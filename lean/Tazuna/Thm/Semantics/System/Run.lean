@@ -185,68 +185,9 @@ theorem send_is_one_message (name : String) (id : Option String) (raw input : Va
   · exact ⟨_, _, rfl⟩
   · exact ⟨_, _, rfl⟩
 
-theorem subscribe_opens_without_answer (name : String) (givenId : Option String) (raw input : Value)
-    (hq : name ∈ st.queries) (hi : fs.canonical (.input name) raw = .ok input)
-    (hn : ∀ sub ∈ s.subscriptions, sub.id ≠ (s.writeInput givenId (.subscribe name input)).2) :
-    arrive st fs s ⟨time, .subscribe givenId name raw, order, stepOrder⟩ =
-      let (s₁, id) := s.writeInput givenId (.subscribe name input)
-      message st fs
-        { s₁ with subscriptions := s₁.subscriptions ++ [({ id, query := name, input := raw } : Subscription)] }.newMessage
-        {} := by
-  have hany : ((s.writeInput givenId (.subscribe name input)).1.subscriptions.any
-      (·.id == (s.writeInput givenId (.subscribe name input)).2)) = false := by
-    rw [List.any_eq_false]
-    intro x hx
-    simpa using hn x hx
-  simp only [arrive, subscribe, hq, hi, id_bind, hany, Bool.false_eq_true, ↓reduceIte]
-
-theorem end_closes_subscription (id : String) (ho : s.subscriptions.any (·.id == id) = true) :
-    arrive st fs s ⟨time, .unsubscribe id, order, stepOrder⟩ =
-      let s₁ := (s.writeInput none (.unsubscribe id)).1
-      message st fs { s₁ with subscriptions := s₁.subscriptions.filter (·.id != id) }.newMessage {} := by
-  simp only [arrive, endSubscription]
-  simp [State.writeInput, ho]
-
 theorem keys_never_duplicate (inputs : List Step) :
     ((run st fs inputs).records.map fun r => (r.entity, r.key)).Nodup :=
   run_keys_distinct inputs
-
-theorem arrive_keeps_started (input : Step) (h : s.started = true) : (arrive st fs s input).started = true := by
-  unfold arrive
-  split
-  · exact h
-  · exact restart_started
-  · rw [send_started]; exact h
-  · rw [call_started]; exact h
-  · rw [subscribe_started]; exact h
-  · rw [endSubscription_started]; exact h
-  · rw [receive_started]; exact h
-  · rw [operate_started]; exact h
-  · rw [operate_started]; exact h
-  · rw [mock_started]; exact h
-
-theorem step_keeps_started (input : Step) (h : s.started = true) : (step st fs s input).started = true := by
-  unfold step
-  split
-  · exact h
-  · simp only [id_bind, id_pure]
-    have ha := advance_keeps_started (st := st) (fs := fs)
-      (s := { s with deadlineOrder := input.deadlineOrder.getD [], inputDeadlineOrder := input.deadlineOrder.getD [], stepOrder := input.stepOrder.getD [] }) input h
-    split <;> rw [checkOrderUsed_started]
-    · exact ha
-    · split
-      · simpa using ha
-      · exact arrive_keeps_started _ ha
-
-theorem started_stays (inputs : List Step) (h : s.started = true) : (runFrom (step st fs) s inputs).started = true := by
-  induction inputs generalizing s with
-  | nil => exact h
-  | cons i rest ih =>
-    simp only [runFrom, id_bind]
-    have hs := step_keeps_started (st := st) (fs := fs) i h
-    split
-    · exact hs
-    · exact ih hs
 
 theorem line_names_accepted_request (name : String) (id : Option String) (raw payload : Value) (k : Nat)
     (s₁ : State) (p : Pending) (hr : name ∈ st.received)

@@ -53,13 +53,6 @@ theorem foldl_fixed' {α : Type} (f : Processing → α → Processing) (h : ∀
   | nil => rfl
   | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h]
 
-theorem foldl_fst_keeps {α β : Type} (f : Processing × β → α → Processing × β)
-    (h : ∀ acc x, (f acc x).1.1.fixed = acc.1.state.fixed) (xs : List α) (acc : Processing × β) :
-    (xs.foldl f acc).1.1.fixed = acc.1.state.fixed := by
-  induction xs generalizing acc with
-  | nil => rfl
-  | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h]
-
 theorem foldl_pair_keeps {α : Type} (f : Processing × Bool → α → Processing × Bool)
     (h : ∀ acc x, (f acc x).1.1.fixed = acc.1.state.fixed) (xs : List α) (acc : Processing × Bool) :
     (xs.foldl f acc).1.1.fixed = acc.1.state.fixed := by
@@ -133,13 +126,6 @@ theorem foldlM_sameLines {α : Type} {g : α → Processing → Id Processing} (
   induction xs generalizing r with
   | nil => rfl
   | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h x r]
-
-theorem foldl_fst_grows {α β : Type} (f : Processing × β → α → Processing × β) (h : ∀ acc x, Grows acc.1.state (f acc x).1.1)
-    (hn : ∀ acc x, (f acc x).1.1.now = acc.1.state.now) (xs : List α) (acc : Processing × β) :
-    Grows acc.1.state (xs.foldl f acc).1.1 := by
-  induction xs generalizing acc with
-  | nil => exact Grows.refl _
-  | cons x xs ih => simp only [List.foldl_cons]; exact (h acc x).trans (hn acc x) (ih _)
 
 theorem foldl_run_grows {α : Type} (f : Processing → α → Processing) (h : ∀ r x, Grows r.state (f r x).1)
     (hn : ∀ r x, (f r x).1.now = r.state.now) (xs : List α) (r : Processing) : Grows r.state (xs.foldl f r).1 := by

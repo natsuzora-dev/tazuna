@@ -339,44 +339,4 @@ theorem refresh_open_shows_match (owner : String) (i : Instance) (wanted : List 
   rw [e]
   exact syncShows_matches owner wanted (wantedShows_nodup i wanted hw) hid
 
-theorem syncShows_keeps_other (owner other : String) (wanted : List Wanted) (hne : other ≠ owner)
-    (hid : (s.pending.map (·.id)).Nodup) :
-    (s.syncShows owner wanted).openShows other = s.openShows other := by
-  let t := (s.openShows owner).foldl (State.endShowStep wanted owner) s
-  obtain ⟨new, hN, hnew, _⟩ := subscribes_pending (s.openShows owner) owner wanted t
-  have hnil : new.filter (fun p => p.requester.machine? == some other && p.requester.slot?.isSome && !p.stale) = [] := by
-    rw [List.filter_eq_nil_iff]
-    intro q hq
-    simp [(hnew q hq).1, Ne.symm hne]
-  show List.filter _ (wanted.foldl _ t).pending = _
-  rw [hN, List.filter_append, hnil, List.append_nil]
-  show List.filter _ (List.foldl _ s (s.openShows owner)).pending = _
-  rw [endShows_pending]
-  refine filter_map_same _ (fun q hq => ?_)
-  by_cases hm : ((s.openShows owner).filter fun p => !kept wanted p).any (·.id == q.id) = true
-  · right
-    obtain ⟨p, hp, he⟩ := List.any_eq_true.mp hm
-    have hpo := (List.mem_filter.mp hp).1
-    have hpp := (List.mem_filter.mp hpo).1
-    have hpq : p = q := nodup_map_inj s.pending hid hpp hq (by simpa using he)
-    have hmo : q.requester.machine? = some owner := by
-      have := (List.mem_filter.mp hpo).2
-      simp only [Bool.and_eq_true, beq_iff_eq] at this
-      exact hpq ▸ this.1.1
-    simp [hm, hmo, hne.symm]
-  · left
-    simp [hm]
-
-theorem refresh_keeps_other_owners (owner other : String) (hne : other ≠ owner) (hid : (s.pending.map (·.id)).Nodup) :
-    (refresh st fs s owner).openShows other = s.openShows other := by
-  unfold refresh
-  split
-  · rfl
-  · split
-    · rfl
-    · simp only [id_bind]
-      split
-      · simp [report_eq, State.openShows]
-      · exact syncShows_keeps_other _ _ _ hne hid
-
 end Tazuna.Thm.Semantics.Screen.Subscription

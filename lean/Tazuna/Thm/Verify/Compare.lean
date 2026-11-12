@@ -547,24 +547,6 @@ theorem compareFrom_shape (c : Ctx) (lineCount : Nat) (malformed : Option Nat) :
       · exact ⟨[], some _, rfl⟩
       · exact compareFrom_shape c lineCount malformed rest _
 
-theorem compare_shape (snapshot lines : List (Option Line)) (malformed : Option Nat) (internal : Line → Bool) :
-    ∃ (ms : List Mismatch) (u : Option Uncomparable),
-      (Verify.compare snapshot lines malformed internal).findings = ms.map .mismatch ++ u.toList.map .uncomparable := by
-  unfold Verify.compare
-  exact compareFrom_shape _ _ _ _ _
-
-theorem uncomparable_last (snapshot lines : List (Option Line)) (malformed : Option Nat) (internal : Line → Bool)
-    (u : Uncomparable) (h : .uncomparable u ∈ (Verify.compare snapshot lines malformed internal).findings) :
-    (Verify.compare snapshot lines malformed internal).findings.getLast? = some (.uncomparable u) := by
-  obtain ⟨ms, last, hc⟩ := compare_shape snapshot lines malformed internal
-  rw [hc] at h ⊢
-  cases last with
-  | none => simp at h
-  | some v =>
-    simp only [Option.toList_some, List.map_cons, List.map_nil, List.mem_append, List.mem_map, reduceCtorEq,
-      and_false, exists_false, List.mem_singleton, Finding.uncomparable.injEq, false_or] at h
-    simp [h]
-
 theorem obj_order_free (d : List String) (fs gs : List (String × CValue)) (m : Bindings) (inInputLine : Bool)
     (hd : Distinct (.obj fs)) (hp : fs.Perm gs) (h : SelfBound m) :
     (equal d (.obj fs) (.obj gs) m inInputLine).1 = true := by

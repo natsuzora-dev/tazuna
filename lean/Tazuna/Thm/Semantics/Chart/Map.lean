@@ -246,21 +246,6 @@ theorem syncMap_copies_in_item_order (step : Nat) (owner : String) (r : Processi
   obtain ⟨pre, post, hd⟩ := documentOrder_at_map o' cs hcs
   exact ⟨o, keys, pre, post, ho, hi, he ▸ hd⟩
 
-theorem copyName_injective (owner map : String) {a b : String} (h : copyName owner map a = copyName owner map b) : a = b := by
-  simp only [copyName, toString] at h
-  exact (String.append_right_inj _).mp ((String.append_left_inj _).mp h)
-
-theorem copyNames_nodup (owner map : String) (keys : List (Value × String)) (h : (keys.map (·.2)).Nodup) :
-    (keys.map (copyName owner map ·.2)).Nodup := by
-  have : keys.map (copyName owner map ·.2) = (keys.map (·.2)).map (copyName owner map) := by
-    simp [List.map_map, Function.comp_def]
-  rw [this, List.Nodup, List.pairwise_map]
-  exact h.imp fun hab e => hab (copyName_injective owner map e)
-
-theorem same_key_keeps_copy (current : List String) (keys : List (Value × String)) (k : Value × String)
-    (hc : k.2 ∈ current) : k ∉ newKeys current keys := by
-  simp [newKeys, hc]
-
 theorem returning_key_starts_copy (step : Nat) (owner map : String) (r : Processing) (o o' : Instance)
     (keysBefore keys : List (Value × String)) (k : Value × String) (hh : r.state.halted = none)
     (ho : r.state.machine? owner = some o) (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keysBefore)
@@ -271,21 +256,5 @@ theorem returning_key_starts_copy (step : Nat) (owner map : String) (r : Process
   rw [ho] at ho₁; cases ho₁
   rw [hi] at hi₁; cases hi₁
   simp [newKeys, hc, hk, hleft]
-
-theorem new_copy_starts_with_defaults (step : Nat) (owner map : String) (key : Value) (k : String) (r : Processing)
-    (o : Instance) (context : Value) (initial : String) (hh : r.state.halted = none) (ho : r.state.machine? owner = some o)
-    (hd : fs.copyContext o.chart.name map = context) (hi : (o.chart.state? map).bind (·.initial) = some initial) :
-    let resource := copyName o.resource map k
-    let copy : Instance := { chart := o.chart, resource, context, input := o.input,
-                             copyOf := some { owner := owner, map := map, key := key, encodedKey := k } }
-    let started : State := { r.state with copies := r.state.copies.filter (·.resource != resource) ++ [copy] }
-    startCopy fs st step owner map key k r =
-      enter fs st (started.newStep (some step) (nested := true)).2 resource [initial]
-        ⟨(started.newStep (some step) (nested := true)).1, r.queue⟩ := by
-  simp [startCopy, withMachine, Processing.halted, hh, ho, hd, hi]
-
-theorem left_key_copy_exits (owner map : String) (itemKeys : List String) (r : Processing) (k : String) (hc : k ∉ itemKeys) :
-    exitLeftCopy fs st owner map itemKeys r k = unlessHalted (endWith (exitOne fs st Limit.exitDepth.max) (copyName owner map k)) r := by
-  simp [exitLeftCopy, hc]
 
 end Tazuna.Thm.Semantics.Chart.Map

@@ -46,4 +46,14 @@ theorem fires_only_in_active_state (step : Nat) (t : Deadline) (r : Processing) 
       · simp [hm, hn]
       · simp [hm, hn]
 
+/-- Without a named order, deadlines due at one time fire in the default order, from the earliest one. -/
+theorem chooseDeadline_default (first : Deadline) (due : List Deadline) (tied : Bool) :
+    chooseDeadline first due tied [] = .ok (first, []) := by
+  cases tied <;> rfl
+
+/-- The next entry of the input's `deadlineOrder` chooses which of the tied deadlines fires. -/
+theorem chooseDeadline_named (first t : Deadline) (due : List Deadline) (c : DeadlineId) (rest : List DeadlineId)
+    (h : due.find? (·.id == c) = some t) : chooseDeadline first due true (c :: rest) = .ok (t, rest) := by
+  simp [chooseDeadline, h]
+
 end Tazuna.Thm.Semantics.System.Clock

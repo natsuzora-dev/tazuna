@@ -78,40 +78,6 @@ theorem settleFrom_grows (step : Nat) (owner : String) (roundsLeft : Nat) (r : P
     · exact ih _
     · exact (growsBy_microstep step _ _ _ r).trans ((keeps_microstep step _ _ _).now r) (ih _)
 
-theorem settle_takes_met_transitions (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) (i o : Instance)
-    (chosen : List (String × Transition)) (hh : r.state.halted = none) (hi : r.state.machine? owner = some i)
-    (hc : i.closed = false) (hs : (syncCopies fs st step owner r).1.state.halted = none)
-    (ho : (syncCopies fs st step owner r).1.state.machine? owner = some o)
-    (ht : select fs st (syncCopies fs st step owner r).1.state o ["always"] .none
-      (leavesOf (syncCopies fs st step owner r).1.state o o.copyResources) = .ok chosen) (hn : chosen ≠ []) :
-    settleFrom fs st step owner (roundsLeft + 1) r =
-      settleFrom fs st step owner roundsLeft (microstep fs st step owner chosen .none (syncCopies fs st step owner r).1) := by
-  cases chosen with
-  | nil => exact absurd rfl hn
-  | cons t ts => simp [settleFrom, alwaysRound, Processing.halted, hh, hi, hc, hs, ho, ht]
-
-theorem settle_resyncs_after_copy_change (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) (i o : Instance)
-    (hh : r.state.halted = none) (hi : r.state.machine? owner = some i) (hc : i.closed = false)
-    (hchg : (syncCopies fs st step owner r).2 = true) (hs : (syncCopies fs st step owner r).1.state.halted = none)
-    (ho : (syncCopies fs st step owner r).1.state.machine? owner = some o)
-    (ht : select fs st (syncCopies fs st step owner r).1.state o ["always"] .none
-      (leavesOf (syncCopies fs st step owner r).1.state o o.copyResources) = .ok []) :
-    settleFrom fs st step owner (roundsLeft + 1) r = settleFrom fs st step owner roundsLeft (syncCopies fs st step owner r).1 := by
-  simp [settleFrom, alwaysRound, Processing.halted, hh, hi, hc, hs, ho, ht, hchg]
-
-theorem settle_stops_without_met_guard (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) (i o : Instance)
-    (hh : r.state.halted = none) (hi : r.state.machine? owner = some i) (hc : i.closed = false)
-    (hchg : (syncCopies fs st step owner r).2 = false)
-    (ho : (syncCopies fs st step owner r).1.state.machine? owner = some o)
-    (ht : select fs st (syncCopies fs st step owner r).1.state o ["always"] .none
-      (leavesOf (syncCopies fs st step owner r).1.state o o.copyResources) = .ok []) :
-    settleFrom fs st step owner roundsLeft r = r := by
-  have hu := syncCopies_unchanged step owner r hchg
-  rw [hu] at ho ht
-  rw [hi] at ho
-  cases ho
-  cases roundsLeft <;> simp [settleFrom, alwaysRound, Processing.halted, hh, hi, hc, ht, hchg, hu]
-
 theorem settle_halts_at_round_limit (step : Nat) (owner : String) (r : Processing) (i o : Instance)
     (chosen : List (String × Transition)) (hh : r.state.halted = none) (hi : r.state.machine? owner = some i)
     (hc : i.closed = false) (hs : (syncCopies fs st step owner r).1.state.halted = none)

@@ -196,24 +196,6 @@ theorem append_cons_inj_of_not_mem (c : Char) : ∀ (a a' b b' : List Char), c �
       (fun m => h' (List.mem_cons_of_mem _ m)) e
     exact ⟨rfl, rfl⟩
 
-theorem copyName_injective_of_plain (owner : String) {m m' a b : String} (hm : plainName m = true)
-    (hm' : plainName m' = true) (h : copyName owner m a = copyName owner m' b) : m = m' ∧ a = b := by
-  simp only [copyName, toString] at h
-  have h := congrArg String.toList h
-  simp only [String.toList_append] at h
-  simp only [plainName, ↓Char.isValue, List.contains_eq_mem, Bool.and_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,
-      decide_eq_false_iff_not] at hm hm'
-  have hl : "[".toList = ['['] := by decide
-  simp only [List.append_assoc, List.append_cancel_left_eq, hl, List.singleton_append] at h
-  rw [← List.append_assoc, ← List.append_assoc, List.append_cancel_right_eq] at h
-  obtain ⟨e1, e2⟩ := append_cons_inj_of_not_mem '[' _ _ _ _ hm.2 hm'.2 h
-  exact ⟨String.toList_inj.mp e1, String.toList_inj.mp e2⟩
-
-theorem copyName_injective_in_chart (c : Chart) (owner : String) {m m' : ChartState} {a b : String}
-    (hm : m ∈ c.states) (hm' : m' ∈ c.states) (h : copyName owner m.name a = copyName owner m'.name b) :
-    m.name = m'.name ∧ a = b :=
-  copyName_injective_of_plain owner (plainName_of_mem c hm) (plainName_of_mem c hm') h
-
 theorem documentOrder_owner (i : Instance) :
     i.documentOrder.filter (·.1 == i.resource) = i.chart.states.map fun cs => (i.resource, cs.name) := by
   unfold Instance.documentOrder
@@ -247,9 +229,6 @@ theorem emitAll_fixed (es : List Emit) : (s.emitAll es).fixed = s.fixed := by
   induction es generalizing s with
   | nil => rfl
   | cons e es ih => exact ih (s := (s.write .out none (.event e.event e.payload none)).1)
-
-theorem emitAll_commandAnswers (es : List Emit) :
-    (s.emitAll es).commandAnswers = s.commandAnswers := congrArg Fixed.commandAnswers (emitAll_fixed es)
 
 theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).fixed = t.fixed) (xs : List α)
     (t : State) : (xs.foldl f t).fixed = t.fixed := by
@@ -430,123 +409,6 @@ def sent (s : State) (name id : String) (input : Value) : State × Nat :=
 def delivered (s : State) (name id : String) (payload : Value) : State :=
   (s.writeInput (some id) (.event name payload none)).1
 
-theorem passed_deadline_fires_now (t : Deadline) (time : Time) (ht : t.time = some time) (hp : time ≤ s.now) :
-    max s.now (t.time.getD s.now) = s.now := by
-  simp only [ht, Option.getD_some]
-  exact Int.max_eq_left hp
-
-/-- Deadline `u` with its time filled in from `s` when it is an `at` deadline. Other deadlines stay unchanged. -/
-def armed (fs : Functions Id) (s : State) (u : Deadline) : Deadline :=
-  if u.fromAt then
-    match s.machine? u.machine with
-    | some i =>
-      match fs.deadlineAt (s.scopeOf i (some u.state)) s.records u.name with
-      | .ok time => { u with time := some time }
-      | .error _ => u
-    | none => u
-  else u
-
-theorem armed_order (u : Deadline) : (armed fs s u).order = u.order := by
-  unfold armed
-  split
-  · split
-    · split <;> rfl
-    · rfl
-  · rfl
-
-def rearmStep (st : Service) (fs : Functions Id) (t : State) (x : Deadline) : State :=
-  if t.halted.isSome || !x.fromAt then t else
-  match t.machine? x.machine with
-  | none => t
-  | some i =>
-    match fs.deadlineAt (t.scopeOf i (some x.state)) t.records x.name with
-    | .error e => t.report (.fault (issueViolation st (st.ref i.chart.name) e))
-    | .ok time => { t with deadlines := t.deadlines.map fun u => if u.order == x.order then { u with time := some time } else u }
-
-theorem rearmStep_halted (t : State) (x : Deadline) (h : t.halted.isSome) : rearmStep st fs t x = t := by
-  simp [rearmStep, h]
-
-theorem foldl_rearmStep_halted (ts : List Deadline) (t : State) (h : t.halted.isSome) :
-    ts.foldl (rearmStep st fs) t = t := by
-  induction ts with
-  | nil => rfl
-  | cons x xs ih => simp only [List.foldl_cons, rearmStep_halted t x h, ih]
-
-theorem map_update_other (l : List Deadline) (o : Nat) (f : Deadline → Deadline) (h : ∀ u ∈ l, u.order ≠ o) :
-    l.map (fun u => if u.order == o then f u else u) = l := by
-  induction l with
-  | nil => rfl
-  | cons u us ih =>
-    simp only [List.map_cons, List.mem_cons] at *
-    rw [ih (fun v hv => h v (Or.inr hv))]
-    simp [h u (Or.inl rfl)]
-
-theorem rearm_fold (T : List Deadline) (hd : (T.map (·.order)).Nodup) :
-    ∀ (ts done : List Deadline) (t : State), T = done ++ ts → t.machines = s.machines → t.copies = s.copies →
-      t.records = s.records →
-      t.now = s.now → t.deadlines = done.map (armed fs s) ++ ts → (ts.foldl (rearmStep st fs) t).halted = none →
-      (ts.foldl (rearmStep st fs) t).deadlines = T.map (armed fs s) := by
-  intro ts
-  induction ts with
-  | nil => intro done t hT _ _ _ _ ht _; simp [hT, ht]
-  | cons x ts ih =>
-    intro done t hT hm hc hr hn ht hf
-    have hnot : t.halted = none := by
-      cases h : t.halted with
-      | none => rfl
-      | some v =>
-        rw [List.foldl_cons, rearmStep_halted t x (by simp [h]), foldl_rearmStep_halted ts t (by simp [h])] at hf
-        simp [h] at hf
-    have hdone : ∀ u ∈ done, u.order ≠ x.order := by
-      intro u hu he
-      rw [hT, List.map_append, List.nodup_append] at hd
-      exact hd.2.2 u.order (List.mem_map_of_mem hu) x.order (by simp) he
-    have hrest : ∀ u ∈ ts, u.order ≠ x.order := by
-      intro u hu he
-      rw [hT, List.map_append, List.nodup_append] at hd
-      have := hd.2.1
-      simp only [List.map_cons, List.nodup_cons] at this
-      exact this.1 (he ▸ List.mem_map_of_mem hu)
-    have hm' : t.machine? x.machine = s.machine? x.machine := by simp [State.machine?, hm, hc]
-    rw [List.foldl_cons] at hf ⊢
-    by_cases hx : x.fromAt = true
-    · cases hi : t.machine? x.machine with
-      | none =>
-        have hs : rearmStep st fs t x = t := by simp [rearmStep, hnot, hx, hi]
-        rw [hs] at hf ⊢
-        refine ih (done ++ [x]) t (by simp [hT]) hm hc hr hn ?_ hf
-        have : armed fs s x = x := by simp [armed, hx, ← hm', hi]
-        simp [ht, this]
-      | some i =>
-        cases hd' : fs.deadlineAt (t.scopeOf i (some x.state)) t.records x.name with
-        | error e =>
-          have hh := issueViolation_halts_default (st := st) (st.ref i.chart.name) e
-          have hs : rearmStep st fs t x = t.report (.fault (issueViolation st (st.ref i.chart.name) e)) := by
-            simp [rearmStep, hnot, hx, hi, hd']
-          rw [hs, foldl_rearmStep_halted ts _ (by simp [report_halted (.fault _) hh])] at hf
-          simp [report_halted (.fault _) hh] at hf
-        | ok time =>
-          have hs : rearmStep st fs t x = { t with deadlines := t.deadlines.map fun u =>
-              if u.order == x.order then { u with time := some time } else u } := by
-            simp [rearmStep, hnot, hx, hi, hd']
-          rw [hs] at hf ⊢
-          refine ih (done ++ [x]) _ (by simp [hT]) hm hc hr hn ?_ hf
-          have harm : armed fs s x = { x with time := some time } := by
-            have hsc : t.scopeOf i (some x.state) = s.scopeOf i (some x.state) := by
-              simp [State.scopeOf, State.machine?, hm, hc, hn]
-            simp [armed, hx, ← hm', hi, ← hsc, ← hr, hd']
-          show List.map _ t.deadlines = _
-          rw [ht, List.map_append, List.map_cons, map_update_other _ _ _ (fun u hu => by
-              obtain ⟨v, hv, rfl⟩ := List.mem_map.mp hu
-              rw [armed_order]; exact hdone v hv),
-            map_update_other _ _ _ hrest]
-          simp [harm]
-    · have hs : rearmStep st fs t x = t := by simp [rearmStep, hx]
-      rw [hs] at hf ⊢
-      refine ih (done ++ [x]) t (by simp [hT]) hm hc hr hn ?_ hf
-      have : armed fs s x = x := by simp [armed, hx]
-      simp [ht, this]
-
 def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l
 
 theorem AddsOnly.trans {P : Line → Prop} {a b c : State} (h₁ : AddsOnly P a b) (h₂ : AddsOnly P b c) :
@@ -572,45 +434,8 @@ theorem nodup_map_inj (l : List Pending) (h : (l.map (·.id)).Nodup) {p q : Pend
     · subst h2; exact absurd (he.symm ▸ List.mem_map_of_mem (f := (·.id)) h1) h.1
     · exact ih h.2 h1 h2
 
-theorem filter_map_same {P : Pending → Bool} {f : Pending → Pending} :
-    ∀ (l : List Pending), (∀ q ∈ l, f q = q ∨ (P q = false ∧ P (f q) = false)) → (l.map f).filter P = l.filter P := by
-  intro l
-  induction l with
-  | nil => intro _; rfl
-  | cons q l ih =>
-    intro h
-    simp only [List.map_cons, List.filter_cons]
-    rw [ih (fun x hx => h x (List.mem_cons_of_mem _ hx))]
-    rcases h q List.mem_cons_self with e | ⟨e₁, e₂⟩
-    · rw [e]
-    · simp [e₁, e₂]
-
 def CopiesOf (chart map : String) (cs : List Instance) : Prop :=
   ∀ c ∈ cs, c.chart.name = chart ∧ ∃ co, c.copyOf = some co ∧ co.map = map
-
-theorem emitAll_started (t : State) (es : List Emit) : (t.emitAll es).started = t.started :=
-  congrArg Fixed.started (emitAll_fixed (s := t) es)
-
-theorem answer_started (to : Option String) (a : Answer) : (s.answer to a).started = s.started := by
-  cases to <;> rfl
-
-theorem generated_id_counts_lines (d : Dir) (b : LineBody) :
-    (s.write d none b).2 = s!"{b.idName}#{namedCount s.lines b.idName + 1}" := rfl
-
-theorem given_id_kept (d : Dir) (id : String) (b : LineBody) : (s.write d (some id) b).2 = id := rfl
-
-theorem nth_line_with_name (d : Dir) (b : LineBody) (s' : State) (h : Extends (s.write d none b).1 s') :
-    ∃ l, s'.lines[s.lines.size]? = some l ∧ l.body = b ∧
-      l.id = s!"{b.idName}#{namedCount (s'.lines.take s.lines.size) b.idName + 1}" := by
-  obtain ⟨new, e⟩ := h
-  refine ⟨{ time := s.now, dir := d, id := (s.write d none b).2, body := b }, ?_, rfl, ?_⟩
-  · rw [e]
-    simp [State.write, Array.getElem?_append_left]
-  · rw [e]
-    simp only [State.write]
-    rw [Array.push_eq_append, Array.append_assoc]
-    simp
-    rfl
 
 theorem foldl_earliest (xs : List Pending) : ∀ (best : Option Pending) (p : Pending),
     xs.foldl (fun best p => match best with
@@ -670,25 +495,11 @@ theorem foldl_earliest (xs : List Pending) : ∀ (best : Option Pending) (p : Pe
           · exact Nat.le_trans (hb _ rfl) (Nat.le_of_not_lt hlt)
           · exact hq q hq'
 
-theorem createKeys_fixed (es : List String) : (s.createKeys es).fixed = s.fixed := rfl
-
-theorem createKeys_lines (es : List String) : (s.createKeys es).lines = s.lines := rfl
-
 theorem createKey_counts_entity (e : String) :
     (s.createKey e).created = s.created ++ [(e, s!"{e}-{(s.created.filter (·.1 == e)).length + 1}")] := rfl
 
-theorem createKeys_in_call_order (e : String) (es : List String) :
-    s.createKeys (e :: es) = (s.createKey e).createKeys es := rfl
-
 theorem answered_fixed (p : Pending) : (s.answered p).1.fixed = s.fixed := by
   unfold State.answered; split <;> rfl
-
-theorem answered_lines (p : Pending) : (s.answered p).1.lines = s.lines := by
-  unfold State.answered; split <;> rfl
-
-theorem answered_request_leaves (p : Pending) (hp : p.requester.slot? = none) :
-    (s.answered p).1.pending = s.pending.filter (·.id != p.id) ∧ (s.answered p).1.pending.Sublist s.pending := by
-  simp [State.answered, hp, List.filter_sublist]
 
 theorem subscription_waits_again (p : Pending) (hp : p.requester.slot?.isSome = true) (hm : p ∈ s.pending) :
     (∃ q ∈ (s.answered p).1.pending, q.id = p.id ∧ q.turn = s.turn) ∧ (s.answered p).1.turn = s.turn + 1 ∧
@@ -703,21 +514,5 @@ theorem subscription_waits_again (p : Pending) (hp : p.requester.slot?.isSome = 
     funext q
     simp only [Function.comp]
     split <;> rfl
-
-theorem answered_subscription_waits_shortest (p : Pending) (hp : p.requester.slot?.isSome = true)
-    (hb : ∀ q ∈ s.pending, q.turn < s.turn) :
-    (∀ q ∈ (s.answered p).1.pending, q.id ≠ p.id → q.turn < s.turn) ∧
-      ∀ q ∈ (s.answered p).1.pending, q.turn < (s.answered p).1.turn := by
-  simp only [State.answered, hp, ↓reduceIte]
-  refine ⟨fun q hq hne => ?_, fun q hq => ?_⟩
-  · obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
-    by_cases he : q'.id = p.id
-    · simp [he] at hne
-    · simp only [he, beq_iff_eq, ↓reduceIte] at hne ⊢
-      exact hb q' hq'
-  · obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
-    split
-    · exact Nat.lt_succ_self _
-    · exact Nat.lt_succ_of_lt (hb q' hq')
 
 end Tazuna.Thm.Semantics.State

@@ -43,11 +43,6 @@ theorem enters_initial (t : Tree) (p : String) (st : Shape) (child : String) (ac
     match l, this with
     | [⟨_, _⟩], rfl => exact mem_addDefaults_of_mem t _ (mem_addName_self acc _)
 
-theorem commonPrefix_self (l : List String) : commonPrefix l l = l.length := by
-  induction l with
-  | nil => rfl
-  | cons a l ih => simp [commonPrefix, ih]
-
 theorem withoutParallel_le (t : Tree) (path : List String) (k : Nat) : t.withoutParallel path k ≤ k := by
   induction k with
   | zero => simp [Tree.withoutParallel]
@@ -300,10 +295,6 @@ theorem region_not_in_path (t : Tree) (name p region : String) (i : Nat) (hi : (
     subst hli
     exact hne (by rw [List.getElem?_eq_getElem hl, hlr])
 
-theorem exitOrder_reverse_document_order (t : Tree) (names : List String) :
-    (t.exitOrder names).Sublist (t.states.map (·.name)).reverse :=
-  List.filter_sublist
-
 theorem mem_exitOrder (t : Tree) (names : List String) (n : String) (st : Shape) (hs : t.state? n = some st)
     (hn : n ∈ names) : n ∈ t.exitOrder names := by
   simp only [Tree.exitOrder, List.mem_filter, List.mem_reverse, List.mem_map, decide_eq_true_eq]
@@ -350,89 +341,6 @@ theorem entryOrder_ancestors_first (t : Tree) (names : List String) (x y : Strin
     (List.singleton_sublist.mpr hyA).append (List.singleton_sublist.mpr (by simp))
   have hf := (show [y, x].Sublist (A ++ x :: B) by simpa using h).filter (· ∈ names)
   simpa [hx, hyn] using hf
-
-theorem parallelBetween_regions (t : Tree) (a b p : String) (h : t.parallelBetween a b = some p) :
-    t.kindOf p = some .parallel ∧ ∃ k, (t.pathOf a)[k]? = some p ∧ (t.pathOf b)[k]? = some p ∧
-      ((t.pathOf a)[k + 1]?).isSome ∧ ((t.pathOf b)[k + 1]?).isSome ∧ (t.pathOf a)[k + 1]? ≠ (t.pathOf b)[k + 1]? := by
-  unfold Tree.parallelBetween at h
-  simp only at h
-  have hle := commonPrefix_le (t.pathOf a) (t.pathOf b)
-  have hdiff := commonPrefix_differs (t.pathOf a) (t.pathOf b)
-  have heq := commonPrefix_eq (t.pathOf a) (t.pathOf b)
-  generalize commonPrefix (t.pathOf a) (t.pathOf b) = n at h hle hdiff heq
-  split at h
-  · cases h
-  · rename_i hb
-    simp only [Bool.or_eq_true, beq_iff_eq, not_or] at hb
-    obtain ⟨⟨h0, ha⟩, hbl⟩ := hb
-    split at h
-    · rename_i q hq
-      split at h
-      · rename_i hk
-        cases h
-        refine ⟨by simpa using hk, n - 1, hq, ?_, ?_, ?_, ?_⟩
-        · rw [← heq (n - 1) (by omega)]; exact hq
-        · have : n - 1 + 1 = n := by omega
-          rw [this]; simp only [isSome_getElem?, gt_iff_lt]; omega
-        · have : n - 1 + 1 = n := by omega
-          rw [this]; simp only [isSome_getElem?, gt_iff_lt]; omega
-        · have : n - 1 + 1 = n := by omega
-          rw [this]; exact hdiff (by omega) (by omega)
-      · cases h
-    · cases h
-
-theorem parallelBetween_of_regions (t : Tree) (a b p : String) (k : Nat) (hp : t.kindOf p = some .parallel)
-    (ha : (t.pathOf a)[k]? = some p) (hb : (t.pathOf b)[k]? = some p)
-    (ha1 : ((t.pathOf a)[k + 1]?).isSome) (hb1 : ((t.pathOf b)[k + 1]?).isSome)
-    (hne : (t.pathOf a)[k + 1]? ≠ (t.pathOf b)[k + 1]?) : t.parallelBetween a b = some p := by
-  have hka : k + 1 < (t.pathOf a).length := by
-    simpa using ha1
-  have hkb : k + 1 < (t.pathOf b).length := by
-    simpa using hb1
-  have hta := pathOf_getElem? t _ a rfl k p ha
-  have htb := pathOf_getElem? t _ b rfl k p hb
-  have hc : commonPrefix (t.pathOf a) (t.pathOf b) = k + 1 :=
-    commonPrefix_of_take _ _ _ (hta.symm.trans htb) (by omega) (by omega) hne
-  unfold Tree.parallelBetween
-  simp only [hc, Nat.add_sub_cancel, ha, hp]
-  have h1 : (k + 1 == (t.pathOf a).length) = false := by simp only [beq_eq_false_iff_ne, ne_eq]; omega
-  have h2 : (k + 1 == (t.pathOf b).length) = false := by simp only [beq_eq_false_iff_ne, ne_eq]; omega
-  simp [h1, h2]
-
-theorem descendants_document_order (t : Tree) (n : String) : (t.descendants n).Sublist (t.states.map (·.name)) :=
-  (List.filter_sublist).map _
-
-theorem done_by_final_child (t : Tree) (entered : List String) (n : String) (st : Shape)
-    (hs : t.state? n = some st) (hk : st.kind ≠ .parallel) :
-    t.isDone entered n = st.children.any fun ch => t.kindOf ch == some .final && ch ∈ entered := by
-  rw [Tree.isDone.eq_def]
-  split
-  · rename_i h; rw [hs] at h; cases h
-  · rename_i st' h
-    rw [hs] at h; cases h
-    simp [hk]
-
-theorem parallel_done_by_regions (t : Tree) (entered : List String) (n : String) (st : Shape)
-    (hs : t.state? n = some st) (hk : st.kind = .parallel) :
-    t.isDone entered n = (t.enterable n).all (t.isDone entered) := by
-  rw [Tree.isDone.eq_def]
-  split
-  · rename_i h; rw [hs] at h; cases h
-  · rename_i st' h
-    rw [hs] at h; cases h
-    simp only [hk, beq_self_eq_true, ↓reduceDIte]
-    simp
-
-theorem entrySet_document_order (t : Tree) (entered : List String) (depth : Nat) (name : String) :
-    (t.entrySet entered depth name).Sublist (t.states.map (·.name)) :=
-  List.filter_sublist
-
-theorem leaves_document_order (t : Tree) (entered : List String) : (t.leaves entered).Sublist (t.states.map (·.name)) :=
-  List.filter_sublist.map _
-
-theorem exitSet_in_exit_order (t : Tree) (entered : List String) (source : Option String) (target : String)
-    (reenter : Bool) : (t.exitSet entered source target reenter).Sublist (t.exitOrder entered) :=
-  List.filter_sublist
 
 theorem mem_path_foldl (entered : List String) (n : String) (hn : n ∉ entered) (path : List String) (hp : n ∈ path)
     (acc : List String) : n ∈ path.foldl (fun acc m => if m ∈ entered then acc else addName acc m) acc := by
@@ -585,23 +493,5 @@ theorem restores_last_children (t : Tree) (initial : String) (lastChildren : Lis
     (hp : st.parent = some parent) (hl : lastChildren.lookup parent = some (x :: xs)) :
     t.historyTargets initial lastChildren target = x :: xs := by
   simp [Tree.historyTargets, hs, hk, hp, hl]
-
-theorem never_exited_enters_parent (t : Tree) (initial : String) (lastChildren : List (String × List String))
-    (target parent : String) (st : Shape) (hs : t.state? target = some st) (hk : st.kind = .history) (hp : st.parent = some parent)
-    (hl : lastChildren.lookup parent = none) (hm : ∀ ps, t.state? parent = some ps → ps.kind ≠ .map) :
-    t.historyTargets initial lastChildren target = [parent] := by
-  simp only [Tree.historyTargets, hs, hk, hp, hl]
-  simp only [beq_self_eq_true, ↓reduceIte]
-  split
-  · rename_i ps hps
-    simp [hm ps hps]
-  · rfl
-
-theorem never_exited_map_enters_initial (t : Tree) (initial : String) (lastChildren : List (String × List String))
-    (target parent : String) (st ps : Shape) (hs : t.state? target = some st) (hk : st.kind = .history)
-    (hp : st.parent = some parent) (hl : lastChildren.lookup parent = none) (hps : t.state? parent = some ps)
-    (hm : ps.kind = .map) :
-    t.historyTargets initial lastChildren target = ps.initial.toList := by
-  simp [Tree.historyTargets, hs, hk, hp, hl, hps, hm]
 
 end Tazuna.Thm.Syntax.Tree

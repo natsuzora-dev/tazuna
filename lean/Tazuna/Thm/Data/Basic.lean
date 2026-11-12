@@ -1,6 +1,5 @@
 namespace Tazuna.Thm.Data.Basic
 
-
 @[simp] theorem id_bind {α β : Type} (x : Id α) (f : α → Id β) : x >>= f = f x := rfl
 
 @[simp] theorem id_pure {α : Type} (a : α) : (pure a : Id α) = a := rfl
@@ -40,22 +39,6 @@ theorem foldl_keeps {α β : Type} (P : β → Prop) (f : β → α → β) (h :
   induction xs with
   | nil => intro b hb; exact hb
   | cons x xs ih => intro b hb; exact ih _ (h b x hb)
-
-theorem find?_zipIdx {α : Type} (p : α × Nat → Bool) (xs : List α) (x : α) (i : Nat)
-    (h : xs.zipIdx.find? p = some (x, i)) :
-    xs[i]? = some x ∧ p (x, i) = true ∧ ∀ j < i, ∀ y, xs[j]? = some y → p (y, j) = false := by
-  obtain ⟨hp, as, bs, e, hn⟩ := List.find?_eq_some_iff_append.mp h
-  have hpos : xs.zipIdx[as.length]? = some (x, i) := by rw [e]; simp
-  rw [List.getElem?_zipIdx] at hpos
-  cases hx : xs[as.length]? with
-  | none => simp [hx] at hpos
-  | some y =>
-    simp only [hx, Option.map_some, Option.some.injEq, Prod.mk.injEq, Nat.zero_add] at hpos
-    obtain ⟨rfl, rfl⟩ := hpos
-    refine ⟨hx, hp, fun j hj z hz => ?_⟩
-    have hj' : xs.zipIdx[j]? = some (z, j) := by rw [List.getElem?_zipIdx, hz]; simp
-    rw [e, List.getElem?_append_left hj] at hj'
-    simpa using hn _ (List.mem_of_getElem? hj')
 
 theorem mem_zipIdx_of_mem {α : Type} {x : α} {l : List α} (h : x ∈ l) : ∃ i, (x, i) ∈ l.zipIdx := by
   obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp h

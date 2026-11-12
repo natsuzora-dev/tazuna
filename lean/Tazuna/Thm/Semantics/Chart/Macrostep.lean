@@ -14,30 +14,12 @@ variable {st : Service} {fs : Functions Id} {s : State}
 theorem settled_some (step : Nat) (name : String) (f : Processing → Id Processing) (r : Processing) :
     settled fs st step (some name) f r = settleAround fs st step (r.state.ownerOf name) f r := rfl
 
-theorem runWork_settles_around (q : Queue) (step : Nat) (w : Work) (name : String) (hw : w.settledMachine? = some name) :
-    runWork st fs s q step w = settleAround fs st step (s.ownerOf name) (workBody st fs step w) ⟨s, q⟩ := by
-  rw [runWork, hw, settled_some]
-
-theorem receive_settles (q : Queue) (step : Nat) (name : String) (cause : Nat) :
-    runWork st fs s q step (.receive name [] cause) =
-      settleFrom fs st step (s.ownerOf name) Limit.alwaysRounds.max ⟨s, q⟩ := by
-  have hw : workBody st fs step (.receive name [] cause) = pure := funext fun _ => rfl
-  rw [runWork_settles_around q step _ name rfl, hw]
-  simp only [settleAround, id_bind]
-  rw [unlessHalted_pure, settleFrom_idem]
-
-theorem receive_settles_before_each_event (step : Nat) (name key : String) (payload : Value)
-    (rest : List (String × Value)) (r : Processing) :
-    receiveWork fs st step name ((key, payload) :: rest) r =
-      receiveWork fs st step name rest (dispatch fs st step name key payload (settle fs st step name r)) := rfl
-
 theorem records_change_settles (s : State) (emits : List Emit) (cause : Nat) (i : Instance) (hm : i ∈ s.machines)
     (hc : i.closed = false) :
     ∃ received, Work.receive i.resource received cause ∈ reactions st s emits true cause := by
   refine ⟨emits.flatMap fun e => (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload),
     List.mem_append_left _ (List.mem_filterMap.mpr ⟨i, hm, ?_⟩)⟩
   simp [machineWork, hc]
-
 
 theorem keeps_settle (step : Nat) (name : String) : Keeps (settle fs st step name) :=
   fun r => settleFrom_fixed step _ _ r
@@ -267,43 +249,6 @@ theorem growsBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requeste
     all_goals exact showAnswer_grows _ _ _ _
   | automation n => exact Grows.of_lines (automationAnswer_lines _ _ _)
 
-theorem growsBy_deliverAnswer (step : Nat) (p : Pending) (answer : Answer) :
-    GrowsBy (deliverAnswer fs st step p answer) := by
-  intro r
-  have hl := answered_lines (s := r.state) p
-  have hn := congrArg Fixed.now (answered_fixed (s := r.state) p)
-  unfold deliverAnswer
-  rcases h : r.state.answered p with ⟨s', live⟩
-  rw [h] at hl hn
-  cases live
-  · exact Grows.of_lines hl
-  · exact (Grows.of_lines hl).trans hn (growsBy_answerTo _ _ _ _ _)
-
-theorem start_settles (step : Nat) (name : String) (r : Processing) (i : Instance) (hh : r.state.halted = none)
-    (hi : r.state.machine? name = some i) :
-    startWork fs st step name r = unlessHalted (settle fs st step name) (enter fs st step name [i.chart.initial] r) := by
-  simp [startWork, withMachine, Processing.halted, hh, hi]
-
-theorem completion_microstep (step : Nat) (name : String) (ts : List Transition) (extra : Extra) (r : Processing)
-    (i : Instance) (t : Transition) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (ht : choose fs st r.state i extra ts = .ok (some t)) :
-    applyCompletion fs st step name ts extra r = microstep fs st step name [(name, t)] extra r := by
-  simp [applyCompletion, withMachine, Processing.halted, hh, hi, ht]
-
-theorem subscription_answer_reaches_screen (step : Nat) (p : Pending) (name slot : String) (answer : Answer)
-    (r : Processing) (waiting : Pending) (hw : r.state.pending.find? (·.id == p.id) = some waiting)
-    (hs : waiting.stale = false) (hp : p.requester = .slot name slot) :
-    deliverAnswer fs st step p answer r = showAnswer st name slot answer ⟨(r.state.answered p).1, r.queue⟩ := by
-  simp [deliverAnswer, answerTo, State.answered, hw, hs, hp]
-
-theorem done_work_takes_first (step : Nat) (name n : String) (rest : List String) (fuel : Nat) (r : Processing)
-    (i : Instance) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (hw : i.awaitingOnDone = some (n :: rest)) :
-    doneWork fs st step name (fuel + 1) r =
-      doneWork fs st step name fuel (done fs st step name n
-        (settle fs st step name ⟨r.state.setMachine name fun i => { i with awaitingOnDone := some rest }, r.queue⟩)) := by
-  simp [doneWork, Processing.halted, hh, hi, hw]
-
 theorem stopped_machine_takes_no_event (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
     (hi : r.state.machine? name = some i) (hc : i.closed = true) :
     dispatch fs st step name key payload r = r := by
@@ -331,22 +276,6 @@ theorem answer_after_exit_ignored (step : Nat) (name state : String) (a : Activi
   · rfl
   · simp [hi, hn]
 
-theorem accepted_output_reaches_onAccepted (step : Nat) (name state : String) (a : Activity) (o : Value) (r : Processing)
-    (i : Instance) (hh : r.state.halted = none) (hi : r.state.machine? name = some i) (hc : i.closed = false)
-    (hin : i.isIn state = true) :
-    handle fs st step name state a (.accepted (some o)) r =
-      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, successAnswer a]) (.output o)
-        r := by
-  simp [handle, withMachine, Processing.halted, hh, hi, hc, hin]
-
-theorem rejection_kind_reaches_guard (step : Nat) (name state : String) (a : Activity) (r : Rejection) (run : Processing)
-    (i : Instance) (hh : run.state.halted = none) (hi : run.state.machine? name = some i) (hc : i.closed = false)
-    (hin : i.isIn state = true) :
-    handle fs st step name state a (.rejected r) run =
-      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, "onRejected"]) (.rejection r)
-        run := by
-  simp [handle, withMachine, Processing.halted, hh, hi, hc, hin]
-
 theorem untaken_operation_changes_nothing (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
     (leaves : List (String × Option String)) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
     (hl : eventLeaves fs st r.state i payload = .ok leaves)
@@ -358,26 +287,10 @@ theorem untaken_operation_changes_nothing (step : Nat) (name key : String) (payl
   · rfl
   · simp only [id_bind]; rw [hl]; simp only; rw [hs]; rfl
 
-
 theorem stale_answer_ignored (step : Nat) (p : Pending) (answer : Answer) (r : Processing) (waiting : Pending)
     (hw : r.state.pending.find? (·.id == p.id) = some waiting) (hs : waiting.stale = true) :
     deliverAnswer fs st step p answer r = ⟨(r.state.answered p).1, r.queue⟩ := by
   simp [deliverAnswer, State.answered, hw, hs]
-
-theorem opens_done_ignored_when_stale (q : Queue) (step : Nat) (name state key : String) (output : Value)
-    (serial cause : Nat) (waiting : Queued) (hq : s.queued.find? (·.serial == serial) = some waiting)
-    (hs : waiting.stale = true) :
-    workBody st fs step (.opensDone name state key output serial cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
-  simp [workBody, State.takeQueued, hq, hs]
-
-theorem opens_done_taken_when_live (q : Queue) (step : Nat) (name state key : String) (output : Value)
-    (serial cause : Nat) (waiting : Queued) (hq : s.queued.find? (·.serial == serial) = some waiting)
-    (hs : waiting.stale = false) :
-    workBody st fs step (.opensDone name state key output serial cause) ⟨s, q⟩ =
-      withMachine name (fun i r =>
-        applyCompletion fs st step name (i.chart.transitionsAt (some state) ["opens", key, "onDone"]) (.output output) r)
-        ⟨(s.takeQueued serial).1, q⟩ := by
-  simp [workBody, State.takeQueued, hq, hs]
 
 theorem keeps_workBody (step : Nat) (w : Work) : Keeps (workBody st fs step w) := by
   intro r
@@ -428,9 +341,6 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
 
 theorem runWork_fixed (q : Queue) (step : Nat) (w : Work) : (runWork st fs s q step w).1.fixed = s.fixed :=
   keeps_settled step _ (keeps_workBody step w) ⟨s, q⟩
-
-theorem runWork_commandAnswers (q : Queue) (step : Nat) (w : Work) :
-    (runWork st fs s q step w).1.commandAnswers = s.commandAnswers := congrArg Fixed.commandAnswers (runWork_fixed q step w)
 
 theorem keeps_settleScreen (name : String) : Keeps (settleScreen st fs name) := by
   intro r
@@ -507,9 +417,6 @@ theorem drain_grows (n : Nat) (q : Queue) : Grows s (drain st fs n s q) := by
          exact (Grows.of_lines rfl).trans rfl (processCommand_grows _ _ _ _)
          exact congrArg Prod.snd (processCommand_clock _ _ _ _))
 
-theorem runWork_records (q : Queue) (step : Nat) (w : Work) : (runWork st fs s q step w).state.records = s.records :=
-  congrArg Fixed.records (runWork_fixed q step w)
-
 theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
     KeysDistinct (drain st fs n s q).records := by
   induction n generalizing s q with
@@ -543,36 +450,6 @@ theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : S
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
   simp [workBody, State.takeQueued, hc, hq, hs]
 
-theorem automation_command_queued (q : Queue) (step : Nat) (a : Automation) (e : Emit) (cause : Nat) (raw input : Value)
-    (keys : List String) (hr : fs.react a.name e.payload s.records s.now s.keyCounts = .ok (some raw, keys))
-    (hn : fs.normalize (.input a.sends.target) (st.sorted (.input a.sends.target) raw) = .ok (some input))
-    (ho : a.sends.own = true) :
-    runWork st fs s q step (.reaction a e cause) =
-      ⟨s.createKeys keys,
-        { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
-                                        serial := none, input, cause := step }] }⟩ := by
-  simp only [runWork, Work.settledMachine?, settled, workBody, id_bind]
-  rw [hr]
-  simp only [hn, ho]
-  rfl
-
-theorem automation_request_sent (q : Queue) (step : Nat) (a : Automation) (e : Emit) (cause : Nat) (raw input : Value)
-    (keys : List String) (hr : fs.react a.name e.payload s.records s.now s.keyCounts = .ok (some raw, keys))
-    (hn : fs.normalize (.input a.sends.target) (st.sorted (.input a.sends.target) raw) = .ok (some input))
-    (ho : a.sends.own = false) :
-    runWork st fs s q step (.reaction a e cause) =
-      ⟨(s.createKeys keys).await (.command a.sends.target input) (.automation a.name) a.sends input, q⟩ := by
-  simp only [runWork, Work.settledMachine?, settled, workBody, id_bind]
-  rw [hr]
-  simp only [hn, ho]
-  rfl
-
-theorem automation_answer_delivered (step : Nat) (p : Pending) (a : String) (answer : Answer) (r : Processing)
-    (waiting : Pending) (hw : r.state.pending.find? (·.id == p.id) = some waiting) (hs : waiting.stale = false)
-    (ha : p.requester = .automation a) :
-    deliverAnswer fs st step p answer r = ⟨automationAnswer st a answer (r.state.answered p).1, r.queue⟩ := by
-  simp [deliverAnswer, answerTo, State.answered, hw, hs, ha]
-
 /-- Without `stepOrder` entries, the queue takes its first task. -/
 theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)
     (ho : s.stepOrder = []) (hq : q.tasks = w :: ws) :
@@ -596,20 +473,6 @@ theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c
   cases s; subst ho
   simp_all [drain, Queue.take, State.readyName]
 
-theorem drain_sends_entered_when_idle (fuel : Nat) (q : Queue) (hh : s.halted = none) (ht : q.tasks = [])
-    (hc : q.commands ++ sortSent q.round = []) (he : q.entered.isEmpty = false) :
-    drain st fs (fuel + 1) s q = drain st fs fuel (sendEntered fs st ⟨s, q⟩).state (sendEntered fs st ⟨s, q⟩).queue := by
-  cases ho : s.stepOrder <;> simp [drain, hh, Queue.take, Queue.ready, ht, hc, he, ho]
-
-theorem drain_refreshes_when_idle (fuel : Nat) (q : Queue) (hh : s.halted = none) (ht : q.tasks = [])
-    (hc : q.commands ++ sortSent q.round = []) (he : q.entered.isEmpty = true) :
-    drain st fs (fuel + 1) s q =
-      let s₁ := refreshScreens st fs s
-      if (shownChanged s s₁).isEmpty then s₁ else
-      let r := (shownChanged s s₁).foldlM (m := Id) (fun r name => settleScreen st fs name r) ⟨s₁, q⟩
-      drain st fs fuel r.state r.queue := by
-  cases ho : s.stepOrder <;> simp [drain, hh, Queue.take, Queue.ready, ht, hc, he, ho]
-
 /-- A ready work or command that the next `stepOrder` entry names runs before the others, whatever their order. -/
 theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready) (i : Nat)
     (h : q.ready.zipIdx.find? (name ·.1 == named) = some (r, i)) :
@@ -627,12 +490,6 @@ theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) 
   rw [hr] at h ⊢
   dsimp only
   rw [h]
-
-theorem settleScreen_settles (name : String) (r : Processing) (hh : r.state.halted = none) :
-    settleScreen st fs name r =
-      let (s₁, step) := r.state.newStep none (barrier := true)
-      settle fs st step name ⟨s₁, r.queue⟩ := by
-  simp [settleScreen, Processing.halted, hh]
 
 theorem newCommandStep_exceeded_halts (cause : Nat) (sender : Syntax.Ref) (exceeded : Fault)
     (h : (s.newCommandStep cause sender).2 = some exceeded) : exceeded.halts = true := by
@@ -694,26 +551,6 @@ theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation)
 
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
-
-theorem drain_started (n : Nat) (q : Queue) : (drain st fs n s q).started = s.started := by
-  induction n generalizing s q with
-  | zero =>
-    simp only [drain, id_bind]
-    repeat' split
-    all_goals first | rfl | exact congrArg Fixed.started (refreshScreens_fixed (fs := fs))
-  | succ n ih =>
-    have hs : ∀ {t : State}, t.fixed = s.fixed → t.started = s.started := fun e => congrArg Fixed.started e
-    simp only [drain, id_bind]
-    repeat' split
-    all_goals first
-      | rfl
-      | exact hs refreshScreens_fixed
-      | exact hs ((report_fixed _).trans rfl)
-      | (rw [ih]; first
-          | exact hs (runWork_fixed _ _ _)
-          | exact hs (keeps_sendEntered _)
-          | exact hs (settleScreens_fixed _ _)
-          | (rw [processCommand_started]; rfl))
 
 theorem drain_mocks (n : Nat) (q : Queue) : (drain st fs n s q).mocks = s.mocks := by
   induction n generalizing s q with

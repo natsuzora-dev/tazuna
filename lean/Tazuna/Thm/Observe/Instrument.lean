@@ -361,67 +361,55 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
     agree [h.react, h.normalize, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
       withMachine_agrees, applyCompletion_agrees h]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :
     Agrees (resolveChecked st fsI s name raw) (resolveChecked st fs s name raw) := by
   unfold resolveChecked normalizeOutput; agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve, h.normalize,
     h.queryEnsures]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem publishOne_agrees (s : State) (sub : Subscription) :
     Agrees (publishOne st fsI s sub) (publishOne st fs s sub) := by
   unfold publishOne; agree [resolveChecked_agrees h, h.comparable]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem publish_agrees (s : State) : Agrees (publish st fsI s) (publish st fs s) := by
   unfold publish; agree [publishOne_agrees h]
-
 
 omit [MonadNote (StateT C Id)] in
 theorem wantedShows_agrees (s : State) (i : Instance) : Agrees (wantedShows st fsI s i) (wantedShows st fs s i) := by
   unfold wantedShows; agree [h.showInput]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem refresh_agrees (s : State) (owner : String) : Agrees (refresh st fsI s owner) (refresh st fs s owner) := by
   unfold refresh; agree [wantedShows_agrees h]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem refreshScreens_agrees (s : State) : Agrees (refreshScreens st fsI s) (refreshScreens st fs s) := by
   unfold refreshScreens; agree [refresh_agrees h]
-
 
 omit [MonadNote (StateT C Id)] in
 theorem offeringStates_agrees (s : State) (top : Instance) (control : String) (payload : Value) :
     Agrees (offeringStates fsI st s top control payload) (offeringStates fs st s top control payload) := by
   unfold offeringStates; agree [reachedCopies_agrees h]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem offered_agrees (s : State) (top : Instance) (control : String) (payload : Value) :
     Agrees (offered fsI st s top control payload) (offered fs st s top control payload) := by
   unfold offered; agree [offeringStates_agrees h, h.offers]
-
 
 omit [MonadNote (StateT C Id)] in
 theorem acceptsOperation_agrees (s : State) (screen control : String) (payload : Value) :
     Agrees (acceptsOperation fsI st s screen control payload) (acceptsOperation fs st s screen control payload) := by
   unfold acceptsOperation; agree [offered_agrees h]
 
-
 theorem fire_agrees (step : Nat) (t : Deadline) (r : Processing) :
     Agrees (fire fsI st step t r) (fire fs st step t r) := by
   unfold fire; agree [withMachine_agrees, applyCompletion_agrees h]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem checkHolds_agrees (s : State) : Agrees (checkHolds st fsI s) (checkHolds st fs s) := by
   unfold checkHolds; agree [h.holds]
-
 
 omit [MonadNote (StateT C Id)] in
 theorem invariantViolations_agrees (s : State) :
@@ -439,17 +427,14 @@ theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterM
   unfold afterMessage
   agree [refreshScreens_agrees h, checkHolds_agrees h, checkInvariants_agrees h, rearm_agrees h, publish_agrees h]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem addResult_agrees (s : State) (id : String) (e : Emit) :
     Agrees (addResult st fsI s id e) (addResult st fs s id e) := by
   unfold addResult; agree [h.resultEnsures]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st fsI s c) (startInstance st fs s c) := by
   unfold startInstance; agree [initialContextOf_agrees h]
-
 
 omit [MonadNote (StateT C Id)] in
 theorem commandEnsures_agrees (name : String) (input : Value) (before after : Records) (now : Time) :
@@ -464,7 +449,6 @@ theorem integrityViolations_agrees (records : Records) (name : String) :
   · unfold rowViolations
     exact Agrees.bind (h.invariant _ _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
   · exact Agrees.bind (h.serviceInvariant _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
-
 
 theorem requirementsRejection_agrees (records : Records) (now : Time) (name : String) (input : Value) :
     Agrees (requirementsRejection st fsI records now name input) (requirementsRejection st fs records now name input) := by
@@ -481,7 +465,6 @@ theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Op
     Agrees (processCommand st fsI s name raw id step) (processCommand st fs s name raw id step) := by
   unfold processCommand; agree [evaluate_agrees h, note_agrees]
 
-
 theorem settleScreen_agrees (name : String) (r : Processing) :
     Agrees (settleScreen st fsI name r) (settleScreen st fs name r) := by
   unfold settleScreen; agree [note_agrees, settle_agrees h]
@@ -495,41 +478,33 @@ theorem drain_agrees (fuel : Nat) (s : State) (q : Queue) :
     agree [runWork_agrees h, processCommand_agrees h, sendEntered_agrees h, refreshScreens_agrees h,
       settleScreen_agrees h, ih]
 
-
 theorem fireDue_agrees (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
     Agrees (fireDue st fsI to fuel tie s) (fireDue st fs to fuel tie s) := by
   induction fuel generalizing s tie with
   | zero => unfold fireDue; agree []
   | succ fuel ih => unfold fireDue; agree [note_agrees, settled_agrees h, fire_agrees h, drain_agrees h, afterMessage_agrees h, ih]
 
-
 theorem finish_agrees (s : State) : Agrees (finish st fsI s) (finish st fs s) := by
   unfold finish; agree [afterMessage_agrees h, fireDue_agrees h]
 
-
 theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (message st fs s q) := by
   unfold message; agree [drain_agrees h, finish_agrees h]
-
 
 theorem send_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
     Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
   unfold send; agree [h.canonical, message_agrees h, processCommand_agrees h]
 
-
 theorem call_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
   unfold call; agree [h.canonical, resolveChecked_agrees h, message_agrees h]
-
 
 theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
     Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
   unfold subscribe; agree [h.canonical, message_agrees h]
 
-
 theorem endSubscription_agrees (s : State) (id : String) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
-
 
 theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload : Value) (request : Option Pending) :
     Agrees (deliver st fsI s name id payload request) (deliver st fs s name id payload request) := by
@@ -540,7 +515,6 @@ theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload
   · exact Agrees.bind (Agrees.pure _) (fun _ => message_agrees h _ _)
   · exact Agrees.bind (addResult_agrees h _ _ _) (fun _ => message_agrees h _ _)
 
-
 theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
     (first : Delivery) :
     Agrees (redeliver st fsI s name id raw resultOf first) (redeliver st fs s name id raw resultOf first) := by
@@ -549,7 +523,6 @@ theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw :
 theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
-
 
 omit [MonadNote (StateT C Id)] in
 theorem canonicalChoice_agrees (name : String) (choice : Option Choice) :
@@ -573,14 +546,12 @@ theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice
   unfold mock
   agree [canonicalChoice_agrees h, checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
-
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.singleRecord]
 
 theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
   unfold begin startInstances; agree [startRecords_agrees h, startInstance_agrees h, message_agrees h]
-
 
 theorem advance_agrees (s : State) (input : Step) : Agrees (advance st fsI s input) (advance st fs s input) := by
   unfold advance
@@ -593,7 +564,6 @@ theorem advance_agrees (s : State) (input : Step) : Agrees (advance st fsI s inp
   split
   · exact Agrees.pure _
   · exact begin_agrees h _
-
 
 theorem operate_agrees (s : State) (screen control : String) (payload : Value) (accepted : Bool) :
     Agrees (operate st fsI s screen control payload accepted) (operate st fs s screen control payload accepted) := by
@@ -616,7 +586,6 @@ theorem operate_agrees (s : State) (screen control : String) (payload : Value) (
   · exact Agrees.pure _
   · exact Agrees.pure _
 
-
 theorem restart_agrees (s : State) : Agrees (restart st fsI s) (restart st fs s) := by
   unfold restart; exact begin_agrees h _
 
@@ -632,7 +601,6 @@ theorem step_agrees (s : State) (input : Step) : Agrees (step st fsI s input) (s
 end
 
 end Tazuna.Thm.Observe.Instrument
-
 
 namespace Tazuna.Thm.Observe.Instrument
 
@@ -691,17 +659,6 @@ theorem reversed_comparable_issue_reported (name : String) (input : Value) (reco
   · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
       ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, normalizeOutput, hr, hn, ho, hc, modify,
       modifyGet, MonadStateOf.modifyGet]
-    rfl
-
-theorem original_comparable_issue_silent (name : String) (input : Value) (records : Records) (now : Time)
-    (output raw reversed : Value) (e : Issue) (c : Collect) (hr : ifs.reversed name input records now = .ok raw)
-    (hn : fs.normalize (.output name) (st.sorted (.output name) raw) = .ok (some reversed))
-    (ho : fs.comparable name (.fulfilled output) = .error e) :
-    ((orderAudit st fs ifs name input records now output).run c).2 = c := by
-  by_cases hm : name ∈ c.reportedOrder
-  · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
-  · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
-      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, normalizeOutput, hr, hn, ho]
     rfl
 
 theorem report_keeps (c : Collect) (v w : Violation) (h : v ∈ c.violations) : v ∈ (c.report w).violations := by

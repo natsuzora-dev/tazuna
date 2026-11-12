@@ -42,9 +42,6 @@ theorem publish_grows : Grows s (publish st fs s) := by
         · exact Grows.of_lines (reportAll_lines _)
         · exact (Grows.of_lines (reportAll_lines (s := t) _)).trans (reportAll_now (s := t) _) (grows_write _ _ _)
 
-theorem publish_each_open_subscription : publish st fs s = s.subscriptions.foldl (publishOne st fs) s := by
-  simp [publish, foldlM_id]
-
 theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
     (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input = .answered a vs)
     (hc : fs.comparable sub.query a = .ok c) (hl : sub.last ≠ some c) :
@@ -112,12 +109,6 @@ theorem query_invalid_input_rejected (name : String) (raw : Value)
     (hp : fs.parse (.input name) raw = .ok none) :
     resolveChecked st fs s name raw = .answered (.rejected { kind := .invalidInput }) [] := by
   simp [resolveChecked, hp]
-
-theorem query_requires_read_only_input (name : String) (raw input : Value) (reason : String)
-    (hp : fs.parse (.input name) raw = .ok (some input))
-    (hr : firstFalse (fs.inputRequirement name · input) (st.requirementsOf name).requires = .ok (some reason)) :
-    resolveChecked st fs s name raw = .answered (.rejected { kind := .requires, reason := some reason }) [] := by
-  simp [resolveChecked, hp, hr]
 
 theorem resolve_output_sorted_before_normalize (name : String) (raw input output normalized : Value)
     (failed : Option String) (hp : fs.parse (.input name) raw = .ok (some input))

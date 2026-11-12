@@ -91,27 +91,6 @@ theorem growsBy_activate (step : Nat) (name state : String) (a : Activity) :
     · intro r; exact Grows.refl _
     · exact growsBy_request step name state a
 
-theorem request_reads_current_values (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
-    (hh : r.state.halted = none) (hi : r.state.machine? name = some i) :
-    ∃ k : Except Issue (Value × List String) → Processing, request fs st step name state a r =
-      k (fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts) := by
-  refine ⟨fun x => match x with
-    | .error e =>
-      r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
-        .requestInputSchema (st.ref i.chart.name) a.ref))
-    | .ok (input, keys) =>
-      let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
-      if a.own then
-        let (s, serial) := r.state.startQueued name state
-        let sent : Sent := { order := i.chart.order, requester := .state name state, activity := a, serial := some serial,
-                             input, cause := step }
-        ⟨s, { r.queue with round := r.queue.round ++ [sent] }⟩
-      else
-        let body := if a.keyword == "calls" then LineBody.query a.target input else .command a.target input
-        ⟨r.state.await body (.state name state) a input, r.queue⟩, ?_⟩
-  simp only [request, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind]
-  rfl
-
 theorem keeps_activateEntered (e : String × String × Nat) : Keeps (activateEntered fs st e) := by
   unfold activateEntered
   apply keeps_withMachine
@@ -140,37 +119,12 @@ theorem growsBy_sendEntered : GrowsBy (sendEntered fs st) := fun r =>
   (foldlM_grows (fun e => growsBy_activateEntered e) (fun e => keeps_activateEntered e) _
     ⟨r.state, { r.queue with entered := [] }⟩).bridge rfl rfl
 
-theorem sendEntered_sends_active (r : Processing) :
-    sendEntered fs st r = (sendOrder r.state r.queue.entered).foldlM (m := Id) (fun r e => activateEntered fs st e r)
-      ⟨r.state, { r.queue with entered := [] }⟩ := rfl
-
 theorem exited_state_sends_nothing (e : String × String × Nat) (r : Processing) (i : Instance)
     (hi : r.state.machine? e.1 = some i) (hn : i.isIn e.2.1 = false) : activateEntered fs st e r = r := by
   unfold activateEntered withMachine
   split
   · rfl
   · simp [hi, hn]
-
-theorem active_state_sends_activities (e : String × String × Nat) (r : Processing) (i : Instance) (cs : ChartState)
-    (hh : r.state.halted = none) (hi : r.state.machine? e.1 = some i) (hc : i.closed = false) (hn : i.isIn e.2.1 = true)
-    (hs : i.chart.state? e.2.1 = some cs) :
-    activateEntered fs st e r =
-      cs.activities.foldlM (m := Id) (fun r' a => unlessHalted (activate fs st (r.state.newStep (some e.2.2) true).2 e.1 e.2.1 a) r')
-        ⟨(r.state.newStep (some e.2.2) true).1, r.queue⟩ := by
-  simp [activateEntered, withMachine, Processing.halted, hh, hi, hc, hn, hs]
-
-theorem activate_requests (step : Nat) (name state : String) (a : Activity) (hk : a.keyword = "calls" ∨ a.keyword = "sends") :
-    activate fs st step name state a = request fs st step name state a := by
-  rcases hk with hk | hk <;> simp [activate, hk]
-
-theorem machine_command_queued (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
-    (input : Value) (keys : List String) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (ho : a.own = true) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts = .ok (input, keys)) :
-    request fs st step name state a r =
-      let started := (r.state.createKeys keys).startQueued name state
-      ⟨started.1, { r.queue with round := r.queue.round ++ [{ order := i.chart.order, requester := .state name state,
-                                                              activity := a, serial := some started.2, input, cause := step }] }⟩ := by
-  simp [request, withMachine, Processing.halted, hh, hi, hp, ho]
 
 theorem activate_opens (step : Nat) (name state : String) (a : Activity) (hk : a.keyword = "opens") :
     activate fs st step name state a = openScreen fs st step name state a := by
@@ -465,13 +419,5 @@ theorem sendEntered_adds_for_active (r : Processing) :
         · obtain ⟨e', he', h1, i, hi, hc', hn'⟩ := ic c hc hm
           exact ⟨e', List.mem_cons_of_mem _ he', h1, hk.active hi hc' hn'⟩
   exact key es _
-
-theorem request_creates_keys (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
-    (input : Value) (keys : List String) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts = .ok (input, keys)) :
-    (request fs st step name state a r).1.created = keys.foldl addCreated r.state.created := by
-  simp only [request, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte,
-    id_bind, hp]
-  split <;> rfl
 
 end Tazuna.Thm.Semantics.Chart.Request

@@ -114,12 +114,6 @@ theorem command_invalid_input_rejected (records : Records) (now : Time) (name : 
     evaluate st fs records now name raw = .rejected { kind := .invalidInput } := by
   simp [evaluate, hp]
 
-theorem requirements_rejection_answered (records : Records) (now : Time) (name : String) (raw input : Value)
-    (r : Rejection) (hp : fs.parse (.input name) raw = .ok (some input))
-    (hr : requirementsRejection st fs records now name input = .ok (some r)) :
-    evaluate st fs records now name raw = .rejected r := by
-  simp [evaluate, hp, hr]
-
 theorem already_exists_iff_duplicated (records : Records) (now : Time) (name : String) (raw input : Value)
     (emits normalized : List Emit) (hp : fs.parse (.input name) raw = .ok (some input))
     (hr : requirementsRejection st fs records now name input = .ok none)
@@ -189,14 +183,6 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                 · obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
                   obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl he
                   exact ⟨x, (List.of_mem_zip hx).1, (hz _ hx).1⟩
-
-theorem processCommand_started (name : String) (raw : Value) (id : Option String) (n : Nat) :
-    (processCommand st fs s name raw id n).1.started = s.started := by
-  simp only [processCommand, id_bind]
-  split
-  · cases id <;> rfl
-  · exact (emitAll_started _ _).trans ((answer_started _ _).trans (reportAll_started _))
-  · exact reportAll_started ..
 
 theorem processCommand_mocks (name : String) (raw : Value) (id : Option String) (n : Nat) :
     (processCommand st fs s name raw id n).1.mocks = s.mocks := by

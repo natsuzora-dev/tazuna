@@ -50,9 +50,6 @@ theorem checkInvariants_fixed : (checkInvariants st fs s).fixed = s.fixed := rep
 
 theorem checkInvariants_lines : (checkInvariants st fs s).lines = s.lines := reportAll_lines _
 
-theorem checkInvariants_halted (h : InvariantsAnswer fs s) : (checkInvariants st fs s).halted = s.halted :=
-  (reportAll_not_halts _ (invariantViolations_not_halts h) s).1
-
 theorem failed_chart_invariant_reported (i : Instance) (c : String) (hh : s.halted = none) (hi : i ∈ s.machines)
     (hc : i.closed = false) (ha : InvariantsAnswer fs s)
     (hf : fs.chartInvariant (s.scopeOf i none) s.records = .ok (some c)) :
@@ -179,8 +176,6 @@ theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDist
   simp only [message, finish, id_bind]
   exact fireDue_keysDistinct _ _ _ (afterMessage_keysDistinct (drain_keysDistinct _ _ h))
 
-theorem message_drains_before_finish (q : Queue) : message st fs s q = finish st fs (drain st fs Limit.messageWork.max s q) := rfl
-
 theorem deadline_is_own_message (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (order : List DeadlineId)
     (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
     (hc : chooseDeadline e (s.deadlines.filter (·.time == e.time)) (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time)
@@ -209,37 +204,6 @@ theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time
       id_pure, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _
 
-theorem finish_publishes_after_message (hh : (checkHolds st fs s).halted = none)
-    (hr : (rearm st fs (checkInvariants st fs (checkHolds st fs s))).halted = none) :
-    finish st fs s =
-      let s₁ := publish st fs (rearm st fs (checkInvariants st fs (checkHolds st fs s)))
-      fireDue st fs s₁.now Limit.dueDeadlines.max none s₁ := by
-  simp [finish, afterMessage, hh, hr]
-
-theorem afterMessage_started : (afterMessage st fs s).started = s.started :=
-  congrArg Fixed.started afterMessage_fixed
-
-theorem fireDue_started (to : Time) (fuel : Nat) (tie : Option Time) :
-    (fireDue st fs to fuel tie s).started = s.started := by
-  induction fuel generalizing s tie with
-  | zero => simp only [fireDue]; split <;> rfl
-  | succ fuel ih =>
-    rw [fireDue]
-    split
-    · rfl
-    · split
-      · rfl
-      · dsimp only
-        split
-        · simp
-        · try simp only [id_bind]
-          rw [ih, afterMessage_started, drain_started, (keeps_settled _ _ (keeps_fire _ _)).started]
-          rfl
-
-theorem message_started (q : Queue) : (message st fs s q).started = s.started := by
-  simp only [message, finish, id_bind]
-  rw [fireDue_started, afterMessage_started, drain_started]
-
 theorem afterMessage_mocks : (afterMessage st fs s).mocks = s.mocks :=
   congrArg Fixed.mocks afterMessage_fixed
 
@@ -264,19 +228,9 @@ theorem message_mocks (q : Queue) : (message st fs s q).mocks = s.mocks := by
   simp only [message, finish, id_bind]
   rw [fireDue_mocks, afterMessage_mocks, drain_mocks]
 
-theorem afterMessage_now : (afterMessage st fs s).now = s.now := congrArg Fixed.now afterMessage_fixed
-
-theorem at_recomputed_after_message (hh : (checkHolds st fs s).halted = none) :
-    afterMessage st fs s =
-      let s₁ := rearm st fs (checkInvariants st fs (checkHolds st fs s))
-      if s₁.halted.isSome then s₁ else publish st fs s₁ := by
-  simp [afterMessage, hh]
-
 theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
     ∃ new, (afterMessage st fs (drain st fs n s q)).lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now :=
   (drain_grows n q).trans (drain_keeps_now n q) afterMessage_grows
-
-theorem after_message_keeps_now : (afterMessage st fs s).now = s.now := afterMessage_now
 
 theorem fireDue_at_deadline_limit (to : Time) (tie : Option Time) :
     fireDue st fs to 0 tie s =

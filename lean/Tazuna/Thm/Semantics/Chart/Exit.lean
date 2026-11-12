@@ -54,16 +54,6 @@ theorem keeps_exitOne (fuel : Nat) (name n : String) : Keeps (exitOne fs st fuel
     · exact h1
     · exact (keeps_leaveWith (fun c n => ih c n) name n _).trans h1
 
-theorem exitOne_ends_copies_reversed (fuel : Nat) (name n : String) (r : Processing) (i : Instance)
-    (hh : r.state.halted = none) (hi : r.state.machine? name = some i) :
-    exitOne fs st (fuel + 1) name n r =
-      let ended := (i.copyKeysOf n).reverse.foldlM (m := Id) (fun r k => unlessHalted (endWith (exitOne fs st fuel) (copyName i.resource n k)) r) r
-      if ended.halted then ended else
-      leaveWith fs st (exitOne fs st fuel) name n
-        ⟨ended.state.setMachine name fun i => { i with copyKeys := i.copyKeys.filter (·.1 != n) }, ended.queue⟩ := by
-  simp only [exitOne, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind]
-  rfl
-
 theorem sameLines_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
     SameLines (runAssign fs st name a scope extra) := by
   unfold runAssign
@@ -119,14 +109,6 @@ theorem growsBy_exitOne (fuel : Nat) (name n : String) : GrowsBy (exitOne fs st 
     split
     · exact g1
     · exact g1.trans n1 ((growsBy_leaveWith (fun c n => ih c n) hk name n _).bridge (by rfl) (by rfl))
-
-theorem exit_assign_before_leaving (exit : String → String → Processing → Id Processing) (name n : String) (r : Processing) :
-    leaveWith fs st exit name n r =
-      let assigned := runAssign fs st name (.exit n) (some n) .none r
-      if assigned.halted then assigned else
-      let s := assigned.state.leaveState name n
-      (s.childrenOf name n).foldlM (m := Id) (fun r c => unlessHalted (endWith exit c) r) ⟨s, assigned.queue⟩ := by
-  simp only [leaveWith, id_bind, id_pure]
 
 theorem foldl_endSubscription_pending (ps : List Pending) (s : State) :
     (ps.foldl (fun s p => s.endSubscription p) s).pending =
@@ -197,57 +179,6 @@ theorem endWith_exits_then_closes (exit : String → String → Processing → I
       ⟨((s.openShows c).foldl (fun s p => s.endSubscription p) s).removeFromStack c, exited.queue⟩ := by
   simp only [endWith, withMachine, Processing.halted, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, hi, id_bind]
   rfl
-
-theorem endWith_closes (exit : String → String → Processing → Id Processing) (c : String) (r : Processing)
-    (ci : Instance) (hh : r.state.halted = none) (hi : r.state.machine? c = some ci)
-    (hn : (endWith exit c r).1.halted = none) :
-    ∀ i, (endWith exit c r).1.machine? c = some i → i.closed = true := by
-  rw [endWith_exits_then_closes exit c r ci hh hi] at hn ⊢
-  generalize List.foldlM (m := Id) (fun r n => unlessHalted (exit c n) r) r _ = X at hn ⊢
-  by_cases hx : X.halted = true
-  · simp only [hx, ↓reduceIte] at hn
-    simp [Processing.halted, hn] at hx
-  · simp only [hx, Bool.false_eq_true, ↓reduceIte]
-    intro i h
-    have : (X.state.setMachine c fun i => { i with closed := true }).machine? c = some i := by
-      simpa [State.machine?, State.removeFromStack] using h
-    rw [machine?_setMachine c (fun i => { i with closed := true }) (fun _ => rfl)] at this
-    obtain ⟨j, _, rfl⟩ := Option.map_eq_some_iff.mp this
-    rfl
-
-theorem lookup_setLastChildren (table : List (String × List String)) (n : String) (children : List String) :
-    (setLastChildren table n children).lookup n = some children := by
-  unfold setLastChildren
-  split
-  · rename_i h
-    induction table with
-    | nil => simp at h
-    | cons e table ih =>
-      obtain ⟨k, v⟩ := e
-      by_cases hk : k = n
-      · subst hk; simp
-      · have hnk : (n == k) = false := beq_false_of_ne (Ne.symm hk)
-        simp only [List.any_cons, Bool.or_eq_true, beq_iff_eq, hk, false_or] at h
-        simp only [List.map_cons, List.lookup, hk, beq_iff_eq, ↓reduceIte, hnk]
-        simpa using ih h
-  · induction table with
-    | nil => simp
-    | cons e table ih =>
-      obtain ⟨k, v⟩ := e
-      rename_i h
-      have hk : k ≠ n := by intro hk; simp [hk] at h
-      have hnk : (n == k) = false := beq_false_of_ne (Ne.symm hk)
-      simp only [List.any_cons, Bool.or_eq_true, beq_iff_eq, hk, false_or] at h
-      simp only [List.cons_append, List.lookup, hnk]
-      exact ih h
-
-theorem exit_records_children (i : Instance) (n : String) (st : ChartState) (hs : i.chart.state? n = some st)
-    (hc : st.children ≠ []) :
-    (recordHistory [n] i).lastChildren.lookup n = some ((i.chart.tree.enterable n).filter (· ∈ i.active)) := by
-  have hr : i.chart.tree.recordedChildren i.active n = some ((i.chart.tree.enterable n).filter (· ∈ i.active)) := by
-    simp [Tree.recordedChildren, i.chart.find?_shape, hs, ChartState.shape, List.isEmpty_iff, hc]
-  simp only [recordHistory, List.foldl_cons, List.foldl_nil, hr]
-  exact lookup_setLastChildren _ _ _
 
 theorem runAssign_deadlines (name : String) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
     (runAssign fs st name a scope extra r).1.deadlines = r.state.deadlines := by
@@ -425,33 +356,6 @@ theorem pendingMapped_exitOne (fuel : Nat) (name n : String) : PendingMapped (ex
       rw [eb]
       simp only [State.setMachine, ea, List.map_map]
 
-theorem exit_keeps_requests (name n : String) (r : Processing) (p : Pending) (hp : p ∈ r.state.pending) :
-    ∃ p' ∈ (exitOne fs st Limit.exitDepth.max name n r).1.pending, p'.id = p.id :=
-  ((pendingMapped_exitOne Limit.exitDepth.max name n).kept r p hp).imp fun _ ⟨h, m⟩ => ⟨h, m.1⟩
-
-theorem exit_closes_opened_children (exit : String → String → Processing → Id Processing) (name n : String) (r : Processing)
-    (ha : (runAssign fs st name (.exit n) (some n) .none r).state.halted = none) :
-    ∃ t : State, leaveWith fs st exit name n r =
-      ((t.machines.filter fun (c : Instance) =>
-          !c.closed && c.opener.any fun o => o.parent == name && o.state == n).map (·.resource)).foldlM (m := Id)
-        (fun r c => unlessHalted (endWith exit c) r) ⟨t, (runAssign fs st name (.exit n) (some n) .none r).queue⟩ := by
-  simp only [leaveWith, id_bind, Processing.halted, ha, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-  exact ⟨_, rfl⟩
-
-theorem exited_copy_closed (exit : String → String → Processing → Id Processing) (c : String) (r : Processing) (ci : Instance)
-    (hh : r.state.halted = none) (hc : r.state.machine? c = some ci) :
-    let exited := (ci.chart.tree.exitOrder ci.active).foldlM (m := Id) (fun r n => unlessHalted (exit c n) r) r
-    exited.halted = false →
-      (endWith exit c r).1.machine? c = (exited.state.machine? c).map fun i => { i with closed := true } := by
-  intro exited hx
-  simp only [exited] at hx
-  rw [endWith_exits_then_closes exit c r ci hh hc]
-  have e1 : ∀ s : State, (s.removeFromStack c).machine? c = s.machine? c := fun _ => rfl
-  have e2 : ∀ (ps : List Pending) (s : State), (ps.foldl (fun s p => s.endSubscription p) s).machine? c = s.machine? c := by
-    intro ps s; simp only [State.machine?, foldl_endSubscription_machines, foldl_endSubscription_copies]
-  simp only [hx, Bool.false_eq_true, ↓reduceIte, e1, e2]
-  exact machine?_setMachine _ _ (by intro _; rfl)
-
 theorem leave_makes_requests_stale (fuel : Nat) (name n : String) (r : Processing) (p : Pending)
     (hp : p ∈ r.state.pending) (hr : p.requester = .state name n)
     (ha : (runAssign fs st name (.exit n) (some n) .none r).1.halted = none) :
@@ -469,25 +373,6 @@ theorem leave_makes_requests_stale (fuel : Nat) (name n : String) (r : Processin
 
 @[simp] theorem endSubscription_fixed (p : Pending) : (s.endSubscription p).fixed = s.fixed := rfl
 
-theorem end_child_shows_keeps_parent (child parent : String) (hne : parent ≠ child)
-    (hid : (s.pending.map (·.id)).Nodup) :
-    ((s.openShows child).foldl (fun s p => s.endSubscription p) s).openShows parent = s.openShows parent := by
-  unfold State.openShows
-  rw [foldl_endSubscription_pending]
-  refine filter_map_same _ (fun q hq => ?_)
-  by_cases hm : (s.pending.filter fun p => p.requester.machine? == some child && p.requester.slot?.isSome && !p.stale).any
-      (·.id == q.id) = true
-  · right
-    obtain ⟨p, hp, he⟩ := List.any_eq_true.mp hm
-    have hpp := (List.mem_filter.mp hp).1
-    have hpq : p = q := nodup_map_inj s.pending hid hpp hq (by simpa using he)
-    have hmc : q.requester.machine? = some child := by
-      have := (List.mem_filter.mp hp).2
-      simp only [Bool.and_eq_true, beq_iff_eq] at this
-      exact hpq ▸ this.1.1
-    simp [hm, hmc, hne.symm]
-  · left
-    simp [hm]
 @[simp] theorem foldl_endSubscription_deadlines (ps : List Pending) (s : State) :
     (ps.foldl (fun s p => s.endSubscription p) s).deadlines = s.deadlines := by
   induction ps generalizing s with
@@ -713,15 +598,6 @@ theorem leave_makes_queued_stale (s : State) (name n : String) :
   · simp [h]
   · simp only [h, Bool.false_eq_true, ↓reduceIte] at hm hs ⊢
     simp [hm, hs] at h
-
-theorem runAssign_creates_keys (name : String) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing)
-    (i : Instance) (context : Value) (copyContext : Option Value) (keys : List String) (hh : r.state.halted = none)
-    (hi : r.state.machine? name = some i)
-    (ha : fs.assign (r.state.scopeOf i scope) r.state.records a extra r.state.keyCounts = .ok (context, copyContext, keys)) :
-    (runAssign fs st name a scope extra r).1.created = keys.foldl addCreated r.state.created := by
-  simp only [runAssign, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte,
-    id_bind, ha]
-  split <;> rfl
 
 def Absent (s : State) (name n : String) : Prop := ∀ i ∈ s.machines ++ s.copies, i.resource = name → n ∉ i.active
 

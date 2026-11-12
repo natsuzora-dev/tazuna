@@ -68,29 +68,6 @@ theorem ancestor_only_without_descendant (s : State) (extra : Extra) (levels : L
         exact hn
       | succ j => exact hb j (by omega) i'' ts'' (by simpa using hj')
 
-theorem guard_reads_current_values (s : State) (i : Instance) (extra : Extra) (t : Transition)
-    (rest : List Transition) (hg : t.guarded = true) :
-    ∃ k : Except Issue Bool → Except Fault (Option Transition), choose fs st s i extra (t :: rest) =
-      k (fs.guard (s.scopeOf i t.source) s.records t extra) := by
-  refine ⟨fun x => match x with
-    | .error e => .error (issueViolation st (st.ref i.chart.name) e)
-    | .ok true => .ok (some t)
-    | .ok false => choose fs st s i extra rest, ?_⟩
-  simp only [choose, hg, ↓reduceIte, id_bind]
-  rfl
-
-theorem reaches_iff (c : Instance) (co : CopyOf) (hc : c.copyOf = some co) (payload : Value) :
-    reaches fs st c payload = .ok true ↔
-      fs.copyKey c.chart.name co.map payload = .ok none ∨
-        fs.copyKey c.chart.name co.map payload = .ok (some (some co.encodedKey)) := by
-  simp only [reaches, hc, id_bind]
-  rcases fs.copyKey c.chart.name co.map payload with e | (_ | (_ | k))
-  · simp
-  · simp
-  · simp
-  · simp only [id_pure, id_ok_inj, reduceCtorEq, Option.some.injEq, false_or]
-    exact ⟨fun h => by rw [beq_iff_eq.mp h], fun h => by rw [h]; simp⟩
-
 theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k : String)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) =
@@ -136,32 +113,6 @@ theorem keyed_payload_reaches_at_most_one (chart map : String) (payload : Value)
         simp [hco, hdo, hc, hd']
       simp [this]
     · exact ih'
-
-theorem choose_ignores_pending (i : Instance) (extra : Extra) (ps : List Pending) (ts : List Transition) :
-    choose fs st { s with pending := ps } i extra ts = choose fs st s i extra ts := by
-  induction ts with
-  | nil => rfl
-  | cons t ts ih =>
-    rw [choose, choose, ih]
-    rfl
-
-theorem firstLevel_ignores_pending (extra : Extra) (ps : List Pending) (levels : List (Instance × List Transition)) :
-    firstLevel fs st { s with pending := ps } extra levels = firstLevel fs st s extra levels := by
-  induction levels with
-  | nil => rfl
-  | cons l levels ih =>
-    obtain ⟨i, ts⟩ := l
-    rw [firstLevel, firstLevel, ih, choose_ignores_pending]
-
-theorem eventLeaves_ignores_pending (top : Instance) (payload : Value) (ps : List Pending) :
-    eventLeaves fs st { s with pending := ps } top payload = eventLeaves fs st s top payload := rfl
-
-theorem select_ignores_pending (top : Instance) (trigger : List String) (extra : Extra)
-    (leaves : List (String × Option String)) (ps : List Pending) :
-    select fs st { s with pending := ps } top trigger extra leaves = select fs st s top trigger extra leaves := by
-  unfold select pick
-  simp only [firstLevel_ignores_pending]
-  rfl
 
 theorem removeConflicts_sublist (s : State) (c : Chart) (enabled : List (String × Transition)) :
     (s.removeConflicts c enabled).Sublist enabled := by
@@ -342,30 +293,6 @@ theorem select_error_halts (s : State) (top : Instance) (trigger : List String) 
     exact h ▸ key leaves _ (fun w hw => by cases hw) u hfound
   | ok e => simp [Except.map] at h
 
-theorem levelsOf_leaf_to_root (top holder : Instance) (trigger : List String) (n : String) :
-    (levelsOf top holder trigger (some n)).map (·.2) =
-      (top.chart.tree.pathOf n).reverse.map (fun x => top.chart.transitionsAt (some x) trigger) ++
-        [top.chart.transitionsAt none trigger] := by
-  unfold levelsOf
-  simp only [List.map_append, List.map_cons, List.map_nil, List.map_map]
-  congr 1
-  generalize top.chart.tree.pathOf n = path
-  have : (path.zipIdx.reverse.map (·.1)) = path.reverse := by rw [List.map_reverse]; simp
-  rw [← this, List.map_map]
-  rfl
-
-theorem leavesOf_document_order (s : State) (top : Instance) (reached : List String) :
-    ((leavesOf s top reached).filterMap fun l => l.2.map (l.1, ·)).Sublist top.documentOrder := by
-  unfold leavesOf
-  simp only
-  split
-  · simp
-  · rw [List.filterMap_map]
-    have : ((fun l : String × Option String => l.2.map (l.1, ·)) ∘ fun x : String × String => (x.1, some x.2)) = some := by
-      funext l; rfl
-    rw [this, List.filterMap_some]
-    exact List.filter_sublist
-
 theorem copyLeaves_any (s : State) (reached : List String) (h n : String)
     (ha : ((reached.filterMap fun h => (s.machine? h).map fun ci => (h, ci.chart.tree.leaves ci.active)).lookup h).any
       (n ∈ ·) = true) :
@@ -402,27 +329,6 @@ theorem leavesOf_atomic (s : State) (top : Instance) (reached : List String) :
     · have : (h == top.resource) = false := by simpa using e
       simp only [this, Bool.false_eq_true, ↓reduceIte] at ha
       exact Or.inr (copyLeaves_any s reached h n ha)
-
-theorem eventLeaves_document_order (s : State) (top : Instance) (payload : Value)
-    (leaves : List (String × Option String)) (h : eventLeaves fs st s top payload = .ok leaves) :
-    let ls := leaves.filterMap fun l => l.2.map (l.1, ·)
-    ls.Sublist top.documentOrder ∧
-      ((ls.filter (·.1 == top.resource)).map (·.2)).Sublist (top.chart.states.map (·.name)) ∧
-      ∀ cs ∈ top.chart.states, ∃ pre post, top.documentOrder =
-        pre ++ (top.resource, cs.name) ::
-          ((top.copyKeysOf cs.name).flatMap fun k => (top.chart.tree.descendants cs.name).map (copyName top.resource cs.name k, ·)) ++ post := by
-  intro ls
-  obtain ⟨reached, -, rfl⟩ : ∃ reached, reachedCopies fs st s top payload = .ok reached ∧ leaves = leavesOf s top reached := by
-    simp only [eventLeaves, id_bind] at h
-    revert h
-    cases reachedCopies fs st s top payload with
-    | error v => intro h; cases h
-    | ok reached => intro h; cases h; exact ⟨reached, rfl, rfl⟩
-  have h1 : ls.Sublist top.documentOrder := leavesOf_document_order s top _
-  refine ⟨h1, ?_, fun cs hcs => documentOrder_at_map top cs hcs⟩
-  have h2 := (h1.filter (·.1 == top.resource)).map (·.2)
-  rw [documentOrder_owner top, List.map_map] at h2
-  exact h2
 
 theorem select_one_per_leaf (s : State) (top : Instance) (trigger : List String) (extra : Extra)
     (leaves : List (String × Option String)) (chosen : List (String × Transition))

@@ -27,12 +27,6 @@ theorem restart_keeps :
 theorem restart_forgets (h : s.stop = t.stop) : restart st fs s = restart st fs t := by
   simp only [restart, stop_writeInput, h]
 
-/-- On a state without the discarded part, as before the first input, a restart only writes its line and begins. -/
-theorem restart_first (h : s.stop = s) : restart st fs s = begin st fs (s.writeInput none .restart).1 := by
-  simp only [restart, stop_writeInput, h]
-
-theorem restart_started : (restart st fs s).started = true := begin_started
-
 theorem restart_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (restart st fs s).records :=
   begin_keysDistinct h
 

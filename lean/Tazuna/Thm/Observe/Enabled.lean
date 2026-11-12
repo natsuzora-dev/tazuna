@@ -54,20 +54,6 @@ def runPrefix (stepper : Stepper Id) : Nat → State → List Step → State
     let s := stepper s input
     if s.halted.isSome then s else runPrefix stepper k s rest
 
-theorem runPrefix_all (stepper : Stepper Id) (k : Nat) (s : State) (inputs : List Step) (h : inputs.length < k) :
-    runPrefix stepper k s inputs = runFrom stepper s inputs := by
-  induction inputs generalizing k s with
-  | nil => cases k <;> rfl
-  | cons i rest ih =>
-    cases k with
-    | zero => simp at h
-    | succ k =>
-      simp only [runPrefix, runFrom]
-      unfold_state
-      split
-      · rfl
-      · exact ih k _ (by simp only [List.length_cons, Nat.add_lt_add_iff_right] at h; omega)
-
 theorem runFrom_prefix (s : State) (inputs : List Step) (log : EnabledLog) (h₀ : log.stopped = none) :
     ∃ added, ((runFrom (enabledStep st stepper fs) s inputs).run log).2.enabled = log.enabled ++ added ∧
       ((runFrom (enabledStep st stepper fs) s inputs).run log).1 = runPrefix stepper (added.length + 1) s inputs := by

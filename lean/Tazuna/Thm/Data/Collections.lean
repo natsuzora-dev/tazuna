@@ -127,21 +127,4 @@ theorem sorted_by_array_sorted (schema item : Value) (xs : List Value) (key : St
     · rename_i heq
       simp [hi] at heq
 
-theorem plain_array_keeps_order (schema item : Value) (xs : List Value)
-    (ha : schema.field? "anyOf" = none) (hi : schema.field? "items" = some item)
-    (hk : ∀ key, schema.field? "x-tazuna-sorted-by" ≠ some (.str key)) :
-    sortCollections schema (.arr xs) = .arr (xs.map (sortCollections item)) := by
-  rw [sortCollections]
-  split
-  · rename_i heq; rw [ha] at heq; cases heq
-  · split
-    · rename_i item' hi' _
-      rw [hi] at hi'
-      cases Option.mem_def.mp hi'
-      split
-      · rename_i key h; exact absurd h (hk key)
-      · rfl
-    · rename_i heq
-      simp [hi] at heq
-
 end Tazuna.Thm.Data.Collections

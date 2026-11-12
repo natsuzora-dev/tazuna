@@ -146,14 +146,6 @@ theorem withResultOf_records (name : String) (k : Option Nat) :
   · rfl
   · exact resultRequest_records _ _
 
-theorem withResultOf_started (name : String) (k : Option Nat) :
-    (withResultOf st s name k).1.started = s.started := by
-  cases k
-  · rfl
-  · simp only [withResultOf, resultRequest]
-    repeat' split
-    all_goals first | rfl | simp
-
 theorem redeliver_records_before_message (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
     (first : Delivery) :
     ∃ s', s'.records = s.records ∧
@@ -215,24 +207,6 @@ theorem operate_keysDistinct (screen control : String) (payload : Value) (accept
        first
         | exact h
         | (rw [(keeps_settled _ _ (keeps_dispatch _ _ _ _)).records]; exact h))
-
-theorem mock_writes_checked_answer (sender name : String) (answer : Answer) (choice : Option Choice) (p : Pending)
-    (canonical : Option Choice) (checked : AnswerCheck) (written : Answer)
-    (hc : canonicalChoice st fs name choice = .ok canonical) (hf : s.answering sender name canonical = some p)
-    (ha : checkAnswer st fs p answer = .ok checked) (hw : checked.written = .ok written) :
-    (mock st fs s sender name answer choice).lines[s.lines.size]? =
-      some { time := s.now, dir := .in, id := (s.writeInput none (.answer p.id written)).2,
-             body := .answer p.id written, deadlineOrder := s.inputDeadlineOrder } := by
-  unfold mock
-  simp only [id_bind, id_pure]
-  rw [hc]
-  simp only
-  rw [hf]
-  simp only [ha, hw]
-  refine (message_extends _).getElem? ?_
-  refine (growsBy_settled _ _ (growsBy_deliverAnswer _ _ _) (keeps_deliverAnswer _ _ _) _).toExtends.getElem? ?_
-  simp only [State.newStep, State.newMessage]
-  cases checked.assumption <;> split <;> simp [State.writeInput, State.lineId]
 
 theorem result_is_event_of_emits (name : String) (k : Nat) (s' : State) (p : Pending)
     (h : resultRequest st s name k = (s', some p)) :
@@ -315,34 +289,6 @@ theorem startInstances_one_per_definition (h : (startInstances st fs s).halted =
         · exact ⟨rfl, rfl, rfl⟩
         · exact h₃ i hi
 
-theorem begin_runs_once (h : s.started = true) : begin st fs s = s := by
-  simp [begin, h]
-
-theorem startRecords_started : (startRecords st fs s).started = s.started := by
-  unfold startRecords
-  rw [foldlM_id]
-  refine foldl_keeps (fun t : State => t.started = s.started) _ (fun t e ht => ?_) _ _ rfl
-  simp only [id_bind]
-  split
-  · exact ht
-  · exact ht
-
-theorem startInstances_started : (startInstances st fs s).started = s.started := by
-  unfold startInstances
-  rw [foldlM_id]
-  refine foldl_keeps (fun t : State => t.started = s.started) _ (fun t c ht => ?_) _ _ rfl
-  unfold startInstance
-  split
-  · exact ht
-  · simp only [id_bind]
-    split <;> simp [ht]
-
-theorem begin_started : (begin st fs s).started = true := by
-  unfold begin
-  split
-  · assumption
-  · simp [message_started, startInstances_started, startRecords_started, State.newMessage]
-
 theorem begin_starts_each (h : s.started = false) :
     begin st fs s = message st fs (startInstances st fs (startRecords st fs { s with started := true }.newMessage))
       { tasks := st.starting.map (.start ·.name none) } := by
@@ -354,151 +300,6 @@ theorem begin_starts_starting_without_parent (h : s.started = false) :
         new.map (·.chart) = st.starting ∧ ∀ i ∈ new, i.opener = none) :=
   ⟨_, begin_starts_each h, fun hh => (startInstances_one_per_definition hh).imp fun _ ⟨h₁, h₂, h₃⟩ =>
     ⟨h₁, h₂, fun i hi => (h₃ i hi).2.1⟩⟩
-
-theorem send_started (name : String) (id : Option String) (raw : Value) :
-    (send st fs s name id raw).started = s.started := by
-  unfold send
-  split
-  · simp only [id_bind]
-    split
-    · simp
-    · split
-      · rw [message_started, answer_started]; rfl
-      · rw [message_started]
-        exact processCommand_started _ _ _ _
-  · rfl
-
-theorem call_started (name : String) (id : Option String) (raw : Value) :
-    (call st fs s name id raw).started = s.started := by
-  unfold call
-  split
-  · simp only [id_bind]
-    split
-    · simp
-    · split
-      · rw [message_started, answer_started, reportAll_started]
-        rfl
-      · exact report_started ..
-  · rfl
-
-theorem subscribe_started (name : String) (id : Option String) (raw : Value) :
-    (subscribe st fs s name id raw).started = s.started := by
-  unfold subscribe
-  split
-  · simp only [id_bind]
-    split
-    · simp
-    · rw [message_started]
-      split <;> rfl
-  · rfl
-
-theorem endSubscription_started (id : String) : (endSubscription st fs s id).started = s.started := by
-  unfold endSubscription
-  rw [message_started]
-  split <;> rfl
-
-theorem deliver_started (name : String) (id : Option String) (payload : Value) (rq : Option Pending) :
-    (deliver st fs s name id payload rq).started = s.started := by
-  unfold deliver
-  simp only [id_bind]
-  split
-  · rename_i p _
-    rw [message_started]
-    show (addResult st fs _ _ _).started = _
-    unfold addResult
-    simp only [id_bind]
-    split
-    · rfl
-    · split
-      · simp only [id_pure, report_started]; rfl
-      · rfl
-      · rfl
-  · rw [message_started]; rfl
-
-theorem receive_started (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat) :
-    (receive st fs s name id raw resultOf).started = s.started := by
-  unfold receive
-  split
-  · split
-    · simp only [redeliver, id_bind]
-      split
-      · simp
-      · rw [message_started]
-        split
-        · exact withResultOf_started _ _
-        · simp only [State.newMessage, report_started]; exact withResultOf_started _ _
-    · simp only [id_bind]
-      split
-      · simp
-      · rfl
-      · rw [deliver_started]; exact withResultOf_started _ _
-  · rfl
-
-theorem mock_started (sender name : String) (answer : Answer) (choice : Option Choice) :
-    (mock st fs s sender name answer choice).started = s.started := by
-  unfold mock
-  simp only [id_bind]
-  split
-  · simp
-  · split
-    · simp
-    · split
-      · simp
-      · split
-        · split <;> simp
-        · rw [message_started, (keeps_settled _ _ (keeps_deliverAnswer _ _ _)).started]
-          simp only [State.newStep, State.newMessage, State.writeInput]
-          repeat' split
-          all_goals simp
-
-theorem operate_started (screen control : String) (payload : Value) (accepted : Bool) :
-    (operate st fs s screen control payload accepted).started = s.started := by
-  unfold operate
-  simp only [id_bind]
-  split
-  · rfl
-  · split
-    · rfl
-    · split
-      · simp only [id_pure, report_started]; rfl
-      · rfl
-      · split
-        · simp only [id_pure, report_started]; rfl
-        · split
-          · rw [message_started]
-            exact congrArg Fixed.started (keeps_settled _ _ (keeps_dispatch _ _ _ _) _)
-          · rw [message_started]; rfl
-          · simp only [id_pure, report_started]; rfl
-          · simp only [id_pure, report_started]; rfl
-
-theorem accepted_operation_settles_around (screen control : String) (payload : Value) (c : Chart) (ctl : Control)
-    (decoded : Value) (top : Instance) (hc : st.chart? screen = some c) (hctl : c.controls.find? (·.name == control) = some ctl)
-    (hp : fs.parse (.control screen control) payload = .ok (some decoded))
-    (ha : acceptsOperation fs st (s.writeInput none (.operation s!"{screen}.{control}"
-      (if ctl.hasPayload then some payload else none) true)).1 screen control decoded = .ok (.ok top)) :
-    operate st fs s screen control payload true =
-      let started := (s.writeInput none (.operation s!"{screen}.{control}"
-        (if ctl.hasPayload then some payload else none) true)).1.newMessage.newStep none
-      let r := settled fs st started.2 (some top.resource) (dispatch fs st started.2 top.resource control decoded)
-        ⟨started.1, {}⟩
-      message st fs r.state r.queue := by
-  simp only [operate, hc, hctl, id_bind, hp, ha]
-
-theorem advance_keeps_started (input : Step) (h : s.started = true) : (advance st fs s input).started = true := by
-  unfold advance
-  dsimp only
-  split
-  · exact h
-  · simp only [id_bind]
-    have hf : (fireDue st fs input.time.time Limit.dueDeadlines.max none s).started = true := by
-      rw [fireDue_started]; exact h
-    generalize fireDue st fs input.time.time Limit.dueDeadlines.max none s = X at hf ⊢
-    split
-    · exact hf
-    · split
-      · exact hf
-      · rw [begin_runs_once (st := st) (fs := fs) (s := { X with now := max X.now input.time.time }) hf]
-        exact hf
 
 theorem earliestTurn_spec (ps : List Pending) (p : Pending) (h : earliestTurn ps = some p) :
     p ∈ ps ∧ ∀ q ∈ ps, p.turn ≤ q.turn := by
