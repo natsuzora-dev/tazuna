@@ -1,0 +1,4 @@
+{"kind":"Mismatch.failedAssumedEnsures","definition":null,"data":{"line":2,"requestId":"q1","target":{"service":"calendar","name":"nextDay"},"condition":"afterFrom"},"location":{"file":"traces/calendar/requests.jsonl","line":2}}
+{"kind":"Mismatch.rejectedAssumedRequires","definition":null,"data":{"line":4,"requestId":"q2","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"traces/calendar/requests.jsonl","line":4}}
+{"kind":"Mismatch.failedAssumedEnsures","definition":null,"data":{"line":8,"requestId":"c1","target":{"service":"calendar","name":"addReminder"},"condition":"isOnce"},"location":{"file":"traces/calendar/requests.jsonl","line":8}}
+{"kind":"Mismatch.failedAssumedRequires","definition":null,"data":{"line":10,"requestId":"q3","target":{"service":"calendar","name":"nextDay"},"condition":"isWeekday"},"location":{"file":"traces/calendar/requests.jsonl","line":10}}

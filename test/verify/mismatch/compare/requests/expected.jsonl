@@ -1,0 +1,3 @@
+{"kind":"Mismatch.request","definition":null,"data":{"line":4,"id":"q1","type":"query","name":"calendar.nextDay","snapshot":{"from":"2026-10-25T00:00:00Z"},"trace":{"from":"2026-10-24T00:00:00Z"}},"location":{"file":"traces/todo/addHourlyWrongRequests.jsonl","line":4}}
+{"kind":"Mismatch.missingLine","definition":null,"data":{"line":5,"type":"query","name":"calendar.nextDay","content":{"from":"2026-10-25T01:00:00Z"},"snapshotLine":8},"location":{"file":"traces/todo/addHourlyWrongRequests.jsonl","line":5}}
+{"kind":"Mismatch.unexpectedLine","definition":null,"data":{"line":12,"subject":{"type":"command","name":"calendar.book","id":"c9"}},"location":{"file":"traces/todo/addHourlyWrongRequests.jsonl","line":12}}

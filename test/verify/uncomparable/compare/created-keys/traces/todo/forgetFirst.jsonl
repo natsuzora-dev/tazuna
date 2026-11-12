@@ -1,0 +1,8 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c1","name":"addTask","input":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e1","name":"seen","payload":{"id":"Seen-2","taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c2","name":"addTask","input":{"taskId":"task-2"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e2","name":"seen","payload":{"id":"Seen-1","taskId":"task-2"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c3","name":"forget","input":{"id":"Seen-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c3","answer":{"result":"accepted"}}

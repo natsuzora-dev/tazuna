@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"device.requestPermission#1","name":"device.requestPermission","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#1"}
+{"time":"2026-10-25T01:05:00Z","dir":"in","type":"restart","id":"restart#1"}
+{"time":"2026-10-25T01:05:00Z","dir":"out","type":"command","id":"device.requestPermission#2","name":"device.requestPermission","input":{}}
+{"time":"2026-10-25T01:05:00Z","dir":"in","type":"answer","id":"answer#1","to":"device.requestPermission#2","answer":{"result":"accepted"}}

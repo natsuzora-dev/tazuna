@@ -1,0 +1,6 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"Task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"Task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"noteAdded#1","name":"noteAdded","payload":{"id":"Note-1","label":"Task-1"},"after":["taskAdded#1"],"created":["Note-1"]}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addNote#1","name":"addNote","input":{"noteId":"Note-1","label":"again"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addNote#1","answer":{"result":"rejected","rejection":{"kind":"already-exists"}}}

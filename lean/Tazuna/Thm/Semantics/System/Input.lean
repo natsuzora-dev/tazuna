@@ -1,0 +1,698 @@
+import Tazuna.Semantics.System.Input
+import Tazuna.Thm.Semantics.System.Queue
+import Tazuna.Thm.Syntax.Structure
+
+namespace Tazuna.Thm.Semantics.System.Input
+
+open Tazuna.Data Tazuna.Semantics
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Semantics.Chart.Always Tazuna.Thm.Semantics.Chart.Deadline Tazuna.Thm.Semantics.Chart.Done Tazuna.Thm.Semantics.Chart.Exit Tazuna.Thm.Semantics.Chart.Macrostep Tazuna.Thm.Semantics.Chart.Map Tazuna.Thm.Semantics.Chart.Microstep Tazuna.Thm.Semantics.Chart.Queue Tazuna.Thm.Semantics.Chart.Request Tazuna.Thm.Semantics.Functions Tazuna.Thm.Semantics.Screen.Subscription Tazuna.Thm.Semantics.Service.Automation Tazuna.Thm.Semantics.Service.Command Tazuna.Thm.Semantics.Service.Integrity Tazuna.Thm.Semantics.Service.Query Tazuna.Thm.Semantics.Service.Records Tazuna.Thm.Semantics.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Semantics.Chart.Basic Tazuna.Thm.Semantics.System.Clock Tazuna.Thm.Semantics.System.Queue
+
+open Tazuna.Thm.Syntax.Structure (resultOfMismatch_eq_none_iff resultOfMismatch_unaccepted)
+
+variable {st : Service} {fs : Functions Id} {s : State}
+
+theorem addResult_records (id : String) (e : Emit) : (addResult st fs s id e).records = s.records := by
+  unfold addResult
+  simp only [id_bind]
+  split
+  · rfl
+  · split <;> simp
+
+theorem resultRequest_records (name : String) (k : Nat) : (resultRequest st s name k).1.records = s.records := by
+  unfold resultRequest
+  repeat' split
+  all_goals first | rfl | simp
+
+theorem startRecords_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (startRecords st fs s).records := by
+  unfold startRecords
+  rw [foldlM_id]
+  refine foldl_keeps (fun t : State => KeysDistinct t.records) _ (fun t e ht => ?_) _ _ h
+  simp only [id_bind]
+  split
+  · exact ht
+  · rename_i hc
+    show KeysDistinct (t.records ++ [_])
+    unfold KeysDistinct at ht ⊢
+    rw [List.map_append, List.nodup_append]
+    refine ⟨ht, by simp, fun a ha b hb he => ?_⟩
+    simp only [List.map_cons, List.map_nil, List.mem_singleton] at hb
+    subst hb
+    subst he
+    obtain ⟨r, hr, hre⟩ := List.mem_map.mp ha
+    exact hc (List.any_eq_true.mpr ⟨r, hr, by simp [(Prod.mk.inj hre).1]⟩)
+
+theorem begin_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (begin st fs s).records := by
+  unfold begin
+  split
+  · exact h
+  · simp only [id_bind]
+    apply message_keysDistinct
+    unfold startInstances
+    rw [foldlM_id]
+    rw [foldl_records]
+    · exact startRecords_keysDistinct h
+    · intro t c
+      unfold startInstance
+      split
+      · rfl
+      · simp only [id_bind]
+        split <;> simp
+
+@[simp] theorem checkOrderUsed_records : s.checkOrderUsed.records = s.records := by
+  unfold State.checkOrderUsed; split <;> simp
+
+@[simp] theorem checkOrderUsed_started : s.checkOrderUsed.started = s.started := by
+  unfold State.checkOrderUsed; split <;> simp
+
+@[simp] theorem checkOrderUsed_lines : s.checkOrderUsed.lines = s.lines := by
+  unfold State.checkOrderUsed; split <;> simp
+
+@[simp] theorem checkOrderUsed_commandAnswers : s.checkOrderUsed.commandAnswers = s.commandAnswers := by
+  unfold State.checkOrderUsed; split <;> simp
+
+theorem advance_keysDistinct (input : Step) (h : KeysDistinct s.records) :
+    KeysDistinct (advance st fs s input).records := by
+  unfold advance
+  dsimp only
+  split
+  · exact h
+  · simp only [id_bind]
+    have hf := fireDue_keysDistinct (st := st) (fs := fs) input.time.time Limit.dueDeadlines.max none h
+    generalize fireDue st fs input.time.time Limit.dueDeadlines.max none s = X at hf ⊢
+    split
+    · exact hf
+    · split
+      · exact hf
+      · exact begin_keysDistinct (st := st) (fs := fs) (s := { X with now := max X.now input.time.time }) hf
+
+theorem send_keysDistinct (name : String) (id : Option String) (raw : Value) (h : KeysDistinct s.records) :
+    KeysDistinct (send st fs s name id raw).records := by
+  unfold send
+  split
+  · simp only [id_bind]
+    split
+    · simpa using h
+    · split
+      · exact message_keysDistinct _ (by rw [answer_records]; exact h)
+      · exact message_keysDistinct _ (processCommand_keysDistinct _ _ _ _ h)
+  · exact h
+
+theorem call_keysDistinct (name : String) (id : Option String) (raw : Value) (h : KeysDistinct s.records) :
+    KeysDistinct (call st fs s name id raw).records := by
+  unfold call
+  split
+  · simp only [id_bind]
+    split
+    · simpa using h
+    · generalize resolveChecked st fs _ name raw = x
+      rcases x with ⟨a, vs⟩ | f
+      · exact message_keysDistinct _ (by rw [answer_records, reportAll_records]; exact h)
+      · simpa using h
+  · exact h
+
+theorem subscribe_keysDistinct (name : String) (id : Option String) (raw : Value) (h : KeysDistinct s.records) :
+    KeysDistinct (subscribe st fs s name id raw).records := by
+  unfold subscribe
+  split
+  · simp only [id_bind]
+    split
+    · simpa using h
+    · apply message_keysDistinct
+      split
+      · simpa using h
+      · exact h
+  · exact h
+
+theorem endSubscription_keysDistinct (id : String) (h : KeysDistinct s.records) :
+    KeysDistinct (endSubscription st fs s id).records := by
+  unfold endSubscription
+  apply message_keysDistinct
+  split <;> exact h
+
+theorem deliver_keysDistinct (name : String) (id : Option String) (payload : Value) (request : Option Pending)
+    (h : KeysDistinct s.records) : KeysDistinct (deliver st fs s name id payload request).records := by
+  unfold deliver
+  simp only [id_bind]
+  split
+  · apply message_keysDistinct
+    show KeysDistinct (State.newStep (State.newMessage (addResult st fs _ _ _)) none).1.records
+    rw [show ∀ t : State, t.newMessage.newStep none |>.1.records = t.records from fun _ => rfl, addResult_records]
+    exact h
+  · exact message_keysDistinct _ h
+
+theorem withResultOf_records (name : String) (k : Option Nat) :
+    (withResultOf st s name k).1.records = s.records := by
+  cases k
+  · rfl
+  · exact resultRequest_records _ _
+
+theorem withResultOf_started (name : String) (k : Option Nat) :
+    (withResultOf st s name k).1.started = s.started := by
+  cases k
+  · rfl
+  · simp only [withResultOf, resultRequest]
+    repeat' split
+    all_goals first | rfl | simp
+
+theorem redeliver_records_before_message (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
+    (first : Delivery) :
+    ∃ s', s'.records = s.records ∧
+      (redeliver st fs s name id raw resultOf first = message st fs s' {} ∨ redeliver st fs s name id raw resultOf first = s') := by
+  unfold redeliver
+  simp only [id_bind]
+  split
+  · exact ⟨_, report_records .., Or.inr rfl⟩
+  · refine ⟨_, ?_, Or.inl rfl⟩
+    split
+    · exact withResultOf_records _ _
+    · simp only [State.newMessage, report_records]; exact withResultOf_records _ _
+
+theorem receive_keysDistinct (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
+    (h : KeysDistinct s.records) : KeysDistinct (receive st fs s name id raw resultOf).records := by
+  unfold receive
+  split
+  · split
+    · rename_i first _
+      obtain ⟨s', hr, e | e⟩ := redeliver_records_before_message (st := st) (fs := fs) (s := s) name id raw resultOf first
+      · rw [e]
+        exact message_keysDistinct _ (hr ▸ h)
+      · rw [e]
+        exact hr ▸ h
+    · simp only [id_bind]
+      split
+      · simpa using h
+      · exact h
+      · exact deliver_keysDistinct _ _ _ _ ((withResultOf_records (st := st) (s := s) _ _).symm ▸ h)
+  · exact h
+
+theorem mock_keysDistinct (sender name : String) (answer : Answer) (choice : Option Choice)
+    (h : KeysDistinct s.records) : KeysDistinct (mock st fs s sender name answer choice).records := by
+  unfold mock
+  simp only [id_bind]
+  split
+  · simpa using h
+  · split
+    · simpa using h
+    · split
+      · simpa using h
+      · split
+        · split <;> simpa using h
+        · apply message_keysDistinct
+          rw [(keeps_settled _ _ (keeps_deliverAnswer _ _ _)).records]
+          simp only [State.newStep, State.newMessage, State.writeInput]
+          repeat' split
+          all_goals simpa using h
+
+theorem operate_keysDistinct (screen control : String) (payload : Value) (accepted : Bool)
+    (h : KeysDistinct s.records) : KeysDistinct (operate st fs s screen control payload accepted).records := by
+  unfold operate
+  simp only [id_bind]
+  repeat' split
+  all_goals first
+    | exact h
+    | simpa using h
+    | (apply message_keysDistinct
+       first
+        | exact h
+        | (rw [(keeps_settled _ _ (keeps_dispatch _ _ _ _)).records]; exact h))
+
+theorem mock_writes_checked_answer (sender name : String) (answer : Answer) (choice : Option Choice) (p : Pending)
+    (canonical : Option Choice) (checked : AnswerCheck) (written : Answer)
+    (hc : canonicalChoice st fs name choice = .ok canonical) (hf : s.answering sender name canonical = some p)
+    (ha : checkAnswer st fs p answer = .ok checked) (hw : checked.written = .ok written) :
+    (mock st fs s sender name answer choice).lines[s.lines.size]? =
+      some { time := s.now, dir := .in, id := (s.writeInput none (.answer p.id written)).2,
+             body := .answer p.id written, deadlineOrder := s.inputDeadlineOrder } := by
+  unfold mock
+  simp only [id_bind, id_pure]
+  rw [hc]
+  simp only
+  rw [hf]
+  simp only [ha, hw]
+  refine (message_extends _).getElem? ?_
+  refine (growsBy_settled _ _ (growsBy_deliverAnswer _ _ _) (keeps_deliverAnswer _ _ _) _).toExtends.getElem? ?_
+  simp only [State.newStep, State.newMessage]
+  cases checked.assumption <;> split <;> simp [State.writeInput, State.lineId]
+
+theorem result_is_event_of_emits (name : String) (k : Nat) (s' : State) (p : Pending)
+    (h : resultRequest st s name k = (s', some p)) :
+    (∃ d ∈ st.«structure».definitions.find? (·.ref == p.activity.ref), match d.body with
+      | .command _ _ _ emits .. => some (st.refOf name) ∈ emits
+      | _ => False) ∧
+      ∃ o, s.mocks.lookup k = some (some (p, .accepted o)) := by
+  unfold resultRequest at h
+  split at h
+  · rename_i q a hk
+    cases a with
+    | accepted o =>
+      cases hm : st.«structure».resultOfMismatch q.activity.ref true (st.refOf name) with
+      | some m => simp [hm] at h
+      | none =>
+        simp only [hm, Prod.mk.injEq, Option.some.injEq] at h
+        obtain ⟨-, rfl⟩ := h
+        exact ⟨((resultOfMismatch_eq_none_iff _ _ _ _).mp hm).2, o, hk⟩
+    | fulfilled o =>
+      cases hm : st.«structure».resultOfMismatch q.activity.ref false (st.refOf name) with
+      | none => exact absurd hm (resultOfMismatch_unaccepted _ _ _)
+      | some m => simp [hm] at h
+    | rejected r =>
+      cases hm : st.«structure».resultOfMismatch q.activity.ref false (st.refOf name) with
+      | none => exact absurd hm (resultOfMismatch_unaccepted _ _ _)
+      | some m => simp [hm] at h
+  · simp at h
+
+theorem subscription_answer_is_own_message (sender name : String) (answer : Answer) (choice : Option Choice)
+    (p : Pending) (canonical : Option Choice) (checked : AnswerCheck) (written : Answer)
+    (hc : canonicalChoice st fs name choice = .ok canonical) (hf : s.answering sender name canonical = some p)
+    (ha : checkAnswer st fs p answer = .ok checked) (hw : checked.written = .ok written) :
+    ∃ t : State, t.lines = (s.writeInput none (.answer p.id written)).1.lines ∧
+      mock st fs s sender name answer choice =
+        let started := t.newMessage.newStep none
+        let r := settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
+        message st fs r.state r.queue := by
+  unfold mock
+  simp only [id_bind, id_pure]
+  rw [hc]
+  simp only
+  rw [hf]
+  simp only [ha, hw]
+  refine ⟨_, ?_, rfl⟩
+  cases checked.assumption <;> split <;> simp [State.writeInput, State.lineId]
+
+theorem startInstance_halted (t : State) (c : Chart) (h : t.halted.isSome = true) : startInstance st fs t c = t := by
+  simp [startInstance, h]
+
+theorem foldl_startInstance_halted (cs : List Chart) (t : State) (h : t.halted.isSome = true) :
+    cs.foldl (startInstance st fs) t = t := by
+  induction cs with
+  | nil => rfl
+  | cons c cs ih => simp only [List.foldl_cons, startInstance_halted t c h, ih]
+
+theorem startInstances_one_per_definition (h : (startInstances st fs s).halted = none) :
+    ∃ new, (startInstances st fs s).machines = s.machines ++ new ∧ new.map (·.chart) = st.starting ∧
+      ∀ i ∈ new, i.resource = i.chart.name ∧ i.opener = none ∧ i.copyOf = none := by
+  unfold startInstances at h ⊢
+  rw [foldlM_id] at h ⊢
+  generalize st.starting = cs at h ⊢
+  induction cs generalizing s with
+  | nil => exact ⟨[], by simp, rfl, by simp⟩
+  | cons c cs ih =>
+    simp only [List.foldl_cons] at h ⊢
+    by_cases hs : s.halted.isSome = true
+    · rw [startInstance_halted s c hs, foldl_startInstance_halted cs s hs] at h
+      simp [h] at hs
+    · cases hc : initialContextOf fs st c.name (.obj []) with
+      | error v =>
+        have hv := initialContextOf_error_halts c.name (.obj []) v hc
+        have e : startInstance st fs s c = s.report (.fault v) := by simp [startInstance, hs, hc]
+        rw [e, foldl_startInstance_halted cs _ (by simp [report_halted (.fault _) hv])] at h
+        simp [report_halted (.fault _) hv] at h
+      | ok context =>
+        simp only [startInstance, hs, Bool.false_eq_true, ↓reduceIte, hc, id_bind, id_pure] at h ⊢
+        obtain ⟨new, h₁, h₂, h₃⟩ := ih h
+        refine ⟨_ :: new, by rw [h₁, List.append_assoc]; rfl, by simp only [List.map_cons, h₂], fun i hi => ?_⟩
+        rcases List.mem_cons.mp hi with rfl | hi
+        · exact ⟨rfl, rfl, rfl⟩
+        · exact h₃ i hi
+
+theorem begin_runs_once (h : s.started = true) : begin st fs s = s := by
+  simp [begin, h]
+
+theorem startRecords_started : (startRecords st fs s).started = s.started := by
+  unfold startRecords
+  rw [foldlM_id]
+  refine foldl_keeps (fun t : State => t.started = s.started) _ (fun t e ht => ?_) _ _ rfl
+  simp only [id_bind]
+  split
+  · exact ht
+  · exact ht
+
+theorem startInstances_started : (startInstances st fs s).started = s.started := by
+  unfold startInstances
+  rw [foldlM_id]
+  refine foldl_keeps (fun t : State => t.started = s.started) _ (fun t c ht => ?_) _ _ rfl
+  unfold startInstance
+  split
+  · exact ht
+  · simp only [id_bind]
+    split <;> simp [ht]
+
+theorem begin_started : (begin st fs s).started = true := by
+  unfold begin
+  split
+  · assumption
+  · simp [message_started, startInstances_started, startRecords_started, State.newMessage]
+
+theorem begin_starts_each (h : s.started = false) :
+    begin st fs s = message st fs (startInstances st fs (startRecords st fs { s with started := true }.newMessage))
+      { tasks := st.starting.map (.start ·.name none) } := by
+  simp [begin, h]
+
+theorem begin_starts_starting_without_parent (h : s.started = false) :
+    ∃ t, begin st fs s = message st fs t { tasks := st.starting.map (.start ·.name none) } ∧
+      (t.halted = none → ∃ new, t.machines = (startRecords st fs { s with started := true }.newMessage).machines ++ new ∧
+        new.map (·.chart) = st.starting ∧ ∀ i ∈ new, i.opener = none) :=
+  ⟨_, begin_starts_each h, fun hh => (startInstances_one_per_definition hh).imp fun _ ⟨h₁, h₂, h₃⟩ =>
+    ⟨h₁, h₂, fun i hi => (h₃ i hi).2.1⟩⟩
+
+theorem send_started (name : String) (id : Option String) (raw : Value) :
+    (send st fs s name id raw).started = s.started := by
+  unfold send
+  split
+  · simp only [id_bind]
+    split
+    · simp
+    · split
+      · rw [message_started, answer_started]; rfl
+      · rw [message_started]
+        exact processCommand_started _ _ _ _
+  · rfl
+
+theorem call_started (name : String) (id : Option String) (raw : Value) :
+    (call st fs s name id raw).started = s.started := by
+  unfold call
+  split
+  · simp only [id_bind]
+    split
+    · simp
+    · split
+      · rw [message_started, answer_started, reportAll_started]
+        rfl
+      · exact report_started ..
+  · rfl
+
+theorem subscribe_started (name : String) (id : Option String) (raw : Value) :
+    (subscribe st fs s name id raw).started = s.started := by
+  unfold subscribe
+  split
+  · simp only [id_bind]
+    split
+    · simp
+    · rw [message_started]
+      split <;> rfl
+  · rfl
+
+theorem endSubscription_started (id : String) : (endSubscription st fs s id).started = s.started := by
+  unfold endSubscription
+  rw [message_started]
+  split <;> rfl
+
+theorem deliver_started (name : String) (id : Option String) (payload : Value) (rq : Option Pending) :
+    (deliver st fs s name id payload rq).started = s.started := by
+  unfold deliver
+  simp only [id_bind]
+  split
+  · rename_i p _
+    rw [message_started]
+    show (addResult st fs _ _ _).started = _
+    unfold addResult
+    simp only [id_bind]
+    split
+    · rfl
+    · split
+      · simp only [id_pure, report_started]; rfl
+      · rfl
+      · rfl
+  · rw [message_started]; rfl
+
+theorem receive_started (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat) :
+    (receive st fs s name id raw resultOf).started = s.started := by
+  unfold receive
+  split
+  · split
+    · simp only [redeliver, id_bind]
+      split
+      · simp
+      · rw [message_started]
+        split
+        · exact withResultOf_started _ _
+        · simp only [State.newMessage, report_started]; exact withResultOf_started _ _
+    · simp only [id_bind]
+      split
+      · simp
+      · rfl
+      · rw [deliver_started]; exact withResultOf_started _ _
+  · rfl
+
+theorem mock_started (sender name : String) (answer : Answer) (choice : Option Choice) :
+    (mock st fs s sender name answer choice).started = s.started := by
+  unfold mock
+  simp only [id_bind]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · split
+        · split <;> simp
+        · rw [message_started, (keeps_settled _ _ (keeps_deliverAnswer _ _ _)).started]
+          simp only [State.newStep, State.newMessage, State.writeInput]
+          repeat' split
+          all_goals simp
+
+theorem operate_started (screen control : String) (payload : Value) (accepted : Bool) :
+    (operate st fs s screen control payload accepted).started = s.started := by
+  unfold operate
+  simp only [id_bind]
+  split
+  · rfl
+  · split
+    · rfl
+    · split
+      · simp only [id_pure, report_started]; rfl
+      · rfl
+      · split
+        · simp only [id_pure, report_started]; rfl
+        · split
+          · rw [message_started]
+            exact congrArg Fixed.started (keeps_settled _ _ (keeps_dispatch _ _ _ _) _)
+          · rw [message_started]; rfl
+          · simp only [id_pure, report_started]; rfl
+          · simp only [id_pure, report_started]; rfl
+
+theorem accepted_operation_settles_around (screen control : String) (payload : Value) (c : Chart) (ctl : Control)
+    (decoded : Value) (top : Instance) (hc : st.chart? screen = some c) (hctl : c.controls.find? (·.name == control) = some ctl)
+    (hp : fs.parse (.control screen control) payload = .ok (some decoded))
+    (ha : acceptsOperation fs st (s.writeInput none (.operation s!"{screen}.{control}"
+      (if ctl.hasPayload then some payload else none) true)).1 screen control decoded = .ok (.ok top)) :
+    operate st fs s screen control payload true =
+      let started := (s.writeInput none (.operation s!"{screen}.{control}"
+        (if ctl.hasPayload then some payload else none) true)).1.newMessage.newStep none
+      let r := settled fs st started.2 (some top.resource) (dispatch fs st started.2 top.resource control decoded)
+        ⟨started.1, {}⟩
+      message st fs r.state r.queue := by
+  simp only [operate, hc, hctl, id_bind, hp, ha]
+
+theorem advance_keeps_started (input : Step) (h : s.started = true) : (advance st fs s input).started = true := by
+  unfold advance
+  dsimp only
+  split
+  · exact h
+  · simp only [id_bind]
+    have hf : (fireDue st fs input.time.time Limit.dueDeadlines.max none s).started = true := by
+      rw [fireDue_started]; exact h
+    generalize fireDue st fs input.time.time Limit.dueDeadlines.max none s = X at hf ⊢
+    split
+    · exact hf
+    · split
+      · exact hf
+      · rw [begin_runs_once (st := st) (fs := fs) (s := { X with now := max X.now input.time.time }) hf]
+        exact hf
+
+theorem earliestTurn_spec (ps : List Pending) (p : Pending) (h : earliestTurn ps = some p) :
+    p ∈ ps ∧ ∀ q ∈ ps, p.turn ≤ q.turn := by
+  obtain ⟨hm, _, hq⟩ := foldl_earliest ps none p h
+  rcases hm with hm | hm
+  · cases hm
+  · exact ⟨hm, hq⟩
+
+theorem mock_answers_longest_waiting (sender name : String) (input : Option Value) (stale : Bool) (p : Pending)
+    (hf : s.longestWaiting sender name input stale = some p) :
+    p ∈ s.pending ∧ p.stale = stale ∧ p.activity.target = name ∧ s.senderOf p.requester = sender ∧
+      (∀ v ∈ input, v = p.input) ∧
+      ∀ q ∈ s.pending, q.stale = stale → q.activity.target = name → s.senderOf q.requester = sender →
+        (∀ v ∈ input, v = q.input) → p.turn ≤ q.turn := by
+  obtain ⟨hm, hmin⟩ := earliestTurn_spec _ p hf
+  have hp := (List.mem_filter.mp hm).2
+  simp only [Bool.and_eq_true, beq_iff_eq] at hp
+  refine ⟨(List.mem_filter.mp hm).1, hp.1.1.1, hp.1.1.2, hp.1.2, ?_, fun q hq h1 h2 h3 h4 => hmin q ?_⟩
+  · intro v hv
+    cases input with
+    | none => cases hv
+    | some w => cases hv; simpa using hp.2
+  · refine List.mem_filter.mpr ⟨hq, ?_⟩
+    simp only [Bool.and_eq_true, beq_iff_eq, h1, h2, h3, and_self, true_and]
+    cases input with
+    | none => rfl
+    | some w => simpa using (h4 w rfl)
+
+theorem resultRequest_lines (name : String) (k : Nat) : (resultRequest st s name k).1.lines = s.lines := by
+  unfold resultRequest
+  repeat' split
+  all_goals first | rfl | simp
+
+theorem addResult_lines (id : String) (e : Emit) : (addResult st fs s id e).lines = s.lines := by
+  unfold addResult
+  simp only [id_bind]
+  split
+  · rfl
+  · split
+    · simp
+    · rfl
+    · rfl
+
+theorem resultRequest_now (name : String) (k : Nat) : (resultRequest st s name k).1.now = s.now := by
+  unfold resultRequest
+  repeat' split
+  all_goals first | rfl | simp
+
+theorem resultRequest_inputDeadlineOrder (name : String) (k : Nat) :
+    (resultRequest st s name k).1.inputDeadlineOrder = s.inputDeadlineOrder := by
+  unfold resultRequest
+  repeat' split
+  all_goals first | rfl | simp
+
+theorem resultOfFinding_halts (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
+    (m : Syntax.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = false := by
+  cases m <;> rfl
+
+theorem brokenAssumption_finding (requestId : String) (target : Syntax.Ref) (answer : Answer)
+    (failedRequires failedEnsures : Option String) (r : Finding)
+    (h : brokenAssumption requestId target answer failedRequires failedEnsures = some r) :
+    r.halts = false ∧ ∃ m, r = assumptionFinding requestId target m := by
+  obtain ⟨m, -, rfl⟩ := Option.map_eq_some_iff.mp h
+  exact ⟨by cases m <;> rfl, m, rfl⟩
+
+theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCheck)
+    (h : checkAnswer st fs p answer = .ok checked) :
+    (∀ r, checked.assumption = some r → r.halts = false ∧ ∃ m, r = assumptionFinding p.id p.activity.ref m) ∧
+      ∀ r, checked.written = .error r → r.halts = true ∧
+        ((∃ rejection, r = .invalidInput (.unlistedRejectionKind p.id p.activity.ref rejection)) ∨
+          (∃ rejection, r = .invalidInput (.unlistedRejectionReason p.id p.activity.ref rejection)) ∨
+          r = .invalidInput (.answerOutputSchema p.id p.activity.ref)) := by
+  unfold checkAnswer at h
+  simp only [id_bind, id_pure] at h
+  repeat' split at h
+  all_goals (try simp only [reduceCtorEq, id_ok_inj] at h)
+  all_goals (try subst h)
+  all_goals refine ⟨fun r hr => ?_, fun r hr => ?_⟩
+  all_goals first
+    | (simp at hr; done)
+    | exact brokenAssumption_finding _ _ _ _ _ _ (by simpa using hr)
+    | (simp only [Except.error.injEq] at hr; subst hr; exact ⟨rfl, by simp⟩)
+
+theorem unmatched_result_violates (name : String) (k : Nat) (s₁ : State) (q : Pending) (a : Answer)
+    (hp : s.mocks.lookup k = some (some (q, a))) (hq : resultRequest st s name k = (s₁, none)) :
+    ∃ event requestId target m, s₁ = s.violate (resultOfFinding event requestId target m).toViolation := by
+  unfold resultRequest at hq
+  split at hq
+  · repeat' split at hq
+    all_goals first
+      | (simp at hq; done)
+      | (simp only [Prod.mk.injEq, State.report, resultOfFinding_halts, Bool.false_eq_true, ↓reduceIte] at hq
+         exact ⟨_, _, _, _, hq.1.symm⟩)
+  · rename_i hn
+    exact (hn q a hp).elim
+
+theorem earlier_at_reported (input : Step) :
+    advance st fs s input =
+      let time := input.time.time
+      if time < s.now then s.halt (Finding.invalidInput (.earlierAt time s.now)).toViolation else
+      let s₁ := fireDue st fs time Limit.dueDeadlines.max none s
+      if s₁.halted.isSome then s₁ else
+      match input.body with
+      | .restart => { s₁ with now := max s₁.now time }
+      | _ => begin st fs { s₁ with now := max s₁.now time } := by
+  simp only [advance, State.report, Finding.halts, InvalidInput.halts, id_bind]
+  rfl
+
+theorem acceptance_mismatch_reported (screen control : String) (payload : Value) (accepted : Bool) (c : Chart)
+    (ctl : Control) (decoded : Value) (top : Except Refusal Instance) (hc : st.chart? screen = some c)
+    (hctl : c.controls.find? (·.name == control) = some ctl)
+    (hp : fs.parse (.control screen control) payload = .ok (some decoded))
+    (ha : acceptsOperation fs st (s.writeInput none (.operation s!"{screen}.{control}"
+      (if ctl.hasPayload then some payload else none) accepted)).1 screen control decoded = .ok top) :
+    let s₁ :=
+      (s.writeInput none (.operation s!"{screen}.{control}" (if ctl.hasPayload then some payload else none) accepted)).1
+    operate st fs s screen control payload accepted =
+      match accepted, top with
+      | true, .error r => s₁.halt (r.finding st screen control decoded).toViolation
+      | false, .ok _ => s₁.halt (Finding.invalidInput (.unexpectedlyAccepted (st.ref screen) control)).toViolation
+      | false, .error _ => message st fs s₁.newMessage {}
+      | true, .ok i =>
+        let started := s₁.newMessage.newStep none
+        let r := settled fs st started.2 (some i.resource) (dispatch fs st started.2 i.resource control decoded) ⟨started.1, {}⟩
+        message st fs r.state r.queue := by
+  cases accepted <;> cases top
+  all_goals simp only [operate, hc, hctl, id_bind, hp, ha]
+  · simp [State.report, Finding.halts, InvalidInput.halts]
+  · rename_i r
+    cases r <;> simp [State.report, Finding.halts, InvalidInput.halts, Refusal.finding]
+
+theorem earliestTurn_eq_none (ps : List Pending) : earliestTurn ps = none ↔ ps = [] := by
+  unfold earliestTurn
+  cases ps with
+  | nil => simp
+  | cons p ps =>
+    simp only [List.foldl_cons, reduceCtorEq, iff_false]
+    suffices ∀ (l : List Pending) (b : Pending), l.foldl (fun best p => match best with
+        | some b => if p.turn < b.turn then some p else some b
+        | none => some p) (some b) ≠ none from this ps p
+    intro l
+    induction l with
+    | nil => intro b; simp
+    | cons q qs ih => intro b; simp only [List.foldl_cons]; split <;> exact ih _
+
+theorem no_waiting_request_iff (sender name : String) (input : Option Value) (stale : Bool) :
+    s.longestWaiting sender name input stale = none ↔
+      ∀ p ∈ s.pending, ¬ (p.stale = stale ∧ p.activity.target = name ∧ s.senderOf p.requester = sender ∧
+        ∀ v ∈ input, v = p.input) := by
+  rw [State.longestWaiting, earliestTurn_eq_none, List.filter_eq_nil_iff]
+  refine forall_congr' fun p => imp_congr_right fun _ => not_congr ?_
+  cases input <;> simp [and_assoc]
+
+theorem mock_without_waiting_request_reported (sender name : String) (answer : Answer) (choice : Option Choice)
+    (canonical : Option Choice) (hc : canonicalChoice st fs name choice = .ok canonical)
+    (hn : s.answering sender name canonical = none) :
+    mock st fs s sender name answer choice =
+      { s with mocks := s.mocks ++ [(s.inputCount, none)] }.violate
+        (Finding.invalidInput ((if choosesStale choice then InvalidInput.noStaleRequest else .noWaitingRequest)
+          (st.refOf sender) (st.refOf name))).toViolation := by
+  simp only [mock, id_bind, hc, hn]
+  cases choosesStale choice <;> simp [State.report, Finding.halts, InvalidInput.halts]
+
+theorem unmatched_mock_reported (sender name : String) (answer : Answer) (choice : Option Choice) (k : Nat)
+    (h : (k, none) ∈ (mock st fs s sender name answer choice).mocks) :
+    (k, none) ∈ s.mocks ∨ k = s.inputCount ∧
+      mock st fs s sender name answer choice = { s with mocks := s.mocks ++ [(s.inputCount, none)] }.violate
+        (Finding.invalidInput ((if choosesStale choice then InvalidInput.noStaleRequest else .noWaitingRequest)
+          (st.refOf sender) (st.refOf name))).toViolation := by
+  cases hc : canonicalChoice st fs name choice with
+  | error v =>
+    have e : (mock st fs s sender name answer choice).mocks = s.mocks := by simp [mock, hc]
+    rw [e] at h
+    exact .inl h
+  | ok canonical =>
+  cases hf : s.answering sender name canonical with
+  | none =>
+    have e := mock_without_waiting_request_reported (st := st) sender name answer choice canonical hc hf
+    rw [e] at h
+    simp only [State.violate, List.mem_append, List.mem_singleton, Prod.mk.injEq, and_true] at h
+    exact h.imp_right (⟨·, e⟩)
+  | some p =>
+    have e : (mock st fs s sender name answer choice).mocks = s.mocks ++ [(s.inputCount, some (p, answer))] := by
+      unfold mock
+      simp only [id_bind, id_pure, hc, hf]
+      split
+      · simp
+      · split
+        · split <;> simp
+        · rw [message_mocks, (keeps_settled _ _ (keeps_deliverAnswer _ _ _)).mocks]
+          simp only [State.newStep, State.newMessage, State.writeInput]
+          repeat' split
+          all_goals simp
+    rw [e] at h
+    exact .inl (by simpa using h)
+
+end Tazuna.Thm.Semantics.System.Input

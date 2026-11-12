@@ -1,0 +1,7 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"closeTask#1","name":"closeTask","input":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"closeTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskClosed#1","name":"taskClosed","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"stats.countCompleted#1","name":"stats.countCompleted","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"stats.resetCount#1","name":"stats.resetCount","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"stats.countCompleted#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#3","to":"stats.resetCount#1","answer":{"result":"accepted"}}

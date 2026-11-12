@@ -1,0 +1,6 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"time","id":"time#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"entryAdded#1","name":"entryAdded","payload":{"id":"Entry-1","text":"ring"},"created":["Entry-1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"entryLogged#1","name":"entryLogged","payload":{"entryId":"Entry-1","text":"ring"},"after":["entryAdded#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"entryAdded#2","name":"entryAdded","payload":{"id":"Entry-2","text":"chime"},"created":["Entry-2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"entryLogged#2","name":"entryLogged","payload":{"entryId":"Entry-2","text":"chime"},"after":["entryAdded#2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#2"}

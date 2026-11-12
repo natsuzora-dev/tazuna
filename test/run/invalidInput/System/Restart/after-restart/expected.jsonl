@@ -1,0 +1,2 @@
+{"kind":"InvalidInput.noWaitingRequest","definition":null,"data":{"sender":{"service":"app","name":"permission"},"target":{"service":"device","name":"requestPermission"}},"location":{"file":"app/scenarios.ts","line":5},"scenario":{"service":"app","name":"answerAfterRestart"}}
+{"kind":"InvalidInput.subscriptionNotOpen","definition":null,"data":{"id":"s1"},"location":{"file":"app/scenarios.ts","line":15},"scenario":{"service":"app","name":"unsubscribeAfterRestart"}}

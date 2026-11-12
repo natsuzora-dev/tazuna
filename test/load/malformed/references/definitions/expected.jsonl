@@ -1,0 +1,14 @@
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"Mark"},"data":{"path":["fields","taskId"]},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unexportedDefinition","definition":null,"data":{"service":"todo","path":["entities","Task"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["entity"]},"location":{"file":"todo/todo.ts","line":17}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"addTask"},"data":{"path":["emits",1]},"location":{"file":"todo/todo.ts","line":20}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"seenMarked"},"data":{"path":["receives","taskSeen"]},"location":{"file":"todo/todo.ts","line":27}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"seenMarked"},"data":{"path":["commands","markSeen"]},"location":{"file":"todo/todo.ts","line":27}}
+{"kind":"Malformed.noDefiner","definition":null,"data":{"name":"noted"},"location":{"file":"todo/todo.ts","line":31}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"watcher"},"data":{"path":["receives","taskSeen"]},"location":{"file":"todo/todo.ts","line":33}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"watcher"},"data":{"path":["commands","markSeen"]},"location":{"file":"todo/todo.ts","line":33}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"taskNoted"},"data":{"path":["payload","taskId"]},"location":{"file":"todo/todo.ts","line":41}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"taskDetail"},"data":{"path":["input","taskId"]},"location":{"file":"todo/todo.ts","line":43}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"taskDetail"},"data":{"path":["output","related"]},"location":{"file":"todo/todo.ts","line":43}}
+{"kind":"Malformed.unexportedDefinition","definition":null,"data":{"contract":"todo","key":"TaskId"},"location":{"file":"todo/todo.ts","line":47}}
+{"kind":"Malformed.unexportedDefinition","definition":null,"data":{"name":"todoConstants","path":["defaultTaskId"]},"location":{"file":"todo/todo.ts","line":49}}

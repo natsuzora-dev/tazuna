@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"planTasks#1","name":"planTasks","input":{"entries":[{"day":2,"title":"Buy eggs"},{"day":1,"title":"Buy milk"}]}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"planTasks#1","answer":{"result":"rejected","rejection":{"kind":"invalid-input"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"planTasks#2","name":"planTasks","input":{"entries":[{"day":1,"title":"Buy milk"},{"day":2,"title":"Buy eggs"}]}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"planTasks#2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"tasksPlanned#1","name":"tasksPlanned","payload":{"entries":[{"day":1,"title":"Buy milk"},{"day":2,"title":"Buy eggs"}]}}

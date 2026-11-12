@@ -1,0 +1,2 @@
+{"kind":"InvalidInput.noWaitingRequest","definition":null,"data":{"sender":{"service":"todo","name":"planner"},"target":{"service":"calendar","name":"nextDay"}},"location":{"file":"todo/scenarios.ts","line":26},"scenario":{"service":"todo","name":"answerBeforeAsking"}}
+{"kind":"InvalidInput.noStaleRequest","definition":null,"data":{"sender":{"service":"todo","name":"planner"},"target":{"service":"calendar","name":"nextDay"}},"location":{"file":"todo/scenarios.ts","line":34},"scenario":{"service":"todo","name":"answerStaleWhileAsking"}}

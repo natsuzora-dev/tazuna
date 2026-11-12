@@ -1,0 +1,10 @@
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"query","id":"q1","name":"nextDay","input":{"from":"2026-10-26T00:00:00Z"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","to":"q1","answer":{"result":"fulfilled","output":{"day":"2026-10-25T00:00:00Z"}}}
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"query","id":"q2","name":"nextDay","input":{"from":"2026-10-26T00:00:00Z"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","to":"q2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"isWeekday"}}}
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"command","id":"c1","name":"addReminder","input":{}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"accepted"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"event","id":"e1","name":"reminderAdded","resultOf":"c1","payload":{"reminderId":"r1"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"event","id":"e2","name":"reminderAdded","resultOf":"c1","payload":{"reminderId":"r2"}}
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"query","id":"q3","name":"nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","to":"q3","answer":{"result":"fulfilled","output":{"day":"2026-10-24T00:00:00Z"}}}

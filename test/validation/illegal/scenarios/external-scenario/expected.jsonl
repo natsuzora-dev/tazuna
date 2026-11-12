@@ -1,0 +1,1 @@
+{"kind":"Illegal.scenarioOfExternalService","definition":{"service":"calendar","name":"addOne"},"data":{},"location":{"file":"calendar/scenarios.ts","line":4}}

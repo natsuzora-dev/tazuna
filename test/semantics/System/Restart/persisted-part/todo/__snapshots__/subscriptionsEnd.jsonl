@@ -1,0 +1,6 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"s1","name":"taskCount","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"s1","answer":{"result":"fulfilled","output":{"count":0}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"restart","id":"restart#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"t1"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"t1"}}

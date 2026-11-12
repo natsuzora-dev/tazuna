@@ -1,0 +1,9 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":"2026-10-25T01:00:00Z"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":"2026-10-25T03:00:00Z"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#3","name":"calendar.nextDay","input":{"from":"2026-10-25T02:00:00Z"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":"2026-10-25T15:00:00Z"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#3","to":"calendar.nextDay#3","answer":{"result":"fulfilled","output":{"day":"2026-10-25T15:00:00Z"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#4","to":"calendar.nextDay#2","answer":{"result":"fulfilled","output":{"day":"2026-10-25T15:00:00Z"}}}

@@ -1,0 +1,23 @@
+name = "tazuna-lean"
+version = "0.1.0"
+defaultTargets = ["Tazuna", "tazuna-lean", "tazuna-generate"]
+
+[leanOptions]
+autoImplicit = false
+linter.extra = true
+
+[[lean_lib]]
+name = "Tazuna"
+globs = ["Tazuna.+"]
+
+[[lean_lib]]
+name = "DiffTest"
+roots = ["DiffTest.Json", "DiffTest.Names"]
+
+[[lean_exe]]
+name = "tazuna-lean"
+root = "DiffTest.Main"
+
+[[lean_exe]]
+name = "tazuna-generate"
+root = "Generate.Main"

@@ -1,0 +1,4 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q1","name":"nextWeek","input":{"from":"2026-10-25T00:00:00Z"}}
+booked 2026-10-26
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e1","name":"moved","payload":{"day":"2026-10-26T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"q1"}

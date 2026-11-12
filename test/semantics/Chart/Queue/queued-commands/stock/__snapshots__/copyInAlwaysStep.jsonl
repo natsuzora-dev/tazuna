@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"start#1","name":"start","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"start#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"started#1","name":"started","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"prepared#1","name":"prepared","payload":{"id":"x"},"after":["started#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{},"after":["started#1","prepared#1"]}

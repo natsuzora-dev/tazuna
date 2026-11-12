@@ -1,0 +1,8 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c1","name":"addTask","input":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e1","name":"taskAdded","payload":{"id":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"s1","name":"seen","payload":{"id":"zz9","taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q1","name":"seenIds","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"q1","answer":{"result":"fulfilled","output":{"repeated":["zz9","zz9"],"none":[],"ids":["zz9"],"listed":["zz9"]}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q2","name":"seenIds","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"q2","answer":{"result":"fulfilled","output":{"repeated":["zz9","zz9"],"none":[],"ids":["zz9"],"listed":["zz8"]}}}

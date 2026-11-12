@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "lib": ["ES2025", "ESNext.Temporal", "DOM"]
+  },
+  "include": ["src"]
+}

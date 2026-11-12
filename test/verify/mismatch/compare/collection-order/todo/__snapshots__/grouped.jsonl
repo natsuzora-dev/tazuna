@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"taskGroups#1","name":"taskGroups","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"taskGroups#1","answer":{"result":"fulfilled","output":{"groups":[{"name":"a","members":["x","y","y"],"steps":[1,2],"slots":[{"at":"2026-10-25T01:00:00Z","n":2},{"at":"2026-10-25T02:00:00Z","n":1},{"at":"2026-10-25T02:00:00Z","n":3}]}],"either":[1,2],"maybe":[1,2],"orNull":[1,2],"withDefault":[1,2]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"tagTask#1","name":"tagTask","input":{"tags":["home","store"]}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"tagTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"tagScreen.pick#1","name":"tagScreen.pick","payload":{"tags":["home","store"]}}

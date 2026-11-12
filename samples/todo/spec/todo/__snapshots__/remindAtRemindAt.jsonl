@@ -1,0 +1,12 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"after":["taskAddedRecorded#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"calendar.nextBusinessDay#1","answer":{"result":"fulfilled","output":{"day":"2026-10-26"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminderScheduled#1","name":"reminderScheduled","payload":{"id":"task-1","remindAt":"2026-10-25T15:00:00Z","reminderDecision":"decided"}}
+{"time":"2026-10-25T14:59:59Z","dir":"in","type":"time","id":"time#1"}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null}}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderTimeReachedRecorded#1"]}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"Buy milk"}}
+{"time":"2026-10-25T15:00:00Z","dir":"in","type":"time","id":"time#2"}

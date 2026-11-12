@@ -1,0 +1,99 @@
+import assert from "node:assert/strict";
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+import { loadViewModel } from "../src/view/load.ts";
+import { serveViewer } from "../src/view/server.ts";
+import type { ViewEvent, ViewModel } from "../src/view/types.ts";
+
+/** Returns with /events already open, so no change notice after the return is missed. */
+async function listen(url: string): Promise<AsyncGenerator<ViewEvent>> {
+  const response = await fetch(`${url}events`);
+  return (async function* () {
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true });
+      for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
+        const block = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        // A block without data, such as a comment line that starts with ":", is skipped, as EventSource does.
+        if (block.startsWith("data: ")) yield JSON.parse(block.slice("data: ".length));
+      }
+    }
+  })();
+}
+
+async function withCopy(body: (copy: string, viewer: string) => Promise<void>): Promise<void> {
+  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
+  const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "watch-"));
+  const viewer = mkdtempSync(join(import.meta.dirname, ".fixtures", "viewer-"));
+  try {
+    writeFileSync(join(viewer, "index.html"), "");
+    cpSync(join(import.meta.dirname, "../samples/todo/spec"), copy, { recursive: true });
+    await body(copy, viewer);
+  } finally {
+    rmSync(copy, { recursive: true, force: true });
+    rmSync(viewer, { recursive: true, force: true });
+  }
+}
+
+test("The view server reloads the spec in a child process when a spec file changes and notifies /events, keeps the old model.json and notifies the reason when loading fails, and recovers when loading succeeds", async () => {
+  await withCopy(async (copy, viewer) => {
+    const data = join(copy, "todo/data.ts");
+    const loaded = await loadViewModel(copy, "copy");
+    assert.ok("model" in loaded);
+    const server = await serveViewer({ root: copy, path: "copy", loaded }, 0, viewer);
+    try {
+      const task = async () => {
+        const model = (await (await fetch(`${server.url}model.json`)).json()) as ViewModel;
+        const definition = model.services.find((s) => s.name === "todo")?.definitions.find((d) => d.name === "Task");
+        return (definition?.definition as Readonly<Record<string, unknown>> | undefined)?.["description"];
+      };
+      const watching = await listen(server.url);
+      const original = readFileSync(data, "utf8");
+      writeFileSync(
+        data,
+        original.replace('description: "A task of the user",', 'description: "A to-do of the user",'),
+      );
+      assert.deepEqual((await watching.next()).value, { type: "model" });
+      assert.equal(await task(), "A to-do of the user");
+
+      appendFileSync(data, "const broken = ;\n");
+      const failed = (await watching.next()).value;
+      assert.equal(failed?.type, "error");
+      assert.match(failed?.type === "error" ? failed.message : "", /data\.ts:\d+[\s\S]*Expression expected/);
+      assert.equal(await task(), "A to-do of the user");
+      assert.deepEqual((await (await listen(server.url)).next()).value, failed);
+
+      writeFileSync(data, original);
+      assert.deepEqual((await watching.next()).value, { type: "model" });
+      assert.equal(await task(), "A task of the user");
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test("The view server starts even when loading the spec fails at startup, returns 404 for model.json and notifies the reason on /events until loading succeeds, and then returns model.json", async () => {
+  await withCopy(async (copy, viewer) => {
+    const data = join(copy, "todo/data.ts");
+    const original = readFileSync(data, "utf8");
+    appendFileSync(data, "const broken = ;\n");
+    const loaded = await loadViewModel(copy, "copy");
+    assert.ok("error" in loaded);
+    const server = await serveViewer({ root: copy, path: "copy", loaded }, 0, viewer);
+    try {
+      assert.equal((await fetch(`${server.url}model.json`)).status, 404);
+      const watching = await listen(server.url);
+      assert.deepEqual((await watching.next()).value, { type: "error", message: loaded.error });
+
+      writeFileSync(data, original);
+      assert.deepEqual((await watching.next()).value, { type: "model" });
+      const model = (await (await fetch(`${server.url}model.json`)).json()) as ViewModel;
+      assert.ok(model.services.some((s) => s.name === "todo"));
+    } finally {
+      server.close();
+    }
+  });
+});

@@ -1,0 +1,8 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Buy eggs"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}

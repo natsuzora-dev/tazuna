@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"ask#1","name":"ask","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"ask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"askPressed#1","name":"askPressed","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"device.requestPermission#1","name":"device.requestPermission","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"restart","id":"restart#1"}

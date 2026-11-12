@@ -1,0 +1,598 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font: var(--font-weight-regular) var(--type-body) / 1.5 var(--font-family-sans);
+}
+.app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+header.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-edge);
+  padding-inline: var(--space-edge);
+  min-height: var(--size-bar);
+  border-bottom: var(--stroke-hairline) solid var(--line-border);
+  background: var(--surface-bar);
+}
+.brand {
+  font: var(--font-weight-semibold) var(--type-title) var(--font-family-sans);
+}
+.crumbs {
+  font: var(--type-body) var(--font-family-mono);
+  color: var(--text-secondary);
+}
+.crumbs b {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+nav.tabs {
+  display: flex;
+  gap: var(--space-inner);
+  margin-left: auto;
+}
+nav.tabs > * {
+  font: var(--font-weight-medium) var(--type-body) var(--font-family-sans);
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: var(--space-inner) var(--space-row);
+  border-radius: var(--radius-chip);
+}
+nav.tabs a:hover,
+nav.tabs [aria-current] {
+  background: var(--surface-band);
+  color: var(--text-primary);
+}
+nav.tabs a:focus-visible {
+  outline: var(--stroke-selected) solid var(--line-selected);
+  outline-offset: var(--space-inner);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--size-panel);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+.canvas {
+  grid-area: 1 / 1;
+  /* Contains React Flow's z-indexes so the later .load-error stacks above the canvas. */
+  isolation: isolate;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Overlays the last model's diagram without blocking it, unlike Vite's full-screen error overlay. */
+.load-error {
+  grid-area: 1 / 1;
+  position: relative;
+  align-self: start;
+  margin: var(--space-edge);
+  max-height: 50%;
+  overflow: auto;
+  padding: var(--space-row);
+  background: var(--surface-node);
+  border: var(--stroke-hairline) solid var(--line-error);
+  border-radius: var(--radius-node);
+  box-shadow: var(--shadow-raised);
+}
+.load-error.beside-list {
+  margin-left: calc(var(--size-list) + var(--space-edge));
+}
+.load-error h2 {
+  margin: 0 0 var(--space-part);
+  font: var(--font-weight-medium) var(--type-body) var(--font-family-sans);
+  color: var(--text-error);
+}
+.load-error pre {
+  margin: 0;
+  font: var(--type-label) / 1.7 var(--font-family-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.react-flow {
+  --xy-background-color: var(--surface-canvas);
+  --xy-background-pattern-color: var(--line-dot);
+  --xy-edge-stroke: var(--line-edge);
+  --xy-edge-stroke-width: var(--stroke-edge);
+}
+/* React Flow sets visibility: visible on measured nodes, so opacity hides the diagram until it is laid out. */
+.react-flow.pending {
+  opacity: 0;
+}
+.react-flow .react-flow__handle {
+  visibility: hidden;
+}
+.react-flow__controls {
+  box-shadow:
+    0 0 0 var(--stroke-hairline) var(--line-border),
+    var(--shadow-node);
+  border-radius: var(--radius-node);
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--surface-node);
+  color: var(--text-secondary);
+  border: 0;
+  border-bottom: var(--stroke-hairline) solid var(--line-border);
+  width: var(--size-control);
+  height: var(--size-control);
+  padding: var(--space-inner);
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+  width: 100%;
+  height: 100%;
+}
+.react-flow__controls-button:hover {
+  background: var(--surface-band);
+  color: var(--text-primary);
+}
+.defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.defs marker {
+  /* SVG markers clip their content by default, which cuts the ends of open arrowheads. */
+  overflow: visible;
+}
+.arrowhead {
+  fill: var(--line-edge);
+}
+.arrowhead.open {
+  fill: none;
+  stroke: var(--line-edge);
+  stroke-width: var(--stroke-hairline);
+}
+
+.kind {
+  font: var(--font-weight-medium) var(--type-caption) var(--font-family-mono);
+  color: var(--text-faint);
+}
+.name {
+  font: var(--font-weight-medium) var(--type-body) var(--font-family-mono);
+}
+.box {
+  background: var(--surface-node);
+  border-radius: var(--radius-node);
+  box-shadow:
+    0 0 0 var(--stroke-hairline) var(--line-border),
+    var(--shadow-node);
+}
+.node {
+  width: var(--size-node);
+  padding: var(--space-part) var(--space-row);
+  display: grid;
+  gap: var(--space-inner);
+  cursor: pointer;
+}
+.selected > .node {
+  box-shadow:
+    0 0 0 var(--stroke-selected) var(--line-selected),
+    var(--shadow-raised);
+}
+.desc {
+  font: var(--font-weight-regular) var(--type-label) / 1.6 var(--font-family-sans);
+  color: var(--text-secondary);
+}
+.counts {
+  display: flex;
+  gap: var(--space-inner);
+  flex-wrap: wrap;
+  margin-top: var(--space-inner);
+}
+.chip {
+  font: var(--font-weight-medium) var(--type-caption) var(--font-family-mono);
+  padding: 0 var(--space-part);
+  border-radius: var(--radius-chip);
+  white-space: nowrap;
+}
+.c-entity {
+  color: var(--kind-entity-ink);
+  background: var(--kind-entity-fill);
+}
+.c-command {
+  color: var(--kind-command-ink);
+  background: var(--kind-command-fill);
+}
+.c-event {
+  color: var(--kind-event-ink);
+  background: var(--kind-event-fill);
+}
+.c-query {
+  color: var(--kind-query-ink);
+  background: var(--kind-query-fill);
+}
+.c-machine {
+  color: var(--kind-machine-ink);
+  background: var(--kind-machine-fill);
+}
+.c-automation {
+  color: var(--kind-automation-ink);
+  background: var(--kind-automation-fill);
+}
+.c-screen {
+  color: var(--kind-screen-ink);
+  background: var(--kind-screen-fill);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: var(--size-list) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+nav.list {
+  border-right: var(--stroke-hairline) solid var(--line-border);
+  background: var(--surface-bar);
+  padding: var(--space-edge);
+  display: grid;
+  gap: var(--space-edge);
+  align-content: start;
+  min-width: 0;
+  overflow-y: auto;
+}
+nav.list section {
+  display: grid;
+  gap: var(--space-inner);
+}
+nav.list h2 {
+  margin: 0;
+}
+nav.list a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-part);
+  padding: var(--space-inner) var(--space-part);
+  border-radius: var(--radius-chip);
+  color: var(--text-secondary);
+  text-decoration: none;
+  min-width: 0;
+}
+nav.list a .name {
+  font-size: var(--type-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+nav.list a .kind {
+  flex: none;
+}
+nav.list a:hover,
+nav.list a[aria-current] {
+  background: var(--surface-band);
+  color: var(--text-primary);
+}
+nav.list a:focus-visible {
+  outline: var(--stroke-selected) solid var(--line-selected);
+}
+
+.state {
+  cursor: pointer;
+}
+.state-title {
+  display: grid;
+  gap: var(--space-inner);
+  justify-items: start;
+  padding: var(--space-part) var(--space-row);
+}
+.compartment {
+  display: grid;
+  padding: var(--space-inner);
+  border-top: var(--stroke-hairline) solid var(--line-border);
+}
+.compartment .line {
+  display: flex;
+  gap: var(--space-part);
+  align-items: center;
+  font: var(--font-weight-regular) var(--type-caption) / 1.6 var(--font-family-mono);
+  color: var(--text-secondary);
+  text-align: left;
+  white-space: nowrap;
+  padding: 0 var(--space-part);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  cursor: pointer;
+}
+.compartment .line:hover {
+  background: var(--surface-band);
+  color: var(--text-primary);
+}
+.compartment .line[aria-pressed="true"] {
+  box-shadow: 0 0 0 var(--stroke-selected) var(--line-selected);
+}
+.mark {
+  flex: none;
+  width: var(--size-mark);
+  height: var(--size-mark);
+  border-radius: 50%;
+}
+.m-command {
+  background: var(--kind-command-ink);
+}
+.m-query {
+  background: var(--kind-query-ink);
+}
+.m-screen {
+  background: var(--kind-screen-ink);
+}
+.state-name {
+  font: var(--font-weight-medium) var(--type-label) var(--font-family-mono);
+  white-space: nowrap;
+}
+.state.group {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-group);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--line-group);
+}
+.state.group > .head {
+  border-bottom: var(--stroke-hairline) solid var(--line-border);
+}
+.state.region {
+  background: var(--surface-band);
+  box-shadow: none;
+}
+.state.region > .head {
+  border-bottom: 0;
+}
+.state.final {
+  box-shadow:
+    0 0 0 var(--stroke-hairline) var(--line-edge),
+    0 0 0 calc(var(--stroke-hairline) + var(--space-ring)) var(--surface-node),
+    0 0 0 calc(2 * var(--stroke-hairline) + var(--space-ring)) var(--line-edge);
+}
+.state.history .state-name {
+  color: var(--text-faint);
+}
+.history-mark {
+  font-size: var(--type-caption);
+  padding: 0 var(--space-inner);
+  margin-right: var(--space-inner);
+  border-radius: var(--radius-chip);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--line-group);
+}
+.state.picked {
+  box-shadow:
+    0 0 0 var(--stroke-selected) var(--line-selected),
+    var(--shadow-node);
+}
+.initial {
+  width: var(--size-initial);
+  height: var(--size-initial);
+  border-radius: 50%;
+  background: var(--text-primary);
+}
+.label {
+  font: var(--font-weight-medium) var(--type-caption) var(--font-family-mono);
+  padding: var(--space-inner) var(--space-part);
+  border: 0;
+  border-radius: var(--radius-chip);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.t-event {
+  color: var(--kind-event-ink);
+  background: var(--kind-event-fill);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--kind-event-line);
+}
+.t-control {
+  color: var(--kind-screen-ink);
+  background: var(--kind-screen-fill);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--kind-screen-line);
+}
+.t-command {
+  color: var(--kind-command-ink);
+  background: var(--kind-command-fill);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--kind-command-line);
+}
+.t-query {
+  color: var(--kind-query-ink);
+  background: var(--kind-query-fill);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--kind-query-line);
+}
+.t-after {
+  color: var(--text-secondary);
+  background: var(--surface-node);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--line-border);
+}
+.t-always,
+.t-onDone,
+.t-screen {
+  color: var(--text-faint);
+  background: var(--surface-node);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--line-border);
+}
+.t-onDone,
+.t-screen {
+  font-style: italic;
+}
+.label[aria-pressed="true"] {
+  box-shadow: 0 0 0 var(--stroke-selected) var(--line-selected);
+}
+.reenter {
+  color: var(--text-faint);
+}
+.react-flow__edge-path.picked {
+  stroke: var(--line-selected);
+  stroke-width: var(--stroke-selected);
+}
+
+.lifeline-head {
+  font: var(--font-weight-medium) var(--type-body) var(--font-family-mono);
+  padding: var(--space-part) var(--space-row);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.react-flow__node-headBackdrop,
+.head-backdrop {
+  pointer-events: none;
+}
+.head-backdrop {
+  background: var(--surface-canvas);
+  border-bottom: var(--stroke-hairline) solid var(--line-border);
+}
+.react-flow__edge-path.lifeline {
+  stroke: var(--line-group);
+}
+.t-answer {
+  color: var(--text-secondary);
+  background: var(--surface-node);
+  box-shadow: 0 0 0 var(--stroke-hairline) var(--line-border);
+}
+.react-flow__edge-path.answer {
+  stroke-width: var(--stroke-hairline);
+}
+.react-flow__edge-path.timeRule {
+  stroke: var(--line-border);
+  stroke-width: var(--stroke-hairline);
+}
+.time {
+  font: var(--font-weight-regular) var(--type-caption) var(--font-family-mono);
+  color: var(--text-secondary);
+  padding: 0 var(--space-inner);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  cursor: pointer;
+}
+.time[aria-pressed="true"] {
+  box-shadow: 0 0 0 var(--stroke-selected) var(--line-selected);
+}
+.entity {
+  position: relative;
+  width: var(--size-node);
+  cursor: pointer;
+}
+.entity.picked {
+  box-shadow:
+    0 0 0 var(--stroke-selected) var(--line-selected),
+    var(--shadow-node);
+}
+.entity-head {
+  display: grid;
+  gap: var(--space-inner);
+  justify-items: start;
+  padding: var(--space-part) var(--space-row);
+  border-bottom: var(--stroke-hairline) solid var(--line-border);
+}
+.entity ul {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-inner) 0;
+}
+.entity .field {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-row);
+  width: 100%;
+  padding: var(--space-inner) var(--space-row);
+  font: var(--type-label) var(--font-family-mono);
+  color: var(--text-primary);
+  text-align: left;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.entity .field:hover {
+  background: var(--surface-band);
+}
+.entity .field[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 var(--stroke-selected) var(--line-selected);
+}
+.entity .type {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.entity .field.ref .type {
+  color: var(--kind-command-ink);
+}
+.entity .key {
+  color: var(--kind-event-ink);
+  font-size: var(--type-caption);
+}
+.crow {
+  fill: none;
+  stroke: var(--line-edge);
+  stroke-width: var(--stroke-edge);
+}
+circle.crow {
+  fill: var(--surface-canvas);
+}
+.crow.picked {
+  stroke: var(--line-selected);
+  stroke-width: var(--stroke-selected);
+}
+.empty {
+  padding: var(--space-edge);
+  margin: 0;
+}
+.kind.error {
+  color: var(--text-error);
+}
+
+aside.inspect {
+  grid-area: 1 / 2;
+  border-left: var(--stroke-hairline) solid var(--line-border);
+  background: var(--surface-bar);
+  padding: var(--space-edge);
+  display: grid;
+  gap: var(--space-row);
+  align-content: start;
+  min-width: 0;
+  overflow-y: auto;
+}
+.title {
+  display: grid;
+  gap: var(--space-inner);
+}
+pre.json {
+  margin: 0;
+  font: var(--type-label) / 1.7 var(--font-family-mono);
+  background: var(--surface-band);
+  border-radius: var(--radius-node);
+  padding: var(--space-row);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.json .k {
+  color: var(--text-secondary);
+}
+.json .s {
+  color: var(--kind-query-ink);
+}
+.json .fold {
+  font: inherit;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.json .fold:hover {
+  color: var(--text-primary);
+}
+@media (prefers-reduced-motion: no-preference) {
+  nav.tabs > * {
+    transition:
+      background var(--motion-hover),
+      color var(--motion-hover);
+  }
+  .node {
+    transition: box-shadow var(--motion-hover);
+  }
+}

@@ -1,0 +1,13 @@
+{"kind":"Restricted.member","definition":null,"data":{"object":"Math","property":"random"},"location":{"file":"todo/stamps.ts","line":1}}
+{"kind":"Restricted.member","definition":null,"data":{"object":"Temporal","property":"Now"},"location":{"file":"todo/stamps.ts","line":2}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"Date"},"location":{"file":"todo/stamps.ts","line":5}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"Date"},"location":{"file":"todo/stamps.ts","line":6}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"performance"},"location":{"file":"todo/stamps.ts","line":7}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"process"},"location":{"file":"todo/stamps.ts","line":8}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"globalThis"},"location":{"file":"todo/stamps.ts","line":9}}
+{"kind":"Restricted.member","definition":null,"data":{"object":"Math","property":"random"},"location":{"file":"todo/stamps.ts","line":10}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"crypto"},"location":{"file":"todo/stamps.ts","line":13}}
+{"kind":"Restricted.cryptoImport","definition":null,"data":{"module":"node:crypto"},"location":{"file":"todo/stamps.ts","line":16}}
+{"kind":"Restricted.global","definition":null,"data":{"name":"crypto"},"location":{"file":"todo/todo.ts","line":24}}
+{"kind":"Restricted.member","definition":null,"data":{"object":"Math","property":"random"},"location":{"file":"todo/todo.ts","line":25}}
+{"kind":"Restricted.member","definition":null,"data":{"object":"Temporal","property":"Now"},"location":{"file":"todo/todo.ts","line":26}}

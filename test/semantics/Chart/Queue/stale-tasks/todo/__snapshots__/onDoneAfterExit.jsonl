@@ -1,0 +1,7 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"archiveTask#1","name":"archiveTask","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"archiveTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskFinished#1","name":"taskFinished","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskArchived#1","name":"taskArchived","payload":{},"after":["taskFinished#1"]}

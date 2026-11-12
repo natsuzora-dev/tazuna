@@ -1,0 +1,3 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"event","id":"e9","name":"todo.taskAdded","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#1","name":"seen","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"event","id":"e9","name":"todo.taskAdded","payload":{"taskId":"task-2"}}

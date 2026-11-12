@@ -1,0 +1,3 @@
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.holiday#1","name":"calendar.holiday","input":{"day":"2026-10-25T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"todo.taskTitle#1","name":"todo.taskTitle","input":{"taskId":""}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.taskTitle#1","answer":{"result":"fulfilled","output":{"title":"Buy milk"}}}

@@ -1,0 +1,5 @@
+{"kind":"Illegal.automationCycle","definition":{"service":"notifier","name":"noticeAdded"},"data":{"chain":[{"service":"todo","name":"readd"}]},"location":{"file":"notifier/notifier.ts","line":8}}
+{"kind":"Illegal.automationCycle","definition":{"service":"todo","name":"retry"},"data":{"chain":[]},"location":{"file":"todo/automations.ts","line":8}}
+{"kind":"Illegal.automationCycle","definition":{"service":"todo","name":"check"},"data":{"chain":[{"service":"todo","name":"rebuild"}]},"location":{"file":"todo/automations.ts","line":14}}
+{"kind":"Illegal.automationCycle","definition":{"service":"todo","name":"notify"},"data":{"chain":[{"service":"todo","name":"noteA"}]},"location":{"file":"todo/automations.ts","line":24}}
+{"kind":"Illegal.automationCycle","definition":{"service":"todo","name":"notify"},"data":{"chain":[{"service":"todo","name":"noteB"}]},"location":{"file":"todo/automations.ts","line":24}}

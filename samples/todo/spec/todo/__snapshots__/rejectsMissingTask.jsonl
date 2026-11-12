@@ -1,0 +1,4 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"task-9"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"completeTask#1","answer":{"result":"rejected","rejection":{"kind":"not-found"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"reopenTask#1","name":"reopenTask","input":{"taskId":"task-9"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"reopenTask#1","answer":{"result":"rejected","rejection":{"kind":"not-found"}}}

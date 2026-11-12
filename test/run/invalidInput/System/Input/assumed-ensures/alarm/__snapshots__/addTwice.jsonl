@@ -1,0 +1,4 @@
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"calendar.addReminder#1","name":"calendar.addReminder","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"calendar.addReminder#1","answer":{"result":"accepted","output":{"reminderId":"r-1"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"event","id":"calendar.reminderAdded#1","name":"calendar.reminderAdded","payload":{"reminderId":"r-1"},"resultOf":"calendar.addReminder#1"}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"event","id":"calendar.reminderAdded#2","name":"calendar.reminderAdded","payload":{"reminderId":"r-1"},"resultOf":"calendar.addReminder#1"}

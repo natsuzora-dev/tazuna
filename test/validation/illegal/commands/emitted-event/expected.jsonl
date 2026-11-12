@@ -1,0 +1,1 @@
+{"kind":"Illegal.foreignEvent","definition":{"service":"notifier","name":"announce"},"data":{"event":{"service":"todo","name":"taskAdded"}},"location":{"file":"notifier/notifier.ts","line":13}}

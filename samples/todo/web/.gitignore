@@ -1,0 +1,5 @@
+.output/
+.tanstack/
+todo.db
+test-results/
+.traces/

@@ -1,0 +1,2 @@
+{"kind":"Illegal.resultOfUnplaced","definition":{"service":"app","name":"grantBeforeAnswer"},"data":{"input":1},"location":{"file":"app/scenarios.ts","line":7}}
+{"kind":"Illegal.resultOfUnplaced","definition":{"service":"app","name":"grantFromAnotherScenario"},"data":{"input":1},"location":{"file":"app/scenarios.ts","line":14}}

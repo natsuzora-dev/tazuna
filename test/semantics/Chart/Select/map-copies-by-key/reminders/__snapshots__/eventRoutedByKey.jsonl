@@ -1,0 +1,7 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"starTask#1","name":"starTask","input":{"taskId":"task-1"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"starTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskStarred#1","name":"taskStarred","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#1","name":"notified","payload":{"taskId":"task-1"},"after":["taskStarred#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"starTask#2","name":"starTask","input":{"taskId":"task-3"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"starTask#2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskStarred#2","name":"taskStarred","payload":{"taskId":"task-3"}}

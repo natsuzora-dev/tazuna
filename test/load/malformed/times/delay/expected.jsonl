@@ -1,0 +1,2 @@
+{"kind":"Malformed.inexactDelay","definition":{"service":"reminder","name":"reminder"},"data":{"state":"waiting","name":"day"},"location":{"file":"reminder/reminder.ts","line":11}}
+{"kind":"Malformed.inexactDelay","definition":{"service":"reminder","name":"reminder"},"data":{"state":"reminding","name":"nudge"},"location":{"file":"reminder/reminder.ts","line":11}}

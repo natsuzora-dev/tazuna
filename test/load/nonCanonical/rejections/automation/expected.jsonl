@@ -1,0 +1,2 @@
+{"kind":"NonCanonical.missingOnRejected","definition":{"service":"notifier","name":"addTaskForFollowUp"},"data":{},"location":{"file":"notifier/notifier.ts","line":14}}
+{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"countAdded"},"data":{},"location":{"file":"todo/todo.ts","line":19}}

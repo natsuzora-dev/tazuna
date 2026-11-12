@@ -1,0 +1,4 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"renameTask#1","name":"renameTask","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"renameTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskRenamed#1","name":"taskRenamed","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"stepsRecorded#1","name":"stepsRecorded","payload":{"steps":["p entry","l2 entry","r1 entry"]},"after":["taskRenamed#1"]}

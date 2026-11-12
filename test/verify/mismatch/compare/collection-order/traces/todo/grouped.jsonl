@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"q1","name":"taskGroups","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","to":"q1","answer":{"result":"fulfilled","output":{"groups":[{"name":"a","members":["y","x","y"],"steps":[1,2],"slots":[{"at":"2026-10-25T01:00:00Z","n":2},{"at":"2026-10-25T02:00:00Z","n":3},{"at":"2026-10-25T02:00:00Z","n":1}]}],"either":[2,1],"maybe":[2,1],"orNull":[2,1],"withDefault":[2,1]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"c1","name":"tagTask","input":{"tags":["store","home"]}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","name":"tagScreen.pick","payload":{"tags":["store","home"]}}

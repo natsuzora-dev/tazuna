@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "test/semantics/**/*.ts",
+        "test/load/**/*.ts",
+        "test/validation/**/*.ts",
+        "test/explore/**/*.ts",
+        "test/verify/**/*.ts"
+      ],
+      "ignoreDependencies": ["@swc/core"],
+      "vite": {
+        "config": ["viewer/vite.config.ts"]
+      }
+    },
+    "samples/todo/spec": {
+      "entry": ["**/{scenarios,contract,automations,machines,*Screen}.ts"]
+    }
+  },
+  "ignoreBinaries": ["lake", "mkfifo"],
+  "ignoreExportsUsedInFile": { "type": true }
+}

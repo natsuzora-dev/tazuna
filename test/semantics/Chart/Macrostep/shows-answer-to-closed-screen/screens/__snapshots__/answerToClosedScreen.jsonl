@@ -1,0 +1,4 @@
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#1"}
+{"time":"2026-10-25T02:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.tasks#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"isListed"}}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.tasks#1"}

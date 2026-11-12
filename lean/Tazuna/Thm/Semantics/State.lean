@@ -1,0 +1,723 @@
+import Tazuna.Semantics.State
+import Tazuna.Thm.Data.Basic
+import Tazuna.Thm.Semantics.Chart.Basic
+import Tazuna.Thm.Semantics.Functions
+
+namespace Tazuna.Thm.Semantics.State
+
+open Tazuna.Data Tazuna.Semantics
+open Tazuna.Syntax (plainName)
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Syntax.Shape Tazuna.Thm.Semantics.Chart.Basic Tazuna.Thm.Semantics.Functions
+
+variable {st : Service} {fs : Functions Id} {s : State}
+
+@[simp] theorem fault_halts (f : Fault) : (Finding.fault f).halts = f.halts := rfl
+
+/-- The parts of a state that internal queue work never changes. -/
+structure Fixed where
+  commandAnswers : CommandAnswers
+  records : Records
+  now : Time
+  started : Bool
+  mocks : List (Nat × Option (Pending × Answer))
+
+def _root_.Tazuna.Semantics.State.fixed (s : State) : Fixed :=
+  ⟨s.commandAnswers, s.records, s.now, s.started, s.mocks⟩
+
+@[simp] theorem write_fixed (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.fixed = s.fixed := rfl
+
+@[simp] theorem write_commandAnswers (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem newStep_commandAnswers (c : Option Nat) : (s.newStep c).1.commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem newMessage_commandAnswers :
+    s.newMessage.commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem halt_commandAnswers (v : Violation) : (s.halt v).commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem violate_commandAnswers (v : Violation) : (s.violate v).commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem report_fixed (f : Finding) : (s.report f).fixed = s.fixed := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_commandAnswers (f : Finding) :
+    (s.report f).commandAnswers = s.commandAnswers := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_started (f : Finding) : (s.report f).started = s.started := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_records (f : Finding) : (s.report f).records = s.records := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_lines (f : Finding) : (s.report f).lines = s.lines := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_now (f : Finding) : (s.report f).now = s.now := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_inputDeadlineOrder (f : Finding) : (s.report f).inputDeadlineOrder = s.inputDeadlineOrder := by
+  unfold State.report; split <;> rfl
+
+theorem report_eq (f : Finding) :
+    s.report f = { s with halted := if f.halts then some f.toViolation else s.halted,
+                          violations := if f.halts then s.violations else s.violations ++ [f.toViolation] } := by
+  unfold State.report State.halt State.violate
+  split <;> rfl
+
+@[simp] theorem report_machines (f : Finding) : (s.report f).machines = s.machines := by
+  simp [report_eq]
+
+@[simp] theorem report_copies (f : Finding) : (s.report f).copies = s.copies := by
+  simp [report_eq]
+
+@[simp] theorem report_pending (f : Finding) : (s.report f).pending = s.pending := by
+  simp [report_eq]
+
+@[simp] theorem report_deadlines (f : Finding) : (s.report f).deadlines = s.deadlines := by
+  simp [report_eq]
+
+@[simp] theorem report_stack (f : Finding) : (s.report f).stack = s.stack := by
+  simp [report_eq]
+
+@[simp] theorem report_mocks (f : Finding) : (s.report f).mocks = s.mocks := by
+  simp [report_eq]
+
+theorem report_halted (f : Finding) (h : f.halts = true) : (s.report f).halted = some f.toViolation := by
+  simp [State.report, h, State.halt]
+
+theorem reportAll_cons (t : State) (f : Fault) (fs : List Fault) :
+    t.reportAll (f :: fs) = (if t.halted.isSome then t else t.report (.fault f)).reportAll fs := rfl
+
+theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State) f, g (t.report (.fault f)) = g t)
+    (fs : List Fault) (t : State) : g (t.reportAll fs) = g t := by
+  induction fs generalizing t with
+  | nil => rfl
+  | cons f fs ih =>
+    rw [reportAll_cons, ih]
+    split <;> simp [hg]
+
+@[simp] theorem reportAll_fixed (fs : List Fault) : (s.reportAll fs).fixed = s.fixed :=
+  reportAll_preserves State.fixed (fun _ _ => report_fixed ..) fs s
+
+@[simp] theorem reportAll_commandAnswers (fs : List Fault) :
+    (s.reportAll fs).commandAnswers = s.commandAnswers :=
+  reportAll_preserves State.commandAnswers (fun _ _ => report_commandAnswers ..) fs s
+
+@[simp] theorem reportAll_started (fs : List Fault) : (s.reportAll fs).started = s.started :=
+  reportAll_preserves State.started (fun _ _ => report_started ..) fs s
+
+@[simp] theorem reportAll_records (fs : List Fault) : (s.reportAll fs).records = s.records :=
+  reportAll_preserves State.records (fun _ _ => report_records ..) fs s
+
+@[simp] theorem reportAll_lines (fs : List Fault) : (s.reportAll fs).lines = s.lines :=
+  reportAll_preserves State.lines (fun _ _ => report_lines ..) fs s
+
+@[simp] theorem reportAll_subscriptions (fs : List Fault) :
+    (s.reportAll fs).subscriptions = s.subscriptions :=
+  reportAll_preserves State.subscriptions (fun _ _ => by unfold State.report; split <;> rfl) fs s
+
+@[simp] theorem reportAll_now (fs : List Fault) : (s.reportAll fs).now = s.now :=
+  reportAll_preserves State.now (fun _ _ => report_now ..) fs s
+
+@[simp] theorem reportAll_mocks (fs : List Fault) : (s.reportAll fs).mocks = s.mocks :=
+  reportAll_preserves State.mocks (fun _ _ => report_mocks ..) fs s
+
+@[simp] theorem reportAll_inputDeadlineOrder (fs : List Fault) :
+    (s.reportAll fs).inputDeadlineOrder = s.inputDeadlineOrder :=
+  reportAll_preserves State.inputDeadlineOrder (fun _ _ => report_inputDeadlineOrder ..) fs s
+
+theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false) (t : State) :
+    (t.reportAll fs).halted = t.halted ∧
+      (t.halted = none → (t.reportAll fs).violations = t.violations ++ fs.map fun f => (Finding.fault f).toViolation) := by
+  induction fs generalizing t with
+  | nil => simp [State.reportAll]
+  | cons f fs ih =>
+    have hr : f.halts = false := h _ (List.mem_cons_self ..)
+    rw [reportAll_cons]
+    cases hh : t.halted with
+    | some v =>
+      simp only [Option.isSome_some, ↓reduceIte, reduceCtorEq, false_implies, and_true]
+      exact (ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) t).1.trans hh
+    | none =>
+      have hrep : t.report (.fault f) = t.violate (Finding.fault f).toViolation := by
+        simp [State.report, hr]
+      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, hrep, forall_const]
+      have := ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) (t.violate (Finding.fault f).toViolation)
+      refine ⟨this.1.trans hh, ?_⟩
+      rw [this.2 hh]
+      simp [State.violate]
+
+@[simp] theorem setMachine_commandAnswers (name : String) (f : Instance → Instance) :
+    (s.setMachine name f).commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem answer_commandAnswers (to : Option String) (a : Answer) :
+    (s.answer to a).commandAnswers = s.commandAnswers := by
+  cases to <;> rfl
+
+theorem find_setMachine (l : List Instance) (c : String) (f : Instance → Instance) (hf : ∀ i, (f i).resource = i.resource) :
+    (l.map fun i => if i.resource == c then f i else i).find? (·.resource == c) = (l.find? (·.resource == c)).map f := by
+  induction l with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [List.map_cons, List.find?_cons, List.find?_cons]
+    by_cases hx : x.resource = c
+    · simp [hx, hf]
+    · have hb : (x.resource == c) = false := by simp [hx]
+      simp only [hb, Bool.false_eq_true, ↓reduceIte, ih]
+
+theorem machine?_setMachine (c : String) (f : Instance → Instance) (hf : ∀ i, (f i).resource = i.resource) :
+    (s.setMachine c f).machine? c = (s.machine? c).map f := by
+  simp only [State.machine?, State.setMachine, ← List.map_append]
+  exact find_setMachine _ c f hf
+
+theorem copyName_ne (owner map key : String) : copyName owner map key ≠ owner := by
+  intro h
+  have := congrArg String.length h
+  simp only [copyName, toString, String.length_append] at this
+  have : "[".length = 1 := by decide
+  omega
+
+theorem append_cons_inj_of_not_mem (c : Char) : ∀ (a a' b b' : List Char), c ∉ a → c ∉ a' →
+    a ++ c :: b = a' ++ c :: b' → a = a' ∧ b = b'
+  | [], [], _, _, _, _, h => by simpa using h
+  | [], y :: _, _, _, _, h', h => by
+    simp only [List.nil_append, List.cons_append, List.cons.injEq] at h
+    exact absurd (h.1 ▸ List.mem_cons_self) h'
+  | x :: _, [], _, _, h, _, e => by
+    simp only [List.nil_append, List.cons_append, List.cons.injEq] at e
+    exact absurd (e.1 ▸ List.mem_cons_self) h
+  | x :: xs, y :: ys, b, b', h, h', e => by
+    simp only [List.cons_append, List.cons.injEq] at e
+    obtain ⟨rfl, e⟩ := e
+    obtain ⟨rfl, rfl⟩ := append_cons_inj_of_not_mem c xs ys b b' (fun m => h (List.mem_cons_of_mem _ m))
+      (fun m => h' (List.mem_cons_of_mem _ m)) e
+    exact ⟨rfl, rfl⟩
+
+theorem copyName_injective_of_plain (owner : String) {m m' a b : String} (hm : plainName m = true)
+    (hm' : plainName m' = true) (h : copyName owner m a = copyName owner m' b) : m = m' ∧ a = b := by
+  simp only [copyName, toString] at h
+  have h := congrArg String.toList h
+  simp only [String.toList_append] at h
+  simp only [plainName, ↓Char.isValue, List.contains_eq_mem, Bool.and_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true,
+      decide_eq_false_iff_not] at hm hm'
+  have hl : "[".toList = ['['] := by decide
+  simp only [List.append_assoc, List.append_cancel_left_eq, hl, List.singleton_append] at h
+  rw [← List.append_assoc, ← List.append_assoc, List.append_cancel_right_eq] at h
+  obtain ⟨e1, e2⟩ := append_cons_inj_of_not_mem '[' _ _ _ _ hm.2 hm'.2 h
+  exact ⟨String.toList_inj.mp e1, String.toList_inj.mp e2⟩
+
+theorem copyName_injective_in_chart (c : Chart) (owner : String) {m m' : ChartState} {a b : String}
+    (hm : m ∈ c.states) (hm' : m' ∈ c.states) (h : copyName owner m.name a = copyName owner m'.name b) :
+    m.name = m'.name ∧ a = b :=
+  copyName_injective_of_plain owner (plainName_of_mem c hm) (plainName_of_mem c hm') h
+
+theorem documentOrder_owner (i : Instance) :
+    i.documentOrder.filter (·.1 == i.resource) = i.chart.states.map fun cs => (i.resource, cs.name) := by
+  unfold Instance.documentOrder
+  generalize i.chart.states = l
+  induction l with
+  | nil => rfl
+  | cons cs rest ih =>
+    rw [List.flatMap_cons, List.filter_append, ih, List.filter_cons]
+    have hb : ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (copyName i.resource cs.name k, ·)).filter
+        (·.1 == i.resource) = [] := by
+      rw [List.filter_eq_nil_iff]
+      intro a ha
+      obtain ⟨k, -, ha⟩ := List.mem_flatMap.mp ha
+      obtain ⟨d, -, rfl⟩ := List.mem_map.mp ha
+      simpa using copyName_ne i.resource cs.name k
+    simp [hb]
+
+theorem documentOrder_at_map (i : Instance) (cs : ChartState) (hcs : cs ∈ i.chart.states) :
+    ∃ pre post, i.documentOrder =
+      pre ++ (i.resource, cs.name) ::
+        ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (copyName i.resource cs.name k, ·)) ++ post := by
+  obtain ⟨A, B, hAB⟩ := List.append_of_mem hcs
+  let f := fun cs : ChartState =>
+    (i.resource, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (copyName i.resource cs.name k, ·)
+  refine ⟨A.flatMap f, B.flatMap f, ?_⟩
+  unfold Instance.documentOrder
+  rw [hAB, List.flatMap_append, List.flatMap_cons]
+  simp [f]
+
+theorem emitAll_fixed (es : List Emit) : (s.emitAll es).fixed = s.fixed := by
+  induction es generalizing s with
+  | nil => rfl
+  | cons e es ih => exact ih (s := (s.write .out none (.event e.event e.payload none)).1)
+
+theorem emitAll_commandAnswers (es : List Emit) :
+    (s.emitAll es).commandAnswers = s.commandAnswers := congrArg Fixed.commandAnswers (emitAll_fixed es)
+
+theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).fixed = t.fixed) (xs : List α)
+    (t : State) : (xs.foldl f t).fixed = t.fixed := by
+  induction xs generalizing t with
+  | nil => rfl
+  | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h]
+
+/-- The parts of a state that a message never changes. -/
+def _root_.Tazuna.Semantics.State.clock (s : State) : CommandAnswers × Time := (s.commandAnswers, s.now)
+
+theorem emitAll_clock (t : State) (es : List Emit) : (t.emitAll es).clock = t.clock := by
+  have h := emitAll_fixed (s := t) es
+  exact Prod.ext (congrArg Fixed.commandAnswers h) (congrArg Fixed.now h)
+
+theorem holdsFold_fixed (i : Instance) (es : List (String × Time)) :
+    (es.foldl (fun s x =>
+      if s.halted.isSome = true then pure s
+      else do
+        match ← fs.holds (s.scopeOf i (some x.fst)) s.records with
+        | .error e =>
+          pure (s.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+        | .ok () => pure s) s : Id State).fixed = s.fixed := by
+  induction es generalizing s with
+  | nil => rfl
+  | cons e es ih =>
+    simp only [List.foldl_cons]
+    rw [ih]
+    split
+    · rfl
+    · try simp only [id_bind]
+      split
+      · exact report_fixed ..
+      · rfl
+
+def Extends (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new
+
+def Grows (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now
+
+theorem Extends.refl (s : State) : Extends s s := ⟨#[], by simp⟩
+
+theorem Extends.trans {a b c : State} (h₁ : Extends a b) (h₂ : Extends b c) : Extends a c := by
+  obtain ⟨n₁, e₁⟩ := h₁
+  obtain ⟨n₂, e₂⟩ := h₂
+  exact ⟨n₁ ++ n₂, by rw [e₂, e₁, Array.append_assoc]⟩
+
+theorem Extends.getElem? {a b : State} (h : Extends a b) {k : Nat} {l : Line} (hk : a.lines[k]? = some l) :
+    b.lines[k]? = some l := by
+  obtain ⟨new, e⟩ := h
+  rw [e, Array.getElem?_append_left (Array.getElem?_eq_some_iff.mp hk).1]
+  exact hk
+
+theorem Grows.refl (s : State) : Grows s s := ⟨#[], by simp, by simp⟩
+
+theorem Grows.of_lines {s s' : State} (h : s'.lines = s.lines) : Grows s s' := ⟨#[], by simp [h], by simp⟩
+
+theorem Grows.trans {a b c : State} (h₁ : Grows a b) (hn : b.now = a.now) (h₂ : Grows b c) : Grows a c := by
+  obtain ⟨n₁, e₁, t₁⟩ := h₁
+  obtain ⟨n₂, e₂, t₂⟩ := h₂
+  refine ⟨n₁ ++ n₂, by rw [e₂, e₁, Array.append_assoc], ?_⟩
+  intro l hl
+  rcases Array.mem_append.mp hl with h | h
+  · exact t₁ l h
+  · rw [t₂ l h, hn]
+
+theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now) : Grows a c :=
+  (Grows.of_lines hl).trans hn h
+
+theorem Grows.toExtends {a b : State} (h : Grows a b) : Extends a b := by
+  obtain ⟨n, e, _⟩ := h
+  exact ⟨n, e⟩
+
+theorem grows_write (d : Dir) (g : Option String) (b : LineBody) : Grows s (s.write d g b).1 :=
+  ⟨#[_], Array.push_eq_append, by simp⟩
+
+theorem foldl_grows {α : Type} (f : State → α → State) (h : ∀ t x, Grows t (f t x)) (hn : ∀ t x, (f t x).now = t.now)
+    (xs : List α) (t : State) : Grows t (xs.foldl f t) := by
+  induction xs generalizing t with
+  | nil => exact Grows.refl _
+  | cons x xs ih => simp only [List.foldl_cons]; exact (h t x).trans (hn t x) (ih _)
+
+theorem emitAll_grows (t : State) (es : List Emit) : Grows t (t.emitAll es) := by
+  unfold State.emitAll
+  induction es generalizing t with
+  | nil => exact Grows.refl _
+  | cons e es ih => exact (grows_write _ _ _).trans rfl (ih _)
+
+theorem answer_grows (t : State) (to : Option String) (a : Answer) : Grows t (t.answer to a) := by
+  cases to
+  · exact Grows.refl _
+  · exact grows_write _ _ _
+
+theorem holdsFold_lines (i : Instance) (es : List (String × Time)) :
+    (es.foldl (fun s x =>
+      if s.halted.isSome = true then pure s
+      else do
+        match ← fs.holds (s.scopeOf i (some x.fst)) s.records with
+        | .error e =>
+          pure (s.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+        | .ok () => pure s) s : Id State).lines = s.lines := by
+  induction es generalizing s with
+  | nil => rfl
+  | cons e es ih =>
+    simp only [List.foldl_cons]
+    rw [ih]
+    split
+    · rfl
+    · try simp only [id_bind]
+      split
+      · exact report_lines ..
+      · rfl
+
+theorem foldl_records {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).records = t.records) (xs : List α)
+    (t : State) : (xs.foldl f t).records = t.records := by
+  induction xs generalizing t with
+  | nil => rfl
+  | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h]
+
+theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer to a).records = t.records := by
+  cases to <;> rfl
+
+@[simp] theorem write_records (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.records = s.records := rfl
+
+@[simp] theorem write_eventDeliveries (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.eventDeliveries = s.eventDeliveries := rfl
+
+@[simp] theorem write_halted (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.halted = s.halted := rfl
+
+@[simp] theorem write_id (d : Dir) (id : String) (b : LineBody) :
+    (s.write d (some id) b).2 = id := rfl
+
+@[simp] theorem write_now (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.now = s.now := rfl
+
+@[simp] theorem writeInput_fixed (g : Option String) (b : LineBody) : (s.writeInput g b).1.fixed = s.fixed := rfl
+
+@[simp] theorem writeInput_commandAnswers (g : Option String) (b : LineBody) :
+    (s.writeInput g b).1.commandAnswers = s.commandAnswers := rfl
+
+@[simp] theorem writeInput_records (g : Option String) (b : LineBody) : (s.writeInput g b).1.records = s.records := rfl
+
+@[simp] theorem writeInput_eventDeliveries (g : Option String) (b : LineBody) :
+    (s.writeInput g b).1.eventDeliveries = s.eventDeliveries := rfl
+
+@[simp] theorem writeInput_halted (g : Option String) (b : LineBody) : (s.writeInput g b).1.halted = s.halted := rfl
+
+@[simp] theorem writeInput_id (id : String) (b : LineBody) : (s.writeInput (some id) b).2 = id := rfl
+
+@[simp] theorem writeInput_now (g : Option String) (b : LineBody) : (s.writeInput g b).1.now = s.now := rfl
+
+@[simp] theorem newStep_now (c : Option Nat) : (s.newStep c).1.now = s.now := rfl
+
+@[simp] theorem newMessage_now : s.newMessage.now = s.now := rfl
+
+@[simp] theorem answer_now (to : Option String) (a : Answer) : (s.answer to a).now = s.now := by
+  cases to <;> rfl
+
+@[simp] theorem newStep_records (c : Option Nat) : (s.newStep c).1.records = s.records := rfl
+
+@[simp] theorem newMessage_records : s.newMessage.records = s.records := rfl
+
+@[simp] theorem newStep_eventDeliveries (c : Option Nat) :
+    (s.newStep c).1.eventDeliveries = s.eventDeliveries := rfl
+
+@[simp] theorem newStep_halted (c : Option Nat) : (s.newStep c).1.halted = s.halted := rfl
+
+@[simp] theorem newMessage_halted : s.newMessage.halted = s.halted := rfl
+
+@[simp] theorem answer_halted (to : Option String) (a : Answer) : (s.answer to a).halted = s.halted := by
+  cases to <;> rfl
+
+/-- The state and the step after `send` writes the input line and begins the message and its step. -/
+def sent (s : State) (name id : String) (input : Value) : State × Nat :=
+  (s.writeInput (some id) (.command name input)).1.newMessage.newStep none
+
+/-- The state after `receive` writes the input line. -/
+def delivered (s : State) (name id : String) (payload : Value) : State :=
+  (s.writeInput (some id) (.event name payload none)).1
+
+theorem passed_deadline_fires_now (t : Deadline) (time : Time) (ht : t.time = some time) (hp : time ≤ s.now) :
+    max s.now (t.time.getD s.now) = s.now := by
+  simp only [ht, Option.getD_some]
+  exact Int.max_eq_left hp
+
+/-- Deadline `u` with its time filled in from `s` when it is an `at` deadline. Other deadlines stay unchanged. -/
+def armed (fs : Functions Id) (s : State) (u : Deadline) : Deadline :=
+  if u.fromAt then
+    match s.machine? u.machine with
+    | some i =>
+      match fs.deadlineAt (s.scopeOf i (some u.state)) s.records u.name with
+      | .ok time => { u with time := some time }
+      | .error _ => u
+    | none => u
+  else u
+
+theorem armed_order (u : Deadline) : (armed fs s u).order = u.order := by
+  unfold armed
+  split
+  · split
+    · split <;> rfl
+    · rfl
+  · rfl
+
+def rearmStep (st : Service) (fs : Functions Id) (t : State) (x : Deadline) : State :=
+  if t.halted.isSome || !x.fromAt then t else
+  match t.machine? x.machine with
+  | none => t
+  | some i =>
+    match fs.deadlineAt (t.scopeOf i (some x.state)) t.records x.name with
+    | .error e => t.report (.fault (issueViolation st (st.ref i.chart.name) e))
+    | .ok time => { t with deadlines := t.deadlines.map fun u => if u.order == x.order then { u with time := some time } else u }
+
+theorem rearmStep_halted (t : State) (x : Deadline) (h : t.halted.isSome) : rearmStep st fs t x = t := by
+  simp [rearmStep, h]
+
+theorem foldl_rearmStep_halted (ts : List Deadline) (t : State) (h : t.halted.isSome) :
+    ts.foldl (rearmStep st fs) t = t := by
+  induction ts with
+  | nil => rfl
+  | cons x xs ih => simp only [List.foldl_cons, rearmStep_halted t x h, ih]
+
+theorem map_update_other (l : List Deadline) (o : Nat) (f : Deadline → Deadline) (h : ∀ u ∈ l, u.order ≠ o) :
+    l.map (fun u => if u.order == o then f u else u) = l := by
+  induction l with
+  | nil => rfl
+  | cons u us ih =>
+    simp only [List.map_cons, List.mem_cons] at *
+    rw [ih (fun v hv => h v (Or.inr hv))]
+    simp [h u (Or.inl rfl)]
+
+theorem rearm_fold (T : List Deadline) (hd : (T.map (·.order)).Nodup) :
+    ∀ (ts done : List Deadline) (t : State), T = done ++ ts → t.machines = s.machines → t.copies = s.copies →
+      t.records = s.records →
+      t.now = s.now → t.deadlines = done.map (armed fs s) ++ ts → (ts.foldl (rearmStep st fs) t).halted = none →
+      (ts.foldl (rearmStep st fs) t).deadlines = T.map (armed fs s) := by
+  intro ts
+  induction ts with
+  | nil => intro done t hT _ _ _ _ ht _; simp [hT, ht]
+  | cons x ts ih =>
+    intro done t hT hm hc hr hn ht hf
+    have hnot : t.halted = none := by
+      cases h : t.halted with
+      | none => rfl
+      | some v =>
+        rw [List.foldl_cons, rearmStep_halted t x (by simp [h]), foldl_rearmStep_halted ts t (by simp [h])] at hf
+        simp [h] at hf
+    have hdone : ∀ u ∈ done, u.order ≠ x.order := by
+      intro u hu he
+      rw [hT, List.map_append, List.nodup_append] at hd
+      exact hd.2.2 u.order (List.mem_map_of_mem hu) x.order (by simp) he
+    have hrest : ∀ u ∈ ts, u.order ≠ x.order := by
+      intro u hu he
+      rw [hT, List.map_append, List.nodup_append] at hd
+      have := hd.2.1
+      simp only [List.map_cons, List.nodup_cons] at this
+      exact this.1 (he ▸ List.mem_map_of_mem hu)
+    have hm' : t.machine? x.machine = s.machine? x.machine := by simp [State.machine?, hm, hc]
+    rw [List.foldl_cons] at hf ⊢
+    by_cases hx : x.fromAt = true
+    · cases hi : t.machine? x.machine with
+      | none =>
+        have hs : rearmStep st fs t x = t := by simp [rearmStep, hnot, hx, hi]
+        rw [hs] at hf ⊢
+        refine ih (done ++ [x]) t (by simp [hT]) hm hc hr hn ?_ hf
+        have : armed fs s x = x := by simp [armed, hx, ← hm', hi]
+        simp [ht, this]
+      | some i =>
+        cases hd' : fs.deadlineAt (t.scopeOf i (some x.state)) t.records x.name with
+        | error e =>
+          have hh := issueViolation_halts_default (st := st) (st.ref i.chart.name) e
+          have hs : rearmStep st fs t x = t.report (.fault (issueViolation st (st.ref i.chart.name) e)) := by
+            simp [rearmStep, hnot, hx, hi, hd']
+          rw [hs, foldl_rearmStep_halted ts _ (by simp [report_halted (.fault _) hh])] at hf
+          simp [report_halted (.fault _) hh] at hf
+        | ok time =>
+          have hs : rearmStep st fs t x = { t with deadlines := t.deadlines.map fun u =>
+              if u.order == x.order then { u with time := some time } else u } := by
+            simp [rearmStep, hnot, hx, hi, hd']
+          rw [hs] at hf ⊢
+          refine ih (done ++ [x]) _ (by simp [hT]) hm hc hr hn ?_ hf
+          have harm : armed fs s x = { x with time := some time } := by
+            have hsc : t.scopeOf i (some x.state) = s.scopeOf i (some x.state) := by
+              simp [State.scopeOf, State.machine?, hm, hc, hn]
+            simp [armed, hx, ← hm', hi, ← hsc, ← hr, hd']
+          show List.map _ t.deadlines = _
+          rw [ht, List.map_append, List.map_cons, map_update_other _ _ _ (fun u hu => by
+              obtain ⟨v, hv, rfl⟩ := List.mem_map.mp hu
+              rw [armed_order]; exact hdone v hv),
+            map_update_other _ _ _ hrest]
+          simp [harm]
+    · have hs : rearmStep st fs t x = t := by simp [rearmStep, hx]
+      rw [hs] at hf ⊢
+      refine ih (done ++ [x]) t (by simp [hT]) hm hc hr hn ?_ hf
+      have : armed fs s x = x := by simp [armed, hx]
+      simp [ht, this]
+
+def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l
+
+theorem AddsOnly.trans {P : Line → Prop} {a b c : State} (h₁ : AddsOnly P a b) (h₂ : AddsOnly P b c) :
+    AddsOnly P a c := by
+  obtain ⟨n₁, e₁, p₁⟩ := h₁
+  obtain ⟨n₂, e₂, p₂⟩ := h₂
+  refine ⟨n₁ ++ n₂, by rw [e₂, e₁, Array.append_assoc], fun l hl => ?_⟩
+  rcases Array.mem_append.mp hl with h | h
+  · exact p₁ l h
+  · exact p₂ l h
+
+def isOpenShow (owner : String) (p : Pending) : Bool := p.requester.machine? == some owner && p.requester.slot?.isSome && !p.stale
+
+theorem nodup_map_inj (l : List Pending) (h : (l.map (·.id)).Nodup) {p q : Pending} (hp : p ∈ l) (hq : q ∈ l)
+    (he : p.id = q.id) : p = q := by
+  induction l with
+  | nil => cases hp
+  | cons x xs ih =>
+    simp only [List.map_cons, List.nodup_cons] at h
+    rcases List.mem_cons.mp hp with h1 | h1 <;> rcases List.mem_cons.mp hq with h2 | h2
+    · rw [h1, h2]
+    · subst h1; exact absurd (he ▸ List.mem_map_of_mem (f := (·.id)) h2) h.1
+    · subst h2; exact absurd (he.symm ▸ List.mem_map_of_mem (f := (·.id)) h1) h.1
+    · exact ih h.2 h1 h2
+
+theorem filter_map_same {P : Pending → Bool} {f : Pending → Pending} :
+    ∀ (l : List Pending), (∀ q ∈ l, f q = q ∨ (P q = false ∧ P (f q) = false)) → (l.map f).filter P = l.filter P := by
+  intro l
+  induction l with
+  | nil => intro _; rfl
+  | cons q l ih =>
+    intro h
+    simp only [List.map_cons, List.filter_cons]
+    rw [ih (fun x hx => h x (List.mem_cons_of_mem _ hx))]
+    rcases h q List.mem_cons_self with e | ⟨e₁, e₂⟩
+    · rw [e]
+    · simp [e₁, e₂]
+
+def CopiesOf (chart map : String) (cs : List Instance) : Prop :=
+  ∀ c ∈ cs, c.chart.name = chart ∧ ∃ co, c.copyOf = some co ∧ co.map = map
+
+theorem emitAll_started (t : State) (es : List Emit) : (t.emitAll es).started = t.started :=
+  congrArg Fixed.started (emitAll_fixed (s := t) es)
+
+theorem answer_started (to : Option String) (a : Answer) : (s.answer to a).started = s.started := by
+  cases to <;> rfl
+
+theorem generated_id_counts_lines (d : Dir) (b : LineBody) :
+    (s.write d none b).2 = s!"{b.idName}#{namedCount s.lines b.idName + 1}" := rfl
+
+theorem given_id_kept (d : Dir) (id : String) (b : LineBody) : (s.write d (some id) b).2 = id := rfl
+
+theorem nth_line_with_name (d : Dir) (b : LineBody) (s' : State) (h : Extends (s.write d none b).1 s') :
+    ∃ l, s'.lines[s.lines.size]? = some l ∧ l.body = b ∧
+      l.id = s!"{b.idName}#{namedCount (s'.lines.take s.lines.size) b.idName + 1}" := by
+  obtain ⟨new, e⟩ := h
+  refine ⟨{ time := s.now, dir := d, id := (s.write d none b).2, body := b }, ?_, rfl, ?_⟩
+  · rw [e]
+    simp [State.write, Array.getElem?_append_left]
+  · rw [e]
+    simp only [State.write]
+    rw [Array.push_eq_append, Array.append_assoc]
+    simp
+    rfl
+
+theorem foldl_earliest (xs : List Pending) : ∀ (best : Option Pending) (p : Pending),
+    xs.foldl (fun best p => match best with
+      | some b => if p.turn < b.turn then some p else some b
+      | none => some p) best = some p →
+    (best = some p ∨ p ∈ xs) ∧ (∀ b, best = some b → p.turn ≤ b.turn) ∧ ∀ q ∈ xs, p.turn ≤ q.turn := by
+  induction xs with
+  | nil =>
+    intro best p h
+    simp only [List.foldl_nil] at h
+    subst h
+    exact ⟨Or.inl rfl, fun b hb => by cases hb; exact Nat.le_refl _, fun q hq => absurd hq List.not_mem_nil⟩
+  | cons x xs ih =>
+    intro best p h
+    simp only [List.foldl_cons] at h
+    obtain ⟨hm, hb, hq⟩ := ih _ p h
+    cases best with
+    | none =>
+      simp only at hm hb
+      refine ⟨?_, (fun b hb' => nomatch hb'), ?_⟩
+      · rcases hm with hm | hm
+        · injection hm with hm
+          subst hm
+          exact Or.inr List.mem_cons_self
+        · exact Or.inr (List.mem_cons_of_mem _ hm)
+      · intro q hq'
+        rcases List.mem_cons.mp hq' with rfl | hq'
+        · exact hb _ rfl
+        · exact hq q hq'
+    | some b =>
+      simp only at hm hb
+      by_cases hlt : x.turn < b.turn
+      · simp only [hlt, ↓reduceIte] at hm hb
+        refine ⟨?_, fun b' hb' => ?_, ?_⟩
+        · rcases hm with hm | hm
+          · injection hm with hm
+            subst hm
+            exact Or.inr List.mem_cons_self
+          · exact Or.inr (List.mem_cons_of_mem _ hm)
+        · injection hb' with hb'
+          subst hb'
+          exact Nat.le_trans (hb _ rfl) (Nat.le_of_lt hlt)
+        · intro q hq'
+          rcases List.mem_cons.mp hq' with rfl | hq'
+          · exact hb _ rfl
+          · exact hq q hq'
+      · simp only [hlt, ↓reduceIte] at hm hb
+        refine ⟨?_, fun b' hb' => ?_, ?_⟩
+        · rcases hm with hm | hm
+          · exact Or.inl hm
+          · exact Or.inr (List.mem_cons_of_mem _ hm)
+        · injection hb' with hb'
+          subst hb'
+          exact hb _ rfl
+        · intro q hq'
+          rcases List.mem_cons.mp hq' with rfl | hq'
+          · exact Nat.le_trans (hb _ rfl) (Nat.le_of_not_lt hlt)
+          · exact hq q hq'
+
+theorem createKeys_fixed (es : List String) : (s.createKeys es).fixed = s.fixed := rfl
+
+theorem createKeys_lines (es : List String) : (s.createKeys es).lines = s.lines := rfl
+
+theorem createKey_counts_entity (e : String) :
+    (s.createKey e).created = s.created ++ [(e, s!"{e}-{(s.created.filter (·.1 == e)).length + 1}")] := rfl
+
+theorem createKeys_in_call_order (e : String) (es : List String) :
+    s.createKeys (e :: es) = (s.createKey e).createKeys es := rfl
+
+theorem answered_fixed (p : Pending) : (s.answered p).1.fixed = s.fixed := by
+  unfold State.answered; split <;> rfl
+
+theorem answered_lines (p : Pending) : (s.answered p).1.lines = s.lines := by
+  unfold State.answered; split <;> rfl
+
+theorem answered_request_leaves (p : Pending) (hp : p.requester.slot? = none) :
+    (s.answered p).1.pending = s.pending.filter (·.id != p.id) ∧ (s.answered p).1.pending.Sublist s.pending := by
+  simp [State.answered, hp, List.filter_sublist]
+
+theorem subscription_waits_again (p : Pending) (hp : p.requester.slot?.isSome = true) (hm : p ∈ s.pending) :
+    (∃ q ∈ (s.answered p).1.pending, q.id = p.id ∧ q.turn = s.turn) ∧ (s.answered p).1.turn = s.turn + 1 ∧
+      (s.answered p).1.pending.map (·.id) = s.pending.map (·.id) := by
+  have e : (s.answered p).1 = { s with
+      pending := s.pending.map (fun q => if q.id == p.id then { q with turn := s.turn } else q),
+      turn := s.turn + 1 } := by simp [State.answered, hp]
+  rw [e]
+  refine ⟨⟨{ p with turn := s.turn }, List.mem_map.mpr ⟨p, hm, by simp⟩, rfl, rfl⟩, rfl, ?_⟩
+  · simp only [List.map_map]
+    congr 1
+    funext q
+    simp only [Function.comp]
+    split <;> rfl
+
+theorem answered_subscription_waits_shortest (p : Pending) (hp : p.requester.slot?.isSome = true)
+    (hb : ∀ q ∈ s.pending, q.turn < s.turn) :
+    (∀ q ∈ (s.answered p).1.pending, q.id ≠ p.id → q.turn < s.turn) ∧
+      ∀ q ∈ (s.answered p).1.pending, q.turn < (s.answered p).1.turn := by
+  simp only [State.answered, hp, ↓reduceIte]
+  refine ⟨fun q hq hne => ?_, fun q hq => ?_⟩
+  · obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+    by_cases he : q'.id = p.id
+    · simp [he] at hne
+    · simp only [he, beq_iff_eq, ↓reduceIte] at hne ⊢
+      exact hb q' hq'
+  · obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+    split
+    · exact Nat.lt_succ_self _
+    · exact Nat.lt_succ_of_lt (hb q' hq')
+
+end Tazuna.Thm.Semantics.State

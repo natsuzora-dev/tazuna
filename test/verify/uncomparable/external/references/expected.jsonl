@@ -1,0 +1,5 @@
+{"kind":"Uncomparable.unknownRequest","definition":null,"data":{"line":1,"type":"query","name":"nextWeek"},"location":{"file":"traces/calendar/requests.jsonl","line":1}}
+{"kind":"Uncomparable.unknownEvent","definition":null,"data":{"line":3,"event":"moved"},"location":{"file":"traces/calendar/requests.jsonl","line":3}}
+{"kind":"Uncomparable.resultOfUnknownRequest","definition":null,"data":{"line":4,"event":{"service":"calendar","name":"booked"},"requestId":"c9"},"location":{"file":"traces/calendar/requests.jsonl","line":4}}
+{"kind":"Uncomparable.resultOfNonCommand","definition":null,"data":{"line":7,"event":{"service":"calendar","name":"booked"},"requestId":"q2","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"traces/calendar/requests.jsonl","line":7}}
+{"kind":"Uncomparable.unknownAnswer","definition":null,"data":{"line":8,"to":"q9"},"location":{"file":"traces/calendar/requests.jsonl","line":8}}

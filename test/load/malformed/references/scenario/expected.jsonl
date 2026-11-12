@@ -1,0 +1,2 @@
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"addThenCancel"},"data":{"path":["inputs",1,"command"]},"location":{"file":"todo/todo.ts","line":25}}
+{"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"addThenCancel"},"data":{"path":["inputs",2,"screen"]},"location":{"file":"todo/todo.ts","line":25}}

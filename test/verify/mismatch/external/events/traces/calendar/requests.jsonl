@@ -1,0 +1,7 @@
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e2","name":"audited","payload":{"count":0}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c1","name":"book","input":{"day":"2026-10-26T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e5","name":"booked","resultOf":"c1","payload":{"day":"2026-10-26T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c2","name":"book","input":{"day":"2026-10-26T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e6","name":"cancelled","resultOf":"c2","payload":{"day":"2026-10-26T00:00:00Z"}}

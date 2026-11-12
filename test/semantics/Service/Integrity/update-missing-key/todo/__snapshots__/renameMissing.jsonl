@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"renameTask#1","name":"renameTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"renameTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskRenamed#1","name":"taskRenamed","payload":{"id":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"taskCount#1","name":"taskCount","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"taskCount#1","answer":{"result":"fulfilled","output":{"count":1}}}

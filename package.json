@@ -1,0 +1,101 @@
+{
+  "name": "@natsuzora-dev/tazuna",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/natsuzora-dev/tazuna.git"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "type": "module",
+  "workspaces": [
+    "samples/todo",
+    "samples/todo/spec",
+    "samples/todo/web"
+  ],
+  "imports": {
+    "#cli": {
+      "tazuna:source": "./src/cli/bin.ts",
+      "default": "./dist/cli/bin.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "tazuna:source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./spec": {
+      "tazuna:source": "./src/load/index.ts",
+      "types": "./dist/load/index.d.ts",
+      "default": "./dist/load/index.js"
+    },
+    "./verify": {
+      "tazuna:source": "./src/verify/index.ts",
+      "types": "./dist/verify/index.d.ts",
+      "default": "./dist/verify/index.js"
+    },
+    "./view": {
+      "tazuna:source": "./src/view/index.ts",
+      "types": "./dist/view/index.d.ts",
+      "default": "./dist/view/index.js"
+    },
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
+  "bin": {
+    "tazuna": "./bin/tazuna.js"
+  },
+  "files": [
+    "dist",
+    "docs/PRINCIPLES.md",
+    "tsconfig.base.json"
+  ],
+  "scripts": {
+    "build": "vite build viewer",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run lean:check && npm run samples:check",
+    "hooks": "git config core.hooksPath .githooks",
+    "lean:check": "PATH=\"$HOME/.elan/bin:$PATH\" lake -d lean build && lean/.lake/build/bin/tazuna-generate src && node --test --test-randomize 'test/*.diff.ts'",
+    "lean:write": "PATH=\"$HOME/.elan/bin:$PATH\" lake -d lean build && lean/.lake/build/bin/tazuna-generate --write src",
+    "lint": "biome check . && depcruise src -T err-long && knip --no-progress",
+    "lint:write": "biome check --write .",
+    "prepack": "rm -rf dist && tsc -p tsconfig.build.json && vite build viewer",
+    "samples:check": "npm run check --workspace todo",
+    "test": "node --test --test-randomize 'test/*.test.ts'",
+    "test:write": "node --test --test-randomize --test-update-snapshots 'test/*.test.ts'",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p viewer"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.154.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@swc/core": "1.16.22",
+    "@types/node": "26.6.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@xyflow/react": "12.12.0",
+    "dependency-cruiser": "18.7.2",
+    "elkjs": "0.12.0",
+    "fast-check": "4.10.2",
+    "knip": "6.42.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "typescript": ">=7.0.0",
+    "zod": "^4.6.6"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "allowScripts": {
+    "@swc/core@1.16.22": true,
+    "fsevents@2.3.3": true
+  }
+}

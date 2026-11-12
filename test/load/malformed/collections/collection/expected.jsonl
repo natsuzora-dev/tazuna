@@ -1,0 +1,4 @@
+{"kind":"Malformed.opaqueCollection","definition":{"service":"todo","name":"marks"},"data":{"path":["output","tags"],"collection":"bag"},"location":{"file":"todo/todo.ts","line":14}}
+{"kind":"Malformed.opaqueCollection","definition":{"service":"todo","name":"marks"},"data":{"path":["output","days"],"collection":"sortedBy"},"location":{"file":"todo/todo.ts","line":14}}
+{"kind":"Malformed.opaqueCollection","definition":{"service":"todo","name":"marks"},"data":{"path":["output","ids"],"collection":"set"},"location":{"file":"todo/todo.ts","line":14}}
+{"kind":"Malformed.opaqueCollection","definition":null,"data":{"name":"defaults","path":["days"],"collection":"set"},"location":{"file":"todo/todo.ts","line":24}}

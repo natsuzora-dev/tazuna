@@ -1,0 +1,6 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"checkPlan#1","name":"checkPlan","input":{"isFilled":false}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"checkPlan#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"planChecked#1","name":"planChecked","payload":{"nullable":null,"union":null}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"checkPlan#2","name":"checkPlan","input":{"isFilled":true}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"checkPlan#2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"planChecked#2","name":"planChecked","payload":{"nullable":[{"day":1,"title":"Buy milk"},{"day":2,"title":"Buy eggs"}],"union":[{"day":1,"title":"Buy milk"},{"day":2,"title":"Buy eggs"}]}}

@@ -1,0 +1,1 @@
+{"kind":"InvalidInput.uncreatedKey","definition":null,"data":{"key":"Note-1","entity":{"service":"notes","name":"Note"}},"location":{"file":"notes/scenarios.ts","line":4},"scenario":{"service":"notes","name":"addBeforeCreated"}}

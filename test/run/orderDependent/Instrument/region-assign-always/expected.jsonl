@@ -1,0 +1,1 @@
+{"kind":"OrderDependent.bothAssign","definition":{"service":"todo","name":"tracker"},"data":{"state":"tracking","first":{"state":"countMarking","keys":["always"],"index":0},"second":{"state":"rememberMarking","keys":["always"],"index":0},"field":"status"},"location":{"file":"todo/todo.ts","line":16},"scenario":{"service":"todo","name":"addOne"}}
