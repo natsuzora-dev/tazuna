@@ -82,6 +82,15 @@ theorem processCommand_answer (name : String) (raw : Value) (id : Option String)
   simp only [processCommand, id_bind]
   split <;> simp_all [Outcome.answer]
 
+/-- A rejected command writes no record and emits no event: the state only gains the answer line. -/
+theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option String) (n : Nat) (r : Rejection)
+    (h : evaluate st fs s.records s.now name raw = .rejected r) :
+    processCommand st fs s name raw id n = (s.answer id (.rejected r), .rejected r, []) ∧
+      (processCommand st fs s name raw id n).1.records = s.records := by
+  have hp : processCommand st fs s name raw id n = (s.answer id (.rejected r), .rejected r, []) := by
+    simp only [processCommand, id_bind, h]; rfl
+  exact ⟨hp, by rw [hp]; exact answer_records s id _⟩
+
 theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option String) (n : Nat)
     (written : Records) (emits : List Emit) (vs : List Fault)
     (h : evaluate st fs s.records s.now name raw = .accepted written emits vs) :
