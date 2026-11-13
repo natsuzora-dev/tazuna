@@ -24,11 +24,8 @@ export interface ReplayAdapter {
   readonly start: (outputs: Outputs, time: Temporal.Instant) => Promise<void>;
   readonly now: () => Temporal.Instant;
   readonly advanceTo: (time: Temporal.Instant) => Promise<void>;
-  /**
-   * Resolves when the app has stopped writing outputs and `isReady` holds. `outputs` counts the trace's output lines;
-   * `isReady` holds when the app has sent the request that the next answer line answers.
-   */
-  readonly untilQuiet: (outputs: () => number, isReady: () => boolean) => Promise<void>;
+  /** Resolves when the app has stopped writing outputs. `outputs` counts the trace's output lines. */
+  readonly untilQuiet: (outputs: () => number) => Promise<void>;
   readonly command?: (command: InputMessage) => Promise<CommandAnswer>;
   readonly query?: (query: InputMessage) => Promise<QueryAnswer>;
   /** `signal` aborts when the subscription ends. */
@@ -89,7 +86,9 @@ interface Waiting extends ForeignRequest {
 /**
  * Gives the input lines of the scenario's snapshot to the app in order, and returns the trace at the app's boundary. A
  * request that the app sends to another service pairs with the earliest unpaired snapshot request that `matchRequest`
- * matches, and receives that snapshot request's answer lines.
+ * matches and that lies between the same two input lines as the app's request, and receives that snapshot request's
+ * answer lines. Replay writes an answer line to the trace without giving it to the app when no waiting app request is
+ * paired with the line's snapshot request.
  */
 export async function replay(
   spec: Spec,
@@ -98,16 +97,21 @@ export async function replay(
 ): Promise<TraceLine[]> {
   const snapshot = readSnapshot(spec, scenario);
   const lines: (TraceLine | undefined)[] = [];
-  const unpaired = snapshot.filter(
-    (l) => l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe"),
-  );
+  const unpaired: { line: TraceLine; inputsBefore: number }[] = [];
+  let inputs = 0;
+  for (const line of snapshot) {
+    if (line.dir === "in") inputs += 1;
+    else if (line.type === "command" || line.type === "query" || line.type === "subscribe")
+      unpaired.push({ line, inputsBefore: inputs });
+  }
+  let inputsGiven = 0;
   const waiting = new Map<string, Waiting>();
   /** Maps the snapshot's request ids and created keys to the app's. */
   const renaming = new Map<string, string>();
   const subscriptions = new Map<string, AbortController>();
   let sent = 0;
 
-  const place = () => ({ at: lines.push(undefined) - 1, time: adapter.now() });
+  const place = () => ({ at: lines.push(undefined) - 1, time: adapter.now(), inputsBefore: inputsGiven });
   const write = (line: UntimedTraceLine, { at, time } = place()) => {
     lines[at] = { ...line, time: time.toString() };
   };
@@ -123,7 +127,7 @@ export async function replay(
     const line = { dir: "out", type, id: appId, name, input: request.input } as const;
     write(line, at);
     waiting.set(appId, { ...request, id: appId, subscription: type === "subscribe" });
-    pair(asJson(lines[at.at]) as TraceLine);
+    pair(asJson(lines[at.at]) as TraceLine, at.inputsBefore);
     return appId;
   };
   const later = (): OutputSlot => {
@@ -150,8 +154,9 @@ export async function replay(
   const outputCount = () => lines.filter((l) => l?.dir === "out").length;
   const writeAnswer = (to: string, answer: SnapshotAnswer) => write({ dir: "out", type: "answer", to, answer });
 
-  function pair(request: TraceLine): void {
-    for (const [i, snapshotRequest] of unpaired.entries()) {
+  function pair(request: TraceLine, inputsBeforeRequest: number): void {
+    for (const [i, { line: snapshotRequest, inputsBefore }] of unpaired.entries()) {
+      if (inputsBefore !== inputsBeforeRequest) continue;
       const keys = matchRequest(snapshotRequest, request, renaming);
       if (keys === undefined || snapshotRequest.id === undefined || request.id === undefined) continue;
       unpaired.splice(i, 1);
@@ -164,12 +169,12 @@ export async function replay(
   const isWaiting = (snapshotRequestId: string) => waiting.has(renaming.get(snapshotRequestId) ?? "");
 
   async function give(snapshotLine: TraceLine): Promise<void> {
+    inputsGiven += 1;
     const line = rename(snapshotLine, renaming);
     write(line);
     if (line.type === "answer") {
       const request = waiting.get(line.to);
-      if (request === undefined)
-        throw new Error(`the snapshot answer ${snapshotLine.id} to ${line.to} has no waiting request`);
+      if (request === undefined) return;
       if (!request.subscription) waiting.delete(line.to);
       return request.answer(line.answer);
     }
@@ -180,7 +185,7 @@ export async function replay(
         return;
       case "restart":
         // The requests that the old process sent get no answers.
-        for (const [id, request] of waiting) if (!request.subscription) waiting.delete(id);
+        waiting.clear();
         return required(adapter.restart, line.type)();
       case "command":
         return writeAnswer(id, await required(adapter.command, line.type)({ ...line, id, payload: undefined }));
@@ -215,23 +220,27 @@ export async function replay(
   const [first] = snapshot;
   if (first === undefined) throw new Error(`the snapshot of ${scenario.service}/${scenario.name} has no lines`);
   await adapter.start(outputs, Temporal.Instant.from(first.time));
-  const always = () => true;
   for (const line of snapshot) {
     if (line.dir === "out") continue;
     const time = Temporal.Instant.from(line.time);
     if (!time.equals(adapter.now())) {
-      await adapter.untilQuiet(outputCount, always);
+      await adapter.untilQuiet(outputCount);
       await adapter.advanceTo(time);
     }
-    const answered = line.type === "answer" ? line.to : undefined;
-    await adapter.untilQuiet(outputCount, answered === undefined ? always : () => isWaiting(answered));
+    await adapter.untilQuiet(outputCount);
+    if (line.type === "answer")
+      for (let i = 0; i < quietPeriodsBeforeAnswer && !isWaiting(line.to); i += 1)
+        await adapter.untilQuiet(outputCount);
     await give(line);
   }
-  await adapter.untilQuiet(outputCount, always);
+  await adapter.untilQuiet(outputCount);
   for (const controller of subscriptions.values()) controller.abort();
-  await adapter.untilQuiet(outputCount, always);
+  await adapter.untilQuiet(outputCount);
   return lines.filter((l) => l !== undefined);
 }
+
+/** How many quiet periods replay waits before an answer line for the app to send the paired request, which a browser may send late. */
+const quietPeriodsBeforeAnswer = 20;
 
 function required<F>(receive: F | undefined, type: string): F {
   if (receive === undefined) throw new Error(`the adapter receives no ${type} line`);

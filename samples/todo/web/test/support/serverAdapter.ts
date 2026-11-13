@@ -103,8 +103,8 @@ export function serverAdapter(service: "todo" | "notifier"): ReplayAdapter {
       const until = time.epochMilliseconds - Date.now();
       if (until > 0) await vi.advanceTimersByTimeAsync(until);
     },
-    async untilQuiet(outputs, isReady) {
-      for (let before = -1; before !== outputs() || !isReady(); ) {
+    async untilQuiet(outputs) {
+      for (let before = -1; before !== outputs(); ) {
         before = outputs();
         await vi.advanceTimersByTimeAsync(0);
       }

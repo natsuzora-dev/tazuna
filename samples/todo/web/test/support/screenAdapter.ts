@@ -237,7 +237,7 @@ export function screenAdapter(page: Page, held: typeof Held): ReplayAdapter & { 
       time = to;
       await page.clock.setFixedTime(time.epochMilliseconds);
     },
-    async untilQuiet(outputs, isReady) {
+    async untilQuiet(outputs) {
       // The browser does not signal when a request from a React effect is sent, so wait until the request and output
       // counts hold still for a poll interval.
       let before = "";
@@ -248,7 +248,7 @@ export function screenAdapter(page: Page, held: typeof Held): ReplayAdapter & { 
             const isUnchanged = now === before;
             before = now;
             const isBusy = (await busy.count()) > 0;
-            return isUnchanged && unbound.length === 0 && isBusy === unansweredCommands > 0 && isReady();
+            return isUnchanged && unbound.length === 0 && isBusy === unansweredCommands > 0;
           },
           { intervals: [100] },
         )
