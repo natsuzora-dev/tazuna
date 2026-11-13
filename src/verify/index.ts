@@ -15,8 +15,8 @@ import { pairingProblem, pairTraces, traceFolderOf } from "./pairing.ts";
 import { compareTrace } from "./prepare.ts";
 import { hasSnapshot } from "./snapshot.ts";
 
-export { alike } from "../data/canonical.ts";
 export { traceName } from "../load/traceName.ts";
+export { matchRequest, rename } from "./replay.ts";
 
 /**
  * Decodes the output of a fulfilled answer, or of an accepted answer of a command with output, with the definition's

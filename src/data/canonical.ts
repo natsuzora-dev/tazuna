@@ -5,35 +5,8 @@ import type { Answer, TraceLine } from "./trace.generated.ts";
 import { contentOf, nameOf } from "./trace.ts";
 import { canonicalJson, objectOf, type Shape } from "./values.ts";
 
-const isPlain = (v: unknown): v is Record<string, unknown> =>
-  Array.isArray(v) || (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype);
-
-function matchCreated(
-  s: unknown,
-  t: unknown,
-  isCreated: (value: string) => boolean,
-  found: (created: string, value: unknown) => void = () => {},
-): boolean {
-  if (typeof s === "string" && isCreated(s)) {
-    found(s, t);
-    return true;
-  }
-  if (!isPlain(s) || !isPlain(t))
-    return (
-      s === t ||
-      (s !== null &&
-        typeof s === "object" &&
-        t !== null &&
-        typeof t === "object" &&
-        canonicalJson(s) === canonicalJson(t))
-    );
-  return [...new Set([...Object.keys(s), ...Object.keys(t)])]
-    .map((k) => matchCreated(s[k], t[k], isCreated, found))
-    .every(Boolean);
-}
-
-export const alike = (a: TraceLine, b: TraceLine, created: readonly string[] = []): boolean =>
-  a.type === b.type && nameOf(a) === nameOf(b) && matchCreated(contentOf(a), contentOf(b), (v) => created.includes(v));
+export const alike = (a: TraceLine, b: TraceLine): boolean =>
+  a.type === b.type && nameOf(a) === nameOf(b) && canonicalJson(contentOf(a)) === canonicalJson(contentOf(b));
 
 const tolerantSchemas = new WeakMap<z.ZodType, z.ZodType>();
 

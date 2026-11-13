@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import type { TraceLine } from "../src/data/trace.generated.ts";
 import { loadSpec } from "../src/load/load.ts";
-import { decodeAnswer, readSnapshot, traceName, verifyTraces } from "../src/verify/index.ts";
+import { decodeAnswer, matchRequest, readSnapshot, rename, traceName, verifyTraces } from "../src/verify/index.ts";
 import { semanticsRoot } from "./examples.ts";
 import { createCharge } from "./semantics/Service/Command/command-output/payments/payments.ts";
 import { placeOrder } from "./semantics/Service/Command/command-output/shop/shop.ts";
@@ -74,4 +75,36 @@ test("verifyTraces compares an external service trace under any name with the co
   };
   assert.deepEqual(kinds("nextDay", monday.add({ hours: 24 })), []);
   assert.deepEqual(kinds("sameDay", monday), ["Mismatch.failedAssumedEnsures"]);
+});
+
+test("matchRequest maps each created key to the implementation's value when the request equals the renamed snapshot request except for created keys, and returns undefined otherwise", () => {
+  const time = "2026-10-25T01:00:00Z";
+  const add = (taskId: unknown, parentId = "Task-1"): TraceLine =>
+    ({ time, dir: "out", type: "command", id: "c1", name: "todo.addTask", input: { taskId, parentId } }) as TraceLine;
+  const snapshot = { ...add("Task-2"), created: ["Task-2"] } as TraceLine;
+  const renaming = new Map([["Task-1", "Task-2"]]);
+  assert.deepEqual(matchRequest(snapshot, add("7c1e", "Task-2"), renaming), new Map([["Task-2", "7c1e"]]));
+  assert.equal(matchRequest(snapshot, add("7c1e", "Task-1"), renaming), undefined);
+  assert.equal(matchRequest(snapshot, add(7, "Task-2"), renaming), undefined);
+  assert.equal(matchRequest(add("Task-2"), add("7c1e", "Task-2"), renaming), undefined);
+});
+
+test("rename replaces each string of a line that the renaming maps, at any depth", () => {
+  const line = {
+    time: "2026-10-25T01:00:00Z",
+    dir: "in",
+    type: "answer",
+    id: "answer#3",
+    to: "todo.tasks#1",
+    answer: { result: "fulfilled", output: { tasks: [{ taskId: "Task-1", title: "Buy eggs" }] } },
+  } as TraceLine;
+  const renaming = new Map([
+    ["todo.tasks#1", "s1"],
+    ["Task-1", "7c1e"],
+  ]);
+  assert.deepEqual(rename(line, renaming), {
+    ...line,
+    to: "s1",
+    answer: { result: "fulfilled", output: { tasks: [{ taskId: "7c1e", title: "Buy eggs" }] } },
+  });
 });

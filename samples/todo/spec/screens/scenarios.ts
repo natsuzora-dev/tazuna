@@ -38,6 +38,21 @@ export const addTask = scenario(
   ],
 );
 
+export const completeAddedTask = scenario(
+  "Add a task on the list screen, and press complete on the added task once the list screen shows it; the screen sends completeTask with the key that the screen created for addTask",
+  [
+    ...openList,
+    operate(taskListScreen, "add", { title: "Buy eggs" }),
+    mock(taskListScreen, [todo.addTask, { result: "accepted" }]),
+    mock(taskListScreen, [
+      todo.tasks,
+      { result: "fulfilled", output: { tasks: [milk, { ...eggs, taskId: "Task-1" }] } },
+    ]),
+    operate(taskListScreen, "complete", { taskId: "Task-1" }),
+    mock(taskListScreen, [todo.completeTask, { result: "accepted" }]),
+  ],
+);
+
 export const completeFromList = scenario(
   "Press complete on an open task in the list screen; the screen sends completeTask",
   [

@@ -7,7 +7,7 @@ import type {
   UntimedTraceLine,
 } from "@natsuzora-dev/tazuna";
 import type { Spec } from "@natsuzora-dev/tazuna/spec";
-import { alike, decodeAnswer, readSnapshot, traceName } from "@natsuzora-dev/tazuna/verify";
+import { decodeAnswer, matchRequest, readSnapshot, rename, traceName } from "@natsuzora-dev/tazuna/verify";
 import type { z } from "zod";
 
 type SnapshotAnswer = Extract<TraceLine, { type: "answer" }>["answer"];
@@ -83,14 +83,13 @@ export interface Outputs extends OutputSlot {
 
 interface Waiting extends ForeignRequest {
   readonly id: string;
-  readonly line: TraceLine;
   readonly subscription: boolean;
 }
 
 /**
  * Gives the input lines of the scenario's snapshot to the app in order, and returns the trace at the app's boundary. A
- * request that the app sent to another service waits for the snapshot's answer line, which goes to the earliest request
- * with the same name and input.
+ * request that the app sends to another service pairs with the earliest unpaired snapshot request that `matchRequest`
+ * matches, and receives that snapshot request's answer lines.
  */
 export async function replay(
   spec: Spec,
@@ -99,8 +98,12 @@ export async function replay(
 ): Promise<TraceLine[]> {
   const snapshot = readSnapshot(spec, scenario);
   const lines: (TraceLine | undefined)[] = [];
+  const unpaired = snapshot.filter(
+    (l) => l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe"),
+  );
   const waiting = new Map<string, Waiting>();
-  const appIds = new Map<string, string>();
+  /** Maps the snapshot's request ids and created keys to the app's. */
+  const renaming = new Map<string, string>();
   const subscriptions = new Map<string, AbortController>();
   let sent = 0;
 
@@ -119,12 +122,8 @@ export async function replay(
     const appId = id ?? `${name}@${sent}`;
     const line = { dir: "out", type, id: appId, name, input: request.input } as const;
     write(line, at);
-    waiting.set(appId, {
-      ...request,
-      id: appId,
-      line: asJson(lines[at.at]) as TraceLine,
-      subscription: type === "subscribe",
-    });
+    waiting.set(appId, { ...request, id: appId, subscription: type === "subscribe" });
+    pair(asJson(lines[at.at]) as TraceLine);
     return appId;
   };
   const later = (): OutputSlot => {
@@ -151,30 +150,29 @@ export async function replay(
   const outputCount = () => lines.filter((l) => l?.dir === "out").length;
   const writeAnswer = (to: string, answer: SnapshotAnswer) => write({ dir: "out", type: "answer", to, answer });
 
-  function waitingRequest(to: string): Waiting | undefined {
-    const request = snapshot.find((l) => l.dir === "out" && l.id === to);
-    if (request?.type !== "command" && request?.type !== "query" && request?.type !== "subscribe")
-      throw new Error(`the snapshot has no request ${to}`);
-    return [...waiting.values()].find((w) => alike(request, w.line, request.created));
+  function pair(request: TraceLine): void {
+    for (const [i, snapshotRequest] of unpaired.entries()) {
+      const keys = matchRequest(snapshotRequest, request, renaming);
+      if (keys === undefined || snapshotRequest.id === undefined || request.id === undefined) continue;
+      unpaired.splice(i, 1);
+      renaming.set(snapshotRequest.id, request.id);
+      for (const [key, appKey] of keys) renaming.set(key, appKey);
+      return;
+    }
   }
 
-  function takeAndBindWaitingRequest(to: string): Waiting {
-    const found = waitingRequest(to);
-    if (found === undefined) throw new Error(`no request waits for the answer to ${to}`);
-    if (!found.subscription) waiting.delete(found.id);
-    appIds.set(to, found.id);
-    return found;
-  }
+  const isWaiting = (snapshotRequestId: string) => waiting.has(renaming.get(snapshotRequestId) ?? "");
 
-  async function give(line: TraceLine): Promise<void> {
+  async function give(snapshotLine: TraceLine): Promise<void> {
+    const line = rename(snapshotLine, renaming);
+    write(line);
     if (line.type === "answer") {
-      const request = takeAndBindWaitingRequest(line.to);
-      write({ ...line, to: request.id });
+      const request = waiting.get(line.to);
+      if (request === undefined)
+        throw new Error(`the snapshot answer ${snapshotLine.id} to ${line.to} has no waiting request`);
+      if (!request.subscription) waiting.delete(line.to);
       return request.answer(line.answer);
     }
-    if (line.type === "event" && line.resultOf !== undefined)
-      write({ ...line, resultOf: appIds.get(line.resultOf) ?? line.resultOf });
-    else write(line);
     const { id } = line;
     if (id === undefined) throw new Error(`the snapshot line ${JSON.stringify(line)} has no id`);
     switch (line.type) {
@@ -226,10 +224,7 @@ export async function replay(
       await adapter.advanceTo(time);
     }
     const answered = line.type === "answer" ? line.to : undefined;
-    await adapter.untilQuiet(
-      outputCount,
-      answered === undefined ? always : () => waitingRequest(answered) !== undefined,
-    );
+    await adapter.untilQuiet(outputCount, answered === undefined ? always : () => isWaiting(answered));
     await give(line);
   }
   await adapter.untilQuiet(outputCount, always);
