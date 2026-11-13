@@ -76,7 +76,7 @@ structure TraceLine where
   /--
   On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
   search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-  is due at that time, each deadline that fires at that time is the next entry (InvalidInput.deadlineNotNext), and
+  is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
   after the entries, the first due in entry order.
   -/
   deadlineOrder : Option (List DeadlineId)

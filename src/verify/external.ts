@@ -4,7 +4,7 @@ import { tolerant } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
-import { type FileLine, untilMalformed } from "../data/trace.ts";
+import { type FileLine, subjectOf, untilMalformed } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import { objectOf } from "../data/values.ts";
 import { zodError } from "../data/violation.ts";
@@ -70,7 +70,8 @@ function checkLine(
       ? ({
           kind: "Uncomparable.unknownRequest",
           definition: null,
-          data: { line: at, type: l.type, name: l.name },
+          line: at,
+          data: { subject: subjectOf(l) },
         } satisfies Uncomparable)
       : undefined;
   }
@@ -79,7 +80,8 @@ function checkLine(
       return {
         kind: "Uncomparable.unknownAnswer",
         definition: null,
-        data: { line: at, to: l.to },
+        line: at,
+        data: { subject: subjectOf(l) },
       } satisfies Uncomparable;
     const request = requests.get(l.to);
     if (request === undefined) return undefined;
@@ -90,7 +92,8 @@ function checkLine(
         : ({
             kind: "Mismatch.unlistedRejectionKind",
             definition: null,
-            data: { line: at, requestId: l.to, target, rejection: l.answer.rejection },
+            line: at,
+            data: { requestId: l.to, target, rejection: l.answer.rejection },
           } satisfies Mismatch);
     }
     request.accepted = l.answer.result === "accepted";
@@ -102,21 +105,24 @@ function checkLine(
       return {
         kind: "Uncomparable.unknownEvent",
         definition: null,
-        data: { line: at, event: l.name },
+        line: at,
+        data: { subject: subjectOf(l) },
       } satisfies Uncomparable;
     if (l.resultOf === undefined)
       return contractsListing(spec.structure, refOfDefinition(spec, event)).includes(service)
         ? { at, line: l, event }
         : ({
-            kind: "Mismatch.emittedNotInContract",
+            kind: "Mismatch.unlistedEvent",
             definition: null,
-            data: { line: at, event: refOfDefinition(spec, event), service },
+            line: at,
+            data: { event: refOfDefinition(spec, event) },
           } satisfies Mismatch);
     if (!requests.has(l.resultOf))
       return {
         kind: "Uncomparable.resultOfUnknownRequest",
         definition: null,
-        data: { line: at, event: refOfDefinition(spec, event), requestId: l.resultOf },
+        line: at,
+        data: { event: refOfDefinition(spec, event), requestId: l.resultOf },
       } satisfies Uncomparable;
     const request = requests.get(l.resultOf);
     if (request === undefined) return undefined;
@@ -127,7 +133,8 @@ function checkLine(
       : ({
           kind: resultOfKinds[mismatch],
           definition: null,
-          data: { line: at, event: refOfDefinition(spec, event), requestId: l.resultOf, target },
+          line: at,
+          data: { event: refOfDefinition(spec, event), requestId: l.resultOf, target },
         } satisfies Mismatch | Uncomparable);
   }
   return undefined;
@@ -167,18 +174,20 @@ const parseKnown = (schema: z.ZodType, value: unknown) => tolerant(schema).safeP
 function assumptionFinding(line: number, request: RequestRef, m: AssumptionMismatch): Mismatch {
   switch (m.kind) {
     case "rejectedAssumedRequires":
-      return { kind: "Mismatch.rejectedAssumedRequires", definition: null, data: { line, ...request } };
+      return { kind: "Mismatch.rejectedAssumedRequires", definition: null, line, data: { ...request } };
     case "failedAssumedRequires":
       return {
         kind: "Mismatch.failedAssumedRequires",
         definition: null,
-        data: { line, ...request, condition: m.condition },
+        line,
+        data: { ...request, condition: m.condition },
       };
     case "failedAssumedEnsures":
       return {
         kind: "Mismatch.failedAssumedEnsures",
         definition: null,
-        data: { line, ...request, condition: m.condition },
+        line,
+        data: { ...request, condition: m.condition },
       };
   }
 }
@@ -220,7 +229,8 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
         problems.push({
           kind: "Mismatch.answerOutputSchema",
           definition: null,
-          data: { line, ...ref },
+          line,
+          data: { ...ref },
           error: zodError(out.error.issues),
         } satisfies Found & Mismatch);
       return;
@@ -230,7 +240,8 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
       problems.push({
         kind: "Mismatch.eventPayloadSchema",
         definition: null,
-        data: { line, event: refOfDefinition(spec, r.event) },
+        line,
+        data: { event: refOfDefinition(spec, r.event) },
         error: zodError(parsed.error.issues),
       } satisfies Found & Mismatch);
       return;

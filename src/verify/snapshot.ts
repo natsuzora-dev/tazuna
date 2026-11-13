@@ -2,7 +2,7 @@ import { relative } from "node:path";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import { entriesOf, pair } from "../data/pairing.ts";
-import { type Problem, toProblem } from "../data/problem.ts";
+import type { Problem } from "../data/problem.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { jsonLine } from "../data/trace.ts";
 import { snapshotFolder, snapshotPath } from "../data/traceFile.ts";
@@ -45,11 +45,8 @@ export function compareSnapshot(
       return {
         kind: "Mismatch.line",
         definition: null,
-        data: {
-          snapshotLine: lines[i]?.line ?? snapshot.length + 1,
-          snapshot: lines[i]?.value ?? null,
-          run: run[i] ?? null,
-        },
+        line: lines[i]?.line ?? snapshot.length + 1,
+        data: { snapshot: lines[i]?.value ?? null, trace: run[i] ?? null },
       };
   return undefined;
 }
@@ -73,7 +70,7 @@ function snapshotPairing(
       ...missing.map((name) =>
         problem(
           { scenario: { service, name } },
-          { kind: "Uncomparable.missingSnapshot", definition: { service, name }, data: {} },
+          { kind: "Uncomparable.missingSnapshot", definition: null, scenario: { service, name }, data: {} },
         ),
       ),
       ...unknown.map((entry) =>
@@ -128,9 +125,7 @@ export function snapshotProblems(spec: Spec, scenario: DefinitionRef, lines: rea
   const path = snapshotPath(spec, scenario);
   const file = relative(spec.root, path);
   const snapshot = readSnapshotProblems(path);
-  if (snapshot.problems.length > 0) return problemsAt(file, snapshot.problems);
+  if (snapshot.problems.length > 0) return problemsAt(file, snapshot.problems, scenario);
   const mismatch = compareSnapshot(snapshot.values, lines.map(jsonLine));
-  return mismatch === undefined
-    ? []
-    : [toProblem(mismatch.kind, { ...mismatch, location: { file, line: mismatch.data.snapshotLine }, scenario })];
+  return mismatch === undefined ? [] : problemsAt(file, [mismatch], scenario);
 }

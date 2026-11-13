@@ -20,7 +20,7 @@ export const cannotPickUnaccepted = scenario(
   ],
 );
 
-export const cancelUnopened = scenario("Cancel the dialog before it opens; test reports screenNotOpen", [
+export const cancelUnopened = scenario("Cancel the dialog before it opens; test reports unopenedScreen", [
   at("2026-10-25T09:00:00+09:00"),
   operate(confirmDialog, "cancel"),
 ]);
@@ -31,7 +31,7 @@ export const pickUnderDialog = scenario("Pick a task while the dialog covers the
   operate(listScreen, "pick", { taskId: "task-1" }),
 ]);
 
-export const pickUnoffered = scenario("Pick a task that the list does not show; test reports payloadNotOffered", [
+export const pickUnoffered = scenario("Pick a task that the list does not show; test reports unofferedPayload", [
   at("2026-10-25T09:00:00+09:00"),
   operate(listScreen, "pick", { taskId: "task-3" }),
 ]);

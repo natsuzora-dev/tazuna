@@ -15,6 +15,7 @@ export type Fault =
         readonly event: DefinitionRef;
       };
     }
+  /** The command emits an event that its emits do not list; `event` is null when the event is no definition. */
   | {
       readonly kind: "Fault.unlistedEmittedEvent";
       readonly definition: DefinitionRef;
@@ -53,6 +54,7 @@ export type Fault =
         readonly screen: DefinitionRef;
       };
     }
+  /** The input that the chart gives the screen it opens fails the screen's requires `condition`. */
   | {
       readonly kind: "Fault.failedRequires";
       readonly definition: DefinitionRef;
@@ -69,19 +71,13 @@ export type Fault =
         readonly state: string;
       };
     }
+  /** `state` is null for the offers of the chart's own `on`. */
   | {
       readonly kind: "Fault.offersSchema";
       readonly definition: DefinitionRef;
       readonly data: {
         readonly control: string;
-        readonly state: string;
-      };
-    }
-  | {
-      readonly kind: "Fault.rootOffersSchema";
-      readonly definition: DefinitionRef;
-      readonly data: {
-        readonly control: string;
+        readonly state: string | null;
       };
     }
   | {
@@ -113,6 +109,7 @@ export type Fault =
         readonly map: string;
       };
     }
+  /** A function reads the held value `held` while its state does not hold it. */
   | {
       readonly kind: "Fault.unheld";
       readonly definition: DefinitionRef;
@@ -125,16 +122,18 @@ export type Fault =
       readonly definition: DefinitionRef | null;
       readonly data: Readonly<Record<string, never>>;
     }
+  /** The record `recordKey` of entity `definition` refers in `field` to the missing record `targetKey`. */
   | {
       readonly kind: "Fault.danglingRef";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly key: string;
+        readonly recordKey: string;
         readonly field: string;
         readonly targetKey: string;
         readonly command: DefinitionRef;
       };
     }
+  /** The record of the single entity `definition` refers in `field` to the missing record `targetKey`. */
   | {
       readonly kind: "Fault.danglingSingleRef";
       readonly definition: DefinitionRef;
@@ -155,7 +154,7 @@ export type Fault =
       readonly kind: "Fault.failedEntityInvariant";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly key: string;
+        readonly recordKey: string;
         readonly condition: string;
         readonly command: DefinitionRef;
       };
@@ -188,43 +187,63 @@ export type Fault =
       readonly definition: DefinitionRef;
       readonly data: {
         readonly map: string;
-        readonly key: Json;
+        readonly itemKey: Json;
       };
     }
   | {
-      readonly kind: "Fault.commandDepth";
+      readonly kind: "Fault.exceededCommandDepth";
       readonly definition: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
   | {
-      readonly kind: "Fault.messageCommands";
+      readonly kind: "Fault.exceededMessageCommands";
       readonly definition: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
   | {
-      readonly kind: "Fault.alwaysRounds";
+      readonly kind: "Fault.exceededAlwaysRounds";
       readonly definition: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
   | {
-      readonly kind: "Fault.onDoneSelections";
+      readonly kind: "Fault.exceededOnDoneSelections";
       readonly definition: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
+  /**
+   * The work items and commands of one message come from every definition that the message runs, none of which alone
+   * exceeds the limit, so the fault names no definition.
+   */
   | {
-      readonly kind: "Fault.messageWork";
+      readonly kind: "Fault.exceededMessageWork";
       readonly definition: null;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
+  /** The deadlines of one clock advance belong to any charts, so the fault names no definition. */
   | {
-      readonly kind: "Fault.dueDeadlines";
+      readonly kind: "Fault.exceededDueDeadlines";
       readonly definition: null;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
+  /** The nested exits run through the copies and screens of several definitions, so the fault names no definition. */
   | {
-      readonly kind: "Fault.exitDepth";
+      readonly kind: "Fault.exceededExitDepth";
       readonly definition: null;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly limit: number;
+      };
     }
   | {
       readonly kind: "Fault.rejectedAutomationCommand";
@@ -253,7 +272,6 @@ export const faultKinds = [
   "Fault.failedRequires",
   "Fault.heldSchema",
   "Fault.offersSchema",
-  "Fault.rootOffersSchema",
   "Fault.initialContextSchema",
   "Fault.screenOutputSchema",
   "Fault.copyContextSchema",
@@ -269,13 +287,13 @@ export const faultKinds = [
   "Fault.failedServiceInvariant",
   "Fault.failedChartInvariant",
   "Fault.duplicateItemKey",
-  "Fault.commandDepth",
-  "Fault.messageCommands",
-  "Fault.alwaysRounds",
-  "Fault.onDoneSelections",
-  "Fault.messageWork",
-  "Fault.dueDeadlines",
-  "Fault.exitDepth",
+  "Fault.exceededCommandDepth",
+  "Fault.exceededMessageCommands",
+  "Fault.exceededAlwaysRounds",
+  "Fault.exceededOnDoneSelections",
+  "Fault.exceededMessageWork",
+  "Fault.exceededDueDeadlines",
+  "Fault.exceededExitDepth",
   "Fault.rejectedAutomationCommand",
   "Fault.rejectedShows",
 ] as const;
@@ -292,7 +310,6 @@ export const haltingFaultKinds = [
   "Fault.failedRequires",
   "Fault.heldSchema",
   "Fault.offersSchema",
-  "Fault.rootOffersSchema",
   "Fault.initialContextSchema",
   "Fault.screenOutputSchema",
   "Fault.copyContextSchema",
@@ -301,11 +318,11 @@ export const haltingFaultKinds = [
   "Fault.unheld",
   "Fault.exception",
   "Fault.duplicateItemKey",
-  "Fault.commandDepth",
-  "Fault.messageCommands",
-  "Fault.alwaysRounds",
-  "Fault.onDoneSelections",
-  "Fault.messageWork",
-  "Fault.dueDeadlines",
-  "Fault.exitDepth",
+  "Fault.exceededCommandDepth",
+  "Fault.exceededMessageCommands",
+  "Fault.exceededAlwaysRounds",
+  "Fault.exceededOnDoneSelections",
+  "Fault.exceededMessageWork",
+  "Fault.exceededDueDeadlines",
+  "Fault.exceededExitDepth",
 ] as const;

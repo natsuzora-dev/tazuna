@@ -9,7 +9,7 @@ import type { TraceLine } from "../src/data/trace.generated.ts";
 import { isMalformed, parseFileLines } from "../src/data/trace.ts";
 import { readTrace, snapshotPath } from "../src/data/traceFile.ts";
 import type { Json } from "../src/data/values.ts";
-import type { ViolationValue } from "../src/data/violation.ts";
+import type { Placed, ViolationValue } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
 import { readSnapshotProblems, resolveAfters } from "../src/verify/lines.ts";
@@ -38,8 +38,8 @@ const snapshotExamples = [...examples, ...runExamples(), ...groupExamples("valid
 
 const specs = new Map(await Promise.all(snapshotExamples.map(async (root) => [root, await loadSpec(root)] as const)));
 
-const value = ({ kind, definition, data }: ViolationValue) =>
-  JSON.parse(JSON.stringify({ kind, definition, data })) as VerifyViolation;
+const value = ({ kind, definition, line, data }: ViolationValue & Placed) =>
+  JSON.parse(JSON.stringify({ kind, definition, line, data })) as VerifyViolation;
 
 const findings = new Map<string, number>();
 

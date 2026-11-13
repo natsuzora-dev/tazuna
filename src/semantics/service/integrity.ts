@@ -107,7 +107,11 @@ export function integrityViolations(r: Run, command: DefinitionRef): (Fault & Lo
         found.push(
           key === undefined
             ? { kind: "Fault.failedSingleInvariant", definition: entity, data: { condition: failing, command } }
-            : { kind: "Fault.failedEntityInvariant", definition: entity, data: { key, condition: failing, command } },
+            : {
+                kind: "Fault.failedEntityInvariant",
+                definition: entity,
+                data: { recordKey: key, condition: failing, command },
+              },
         );
       for (const { entity: owner, field, target } of r.st.references) {
         if (owner !== name || row[field] === null || row[field] === undefined) continue;
@@ -117,7 +121,7 @@ export function integrityViolations(r: Run, command: DefinitionRef): (Fault & Lo
         found.push(
           key === undefined
             ? { kind: "Fault.danglingSingleRef", definition: entity, data: dangling }
-            : { kind: "Fault.danglingRef", definition: entity, data: { key, ...dangling } },
+            : { kind: "Fault.danglingRef", definition: entity, data: { recordKey: key, ...dangling } },
         );
       }
     }

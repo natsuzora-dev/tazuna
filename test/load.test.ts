@@ -10,8 +10,8 @@ for (const [folder, group] of Object.entries(groups))
   testExamples(groupExamples("load", folder), group, ["check", "."]);
 
 const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restricted["kind"], true>> = {
-  "Malformed.noDefiner": true,
-  "Malformed.unlisted": true,
+  "Malformed.missingDefiner": true,
+  "Malformed.unlistedEntity": true,
   "Malformed.listedTwice": true,
   "Malformed.listedUnderOtherName": true,
   "Malformed.serviceInSharedFolder": true,

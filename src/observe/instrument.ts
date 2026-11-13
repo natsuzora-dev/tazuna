@@ -77,7 +77,7 @@ function regionFindings(
           {
             kind: "OrderDependent.bothAssign",
             definition: chart,
-            data: { state, first: firstRef, second: secondRef, field },
+            data: { state, firstTransition: firstRef, secondTransition: secondRef, field },
           },
         ];
       return a.reads.has(v) ? [assignRead(secondRef, firstRef, field)] : [];
@@ -322,7 +322,7 @@ export class InstrumentedFunctions implements Functions {
     report({
       kind: "OrderDependent.reversedRecords",
       definition,
-      data: { original: plain(output), reversed: plain(checked.encoded) },
+      data: { original: plain(output), alternative: plain(checked.encoded) },
     });
   }
 

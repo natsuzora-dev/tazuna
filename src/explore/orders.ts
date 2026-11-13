@@ -122,7 +122,7 @@ function changedFork(
     decided?.({ kind: "deadlineOrder", runs: [own.result, sibling.result], found });
     if (found === undefined) continue;
     // The alternative is the run whose deadline comes second in the pair.
-    const alternative = canonicalJson(found.data.first) === canonicalJson(a) ? sibling.input : own.input;
+    const alternative = canonicalJson(found.data.firstDeadline) === canonicalJson(a) ? sibling.input : own.input;
     return changed(found, found.definition === null ? place : placeOf(spec, found.definition), [alternative]);
   }
   const request = toOf(own.input);
@@ -187,7 +187,7 @@ export function stepOrderChanges(
     options.decided?.({ kind: "stepOrder", runs: [own.result, alternative], found: result });
     if (result === undefined) continue;
     // The alternative is the run whose step comes second in the pair, at the definition of the pair's first step.
-    const first = canonicalJson(result.data.first) === canonicalJson(a);
+    const first = canonicalJson(result.data.firstStep) === canonicalJson(a);
     found.push(changed(result, placeOf(spec, result.definition), [first ? input : own.input]));
   }
   return found;
@@ -235,7 +235,7 @@ function unordered(
         const senders = [refOfDefinition(spec, a.sender), refOfDefinition(spec, b.sender)] as const;
         const found = answerOrder(compare, x, y, ...senders, forward, backward);
         if (found === undefined) return undefined;
-        return { found, place: placeOf(spec, found.definition), backward: found.data.first === x };
+        return { found, place: placeOf(spec, found.definition), backward: found.data.firstRequestId === x };
       },
     };
   }

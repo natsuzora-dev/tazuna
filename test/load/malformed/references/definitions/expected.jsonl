@@ -4,7 +4,7 @@
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"addTask"},"data":{"path":["emits",1]},"location":{"file":"todo/todo.ts","line":20}}
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"seenMarked"},"data":{"path":["receives","taskSeen"]},"location":{"file":"todo/todo.ts","line":27}}
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"seenMarked"},"data":{"path":["commands","markSeen"]},"location":{"file":"todo/todo.ts","line":27}}
-{"kind":"Malformed.noDefiner","definition":null,"data":{"name":"noted"},"location":{"file":"todo/todo.ts","line":31}}
+{"kind":"Malformed.missingDefiner","definition":null,"data":{"name":"noted"},"location":{"file":"todo/todo.ts","line":31}}
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"watcher"},"data":{"path":["receives","taskSeen"]},"location":{"file":"todo/todo.ts","line":33}}
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"watcher"},"data":{"path":["commands","markSeen"]},"location":{"file":"todo/todo.ts","line":33}}
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"todo","name":"taskNoted"},"data":{"path":["payload","taskId"]},"location":{"file":"todo/todo.ts","line":41}}

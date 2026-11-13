@@ -21,6 +21,6 @@ export const grantAfterRetry = scenario(
 );
 
 export const grantAfterExtraAnswer = scenario(
-  "Link a result to a mock that comes after the request is answered; test reports noWaitingRequest",
+  "Link a result to a mock that comes after the request is answered; test reports missingWaitingRequest",
   [at("2026-10-25T09:00:00+09:00"), accepted, acceptedAgain, receive(device.granted, {}, { resultOf: acceptedAgain })],
 );

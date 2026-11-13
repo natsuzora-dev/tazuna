@@ -1,1 +1,1 @@
-{"kind":"Illegal.notRequested","definition":{"service":"todo","name":"answerHoliday"},"data":{"input":2},"location":{"file":"todo/scenarios.ts","line":11}}
+{"kind":"Illegal.unrequestedAnswer","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":11,"input":3},"scenario":{"service":"todo","name":"answerHoliday"}}

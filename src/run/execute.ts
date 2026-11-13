@@ -84,6 +84,18 @@ export class Run {
     return this.execution.inputLines;
   }
   /**
+   * Returns the index of the input during which the run reported `violation`, one of the state's violations or the one
+   * that halted the run, or undefined for another violation.
+   */
+  inputOf(violation: Violation): number | undefined {
+    const last = this.execution.inputs.length - 1;
+    if (violation === this.halted) return last;
+    const j = this.execution.processing.state.violations.indexOf(violation);
+    if (j < 0) return undefined;
+    const k = this.execution.violationCounts.findIndex((count) => count > j);
+    return k < 0 ? last : k;
+  }
+  /**
    * Returns the violations of outcome.violations that `parent`, which this run extends, did not report. The run's
    * violations and the OrderDependent violations each keep the parent's as their start.
    */
@@ -433,6 +445,8 @@ class Execution {
   readonly inputs: Input[];
   readonly answered: (Pending | undefined)[];
   readonly inputLines: number[];
+  /** The number of the state's violations after each input that completed. */
+  readonly violationCounts: number[];
 
   private constructor(
     processing: Processing,
@@ -440,19 +454,21 @@ class Execution {
     inputs: Input[],
     answered: (Pending | undefined)[],
     inputLines: number[],
+    violationCounts: number[],
   ) {
     this.processing = processing;
     this.listener = listener;
     this.inputs = inputs;
     this.answered = answered;
     this.inputLines = inputLines;
+    this.violationCounts = violationCounts;
   }
 
   static create(spec: Spec, service: string): Execution {
     const listener = new Listener(spec, service, new Collect());
     const functions = instrumented(spec, service, listener);
     const place = spec.services.get(service)?.place;
-    return new Execution(newProcessing(functions.st, functions, listener, place), listener, [], [], []);
+    return new Execution(newProcessing(functions.st, functions, listener, place), listener, [], [], [], []);
   }
 
   /** Returns a copy; call it only after an input that completed without halting. */
@@ -465,6 +481,7 @@ class Execution {
       [...this.inputs],
       [...this.answered],
       [...this.inputLines],
+      [...this.violationCounts],
     );
   }
 }
@@ -482,6 +499,7 @@ function feed(execution: Execution, inputs: readonly Input[]): Fed {
       const next = stepOf(listener.spec, r.st.service, input, execution.inputs);
       execution.inputs.push(input);
       execution.answered.push(step(r, next, (line) => execution.inputLines.push(line)));
+      execution.violationCounts.push(r.state.violations.length);
     }
     return { enabled: inputs.length === 0 ? undefined : enabled(r) };
   } catch (error) {

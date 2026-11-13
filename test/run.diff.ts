@@ -85,7 +85,7 @@ const specs = await Promise.all(
   roots.map(async (root) => ({ name: relative(tazuna, root), spec: await loadRoot(root) })),
 );
 
-test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values match Limit.max, and haltingFaultKinds has the Fault kind named after each limit", () => {
+test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values match Limit.max, and haltingFaultKinds has the Fault kind named exceeded and each limit's name", () => {
   const names = lean.names();
   assert.deepEqual(
     Object.fromEntries(Object.keys(names.byCaller).map((kind) => [kind, byCallerKinds.has(kind as RejectionKind)])),
@@ -94,7 +94,9 @@ test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values mat
   assert.deepEqual({ ...tsLimits }, names.limits);
   const halting: ReadonlySet<string> = new Set(haltingFaultKinds);
   assert.deepEqual(
-    Object.keys(names.limits).filter((limit) => !halting.has(`Fault.${limit}`)),
+    Object.keys(names.limits).filter(
+      (limit) => !halting.has(`Fault.exceeded${limit.charAt(0).toUpperCase()}${limit.slice(1)}`),
+    ),
     [],
   );
 });
@@ -174,31 +176,31 @@ test("A step that names a command, query, subscription, or screen of another ser
       shop,
       "shop",
       { type: "command", command: named(shop, "shop", "command", "payments.createCharge"), input: { amount: 1 }, time },
-      { kind: "InvalidInput.notOwned", target: { service: "payments", name: "createCharge" } },
+      { kind: "InvalidInput.unownedTarget", target: { service: "payments", name: "createCharge" } },
     ],
     [
       screens,
       "screens",
       { type: "query", query: named(screens, "screens", "query", "todo.tasks"), input: {}, time },
-      { kind: "InvalidInput.notOwned", target: { service: "todo", name: "tasks" } },
+      { kind: "InvalidInput.unownedTarget", target: { service: "todo", name: "tasks" } },
     ],
     [
       screens,
       "screens",
       { type: "subscribe", query: named(screens, "screens", "query", "todo.tasks"), input: {}, time },
-      { kind: "InvalidInput.notOwned", target: { service: "todo", name: "tasks" } },
+      { kind: "InvalidInput.unownedTarget", target: { service: "todo", name: "tasks" } },
     ],
     [
       shop,
       "shop",
       { type: "event", event: named(shop, "shop", "event", "orderPlaced"), payload: { amount: 1 }, time },
-      { kind: "InvalidInput.notInContract", event: { service: "shop", name: "orderPlaced" } },
+      { kind: "InvalidInput.unlistedEvent", event: { service: "shop", name: "orderPlaced" } },
     ],
     ...(["operation", "unacceptedOperation"] as const).map((type): [Spec, string, Input, Data] => [
       screens,
       "todo",
       { type, screen: named(screens, "todo", "screen", "screens.homeScreen"), control: "openList", payload: {}, time },
-      { kind: "InvalidInput.notOwned", target: { service: "screens", name: "homeScreen" } },
+      { kind: "InvalidInput.unownedTarget", target: { service: "screens", name: "homeScreen" } },
     ]),
   ];
   for (const [found, service, input, expected] of cases) {

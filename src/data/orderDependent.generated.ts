@@ -20,12 +20,13 @@ export type OrderDependent =
       readonly definition: DefinitionRef;
       readonly data: Readonly<Record<string, never>>;
     }
+  /** `alternative` is the output of the query with records in reverse key order. */
   | {
       readonly kind: "OrderDependent.reversedRecords";
       readonly definition: DefinitionRef;
       readonly data: {
         readonly original: Json;
-        readonly reversed: Json;
+        readonly alternative: Json;
       };
     }
   | {
@@ -33,8 +34,8 @@ export type OrderDependent =
       readonly definition: DefinitionRef;
       readonly data: {
         readonly state: string;
-        readonly first: TransitionRef;
-        readonly second: TransitionRef;
+        readonly firstTransition: TransitionRef;
+        readonly secondTransition: TransitionRef;
         readonly field: string;
       };
     }

@@ -485,7 +485,7 @@ theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (r
 
 theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready)
     (rs : List Ready) (hr : q.ready = r :: rs) (h : q.ready.zipIdx.find? (name ·.1 == named) = none) :
-    q.take name (named :: rest) = .error (.stepNotNext named (q.ready.map name)) := by
+    q.take name (named :: rest) = .error (.unreadyStep named (q.ready.map name)) := by
   simp only [Queue.take]
   rw [hr] at h ⊢
   dsimp only
@@ -512,9 +512,9 @@ theorem drain_halts_on_command_runaway (fuel : Nat) (q : Queue) (c : Sent) (cs :
 
 theorem drain_at_work_limit (q : Queue) (hh : s.halted = none) :
     drain st fs 0 s q =
-      if !q.isEmpty then s.halt (Finding.fault .messageWork).toViolation else
+      if !q.isEmpty then s.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)).toViolation else
       let s₁ := refreshScreens st fs s
-      if s₁.halted.isNone && !(shownChanged s s₁).isEmpty then s₁.halt (Finding.fault .messageWork).toViolation else s₁ := by
+      if s₁.halted.isNone && !(shownChanged s s₁).isEmpty then s₁.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)).toViolation else s₁ := by
   simp only [drain, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind, State.report]
   rfl
 
@@ -522,7 +522,7 @@ theorem doneWork_at_selection_limit (step : Nat) (name : String) (r : Processing
     (hi : r.state.machine? name = some i) :
     doneWork fs st step name 0 r =
       match i.awaitingOnDone with
-      | some (_ :: _) => ⟨r.state.halt (Finding.fault (.onDoneSelections (st.ref i.chart.name))).toViolation, r.queue⟩
+      | some (_ :: _) => ⟨r.state.halt (Finding.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)).toViolation, r.queue⟩
       | _ => ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩ := by
   simp only [doneWork, hi]
   rcases h : i.awaitingOnDone with _ | _ | ⟨_, _⟩ <;> simp [Processing.report, State.report, Fault.halts]

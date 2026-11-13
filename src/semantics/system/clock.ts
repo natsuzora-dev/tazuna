@@ -42,9 +42,9 @@ export function chooseDeadline<T extends Deadline>(r: Processing, first: T, due:
   const deadline = due.find((t) => canonicalJson(deadlineId(t)) === canonicalJson(named));
   if (deadline === undefined)
     return report(r.state, {
-      kind: "InvalidInput.deadlineNotNext",
+      kind: "InvalidInput.unreadyDeadline",
       definition: null,
-      data: { named, deadlines },
+      data: { named, candidates: deadlines },
     });
   s.deadlineOrder = rest;
   return deadline;

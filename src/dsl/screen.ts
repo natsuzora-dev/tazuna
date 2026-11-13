@@ -214,7 +214,7 @@ export type ScreenDefiner<Es extends Entities> = <
     description: string;
     /**
      * The input of a screen that another screen opens. Only such a screen has `input`, `output`, `requires`, and
-     * `ensures` (Illegal.keysWithoutParent).
+     * `ensures` (Illegal.missingParent).
      */
     input?: I & SomeKey<keyof I>;
     output?: O & SomeKey<keyof O>;

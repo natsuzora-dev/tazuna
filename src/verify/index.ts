@@ -54,11 +54,12 @@ export function verifyTraces(spec: Spec, folder: string): { traces: number; prob
     traceFolderOf(folder),
   );
   const traceFile = (t: DefinitionRef) => join(folder, t.service, `${t.name}.jsonl`);
-  const atLines = (path: string, found: readonly Found[]) => problemsAt(relative(spec.root, path), found);
+  const atLines = (path: string, found: readonly Found[], scenario?: DefinitionRef) =>
+    problemsAt(relative(spec.root, path), found, scenario);
   const compared = pairing.compare.flatMap((t) => {
     const snapshot = readSnapshotProblems(snapshotPath(spec, t));
-    if (snapshot.problems.length > 0) return atLines(snapshotPath(spec, t), snapshot.problems);
-    return atLines(traceFile(t), compareTrace(spec, t.service, snapshot.lines, readTrace(traceFile(t))).found);
+    if (snapshot.problems.length > 0) return atLines(snapshotPath(spec, t), snapshot.problems, t);
+    return atLines(traceFile(t), compareTrace(spec, t.service, snapshot.lines, readTrace(traceFile(t))).found, t);
   });
   const checked = pairing.contract.flatMap((t) =>
     atLines(traceFile(t), verifyExternal(spec, t.service, parseFileLines(readTrace(traceFile(t))))),

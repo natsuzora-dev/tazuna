@@ -143,7 +143,11 @@ function doneWork(r: Processing, name: string, step: number): void {
       return;
     }
     if (selections === limits.onDoneSelections)
-      report(r.state, { kind: "Fault.onDoneSelections", definition: ref(r.st, instance.chart.name), data: {} });
+      report(r.state, {
+        kind: "Fault.exceededOnDoneSelections",
+        definition: ref(r.st, instance.chart.name),
+        data: { limit: limits.onDoneSelections },
+      });
     instance.awaitingOnDone = rest;
     settle(r, name, step);
     done(r, name, n, step);
@@ -293,7 +297,8 @@ export function drain(r: Processing): void {
   const { state: s, queue } = r;
   let messageWork = 0;
   const countWork = () => {
-    if (messageWork === limits.messageWork) report(r.state, { kind: "Fault.messageWork", definition: null, data: {} });
+    if (messageWork === limits.messageWork)
+      report(r.state, { kind: "Fault.exceededMessageWork", definition: null, data: { limit: limits.messageWork } });
     messageWork += 1;
   };
   for (;;) {

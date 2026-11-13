@@ -2,10 +2,10 @@
 {"kind":"Restricted.mutableModule","definition":null,"data":{"declaration":"var"},"location":{"file":"todo/environment.ts","line":2}}
 {"kind":"Restricted.alias","definition":null,"data":{"object":"Temporal"},"location":{"file":"todo/environment.ts","line":3}}
 {"kind":"Restricted.alias","definition":null,"data":{"object":"Math"},"location":{"file":"todo/environment.ts","line":4}}
-{"kind":"Restricted.localeMethod","definition":null,"data":{"name":"localeCompare"},"location":{"file":"todo/environment.ts","line":13}}
-{"kind":"Restricted.global","definition":null,"data":{"name":"Intl"},"location":{"file":"todo/environment.ts","line":15}}
-{"kind":"Restricted.localeMethod","definition":null,"data":{"name":"toLocaleString"},"location":{"file":"todo/environment.ts","line":20}}
-{"kind":"Restricted.localeMethod","definition":null,"data":{"name":"toLocaleDateString"},"location":{"file":"todo/environment.ts","line":21}}
-{"kind":"Restricted.localeMethod","definition":null,"data":{"name":"toLocaleTimeString"},"location":{"file":"todo/environment.ts","line":22}}
-{"kind":"Restricted.localeMethod","definition":null,"data":{"name":"toLocaleUpperCase"},"location":{"file":"todo/environment.ts","line":23}}
-{"kind":"Restricted.localeMethod","definition":null,"data":{"name":"toLocaleLowerCase"},"location":{"file":"todo/environment.ts","line":24}}
+{"kind":"Restricted.localeMethod","definition":null,"data":{"method":"localeCompare"},"location":{"file":"todo/environment.ts","line":13}}
+{"kind":"Restricted.global","definition":null,"data":{"global":"Intl"},"location":{"file":"todo/environment.ts","line":15}}
+{"kind":"Restricted.localeMethod","definition":null,"data":{"method":"toLocaleString"},"location":{"file":"todo/environment.ts","line":20}}
+{"kind":"Restricted.localeMethod","definition":null,"data":{"method":"toLocaleDateString"},"location":{"file":"todo/environment.ts","line":21}}
+{"kind":"Restricted.localeMethod","definition":null,"data":{"method":"toLocaleTimeString"},"location":{"file":"todo/environment.ts","line":22}}
+{"kind":"Restricted.localeMethod","definition":null,"data":{"method":"toLocaleUpperCase"},"location":{"file":"todo/environment.ts","line":23}}
+{"kind":"Restricted.localeMethod","definition":null,"data":{"method":"toLocaleLowerCase"},"location":{"file":"todo/environment.ts","line":24}}

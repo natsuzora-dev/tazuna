@@ -66,7 +66,7 @@ function nondeterminism(source: SourceFile): Found<Restricted>[] {
     const propertyKey = parent?.type === "Property" && key === "key" && !parent.computed;
     const named = !property && !propertyKey && !bindingKeys.has(key);
     if (n.type === "Identifier" && isOneOf(nondeterministicGlobals, n.name) && named)
-      report(n, { kind: "Restricted.global", definition: null, data: { name: n.name } });
+      report(n, { kind: "Restricted.global", definition: null, data: { global: n.name } });
     if (n.type === "Identifier" && isOneOf(memberObjects, n.name) && named) {
       const object = parent?.type === "MemberExpression" && key === "object";
       const destructured =
@@ -76,7 +76,8 @@ function nondeterminism(source: SourceFile): Found<Restricted>[] {
     const name = n.type === "MemberExpression" && n.property ? propertyName(n.property, n.computed) : undefined;
     const read = name === undefined ? undefined : memberRead(n.object, name);
     if (read !== undefined) report(n, { kind: "Restricted.member", definition: null, data: { ...read } });
-    if (isOneOf(localeMethods, name)) report(n, { kind: "Restricted.localeMethod", definition: null, data: { name } });
+    if (isOneOf(localeMethods, name))
+      report(n, { kind: "Restricted.localeMethod", definition: null, data: { method: name } });
     if (n.type === "VariableDeclarator" && n.id?.type === "ObjectPattern")
       for (const p of n.id.properties ?? []) {
         const destructured = p.key ? memberRead(n.init, propertyName(p.key, p.computed)) : undefined;

@@ -55,7 +55,7 @@ entry of the input's `deadlineOrder` chooses each deadline that fires, and after
 def fireDue [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (to : Time) : Nat → Option Time → State → m State
   | 0, _, s =>
     pure (if s.halted.isNone && (earliestDeadline s.deadlines to).isSome then
-      s.report (.fault .dueDeadlines) else s)
+      s.report (.fault (.exceededDueDeadlines Limit.dueDeadlines.max)) else s)
   | fuel + 1, tie, s =>
     if s.halted.isSome then pure s else
     match earliestDeadline s.deadlines to with

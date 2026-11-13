@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { Subject } from "./mismatch.generated.ts";
 import { type TraceLine, traceLine } from "./trace.generated.ts";
 import { type Json, plain } from "./values.ts";
 
@@ -31,6 +32,12 @@ export const sameTime = (a: TraceLine, b: TraceLine): boolean =>
 export const nameOf = (l: TraceLine): string | undefined => ("name" in l ? l.name : undefined);
 
 export const toOf = (l: TraceLine): string | undefined => ("to" in l ? l.to : undefined);
+
+/** Lean's Subject.of. */
+export const subjectOf = (l: TraceLine): Subject =>
+  l.type === "answer" || l.type === "unsubscribe"
+    ? { type: l.type, to: l.to }
+    : { type: l.type, name: nameOf(l) ?? null, id: l.id ?? null };
 
 export const resultOf = (l: TraceLine): string | undefined => ("resultOf" in l ? l.resultOf : undefined);
 

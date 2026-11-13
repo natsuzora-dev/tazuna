@@ -62,7 +62,8 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
   let fired = 0;
   let tie: Temporal.Instant | undefined;
   for (let e = earliestDeadline(s.deadlines, to); e !== undefined; e = earliestDeadline(s.deadlines, to)) {
-    if (fired === limits.dueDeadlines) report(s, { kind: "Fault.dueDeadlines", definition: null, data: {} });
+    if (fired === limits.dueDeadlines)
+      report(s, { kind: "Fault.exceededDueDeadlines", definition: null, data: { limit: limits.dueDeadlines } });
     fired += 1;
     const { time } = e;
     const due = s.deadlines.filter((t): t is Deadline & { time: Temporal.Instant } => t.time?.equals(time) === true);

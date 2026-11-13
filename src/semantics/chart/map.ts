@@ -70,7 +70,7 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
     const keys = checked;
     const duplicate = keys.find((k, i) => keys.findIndex((other) => other.encodedKey === k.encodedKey) < i);
     if (duplicate !== undefined)
-      report(r.state, { kind: "Fault.duplicateItemKey", definition, data: { map, key: plain(duplicate.encoded) } });
+      report(r.state, { kind: "Fault.duplicateItemKey", definition, data: { map, itemKey: plain(duplicate.encoded) } });
     const current = copyKeysOf(owner, map);
     const itemKeys = keys.map((k) => k.encodedKey);
     const same = current.length === itemKeys.length && itemKeys.every((k, i) => current[i] === k);

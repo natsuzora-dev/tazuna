@@ -12,7 +12,7 @@ export const endUnopened = scenario(
 );
 
 export const endUnopenedAndSubscribeTwice = scenario(
-  "Unsubscribe from s1, which is not open, then subscribe twice with the id s2; test reports subscriptionNotOpen and subscriptionOpen",
+  "Unsubscribe from s1, which is not open, then subscribe twice with the id s2; test reports unopenedSubscription and reusedSubscriptionId",
   [
     at("2026-10-25T09:00:00+09:00"),
     unsubscribe("s1"),
@@ -27,6 +27,6 @@ export const addOwnTask = scenario("Add a task through the command of todo; no v
 ]);
 
 export const receiveOwnEvent = scenario(
-  "Give todo its own event, as if another service sent it; the event is in no contract of another service, so test reports notInContract",
+  "Give todo its own event, as if another service sent it; the event is in no contract of another service, so test reports unlistedEvent",
   [at("2026-10-25T09:00:00+09:00"), receive(taskAdded, { id: "task-1", title: "Buy milk" })],
 );

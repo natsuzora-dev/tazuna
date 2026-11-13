@@ -102,7 +102,7 @@ def Queue.take (q : Queue) (name : Ready → StepName) : List StepName →
     | ready =>
       match ready.zipIdx.find? (name ·.1 == named) with
       | some (r, i) => .ok (some (r, q.without i, rest))
-      | none => .error (.stepNotNext named (ready.map name))
+      | none => .error (.unreadyStep named (ready.map name))
 
 structure Processing where
   state : State

@@ -19,10 +19,10 @@ def RecordPart.name : RecordPart → String
   | .field entity (some key) name => s!"field:{entity}#{key}.{name}"
   | .field entity none name => s!"field:{entity}.{name}"
 
-/-- A copy of map state `map`, made for the item whose key is `key`. -/
+/-- A copy of map state `map`, made for the item whose key is `itemKey`. -/
 structure Copy where
   map : String
-  key : Value
+  itemKey : Value
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Copy

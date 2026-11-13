@@ -24,7 +24,7 @@ export const answerOneOfTwo = scenario("Answer one of two questions; no violatio
 ]);
 
 export const answerBeforeAsking = scenario(
-  "Answer before the planner asks; no request waits for an answer, so test reports noWaitingRequest",
+  "Answer before the planner asks; no request waits for an answer, so test reports missingWaitingRequest",
   [
     at("2026-10-25T09:00:00+09:00"),
     mock(planner, [calendar.nextDay, { result: "fulfilled", output: { day: "2026-10-26T00:00:00+09:00" } }]),
@@ -32,7 +32,7 @@ export const answerBeforeAsking = scenario(
 );
 
 export const answerStaleWhileAsking = scenario(
-  "Answer a stale request while the planner still asks; no request is stale yet, so test reports noStaleRequest",
+  "Answer a stale request while the planner still asks; no request is stale yet, so test reports missingStaleRequest",
   [
     at("2026-10-25T09:00:00+09:00"),
     send(addTask, { taskId: "task-1", title: "Buy milk" }),

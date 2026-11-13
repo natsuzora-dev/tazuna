@@ -3,6 +3,10 @@ import type { DefinitionRef } from "./definitionRef.ts";
 import type { Rejection, RejectionKind } from "./trace.generated.ts";
 import type { Json } from "./values.ts";
 
+/**
+ * A trace line as a violation names it: an answer or unsubscribe line by its `to`, and any other line by its name and
+ * id.
+ */
 export type Subject =
   | {
       readonly type: string;
@@ -23,22 +27,18 @@ export type Use = {
 };
 
 /**
- * A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the
- * trace's `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. Mismatch.line compares the run
- * of test, not a trace: `run` is the run's line compared with the snapshot line at `snapshotLine`, and a missing
- * line is null. `renaming` holds the uses of one connected group of values in which a value stands for two values,
- * when no line differs otherwise. TS decides rejectedAssumedRequires, failedAssumedRequires, failedAssumedEnsures,
- * answerOutputSchema and eventPayloadSchema, which need the spec's functions or Zod schemas.
+ * A difference between compared lines. `line` is 1-based in the trace; a line missing from the trace is at the trace's
+ * `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
+ * failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
+ * or Zod schemas.
  */
 export type Mismatch =
   | {
       readonly kind: "Mismatch.request";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly id: string | null;
-        readonly type: string;
-        readonly name: string;
+        readonly subject: Subject;
         readonly snapshot: Json;
         readonly trace: Json;
       };
@@ -46,9 +46,9 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.event";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly name: string;
+        readonly subject: Subject;
         readonly snapshot: Json;
         readonly trace: Json;
       };
@@ -56,19 +56,20 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.operation";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly name: string;
+        readonly subject: Subject;
         readonly snapshot: Json;
         readonly trace: Json;
       };
     }
+  /** The output of an accepted or fulfilled answer, or the answer to a query. */
   | {
       readonly kind: "Mismatch.output";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly to: string;
+        readonly subject: Subject;
         readonly snapshot: Json;
         readonly trace: Json;
       };
@@ -76,9 +77,9 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.result";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly to: string;
+        readonly subject: Subject;
         readonly snapshot: string;
         readonly trace: string;
       };
@@ -86,9 +87,9 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.rejection";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly to: string;
+        readonly subject: Subject;
         readonly snapshot: RejectionKind;
         readonly trace: RejectionKind;
       };
@@ -96,57 +97,57 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.missingAnswer";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly type: string;
-        readonly to: string;
+        readonly subject: Subject;
         readonly snapshotLine: number;
       };
     }
   | {
       readonly kind: "Mismatch.missingLine";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly type: string;
-        readonly name: string;
+        readonly subject: Subject;
         readonly content: Json;
         readonly snapshotLine: number;
       };
     }
+  /** The trace does not open the subscription that the snapshot opens. */
   | {
       readonly kind: "Mismatch.unopenedSubscription";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly name: string;
-        readonly input: Json;
+        readonly subject: Subject;
+        readonly content: Json;
         readonly snapshotLine: number;
       };
     }
+  /** The trace opens a subscription that the snapshot does not. */
   | {
       readonly kind: "Mismatch.unexpectedSubscription";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
-        readonly name: string;
-        readonly input: Json;
-        readonly id: string;
+        readonly subject: Subject;
+        readonly content: Json;
       };
     }
   | {
       readonly kind: "Mismatch.unexpectedLine";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly subject: Subject;
       };
     }
+  /** The line comes before the line `before`, which its snapshot line must follow. */
   | {
       readonly kind: "Mismatch.lineOrder";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly subject: Subject;
         readonly before: Subject;
       };
@@ -154,13 +155,17 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.time";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly subject: Subject;
         readonly snapshot: string;
         readonly trace: string;
       };
     }
+  /**
+   * The uses of one connected group of values in which a value stands for two values, reported when no line differs
+   * otherwise.
+   */
   | {
       readonly kind: "Mismatch.renaming";
       readonly definition: null;
@@ -168,29 +173,30 @@ export type Mismatch =
         readonly uses: readonly Use[];
       };
     }
+  /** The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. */
   | {
       readonly kind: "Mismatch.line";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly snapshotLine: number;
         readonly snapshot: Json | null;
-        readonly run: Json | null;
+        readonly trace: Json | null;
       };
     }
+  /** No contract of another service lists the event that the external service emits. */
   | {
-      readonly kind: "Mismatch.emittedNotInContract";
+      readonly kind: "Mismatch.unlistedEvent";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly event: DefinitionRef;
-        readonly service: string;
       };
     }
   | {
       readonly kind: "Mismatch.resultOfUnacceptedRequest";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly event: DefinitionRef;
         readonly requestId: string;
         readonly target: DefinitionRef;
@@ -199,8 +205,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.resultOfUnlistedEvent";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly event: DefinitionRef;
         readonly requestId: string;
         readonly target: DefinitionRef;
@@ -209,8 +215,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.unlistedRejectionKind";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly requestId: string;
         readonly target: DefinitionRef;
         readonly rejection: Rejection;
@@ -219,8 +225,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.rejectedAssumedRequires";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly requestId: string;
         readonly target: DefinitionRef;
       };
@@ -228,8 +234,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.failedAssumedRequires";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly requestId: string;
         readonly target: DefinitionRef;
         readonly condition: string;
@@ -238,8 +244,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.failedAssumedEnsures";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly requestId: string;
         readonly target: DefinitionRef;
         readonly condition: string;
@@ -248,8 +254,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.answerOutputSchema";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly requestId: string;
         readonly target: DefinitionRef;
       };
@@ -257,8 +263,8 @@ export type Mismatch =
   | {
       readonly kind: "Mismatch.eventPayloadSchema";
       readonly definition: null;
+      readonly line: number;
       readonly data: {
-        readonly line: number;
         readonly event: DefinitionRef;
       };
     };
@@ -279,7 +285,7 @@ export const mismatchKinds = [
   "Mismatch.time",
   "Mismatch.renaming",
   "Mismatch.line",
-  "Mismatch.emittedNotInContract",
+  "Mismatch.unlistedEvent",
   "Mismatch.resultOfUnacceptedRequest",
   "Mismatch.resultOfUnlistedEvent",
   "Mismatch.unlistedRejectionKind",

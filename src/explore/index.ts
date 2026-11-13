@@ -1,9 +1,7 @@
-import { relative } from "node:path";
-import { snapshotPath } from "../data/traceFile.ts";
 import { canonicalJson } from "../data/values.ts";
 import type { Location, Violation } from "../data/violation.ts";
 import type { Named, Place } from "../dsl/definition.ts";
-import type { Input, Scenario } from "../dsl/scenario.ts";
+import { type Input, type Scenario, writtenPositions } from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { Coverage } from "../run/coverage.ts";
 import { execute, extend, type Run } from "../run/execute.ts";
@@ -67,13 +65,22 @@ export function explore(
   const report = (violation: Violation, appendedInputs?: readonly Input[]) =>
     found.push(appendedInputs === undefined ? { violation } : { violation, appendedInputs });
   const concurrent = new Map<Target, Map<Target, Place>>();
+  const positions = writtenPositions(scenario.definition);
+  // The position of input `k` of a path: as written for the scenario's inputs, and after them for appended inputs.
+  const inputAt = (k: number): Location => ({
+    file: scenario.place.file,
+    line: scenario.place.line,
+    input: positions[k] ?? scenario.definition.inputs.length + k - prefix.length + 1,
+  });
   const violationsOf = (run: Run, appendedInputs?: readonly Input[]) => {
-    // The scenario's inputs cause a violation of the run that names no definition and no location.
-    for (const v of run.outcome.violations)
+    // A violation of the run that names no definition and no location is at the input that caused it.
+    for (const v of run.outcome.violations) {
+      const k = run.inputOf(v);
       report(
-        v.definition === null && v.location === undefined ? { ...v, location: scenario.place } : v,
+        v.definition === null && v.location === undefined && k !== undefined ? { ...v, location: inputAt(k) } : v,
         appendedInputs,
       );
+    }
     for (const { first, second, place } of run.requestPairs) {
       const seconds = concurrent.get(first) ?? new Map<Target, Place>();
       concurrent.set(first, seconds);
@@ -94,7 +101,6 @@ export function explore(
     place,
     decided: options.decided,
   });
-  const snapshot = relative(spec.root, snapshotPath(spec, scenario));
   let parent = execute(spec, service, []);
   // A scenario mock names the request it answered in the scenario's run, which the other order also answers.
   const named = (i: number): Input | undefined => {
@@ -103,8 +109,7 @@ export function explore(
     return input?.type === "answer" && to !== undefined ? { ...input, choice: { to } } : input;
   };
   for (const [k, input] of prefix.entries()) {
-    const at = { file: snapshot, line: (base.inputLines[k] as number) + 1 };
-    const withOptions = changesOptions(parent, at);
+    const withOptions = changesOptions(parent, inputAt(k));
     // The first order fires the first due deadline in each tie, as the scenario's run does.
     const own = withOptions.ordered(named(k) as Input)[0] as Child;
     const next = named(k + 1);
@@ -132,7 +137,7 @@ export function explore(
   // paired with later inputs; changedFork compares its other orders with it.
   const next = (path: readonly Input[], run: Run): Input[] => {
     if (run.halted !== undefined) return [];
-    const withOptions = changesOptions(run, scenario.place);
+    const withOptions = changesOptions(run, inputAt(path.length));
     const ordered = enabled(run)
       .map((input) => withOptions.ordered(input).filter((c) => givable(run, c.result)))
       .filter((c) => c.length > 0);

@@ -26,12 +26,12 @@ const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<No
 
 function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
   switch (illegal.kind) {
-    case "Illegal.notRequested":
+    case "Illegal.unrequestedAnswer":
     case "Illegal.resultOfPlacedTwice":
     case "Illegal.resultOfUnplaced":
     case "Illegal.scenarioOfExternalService": {
-      const { service, name } = illegal.definition;
-      const scenario = spec.scenarios.find((s) => sameRef(s, illegal.definition));
+      const { service, name } = illegal.scenario;
+      const scenario = spec.scenarios.find((s) => sameRef(s, illegal.scenario));
       if (scenario === undefined) throw new Error(`no scenario ${service}.${name}`);
       return scenario.place;
     }
@@ -41,7 +41,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
       return contract.place;
     }
     case "Illegal.automationCycle":
-    case "Illegal.keysWithoutParent":
+    case "Illegal.missingParent":
     case "Illegal.ownQuery":
     case "Illegal.alwaysCycle":
     case "Illegal.foreignEvent":

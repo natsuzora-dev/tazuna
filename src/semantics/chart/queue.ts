@@ -97,7 +97,11 @@ export function take(r: Processing, name: (ready: Ready) => StepName): Ready | u
   if (ready.length === 0) return undefined;
   const i = ready.findIndex((entry) => canonicalJson(name(entry)) === canonicalJson(named));
   if (i < 0)
-    return report(s, { kind: "InvalidInput.stepNotNext", definition: null, data: { named, ready: ready.map(name) } });
+    return report(s, {
+      kind: "InvalidInput.unreadyStep",
+      definition: null,
+      data: { named, candidates: ready.map(name) },
+    });
   s.stepOrder = rest;
   if (i < queue.tasks.length) queue.tasks.splice(i, 1);
   else {

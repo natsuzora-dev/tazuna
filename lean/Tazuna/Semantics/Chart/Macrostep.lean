@@ -115,7 +115,8 @@ def doneWork (st : Service) (step : Nat) (name : String) : Nat → Processing �
     match r.state.machine? name with
     | some i =>
       match i.awaitingOnDone with
-      | some (_ :: _) => pure (r.report (.fault (.onDoneSelections (st.ref i.chart.name))))
+      | some (_ :: _) =>
+        pure (r.report (.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)))
       | _ => pure ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩
     | none => pure r
   | fuel + 1, r =>
@@ -234,10 +235,10 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
   if s.halted.isSome then pure s else
   match fuel with
   | 0 =>
-    if !q.isEmpty then pure (s.report (.fault .messageWork)) else do
+    if !q.isEmpty then pure (s.report (.fault (.exceededMessageWork Limit.messageWork.max))) else do
     let refreshed ← refreshScreens st fs s
     pure (if refreshed.halted.isNone && !(shownChanged s refreshed).isEmpty then
-      refreshed.report (.fault .messageWork) else refreshed)
+      refreshed.report (.fault (.exceededMessageWork Limit.messageWork.max)) else refreshed)
   | fuel + 1 =>
     match q.take (s.readyName st) s.stepOrder with
     | .error invalid => pure (s.report (.invalidInput invalid))

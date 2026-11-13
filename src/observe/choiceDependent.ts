@@ -125,7 +125,11 @@ export function deadlineOrder(
   const found = difference(compare, original, alternative);
   return found === undefined
     ? undefined
-    : { kind: "ChoiceDependent.deadlineOrder", definition: chart(first), data: { first, second, difference: found } };
+    : {
+        kind: "ChoiceDependent.deadlineOrder",
+        definition: chart(first),
+        data: { firstDeadline: first, secondDeadline: second, difference: found },
+      };
 }
 
 /**
@@ -143,7 +147,11 @@ export function answerChoice(
   const found = difference(compare, answered, alternative);
   return found === undefined
     ? undefined
-    : { kind: "ChoiceDependent.answerChoice", definition: sender, data: { request, other, difference: found } };
+    : {
+        kind: "ChoiceDependent.answerChoice",
+        definition: sender,
+        data: { requestId: request, otherRequestId: other, difference: found },
+      };
 }
 
 /**
@@ -164,7 +172,11 @@ export function answerOrder(
   const found = difference(compare, original, alternative);
   return found === undefined
     ? undefined
-    : { kind: "ChoiceDependent.answerOrder", definition: sender, data: { first, second, difference: found } };
+    : {
+        kind: "ChoiceDependent.answerOrder",
+        definition: sender,
+        data: { firstRequestId: first, secondRequestId: second, difference: found },
+      };
 }
 
 /**
@@ -181,7 +193,7 @@ export function requestOrder(
   const found = difference(compare, forward, backward);
   return found === undefined
     ? undefined
-    : { kind: "ChoiceDependent.requestOrder", definition: first, data: { second, difference: found } };
+    : { kind: "ChoiceDependent.requestOrder", definition: first, data: { secondRequest: second, difference: found } };
 }
 
 /**
@@ -203,6 +215,6 @@ export function stepOrder(
     : {
         kind: "ChoiceDependent.stepOrder",
         definition: stepNameDefinition(first),
-        data: { first, second, difference: found },
+        data: { firstStep: first, secondStep: second, difference: found },
       };
 }

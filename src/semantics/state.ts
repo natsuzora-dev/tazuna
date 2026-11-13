@@ -410,9 +410,9 @@ export function newCommandStep(
     step,
     exceeded:
       depth > limits.commandDepth
-        ? { kind: "Fault.commandDepth", definition: sender, data: {} }
+        ? { kind: "Fault.exceededCommandDepth", definition: sender, data: { limit: limits.commandDepth } }
         : count > limits.messageCommands
-          ? { kind: "Fault.messageCommands", definition: sender, data: {} }
+          ? { kind: "Fault.exceededMessageCommands", definition: sender, data: { limit: limits.messageCommands } }
           : undefined,
   };
 }
@@ -542,7 +542,7 @@ export function instanceWho(instance: Pick<Instance, "chart" | "copyOf">, st: Se
   const copy = instance.copyOf;
   return {
     chart: ref(st, instance.chart.name),
-    copy: copy === undefined ? null : { map: copy.map, key: plain(copy.key) },
+    copy: copy === undefined ? null : { map: copy.map, itemKey: plain(copy.key) },
   };
 }
 

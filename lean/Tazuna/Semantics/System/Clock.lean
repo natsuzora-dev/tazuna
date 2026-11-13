@@ -42,7 +42,7 @@ def chooseDeadline (first : Deadline) (due : List Deadline) (tied : Bool) (order
   | true, c :: rest =>
     match due.find? (·.id == c) with
     | some t => .ok (t, rest)
-    | none => .error (.deadlineNotNext c (due.map Deadline.id))
+    | none => .error (.unreadyDeadline c (due.map Deadline.id))
   | _, _ => .ok (first, order)
 
 end Tazuna.Semantics

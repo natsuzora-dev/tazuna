@@ -18,7 +18,7 @@ export const addMilk = scenario("Add a task to buy milk; verify reports differen
   send(addTask, { taskId: "task-1", title: "Buy milk" }),
 ]);
 
-export const answerDay = scenario("Add a task and answer the next day; verify reports answersNoRequest", [
+export const answerDay = scenario("Add a task and answer the next day; verify reports differentRequest", [
   at("2026-10-25T00:00:00Z"),
   send(addTask, { taskId: "task-1", title: "Buy milk" }),
   mock(planner, [calendar.nextDay, { result: "fulfilled", output: { day: "2026-10-26T00:00:00Z" } }]),

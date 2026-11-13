@@ -11,12 +11,12 @@ theorem checkExternal_after_malformed (s : Structure) (service : String) (pre po
 
 /-- The value that TS `byLine` sorts violations by. -/
 def lineOf : Finding → Option Value
-  | .mismatch m => m.data.field? "line"
-  | .uncomparable u => u.data.field? "line"
+  | .mismatch m => m.place.lookup "line"
+  | .uncomparable u => u.place.lookup "line"
 
 theorem resultOfFinding_line (line : Nat) (event : Ref) (requestId : String) (target : Ref) (m : ResultOfMismatch) :
     lineOf (resultOfFinding line event requestId target m) = some (ToValue.toValue line) := by
-  cases m <;> simp [resultOfFinding, lineOf, Mismatch.data, Uncomparable.data, Value.field?]
+  cases m <;> simp [resultOfFinding, lineOf, Mismatch.place, Uncomparable.place]
 
 theorem checkLine_line (s : Structure) (service : String) (requests : List (String × Option Request)) (line : Nat)
     (l : TraceLine) (f : Finding) (h : (checkLine s service requests line l).1 = some f) :
@@ -26,7 +26,7 @@ theorem checkLine_line (s : Structure) (service : String) (requests : List (Stri
   repeat' split at h
   all_goals first
     | (cases h; done)
-    | (cases h; simp [lineOf, Mismatch.data, Uncomparable.data, Value.field?]; done)
+    | (cases h; simp [lineOf, Mismatch.place, Uncomparable.place]; done)
     | (obtain ⟨m, -, rfl⟩ := Option.map_eq_some_iff.mp h; exact resultOfFinding_line _ _ _ _ m)
 
 theorem checkLines_lines (s : Structure) (service : String) :

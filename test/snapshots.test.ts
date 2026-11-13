@@ -32,7 +32,7 @@ test("test writes no snapshot, and test --update rewrites snapshots without comp
   const compared = testSpec(spec, { update: false, depth: 0 });
   assert.deepEqual(compared.written, []);
   assert.ok(
-    compared.problems.some((p) => p.kind === "Uncomparable.missingSnapshot" && sameRef(p.definition, scenario)),
+    compared.problems.some((p) => p.kind === "Uncomparable.missingSnapshot" && sameRef(p.scenario ?? null, scenario)),
   );
   assert.ok(!existsSync(snapshotPath(spec, scenario)));
   const updated = testSpec(spec, { update: true, depth: 0 });

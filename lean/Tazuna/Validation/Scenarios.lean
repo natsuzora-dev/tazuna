@@ -11,27 +11,27 @@ def requests (d : Definition) (target : Ref) : Bool :=
   | .machine c | .screen c => c.commands.any (·.2 == some target) || c.queries.any (·.2 == some target)
   | _ => false
 
-def notRequestedAnswers (s : Structure) : List Illegal :=
+def unrequestedAnswers (s : Structure) : List Illegal :=
   s.scenarios.flatMap fun sc =>
     sc.inputs.zipIdx.filterMap fun (input, i) =>
       match input with
       | .answer (some sender) (some target) =>
         if s.definitions.any fun d => d.ref == sender && requests d target then none
-        else some (.notRequested sc.ref i)
+        else some (.unrequestedAnswer sc.ref (i + 1))
       | _ => none
 
 def resultsOfPlacedTwice (s : Structure) : List Illegal :=
   s.scenarios.flatMap fun sc =>
     sc.inputs.zipIdx.filterMap fun (input, i) =>
       match input with
-      | .event (some positions) => if 1 < positions.length then some (.resultOfPlacedTwice sc.ref i) else none
+      | .event (some positions) => if 1 < positions.length then some (.resultOfPlacedTwice sc.ref (i + 1)) else none
       | _ => none
 
 def resultsOfUnplaced (s : Structure) : List Illegal :=
   s.scenarios.flatMap fun sc =>
     sc.inputs.zipIdx.filterMap fun (input, i) =>
       match input with
-      | .event (some positions) => if positions.any (· < i) then none else some (.resultOfUnplaced sc.ref i)
+      | .event (some positions) => if positions.any (· < i) then none else some (.resultOfUnplaced sc.ref (i + 1))
       | _ => none
 
 def scenariosOfExternalServices (s : Structure) : List Illegal :=
@@ -40,6 +40,6 @@ def scenariosOfExternalServices (s : Structure) : List Illegal :=
     else none
 
 def check (s : Structure) : List Illegal :=
-  notRequestedAnswers s ++ resultsOfPlacedTwice s ++ resultsOfUnplaced s ++ scenariosOfExternalServices s
+  unrequestedAnswers s ++ resultsOfPlacedTwice s ++ resultsOfUnplaced s ++ scenariosOfExternalServices s
 
 end Tazuna.Validation.Scenarios

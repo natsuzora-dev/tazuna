@@ -1,6 +1,7 @@
 import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../syntax/tree.ts";
 import { type Assignment, Failed, issueViolation } from "../functions.ts";
+import { limits } from "../limits.ts";
 import { ref } from "../service/basic.ts";
 import { LazyRecordSource } from "../service/records.ts";
 import {
@@ -111,7 +112,8 @@ function leaveWith(r: Processing, fuel: number, instance: Instance, n: string): 
 
 /** Exits state `n` of `instance`, after its copies; `fuel` is the remaining nesting depth of exits. */
 export function exitOne(r: Processing, fuel: number, instance: Instance, n: string): void {
-  if (fuel === 0) report(r.state, { kind: "Fault.exitDepth", definition: null, data: {} });
+  if (fuel === 0)
+    report(r.state, { kind: "Fault.exceededExitDepth", definition: null, data: { limit: limits.exitDepth } });
   for (const k of copyKeysOf(instance, n).toReversed()) endWith(r, copyName(instance.resource, n, k), fuel - 1);
   instance.copyKeys.delete(n);
   leaveWith(r, fuel - 1, instance, n);

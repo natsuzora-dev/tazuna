@@ -7,13 +7,13 @@ function parentKeys(chart: ChartStructure): string[] {
   return (["input", "requires", "output", "ensures"] as const).filter((key) => chart[key].length > 0);
 }
 
-function keysWithoutParent(structure: Structure): Illegal[] {
+function missingParents(structure: Structure): Illegal[] {
   return structure.definitions.flatMap((d): Illegal[] => {
     if (d.kind !== "screen" || isOpenedByScreen(structure, d)) return [];
     const keys = parentKeys(d);
     return keys.length === 0
       ? []
-      : [{ kind: "Illegal.keysWithoutParent", definition: { service: d.service, name: d.name }, data: { keys } }];
+      : [{ kind: "Illegal.missingParent", definition: { service: d.service, name: d.name }, data: { keys } }];
   });
 }
 
@@ -133,10 +133,10 @@ function alwaysCycles(structure: Structure): Illegal[] {
     const path = cyclePath(d);
     return path === null
       ? []
-      : [{ kind: "Illegal.alwaysCycle", definition: { service: d.service, name: d.name }, data: { path } }];
+      : [{ kind: "Illegal.alwaysCycle", definition: { service: d.service, name: d.name }, data: { statePath: path } }];
   });
 }
 
 export function check(structure: Structure): Illegal[] {
-  return [...keysWithoutParent(structure), ...ownQueries(structure), ...alwaysCycles(structure)];
+  return [...missingParents(structure), ...ownQueries(structure), ...alwaysCycles(structure)];
 }

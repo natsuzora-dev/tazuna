@@ -39,10 +39,10 @@ type Of<Name extends string, Data> = {
  * spec functions: determinism, sound types, and service boundaries.
  */
 export type Restricted =
-  | Of<"global", { readonly name: (typeof nondeterministicGlobals)[number] }>
+  | Of<"global", { readonly global: (typeof nondeterministicGlobals)[number] }>
   | Of<"member", (typeof nondeterministicMembers)[number]>
   | Of<"alias", { readonly object: (typeof memberObjects)[number] }>
-  | Of<"localeMethod", { readonly name: (typeof localeMethods)[number] }>
+  | Of<"localeMethod", { readonly method: (typeof localeMethods)[number] }>
   | Of<"mutableModule", { readonly declaration: "let" | "var" }>
   | Of<"cryptoImport", { readonly module: (typeof cryptoModules)[number] }>
   | Of<"nonNull", Readonly<Record<string, never>>>

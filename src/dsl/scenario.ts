@@ -47,9 +47,9 @@ interface Timed {
 
 /**
  * The orders of an input, which only test's search sets; a scenario does not write them. `deadlineOrder` names, in
- * firing order, the deadlines that fire first in the ties during the input (InvalidInput.deadlineNotNext,
+ * firing order, the deadlines that fire first in the ties during the input (InvalidInput.unreadyDeadline,
  * InvalidInput.unusedDeadlineOrder); after its entries, the first due in entry order fires. `stepOrder` names, in
- * order, the steps that the internal queue takes first during the input (InvalidInput.stepNotNext,
+ * order, the steps that the internal queue takes first during the input (InvalidInput.unreadyStep,
  * InvalidInput.unusedStepOrder).
  */
 interface Scheduled {
@@ -126,6 +126,17 @@ export function timed(scenario: Scenario): Input[] {
     if (input.type !== "event" || input.resultOf === undefined) return answers[i] ?? timedOf(e);
     const resultOf = first.get(input.resultOf) ?? (timedOf({ input: input.resultOf, time }) as AnswerInput);
     return { ...timedOf(e), resultOf } as Input;
+  });
+}
+
+/**
+ * Returns, for each input that `timed` returns, its position in the scenario as written, from 1 with `at` included.
+ */
+export function writtenPositions(scenario: Scenario): number[] {
+  const written = scenario.inputs;
+  return written.flatMap((w, i) => {
+    const next = written[i + 1];
+    return w.type !== "at" || next === undefined || next.type === "at" ? [i + 1] : [];
   });
 }
 
@@ -211,7 +222,8 @@ type AcceptedAnswer<O> = [O] extends [undefined]
 
 /**
  * Answers, from another service, the longest-waiting request among those that a definition of kind `sender.kind` has
- * sent and the choice chooses. The target in `pair` is a query or command that the sender uses (Illegal.notRequested).
+ * sent and the choice chooses. The target in `pair` is a query or command that the sender uses
+ * (Illegal.unrequestedAnswer).
  */
 export function mock<const T extends AnyCommand | AnyQuery>(
   sender: Sender,

@@ -32,7 +32,13 @@ export function unparsableTimes(scenarios: readonly Named<Scenario>[]): Found<Ma
       input.type === "at" && !readable(input.time)
         ? [
             {
-              violation: { kind: "Malformed.unparsableTime", definition: { service, name }, data: { input: i } },
+              violation: {
+                kind: "Malformed.unparsableTime",
+                definition: null,
+                scenario: { service, name },
+                input: i + 1,
+                data: {},
+              },
               place,
             },
           ]
@@ -72,7 +78,7 @@ export function inexactDelays(
                 violation: {
                   kind: "Malformed.inexactDelay",
                   definition: { service: named.service, name: named.name },
-                  data: { state: state.name, name },
+                  data: { state: state.name, deadline: name },
                 },
                 place: named.place,
               },

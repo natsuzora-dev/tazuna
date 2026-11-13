@@ -14,7 +14,7 @@ theorem parentKeys_eq_nil (c : Chart) :
   cases c.input <;> cases c.requires <;> cases c.output <;> cases c.ensures <;> simp
 
 theorem starting_screen_has_no_parent_keys (j : Structure) (service : String) (st : Tazuna.Semantics.Service)
-    (hs : j.service service = .ok st) (h : keysWithoutParent j = []) (c : Tazuna.Semantics.Chart)
+    (hs : j.service service = .ok st) (h : missingParents j = []) (c : Tazuna.Semantics.Chart)
     (hc : c ∈ st.starting) (hscr : c.screen = true) :
     ∃ d ∈ j.definitions, ∃ sc, d.body = .screen sc ∧ d.service = service ∧ d.name = c.name ∧
       sc.input = [] ∧ sc.requires = [] ∧ sc.output = [] ∧ sc.ensures = [] := by
@@ -56,10 +56,10 @@ theorem opened_by_screen_iff (s : Structure) (r : Ref) :
     exact List.any_eq_true.mpr ⟨(key, some r), hk, by simp [sameRef]⟩
 
 theorem screens_with_parent_keys_are_opened (s : Structure) :
-    keysWithoutParent s = [] ↔
+    missingParents s = [] ↔
       ∀ d ∈ s.definitions, ∀ c, d.body = .screen c → ¬(c.input = [] ∧ c.requires = [] ∧ c.output = [] ∧ c.ensures = []) →
         ∃ o ∈ s.definitions, ∃ oc, o.body = .screen oc ∧ ∃ key, (key, some d.ref) ∈ oc.screens := by
-  simp only [keysWithoutParent, List.filterMap_eq_nil_iff]
+  simp only [missingParents, List.filterMap_eq_nil_iff]
   constructor
   · intro h d hd c hb hin
     have := h d hd

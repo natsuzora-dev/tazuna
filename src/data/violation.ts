@@ -10,6 +10,16 @@ export type ViolationValue = {
   readonly data: Data;
 };
 
+/**
+ * The place that a violation names beside its data, as Lean's derive_group writes it: the scenario, the line of the
+ * compared file, and the position of the scenario input. A report moves them to `scenario` and `location`.
+ */
+export interface Placed {
+  readonly scenario?: DefinitionRef;
+  readonly line?: number;
+  readonly input?: number;
+}
+
 /** The fields that only TS reports beside a violation's kind, definition, and data. */
 export interface Located {
   readonly error?: ProblemError;
@@ -49,11 +59,13 @@ export type Kind = `${Group}.${string}`;
 
 /**
  * The location of a violation. `file` is relative to the spec folder. Without `line`, the location is a whole file or a
- * folder entry.
+ * folder entry. `input` is the position of a scenario input as written, from 1 with `at` included; the inputs that test
+ * appends to the scenario continue the count.
  */
 export interface Location {
   readonly file: string;
   readonly line?: number;
+  readonly input?: number;
 }
 
 /** The value that a spec function threw, or the reason that Zod rejected a value. */

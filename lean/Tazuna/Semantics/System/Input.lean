@@ -26,7 +26,7 @@ def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
       let pc ← processCommand st fs s name raw (some id) step
       message st fs { pc.1 with commandAnswers := pc.1.commandAnswers.keep id request pc.2.1 }
         { tasks := commandWork st pc.1 pc.2.2 step }
-  else pure (s.report (.invalidInput (.notOwned (st.refOf name))))
+  else pure (s.report (.invalidInput (.unownedTarget (st.refOf name))))
 
 def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) : m State := do
@@ -40,7 +40,7 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     match ← resolveChecked st fs s name raw with
     | .answered answer violations => message st fs ((s.reportAll violations).answer (some id) answer) {}
     | .halted fault => pure (s.report (.fault fault))
-  else pure (s.report (.invalidInput (.notOwned (st.refOf name))))
+  else pure (s.report (.invalidInput (.unownedTarget (st.refOf name))))
 
 /-- The state after a subscribe input. The first answer is sent when the message finishes. -/
 def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
@@ -52,15 +52,15 @@ def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
     | .ok input =>
     let (s, id) := s.writeInput givenId (.subscribe name input)
     let s := if s.subscriptions.any (·.id == id) then
-        s.report (.invalidInput (.subscriptionOpen id))
+        s.report (.invalidInput (.reusedSubscriptionId id))
       else { s with subscriptions := s.subscriptions ++ [{ id, query := name, input := raw }] }
     message st fs s.newMessage {}
-  else pure (s.report (.invalidInput (.notOwned (st.refOf name))))
+  else pure (s.report (.invalidInput (.unownedTarget (st.refOf name))))
 
 def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
   let s := (s.writeInput none (.unsubscribe id)).1
   let s := if s.subscriptions.any (·.id == id) then { s with subscriptions := s.subscriptions.filter (·.id != id) }
-    else s.report (.invalidInput (.subscriptionNotOpen id))
+    else s.report (.invalidInput (.unopenedSubscription id))
   message st fs s.newMessage {}
 
 def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref) : Syntax.ResultOfMismatch → Finding
@@ -70,8 +70,8 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
 
 /--
 The request whose answer the mock input at index `k` gave. A checked scenario names only a mock input before the event
-(Illegal.resultOfUnplaced), so the request has been placed. It is none when that mock reported noWaitingRequest or
-noStaleRequest, and after reporting that the request cannot have the event as its result (resultOfMismatch).
+(Illegal.resultOfUnplaced), so the request has been placed. It is none when that mock reported missingWaitingRequest or
+missingStaleRequest, and after reporting that the request cannot have the event as its result (resultOfMismatch).
 -/
 def resultRequest (st : Service) (s : State) (name : String) (k : Nat) : State × Option Pending :=
   match s.mocks.lookup k with
@@ -137,7 +137,7 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
       | .ok (some payload) =>
         let (s, request) := withResultOf st s name resultOf
         deliver st fs s name givenId payload request
-  else pure (s.report (.invalidInput (.notInContract (st.refOf name))))
+  else pure (s.report (.invalidInput (.unlistedEvent (st.refOf name))))
 
 def earliestTurn (ps : List Pending) : Option Pending :=
   ps.foldl (fun best p => match best with
@@ -244,7 +244,7 @@ def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
   | .ok canonical =>
   match s.answering sender name canonical with
   | none => pure ({ s with mocks := s.mocks ++ [(s.inputCount, none)] }.report (.invalidInput
-      ((if choosesStale choice then InvalidInput.noStaleRequest else .noWaitingRequest) (st.refOf sender)
+      ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest) (st.refOf sender)
         (st.refOf name))))
   | some p => do
     let s := { s with mocks := s.mocks ++ [(s.inputCount, some (p, answer))] }
@@ -336,7 +336,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     (accepted : Bool) : m State := do
   let name := s!"{screen}.{control}"
   match st.chart? screen with
-  | none => pure (s.report (.invalidInput (.notOwned (st.refOf screen))))
+  | none => pure (s.report (.invalidInput (.unownedTarget (st.refOf screen))))
   | some c =>
   match c.controls.find? (·.name == control) with
   | none => pure (s.report (.invalidInput (.unknownControl (st.ref screen) control)))

@@ -6,6 +6,7 @@ import type { Json } from "./values.ts";
 
 /** A scenario input that no caller or external service gives. The input is the subject, so `definition` is null. */
 export type InvalidInput =
+  /** The time of the input is before `now`, the time that the inputs before it reached. */
   | {
       readonly kind: "InvalidInput.earlierAt";
       readonly definition: null;
@@ -14,15 +15,17 @@ export type InvalidInput =
         readonly now: string;
       };
     }
+  /** The input names a command, query, or screen that the service does not own. */
   | {
-      readonly kind: "InvalidInput.notOwned";
+      readonly kind: "InvalidInput.unownedTarget";
       readonly definition: null;
       readonly data: {
         readonly target: DefinitionRef;
       };
     }
+  /** No contract of another service lists the event, so the service does not receive it. */
   | {
-      readonly kind: "InvalidInput.notInContract";
+      readonly kind: "InvalidInput.unlistedEvent";
       readonly definition: null;
       readonly data: {
         readonly event: DefinitionRef;
@@ -43,37 +46,41 @@ export type InvalidInput =
         readonly control: string;
       };
     }
+  /** The event input has the id of an earlier event input of another event. */
   | {
       readonly kind: "InvalidInput.reusedEventId";
       readonly definition: null;
       readonly data: {
-        readonly id: string;
-        readonly first: DefinitionRef;
-        readonly delivered: DefinitionRef;
+        readonly eventId: string;
+        readonly firstEvent: DefinitionRef;
+        readonly deliveredEvent: DefinitionRef;
       };
     }
+  /** The event input delivers the event of an earlier event input with the same id again, with another payload. */
   | {
       readonly kind: "InvalidInput.changedRedeliveryPayload";
       readonly definition: null;
       readonly data: {
-        readonly id: string;
+        readonly eventId: string;
         readonly event: DefinitionRef;
-        readonly first: Json;
-        readonly delivered: Json;
+        readonly firstPayload: Json;
+        readonly deliveredPayload: Json;
       };
     }
+  /** The subscribe input has the id of a subscription that is open. */
   | {
-      readonly kind: "InvalidInput.subscriptionOpen";
+      readonly kind: "InvalidInput.reusedSubscriptionId";
       readonly definition: null;
       readonly data: {
-        readonly id: string;
+        readonly subscriptionId: string;
       };
     }
+  /** The unsubscribe input names a subscription that is not open. */
   | {
-      readonly kind: "InvalidInput.subscriptionNotOpen";
+      readonly kind: "InvalidInput.unopenedSubscription";
       readonly definition: null;
       readonly data: {
-        readonly id: string;
+        readonly subscriptionId: string;
       };
     }
   | {
@@ -85,6 +92,7 @@ export type InvalidInput =
         readonly rejection: Rejection;
       };
     }
+  /** The answer rejects the request for a requires reason that the target does not list. */
   | {
       readonly kind: "InvalidInput.unlistedRejectionReason";
       readonly definition: null;
@@ -102,6 +110,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** The answer rejects the request for requires, although the input meets the target's assumed requires. */
   | {
       readonly kind: "InvalidInput.rejectedAssumedRequires";
       readonly definition: null;
@@ -110,6 +119,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** The answer is no rejection, although the input fails the target's assumed requires `condition`. */
   | {
       readonly kind: "InvalidInput.failedAssumedRequires";
       readonly definition: null;
@@ -119,6 +129,7 @@ export type InvalidInput =
         readonly condition: string;
       };
     }
+  /** The answer, or the result events so far, fail the target's assumed ensures `condition`. */
   | {
       readonly kind: "InvalidInput.failedAssumedEnsures";
       readonly definition: null;
@@ -128,6 +139,7 @@ export type InvalidInput =
         readonly condition: string;
       };
     }
+  /** The resultOf of the event input names a request to a target that is not a command. */
   | {
       readonly kind: "InvalidInput.resultOfNonCommand";
       readonly definition: null;
@@ -137,6 +149,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** The resultOf of the event input names a request that the answer did not accept. */
   | {
       readonly kind: "InvalidInput.resultOfUnacceptedRequest";
       readonly definition: null;
@@ -146,6 +159,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** The resultOf of the event input names a request to a command whose emits do not list the event. */
   | {
       readonly kind: "InvalidInput.resultOfUnlistedEvent";
       readonly definition: null;
@@ -155,16 +169,18 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** No request from `sender` to `target` waits for the answer input. */
   | {
-      readonly kind: "InvalidInput.noWaitingRequest";
+      readonly kind: "InvalidInput.missingWaitingRequest";
       readonly definition: null;
       readonly data: {
         readonly sender: DefinitionRef;
         readonly target: DefinitionRef;
       };
     }
+  /** No stale request from `sender` to `target` waits for the answer input that chooses a stale request. */
   | {
-      readonly kind: "InvalidInput.noStaleRequest";
+      readonly kind: "InvalidInput.missingStaleRequest";
       readonly definition: null;
       readonly data: {
         readonly sender: DefinitionRef;
@@ -179,14 +195,16 @@ export type InvalidInput =
         readonly control: string;
       };
     }
+  /** The operation input operates a screen that is not open. */
   | {
-      readonly kind: "InvalidInput.screenNotOpen";
+      readonly kind: "InvalidInput.unopenedScreen";
       readonly definition: null;
       readonly data: {
         readonly screen: DefinitionRef;
         readonly control: string;
       };
     }
+  /** The modal screen `child` covers the operated screen. */
   | {
       readonly kind: "InvalidInput.coveredByModal";
       readonly definition: null;
@@ -196,8 +214,9 @@ export type InvalidInput =
         readonly child: DefinitionRef;
       };
     }
+  /** No active state of the screen offers the payload of the operation input. */
   | {
-      readonly kind: "InvalidInput.payloadNotOffered";
+      readonly kind: "InvalidInput.unofferedPayload";
       readonly definition: null;
       readonly data: {
         readonly screen: DefinitionRef;
@@ -205,6 +224,7 @@ export type InvalidInput =
         readonly payload: Json;
       };
     }
+  /** The screen accepts the operation of the cannotOperate input. */
   | {
       readonly kind: "InvalidInput.unexpectedlyAccepted";
       readonly definition: null;
@@ -213,14 +233,16 @@ export type InvalidInput =
         readonly control: string;
       };
     }
+  /** The deadlineOrder entry `named` is not among the deadlines due in the tie, `candidates`. */
   | {
-      readonly kind: "InvalidInput.deadlineNotNext";
+      readonly kind: "InvalidInput.unreadyDeadline";
       readonly definition: null;
       readonly data: {
         readonly named: DeadlineId;
-        readonly deadlines: readonly DeadlineId[];
+        readonly candidates: readonly DeadlineId[];
       };
     }
+  /** No tie during the input used the deadlineOrder `entries`. */
   | {
       readonly kind: "InvalidInput.unusedDeadlineOrder";
       readonly definition: null;
@@ -228,14 +250,16 @@ export type InvalidInput =
         readonly entries: readonly DeadlineId[];
       };
     }
+  /** The stepOrder entry `named` is not among the steps that can begin next, `candidates`. */
   | {
-      readonly kind: "InvalidInput.stepNotNext";
+      readonly kind: "InvalidInput.unreadyStep";
       readonly definition: null;
       readonly data: {
         readonly named: StepName;
-        readonly ready: readonly StepName[];
+        readonly candidates: readonly StepName[];
       };
     }
+  /** No step choice during the input used the stepOrder `entries`. */
   | {
       readonly kind: "InvalidInput.unusedStepOrder";
       readonly definition: null;
@@ -243,25 +267,29 @@ export type InvalidInput =
         readonly entries: readonly StepName[];
       };
     }
+  /**
+   * A value of the input has the form of a createKey value of the service's entity `entity` that createKey has not given
+   * yet. An implementation makes its own keys, such as UUIDs, so no caller knows a key before the service gives it.
+   */
   | {
       readonly kind: "InvalidInput.uncreatedKey";
       readonly definition: null;
       readonly data: {
-        readonly key: string;
+        readonly recordKey: string;
         readonly entity: DefinitionRef;
       };
     };
 
 export const invalidInputKinds = [
   "InvalidInput.earlierAt",
-  "InvalidInput.notOwned",
-  "InvalidInput.notInContract",
+  "InvalidInput.unownedTarget",
+  "InvalidInput.unlistedEvent",
   "InvalidInput.eventPayloadSchema",
   "InvalidInput.controlPayloadSchema",
   "InvalidInput.reusedEventId",
   "InvalidInput.changedRedeliveryPayload",
-  "InvalidInput.subscriptionOpen",
-  "InvalidInput.subscriptionNotOpen",
+  "InvalidInput.reusedSubscriptionId",
+  "InvalidInput.unopenedSubscription",
   "InvalidInput.unlistedRejectionKind",
   "InvalidInput.unlistedRejectionReason",
   "InvalidInput.answerOutputSchema",
@@ -271,16 +299,16 @@ export const invalidInputKinds = [
   "InvalidInput.resultOfNonCommand",
   "InvalidInput.resultOfUnacceptedRequest",
   "InvalidInput.resultOfUnlistedEvent",
-  "InvalidInput.noWaitingRequest",
-  "InvalidInput.noStaleRequest",
+  "InvalidInput.missingWaitingRequest",
+  "InvalidInput.missingStaleRequest",
   "InvalidInput.unknownControl",
-  "InvalidInput.screenNotOpen",
+  "InvalidInput.unopenedScreen",
   "InvalidInput.coveredByModal",
-  "InvalidInput.payloadNotOffered",
+  "InvalidInput.unofferedPayload",
   "InvalidInput.unexpectedlyAccepted",
-  "InvalidInput.deadlineNotNext",
+  "InvalidInput.unreadyDeadline",
   "InvalidInput.unusedDeadlineOrder",
-  "InvalidInput.stepNotNext",
+  "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
   "InvalidInput.uncreatedKey",
 ] as const;
@@ -288,21 +316,21 @@ export const invalidInputKinds = [
 /** The kinds whose violations halt the run. */
 export const haltingInvalidInputKinds = [
   "InvalidInput.earlierAt",
-  "InvalidInput.notOwned",
-  "InvalidInput.notInContract",
+  "InvalidInput.unownedTarget",
+  "InvalidInput.unlistedEvent",
   "InvalidInput.eventPayloadSchema",
   "InvalidInput.controlPayloadSchema",
   "InvalidInput.unlistedRejectionKind",
   "InvalidInput.unlistedRejectionReason",
   "InvalidInput.answerOutputSchema",
   "InvalidInput.unknownControl",
-  "InvalidInput.screenNotOpen",
+  "InvalidInput.unopenedScreen",
   "InvalidInput.coveredByModal",
-  "InvalidInput.payloadNotOffered",
+  "InvalidInput.unofferedPayload",
   "InvalidInput.unexpectedlyAccepted",
-  "InvalidInput.deadlineNotNext",
+  "InvalidInput.unreadyDeadline",
   "InvalidInput.unusedDeadlineOrder",
-  "InvalidInput.stepNotNext",
+  "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
   "InvalidInput.uncreatedKey",
 ] as const;

@@ -14,8 +14,10 @@ output or its comparable value.
 inductive OrderDependent where
   | reversedOutputSchema (definition : Syntax.Ref)
   | reversedException (definition : Syntax.Ref)
-  | reversedRecords (definition : Syntax.Ref) (original reversed : Value)
-  | bothAssign (definition : Syntax.Ref) (state : String) (first second : Syntax.TransitionRef) (field : String)
+  /-- `alternative` is the output of the query with records in reverse key order. -/
+  | reversedRecords (definition : Syntax.Ref) (original alternative : Value)
+  | bothAssign (definition : Syntax.Ref) (state : String) (firstTransition secondTransition : Syntax.TransitionRef)
+      (field : String)
   | assignRead (definition : Syntax.Ref) (state : String) (writer reader : Syntax.TransitionRef) (field : String)
 deriving DecidableEq, Repr, Inhabited
 

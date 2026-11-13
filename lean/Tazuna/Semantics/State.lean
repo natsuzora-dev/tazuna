@@ -258,8 +258,8 @@ def State.newCommandStep (s : State) (cause : Nat) (sender : Syntax.Ref) : (Stat
   let depth := s.commandDepth step
   let count := s.steps.countP fun i => i.command && i.message == message
   ((s, step),
-    if depth > Limit.commandDepth.max then some (.commandDepth sender)
-    else if count > Limit.messageCommands.max then some (.messageCommands sender)
+    if depth > Limit.commandDepth.max then some (.exceededCommandDepth sender Limit.commandDepth.max)
+    else if count > Limit.messageCommands.max then some (.exceededMessageCommands sender Limit.messageCommands.max)
     else none)
 
 def Service.failedEnsures (st : Service) (name c : String) : Fault := .failedEnsures (st.ref name) c
@@ -319,7 +319,7 @@ def Instance.documentOrder (i : Instance) : List (String × String) :=
     (i.resource, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (copyName i.resource cs.name k, ·)
 
 def Instance.who (i : Instance) (st : Service) : Who :=
-  { chart := st.ref i.chart.name, copy := i.copyOf.map fun c => { map := c.map, key := c.key } }
+  { chart := st.ref i.chart.name, copy := i.copyOf.map fun c => { map := c.map, itemKey := c.key } }
 
 def State.who (s : State) (st : Service) (resource : String) : Who :=
   match s.machine? resource with

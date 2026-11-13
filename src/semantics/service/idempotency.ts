@@ -48,11 +48,11 @@ export function malformedRedelivery(
     ? {
         kind: "InvalidInput.changedRedeliveryPayload",
         definition: null,
-        data: { id, event: delivered.event, first: first.payload, delivered: delivered.payload },
+        data: { eventId: id, event: delivered.event, firstPayload: first.payload, deliveredPayload: delivered.payload },
       }
     : {
         kind: "InvalidInput.reusedEventId",
         definition: null,
-        data: { id, first: first.event, delivered: delivered.event },
+        data: { eventId: id, firstEvent: first.event, deliveredEvent: delivered.event },
       };
 }

@@ -5,30 +5,31 @@ namespace Tazuna.Validation
 
 open Tazuna.Data
 
-/--
-A form that the spec must not have, which `check` finds from the structure without running the spec.
-
-For `notRequested`, `resultOfPlacedTwice`, `resultOfUnplaced`, and `scenarioOfExternalService`, `definition` names
-the scenario. `input` is the position of a scenario input as written, counting from 0 with `at` included.
-`resultOfUnplaced` means that the scenario places the event's resultOf mock only after the event, or not at all.
-
-The `chain` of `automationCycle` lists the automations after `definition` in the cycle, and is empty when
-`definition` receives an event of its own command. The `keys` of `keysWithoutParent` lists which of input, requires,
-output, and ensures, in this order, a screen that no screen opens has; only a screen that opens it gives the input
-and reads the output. The `path` of `alwaysCycle` leads from the state of an unguarded always transition back to
-that state.
--/
+/-- A form that the spec must not have, which `check` finds from the structure without running the spec. -/
 inductive Illegal where
+  /--
+  The automations after `definition` in the cycle, empty when `definition` receives an event of its own command.
+  -/
   | automationCycle (definition : Syntax.Ref) (chain : List Syntax.Ref)
-  | keysWithoutParent (definition : Syntax.Ref) (keys : List String)
+  /--
+  A screen that no screen opens has the `keys` of input, requires, output, and ensures, in this order; only a screen
+  that opens it gives the input and reads the output.
+  -/
+  | missingParent (definition : Syntax.Ref) (keys : List String)
+  /-- The chart reads under `key` a query of its own service. -/
   | ownQuery (definition : Syntax.Ref) (key : String)
-  | alwaysCycle (definition : Syntax.Ref) (path : List String)
+  /-- `statePath` leads from the state of an unguarded always transition back to that state. -/
+  | alwaysCycle (definition : Syntax.Ref) (statePath : List String)
   | foreignEvent (definition : Syntax.Ref) (event : Syntax.Ref)
+  /-- The contract of service `contract` lists under `key` a definition of another service. -/
   | foreignMember (contract key : String)
-  | notRequested (definition : Syntax.Ref) (input : Nat)
-  | resultOfPlacedTwice (definition : Syntax.Ref) (input : Nat)
-  | resultOfUnplaced (definition : Syntax.Ref) (input : Nat)
-  | scenarioOfExternalService (definition : Syntax.Ref)
+  /-- The sender of the answer input does not request its target. -/
+  | unrequestedAnswer (scenario : Syntax.Ref) (input : Nat)
+  /-- The resultOf of the event input names an answer input that the scenario places more than once. -/
+  | resultOfPlacedTwice (scenario : Syntax.Ref) (input : Nat)
+  /-- The scenario places the resultOf answer of the event input only after the event, or not at all. -/
+  | resultOfUnplaced (scenario : Syntax.Ref) (input : Nat)
+  | scenarioOfExternalService (scenario : Syntax.Ref)
 
 derive_group Illegal
 

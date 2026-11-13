@@ -24,9 +24,9 @@ inductive Refusal where
 deriving DecidableEq, Repr, Inhabited
 
 def Refusal.finding (st : Service) (screen control : String) (payload : Value) : Refusal → Finding
-  | .notOpen => .invalidInput (.screenNotOpen (st.ref screen) control)
+  | .notOpen => .invalidInput (.unopenedScreen (st.ref screen) control)
   | .covered child => .invalidInput (.coveredByModal (st.ref screen) control (st.ref child))
-  | .notOffered => .invalidInput (.payloadNotOffered (st.ref screen) control payload)
+  | .notOffered => .invalidInput (.unofferedPayload (st.ref screen) control payload)
 
 /--
 The instance of `screen` that accepts operations, or the refusal. As with HTML `dialog.showModal()`, a modal blocks the
@@ -80,9 +80,7 @@ def offered (st : Service) (s : State) (top : Instance) (control : String) (payl
       match ← fs.offers (s.scopeOf holder state) s.records control with
       | .error e =>
         pure (.error (issueViolation st (st.ref top.chart.name) e fun _ =>
-          match state with
-          | none => .rootOffersSchema (st.ref top.chart.name) control
-          | some state => .offersSchema (st.ref top.chart.name) control state))
+          .offersSchema (st.ref top.chart.name) control state))
       | .ok payloads => pure (.ok (done ++ [(state, payloads)]))
 
 /--

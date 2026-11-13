@@ -21,13 +21,15 @@ function owner(
   if (definition.kind !== "entity") {
     const service = serviceNames.get(definition.service);
     if (service !== undefined) return { service };
-    return exported.has(definition.service) ? null : { kind: "Malformed.noDefiner", definition: null, data: { name } };
+    return exported.has(definition.service)
+      ? null
+      : { kind: "Malformed.missingDefiner", definition: null, data: { name } };
   }
   const lists = (d: ServiceDefinition) => Object.values(d.entities).includes(definition);
   const listing = [...serviceNames].filter(([d]) => lists(d)).map(([, service]) => service);
   if (listing.length === 1) return { service: listing[0] as string };
   if (listing.length > 1) return { kind: "Malformed.listedTwice", definition: null, data: { name, services: listing } };
-  return [...exported].some(lists) ? null : { kind: "Malformed.unlisted", definition: null, data: { name } };
+  return [...exported].some(lists) ? null : { kind: "Malformed.unlistedEntity", definition: null, data: { name } };
 }
 
 function ambiguousServices(definerExports: readonly DefinerExport[]): Found<Malformed>[] {

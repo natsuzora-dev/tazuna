@@ -1,5 +1,5 @@
 import { alike, Bag, Runs } from "../data/canonical.ts";
-import type { Mismatch, Subject, Use } from "../data/mismatch.generated.ts";
+import type { Mismatch, Use } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import {
@@ -11,6 +11,7 @@ import {
   resultOf,
   sameTime,
   steps,
+  subjectOf,
   toOf,
 } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
@@ -18,11 +19,6 @@ import { plain } from "../data/values.ts";
 import { type Found, lineSchema, resolveAfters } from "./lines.ts";
 
 const json = (value: unknown) => JSON.stringify(value);
-
-const subjectOf = (l: TraceLine): Subject =>
-  l.type === "answer" || l.type === "unsubscribe"
-    ? { type: l.type, to: l.to }
-    : { type: l.type, name: nameOf(l) ?? null, id: l.id ?? null };
 
 /** The number of steps after which a search stops: a window's search, or the search of one pair of `in` lines. */
 const searchLimit = 100000;
@@ -551,42 +547,52 @@ export function compare(
     const at = t.at;
     const actualLine = t.line;
     const got = plain(contentOf(actualLine));
+    const subject = subjectOf(actualLine);
     const sub = (v: unknown) => plain(substitute(keys, v));
     if (s.type === "command" || s.type === "query")
       return {
         kind: "Mismatch.request",
         definition: null,
-        data: { line: at, id: actualLine.id ?? null, type: s.type, name: s.name, snapshot: sub(s.input), trace: got },
+        line: at,
+        data: { subject, snapshot: sub(s.input), trace: got },
       };
     if (s.type === "event")
       return {
         kind: "Mismatch.event",
         definition: null,
-        data: { line: at, name: s.name, snapshot: sub(s.payload), trace: got },
+        line: at,
+        data: { subject, snapshot: sub(s.payload), trace: got },
       };
     if (s.type === "operation" || s.type === "unacceptedOperation")
       return {
         kind: "Mismatch.operation",
         definition: null,
-        data: { line: at, name: s.name, snapshot: sub(s.payload), trace: got },
+        line: at,
+        data: { subject, snapshot: sub(s.payload), trace: got },
       };
     if (s.type !== "answer" || actualLine.type !== "answer") return undefined;
     const e = s.answer;
     const a = actualLine.answer;
-    const to = actualLine.to;
     const output = (snapshot: unknown, trace: unknown): Mismatch => ({
       kind: "Mismatch.output",
       definition: null,
-      data: { line: at, to, snapshot: sub(snapshot), trace: plain(trace) },
+      line: at,
+      data: { subject, snapshot: sub(snapshot), trace: plain(trace) },
     });
     if (answersQuery(s.to)) return output(queryAnswer(s), queryAnswer(actualLine));
     if (e.result !== a.result)
-      return { kind: "Mismatch.result", definition: null, data: { line: at, to, snapshot: e.result, trace: a.result } };
+      return {
+        kind: "Mismatch.result",
+        definition: null,
+        line: at,
+        data: { subject, snapshot: e.result, trace: a.result },
+      };
     if (e.result === "rejected" && a.result === "rejected")
       return {
         kind: "Mismatch.rejection",
         definition: null,
-        data: { line: at, to, snapshot: e.rejection.kind, trace: a.rejection.kind },
+        line: at,
+        data: { subject, snapshot: e.rejection.kind, trace: a.rejection.kind },
       };
     if ((e.result === "accepted" && a.result === "accepted") || (e.result === "fulfilled" && a.result === "fulfilled"))
       return output(e.output, a.output);
@@ -598,15 +604,15 @@ export function compare(
       ? {
           kind: "Mismatch.missingAnswer",
           definition: null,
-          data: { line, type: s.line.type, to: traceOf(ids.bound, s.line.to) ?? s.line.to, snapshotLine: s.at },
+          line,
+          data: { subject: { type: s.line.type, to: traceOf(ids.bound, s.line.to) ?? s.line.to }, snapshotLine: s.at },
         }
       : {
           kind: "Mismatch.missingLine",
           definition: null,
+          line,
           data: {
-            line,
-            type: s.line.type,
-            name: nameOf(s.line) as string,
+            subject: subjectOf(s.line),
             content: plain(substitute(keys, contentOf(s.line))),
             snapshotLine: s.at,
           },
@@ -681,7 +687,8 @@ export function compare(
         problems.push({
           kind: "Mismatch.time",
           definition: null,
-          data: { line: t.at, subject: subjectOf(t.line), snapshot: s.line.time, trace: t.line.time },
+          line: t.at,
+          data: { subject: subjectOf(t.line), snapshot: s.line.time, trace: t.line.time },
         });
       const paired = pairIds(sc, ids, s, t);
       if (paired !== undefined) ids = paired;
@@ -717,10 +724,10 @@ export function compare(
         problems.push({
           kind: "Mismatch.unopenedSubscription",
           definition: null,
+          line: missingAt,
           data: {
-            line: missingAt,
-            name: s.line.name,
-            input: plain(substitute(keys, contentOf(s.line))),
+            subject: subjectOf(s.line),
+            content: plain(substitute(keys, contentOf(s.line))),
             snapshotLine: s.at,
           },
         });
@@ -734,7 +741,8 @@ export function compare(
         problems.push({
           kind: "Mismatch.unexpectedSubscription",
           definition: null,
-          data: { line: t.at, name: t.line.name, input: plain(contentOf(t.line)), id: tid },
+          line: t.at,
+          data: { subject: subjectOf(t.line), content: plain(contentOf(t.line)) },
         });
       }
     subscribe(sc, subscriptions);
@@ -744,7 +752,8 @@ export function compare(
         problems.push({
           kind: "Mismatch.lineOrder",
           definition: null,
-          data: { line: t.at, subject: subjectOf(t.line), before: subjectOf(before.trace.line) },
+          line: t.at,
+          data: { subject: subjectOf(t.line), before: subjectOf(before.trace.line) },
         });
     }
     for (const t of sc.traceOut)
@@ -752,7 +761,8 @@ export function compare(
         problems.push({
           kind: "Mismatch.unexpectedLine",
           definition: null,
-          data: { line: t.at, subject: subjectOf(t.line) },
+          line: t.at,
+          data: { subject: subjectOf(t.line) },
         });
     if (repeated || problems.length > reported) return;
     const found = [...conflicts([...idUsesOf(ids), ...idUses]), ...conflicts([...keys, ...keyUses])];
@@ -809,7 +819,8 @@ export function compare(
       return {
         kind: "Uncomparable.searchLimit",
         definition: null,
-        data: { line: missingAt, snapshotLine: snapshotAt },
+        line: missingAt,
+        data: { snapshotLine: snapshotAt },
       };
     if (found.kind === "unpaired") explain(sc, specOut, missingAt);
     else {
@@ -876,34 +887,37 @@ export function compare(
     if (s === undefined && t === undefined) return { found: problems, bindings: bindings() };
     if (s === undefined) {
       const { at, line } = t as NumberedLine;
-      problems.push({ kind: "Uncomparable.unexpectedInput", definition: null, data: { line: at, input: plain(line) } });
+      problems.push({ kind: "Uncomparable.unexpectedInput", definition: null, line: at, data: { trace: plain(line) } });
       return { found: problems, bindings: bindings() };
     }
     if (t === undefined) {
       problems.push({
         kind: "Uncomparable.missingInput",
         definition: null,
-        data: { line: lines.length, input: plain(s.line), snapshotLine: s.at },
+        line: lines.length,
+        data: { snapshot: plain(s.line), snapshotLine: s.at },
       });
       return { found: problems, bindings: bindings() };
     }
     const same = sameInput(s, t);
     if (same.kind === "limited") {
-      problems.push({ kind: "Uncomparable.searchLimit", definition: null, data: { line: t.at, snapshotLine: s.at } });
+      problems.push({ kind: "Uncomparable.searchLimit", definition: null, line: t.at, data: { snapshotLine: s.at } });
       return { found: problems, bindings: bindings() };
     }
     if (same.kind === "unpaired") {
       problems.push(
         s.line.type === "answer" && t.line.type === "answer" && answersPlaced(ids, s, t) === undefined
           ? {
-              kind: "Uncomparable.answersNoRequest",
+              kind: "Uncomparable.differentRequest",
               definition: null,
-              data: { line: t.at, to: t.line.to, snapshotLine: s.at },
+              line: t.at,
+              data: { subject: subjectOf(t.line), snapshotLine: s.at },
             }
           : {
               kind: "Uncomparable.differentInput",
               definition: null,
-              data: { line: t.at, snapshotLine: s.at, snapshot: plain(substitute(keys, s.line)), trace: plain(t.line) },
+              line: t.at,
+              data: { snapshotLine: s.at, snapshot: plain(substitute(keys, s.line)), trace: plain(t.line) },
             },
       );
       return { found: problems, bindings: bindings() };

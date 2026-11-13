@@ -53,7 +53,7 @@ import { fireDue, message } from "./queue.ts";
 
 export function send(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
-  if (!r.st.commands.includes(name)) notOwned(r, name);
+  if (!r.st.commands.includes(name)) unownedTarget(r, name);
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
@@ -70,13 +70,13 @@ export function send(r: Processing, name: string, input: unknown, given: { reado
   message(r);
 }
 
-function notOwned(r: Processing, name: string): never {
-  return report(r.state, { kind: "InvalidInput.notOwned", definition: null, data: { target: refOf(r.st, name) } });
+function unownedTarget(r: Processing, name: string): never {
+  return report(r.state, { kind: "InvalidInput.unownedTarget", definition: null, data: { target: refOf(r.st, name) } });
 }
 
 export function call(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
-  if (!r.st.queries.includes(name)) notOwned(r, name);
+  if (!r.st.queries.includes(name)) unownedTarget(r, name);
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
@@ -88,13 +88,13 @@ export function call(r: Processing, name: string, input: unknown, given: { reado
 
 export function subscribe(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
-  if (!r.st.queries.includes(name)) notOwned(r, name);
+  if (!r.st.queries.includes(name)) unownedTarget(r, name);
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
   const id = writeInput(s, { dir: "in", type: "subscribe", ...given, name, input: canonicalInput });
   if (!s.subscriptions.subscribe(id, { query: name, input }))
-    report(r.state, { kind: "InvalidInput.subscriptionOpen", definition: null, data: { id } });
+    report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
   newMessage(s);
   message(r);
 }
@@ -103,7 +103,7 @@ export function endSubscription(r: Processing, id: string): void {
   const s = r.state;
   writeInput(s, { dir: "in", type: "unsubscribe", to: id });
   if (!s.subscriptions.unsubscribe(id))
-    report(r.state, { kind: "InvalidInput.subscriptionNotOpen", definition: null, data: { id } });
+    report(r.state, { kind: "InvalidInput.unopenedSubscription", definition: null, data: { subscriptionId: id } });
   newMessage(s);
   message(r);
 }
@@ -111,8 +111,8 @@ export function endSubscription(r: Processing, id: string): void {
 /**
  * Returns the request whose answer the mock input at position `k` gave. A checked scenario names only a mock input
  * before the event (Illegal.resultOfUnplaced), so that mock has been placed. Returns undefined when that mock reported
- * noWaitingRequest or noStaleRequest, and after reporting that the request cannot have the event as its result
- * (resultOfMismatch).
+ * missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its
+ * result (resultOfMismatch).
  */
 function resultRequest(r: Processing, name: string, k: number): Pending | undefined {
   const answered = r.state.mocks.get(k)?.answered;
@@ -184,7 +184,7 @@ export function receive(
 ): void {
   const s = r.state;
   if (!r.st.received.includes(name))
-    report(r.state, { kind: "InvalidInput.notInContract", definition: null, data: { event: refOf(r.st, name) } });
+    report(r.state, { kind: "InvalidInput.unlistedEvent", definition: null, data: { event: refOf(r.st, name) } });
   const first = s.eventDeliveries.get(lineId(s, given.id, name));
   if (first !== undefined) {
     redeliver(r, name, payload, given, first, resultOf);
@@ -374,7 +374,7 @@ export function mock(r: Processing, value: Mock): Pending | undefined {
   s.mocks.set(s.inputCount, p === undefined ? {} : { answered: { request: p, answer: value.answer } });
   if (p === undefined)
     return report(s, {
-      kind: choosesStale(value.choice) ? "InvalidInput.noStaleRequest" : "InvalidInput.noWaitingRequest",
+      kind: choosesStale(value.choice) ? "InvalidInput.missingStaleRequest" : "InvalidInput.missingWaitingRequest",
       definition: null,
       data: { sender: refOf(r.st, sender), target: refOf(r.st, name) },
     });
@@ -470,7 +470,11 @@ export function checkUncreatedKeys(r: Processing, input: Step): void {
     if (s.created.some(([, key]) => key === value)) continue;
     const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(e, value));
     if (entity !== undefined)
-      report(s, { kind: "InvalidInput.uncreatedKey", definition: null, data: { key: value, entity: ref(st, entity) } });
+      report(s, {
+        kind: "InvalidInput.uncreatedKey",
+        definition: null,
+        data: { recordKey: value, entity: ref(st, entity) },
+      });
   }
 }
 
@@ -509,11 +513,11 @@ export function operate(r: Processing, screen: string, key: string, payload: unk
           })
         : "payload" in found
           ? report(r.state, {
-              kind: "InvalidInput.payloadNotOffered",
+              kind: "InvalidInput.unofferedPayload",
               definition: null,
               data: { ...data, payload: found.payload },
             })
-          : report(r.state, { kind: "InvalidInput.screenNotOpen", definition: null, data });
+          : report(r.state, { kind: "InvalidInput.unopenedScreen", definition: null, data });
   const s = r.state;
   newMessage(s);
   const step = newStep(s, undefined);
@@ -544,7 +548,7 @@ function writeOperation(
   payload: unknown,
 ) {
   const chart = r.st.charts.get(screen);
-  if (chart === undefined) return notOwned(r, screen);
+  if (chart === undefined) return unownedTarget(r, screen);
   const definition = ref(r.st, screen);
   const control = chart.controls.find((c) => c.name === key);
   if (control === undefined)

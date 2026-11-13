@@ -1,3 +1,4 @@
+import type { DefinitionRef } from "../data/definitionRef.ts";
 import { type Problem, toProblem } from "../data/problem.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { MalformedLine } from "../data/trace.ts";
@@ -5,12 +6,12 @@ import { parseLines, steps } from "../data/trace.ts";
 import { readTrace } from "../data/traceFile.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import type { Json } from "../data/values.ts";
-import { type ViolationValue, zodError } from "../data/violation.ts";
+import { type Placed, type ViolationValue, zodError } from "../data/violation.ts";
 
-export type Found = ViolationValue & Pick<Problem, "error">;
+export type Found = ViolationValue & Placed & Pick<Problem, "error">;
 
 export const lineSchema = ({ lineNumber, issues }: MalformedLine): Found => {
-  const value: Uncomparable = { kind: "Uncomparable.lineSchema", definition: null, data: { line: lineNumber } };
+  const value: Uncomparable = { kind: "Uncomparable.lineSchema", definition: null, line: lineNumber, data: {} };
   return { ...value, error: zodError(issues) };
 };
 
@@ -45,7 +46,7 @@ export function resolveAfters(snapshot: readonly (TraceLine | undefined)[]): {
       for (const id of line.after ?? []) {
         const earlier = before.slice(0, k).findLast((o) => o.line.id === id);
         if (earlier === undefined)
-          unknown.push({ kind: "Uncomparable.unknownAfter", definition: null, data: { line: at, id } });
+          unknown.push({ kind: "Uncomparable.unknownAfter", definition: null, line: at, data: { lineId: id } });
         else named.add(earlier.at);
       }
       follows.set(at, named);
@@ -53,22 +54,16 @@ export function resolveAfters(snapshot: readonly (TraceLine | undefined)[]): {
   return { follows, unknown };
 }
 
-/** Returns each violation as a Problem at the line that its data names, or at the whole file. */
-export function problemsAt(file: string, found: readonly Found[]): Problem[] {
-  return found.map((v) => {
-    const line = v.data["line"];
-    const location = typeof line === "number" ? { file, line } : { file };
-    return toProblem(v.kind, { ...v, location });
-  });
-}
+/** Returns each violation as a Problem in `file`, at the line that it names, or at the whole file. */
+export const problemsAt = (file: string, found: readonly Found[], scenario?: DefinitionRef): Problem[] =>
+  found.map((v) => toProblem(v, { file }, scenario === undefined ? {} : { scenario }));
 
 /** Returns the line that orders a violation in a report: its line, or for Mismatch.renaming the last line of its uses. */
 const lineOf = (v: Found): number => {
   if (v.kind === "Mismatch.renaming")
     return (v.data["uses"] as { line: number }[]).reduce((n, u) => Math.max(n, u.line), 0);
-  const line = v.data["line"];
-  if (typeof line !== "number") throw new Error(`the ${v.kind} violation has no trace line`);
-  return line;
+  if (v.line === undefined) throw new Error(`the ${v.kind} violation has no trace line`);
+  return v.line;
 };
 
 export const byLine = (a: Found, b: Found): number => lineOf(a) - lineOf(b);

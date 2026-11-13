@@ -29,7 +29,8 @@ structure TsType where
 
 def tsTypes : List TsType :=
   [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
-   ⟨``Tazuna.Syntax.Ref, "DefinitionRef", some "./definitionRef.ts"⟩, ⟨``Tazuna.Verify.Subject, "Subject", none⟩,
+   ⟨``Tazuna.Syntax.Ref, "DefinitionRef", some "./definitionRef.ts"⟩,
+   ⟨``Tazuna.Verify.Subject, "Subject", some "./mismatch.generated.ts"⟩,
    ⟨``Tazuna.Verify.Use, "Use", none⟩,
    ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Rejection, "Rejection", some "./trace.generated.ts"⟩,
@@ -104,12 +105,16 @@ def group (type : Name) : StateT (List (String × String)) MetaM String := do
           throwError "{ctor}: the argument definition must have type Syntax.Ref or Option Syntax.Ref"
         tsType type
       | none => pure "null"
-    pure ("{\n" ++ s!"      readonly kind: \"{kindName type ctor}\";\n" ++
-      s!"      readonly definition: {definition};\n" ++ s!"      readonly data: {← object fields.data "        "};\n" ++
-      "    }")
+    let place ← fields.place.mapM fun (n, type) => do pure s!"      readonly {n}: {← tsType type};\n"
+    let doc := ((← findDocString? (← getEnv) ctor).map (jsdoc "  ")).getD ""
+    pure (doc, "{\n" ++ s!"      readonly kind: \"{kindName type ctor}\";\n" ++
+      s!"      readonly definition: {definition};\n" ++ String.join place ++
+      s!"      readonly data: {← object fields.data "        "};\n" ++ "    }")
   let name := type.getString!
   let kinds := String.join (ctors.map fun ctor => s!"  \"{kindName type ctor}\",\n")
-  return union type ((← findDocString? (← getEnv) type).map (jsdoc "") |>.getD "") members ++ "\n" ++
+  let typeDoc := (← findDocString? (← getEnv) type).map (jsdoc "") |>.getD ""
+  return typeDoc ++ s!"export type {name} =\n" ++
+    "\n".intercalate (members.map fun (doc, m) => doc ++ "  | " ++ m) ++ ";\n\n" ++
     s!"export const {lowerFirst name}Kinds = [\n{kinds}] as const;\n"
 
 /-- The `import type` lines, one per module, for the TS types that `imports` names. -/

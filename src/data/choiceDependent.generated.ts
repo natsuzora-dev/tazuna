@@ -4,10 +4,10 @@ import type { DeadlineId } from "./trace.generated.ts";
 import type { Json } from "./values.ts";
 import type { ViolationValue } from "./violation.ts";
 
-/** A copy of map state `map`, made for the item whose key is `key`. */
+/** A copy of map state `map`, made for the item whose key is `itemKey`. */
 export type Copy = {
   readonly map: string;
-  readonly key: Json;
+  readonly itemKey: Json;
 };
 
 export type Who = {
@@ -65,7 +65,8 @@ export type StepName =
 
 /**
  * A difference between the results of two runs. `original` is the result of the order or choice that the violation
- * names first (`first` before `second`, or the answer to `request`), and `alternative` is the result of the other.
+ * names first (the first of the pair before the second, or the answer to `requestId`), and `alternative` is the result
+ * of the other.
  * `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
  * snapshot.
  */
@@ -90,52 +91,55 @@ export type Difference =
  * order of two deadlines due at one time, which request an answer goes to among requests the trace cannot tell apart,
  * the order of two answers that screens await at once, the order of two requests to a spec service of which one was
  * sent while the other waited for its answer, or the order of two steps of one message that no cause orders.
- * deadlineOrder, answerOrder and stepOrder write the pair in canonical order. `definition` is the chart of the first
- * deadline (null when the run no longer has its instance, as after a restart), the sender of `request`, the sender of the
- * first request, the request sent first, or the definition of the first step.
+ * deadlineOrder, answerOrder and stepOrder write the pair in canonical order.
  */
 export type ChoiceDependent =
+  /** `definition` is the chart of the first deadline, null when the run no longer has its instance. */
   | {
       readonly kind: "ChoiceDependent.deadlineOrder";
       readonly definition: DefinitionRef | null;
       readonly data: {
-        readonly first: DeadlineId;
-        readonly second: DeadlineId;
+        readonly firstDeadline: DeadlineId;
+        readonly secondDeadline: DeadlineId;
         readonly difference: Difference;
       };
     }
+  /** `definition` is the sender of the requests. */
   | {
       readonly kind: "ChoiceDependent.answerChoice";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly request: string;
-        readonly other: string;
+        readonly requestId: string;
+        readonly otherRequestId: string;
         readonly difference: Difference;
       };
     }
+  /** `definition` is the sender of the first request. */
   | {
       readonly kind: "ChoiceDependent.answerOrder";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly first: string;
-        readonly second: string;
+        readonly firstRequestId: string;
+        readonly secondRequestId: string;
         readonly difference: Difference;
       };
     }
+  /** `definition` is the request sent first. */
   | {
       readonly kind: "ChoiceDependent.requestOrder";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly second: DefinitionRef;
+        readonly secondRequest: DefinitionRef;
         readonly difference: Difference;
       };
     }
+  /** `definition` is the definition of the first step. */
   | {
       readonly kind: "ChoiceDependent.stepOrder";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly first: StepName;
-        readonly second: StepName;
+        readonly firstStep: StepName;
+        readonly secondStep: StepName;
         readonly difference: Difference;
       };
     };

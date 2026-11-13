@@ -364,11 +364,6 @@ def Line.isSubscribing (l : Line) : Bool :=
   | .subscribe .. | .unsubscribe .. => true
   | _ => false
 
-def subject (l : Line) : Subject :=
-  match l.body with
-  | .answer _ _ to _ | .unsubscribe _ _ to => .reply l.body.type to
-  | _ => .named l.body.type l.body.name? l.body.id
-
 def sameTime (a b : Line) : Bool := a.time.time == b.time.time
 
 def Ctx.answersQuery (c : Ctx) (to : String) : Bool :=
@@ -530,19 +525,19 @@ def report (m : Mismatch) : CompareM Unit :=
 def valueMismatch (c : Ctx) (s : Line) (t : Out) (keys : Renaming) : Option Mismatch :=
   let a := t.line
   let got := jsonOrNull a.content
+  let subject := Subject.of a.toTraceLine
   let sub (v : Option CValue) : Value := jsonOrNull (v.map (substitute keys))
   match s.body, a.body with
-  | .command _ _ name _, _ | .query _ _ name _, _ =>
-    some (.request t.index a.body.id s.body.type name (sub s.content) got)
-  | .event _ _ name _ _, _ => some (.event t.index name (sub s.content) got)
-  | .operation _ _ name _, _ | .unacceptedOperation _ _ name _, _ => some (.operation t.index name (sub s.content) got)
-  | .answer _ _ snapshotTo e, .answer _ _ to g =>
-    let output (x y : Option CValue) : Mismatch := .output t.index to (sub x) (jsonOrNull y)
+  | .command .., _ | .query .., _ => some (.request t.index subject (sub s.content) got)
+  | .event .., _ => some (.event t.index subject (sub s.content) got)
+  | .operation .., _ | .unacceptedOperation .., _ => some (.operation t.index subject (sub s.content) got)
+  | .answer _ _ snapshotTo e, .answer _ _ _ g =>
+    let output (x y : Option CValue) : Mismatch := .output t.index subject (sub x) (jsonOrNull y)
     if c.answersQuery snapshotTo then some (output s.queryAnswer a.queryAnswer)
-    else if e.result != g.result then some (.result t.index to e.result g.result)
+    else if e.result != g.result then some (.result t.index subject e.result g.result)
     else
       match e, g with
-      | .rejected er, .rejected gr => some (.rejection t.index to er.kind gr.kind)
+      | .rejected er, .rejected gr => some (.rejection t.index subject er.kind gr.kind)
       | .accepted _, .accepted _ | .fulfilled _, .fulfilled _ => some (output s.value a.value)
       | _, _ => none
   | _, _ => none
@@ -552,10 +547,10 @@ def missing (s : Out) (line : Nat) : CompareM Unit := do
   let l := s.line
   match l.body with
   | .answer _ _ to _ | .unsubscribe _ _ to =>
-    report (.missingAnswer line l.body.type ((st.ids.bound.traceOf? to).getD to) s.index)
+    report (.missingAnswer line (.reply l.body.type ((st.ids.bound.traceOf? to).getD to)) s.index)
   | _ =>
     let content := jsonOrNull (l.content.map (substitute st.keys))
-    report (.missingLine line l.body.type (l.body.name?.getD "") content s.index)
+    report (.missingLine line (Subject.of l.toTraceLine) content s.index)
 
 /-- The renaming under which the values are equal, bags included, or `none`. -/
 def contentKeys (sc : Scope) (line snapshotLine : Nat) (s t : Option CValue) (p : Pairing) : Option Renaming :=
@@ -611,7 +606,8 @@ def explain (sc : Scope) (specOut : List Out) (missingAt : Nat) : CompareM Unit 
     | none => missing s missingAt
     | some t =>
       pairs := pairs ++ [(s, t)]
-      if !sameTime s.line t.line then report (.time t.index (subject t.line) s.line.time.text t.line.time.text)
+      if !sameTime s.line t.line then
+        report (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text)
       match pairIds sc st.ids s t with
       | some ids => modify fun st => { st with ids }
       | none =>
@@ -641,21 +637,22 @@ def explain (sc : Scope) (specOut : List Out) (missingAt : Nat) : CompareM Unit 
       if st.reportedMissing.contains id then repeated := true
       else
         set { st with reportedMissing := st.reportedMissing ++ [id] }
-        report (.unopenedSubscription missingAt s.name (jsonOrNull (s.out.line.content.map (substitute st.keys)))
-          s.out.index)
+        report (.unopenedSubscription missingAt (Subject.of s.out.line.toTraceLine)
+          (jsonOrNull (s.out.line.content.map (substitute st.keys))) s.out.index)
   for (tid, t) in sc.openTrace do
     let st ← get
     if !subscriptions.any (·.2 == tid) then
       if st.reportedUnexpected.contains tid then repeated := true
       else
         set { st with reportedUnexpected := st.reportedUnexpected ++ [tid] }
-        report (.unexpectedSubscription t.out.index t.name (jsonOrNull t.out.line.content) tid)
+        report (.unexpectedSubscription t.out.index (Subject.of t.out.line.toTraceLine) (jsonOrNull t.out.line.content))
   modify fun st => { st with subscriptionIds := subscribed sc st.subscriptionIds subscriptions }
   for (s, t) in pairs do
     let before := pairs.find? fun (ps, pt) => pt.index > t.index && (c.follows (s.index - 1)).contains (ps.index - 1)
-    if let some (_, bt) := before then report (.lineOrder t.index (subject t.line) (subject bt.line))
+    if let some (_, bt) := before then
+      report (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of bt.line.toTraceLine))
   for t in sc.traceOut do
-    if !pairs.any (·.2.index == t.index) then report (.unexpectedLine t.index (subject t.line))
+    if !pairs.any (·.2.index == t.index) then report (.unexpectedLine t.index (Subject.of t.line.toTraceLine))
   let st ← get
   if !repeated && st.findings.length == before.findings.length then
     let found := conflicts (st.ids.uses ++ idUses) ++ conflicts (st.keys ++ keyUses)
@@ -753,7 +750,8 @@ def differentInput (st : St) (s t : Out) : Uncomparable :=
   let mismatch : Uncomparable := .differentInput t.index s.index
     (substitute st.keys (.ofValue (ToValue.toValue s.line.toTraceLine))).flatten (ToValue.toValue t.line.toTraceLine)
   match s.line.body, t.line.body with
-  | .answer .., .answer _ _ to _ => if (answersPlaced st s t).isSome then mismatch else .answersNoRequest t.index to s.index
+  | .answer .., .answer .. =>
+    if (answersPlaced st s t).isSome then mismatch else .differentRequest t.index (Subject.of t.line.toTraceLine) s.index
   | _, _ => mismatch
 
 def bindings (st : St) : Bindings := st.keys.map fun u => (u.snapshot, u.trace)
@@ -826,11 +824,11 @@ def mustFollow (snapshot : List (Option Line)) (n : Nat) : List Nat :=
 def Finding.line : Finding → Nat
   | .mismatch (.renaming uses) => uses.foldl (fun n u => max n u.line) 0
   | .mismatch m =>
-    match m.data.field? "line" with
+    match m.place.lookup "line" with
     | some (.num n) => n.mantissa.toNat
     | _ => 0
   | .uncomparable u =>
-    match u.data.field? "line" with
+    match u.place.lookup "line" with
     | some (.num n) => n.mantissa.toNat
     | _ => 0
 

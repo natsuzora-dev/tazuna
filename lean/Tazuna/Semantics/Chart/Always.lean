@@ -28,7 +28,8 @@ def alwaysRound (st : Service) (step : Nat) (owner : String)
       | .ok chosen => if chosen.isEmpty && !changed then pure r else next o chosen r
 
 def settleFrom (st : Service) (step : Nat) (owner : String) : (roundsLeft : Nat) → Processing → m Processing
-  | 0 => alwaysRound fs st step owner fun o _ r => pure (r.report (.fault (.alwaysRounds (st.ref o.chart.name))))
+  | 0 => alwaysRound fs st step owner fun o _ r =>
+    pure (r.report (.fault (.exceededAlwaysRounds (st.ref o.chart.name) Limit.alwaysRounds.max)))
   | roundsLeft + 1 => alwaysRound fs st step owner fun _ chosen r => do
     settleFrom st step owner roundsLeft (← if chosen.isEmpty then pure r else microstep fs st step owner chosen .none r)
 

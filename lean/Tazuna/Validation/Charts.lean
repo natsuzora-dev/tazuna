@@ -9,11 +9,11 @@ def parentKeys (c : Chart) : List String :=
   [("input", c.input), ("requires", c.requires), ("output", c.output), ("ensures", c.ensures)].filterMap
     fun (key, names) => if names.isEmpty then none else some key
 
-def keysWithoutParent (s : Structure) : List Illegal :=
+def missingParents (s : Structure) : List Illegal :=
   s.definitions.filterMap fun d =>
     match d.body with
     | .screen c =>
-      if !(parentKeys c).isEmpty && !s.isOpenedByScreen d.ref then some (.keysWithoutParent d.ref (parentKeys c))
+      if !(parentKeys c).isEmpty && !s.isOpenedByScreen d.ref then some (.missingParent d.ref (parentKeys c))
       else none
     | _ => none
 
@@ -168,6 +168,6 @@ def cyclePath (c : Chart) : Option (List String) :=
 def alwaysCycles (s : Structure) : List Illegal :=
   s.definitions.filterMap fun d => d.chart?.bind fun c => (cyclePath c).map (.alwaysCycle d.ref)
 
-def check (s : Structure) : List Illegal := keysWithoutParent s ++ ownQueries s ++ alwaysCycles s
+def check (s : Structure) : List Illegal := missingParents s ++ ownQueries s ++ alwaysCycles s
 
 end Tazuna.Validation.Charts

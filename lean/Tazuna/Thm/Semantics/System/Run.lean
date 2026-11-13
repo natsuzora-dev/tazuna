@@ -242,7 +242,7 @@ theorem other_service_screen_stops_run (screen control : String) (payload : Valu
     (hc : st.chart? screen = none) :
     runFrom (step st fs) s (⟨time, body, order, stepOrder⟩ :: rest) =
       { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).halt
-          (Finding.invalidInput (.notOwned (st.refOf screen))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } := by
+          (Finding.invalidInput (.unownedTarget (st.refOf screen))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } := by
   rcases hb with rfl | rfl <;>
   exact halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, operate, hc, State.halt, State.report, Finding.halts, InvalidInput.halts])
@@ -267,7 +267,7 @@ theorem other_service_command_stops_run (name : String) (id : Option String) (ra
     (hc : name ∉ st.commands) :
     runFrom (step st fs) s (⟨time, .command id name raw, order, stepOrder⟩ :: rest) =
       { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .command id name raw, order, stepOrder⟩).halt
-          (Finding.invalidInput (.notOwned (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, send, hc, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
@@ -278,7 +278,7 @@ theorem other_service_query_stops_run (name : String) (id : Option String) (raw 
     (hq : name ∉ st.queries) :
     runFrom (step st fs) s (⟨time, .query id name raw, order, stepOrder⟩ :: rest) =
       { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .query id name raw, order, stepOrder⟩).halt
-          (Finding.invalidInput (.notOwned (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, call, hq, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
@@ -289,7 +289,7 @@ theorem other_service_subscription_stops_run (name : String) (id : Option String
     (hq : name ∉ st.queries) :
     runFrom (step st fs) s (⟨time, .subscribe id name raw, order, stepOrder⟩ :: rest) =
       { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .subscribe id name raw, order, stepOrder⟩).halt
-          (Finding.invalidInput (.notOwned (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, subscribe, hq, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
@@ -300,7 +300,7 @@ theorem uncontracted_event_stops_run (name : String) (id : Option String) (raw :
     (hr : name ∉ st.received) :
     runFrom (step st fs) s (⟨time, .event id name raw resultOf, order, stepOrder⟩ :: rest) =
       { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .event id name raw resultOf, order, stepOrder⟩).halt
-          (Finding.invalidInput (.notInContract (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+          (Finding.invalidInput (.unlistedEvent (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, receive, hr, State.halt, State.report, Finding.halts, InvalidInput.halts])
 

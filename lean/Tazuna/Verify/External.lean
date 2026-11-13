@@ -24,13 +24,13 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
   match l.body with
   | .command .in id name _ | .query .in id name _ =>
     let definition := s.named service (some name) [l.body.type]
-    (if definition.isSome then none else some (.uncomparable (.unknownRequest line l.body.type name)),
+    (if definition.isSome then none else some (.uncomparable (.unknownRequest line (Subject.of l))),
       match id with
       | some id => setAt requests id (definition.map fun definition => { definition, accepted := false })
       | none => requests)
   | .answer .out _ to answer =>
     match requests.lookup to, answer with
-    | none, _ => (some (.uncomparable (.unknownAnswer line to)), requests)
+    | none, _ => (some (.uncomparable (.unknownAnswer line (Subject.of l))), requests)
     | some none, _ => (none, requests)
     | some (some r), .rejected rejection =>
       (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none
@@ -39,12 +39,12 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
     | some (some r), .fulfilled _ => (none, setAt requests to (some { r with accepted := false }))
   | .event .out _ name _ resultOf =>
     let found := match s.named service (some name) ["event"] with
-      | none => some (.uncomparable (.unknownEvent line name))
+      | none => some (.uncomparable (.unknownEvent line (Subject.of l)))
       | some event =>
         match resultOf with
         | none =>
           if (s.contractsListing event.ref).contains service then none
-          else some (.mismatch (.emittedNotInContract line event.ref service))
+          else some (.mismatch (.unlistedEvent line event.ref))
         | some id =>
           match requests.lookup id with
           | none => some (.uncomparable (.resultOfUnknownRequest line event.ref id))

@@ -106,13 +106,13 @@ function servicePairing(
       ...pair(scenarioNames(scenarios, service), entries).extra.map((name) =>
         problem(
           { service, entry: `${name}.jsonl` },
-          { kind: "Uncomparable.unknownScenario", definition: null, data: { scenario: { service, name } } },
+          { kind: "Uncomparable.unknownScenario", definition: null, scenario: { service, name }, data: {} },
         ),
       ),
       ...missing.map((name) =>
         problem(
           { service, snapshotEntry: `${name}.jsonl` },
-          { kind: "Uncomparable.missingTrace", definition: { service, name }, data: {} },
+          { kind: "Uncomparable.missingTrace", definition: null, scenario: { service, name }, data: {} },
         ),
       ),
     ],
@@ -147,14 +147,10 @@ export function pairingProblem(spec: Spec, { at, violation }: PairingProblem, tr
   if ("scenario" in at) {
     const scenario = spec.scenarios.find((s) => sameRef(s, at.scenario));
     if (scenario === undefined) throw new Error(`no scenario ${at.scenario.service}.${at.scenario.name}`);
-    return toProblem(violation.kind, { ...violation, location: scenario.place });
+    return toProblem(violation, scenario.place);
   }
-  if ("snapshotEntry" in at)
-    return toProblem(violation.kind, {
-      ...violation,
-      location: { file: relative(spec.root, snapshotEntryPath(spec, at)) },
-    });
+  if ("snapshotEntry" in at) return toProblem(violation, { file: relative(spec.root, snapshotEntryPath(spec, at)) });
   if (traces === undefined) throw new Error(`the trace folder entry ${at.entry} has no trace folder`);
   const path = join(traces, at.service ?? "", at.entry);
-  return toProblem(violation.kind, { ...violation, location: { file: relative(spec.root, path) } });
+  return toProblem(violation, { file: relative(spec.root, path) });
 }

@@ -57,7 +57,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -69,7 +69,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -83,7 +83,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -97,7 +97,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -111,7 +111,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -123,7 +123,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -139,7 +139,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -153,7 +153,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -167,7 +167,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
@@ -186,7 +186,7 @@ const step = z.discriminatedUnion("type", [
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
      * remain, each work or own-service command that the queue takes is the ready one that the next entry names
-     * (InvalidInput.stepNotNext, InvalidInput.unusedStepOrder); after them, the queue order.
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),

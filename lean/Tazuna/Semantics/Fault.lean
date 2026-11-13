@@ -12,44 +12,49 @@ An exception has no `definition` when a service invariant throws, since the subj
 -/
 inductive Fault where
   | emittedPayloadSchema (definition : Syntax.Ref) (event : Syntax.Ref)
+  /-- The command emits an event that its emits do not list; `event` is null when the event is no definition. -/
   | unlistedEmittedEvent (definition : Syntax.Ref) (event : Option Syntax.Ref)
   | outputSchema (definition : Syntax.Ref)
   | automationInputSchema (definition : Syntax.Ref)
   | requestInputSchema (definition : Syntax.Ref) (target : Syntax.Ref)
   | showsInputSchema (definition : Syntax.Ref) (slot : String)
   | screenInputSchema (definition : Syntax.Ref) (screen : Syntax.Ref)
+  /-- The input that the chart gives the screen it opens fails the screen's requires `condition`. -/
   | failedRequires (definition : Syntax.Ref) (screen : Syntax.Ref) (condition : String)
   | heldSchema (definition : Syntax.Ref) (held state : String)
-  | offersSchema (definition : Syntax.Ref) (control state : String)
-  | rootOffersSchema (definition : Syntax.Ref) (control : String)
+  /-- `state` is null for the offers of the chart's own `on`. -/
+  | offersSchema (definition : Syntax.Ref) (control : String) (state : Option String)
   | initialContextSchema (definition : Syntax.Ref)
   | screenOutputSchema (definition : Syntax.Ref)
   | copyContextSchema (definition : Syntax.Ref) (map : String)
   | contextSchema (definition : Syntax.Ref)
   | itemsSchema (definition : Syntax.Ref) (map : String)
+  /-- A function reads the held value `held` while its state does not hold it. -/
   | unheld (definition : Syntax.Ref) (held : String)
   | exception (definition : Option Syntax.Ref)
-  | danglingRef (definition : Syntax.Ref) (key field targetKey : String) (command : Syntax.Ref)
+  /-- The record `recordKey` of entity `definition` refers in `field` to the missing record `targetKey`. -/
+  | danglingRef (definition : Syntax.Ref) (recordKey field targetKey : String) (command : Syntax.Ref)
+  /-- The record of the single entity `definition` refers in `field` to the missing record `targetKey`. -/
   | danglingSingleRef (definition : Syntax.Ref) (field targetKey : String) (command : Syntax.Ref)
   | failedEnsures (definition : Syntax.Ref) (condition : String)
-  | failedEntityInvariant (definition : Syntax.Ref) (key condition : String) (command : Syntax.Ref)
+  | failedEntityInvariant (definition : Syntax.Ref) (recordKey condition : String) (command : Syntax.Ref)
   | failedSingleInvariant (definition : Syntax.Ref) (condition : String) (command : Syntax.Ref)
   | failedServiceInvariant (condition : String) (command : Syntax.Ref)
   | failedChartInvariant (definition : Syntax.Ref) (condition : String)
-  | duplicateItemKey (definition : Syntax.Ref) (map : String) (key : Value)
-  | commandDepth (definition : Syntax.Ref)
-  | messageCommands (definition : Syntax.Ref)
-  | alwaysRounds (definition : Syntax.Ref)
-  | onDoneSelections (definition : Syntax.Ref)
+  | duplicateItemKey (definition : Syntax.Ref) (map : String) (itemKey : Value)
+  | exceededCommandDepth (definition : Syntax.Ref) (limit : Nat)
+  | exceededMessageCommands (definition : Syntax.Ref) (limit : Nat)
+  | exceededAlwaysRounds (definition : Syntax.Ref) (limit : Nat)
+  | exceededOnDoneSelections (definition : Syntax.Ref) (limit : Nat)
   /--
   The work items and commands of one message come from every definition that the message runs, none of which alone
   exceeds the limit, so the fault names no definition.
   -/
-  | messageWork
+  | exceededMessageWork (limit : Nat)
   /-- The deadlines of one clock advance belong to any charts, so the fault names no definition. -/
-  | dueDeadlines
+  | exceededDueDeadlines (limit : Nat)
   /-- The nested exits run through the copies and screens of several definitions, so the fault names no definition. -/
-  | exitDepth
+  | exceededExitDepth (limit : Nat)
   | rejectedAutomationCommand (definition : Syntax.Ref) (rejection : Rejection)
   | rejectedShows (definition : Syntax.Ref) (slot : String) (rejection : Rejection)
 deriving Repr
@@ -60,9 +65,10 @@ derive_group Fault
 def Fault.halts : Fault → Bool
   | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .outputSchema .. | .automationInputSchema ..
   | .requestInputSchema .. | .showsInputSchema .. | .screenInputSchema .. | .failedRequires .. | .heldSchema ..
-  | .offersSchema .. | .rootOffersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema ..
-  | .contextSchema .. | .itemsSchema .. | .unheld .. | .exception .. | .duplicateItemKey .. | .commandDepth ..
-  | .messageCommands .. | .alwaysRounds .. | .onDoneSelections .. | .messageWork | .dueDeadlines | .exitDepth => true
+  | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
+  | .itemsSchema .. | .unheld .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
+  | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
+  | .exceededDueDeadlines .. | .exceededExitDepth .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..
   | .failedServiceInvariant .. | .failedChartInvariant .. | .rejectedAutomationCommand .. | .rejectedShows .. => false
 

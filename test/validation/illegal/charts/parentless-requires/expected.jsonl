@@ -1,1 +1,1 @@
-{"kind":"Illegal.keysWithoutParent","definition":{"service":"home","name":"homeScreen"},"data":{"keys":["requires"]},"location":{"file":"home/home.ts","line":5}}
+{"kind":"Illegal.missingParent","definition":{"service":"home","name":"homeScreen"},"data":{"keys":["requires"]},"location":{"file":"home/home.ts","line":5}}

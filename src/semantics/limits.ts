@@ -1,4 +1,7 @@
-/** Lean's Limit.max, by limit name. Exceeding a limit halts with the Fault of the same name. */
+/**
+ * Lean's Limit.max, by limit name. Exceeding a limit halts with the Fault named `exceeded` and the limit's name, such
+ * as exceededCommandDepth.
+ */
 export const limits = {
   /** The depth of a chain of own-service commands. */
   commandDepth: 100,

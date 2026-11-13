@@ -1,4 +1,4 @@
-{"kind":"Malformed.unparsableTime","definition":{"service":"todo","name":"countAtEachTime"},"data":{"input":0},"location":{"file":"todo/todo.ts","line":10}}
-{"kind":"Malformed.unparsableTime","definition":{"service":"todo","name":"countAtEachTime"},"data":{"input":2},"location":{"file":"todo/todo.ts","line":10}}
-{"kind":"Malformed.unparsableTime","definition":{"service":"todo","name":"countAtEachTime"},"data":{"input":4},"location":{"file":"todo/todo.ts","line":10}}
-{"kind":"Malformed.unparsableTime","definition":{"service":"todo","name":"countAtEachTime"},"data":{"input":6},"location":{"file":"todo/todo.ts","line":10}}
+{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":10,"input":1},"scenario":{"service":"todo","name":"countAtEachTime"}}
+{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":10,"input":3},"scenario":{"service":"todo","name":"countAtEachTime"}}
+{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":10,"input":5},"scenario":{"service":"todo","name":"countAtEachTime"}}
+{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":10,"input":7},"scenario":{"service":"todo","name":"countAtEachTime"}}

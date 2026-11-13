@@ -126,11 +126,8 @@ export function testSpec(
       const key = canonicalJson([violation.kind, violation.definition, violation.data, violation.location ?? null]);
       if (reported.has(key)) continue;
       reported.add(key);
-      const location = violation.location ?? placeOf(spec, violation.definition);
       problems.push(
-        toProblem(violation.kind, {
-          ...violation,
-          location,
+        toProblem(violation, violation.location ?? placeOf(spec, violation.definition), {
           scenario: ref,
           ...(appendedInputs === undefined ? {} : { appendedInputs: stepsOf(spec, scenario.service, appendedInputs) }),
         }),

@@ -80,11 +80,11 @@ function offered(
     );
     if (!(payloads instanceof Failed)) return { state, payloads };
     return halt(
-      issueViolation(definition, payloads, () =>
-        state === null
-          ? { kind: "Fault.rootOffersSchema", definition, data: { control: key } }
-          : { kind: "Fault.offersSchema", definition, data: { control: key, state } },
-      ),
+      issueViolation(definition, payloads, () => ({
+        kind: "Fault.offersSchema",
+        definition,
+        data: { control: key, state },
+      })),
     );
   });
 }

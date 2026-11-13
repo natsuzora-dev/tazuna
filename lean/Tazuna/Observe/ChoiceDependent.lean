@@ -11,7 +11,8 @@ open Tazuna.Data Tazuna.Semantics
 
 /--
 A difference between the results of two runs. `original` is the result of the order or choice that the violation
-names first (`first` before `second`, or the answer to `request`), and `alternative` is the result of the other.
+names first (the first of the pair before the second, or the answer to `requestId`), and `alternative` is the result
+of the other.
 `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
 snapshot.
 -/
@@ -28,16 +29,19 @@ A result that depends on a choice nobody controls, between two runs from one par
 order of two deadlines due at one time, which request an answer goes to among requests the trace cannot tell apart,
 the order of two answers that screens await at once, the order of two requests to a spec service of which one was
 sent while the other waited for its answer, or the order of two steps of one message that no cause orders.
-deadlineOrder, answerOrder and stepOrder write the pair in canonical order. `definition` is the chart of the first
-deadline (null when the run no longer has its instance, as after a restart), the sender of `request`, the sender of the
-first request, the request sent first, or the definition of the first step.
+deadlineOrder, answerOrder and stepOrder write the pair in canonical order.
 -/
 inductive ChoiceDependent where
-  | deadlineOrder (definition : Option Syntax.Ref) (first second : DeadlineId) (difference : Difference)
-  | answerChoice (definition : Syntax.Ref) (request other : String) (difference : Difference)
-  | answerOrder (definition : Syntax.Ref) (first second : String) (difference : Difference)
-  | requestOrder (definition second : Syntax.Ref) (difference : Difference)
-  | stepOrder (definition : Syntax.Ref) (first second : StepName) (difference : Difference)
+  /-- `definition` is the chart of the first deadline, null when the run no longer has its instance. -/
+  | deadlineOrder (definition : Option Syntax.Ref) (firstDeadline secondDeadline : DeadlineId) (difference : Difference)
+  /-- `definition` is the sender of the requests. -/
+  | answerChoice (definition : Syntax.Ref) (requestId otherRequestId : String) (difference : Difference)
+  /-- `definition` is the sender of the first request. -/
+  | answerOrder (definition : Syntax.Ref) (firstRequestId secondRequestId : String) (difference : Difference)
+  /-- `definition` is the request sent first. -/
+  | requestOrder (definition secondRequest : Syntax.Ref) (difference : Difference)
+  /-- `definition` is the definition of the first step. -/
+  | stepOrder (definition : Syntax.Ref) (firstStep secondStep : StepName) (difference : Difference)
 deriving Repr, Inhabited
 
 derive_group ChoiceDependent

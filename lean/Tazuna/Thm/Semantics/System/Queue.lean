@@ -234,7 +234,7 @@ theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
 
 theorem fireDue_at_deadline_limit (to : Time) (tie : Option Time) :
     fireDue st fs to 0 tie s =
-      if s.halted.isNone && (earliestDeadline s.deadlines to).isSome then s.halt (Finding.fault .dueDeadlines).toViolation else s := by
+      if s.halted.isNone && (earliestDeadline s.deadlines to).isSome then s.halt (Finding.fault (.exceededDueDeadlines Limit.dueDeadlines.max)).toViolation else s := by
   simp only [fireDue, id_pure, State.report]
   rfl
 

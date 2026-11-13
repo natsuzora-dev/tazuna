@@ -458,7 +458,7 @@ theorem mock_without_waiting_request_reported (sender name : String) (answer : A
     (hn : s.answering sender name canonical = none) :
     mock st fs s sender name answer choice =
       { s with mocks := s.mocks ++ [(s.inputCount, none)] }.violate
-        (Finding.invalidInput ((if choosesStale choice then InvalidInput.noStaleRequest else .noWaitingRequest)
+        (Finding.invalidInput ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest)
           (st.refOf sender) (st.refOf name))).toViolation := by
   simp only [mock, id_bind, hc, hn]
   cases choosesStale choice <;> simp [State.report, Finding.halts, InvalidInput.halts]
@@ -467,7 +467,7 @@ theorem unmatched_mock_reported (sender name : String) (answer : Answer) (choice
     (h : (k, none) ∈ (mock st fs s sender name answer choice).mocks) :
     (k, none) ∈ s.mocks ∨ k = s.inputCount ∧
       mock st fs s sender name answer choice = { s with mocks := s.mocks ++ [(s.inputCount, none)] }.violate
-        (Finding.invalidInput ((if choosesStale choice then InvalidInput.noStaleRequest else .noWaitingRequest)
+        (Finding.invalidInput ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest)
           (st.refOf sender) (st.refOf name))).toViolation := by
   cases hc : canonicalChoice st fs name choice with
   | error v =>

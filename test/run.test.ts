@@ -40,19 +40,19 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
     "InvalidInput.resultOfNonCommand": "The type of resultOf in receive accepts only mocks of commands",
     "InvalidInput.unknownControl":
       "The types of operate and cannotOperate accept only the controls of the screen, and the exploration of test operates only those",
-    "InvalidInput.deadlineNotNext":
+    "InvalidInput.unreadyDeadline":
       "Scenarios do not write deadlineOrder, and the exploration of test names only the deadlines of the ties that a run reaches",
     "InvalidInput.unusedDeadlineOrder":
       "Scenarios do not write deadlineOrder, and the exploration of test names only the deadlines of the ties that a run reaches",
-    "InvalidInput.stepNotNext":
+    "InvalidInput.unreadyStep":
       "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
     "InvalidInput.unusedStepOrder":
       "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
   },
   Fault: {
-    "Fault.messageWork":
+    "Fault.exceededMessageWork":
       "An example that reaches the limit 100000 writes about 8300 event lines in one message and makes run.diff several times slower",
-    "Fault.exitDepth": "Reaching the exit nesting limit 100 takes about 50 nested screen definitions",
+    "Fault.exceededExitDepth": "Reaching the exit nesting limit 100 takes about 50 nested screen definitions",
   },
 };
 

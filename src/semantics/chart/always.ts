@@ -49,7 +49,11 @@ export function settle(r: Processing, name: string, step: number): void {
 
 function countRound(r: Processing, instance: Instance, rounds: { count: number }): void {
   if (rounds.count === limits.alwaysRounds)
-    report(r.state, { kind: "Fault.alwaysRounds", definition: ref(r.st, instance.chart.name), data: {} });
+    report(r.state, {
+      kind: "Fault.exceededAlwaysRounds",
+      definition: ref(r.st, instance.chart.name),
+      data: { limit: limits.alwaysRounds },
+    });
   rounds.count += 1;
 }
 

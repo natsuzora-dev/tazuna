@@ -15,10 +15,10 @@ theorem requests_iff (d : Definition) (target : Ref) : requests d target = true 
   split <;> simp_all [List.any_eq_true]
 
 theorem answers_requested (s : Structure) :
-    notRequestedAnswers s = [] ↔
+    unrequestedAnswers s = [] ↔
       ∀ sc ∈ s.scenarios, ∀ sender target, ScenarioInput.answer (some sender) (some target) ∈ sc.inputs →
         ∃ d ∈ s.definitions, d.ref = sender ∧ Requests d target := by
-  simp only [notRequestedAnswers, List.flatMap_eq_nil_iff]
+  simp only [unrequestedAnswers, List.flatMap_eq_nil_iff]
   constructor
   · intro h sc hsc sender target hin
     obtain ⟨i, hi⟩ := mem_zipIdx_of_mem hin

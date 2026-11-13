@@ -17,13 +17,21 @@ type OnRejectedAt = { readonly state: string; readonly keys: readonly string[] }
 export type NonCanonical =
   | Of<"emptyGuard", DefinitionRef, { readonly transition: TransitionRef }>
   | Of<"emptyAfter", DefinitionRef, { readonly state: string }>
+  /** A transition to its source state or a descendant of it has no `reenter`. */
   | Of<"missingReenter", DefinitionRef, { readonly transition: TransitionRef }>
+  /** A transition of the chart's own `on` has a `reenter`. */
   | Of<"reenterOnRoot", DefinitionRef, { readonly transition: TransitionRef }>
+  /** A transition to a state outside its source state has a `reenter`. */
   | Of<"reenterOutsideSource", DefinitionRef, { readonly transition: TransitionRef }>
+  /** A literal constant is exported outside a `constants()` call. */
   | Of<"ungroupedConstant", null, { readonly name: string }>
+  /** A machine with one state, no context, and nothing to wait for, which turns one event into one command. */
   | Of<"statelessMachine", DefinitionRef, Readonly<Record<string, never>>>
+  /** An answer may be rejected, but the request has no `onRejected`. */
   | Of<"missingOnRejected", DefinitionRef, Readonly<Record<string, never>> | OnRejectedAt>
+  /** The request has an `onRejected`, but no answer can be rejected. */
   | Of<"unreachableOnRejected", DefinitionRef, Readonly<Record<string, never>> | OnRejectedAt>
+  /** No function of the command or automation reads the binding of its `binds`. */
   | Of<"unreadBinding", DefinitionRef, { readonly binding: string }>
   | Of<"undescribedService", null, { readonly service: string }>
   | Of<"undescribedDefinition", DefinitionRef, Readonly<Record<string, never>>>;

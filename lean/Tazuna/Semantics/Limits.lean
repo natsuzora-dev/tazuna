@@ -2,7 +2,10 @@ import Tazuna.Data.Names
 
 namespace Tazuna.Semantics
 
-/-- An implementation limit. Exceeding a limit halts the run with the Fault of the same name. -/
+/--
+An implementation limit. Exceeding a limit halts the run with the Fault named `exceeded` and the limit's name, such as
+`exceededCommandDepth`.
+-/
 inductive Limit where
   /-- The depth of a chain of own-service commands. -/
   | commandDepth

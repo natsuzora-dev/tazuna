@@ -1,16 +1,26 @@
 import Tazuna.Data.Answer
 import Tazuna.Data.Group
+import Tazuna.Data.Trace
 import Tazuna.Syntax.Structure
 
 namespace Tazuna.Verify
 
 open Tazuna.Data
 
+/--
+A trace line as a violation names it: an answer or unsubscribe line by its `to`, and any other line by its name and
+id.
+-/
 inductive Subject where
   | reply (type to : String)
   | named (type : String) (name id : Option String)
 
 derive_wire Subject untagged
+
+def Subject.of (l : TraceLine) : Subject :=
+  match l.body with
+  | .answer _ _ to _ | .unsubscribe _ _ to => .reply l.body.type to
+  | _ => .named l.body.type l.body.name? l.body.id
 
 /-- A snapshot value and the trace value that a pair of lines uses for it. -/
 structure Use where
@@ -23,30 +33,38 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Use
 
 /--
-A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the
-trace's `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. Mismatch.line compares the run
-of test, not a trace: `run` is the run's line compared with the snapshot line at `snapshotLine`, and a missing
-line is null. `renaming` holds the uses of one connected group of values in which a value stands for two values,
-when no line differs otherwise. TS decides rejectedAssumedRequires, failedAssumedRequires, failedAssumedEnsures,
-answerOutputSchema and eventPayloadSchema, which need the spec's functions or Zod schemas.
+A difference between compared lines. `line` is 1-based in the trace; a line missing from the trace is at the trace's
+`in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
+failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
+or Zod schemas.
 -/
 inductive Mismatch where
-  | request (line : Nat) (id : Option String) (type name : String) (snapshot trace : Value)
-  | event (line : Nat) (name : String) (snapshot trace : Value)
-  | operation (line : Nat) (name : String) (snapshot trace : Value)
-  | output (line : Nat) (to : String) (snapshot trace : Value)
-  | result (line : Nat) (to : String) (snapshot trace : String)
-  | rejection (line : Nat) (to : String) (snapshot trace : RejectionKind)
-  | missingAnswer (line : Nat) (type to : String) (snapshotLine : Nat)
-  | missingLine (line : Nat) (type name : String) (content : Value) (snapshotLine : Nat)
-  | unopenedSubscription (line : Nat) (name : String) (input : Value) (snapshotLine : Nat)
-  | unexpectedSubscription (line : Nat) (name : String) (input : Value) (id : String)
+  | request (line : Nat) (subject : Subject) (snapshot trace : Value)
+  | event (line : Nat) (subject : Subject) (snapshot trace : Value)
+  | operation (line : Nat) (subject : Subject) (snapshot trace : Value)
+  /-- The output of an accepted or fulfilled answer, or the answer to a query. -/
+  | output (line : Nat) (subject : Subject) (snapshot trace : Value)
+  | result (line : Nat) (subject : Subject) (snapshot trace : String)
+  | rejection (line : Nat) (subject : Subject) (snapshot trace : RejectionKind)
+  | missingAnswer (line : Nat) (subject : Subject) (snapshotLine : Nat)
+  | missingLine (line : Nat) (subject : Subject) (content : Value) (snapshotLine : Nat)
+  /-- The trace does not open the subscription that the snapshot opens. -/
+  | unopenedSubscription (line : Nat) (subject : Subject) (content : Value) (snapshotLine : Nat)
+  /-- The trace opens a subscription that the snapshot does not. -/
+  | unexpectedSubscription (line : Nat) (subject : Subject) (content : Value)
   | unexpectedLine (line : Nat) (subject : Subject)
+  /-- The line comes before the line `before`, which its snapshot line must follow. -/
   | lineOrder (line : Nat) (subject before : Subject)
   | time (line : Nat) (subject : Subject) (snapshot trace : String)
+  /--
+  The uses of one connected group of values in which a value stands for two values, reported when no line differs
+  otherwise.
+  -/
   | renaming (uses : List Use)
-  | line (snapshotLine : Nat) (snapshot run : Option Value)
-  | emittedNotInContract (line : Nat) (event : Syntax.Ref) (service : String)
+  /-- The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. -/
+  | line (line : Nat) (snapshot trace : Option Value)
+  /-- No contract of another service lists the event that the external service emits. -/
+  | unlistedEvent (line : Nat) (event : Syntax.Ref)
   | resultOfUnacceptedRequest (line : Nat) (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
   | resultOfUnlistedEvent (line : Nat) (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
   | unlistedRejectionKind (line : Nat) (requestId : String) (target : Syntax.Ref) (rejection : Rejection)

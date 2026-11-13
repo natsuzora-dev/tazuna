@@ -11,6 +11,7 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * A spec that the loader cannot read faithfully, or whose declared defaults fail their own schemas or throw. When the
  * loader finds one, check skips the structure checks (Illegal).
  *
+ * - `missingDefiner`: the definer that the definition names is not exported.
  * - `listedUnderOtherName`: a service definer lists the entity under `key`, not under its export name, which also names
  *   its records.
  * - `duplicateName`: `name` also names another definition, scenario, or `constants()` call of the service in the file
@@ -19,15 +20,14 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `unexportedDefinition` and `opaqueCollection`: `path` leads from the definition, scenario, service definer, or
  *   `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema
  *   has the path of the field that holds it, and a chart holds each state's `held` under `held` by the state's name.
- * - `unparsableTime`: the time of the `at` at `input` is not an ISO datetime with seconds and an offset, or has a part
- *   below a millisecond, so the run cannot read it as an instant in milliseconds. `input` is the position of a scenario
- *   input as written, counting from 0 with `at` included.
- * - `inexactDelay`: the delay of the deadline `name` of `state` has a date unit, a part below a millisecond, or a value
- *   that Temporal does not read, so the run cannot add it to an instant in milliseconds.
+ * - `unparsableTime`: the time of the `at` input is not an ISO datetime with seconds and an offset, or has a part below
+ *   a millisecond, so the run cannot read it as an instant in milliseconds.
+ * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
+ *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.
  */
 export type Malformed =
-  | Of<"noDefiner", null, { readonly name: string }>
-  | Of<"unlisted", null, { readonly name: string }>
+  | Of<"missingDefiner", null, { readonly name: string }>
+  | Of<"unlistedEntity", null, { readonly name: string }>
   | Of<"listedTwice", null, { readonly name: string; readonly services: readonly string[] }>
   | Of<"listedUnderOtherName", DefinitionRef, { readonly key: string }>
   | Of<"serviceInSharedFolder", null, { readonly folder: string }>
@@ -46,5 +46,8 @@ export type Malformed =
   | Of<"unexportedDefinition", null, { readonly service: string; readonly path: readonly (string | number)[] }>
   | Of<"unexportedDefinition", null, { readonly name: string; readonly path: readonly (string | number)[] }>
   | Of<"unexportedDefinition", null, { readonly contract: string; readonly key: string }>
-  | Of<"unparsableTime", DefinitionRef, { readonly input: number }>
-  | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly name: string }>;
+  | (Of<"unparsableTime", null, Readonly<Record<string, never>>> & {
+      readonly scenario: DefinitionRef;
+      readonly input: number;
+    })
+  | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly deadline: string }>;

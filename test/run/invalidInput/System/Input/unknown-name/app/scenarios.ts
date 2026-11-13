@@ -16,6 +16,6 @@ export const grantAfterRetry = scenario("The user grants the permission that the
 ]);
 
 export const askDevice = scenario(
-  "Send the command of the device to the app; requestPermission is not a command of app, so test reports notOwned",
+  "Send the command of the device to the app; requestPermission is not a command of app, so test reports unownedTarget",
   [at("2026-10-25T09:00:00+09:00"), send(device.requestPermission, {})],
 );

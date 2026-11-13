@@ -88,7 +88,7 @@ The processing after instance `name` exits state `n`, after the copies of `n`. T
 of exits.
 -/
 def exitOne (st : Service) : Nat → String → String → Processing → m Processing
-  | 0, _, _, r => pure (r.report (.fault .exitDepth))
+  | 0, _, _, r => pure (r.report (.fault (.exceededExitDepth Limit.exitDepth.max)))
   | fuel + 1, name, n, r =>
     withMachine name (fun i r => do
       let r : Processing ←

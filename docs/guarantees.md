@@ -24,7 +24,7 @@ tazuna has three tools that report violations:
 A *violation* is a problem that a tool reports.
 Each violation has a kind, such as `Fault.failedEnsures`.
 The part of the kind before the dot is the violation's *group*.
-The type of each group, such as `Fault`, states what each of its kinds means.
+A kind's name and data, with its doc comment where they do not suffice, state what the kind means.
 A run stops at a violation of a *halting* kind, because the behavior after that violation is undefined.
 
 ## What a passing tool means

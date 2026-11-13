@@ -1,7 +1,7 @@
 import { at, operate, scenario } from "@natsuzora-dev/tazuna";
 import { filteredScreen, listScreen } from "./picker.ts";
 
-export const pickListed = scenario("Pick a task from the list; test reports rootOffersSchema", [
+export const pickListed = scenario("Pick a task from the list; test reports offersSchema", [
   at("2026-10-25T09:00:00+09:00"),
   operate(listScreen, "pick", { taskId: "task-1" }),
 ]);
