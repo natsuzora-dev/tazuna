@@ -8,13 +8,14 @@ mutual
 
 /--
 Whether snapshot value `s` matches implementation value `t`, where `rename` gives the implementation value of a snapshot
-createKey value. A string matches itself or the implementation value of its key. Arrays and runs match element by
-element, objects with the same keys match field by field, and bags match in some order.
+createKey value. A string that `rename` renames matches only its implementation value, and any other string matches
+itself. Arrays and runs match element by element, objects with the same keys match field by field, and bags match in
+some order.
 -/
 def ValueMatches (rename : String → Option String) : CValue → CValue → Prop
   | .leaf v, t =>
     match v with
-    | .str s => ∃ w, t = .leaf (.str w) ∧ (w = s ∨ rename s = some w)
+    | .str s => ∃ w, t = .leaf (.str w) ∧ ((rename s = none ∧ w = s) ∨ rename s = some w)
     | _ => t = .leaf v
   | .arr xs, t => ∃ ys, t = .arr ys ∧ ListMatches rename xs ys
   | .runs xs, t => ∃ ys, t = .runs ys ∧ ListMatches rename xs ys
@@ -48,6 +49,14 @@ def context (snapshot : List (Option Line)) (internal : Line → Bool) : Ctx :=
 /-- The `out` lines of a window that verify pairs: neither subscribe nor unsubscribe lines, nor internal events. -/
 def pairedOut (internal : Line → Bool) (w : Window) : List Out :=
   w.before.filter fun o => !o.line.isSubscribing && !internal o.line
+
+/-- The createKey values that the snapshot's `out` lines create up to window `k`. -/
+def declaredBy (ws : List Window) (k : Nat) : List String :=
+  (ws.take (k + 1)).flatMap fun w => w.before.flatMap (·.line.created.getD [])
+
+/-- The renaming of createKey values in window `k`: a value that no line has created yet stands for itself. -/
+def keysAt (keys : String → Option String) (ws : List Window) (k : Nat) (s : String) : Option String :=
+  if s ∈ declaredBy ws k then keys s else none
 
 /-- The subscriptions open after window `k`. -/
 def openAfter (ws : List Window) (k : Nat) : List (String × Subscription) :=
@@ -100,10 +109,11 @@ def OpenMatches (keys : String → Option String) (os ot : List (String × Subsc
 
 /--
 The implementation trace `lines` matches `snapshot`, up to what verify ignores. `keys` renames the snapshot's
-createKey values and `ids` its ids, each to distinct implementation values; a subscription may instead be named by one
-that `Q` paired with an alike subscription. In each window `P k` pairs the compared `out` lines one to one in the
-snapshot's `after` order, and `Q k` pairs the subscriptions open after the window. The `in` lines at the same position
-match. An `out` request's id is only checked through the lines that name it, and alike requests may swap.
+createKey values and `ids` its ids, each to distinct implementation values; a createKey value is renamed from the
+window that creates it on (keysAt), and a subscription may instead be named by one that `Q` paired with an alike
+subscription. In each window `P k` pairs the compared `out` lines one to one in the snapshot's `after` order, and `Q k`
+pairs the subscriptions open after the window. The `in` lines at the same position match. An `out` request's id is
+only checked through the lines that name it, and alike requests may swap.
 -/
 def Matches (snapshot lines : List (Option Line)) (internal : Line → Bool) : Prop :=
   let E := steps snapshot
@@ -116,10 +126,11 @@ def Matches (snapshot lines : List (Option Line)) (internal : Line → Bool) : P
       (∀ a b x, ids a = some x → ids b = some x → a = b) ∧
       ∀ k (e a : Window), E[k]? = some e → A[k]? = some a →
         ((P k).map (·.1)).Perm (pairedOut internal e) ∧ ((P k).map (·.2)).Perm (pairedOut internal a) ∧
-        (∀ p ∈ P k, OutMatches keys ids (Subscribed E Q k) c p.1.line p.2.line) ∧
+        (∀ p ∈ P k, OutMatches (keysAt keys E k) ids (Subscribed E Q k) c p.1.line p.2.line) ∧
         (∀ p ∈ P k, ∀ q ∈ P k, p.1.index - 1 ∈ mustFollow snapshot (q.1.index - 1) → p.2.index < q.2.index) ∧
-        OpenMatches keys (openAfter E k) (openAfter A k) (Q k) ∧
+        OpenMatches (keysAt keys E k) (openAfter E k) (openAfter A k) (Q k) ∧
         e.input.isSome = a.input.isSome ∧
-        ∀ s t, e.input = some s → a.input = some t → InMatches keys ids (Subscribed E Q k) s.line t.line
+        ∀ s t, e.input = some s → a.input = some t →
+          InMatches (keysAt keys E k) ids (Subscribed E Q k) s.line t.line
 
 end Tazuna.Thm.Verify.Matching

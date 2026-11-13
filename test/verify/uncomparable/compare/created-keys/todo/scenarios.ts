@@ -10,3 +10,8 @@ export const forgetFirst = scenario(
     send(forget, { id: "Seen-1" }),
   ],
 );
+
+export const forgetOne = scenario(
+  "Add a task and forget its seen task; the implementation trace of this scenario gives the snapshot's key verbatim instead of the key that the implementation created, so verify reports differentInput",
+  [at("2026-10-25T00:00:00Z"), send(addTask, { taskId: "task-1" }), send(forget, { id: "Seen-1" })],
+);

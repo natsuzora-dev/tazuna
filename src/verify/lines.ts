@@ -62,7 +62,10 @@ export function problemsAt(file: string, found: readonly Found[]): Problem[] {
   });
 }
 
+/** Returns the line that orders a violation in a report: its line, or for Mismatch.renaming the last line of its uses. */
 const lineOf = (v: Found): number => {
+  if (v.kind === "Mismatch.renaming")
+    return (v.data["uses"] as { line: number }[]).reduce((n, u) => Math.max(n, u.line), 0);
   const line = v.data["line"];
   if (typeof line !== "number") throw new Error(`the ${v.kind} violation has no trace line`);
   return line;

@@ -8,7 +8,7 @@ import { canonicalJson, objectOf, type Shape } from "./values.ts";
 const isPlain = (v: unknown): v is Record<string, unknown> =>
   Array.isArray(v) || (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype);
 
-export function matchCreated(
+function matchCreated(
   s: unknown,
   t: unknown,
   isCreated: (value: string) => boolean,

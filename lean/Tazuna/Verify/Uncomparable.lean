@@ -7,7 +7,8 @@ open Tazuna.Data
 
 /--
 A line or file that verify cannot compare. `line` is 1-based in the violation's file, and `snapshotLine` is
-1-based in the snapshot.
+1-based in the snapshot. `searchLimit` is at the `in` lines before the window (1 for the first window), or at
+the compared `in` lines, whose comparison takes more steps than verify searches.
 -/
 inductive Uncomparable where
   | lineSchema (line : Nat)
@@ -21,6 +22,7 @@ inductive Uncomparable where
   | missingInput (line : Nat) (input : Value) (snapshotLine : Nat)
   | answersNoRequest (line : Nat) (to : String) (snapshotLine : Nat)
   | differentInput (line snapshotLine : Nat) (snapshot trace : Value)
+  | searchLimit (line snapshotLine : Nat)
   | unknownService (service : String)
   | unknownScenario (scenario : Syntax.Ref)
   | missingTrace (definition : Syntax.Ref)

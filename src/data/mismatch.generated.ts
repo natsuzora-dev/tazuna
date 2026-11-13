@@ -14,11 +14,20 @@ export type Subject =
       readonly id: string | null;
     };
 
+/** A snapshot value and the trace value that a pair of lines uses for it. */
+export type Use = {
+  readonly snapshot: string;
+  readonly trace: string;
+  readonly line: number;
+  readonly snapshotLine: number;
+};
+
 /**
  * A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the
  * trace's `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. Mismatch.line compares the run
  * of test, not a trace: `run` is the run's line compared with the snapshot line at `snapshotLine`, and a missing
- * line is null. TS decides rejectedAssumedRequires, failedAssumedRequires, failedAssumedEnsures,
+ * line is null. `renaming` holds the uses of one connected group of values in which a value stands for two values,
+ * when no line differs otherwise. TS decides rejectedAssumedRequires, failedAssumedRequires, failedAssumedEnsures,
  * answerOutputSchema and eventPayloadSchema, which need the spec's functions or Zod schemas.
  */
 export type Mismatch =
@@ -36,6 +45,16 @@ export type Mismatch =
     }
   | {
       readonly kind: "Mismatch.event";
+      readonly definition: null;
+      readonly data: {
+        readonly line: number;
+        readonly name: string;
+        readonly snapshot: Json;
+        readonly trace: Json;
+      };
+    }
+  | {
+      readonly kind: "Mismatch.operation";
       readonly definition: null;
       readonly data: {
         readonly line: number;
@@ -143,6 +162,13 @@ export type Mismatch =
       };
     }
   | {
+      readonly kind: "Mismatch.renaming";
+      readonly definition: null;
+      readonly data: {
+        readonly uses: readonly Use[];
+      };
+    }
+  | {
       readonly kind: "Mismatch.line";
       readonly definition: null;
       readonly data: {
@@ -240,6 +266,7 @@ export type Mismatch =
 export const mismatchKinds = [
   "Mismatch.request",
   "Mismatch.event",
+  "Mismatch.operation",
   "Mismatch.output",
   "Mismatch.result",
   "Mismatch.rejection",
@@ -250,6 +277,7 @@ export const mismatchKinds = [
   "Mismatch.unexpectedLine",
   "Mismatch.lineOrder",
   "Mismatch.time",
+  "Mismatch.renaming",
   "Mismatch.line",
   "Mismatch.emittedNotInContract",
   "Mismatch.resultOfUnacceptedRequest",

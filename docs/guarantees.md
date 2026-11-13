@@ -33,7 +33,7 @@ A tool *passes* when it reports no violation.
 
 - When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
 - When `test` passes, `check` passes, and each scenario's trace equals its snapshot.
-- When `test` and `verify` both pass with the same spec and snapshots, the trace that the implementation records for each scenario matches its snapshot, provided that the [conditions for verify](#when-a-passing-verify-implies-a-match) hold.
+- When `test` and `verify` both pass with the same spec and snapshots, the trace that the implementation records for each scenario matches its snapshot.
 
 When, in addition, the [assumptions](#assumptions) hold, the implementation sends the messages that the spec defines for the inputs of each scenario.
 tazuna guarantees nothing about inputs that no scenario contains.
@@ -45,18 +45,9 @@ Paired outputs have equal type, target, time, and value.
 The pairing keeps exactly the orders that the snapshot states.
 
 `verify` compares the IDs and keys that the implementation chooses up to a one-to-one renaming.
-An implementation value that equals the snapshot value also matches, even if the renaming maps the snapshot value to another value.
+A key that the spec creates is renamed from the output that creates it; before that output, `verify` compares it as written.
 `verify` compares the IDs of the requests that the implementation sends only through the answers that name them.
 When a line of a trace is malformed, `verify` reports it and compares nothing after it.
-
-### When a passing verify implies a match
-
-A passing `verify` implies a match only when the following conditions hold:
-
-- No ID repeats within the snapshot, and no ID repeats within the recorded trace.
-  A scenario that resends a command or redelivers an event with the same ID breaks this condition.
-- The implementation does not answer a request that it sent itself.
-- No subscription that the service opens has a bag or a set in its input.
 
 ## Who fixes a violation
 
@@ -110,7 +101,8 @@ tazuna detects breaks of each assumption only partly or not at all.
   For `check` and `verify`, it covers the example specs and traces.
 - **Spec functions.** Spec functions are deterministic: they read no clock, random source, or mutable global state, and receive the current time as an argument.
 - **Types.** Each value in spec code has the type that the code declares.
-- **Recorder.** The recorder writes only messages that the implementation received or sent, and it writes the time of each message correctly.
+- **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
+  An input line therefore carries the implementation's IDs and keys, not the snapshot's.
   `verify` reports a message that the recorder leaves out.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` detects a break of this assumption only on the traces that the recorder writes.

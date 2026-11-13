@@ -1,0 +1,12 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c1","name":"addTasks","input":{"taskIds":["t0","t1","t2","t3","t4","t5","t6","t7","t8","t9"]}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w2"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w3"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w4"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w5"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w6"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w7"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w8"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w9"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","name":"seen","payload":{"id":"w1"}}

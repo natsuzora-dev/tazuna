@@ -144,7 +144,7 @@ theorem at?_sizeOf {c v : CValue} {k : String} (h : c.at? k = some v) : sizeOf v
   | leaf _ | bag _ | runs _ => simp [CValue.at?] at h
 
 /--
-Whether `s` equals `t` as TS `matchCreated(s, t, () => false)` decides. Plain values compare key by key. Other values
+Whether `s` equals `t` as TS `plainEqual(s, t)` decides. Plain values compare key by key. Other values
 compare by equality for leaves, or by canonicalJson when both are objects. `none` is undefined.
 -/
 def plainEqual (s t : Option CValue) : Bool :=

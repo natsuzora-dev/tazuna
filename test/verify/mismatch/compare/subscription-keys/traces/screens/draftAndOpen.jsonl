@@ -1,0 +1,9 @@
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s1","name":"todo.notesIn","input":{"ids":["",""]}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s2","name":"todo.notesNamed","input":{"prefix":""}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","name":"noteScreen.draft"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"unsubscribe","to":"s1"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s3","name":"todo.notesIn","input":{"ids":["n1","n2"]}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","name":"noteScreen.open"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"unsubscribe","to":"s3"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"unsubscribe","to":"s2"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s4","name":"todo.note","input":{"id":"n1"}}

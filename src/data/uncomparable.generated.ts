@@ -4,7 +4,8 @@ import type { Json } from "./values.ts";
 
 /**
  * A line or file that verify cannot compare. `line` is 1-based in the violation's file, and `snapshotLine` is
- * 1-based in the snapshot.
+ * 1-based in the snapshot. `searchLimit` is at the `in` lines before the window (1 for the first window), or at
+ * the compared `in` lines, whose comparison takes more steps than verify searches.
  */
 export type Uncomparable =
   | {
@@ -103,6 +104,14 @@ export type Uncomparable =
       };
     }
   | {
+      readonly kind: "Uncomparable.searchLimit";
+      readonly definition: null;
+      readonly data: {
+        readonly line: number;
+        readonly snapshotLine: number;
+      };
+    }
+  | {
       readonly kind: "Uncomparable.unknownService";
       readonly definition: null;
       readonly data: {
@@ -154,6 +163,7 @@ export const uncomparableKinds = [
   "Uncomparable.missingInput",
   "Uncomparable.answersNoRequest",
   "Uncomparable.differentInput",
+  "Uncomparable.searchLimit",
   "Uncomparable.unknownService",
   "Uncomparable.unknownScenario",
   "Uncomparable.missingTrace",

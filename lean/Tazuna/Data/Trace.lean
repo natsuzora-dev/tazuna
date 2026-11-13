@@ -86,14 +86,12 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire TraceLine flatten body skip_serializing_none
 
-/-- Each createKey value of a snapshot (`created`), with the values of a compared trace that it stands for. -/
-abbrev Bindings := List (String × List String)
+/-- Each createKey value of a snapshot (`created`), with the value of a compared trace that stands for it. -/
+abbrev Bindings := List (String × String)
 
-/-- `v` with each string that `bindings` binds replaced by its first bound value. -/
+/-- `v` with each string that `bindings` binds replaced by its bound value. -/
 def Bindings.rename (bindings : Bindings) (v : Value) : Value :=
-  v.mapStrings fun s => match bindings.lookup s with
-    | some (w :: _) => w
-    | _ => s
+  v.mapStrings fun s => (bindings.lookup s).getD s
 
 inductive FileLine (α : Type) where
   | blank

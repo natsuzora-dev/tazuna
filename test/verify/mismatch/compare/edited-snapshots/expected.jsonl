@@ -1,0 +1,2 @@
+{"kind":"Mismatch.operation","definition":null,"data":{"line":4,"name":"taskScreen.open","snapshot":{"taskId":"task-1"},"trace":{"taskId":"task-2"}},"location":{"file":"traces/todo/addOneOperated.jsonl","line":4}}
+{"kind":"Mismatch.output","definition":null,"data":{"line":2,"to":"c1","snapshot":{"count":1},"trace":{"count":2}},"location":{"file":"traces/todo/addOneFulfilled.jsonl","line":2}}

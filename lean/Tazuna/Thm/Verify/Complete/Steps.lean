@@ -1,9 +1,8 @@
-import Tazuna.Thm.Verify.Complete.Values
+import Tazuna.Thm.Verify.Complete.Lists
 
 namespace Tazuna.Thm.Verify.Complete.Steps
 
 open Tazuna.Data Tazuna.Verify
-open Tazuna.Thm.Verify.Complete.Values
 
 /-- The lines of a window in trace order. -/
 def windowLines (w : Window) : List Out := w.before ++ w.input.toList
@@ -142,5 +141,74 @@ theorem window_order {ws : List Window} (h : ((flat ws).map (·.index)).Pairwise
     (hw : ws[i]? = some w) : ((windowLines w).map (·.index)).Pairwise (· < ·) := by
   rw [flat_split hw, List.map_append, List.map_append] at h
   exact (List.pairwise_append.mp (List.pairwise_append.mp h).1).2.1
+
+
+theorem before_order (ls : List (Option Line)) {w : Window} (hw : w ∈ steps ls) :
+    (w.before.map (·.index)).Pairwise (· < ·) := by
+  obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp hw
+  have := window_order (steps_spec ls).1 hi
+  simp only [windowLines, List.map_append] at this
+  exact (List.pairwise_append.mp this).1
+
+theorem before_atLine (ls : List (Option Line)) {w : Window} (hw : w ∈ steps ls) {o : Out} (ho : o ∈ w.before) :
+    AtLine ls o :=
+  (steps_spec ls).2.1 o (mem_flat hw (List.mem_append_left _ ho))
+
+theorem AtLine.mem {ls : List (Option Line)} {o : Out} (h : AtLine ls o) : some o.line ∈ ls :=
+  List.mem_of_getElem? h.2
+
+theorem mustFollow_irrefl (S : List (Option Line)) (n : Nat) : n ∉ mustFollow S n := by
+  unfold mustFollow
+  cases hh : (((steps S).flatMap fun w => w.before.zipIdx.filterMap fun (o, k) =>
+      if o.index - 1 == n then some ((o.line.after.getD []).filterMap (earlierWithId (w.before.take k)))
+      else none).head?) with
+  | none => simp
+  | some xs =>
+    simp only [Option.getD_some]
+    intro hn
+    obtain ⟨w, hw, hx⟩ := List.mem_flatMap.mp (List.mem_of_mem_head? hh)
+    obtain ⟨⟨o, k⟩, hok, hf⟩ := List.mem_filterMap.mp hx
+    simp only at hf
+    split at hf
+    · rename_i he
+      simp only [Option.some.injEq] at hf
+      subst hf
+      obtain ⟨id, _, hy⟩ := List.mem_filterMap.mp hn
+      simp only [earlierWithId, Option.map_eq_some_iff] at hy
+      obtain ⟨o', hf', ho'⟩ := hy
+      have hmem : o' ∈ w.before.take k := List.mem_reverse.mp (List.mem_of_find?_eq_some hf')
+      obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hmem
+      rw [List.getElem?_take] at hj
+      split at hj
+      · rename_i hjk
+        have hk := List.mem_zipIdx_iff_getElem?.mp hok
+        simp only at hk
+        have hord := before_order S hw
+        have hjl : j < w.before.length := (List.getElem?_eq_some_iff.mp hj).1
+        have hkl : k < w.before.length := (List.getElem?_eq_some_iff.mp hk).1
+        have := List.pairwise_iff_getElem.mp hord j k (by simpa using hjl) (by simpa using hkl) hjk
+        simp only [List.getElem_map] at this
+        rw [List.getElem?_eq_some_iff.mp hj |>.2, List.getElem?_eq_some_iff.mp hk |>.2] at this
+        have h1 := (before_atLine S hw (List.mem_of_getElem? hj)).1
+        simp only [beq_iff_eq] at he
+        omega
+      · cases hj
+    · cases hf
+
+theorem byRank_perm : ∀ ss : List Out, (byRank ss).Perm ss
+  | [] => by simp [byRank]
+  | s :: ss => by
+    have ih := byRank_perm ss
+    simp only [byRank, List.flatMap_cons, List.flatMap_nil, List.append_nil, List.filter_cons] at ih ⊢
+    have hr : rank s.line = 0 ∨ rank s.line = 1 ∨ rank s.line = 2 := by
+      unfold rank; split
+      · exact .inl rfl
+      · split <;> simp
+    rcases hr with h | h | h <;> simp only [h, beq_self_eq_true, ite_true, Nat.reduceBEq, Bool.false_eq_true,
+      ite_false, List.cons_append]
+    · exact (List.perm_cons s).mpr ih
+    · exact List.perm_middle.trans ((List.perm_cons s).mpr ih)
+    · rw [← List.append_assoc]
+      exact List.perm_middle.trans (by rw [List.append_assoc]; exact (List.perm_cons s).mpr ih)
 
 end Tazuna.Thm.Verify.Complete.Steps

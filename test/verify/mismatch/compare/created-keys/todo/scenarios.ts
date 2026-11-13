@@ -17,7 +17,7 @@ export const seenOnce = scenario("Add a task and ask twice for the seen ids; no 
 ]);
 
 export const seenTwiceWrongIds = scenario(
-  "Same inputs as seenTwice; the implementation trace of this scenario answers the second seenIds with other created keys, so verify reports Mismatch.output",
+  "Same inputs as seenTwice; the implementation trace of this scenario answers the second seenIds with other created keys, so verify reports Mismatch.renaming",
   [
     at("2026-10-25T00:00:00Z"),
     send(addTask, { taskId: "task-1" }),
@@ -28,6 +28,6 @@ export const seenTwiceWrongIds = scenario(
 );
 
 export const seenOnceWrongListed = scenario(
-  "Same inputs as seenOnce; the implementation trace of this scenario answers the second seenIds with another key in listed, so verify reports Mismatch.output",
+  "Same inputs as seenOnce; the implementation trace of this scenario answers the second seenIds with another key in listed, so verify reports Mismatch.renaming",
   [at("2026-10-25T00:00:00Z"), send(addTask, { taskId: "task-1" }), call(seenIds, {}), call(seenIds, {})],
 );

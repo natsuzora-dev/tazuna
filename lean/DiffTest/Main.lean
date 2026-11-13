@@ -357,13 +357,11 @@ returns.
 def compareOf (spec : Syntax.Structure) (service : String)
     (ask : Syntax.Definition → Verify.Part → Value → IO Verify.CValue) : Compare IO := fun expected actual => do
   let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line)
-  let numbered ← compared.findings.mapM fun f => do
+  let numbered := compared.findings.map fun f =>
     let v : Violation := match f with
       | .mismatch m => { kind := m.kind, definition := m.definition, data := m.data }
       | .uncomparable u => { kind := u.kind, definition := u.definition, data := u.data }
-    match v.data.field? "line" with
-    | some (.num n) => pure (n.mantissa.toNat, v)
-    | _ => throw (IO.userError s!"the {v.kind} violation has no trace line")
+    (f.line, v)
   pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
     | some (_, v) => .error v
     | none => .ok compared.bindings)

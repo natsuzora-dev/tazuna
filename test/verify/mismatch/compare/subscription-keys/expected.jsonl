@@ -1,0 +1,3 @@
+{"kind":"Mismatch.unopenedSubscription","definition":null,"data":{"line":3,"name":"todo.notesNamed","input":{"prefix":""},"snapshotLine":2},"location":{"file":"traces/screens/draftAndOpenWrongKeys.jsonl","line":3}}
+{"kind":"Mismatch.unexpectedSubscription","definition":null,"data":{"line":7,"name":"todo.notesNamed","input":{"prefix":"x"},"id":"s5"},"location":{"file":"traces/screens/draftAndOpenWrongKeys.jsonl","line":7}}
+{"kind":"Mismatch.renaming","definition":null,"data":{"uses":[{"snapshot":"Draft-1","trace":"n2","line":6,"snapshotLine":5},{"snapshot":"Draft-1","trace":"n3","line":11,"snapshotLine":9}]},"location":{"file":"traces/screens/draftAndOpenWrongKeys.jsonl"}}
