@@ -1,7 +1,8 @@
 # tazuna
 
 tazuna is a language for specifying the behavior of services in TypeScript so that each spec has exactly one meaning.
-The principles behind it are in [docs/PRINCIPLES.md](docs/PRINCIPLES.md).
+[docs/guarantees.md](docs/guarantees.md) states what tazuna guarantees, and [docs/writing-specs.md](docs/writing-specs.md) states the rules for writing specs.
+Facts about one definition are in its doc comment.
 
 ## Get started
 

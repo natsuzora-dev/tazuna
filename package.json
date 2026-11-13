@@ -47,7 +47,8 @@
   },
   "files": [
     "dist",
-    "docs/PRINCIPLES.md",
+    "docs/guarantees.md",
+    "docs/writing-specs.md",
     "tsconfig.base.json"
   ],
   "scripts": {
