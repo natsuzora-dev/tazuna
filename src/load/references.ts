@@ -71,6 +71,8 @@ const definitionReferences = (definition: Definition): Reference[] => [
 function inputReferences(input: Scenario["inputs"][number], i: number): Reference[] {
   const field = (role: string, target: unknown): Reference => ({ path: ["inputs", i, role], target });
   switch (input.type) {
+    case "elsewhere":
+      return inputReferences(input.input, i).map((r) => ({ ...r, path: ["inputs", i, "input", ...r.path.slice(2)] }));
     case "at":
     case "unsubscribe":
     case "restart":

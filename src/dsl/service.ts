@@ -28,6 +28,7 @@ import {
   type UpdateEventDefiner,
 } from "./event.ts";
 import { type MachineDefiner, machineDefiner } from "./machine.ts";
+import type { StateInputs } from "./scenario.ts";
 import { type ScreenDefiner, screenDefiner } from "./screen.ts";
 import type { IsUnion } from "./tree.ts";
 
@@ -336,8 +337,13 @@ export function definerService(value: unknown): ServiceDefinition | undefined {
   return typeof value === "function" ? definerOwners.get(value) : undefined;
 }
 
-/** Marks the members that other services may refer to (Restricted.crossServiceImport). */
-export function contract<const M extends Readonly<Record<string, Member>>>(members: M): M {
+type Members<M> = { readonly [K in keyof M]: K extends "states" ? Readonly<Record<string, StateInputs>> : Member };
+
+/**
+ * Marks the members that other services may refer to (Restricted.crossServiceImport). `states` names the start states
+ * that scenarios of other services may give the service (`given`).
+ */
+export function contract<const M extends Members<M>>(members: M): M {
   contracts.add(members);
   return members;
 }

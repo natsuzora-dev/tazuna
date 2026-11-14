@@ -215,6 +215,10 @@ const scenarioInput = z.discriminatedUnion("type", [
     sender: ref.nullable(),
     target: ref.nullable(),
   }),
+  /** An input to another spec service, which the scenario's service skips. */
+  z.object({
+    type: z.literal("elsewhere"),
+  }),
 ]);
 
 const scenario = z.object({

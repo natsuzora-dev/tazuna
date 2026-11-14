@@ -132,7 +132,8 @@ export async function loadSpec(root: string): Promise<Spec> {
       } else if (definer !== undefined) {
         definerExports.push({ folder: service, definition: definer, place });
       } else if (isContract(value)) {
-        contracts.push({ service, place, members: value });
+        const { states, ...members } = value;
+        contracts.push({ service, place, members, states: (states ?? {}) as Contract["states"], value });
       } else if (schema !== undefined) {
         namedExports.push({ name, service, place, value });
         if (!constants.some((c) => c.definition.values === value))

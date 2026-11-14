@@ -77,13 +77,35 @@ interface At extends Timed {
   readonly type: "at";
 }
 
-type ScenarioInputs = readonly [At, ...(UntimedInput | At)[]];
+/**
+ * A start state of a spec service, as its contract's `states` writes it: inputs to the service in time order, which a
+ * scenario of another service names in `given`.
+ */
+export type StateInputs = readonly [At, ...(UntimedInput | At)[]];
+
+/** An input to the spec service `service`, a contract, that the scenario's service does not take. */
+interface Elsewhere {
+  readonly type: "elsewhere";
+  readonly service: object;
+  readonly input: UntimedInput;
+}
+
+type ScenarioInputs = readonly [At, ...(UntimedInput | At | Elsewhere)[]];
+
+/**
+ * The options of a scenario. `given` names, by service, the start state of each spec service whose messages the
+ * scenario mocks; a service it does not name starts empty.
+ */
+interface ScenarioOptions {
+  readonly given?: Readonly<Record<string, StateInputs>>;
+}
 
 /** A scenario: the inputs given to one service, as the scenario file writes them. */
 export interface Scenario {
   readonly kind: "scenario";
   readonly description: string;
   readonly inputs: ScenarioInputs;
+  readonly given: Readonly<Record<string, StateInputs>>;
 }
 
 /** The options of an input. `id` is the message id, and a given id has no `#`. */
@@ -94,27 +116,14 @@ type GivenId<Id extends string> = Id extends `${string}#${string}` ? never : Id;
  * Defines a scenario: inputs to one service in time order, in trace form (datetime and date values as strings). The
  * export name of the scenario is its name; test compares the trace of its run with its snapshot (Mismatch.line).
  */
-export function scenario(description: string, inputs: ScenarioInputs): Scenario {
-  return { kind: "scenario", description, inputs };
+export function scenario(description: string, inputs: ScenarioInputs, options: ScenarioOptions = {}): Scenario {
+  return { kind: "scenario", description, inputs, given: options.given ?? {} };
 }
 
-/**
- * Returns the scenario's inputs with times, as a run takes them. Each input takes the time of the `at` before it. An
- * `at` that another `at` or the end follows becomes a time input. An event's `resultOf` names the answer input of the
- * mock's first placement.
- */
-export function timed(scenario: Scenario): Input[] {
-  const written = scenario.inputs;
-  type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string };
-  const entries: Entry[] = [];
-  let at = written[0];
-  for (const [i, w] of written.entries()) {
-    if (w.type === "at") {
-      const next = written[i + 1];
-      if (next === undefined || next.type === "at") entries.push({ input: { type: "time" }, time: w.time });
-      at = w;
-    } else entries.push({ input: w, time: at.time });
-  }
+type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string };
+
+/** Returns the entries with times; an event's `resultOf` names the answer input of the mock's first placement. */
+function timedEntries(entries: readonly Entry[]): Input[] {
   const timedOf = ({ input, time }: Entry) => ({ ...input, time }) as Input;
   const answers = entries.map((e) => (e.input.type === "answer" ? (timedOf(e) as AnswerInput) : undefined));
   const first = new Map<UntimedInput, AnswerInput>();
@@ -130,14 +139,75 @@ export function timed(scenario: Scenario): Input[] {
 }
 
 /**
- * Returns, for each input that `timed` returns, its position in the scenario as written, from 1 with `at` included.
+ * The written lines with times: each of the service's inputs with its position from 1, and each elsewhere input with
+ * its position and the number of the service's inputs before it. Each input takes the time of the `at` before it. An
+ * `at` that another `at` or the end follows, with elsewhere inputs skipped, becomes a time input.
+ */
+function written(inputs: ScenarioInputs | StateInputs) {
+  const own: { readonly entry: Entry; readonly position: number }[] = [];
+  const others: {
+    readonly entry: Entry;
+    readonly position: number;
+    readonly service: object;
+    readonly before: number;
+  }[] = [];
+  let at = inputs[0];
+  for (const [i, w] of inputs.entries()) {
+    if (w.type === "at") {
+      const next = inputs.slice(i + 1).find((n) => n.type !== "elsewhere");
+      if (next === undefined || next.type === "at")
+        own.push({ entry: { input: { type: "time" }, time: w.time }, position: i + 1 });
+      at = w;
+    } else if (w.type === "elsewhere")
+      others.push({
+        entry: { input: w.input, time: at.time },
+        position: i + 1,
+        service: w.service,
+        before: own.length,
+      });
+    else own.push({ entry: { input: w, time: at.time }, position: i + 1 });
+  }
+  return { own, others };
+}
+
+/**
+ * Returns the inputs with times, as a run takes them: the scenario's inputs to its service, or the inputs of a state.
+ * The service does not take the elsewhere inputs.
+ */
+export function timed(scenario: { readonly inputs: ScenarioInputs | StateInputs }): Input[] {
+  return timedEntries(written(scenario.inputs).own.map((o) => o.entry));
+}
+
+/**
+ * Returns, for each input that `timed` returns, its position in the scenario as written, from 1 with `at` and elsewhere
+ * inputs included.
  */
 export function writtenPositions(scenario: Scenario): number[] {
-  const written = scenario.inputs;
-  return written.flatMap((w, i) => {
-    const next = written[i + 1];
-    return w.type !== "at" || next === undefined || next.type === "at" ? [i + 1] : [];
-  });
+  return written(scenario.inputs).own.map((o) => o.position);
+}
+
+/** An elsewhere input of a scenario with its time, written position, and the number of the service's inputs before it. */
+export interface ElsewhereInput {
+  readonly service: object;
+  readonly input: Input;
+  readonly position: number;
+  readonly before: number;
+}
+
+/** Returns the elsewhere inputs of the scenario in written order. */
+export function elsewhereInputs(scenario: Scenario): ElsewhereInput[] {
+  const { others } = written(scenario.inputs);
+  const inputs = timedEntries(others.map((o) => o.entry));
+  return others.map(({ service, position, before }, i) => ({ service, input: inputs[i] as Input, position, before }));
+}
+
+/**
+ * Gives `input` to the spec service `service`, a contract, at this point: an input of that service that the scenario's
+ * service does not see, such as a command from another caller. The scenario's service skips it; test gives it to
+ * `service` in the run that it derives from the scenario to check the scenario's mocks of `service`.
+ */
+export function elsewhere(service: Readonly<Record<string, unknown>>, input: UntimedInput): Elsewhere {
+  return { type: "elsewhere", service, input };
 }
 
 /** Sends a command to the service. */

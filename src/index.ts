@@ -15,6 +15,7 @@ export {
   at,
   call,
   cannotOperate,
+  elsewhere,
   mock,
   operate,
   receive,

@@ -40,7 +40,7 @@ theorem answers_requested (s : Structure) :
         List.any_eq_true.mpr ⟨d, hd, by simp [hr, (requests_iff d target).mpr hreq]⟩
       simp [this]
     | .answer none _, _ | .answer (some _) none, _ | .at, _ | .command, _ | .query, _ | .subscribe, _ | .unsubscribe, _ | .restart, _
-    | .event _, _ | .operation, _ | .unacceptedOperation, _ => rfl
+    | .event _, _ | .operation, _ | .unacceptedOperation, _ | .elsewhere, _ => rfl
 
 theorem results_placed_at_most_once (s : Structure) :
     resultsOfPlacedTwice s = [] ↔
@@ -57,7 +57,7 @@ theorem results_placed_at_most_once (s : Structure) :
     match input, hin with
     | .event (some positions), hin => simpa using h sc hsc positions hin
     | .event none, _ | .at, _ | .command, _ | .query, _ | .subscribe, _ | .unsubscribe, _ | .restart, _ | .operation, _
-    | .unacceptedOperation, _ | .answer _ _, _ => rfl
+    | .unacceptedOperation, _ | .answer _ _, _ | .elsewhere, _ => rfl
 
 theorem results_placed_before (s : Structure) :
     resultsOfUnplaced s = [] ↔
@@ -75,7 +75,7 @@ theorem results_placed_before (s : Structure) :
     match input, hi with
     | .event (some positions), hi => simpa using h sc hsc i positions hi
     | .event none, _ | .at, _ | .command, _ | .query, _ | .subscribe, _ | .unsubscribe, _ | .restart, _ | .operation, _
-    | .unacceptedOperation, _ | .answer _ _, _ => rfl
+    | .unacceptedOperation, _ | .answer _ _, _ | .elsewhere, _ => rfl
 
 theorem scenarios_of_internal_services (s : Structure) :
     scenariosOfExternalServices s = [] ↔

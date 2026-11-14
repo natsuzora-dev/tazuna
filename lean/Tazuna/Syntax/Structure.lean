@@ -231,6 +231,8 @@ inductive ScenarioInput where
   | operation
   | unacceptedOperation
   | answer (sender : Option Ref) (target : Option Ref)
+  /-- An input to another spec service, which the scenario's service skips. -/
+  | elsewhere
 deriving Repr, Inhabited
 
 derive_wire ScenarioInput tag "type"
