@@ -41,9 +41,7 @@ function linesBefore(run: Run, { input, before }: ElsewhereInput): number {
 
 /**
  * Returns the peers of the scenario's run, the spec services other than its own that it messages or names in `given`
- * or `elsewhere`, each with the arguments of peerInputs. Load checks that each service that `given` or `elsewhere` names
- * is another spec service and that each given state is one of its contract's states (Malformed.unknownPeer,
- * Malformed.unlistedState).
+ * or `elsewhere`, each with the arguments of peerInputs.
  */
 export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): PeerDerivation[] {
   const { given } = scenario.definition;

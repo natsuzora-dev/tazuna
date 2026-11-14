@@ -83,7 +83,8 @@ export function peerSnapshots(spec: Spec): SnapshotRun[] {
 }
 
 /**
- * Reads the lines of a scenario's snapshot, or of a snapshot that peerSnapshots returns. Throws when the snapshot is missing or has a line that is not a trace line.
+ * Reads the lines of a scenario's snapshot, or of a snapshot that peerSnapshots returns. Throws when the snapshot is
+ * missing or has a line that is not a trace line.
  */
 export function readSnapshot(spec: Spec, snapshot: DefinitionRef): TraceLine[] {
   const path = snapshotPath(spec, snapshot);

@@ -45,8 +45,6 @@ A scenario's *peer* is another service of the spec, not an external one, that th
 A request that a mock answers as `unavailable` never reaches the peer.
 The peer receives the keys that the scenario's service creates renamed, and values compare in the form that `verify` compares, up to that renaming and a one-to-one renaming of the keys that the peer creates.
 `test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
-`test` writes the peer's run, unless it took no input, as the snapshot `<scenario>.<peer>.jsonl` beside the scenario's.
-`verify` compares the trace that the peer's implementation records for those inputs, `<scenario>.<peer>.jsonl` in the folder of the scenario's traces, with that snapshot, as the peer's trace.
 
 When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
 

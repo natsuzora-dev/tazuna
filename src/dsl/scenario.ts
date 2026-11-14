@@ -202,9 +202,8 @@ export function elsewhereInputs(scenario: Scenario): ElsewhereInput[] {
 }
 
 /**
- * Gives `input` to the spec service `service`, a contract, at this point: an input of that service that the scenario's
- * service does not see, such as a command from another caller. The scenario's service skips it; test gives it to
- * `service` in the run that it derives from the scenario to check the scenario's mocks of `service`.
+ * Gives `input`, such as a command from another caller, to the spec service of the contract `service` at this point:
+ * test gives it to that service in the run that it derives from the scenario, and the scenario's service skips it.
  */
 export function elsewhere(service: Readonly<Record<string, unknown>>, input: UntimedInput): Elsewhere {
   return { type: "elsewhere", service, input };

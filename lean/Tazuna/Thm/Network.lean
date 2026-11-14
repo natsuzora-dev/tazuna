@@ -375,7 +375,6 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
     simp [Execution.line?, Execution.lines, e]
   have hsrc2 : ∀ m j, e.source (m + 1 + 1, j) = none := fun _ _ => rfl
   have hlen : e.members.length = 2 := rfl
-  -- The peer's `in` line that a line of the scenario's run sent.
   have fromB : ∀ j i, sourceB inputs bLines j = some (0, i) → ∃ al l,
       aLines[i]? = some al ∧ bLines[j]? = some l ∧ al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧
         isEventLine l = false ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
@@ -386,7 +385,6 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
     have hw := hrun.2 k _ _ (by rw [List.getElem?_map, show inputs[k]? = _ from hk]; rfl) hl
     exact ⟨al, l, hal, (mem_inLines (List.mem_of_getElem? hl)).1,
       peerBody_carries hname1 (fun _ _ => rfl) hb hw⟩
-  -- The scenario's line that a line of the peer's run sent, as the stage-1 theorems give it.
   have fromA : ∀ i s j, sourceA normal service peer aLines bLines i = some (s, j) → ∃ al bl,
       aLines[i]? = some al ∧ bLines[j]? = some bl ∧ bl.body.dir = .out ∧ al.body.dir = .in ∧
         bl.time.time ≤ al.time.time ∧ Carries (peerAgree normal canon service peer aLines bLines) e 1 0 bl al := by

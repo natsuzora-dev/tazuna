@@ -57,9 +57,8 @@ function writeSnapshot(spec: Spec, scenario: DefinitionRef, lines: readonly Trac
 }
 
 /**
- * A snapshot that test writes: a scenario's run, or a peer's run of the inputs derived from it, which the scenario's
- * snapshot folder holds as `<scenario>.<peer>.jsonl` unless the peer took no input. `lines` is undefined for a run that
- * halted.
+ * A snapshot that test writes: a scenario's run, or a peer's run of the inputs derived from it (peerSnapshotName).
+ * `lines` is undefined for a run that halted.
  */
 interface Snapshotted {
   readonly scenario: Named<Scenario>;
