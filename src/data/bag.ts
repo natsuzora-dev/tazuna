@@ -179,14 +179,13 @@ export class BagValue<T> implements Bag<T> {
       .includes(false);
   }
 
+  // Neither which value fails nor whether a partial sum overflows may depend on the order, so only the whole sum counts.
   sum(f: (value: T) => number): number {
-    return this.#visited().reduce((total, v) => {
-      const n = f(v);
-      if (!Number.isSafeInteger(n)) throw new RangeError(`sum of ${n}, which is not a safe integer`);
-      const next = total + n;
-      if (!Number.isSafeInteger(next)) throw new RangeError(`sum ${next} is not a safe integer`);
-      return next;
-    }, 0);
+    const ns = this.#visited().map((v) => f(v));
+    if (!ns.every((n) => Number.isSafeInteger(n))) throw new RangeError("sum of a value that is not a safe integer");
+    const total = Number(ns.reduce((t, n) => t + BigInt(n), 0n));
+    if (!Number.isSafeInteger(total)) throw new RangeError(`sum ${total} is not a safe integer`);
+    return total;
   }
 
   min<K extends SortKey>(f: (value: T) => K): K | undefined {

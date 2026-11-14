@@ -54,6 +54,10 @@ test("min and max return the key, sum takes only safe integers", () => {
   );
   assert.throws(() => bagOf([0.5]).sum((n) => n), RangeError);
   assert.throws(() => bagOf([Number.MAX_SAFE_INTEGER, 1]).sum((n) => n), RangeError);
+  assert.equal(
+    bagOf([Number.MAX_SAFE_INTEGER, 1, -2]).sum((n) => n),
+    Number.MAX_SAFE_INTEGER - 1,
+  );
 });
 
 test("only returns the one value, undefined for none, and throws NotOnly for more", () => {
