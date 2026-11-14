@@ -44,7 +44,6 @@ def sortByKey (key : String) : List Value → List Value
   | [] => []
   | c :: cs => insertByKey key c (sortByKey key cs)
 
-/-- The elements sorted by their canonical text. -/
 def sortCanonical (xs : List Value) : List Value :=
   xs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
 

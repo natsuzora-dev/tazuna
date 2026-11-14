@@ -102,7 +102,7 @@ tazuna detects breaks of each assumption only partly or not at all.
 - **Spec functions.** Spec functions are deterministic: they read no clock, random source, or mutable global state, and receive the current time as an argument.
 - **Types.** Each value in spec code has the type that the code declares.
   A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
-  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers.
+  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, the keys that one call creates up to a renaming.
 - **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
   An input line therefore carries the implementation's IDs and keys, not the snapshot's.
   `verify` reports a message that the recorder leaves out.
@@ -195,7 +195,7 @@ Precedent: the run-to-completion step of UML state machines (OMG).
 ### Ordering and determinism
 
 - The result of a spec depends only on its inputs and on the orders that the spec states.
-- Spec functions receive the records of an entity as a `Bag`, which has no index, iterator, or order, so a result does not depend on the keys' order.
+- Spec functions receive the records of an entity as a `Bag`, which has no index, iterator, or order.
 - Spec functions also receive each value of a bag or set schema as a `Bag`, and each value of a `sortedBy` schema as runs of `Bag`s in key order, wherever the value comes from: an input, payload, output, context, held value, or shown answer.
 - The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON, whatever order the spec built them in.
 - The events that `decide` returns keep their order, except the events of a `Bag` in the result, which have no order among them; a snapshot does not order their lines.

@@ -69,10 +69,7 @@ structure RegionCheck where
 deriving DecidableEq, Repr, Inhabited
 
 inductive Note where
-  /--
-  The event lines that step `step` wrote from line `start`, in groups of the lengths `groups`. The lines of one group
-  have no order among them.
-  -/
+  /-- The event lines that step `step` wrote from line `start`, in groups of the lengths `groups`. -/
   | events (step start : Nat) (groups : List Nat)
   /-- The start of message `message` as the deadline message for time `time`. -/
   | deadline (message : Nat) (time : Time)
