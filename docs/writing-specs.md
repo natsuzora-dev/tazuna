@@ -29,6 +29,7 @@ The records of an entity have no order: spec functions receive them as a `Bag`, 
 Find one record with `get(key)`, or with `filter(...).only()` when another field identifies it.
 A result that needs an order goes through `sortedBy` with a number or time key, which groups the records with equal keys into runs that have no order inside.
 A page of an ordered result takes whole runs, so it never cuts the records with equal keys apart.
+A value of a `bag`, `set`, or `sortedBy` schema reaches spec functions the same way, as a `Bag` or as runs.
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 

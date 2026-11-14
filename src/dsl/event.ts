@@ -1,5 +1,7 @@
 import type { z } from "zod";
-import type { Shape } from "../data/values.ts";
+import type { Made } from "../data/bag.ts";
+import { bagged, sorted } from "../data/collections.ts";
+import { objectOf, type Shape } from "../data/values.ts";
 import type { SomeKey } from "./conditions.ts";
 import type {
   AnyEvent,
@@ -93,7 +95,8 @@ export type EncodedPayload<Ev extends AnyEvent> = z.input<
   z.ZodObject<{ -readonly [K in keyof PayloadShape<Ev>]: PayloadShape<Ev>[K] }>
 >;
 
-/** Returns one event for the result of a command's `decide`. */
-export function emit<const Ev extends AnyEvent>(ev: Ev, payload: Payload<Ev>): Emit<Ev> {
-  return { kind: "emit", event: ev, payload };
+/** Returns one event for the result of a command's `decide`; its payload holds each bag and set as a Bag. */
+export function emit<const Ev extends AnyEvent>(ev: Ev, payload: Made<Payload<Ev>>): Emit<Ev> {
+  const object = objectOf(ev.payload);
+  return { kind: "emit", event: ev, payload: bagged(object, sorted(object, payload)) as Payload<Ev> };
 }

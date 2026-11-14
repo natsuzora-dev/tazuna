@@ -1,4 +1,4 @@
-import { bag, date, datetime, emit, service, set, sortedBy } from "@natsuzora-dev/tazuna";
+import { bag, date, datetime, emit, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, event, screen } = service({ description: "Keep tasks" });
@@ -64,8 +64,8 @@ export const checkPlan = command({
   return [emit(planChecked, { nullable: entries, union: entries })];
 });
 
-const isSorted = (entries: readonly { readonly day: number }[]) =>
-  entries.every((entry, i) => i === 0 || (entries[i - 1]?.day ?? 0) <= entry.day);
+const isSorted = (runs: Runs<{ readonly day: number }>) =>
+  runs.every((run, i) => i === 0 || (runs[i - 1]?.max((e) => e.day) ?? 0) < (run.min((e) => e.day) ?? 0));
 
 const unsorted = () => [
   { day: 2, title: "Buy eggs" },

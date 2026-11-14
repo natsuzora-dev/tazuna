@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { ChartSpec, StateSpec } from "./definition.ts";
 import type { DefaultedShape, Immutable, Row } from "./entity.ts";
@@ -210,7 +211,7 @@ type TableRow<F, K extends keyof F, A, B> =
       }
     : SomeKnownKey<B> & B & { readonly holds?: never };
 type Holds<A, Own extends Shape> = {
-  readonly [h in keyof Own]: (args: A) => Immutable<z.output<Own[h]>> | null | undefined;
+  readonly [h in keyof Own]: (args: A) => Made<Immutable<z.output<Own[h]>>> | null | undefined;
 };
 /**
  * The behaviors of the states. A state without behavior is left out; a state with held values needs `holds`

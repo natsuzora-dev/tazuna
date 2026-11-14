@@ -6,7 +6,7 @@ export const { query } = service({ description: "Answer questions about notes" }
 export const notesIn = query({
   input: { ids: bag(z.string()) },
   output: { count: z.number() },
-}).resolve(({ input }) => ({ count: input.ids.length }));
+}).resolve(({ input }) => ({ count: input.ids.size }));
 
 export const note = query({
   input: { id: z.string() },

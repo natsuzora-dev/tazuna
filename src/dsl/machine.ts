@@ -1,4 +1,4 @@
-import type { Bag } from "../data/bag.ts";
+import type { Bag, Made } from "../data/bag.ts";
 import type { Delay } from "../data/datetime.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
@@ -50,7 +50,7 @@ export interface BaseArgs<Ctx, N extends string, D> extends Now {
   readonly active: { readonly [S in N]: boolean };
 }
 
-type Assign<Ctx, A> = SomeKnownKey<Ctx> & { readonly [K in keyof Ctx]?: (args: A & CreateKey) => Ctx[K] };
+type Assign<Ctx, A> = SomeKnownKey<Ctx> & { readonly [K in keyof Ctx]?: (args: A & CreateKey) => Made<Ctx[K]> };
 
 type Transition<N extends string, Ctx, A> = {
   /**

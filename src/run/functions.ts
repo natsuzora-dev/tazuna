@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assumedEnsures } from "../contract/checks.ts";
 import { NotOnly, valuesOf } from "../data/bag.ts";
 import { canonical as canonicalOf, comparableAnswer, orderFree } from "../data/canonical.ts";
-import { bag, defaultRow, sorted } from "../data/collections.ts";
+import { bag, bagged, defaultRow, sorted } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
@@ -67,7 +67,10 @@ function attempt<T>(f: () => T, schema?: Schema): T | Failed {
  */
 const unbagged = (shape: Shape | undefined, value: unknown): unknown => sorted(objectOf(shape ?? {}), value);
 
-/** Returns the value with every collection sorted and its encoding, or why it does not match `zod`. */
+/**
+ * Returns the value with every collection sorted, as spec code receives it, and its encoding, or why it does not match
+ * `zod`.
+ */
 function encodedSorted<T>(
   schema: Schema,
   zod: z.ZodType,
@@ -79,7 +82,7 @@ function encodedSorted<T>(
   }, schema);
   if (checked instanceof Failed) return checked;
   const { sortedValue, encoded } = checked;
-  return encoded.success ? { value: sortedValue, encoded: encoded.data } : { error: encoded.error };
+  return encoded.success ? { value: bagged(zod, sortedValue) as T, encoded: encoded.data } : { error: encoded.error };
 }
 
 /** Returns the checked value and its encoding, or the Issue of a value that does not match `schema`. */
@@ -416,7 +419,7 @@ export class SpecFunctions implements Functions {
     if (!parsed.success) return { error: zodError(parsed.error.issues) };
     const encoded = attempt(() => z.encode(object, parsed.data as never), schema);
     if (encoded instanceof Failed) return encoded;
-    return { value: parsed.data as Fields, encoded };
+    return { value: bagged(object, parsed.data) as Fields, encoded };
   }
 
   canonical(schema: Schema, value: unknown): unknown {
@@ -785,19 +788,24 @@ export class SpecFunctions implements Functions {
     const keys = matching({ kind: "mapKey", chart, map }, bag(objectOf(node?.key ?? {})), given);
     if (keys instanceof Failed) return keys;
     const encoded = keys.encoded as unknown[];
-    return keys.value.map((key, i) => ({ key, encoded: encoded[i], encodedKey: canonicalJson(encoded[i]) }));
+    return (valuesOf(keys.value) ?? []).map((key, i) => ({
+      key,
+      encoded: encoded[i],
+      encodedKey: canonicalJson(encoded[i]),
+    }));
   }
 
   /** Returns the defaults of the map state's copy context, which load checks against the schema. */
   copyContext(machine: string, map: string): Fields {
-    return defaultRow(this.node(machine, map)?.context ?? {});
+    const shape = this.node(machine, map)?.context ?? {};
+    return bagged(objectOf(shape), defaultRow(shape)) as Fields;
   }
 
   /** Returns the defaults of a single entity's fields, which load checks against the schema. */
   singleRecord(entity: string): Row {
     const shape = this.entity(entity).fields as Shape;
     const value = defaultRow(shape);
-    return { value, encoded: encode(shape, value) as Fields };
+    return { value: bagged(objectOf(shape), value) as Fields, encoded: encode(shape, value) as Fields };
   }
 
   copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed {
@@ -805,7 +813,7 @@ export class SpecFunctions implements Functions {
     const fields = Object.keys(shape);
     const row = payload as Fields;
     if (!fields.every((f) => row[f] !== undefined)) return undefined;
-    const key = Object.fromEntries(fields.map((f) => [f, row[f]]));
+    const key = sorted(objectOf(shape), Object.fromEntries(fields.map((f) => [f, row[f]])));
     const chart = this.chartOf(machine).ref;
     const encoded = attempt(() => z.safeEncode(objectOf(shape), key as never), { kind: "mapKey", chart, map });
     if (encoded instanceof Failed) return encoded;

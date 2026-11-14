@@ -1,6 +1,14 @@
 import { Bag, comparable as comparableValue, Runs } from "../../src/data/canonical.ts";
+import { bagged, sorted } from "../../src/data/collections.ts";
 import type { Answer } from "../../src/data/trace.generated.ts";
-import { canonicalJson, encode, type Fields, objectOf, type Shape, strictObjectOf } from "../../src/data/values.ts";
+import {
+  canonicalJson,
+  encode as encodeArrays,
+  type Fields,
+  objectOf,
+  type Shape,
+  strictObjectOf,
+} from "../../src/data/values.ts";
 import { thrown } from "../../src/data/violation.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, Automation, Named, ServiceDefinition } from "../../src/dsl/definition.ts";
 import type { AnyEntity } from "../../src/dsl/entity.ts";
@@ -22,6 +30,9 @@ import { type RecordSource, reversedKeys } from "../../src/semantics/service/rec
 import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/syntax/structure.ts";
 import type { Message } from "./lean.ts";
 
+/** Encodes a value as spec code receives it, whose bags, sets and sortedBy arrays are Bags and Runs. */
+const encode = (shape: Shape, value: unknown): unknown => encodeArrays(shape, sorted(objectOf(shape), value));
+
 const json = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
 /**
@@ -36,16 +47,16 @@ function decoding<T>(f: () => T, schema?: Schema): T | Failed {
   }
 }
 
-/** Decodes `value`, an encoded value of `shape`. */
+/** Decodes `value`, an encoded value of `shape`, as spec code receives it. */
 function decode(schema: Schema, shape: Shape, value: unknown): Fields | Failed {
-  return decoding(() => objectOf(shape).parse(value) as Fields, schema);
+  return decoding(() => bagged(objectOf(shape), objectOf(shape).parse(value)) as Fields, schema);
 }
 
 /** Decodes `value` when it matches `shape` with no other fields, and returns undefined when it does not. */
 function decodeStrict(schema: Schema, shape: Shape, value: unknown): Fields | undefined | Failed {
   const decoded = decoding(() => strictObjectOf(shape).safeParse(value), schema);
   if (decoded instanceof Failed) return decoded;
-  return decoded.success ? (decoded.data as Fields) : undefined;
+  return decoded.success ? (bagged(strictObjectOf(shape), decoded.data) as Fields) : undefined;
 }
 
 /**
@@ -55,8 +66,9 @@ function decodeFields(shape: Shape, row: Fields): Fields | Failed {
   return decoding(() =>
     Object.fromEntries(
       Object.entries(row).map(([field, value]) => {
-        const decoded = shape[field]?.safeParse(value);
-        return [field, decoded?.success === true ? decoded.data : value];
+        const schema = shape[field];
+        const decoded = schema?.safeParse(value);
+        return [field, schema !== undefined && decoded?.success === true ? bagged(schema, decoded.data) : value];
       }),
     ),
   );
@@ -167,7 +179,7 @@ export class RunFunctions implements Answering {
       field: (entity, key, field) => {
         const value = read(key === undefined ? { entity, field, ...before } : { entity, key, field, ...before });
         const schema = (entities[entity]?.fields as Shape | undefined)?.[field];
-        return value === undefined || schema === undefined ? value : schema.parse(value);
+        return value === undefined || schema === undefined ? value : bagged(schema, schema.parse(value));
       },
     });
     this.records = source({});

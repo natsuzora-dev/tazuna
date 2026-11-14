@@ -1,14 +1,18 @@
 import { z } from "zod";
-import type { Bag, Made } from "../data/bag.ts";
+import type { Bag, Made, MarkOf, Runs } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { Conditions, Named } from "./conditions.ts";
 
 export type DefaultedShape = Readonly<Record<string, z.ZodDefault<z.ZodType>>>;
-/** The type T with every nested object and array readonly. */
+/** The type T with every nested object and array readonly, each bag and set a Bag, and each sortedBy array Runs. */
 export type Immutable<T> = T extends Temporal.Instant | Temporal.PlainDate | Temporal.Duration
   ? T
   : T extends readonly (infer E)[]
-    ? readonly Immutable<E>[]
+    ? [MarkOf<T>] extends [never]
+      ? readonly Immutable<E>[]
+      : MarkOf<T> extends "sortedBy"
+        ? Runs<Immutable<E>>
+        : Bag<Immutable<E>>
     : T extends object
       ? { readonly [K in keyof T]: Immutable<T[K]> }
       : T;
@@ -16,7 +20,7 @@ export type Immutable<T> = T extends Temporal.Instant | Temporal.PlainDate | Tem
 /** A record's values as expressions receive them; changing one is a type error. */
 export type Row<S extends Shape> = Immutable<z.output<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>>;
 /** Values of shape `S` as expressions return them: a bag, set or sortedBy field also takes a Bag. */
-export type MadeRow<S extends Shape> = Made<z.output<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>>;
+export type MadeRow<S extends Shape> = Made<Row<S>>;
 
 export interface KeyedEntity<S extends Shape = Shape, K extends keyof S & string = keyof S & string> {
   readonly kind: "entity";

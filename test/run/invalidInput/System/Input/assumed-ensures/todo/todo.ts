@@ -13,7 +13,7 @@ export const { query } = service({ description: "Keep the tasks", entities: { Ta
 export const taskTitles = query({
   output: { titles: bag(Task.fields.title) },
   ensures: {
-    distinct: ({ output }) => output.titles.every((t) => output.titles.filter((u) => u === t).length === 1),
-    readsRecords: ({ output, records }) => output.titles.length === records.Task.size,
+    distinct: ({ output }) => output.titles.every((t) => output.titles.filter((u) => u === t).size === 1),
+    readsRecords: ({ output, records }) => output.titles.size === records.Task.size,
   },
 }).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));

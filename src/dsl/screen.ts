@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Bag } from "../data/bag.ts";
+import type { Bag, Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { Named, SomeKey } from "./conditions.ts";
 import type { AnyScreen, Control, Events, InputOf, QueryOutput, Screen, ServiceDefinition } from "./definition.ts";
@@ -89,8 +89,8 @@ type ScreenResolve<O extends Shape, A> = keyof O extends never
   : { resolve: (args: A) => MadeRow<O> };
 
 type RequiredKeys<S extends Shape> = { [K in keyof S]: S[K] extends z.ZodDefault<z.ZodType> ? never : K }[keyof S];
-type InitialContext<S extends Shape> = { readonly [K in RequiredKeys<S>]: Immutable<z.output<S[K]>> } & {
-  readonly [K in Exclude<keyof S, RequiredKeys<S>>]?: Immutable<z.output<S[K]>>;
+type InitialContext<S extends Shape> = { readonly [K in RequiredKeys<S>]: Made<Immutable<z.output<S[K]>>> } & {
+  readonly [K in Exclude<keyof S, RequiredKeys<S>>]?: Made<Immutable<z.output<S[K]>>>;
 };
 type NoExtra<R, S extends Shape> = { readonly [K in Exclude<keyof R, keyof S>]: never };
 type InitialContextOf<I extends Shape, Ctx extends Shape, R> = (args: {

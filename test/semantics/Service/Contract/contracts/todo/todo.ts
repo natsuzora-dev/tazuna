@@ -69,6 +69,6 @@ export const pinTaskByTitle = command({
 export const taskTitles = query({
   output: { titles: bag(Task.fields.title) },
   ensures: {
-    distinct: ({ output }) => output.titles.every((t) => output.titles.filter((u) => u === t).length === 1),
+    distinct: ({ output }) => output.titles.every((t) => output.titles.filter((u) => u === t).size === 1),
   },
 }).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));

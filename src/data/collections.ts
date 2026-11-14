@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { compareKeys, type Marked, type SortKey, valuesOf } from "./bag.ts";
+import { BagValue, compareKeys, type Marked, type SortKey, valuesOf } from "./bag.ts";
 import { schemaNode } from "./schemaNode.ts";
 import { byCodePoint, canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
 
@@ -122,6 +122,39 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
       return value;
     default:
       return value == null ? value : sorted(node.inner, value);
+  }
+}
+
+/**
+ * Returns a value as `sorted` returns it, as spec code receives it: each bag and set as a Bag, and each sortedBy array as
+ * Runs.
+ */
+export function bagged(schema: z.ZodType, value: unknown): unknown {
+  const node = schemaNode(schema);
+  switch (node.type) {
+    case "array": {
+      if (!Array.isArray(value)) return value;
+      const items = value.map((v) => bagged(node.element, v));
+      const collection = collectionOf(schema);
+      if (collection === undefined) return items;
+      const values = new BagValue(() => items);
+      return collection.kind === "sortedBy"
+        ? values.sortedBy((v) => (v as Record<string, SortKey>)[collection.key] as SortKey)
+        : values;
+    }
+    case "object":
+      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, node.shape[k] === undefined ? v : bagged(node.shape[k], v)]),
+      );
+    case "union": {
+      const option = node.options.find((o) => z.safeEncode(o, value as never).success);
+      return option === undefined ? value : bagged(option, value);
+    }
+    case "opaque":
+      return value;
+    default:
+      return value == null ? value : bagged(node.inner, value);
   }
 }
 

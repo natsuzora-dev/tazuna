@@ -8,23 +8,31 @@ export function compareKeys(a: unknown, b: unknown): number {
 }
 
 declare const collectionMark: unique symbol;
-/** An array type that a bag, set or sortedBy schema outputs; implementations still see a plain array. */
+/** An array type that a bag, set or sortedBy schema outputs, and Runs; implementations still see a plain array. */
 export type Marked<T, M extends "bag" | "sortedBy"> = T & { readonly [collectionMark]?: M };
+
+/** The mark of an array type that a bag, set or sortedBy schema outputs, or never for another type. */
+export type MarkOf<T> = typeof collectionMark extends keyof T ? NonNullable<T[typeof collectionMark]> : never;
 
 type Leaf = Temporal.Instant | Temporal.PlainDate | Temporal.Duration;
 
-/** A value as spec functions may produce it: a bag or set also takes a Bag, and a sortedBy array also takes Runs. */
+/**
+ * A value as spec functions may produce one that they receive as `T`: a Bag also takes an array, and Runs also take a
+ * Bag or an array of values and Bags.
+ */
 export type Made<T> = T extends Leaf
   ? T
-  : T extends readonly (infer E)[]
-    ? typeof collectionMark extends keyof T
-      ? NonNullable<T[typeof collectionMark]> extends "sortedBy"
-        ? Bag<Made<E>> | readonly (Made<E> | Bag<Made<E>>)[]
-        : Bag<Made<E>> | readonly Made<E>[]
-      : readonly Made<E>[]
-    : T extends object
-      ? { readonly [K in keyof T]: Made<T[K]> }
-      : T;
+  : T extends Bag<infer E>
+    ? Bag<Made<E>> | readonly Made<E>[]
+    : T extends readonly (infer E)[]
+      ? [MarkOf<T>] extends [never]
+        ? readonly Made<E>[]
+        : E extends Bag<infer V>
+          ? Bag<Made<V>> | readonly (Made<V> | Bag<Made<V>>)[]
+          : never
+      : T extends object
+        ? { readonly [K in keyof T]: Made<T[K]> }
+        : T;
 
 let itemsOf: (bag: BagValue<unknown>) => readonly unknown[];
 
@@ -59,7 +67,7 @@ export interface Bag<T> {
 }
 
 /** Groups of values in ascending key order; the values of one group have equal keys and no order. */
-export type Runs<T> = readonly Bag<T>[];
+export type Runs<T> = Marked<readonly Bag<T>[], "sortedBy">;
 
 /** The error of `only()` on more than one value. */
 export class NotOnly extends Error {}

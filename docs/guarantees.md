@@ -194,6 +194,7 @@ Precedent: the run-to-completion step of UML state machines (OMG).
 
 - The result of a spec depends only on its inputs and on the orders that the spec states.
 - Spec functions receive the records of an entity as a `Bag`, which has no index, iterator, or order, so a result does not depend on the keys' order.
+- Spec functions also receive each value of a bag or set schema as a `Bag`, and each value of a `sortedBy` schema as runs of `Bag`s in key order, wherever the value comes from: an input, payload, output, context, held value, shown answer, or constant.
 - The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON, whatever order the spec built them in.
 - Deadlines due at the same time fire in a default order, and the exploration of `test` also tries the other orders.
 

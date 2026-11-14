@@ -123,7 +123,7 @@ type SendInput<C, Args> =
   C extends Command<infer I, AnyEvent>
     ? keyof I extends never
       ? { input?: never }
-      : { input: (args: Args) => Input<I> }
+      : { input: (args: Args) => MadeRow<I> }
     : never;
 
 /**

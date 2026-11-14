@@ -30,6 +30,7 @@ import {
   scenario,
   send,
   service,
+  set,
   singleEntity,
   sortedBy,
 } from "../src/index.ts";
@@ -135,6 +136,27 @@ query({ output: { tasks: sortedBy(z.object({ id: ref(Task), createdAt: datetime 
 );
 // @ts-expect-error an array output takes no Bag
 query({ output: { ids: z.array(ref(Task)) } }).resolve(({ records }) => ({ ids: records.Task.map((t) => t.id) }));
+
+// A bag, set or sortedBy value that spec code receives is a Bag or Runs, and spec code may give it back as it is.
+query({
+  input: { ids: set(ref(Task)), tasks: sortedBy(z.object({ id: ref(Task), createdAt: datetime }), "createdAt") },
+  output: { ids: bag(ref(Task)), earliest: bag(ref(Task)) },
+  ensures: {
+    // @ts-expect-error a received bag has no length
+    counted: ({ output }) => output.ids.length > 0,
+  },
+}).resolve(({ input }) => ({ ids: input.ids, earliest: input.tasks[0]?.map((t) => t.id) ?? [] }));
+machine({
+  description: "",
+  context: { ids: bag(z.string()).default([]) },
+  receives: { taskAddedRecorded },
+  initial: "a",
+  states: { a: {} },
+}).chart({
+  states: {
+    a: { on: { taskAddedRecorded: [{ assign: { ids: ({ context }) => context.ids.filter((id) => id !== "") } }] } },
+  },
+});
 
 machine({
   description: "",
@@ -475,8 +497,8 @@ machine({
         tasks: {
           input: () => ({ filter: "open" }),
           onFulfilled: [
-            { guard: { many: ({ output }) => output.tasks.length > 3 }, target: "adding" },
-            { assign: { count: ({ output }) => output.tasks.length }, target: "idle" },
+            { guard: { many: ({ output }) => output.tasks.size > 3 }, target: "adding" },
+            { assign: { count: ({ output }) => output.tasks.size }, target: "idle" },
           ],
           onRejected: [],
         },
