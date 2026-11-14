@@ -10,13 +10,14 @@ import type { RecordSource, Row } from "./service/records.ts";
 
 /**
  * The reason that a Functions question has no answer: its author code threw (with `schema`, inside that schema's
- * refinement or codec), a value does not match `schema`, or an expression read a `held` name that no enclosing state
- * holds.
+ * refinement or codec), a value does not match `schema`, an expression read a `held` name that no enclosing state
+ * holds, or it called `only()` on a bag with more than one element.
  */
 export type Issue =
   | { readonly kind: "thrown"; readonly schema?: Schema }
   | { readonly kind: "schema"; readonly schema: Schema }
-  | { readonly kind: "unheld"; readonly held: string };
+  | { readonly kind: "unheld"; readonly held: string }
+  | { readonly kind: "notOnly" };
 
 /** A question's Issue, with what only TS reports: the thrown value or the Zod issues. */
 export class Failed {
@@ -31,9 +32,9 @@ export class Failed {
 
 /**
  * Returns the fault that `failed` means at a site whose own author code belongs to `owner`, with the error that only TS
- * reports. A throw names `owner`, or the owner of the schema whose refinement or codec threw. An unheld read, and a
- * held value that fails its schema, name `owner`; a value that fails any other schema is the site's `mismatch`, an
- * exception where the site checks no schema.
+ * reports. A throw names `owner`, or the owner of the schema whose refinement or codec threw. An unheld read, a call
+ * of `only()` on more than one element, and a held value that fails its schema, name `owner`; a value that fails any
+ * other schema is the site's `mismatch`, an exception where the site checks no schema.
  */
 export function issueViolation(
   owner: DefinitionRef,
@@ -47,6 +48,8 @@ export function issueViolation(
     }
     case "unheld":
       return { kind: "Fault.unheld", definition: owner, data: { held: issue.held } };
+    case "notOnly":
+      return { kind: "Fault.notOnly", definition: owner, data: {} };
     case "schema": {
       const { schema } = issue;
       const fault: Fault =

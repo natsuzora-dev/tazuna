@@ -63,18 +63,21 @@ deriving DecidableEq, Repr, Inhabited
 
 /--
 The reason that a question has no answer: its author code threw (with `schema`, inside that schema's refinement or
-codec), a value does not match `schema`, or an expression read a `held` name that no enclosing state holds.
+codec), a value does not match `schema`, an expression read a `held` name that no enclosing state holds, or it called
+`only()` on a bag with more than one element.
 -/
 inductive Issue where
   | thrown (schema : Option Schema)
   | schema (schema : Schema)
   | unheld (held : String)
+  | notOnly
 deriving DecidableEq, Repr, Inhabited
 
 /--
 The fault that `e` means at a site whose own author code belongs to `owner`. A throw names `owner`, or the owner of the
-schema whose refinement or codec threw. An unheld read, and a held value that fails its schema, name `owner`; a value
-that fails any other schema is the site's `mismatch`, an exception where the site checks no schema.
+schema whose refinement or codec threw. An unheld read, a call of `only()` on more than one element, and a held value
+that fails its schema, name `owner`; a value that fails any other schema is the site's `mismatch`, an exception where
+the site checks no schema.
 -/
 def issueViolation (st : Service) (owner : Syntax.Ref) (e : Issue)
     (mismatch : Schema → Fault := fun _ => .exception (some owner)) : Fault :=
@@ -82,6 +85,7 @@ def issueViolation (st : Service) (owner : Syntax.Ref) (e : Issue)
   | .thrown none => .exception (some owner)
   | .thrown (some s) => .exception (some (st.schemaOwner s))
   | .unheld held => .unheld owner held
+  | .notOnly => .notOnly owner
   | .schema (.held _ state name) => .heldSchema owner name state
   | .schema s => mismatch s
 

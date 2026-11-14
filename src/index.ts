@@ -1,6 +1,7 @@
 import "./dsl/unit.ts";
 
 export type { CommandAnswer, QueryAnswer } from "./data/answer.ts";
+export type { Bag, Runs } from "./data/bag.ts";
 export { bag, set, sortedBy } from "./data/collections.ts";
 export { date, datetime, duration, timeZone } from "./data/datetime.ts";
 export type { Rejection, RejectionKind, TraceLine } from "./data/trace.generated.ts";

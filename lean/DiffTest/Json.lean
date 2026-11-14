@@ -150,6 +150,7 @@ def Issue.decode (v : Value) : Except String Issue := do
   | "thrown" => pure (.thrown (← (optional v "schema").mapM Schema.decode))
   | "schema" => pure (.schema (← Schema.decode (← field v "schema")))
   | "unheld" => pure (.unheld (← stringField v "held"))
+  | "notOnly" => pure .notOnly
   | other => throw s!"unknown issue kind {other}"
 
 def Transition.toValue (t : Transition) : Value :=

@@ -31,6 +31,8 @@ inductive Fault where
   | itemsSchema (definition : Syntax.Ref) (map : String)
   /-- A function reads the held value `held` while its state does not hold it. -/
   | unheld (definition : Syntax.Ref) (held : String)
+  /-- A function calls `only()` on a bag with more than one element. -/
+  | notOnly (definition : Syntax.Ref)
   | exception (definition : Option Syntax.Ref)
   /-- The record `recordKey` of entity `definition` refers in `field` to the missing record `targetKey`. -/
   | danglingRef (definition : Syntax.Ref) (recordKey field targetKey : String) (command : Syntax.Ref)
@@ -66,7 +68,7 @@ def Fault.halts : Fault → Bool
   | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .outputSchema .. | .automationInputSchema ..
   | .requestInputSchema .. | .showsInputSchema .. | .screenInputSchema .. | .failedRequires .. | .heldSchema ..
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
-  | .itemsSchema .. | .unheld .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
+  | .itemsSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
   | .exceededDueDeadlines .. | .exceededExitDepth .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..

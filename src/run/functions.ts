@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { assumedEnsures } from "../contract/checks.ts";
+import { NotOnly } from "../data/bag.ts";
 import { canonical as canonicalOf, comparableAnswer, orderFree } from "../data/canonical.ts";
 import { defaultRow, sorted } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
@@ -48,13 +49,14 @@ import { recordsView } from "./records.ts";
 
 /**
  * Runs author code and returns its value. A throw becomes a `thrown` Issue, of `schema` when the code is that schema's
- * refinement or codec; the Issue of a held read inside passes through.
+ * refinement or codec; the Issue of a held read inside passes through, and `only()` on more than one value is notOnly.
  */
 function attempt<T>(f: () => T, schema?: Schema): T | Failed {
   try {
     return f();
   } catch (error) {
     if (error instanceof Failed) return error;
+    if (error instanceof NotOnly) return new Failed({ kind: "notOnly" });
     return new Failed(schema === undefined ? { kind: "thrown" } : { kind: "thrown", schema }, thrown(error));
   }
 }

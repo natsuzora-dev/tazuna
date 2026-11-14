@@ -234,6 +234,7 @@ export class RunFunctions implements Answering {
       case "schema":
         return { kind: "schema", schema: this.leanSchema(issue.schema) };
       case "unheld":
+      case "notOnly":
         return issue;
     }
   }

@@ -53,6 +53,7 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
     "Fault.exceededMessageWork":
       "An example that reaches the limit 100000 writes about 8300 event lines in one message and makes run.diff several times slower",
     "Fault.exceededExitDepth": "Reaching the exit nesting limit 100 takes about 50 nested screen definitions",
+    "Fault.notOnly": "Spec functions receive no Bag yet",
   },
 };
 

@@ -117,6 +117,12 @@ export type Fault =
         readonly held: string;
       };
     }
+  /** A function calls `only()` on a bag with more than one element. */
+  | {
+      readonly kind: "Fault.notOnly";
+      readonly definition: DefinitionRef;
+      readonly data: Readonly<Record<string, never>>;
+    }
   | {
       readonly kind: "Fault.exception";
       readonly definition: DefinitionRef | null;
@@ -278,6 +284,7 @@ export const faultKinds = [
   "Fault.contextSchema",
   "Fault.itemsSchema",
   "Fault.unheld",
+  "Fault.notOnly",
   "Fault.exception",
   "Fault.danglingRef",
   "Fault.danglingSingleRef",
@@ -316,6 +323,7 @@ export const haltingFaultKinds = [
   "Fault.contextSchema",
   "Fault.itemsSchema",
   "Fault.unheld",
+  "Fault.notOnly",
   "Fault.exception",
   "Fault.duplicateItemKey",
   "Fault.exceededCommandDepth",

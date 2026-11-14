@@ -44,14 +44,14 @@ export const bag = <E extends z.ZodType>(element: E): z.ZodArray<E> =>
 export const set = <E extends z.ZodType>(element: E): z.ZodArray<E> =>
   marked(element, setCheck as never, { kind: "set" });
 
-// String order differs across languages, so a sort key is a number or a point in time.
-type SortKey = number | Temporal.Instant | Temporal.PlainDate;
+/** A value that orders others: a number or a point in time, not a string, whose order differs across languages. */
+export type SortKey = number | Temporal.Instant | Temporal.PlainDate;
 type SortKeyOf<E extends z.ZodObject> = {
   [K in keyof z.output<E>]-?: z.output<E>[K] extends SortKey ? K : never;
 }[keyof z.output<E>] &
   string;
 
-function compareKeys(a: unknown, b: unknown): number {
+export function compareKeys(a: unknown, b: unknown): number {
   if (a instanceof Temporal.Instant && b instanceof Temporal.Instant) return Temporal.Instant.compare(a, b);
   if (a instanceof Temporal.PlainDate && b instanceof Temporal.PlainDate) return Temporal.PlainDate.compare(a, b);
   return typeof a === "number" && typeof b === "number" ? a - b : 0;
