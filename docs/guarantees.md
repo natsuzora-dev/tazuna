@@ -112,7 +112,7 @@ tazuna detects breaks of each assumption only partly or not at all.
   `test` runs the other service's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the service at their times, with the scenario's `elsewhere` inputs at their places.
   It reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
   Values compare up to the keys that the scenario's service creates, which the other service receives renamed, and, one to one, the keys that the other service creates.
-  `test` writes the other service's run as the snapshot `<scenario>.<service>.jsonl` beside the scenario's.
+  `test` writes the other service's run, unless it took no input, as the snapshot `<scenario>.<service>.jsonl` beside the scenario's.
   `verify` compares the trace that the other service's implementation records for those inputs, `<scenario>.<service>.jsonl` in the folder of the scenario's traces, with that snapshot, as the other service's trace.
   A later step of tazuna replaces this assumption with a guarantee.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.

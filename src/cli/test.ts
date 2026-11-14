@@ -58,7 +58,8 @@ function writeSnapshot(spec: Spec, scenario: DefinitionRef, lines: readonly Trac
 
 /**
  * A snapshot that test writes: a scenario's run, or a peer's run of the inputs derived from it, which the scenario's
- * snapshot folder holds as `<scenario>.<peer>.jsonl`. `lines` is undefined for a run that halted.
+ * snapshot folder holds as `<scenario>.<peer>.jsonl` unless the peer took no input. `lines` is undefined for a run that
+ * halted.
  */
 interface Snapshotted {
   readonly scenario: Named<Scenario>;
@@ -162,7 +163,9 @@ export function testSpec(
     snapshotted.push({ scenario, name: scenario.name, lines: run.outcome.lines });
     for (const check of checkPeers(spec, scenario, run)) {
       problems.push(...check.problems);
-      snapshotted.push({ scenario, name: peerSnapshotName(scenario.name, check.peer), lines: check.lines });
+      // A peer run without input has no line, so no harness should have to replay an empty file.
+      if (check.lines?.length !== 0)
+        snapshotted.push({ scenario, name: peerSnapshotName(scenario.name, check.peer), lines: check.lines });
     }
   }
   const snapshots = testSnapshots(spec, snapshotted, options.update);
