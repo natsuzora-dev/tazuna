@@ -2,7 +2,7 @@ import { at, operate, scenario, send } from "@natsuzora-dev/tazuna";
 import { checkPlan, listTasks, listVisits, pickScreen, planScreen, planTasks } from "./todo.ts";
 
 export const listed = scenario(
-  "List the tasks; decide writes the entries of tasksListed out of day order, and tazuna sorts them by day",
+  "List the tasks; decide writes the titles and the entries of tasksListed out of order, and tazuna sorts the titles bag by canonical JSON and the entries by day, the two entries of day 1 by canonical JSON",
   [at("2026-10-25T10:00:00+09:00"), send(listTasks, {})],
 );
 

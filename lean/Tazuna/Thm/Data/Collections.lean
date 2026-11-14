@@ -114,7 +114,7 @@ theorem sortByKey_keeps_equal_keys (key : String) (k : SortKey) (xs : List Value
 theorem sorted_by_array_sorted (schema item : Value) (xs : List Value) (key : String)
     (ha : schema.field? "anyOf" = none) (hi : schema.field? "items" = some item)
     (hk : schema.field? "x-tazuna-sorted-by" = some (.str key)) :
-    sortCollections schema (.arr xs) = .arr (sortByKey key (xs.map (sortCollections item))) := by
+    sortCollections schema (.arr xs) = .arr (sortByKey key (sortCanonical (xs.map (sortCollections item)))) := by
   rw [sortCollections]
   split
   · rename_i heq; rw [ha] at heq; cases heq
@@ -126,5 +126,30 @@ theorem sorted_by_array_sorted (schema item : Value) (xs : List Value) (key : St
       rfl
     · rename_i heq
       simp [hi] at heq
+
+theorem bag_or_set_array_sorted (schema item : Value) (xs : List Value)
+    (ha : schema.field? "anyOf" = none) (hi : schema.field? "items" = some item)
+    (hk : schema.field? "x-tazuna-sorted-by" = none)
+    (hb : schema.field? "x-tazuna-bag" = some (.bool true) ∨ schema.field? "x-tazuna-set" = some (.bool true)) :
+    sortCollections schema (.arr xs) = .arr (sortCanonical (xs.map (sortCollections item))) := by
+  rw [sortCollections]
+  split
+  · rename_i heq; rw [ha] at heq; cases heq
+  · simp only [hk]
+    rcases hb with hb | hb <;> split <;> simp_all <;> split <;> simp_all
+
+theorem sortCanonical_in_order (xs : List Value) : (sortCanonical xs).Pairwise (·.canonical ≤ ·.canonical) := by
+  have trans (a b c : Value) (hab : decide (a.canonical ≤ b.canonical) = true)
+      (hbc : decide (b.canonical ≤ c.canonical) = true) : decide (a.canonical ≤ c.canonical) = true := by
+    simp only [decide_eq_true_eq] at *; exact String.le_trans hab hbc
+  have total (a b : Value) : (decide (a.canonical ≤ b.canonical) || decide (b.canonical ≤ a.canonical)) = true := by
+    simpa using String.le_total a.canonical b.canonical
+  simpa [sortCanonical] using List.pairwise_mergeSort trans total xs
+
+/-- In an array sorted by a key, the elements with equal keys are in the order of their canonical text. -/
+theorem sortByKey_equal_keys_in_canonical_order (key : String) (k : SortKey) (xs : List Value) :
+    ((sortByKey key (sortCanonical xs)).filter (keyOf key · == k)).Pairwise (·.canonical ≤ ·.canonical) := by
+  rw [sortByKey_keeps_equal_keys]
+  exact (sortCanonical_in_order xs).filter _
 
 end Tazuna.Thm.Data.Collections

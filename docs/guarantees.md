@@ -194,7 +194,7 @@ Precedent: the run-to-completion step of UML state machines (OMG).
 
 - The result of a spec depends only on its inputs and on the orders that the spec states.
 - Spec functions see the records of an entity in key order, regardless of the order in which they were written.
-- An array sorted by a key keeps the order of equal keys.
+- The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON, whatever order the spec built them in.
 - Deadlines due at the same time fire in a default order, and the exploration of `test` also tries the other orders.
 
 Precedent: CHESS (Madanlal Musuvathi and others), which makes each scheduling choice an input to a run.

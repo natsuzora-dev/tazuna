@@ -59,7 +59,7 @@ function attempt<T>(f: () => T, schema?: Schema): T | Failed {
   }
 }
 
-/** Returns the value with every sortedBy array in key order and its encoding, or why it does not match `zod`. */
+/** Returns the value with every collection sorted and its encoding, or why it does not match `zod`. */
 function encodedSorted<T>(
   schema: Schema,
   zod: z.ZodType,

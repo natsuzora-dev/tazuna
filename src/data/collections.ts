@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { schemaNode } from "./schemaNode.ts";
-import { canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
+import { byCodePoint, canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
 
 export type Collection =
   | { readonly kind: "bag" }
@@ -81,6 +81,10 @@ export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(element:
 export const collectionOf = (schema: z.core.$ZodType): Collection | undefined =>
   (schema._zod.def.checks ?? []).map((c) => collections.get(c)).find((c) => c !== undefined);
 
+/**
+ * Returns the value with the elements of each bag and set in canonical JSON order, and each sortedBy array in key order
+ * with equal keys in canonical JSON order, so that the order in which spec code built them leaves no trace.
+ */
 export function sorted(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
   switch (node.type) {
@@ -88,7 +92,9 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
       if (!Array.isArray(value)) return value;
       const items = value.map((v) => sorted(node.element, v));
       const collection = collectionOf(schema);
-      return collection?.kind === "sortedBy" ? items.toSorted(byKey(collection.key)) : items;
+      if (collection === undefined) return items;
+      const canonical = items.toSorted((a, b) => byCodePoint(canonicalJson(a), canonicalJson(b)));
+      return collection.kind === "sortedBy" ? canonical.toSorted(byKey(collection.key)) : canonical;
     }
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -108,7 +114,7 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
   }
 }
 
-/** Returns the value with every sortedBy array in key order, or the reason that the value does not match the schema. */
+/** Returns the value with every collection sorted, or the reason that the value does not match the schema. */
 function normalized<T>(schema: z.ZodType, value: T): { readonly value: T } | { readonly error: z.ZodError } {
   const sortedValue = sorted(schema, value) as T;
   const encoded = z.safeEncode(schema, sortedValue as never);
@@ -120,7 +126,7 @@ export const normalizedRow = (
   value: unknown,
 ): { readonly value: Fields } | { readonly error: z.ZodError } => normalized(strictObjectOf(shape), value as Fields);
 
-/** Returns the row of the shape's defaults with every sortedBy array in key order; load checks it against the shape. */
+/** Returns the row of the shape's defaults with every collection sorted; load checks it against the shape. */
 export function defaultRow(shape: Shape): Fields {
   const object = objectOf(shape);
   return sorted(object, object.parse({})) as Fields;

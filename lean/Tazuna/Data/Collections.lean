@@ -1,7 +1,10 @@
 import Tazuna.Data.Value
 import Tazuna.Data.Time
 
-/-! This module sorts each array whose JSON Schema has `x-tazuna-sorted-by` by that key, in ascending order. -/
+/-!
+This module sorts the elements of each bag and set by their canonical text, and each array whose JSON Schema has
+`x-tazuna-sorted-by` by that key in ascending order, with equal keys by their canonical text.
+-/
 
 namespace Tazuna.Data
 
@@ -41,6 +44,10 @@ def sortByKey (key : String) : List Value → List Value
   | [] => []
   | c :: cs => insertByKey key c (sortByKey key cs)
 
+/-- The elements sorted by their canonical text. -/
+def sortCanonical (xs : List Value) : List Value :=
+  xs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
+
 def fitsType (schema v : Value) : Bool :=
   match schema.field? "type", v with
   | none, _ => true
@@ -78,9 +85,10 @@ def sortCollections (schema v : Value) : Value :=
       let items := match (schema.field? "items").attach with
         | some ⟨item, _hi⟩ => xs.map (sortCollections item)
         | none => xs
-      match schema.field? "x-tazuna-sorted-by" with
-      | some (.str key) => .arr (sortByKey key items)
-      | _ => .arr items
+      match schema.field? "x-tazuna-sorted-by", schema.field? "x-tazuna-bag", schema.field? "x-tazuna-set" with
+      | some (.str key), _, _ => .arr (sortByKey key (sortCanonical items))
+      | _, some (.bool true), _ | _, _, some (.bool true) => .arr (sortCanonical items)
+      | _, _, _ => .arr items
     | .obj fields =>
       match _hp : schema.field? "properties" with
       | some properties =>

@@ -5,4 +5,4 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"titles#1","name":"titles","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"titles#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk","Buy eggs"]}}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"titles#1","answer":{"result":"fulfilled","output":{"titles":["Buy eggs","Buy milk"]}}}
