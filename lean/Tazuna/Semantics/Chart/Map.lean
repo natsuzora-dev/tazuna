@@ -37,6 +37,10 @@ def exitLeftCopy (st : Service) (owner map : String) (itemKeys : List String) (r
 def newKeys (current : List String) (keys : List (Value × String)) : List (Value × String) :=
   keys.filter (·.2 ∉ current)
 
+/-- The item keys in encoded-key order, since a map state takes its items as a set. -/
+def sortItemKeys (keys : List (Value × String)) : List (Value × String) :=
+  keys.mergeSort fun a b => decide (a.2 ≤ b.2)
+
 /-- The processing after map state `map` syncs its copies with its items, and whether anything changed. -/
 def syncMap (st : Service) (step : Nat) (owner : String) (r : Processing) (map : String) : m (Processing × Bool) := do
   if r.halted then pure (r, false) else
@@ -48,7 +52,8 @@ def syncMap (st : Service) (step : Nat) (owner : String) (r : Processing) (map :
     | .error e =>
       pure (r.report (.fault (issueViolation st (st.ref o.chart.name) e fun _ =>
         .itemsSchema (st.ref o.chart.name) map)), true)
-    | .ok keys =>
+    | .ok items =>
+      let keys := sortItemKeys items
       let current := o.copyKeysOf map
       let itemKeys := keys.map (·.2)
       match firstDuplicate (·.2) keys with

@@ -64,10 +64,10 @@ theorem syncMap_unchanged (step : Nat) (owner : String) (r : Processing) (map : 
       cases hi : fs.items (r.state.scopeOf o (some map)) r.state.records with
       | error v => simp [syncMap, hr, ho, hi] at h
       | ok keys =>
-        cases hd : firstDuplicate (·.2) keys with
+        cases hd : firstDuplicate (·.2) (sortItemKeys keys) with
         | some k => simp [syncMap, hr, ho, hi, hd] at h
         | none =>
-        by_cases he : o.copyKeysOf map = keys.map (·.2)
+        by_cases he : o.copyKeysOf map = (sortItemKeys keys).map (·.2)
         · simp [syncMap, hr, ho, hi, hd, he]
         · simp [syncMap, hr, ho, hi, hd, he] at h
 
@@ -181,12 +181,12 @@ theorem lookup_setCopyKeys (copyKeys : List (String × List String)) (map : Stri
 theorem syncMap_copies_follow_items (step : Nat) (owner map : String) (r : Processing) (o : Instance)
     (keys : List (Value × String)) (hh : r.state.halted = none) (ho : r.state.machine? owner = some o)
     (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys)
-    (hd : firstDuplicate (·.2) keys = none) :
+    (hd : firstDuplicate (·.2) (sortItemKeys keys) = none) :
     syncMap fs st step owner r map =
-      let itemKeys := keys.map (·.2)
+      let itemKeys := (sortItemKeys keys).map (·.2)
       if o.copyKeysOf map == itemKeys then (r, false) else
       let exited := (o.copyKeysOf map).reverse.foldlM (m := Id) (exitLeftCopy fs st o.resource map itemKeys) r
-      let started := (newKeys (o.copyKeysOf map) keys).foldlM (m := Id)
+      let started := (newKeys (o.copyKeysOf map) (sortItemKeys keys)).foldlM (m := Id)
         (fun r k => unlessHalted (startCopy fs st step owner map k.1 k.2) r) exited
       (⟨started.state.setMachine owner fun o => { o with copyKeys := setCopyKeys o.copyKeys map itemKeys }, started.queue⟩,
         true) := by
@@ -196,7 +196,7 @@ theorem syncMap_copies_follow_items (step : Nat) (owner map : String) (r : Proce
 theorem syncMap_halts_on_duplicate_key (step : Nat) (owner map : String) (r : Processing) (o : Instance)
     (keys : List (Value × String)) (k : Value × String) (hh : r.state.halted = none) (ho : r.state.machine? owner = some o)
     (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys)
-    (hd : firstDuplicate (·.2) keys = some k) :
+    (hd : firstDuplicate (·.2) (sortItemKeys keys) = some k) :
     syncMap fs st step owner r map =
       (⟨r.state.halt (Finding.fault (.duplicateItemKey (st.ref o.chart.name) map k.1)).toViolation, r.queue⟩, true) := by
   simp [syncMap, Processing.halted, hh, ho, hi, hd, Processing.report, State.report, Fault.halts]
@@ -205,7 +205,7 @@ theorem syncMap_copyKeys_are_item_keys (step : Nat) (owner map : String) (r : Pr
     (hh : r.state.halted = none) (hr : (syncMap fs st step owner r map).1.state.halted = none)
     (ho' : (syncMap fs st step owner r map).1.state.machine? owner = some o') :
     ∃ o keys, r.state.machine? owner = some o ∧ fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys ∧
-      o'.copyKeysOf map = keys.map (·.2) ∧ (o'.copyKeysOf map).Nodup := by
+      o'.copyKeysOf map = (sortItemKeys keys).map (·.2) ∧ (o'.copyKeysOf map).Nodup := by
   cases ho : r.state.machine? owner with
   | none => simp [syncMap, Processing.halted, hh, ho] at ho'
   | some o =>
@@ -215,33 +215,33 @@ theorem syncMap_copyKeys_are_item_keys (step : Nat) (owner map : String) (r : Pr
         fun _ => rfl
       simp [syncMap, Processing.halted, Processing.report, report_halted (.fault _) hv, hh, ho, hi] at hr
     | ok keys =>
-      cases hd : firstDuplicate (·.2) keys with
+      cases hd : firstDuplicate (·.2) (sortItemKeys keys) with
       | some k =>
         rw [syncMap_halts_on_duplicate_key step owner map r o keys k hh ho hi hd] at hr
         simp [State.halt] at hr
       | none =>
       have hn := (firstDuplicate_eq_none_iff _ _).mp hd
-      have he : o'.copyKeysOf map = keys.map (·.2) := by
+      have he : o'.copyKeysOf map = (sortItemKeys keys).map (·.2) := by
         rw [syncMap_copies_follow_items step owner map r o keys hh ho hi hd] at ho'
         simp only at ho'
         split at ho'
         · rename_i he
           rw [ho] at ho'; cases ho'
           simpa using he
-        · rw [machine?_setMachine (f := fun o => { o with copyKeys := setCopyKeys o.copyKeys map (keys.map (·.2)) }) _
+        · rw [machine?_setMachine (f := fun o => { o with copyKeys := setCopyKeys o.copyKeys map ((sortItemKeys keys).map (·.2)) }) _
             (fun _ => rfl)] at ho'
           obtain ⟨x, -, rfl⟩ := Option.map_eq_some_iff.mp ho'
           simp [Instance.copyKeysOf, lookup_setCopyKeys]
       exact ⟨o, keys, rfl, hi, he, he ▸ hn⟩
 
-theorem syncMap_copies_in_item_order (step : Nat) (owner : String) (r : Processing) (o' : Instance) (cs : ChartState)
+theorem syncMap_copies_in_key_order (step : Nat) (owner : String) (r : Processing) (o' : Instance) (cs : ChartState)
     (hcs : cs ∈ o'.chart.states) (hh : r.state.halted = none)
     (hr : (syncMap fs st step owner r cs.name).1.state.halted = none)
     (ho' : (syncMap fs st step owner r cs.name).1.state.machine? owner = some o') :
     ∃ o keys pre post, r.state.machine? owner = some o ∧
       fs.items (r.state.scopeOf o (some cs.name)) r.state.records = .ok keys ∧
       o'.documentOrder = pre ++ (o'.resource, cs.name) ::
-        ((keys.map (·.2)).flatMap fun k => (o'.chart.tree.descendants cs.name).map (copyName o'.resource cs.name k, ·)) ++ post := by
+        (((sortItemKeys keys).map (·.2)).flatMap fun k => (o'.chart.tree.descendants cs.name).map (copyName o'.resource cs.name k, ·)) ++ post := by
   obtain ⟨o, keys, ho, hi, he, -⟩ := syncMap_copyKeys_are_item_keys step owner cs.name r o' hh hr ho'
   obtain ⟨pre, post, hd⟩ := documentOrder_at_map o' cs hcs
   exact ⟨o, keys, pre, post, ho, hi, he ▸ hd⟩
@@ -255,6 +255,7 @@ theorem returning_key_starts_copy (step : Nat) (owner map : String) (r : Process
   obtain ⟨o₁, keys₁, ho₁, hi₁, hc, -⟩ := syncMap_copyKeys_are_item_keys step owner map r o' hh hr ho'
   rw [ho] at ho₁; cases ho₁
   rw [hi] at hi₁; cases hi₁
+  have hleft : k.2 ∉ (sortItemKeys keysBefore).map (·.2) := fun h => hleft (((List.mergeSort_perm _ _).map _).mem_iff.mp h)
   simp [newKeys, hc, hk, hleft]
 
 end Tazuna.Thm.Semantics.Chart.Map

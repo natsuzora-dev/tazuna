@@ -1,4 +1,4 @@
-import { plain } from "../../data/values.ts";
+import { byCodePoint, plain } from "../../data/values.ts";
 import { Failed, type Functions, issueViolation } from "../functions.ts";
 import { limits } from "../limits.ts";
 import { ref } from "../service/basic.ts";
@@ -67,7 +67,7 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
       return halt(
         issueViolation(definition, checked, () => ({ kind: "Fault.itemsSchema", definition, data: { map } })),
       );
-    const keys = checked;
+    const keys = checked.toSorted((a, b) => byCodePoint(a.encodedKey, b.encodedKey));
     const duplicate = keys.find((k, i) => keys.findIndex((other) => other.encodedKey === k.encodedKey) < i);
     if (duplicate !== undefined)
       report(r.state, { kind: "Fault.duplicateItemKey", definition, data: { map, itemKey: plain(duplicate.encoded) } });

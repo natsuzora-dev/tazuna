@@ -148,7 +148,10 @@ interface ParentNode<N extends string, Ctx, B> {
 }
 
 interface MapNode<B, Key> {
-  /** A function that returns the rows of the map state's key fields; each key appears once. */
+  /**
+   * A function that returns the rows of the map state's key fields; each key appears once, and their order does not
+   * matter.
+   */
   readonly items: (args: B) => readonly Key[];
 }
 

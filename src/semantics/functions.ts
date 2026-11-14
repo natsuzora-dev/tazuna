@@ -223,7 +223,7 @@ export interface Functions {
     activity: { readonly keyword: string; readonly key: string },
     access: Access,
   ): { readonly value: Fields; readonly encoded: unknown } | Failed;
-  /** Returns each item key, encoded and as canonicalJson of the encoding, in returned order. */
+  /** Returns each item key, encoded and as canonicalJson of the encoding. The map state takes them as a set. */
   items(
     scope: Scope,
     records: RecordSource,

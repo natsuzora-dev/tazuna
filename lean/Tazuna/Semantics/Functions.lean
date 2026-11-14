@@ -119,7 +119,7 @@ at load) always answer.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
 - showInput: the query input of a shows slot, schema-checked and encoded.
-- items: the keys that a map state's items return, encoded and as canonicalJson, in returned order.
+- items: the keys that a map state's items return, encoded and as canonicalJson. The map state takes them as a set.
 - copyContext: a copy's initial context (defaults, checked at load).
 - singleRecord: the initial record of a single entity (defaults, checked at load).
 - copyKey: the canonicalJson of the payload's key fields if the payload has all of them (none if they fail the schema),
