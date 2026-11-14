@@ -1,4 +1,4 @@
-import { contract, datetime, emit, entity, ref, service } from "@natsuzora-dev/tazuna";
+import { bag, contract, datetime, emit, entity, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
@@ -28,8 +28,8 @@ export const completeTask = command({
 }).decide(({ input }) => [emit(taskCompleted, { id: input.taskId, isDone: true })]);
 
 export const taskTitles = query({
-  output: { titles: z.array(Task.fields.title) },
-}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title).sort() }));
+  output: { titles: bag(Task.fields.title) },
+}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));
 
 const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.number() })]);
 

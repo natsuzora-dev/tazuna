@@ -13,5 +13,5 @@ export const addTask = command({
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
 
 export const taskCount = query({ output: { count: z.int() } }).resolve(({ records }) => ({
-  count: records.Task.length,
+  count: records.Task.size,
 }));

@@ -39,8 +39,10 @@ export const seenIds = query({
     listed: z.array(ref(Seen)),
   },
 }).resolve(({ records }) => {
-  const ids = records.Seen.map((s) => s.id).toSorted();
-  return { repeated: [...ids, ...ids.slice(0, 1)], none: [], ids, listed: ids };
+  const ids = records.Seen.map((s) => s.id);
+  const seenOf = (taskId: string) => records.Seen.filter((s) => s.taskId === taskId).map((s) => s.id);
+  const listed = ["task-1", "task-2"].flatMap((taskId) => seenOf(taskId).only() ?? []);
+  return { repeated: ids.concat(seenOf("task-1")), none: [], ids, listed };
 });
 
 export const todo = contract({ addTask, seenIds });

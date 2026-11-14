@@ -20,15 +20,13 @@ export const subtaskCounts = query({
   output: { counts: bag(z.number()) },
 }).resolve(({ records }) => {
   const parents = new Map<string, { subtasks: number }>();
-  for (const task of records.Task) {
-    if (task.parentId === null) {
-      parents.set(task.id, { subtasks: 0 });
-      continue;
-    }
+  records.Task.map((task) => {
+    if (task.parentId === null) return parents.set(task.id, { subtasks: 0 });
     const parent = parents.get(task.parentId);
     if (parent === undefined) throw new Error(`Task ${task.id} comes before its parent ${task.parentId}`);
     parent.subtasks += 1;
-  }
+    return parents;
+  });
   return { counts: [...parents.values()].map((parent) => parent.subtasks) };
 });
 

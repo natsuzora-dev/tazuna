@@ -1,4 +1,4 @@
-import { emit, entity, service } from "@natsuzora-dev/tazuna";
+import { bag, emit, entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task of the user", fields: { id: z.string() }, key: "id" });
@@ -13,13 +13,13 @@ export const addTask = command({
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
 
 export const taskIds = query({
-  output: { taskIds: z.array(Task.fields.id) },
-}).resolve(({ records }) => ({ taskIds: records.Task.map((t) => t.id).sort() }));
+  output: { taskIds: bag(Task.fields.id) },
+}).resolve(({ records }) => ({ taskIds: records.Task.map((t) => t.id) }));
 
 export const taskCount = query({
   output: { count: z.int() },
-}).resolve(({ records }) => ({ count: records.Task.length }));
+}).resolve(({ records }) => ({ count: records.Task.size }));
 
 export const hasTasks = query({
   output: { hasTasks: z.boolean() },
-}).resolve(({ records }) => ({ hasTasks: records.Task.length > 0 }));
+}).resolve(({ records }) => ({ hasTasks: records.Task.size > 0 }));

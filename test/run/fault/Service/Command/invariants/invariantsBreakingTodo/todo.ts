@@ -17,7 +17,10 @@ export const Tally = singleEntity({
 export const { command, createEvent, updateEvent } = service({
   description: "Keep the tasks while breaking the invariants of Task, Tally, and the service",
   entities: { Task, Tally },
-  invariants: { uniqueTitles: ({ records }) => new Set(records.Task.map((t) => t.title)).size === records.Task.length },
+  invariants: {
+    uniqueTitles: ({ records }) =>
+      records.Task.every((t) => records.Task.filter((u) => u.title === t.title).size === 1),
+  },
 });
 
 export const taskAdded = createEvent({ entity: Task });

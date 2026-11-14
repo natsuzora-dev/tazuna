@@ -52,4 +52,4 @@ export const titledCount = query({
   input: { title: z.string() },
   output: { count: z.int() },
   requires: { hasTitle: ({ input }) => input.title !== "" },
-}).resolve(({ input, records }) => ({ count: records.Task.filter((t) => t.title === input.title).length }));
+}).resolve(({ input, records }) => ({ count: records.Task.filter((t) => t.title === input.title).size }));

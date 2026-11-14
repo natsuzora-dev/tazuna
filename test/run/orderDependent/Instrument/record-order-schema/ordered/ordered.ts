@@ -14,6 +14,10 @@ export const addTask = command({
 
 export const firstTask = query({
   output: { id: z.string().endsWith("1") },
-}).resolve(({ records }) => ({ id: records.Task[0]?.id ?? "" }));
+}).resolve(({ records }) => {
+  let first: string | undefined;
+  records.Task.map((t) => (first ??= t.id));
+  return { id: first ?? "" };
+});
 
 export const ordered = contract({ addTask, firstTask });

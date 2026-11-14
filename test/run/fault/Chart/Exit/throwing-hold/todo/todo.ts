@@ -15,7 +15,7 @@ export const watcher = machine({
     watching: {
       holds: {
         task: ({ records }) => {
-          const [task] = records.Task;
+          const task = records.Task.only();
           if (task === undefined) throw new Error("there is no task to watch");
           return task;
         },

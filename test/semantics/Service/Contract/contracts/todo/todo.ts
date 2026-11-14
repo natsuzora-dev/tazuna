@@ -1,4 +1,4 @@
-import { emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { bag, emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
@@ -17,7 +17,10 @@ export const Board = singleEntity({
 export const { command, query, createEvent, updateEvent } = service({
   description: "Keep tasks",
   entities: { Task, Board },
-  invariants: { uniqueTitles: ({ records }) => new Set(records.Task.map((t) => t.title)).size === records.Task.length },
+  invariants: {
+    uniqueTitles: ({ records }) =>
+      records.Task.every((t) => records.Task.filter((u) => u.title === t.title).size === 1),
+  },
 });
 
 export const taskAdded = createEvent({ entity: Task });
@@ -59,11 +62,13 @@ export const pinTask = command({
 export const pinTaskByTitle = command({
   input: { title: Task.fields.title },
   emits: [taskPinned],
-  binds: { task: ({ input, records }) => records.Task.find((t) => t.title === input.title) },
+  binds: { task: ({ input, records }) => records.Task.filter((t) => t.title === input.title).only() },
   requires: { pinsLeft: ({ records }) => records.Board.pins < 2 },
 }).decide(({ records, bound }) => [emit(taskPinned, { pinned: bound.task.id, pins: records.Board.pins + 1 })]);
 
 export const taskTitles = query({
-  output: { titles: z.array(Task.fields.title) },
-  ensures: { sorted: ({ output }) => output.titles.every((t, i) => i === 0 || (output.titles[i - 1] ?? "") <= t) },
-}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title).sort() }));
+  output: { titles: bag(Task.fields.title) },
+  ensures: {
+    distinct: ({ output }) => output.titles.every((t) => output.titles.filter((u) => u === t).length === 1),
+  },
+}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));

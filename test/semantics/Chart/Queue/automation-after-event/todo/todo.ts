@@ -24,4 +24,4 @@ export const tellCount = command({
 export const countAdded = automation({
   receives: { taskAdded },
   commands: { tellCount },
-}).send({ input: ({ records }) => ({ count: records.Task.length }) });
+}).send({ input: ({ records }) => ({ count: records.Task.size }) });

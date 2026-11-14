@@ -22,7 +22,7 @@ export const addTask = command({
 }).decide(({ input, records }) => [
   emit(taskAddedRecorded, { id: input.taskId, title: input.title, dueAt: null }),
   emit(taskAdded, { taskId: input.taskId }),
-  emit(taskCountChanged, { count: records.Task.length + 1 }),
+  emit(taskCountChanged, { count: records.Task.size + 1 }),
 ]);
 
 export const planner = machine({

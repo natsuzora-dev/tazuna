@@ -8,7 +8,7 @@ export const answer = scenario("Answer a day after from; no violation", [
   mock(planner, [calendar.nextDay, { result: "fulfilled", output: { day: "2026-10-25T15:00:00Z" } }]),
 ]);
 
-export const readTitles = scenario("Answer the titles in title order; no violation", [
+export const readTitles = scenario("Answer two different titles; no violation", [
   at("2026-10-25T09:00:00+09:00"),
   mock(reader, [todo.taskTitles, { result: "fulfilled", output: { titles: ["Buy bread", "Buy milk"] } }]),
 ]);
@@ -21,10 +21,10 @@ export const answerBeforeFrom = scenario(
   ],
 );
 
-export const readTitlesOutOfOrder = scenario(
-  "Answer the titles out of title order; the answer breaks the assumed ensures sorted, so test reports failedAssumedEnsures",
+export const readTitleTwice = scenario(
+  "Answer one title twice; the answer breaks the assumed ensures distinct, so test reports failedAssumedEnsures",
   [
     at("2026-10-25T09:00:00+09:00"),
-    mock(reader, [todo.taskTitles, { result: "fulfilled", output: { titles: ["Buy milk", "Buy bread"] } }]),
+    mock(reader, [todo.taskTitles, { result: "fulfilled", output: { titles: ["Buy milk", "Buy milk"] } }]),
   ],
 );

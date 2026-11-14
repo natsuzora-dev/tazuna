@@ -25,6 +25,10 @@ Precedent: checked exceptions (Java).
 
 A result must not depend on an order or a choice that nobody controls.
 When more than one order can happen, state the order in the spec, or let an input choose it.
+The records of an entity have no order: spec functions receive them as a `Bag`, and its callbacks see one record at a time.
+Find one record with `get(key)`, or with `filter(...).only()` when another field identifies it.
+A result that needs an order goes through `sortedBy` with a number or time key, which groups the records with equal keys into runs that have no order inside.
+A page of an ordered result takes whole runs, so it never cuts the records with equal keys apart.
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 

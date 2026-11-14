@@ -36,7 +36,7 @@ export const packer = machine({
       },
     },
     counting: { sends: { count: { onAccepted: [{ target: "idle" }] } } },
-    waiting: { always: [{ guard: { itemExists: ({ records }) => records.Item.length > 0 }, target: "items" }] },
+    waiting: { always: [{ guard: { itemExists: ({ records }) => records.Item.size > 0 }, target: "items" }] },
     items: { items: ({ records }) => records.Item.map((i) => ({ name: i.id })) },
     added: { entry: { assign: { names: ({ context, key }) => [...context.names, key.name] } } },
   },

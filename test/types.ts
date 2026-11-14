@@ -15,6 +15,8 @@ import {
 } from "../samples/todo/spec/todo/events.ts";
 import { tasks } from "../samples/todo/spec/todo/queries.ts";
 import {
+  type Bag,
+  bag,
   constants,
   contract,
   datetime,
@@ -87,8 +89,9 @@ command({
   input: { taskIds: z.array(ref(Task)) },
   emits: [taskDeletedRecorded],
 }).decide(({ input, records }) => {
+  const task = records.Task.filter((t) => input.taskIds.includes(t.id)).only();
   // @ts-expect-error expressions cannot mutate records
-  records.Task.filter((t) => input.taskIds.includes(t.id))[0].title = "";
+  if (task !== undefined) task.title = "";
   // @ts-expect-error expressions cannot mutate input arrays
   input.taskIds.push("task-2");
   return [];
@@ -101,9 +104,37 @@ command({ emits: [] }).decide(({ records }) => {
   records.Task.filter(isOpen);
   shouldRemind(records.Settings);
   // @ts-expect-error RowOf records are readonly like expression records
-  ((task: RowOf<typeof Task>) => (task.title = ""))(records.Task[0]);
+  records.Task.map((task: RowOf<typeof Task>) => (task.title = ""));
   return [];
 });
+
+// Records are a Bag: no index, length or iterator, and a sort key is a number or a time.
+query({ output: { n: z.number() } }).resolve(({ records }) => {
+  // @ts-expect-error a Bag has no index
+  void records.Task[0];
+  // @ts-expect-error a Bag has no length
+  void records.Task.length;
+  // @ts-expect-error a Bag is not iterable
+  for (const t of records.Task) void t;
+  // @ts-expect-error a Bag has no find; filter and only() find one record
+  records.Task.find(() => true);
+  // @ts-expect-error a string is not a sort key
+  records.Task.sortedBy((t) => t.title);
+  // @ts-expect-error a nullable value is not a sort key
+  records.Task.min((t) => t.dueAt);
+  const due: Bag<Temporal.Instant> = records.Task.map((t) => t.dueAt).filter((d) => d !== null);
+  return { n: due.size };
+});
+
+// A bag output takes a Bag, and a sortedBy output takes Runs; an array output, whose order means something, takes no Bag.
+query({ output: { ids: bag(ref(Task)) } }).resolve(({ records }) => ({ ids: records.Task.map((t) => t.id) }));
+query({ output: { tasks: sortedBy(z.object({ id: ref(Task), createdAt: datetime }), "createdAt") } }).resolve(
+  ({ records }) => ({
+    tasks: records.Task.map((t) => ({ id: t.id, createdAt: t.createdAt })).sortedBy((t) => t.createdAt),
+  }),
+);
+// @ts-expect-error an array output takes no Bag
+query({ output: { ids: z.array(ref(Task)) } }).resolve(({ records }) => ({ ids: records.Task.map((t) => t.id) }));
 
 machine({
   description: "",
@@ -208,7 +239,7 @@ const undecided = command({ input: { taskId: ref(Task) }, emits: [taskCompletedR
 contract({ undecided });
 
 // @ts-expect-error query requires read only input
-query({ output: { n: z.number() }, requires: { some: ({ records }) => records.Task.length > 0 } });
+query({ output: { n: z.number() }, requires: { some: ({ records }) => records.Task.size > 0 } });
 
 // Command ensures read, through bound, the values binds computed before the command ran.
 command({
@@ -569,7 +600,7 @@ machine({ description: "", receives: { taskAddedRecorded }, initial: "a", states
           // Machine expressions read their own service's records through records.
           { guard: { enabled: ({ records }) => records.Settings.shouldRemind }, target: "b" },
           // @ts-expect-error records keys name the service's entities
-          { guard: { typo: ({ records }) => records.Tasks.length > 0 }, target: "b" },
+          { guard: { typo: ({ records }) => records.Tasks.size > 0 }, target: "b" },
         ],
       },
     },
@@ -652,7 +683,7 @@ machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
         minute: { delay: { minutes: 1 }, onFired: [{ target: "b" }] },
         created: {
           at: ({ records }) =>
-            records.Task[0]?.createdAt.add({ minutes: 1 }) ?? Temporal.Instant.fromEpochMilliseconds(0),
+            records.Task.min((t) => t.createdAt)?.add({ minutes: 1 }) ?? Temporal.Instant.fromEpochMilliseconds(0),
           onFired: [{ target: "b" }],
         },
         // @ts-expect-error at does not read now; a fixed length from now is a delay

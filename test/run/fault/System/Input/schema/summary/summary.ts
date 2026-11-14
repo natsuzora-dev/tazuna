@@ -8,6 +8,6 @@ export const { query } = service({ description: "Count items", entities: { Item 
 export const itemCount = query({
   input: { owner: z.string() },
   output: { count: z.number() },
-}).resolve(({ records }) => ({ count: records.Item.length }));
+}).resolve(({ records }) => ({ count: records.Item.size }));
 
 export const summary = contract({ itemCount });

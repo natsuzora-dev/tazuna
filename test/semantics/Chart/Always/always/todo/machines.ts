@@ -1,3 +1,4 @@
+import type { Bag } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { count, list, machine, markRow, rowsOpened, signalled, taskAdded, warn } from "./todo.ts";
 
@@ -8,16 +9,16 @@ export const workload = machine({
   states: { quiet: {}, warning: {} },
 }).chart({
   states: {
-    quiet: { always: [{ guard: { tooMany: ({ records }) => records.Task.length > 2 }, target: "warning" }] },
+    quiet: { always: [{ guard: { tooMany: ({ records }) => records.Task.size > 2 }, target: "warning" }] },
     warning: {
-      always: [{ guard: { fewEnough: ({ records }) => records.Task.length <= 2 }, target: "quiet" }],
+      always: [{ guard: { fewEnough: ({ records }) => records.Task.size <= 2 }, target: "quiet" }],
       sends: { warn: { onAccepted: [] } },
     },
   },
 });
 
-const fourOrMore = ({ records }: { records: { Task: readonly unknown[] } }) => records.Task.length >= 4;
-const fewerThanFour = ({ records }: { records: { Task: readonly unknown[] } }) => records.Task.length < 4;
+const fourOrMore = ({ records }: { records: { Task: Bag<unknown> } }) => records.Task.size >= 4;
+const fewerThanFour = ({ records }: { records: { Task: Bag<unknown> } }) => records.Task.size < 4;
 
 export const review = machine({
   description:
@@ -90,7 +91,7 @@ export const gate = machine({
   states: { idle: {}, ready: {}, opened: {} },
 }).chart({
   states: {
-    idle: { always: [{ guard: { signalRecorded: ({ records }) => records.Signal.length > 0 }, target: "ready" }] },
+    idle: { always: [{ guard: { signalRecorded: ({ records }) => records.Signal.size > 0 }, target: "ready" }] },
     ready: { on: { signalled: [{ target: "opened" }] } },
     opened: { sends: { count: { onAccepted: [{ target: "idle" }] } } },
   },

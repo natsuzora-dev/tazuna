@@ -1,1 +1,1 @@
-{"kind":"Fault.failedEnsures","definition":{"service":"ensuresBreakingQuery","name":"taskTitles"},"data":{"condition":"sorted"},"location":{"file":"ensuresBreakingQuery/todo.ts","line":18},"scenario":{"service":"ensuresBreakingQuery","name":"addTwo"}}
+{"kind":"Fault.failedEnsures","definition":{"service":"ensuresBreakingQuery","name":"taskCount"},"data":{"condition":"countsTasks"},"location":{"file":"ensuresBreakingQuery/todo.ts","line":18},"scenario":{"service":"ensuresBreakingQuery","name":"addTwo"}}

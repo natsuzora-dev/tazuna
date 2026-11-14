@@ -28,7 +28,7 @@ export const firstTaskWatcher = machine({
   states: {
     idle: { on: { taskAdded: [{ target: "watching" }] } },
     watching: {
-      holds: { task: ({ records }) => records.Task[0] },
+      holds: { task: ({ records }) => records.Task.only() },
       entry: { assign: { title } },
       on: { taskAdded: [{ target: "idle" }] },
     },
@@ -45,7 +45,7 @@ export const watcher = machine({
   states: {
     idle: { on: { taskAdded: [{ target: "watching" }] } },
     watching: {
-      holds: { task: ({ records }) => records.Task[0] },
+      holds: { task: ({ records }) => records.Task.only() },
       entry: { assign: { title: latestTitle } },
       on: { taskAdded: [{ target: "idle" }] },
     },

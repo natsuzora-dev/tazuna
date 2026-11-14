@@ -24,7 +24,7 @@ export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 export const completeTask = command({
   input: { title: Task.fields.title },
   emits: [taskCompleted],
-  binds: { task: ({ input, records }) => records.Task.find((t) => t.title === input.title) },
+  binds: { task: ({ input, records }) => records.Task.filter((t) => t.title === input.title).only() },
   requires: { notDone: ({ bound }) => !bound.task.isDone },
 }).decide(({ bound }) => [emit(taskCompleted, { id: bound.task.id, isDone: true })]);
 
@@ -32,7 +32,7 @@ export const completeChores = automation({
   receives: { taskAdded },
   commands: { completeTask },
 }).send({
-  binds: { added: ({ payload, records }) => records.Task.find((t) => t.id === payload.id) },
+  binds: { added: ({ payload, records }) => records.Task.get(payload.id) },
   guard: { chore: ({ bound }) => bound.added.title.startsWith("Chore") },
   input: ({ bound }) => ({ title: bound.added.title }),
 });
@@ -42,7 +42,8 @@ export const completeDuplicates = automation({
   commands: { completeTask },
 }).send({
   binds: {
-    earlier: ({ payload, records }) => records.Task.find((t) => t.title === payload.title && t.id !== payload.id),
+    earlier: ({ payload, records }) =>
+      records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),
   },
   input: ({ bound }) => ({ title: bound.earlier.title }),
 });

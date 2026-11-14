@@ -1,12 +1,13 @@
+import { BagValue } from "../data/bag.ts";
 import type { Fields } from "../data/values.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { RecordSource } from "../semantics/service/records.ts";
 
 /**
- * Returns a view of the records that reads each value from `source`. Read granularity: get(key) reads existence;
- * length, elements, filter and the like read the key set; a field access reads that field; enumerating field names
- * (spread) reads every field. Field names come from the entity definition and are not reads. Table elements are in the
- * order of the source's keys.
+ * Returns a view of the records that reads each value from `source`. Read granularity: get(key) reads existence; size,
+ * filter and the other Bag methods read the key set; a field access reads that field; enumerating field names (spread)
+ * reads every field. Field names come from the entity definition and are not reads. A table calls spec functions on its
+ * records in the order of the source's keys.
  */
 export function recordsView(
   entities: Readonly<Record<string, AnyEntity>>,
@@ -42,26 +43,8 @@ export function recordsView(
       rows.set(key, known);
       return known;
     };
-    const target: Fields[] & { get?: (key: unknown) => Fields | undefined } = [];
-    target.get = (key: unknown) => (source.exists(entity, String(key)) ? rowOf(String(key)) : undefined);
-    const filled = () => {
-      const keys = source.keys(entity);
-      if (target.length === 0) target.push(...keys.map(rowOf));
-    };
-    return new Proxy(target, {
-      get: (t, p, r) => {
-        if (p !== "get") filled();
-        return Reflect.get(t, p, r);
-      },
-      has: (t, p) => {
-        filled();
-        return Reflect.has(t, p);
-      },
-      ownKeys: (t) => {
-        filled();
-        return Reflect.ownKeys(t);
-      },
-    });
+    const get = (key: unknown) => (source.exists(entity, String(key)) ? rowOf(String(key)) : undefined);
+    return Object.assign(new BagValue(() => source.keys(entity).map(rowOf)), { get });
   };
   return Object.fromEntries(
     Object.entries(entities).map(([name, entity]) => {

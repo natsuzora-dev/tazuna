@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { assumedEnsures } from "../contract/checks.ts";
-import { NotOnly } from "../data/bag.ts";
+import { NotOnly, valuesOf } from "../data/bag.ts";
 import { canonical as canonicalOf, comparableAnswer, orderFree } from "../data/canonical.ts";
-import { defaultRow, sorted } from "../data/collections.ts";
+import { bag, defaultRow, sorted } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
@@ -60,6 +60,12 @@ function attempt<T>(f: () => T, schema?: Schema): T | Failed {
     return new Failed(schema === undefined ? { kind: "thrown" } : { kind: "thrown", schema }, thrown(error));
   }
 }
+
+/**
+ * Returns a value that author code made, with each Bag in a bag, set or sortedBy field as an array, as Lean's Value can
+ * hold it for normalize.
+ */
+const unbagged = (shape: Shape | undefined, value: unknown): unknown => sorted(objectOf(shape ?? {}), value);
 
 /** Returns the value with every collection sorted and its encoding, or why it does not match `zod`. */
 function encodedSorted<T>(
@@ -457,9 +463,12 @@ export class SpecFunctions implements Functions {
     const bound = this.bound(command, args);
     if (bound instanceof Failed) return bound;
     const f = command.decide as ((a: Fields) => readonly DefinedEmit[]) | undefined;
-    const decided = attempt(() => f?.({ ...args, bound }) ?? []);
-    if (decided instanceof Failed) return decided;
-    return decided.map((e) => ({ event: traceName(this.spec, e.event, this.service), payload: e.payload as Fields }));
+    return attempt(() =>
+      (f?.({ ...args, bound }) ?? []).map((e) => ({
+        event: traceName(this.spec, e.event, this.service),
+        payload: unbagged(e.event.payload, e.payload) as Fields,
+      })),
+    );
   }
 
   ensures(
@@ -524,7 +533,9 @@ export class SpecFunctions implements Functions {
 
   resolve(name: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown {
     const query = this.query(name).definition;
-    return attempt(() => (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now }));
+    return attempt(() =>
+      unbagged(query.output, (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now })),
+    );
   }
 
   react(
@@ -554,7 +565,8 @@ export class SpecFunctions implements Functions {
         this.note?.reached({ kind: "automationGuard", definition, data: { condition, met } });
         if (!met) return undefined;
       }
-      return { input: a.input?.({ ...args, createKey } as never) ?? {} };
+      const command = Object.values(a.commands)[0];
+      return { input: unbagged(command?.input, a.input?.({ ...args, createKey } as never) ?? {}) };
     });
     if (reacted instanceof Failed) return reacted;
     return reacted === undefined ? { created } : { input: reacted.input, created };
@@ -734,8 +746,9 @@ export class SpecFunctions implements Functions {
       scope.state === null
         ? named.definition.offers?.[control]
         : this.node(scope.machine, scope.state)?.offers?.[control];
-    const payloads = attempt(() => f?.(this.args(scope, records, access) as never) ?? []);
-    if (payloads instanceof Failed) return payloads;
+    const given = attempt(() => f?.(this.args(scope, records, access) as never) ?? []);
+    if (given instanceof Failed) return given;
+    const payloads = valuesOf(given) ?? (given as readonly unknown[]);
     const row = strictObjectOf(named.definition.controls?.[control]?.payload ?? {});
     const checked: { readonly value: Fields; readonly encoded: unknown }[] = [];
     for (const o of payloads) {
@@ -769,7 +782,7 @@ export class SpecFunctions implements Functions {
     const given = attempt(() => node?.items?.(this.args(scope, records, access) as never) ?? []);
     if (given instanceof Failed) return given;
     const chart = this.chartOf(scope.machine).ref;
-    const keys = matching({ kind: "mapKey", chart, map }, z.array(objectOf(node?.key ?? {})), given);
+    const keys = matching({ kind: "mapKey", chart, map }, bag(objectOf(node?.key ?? {})), given);
     if (keys instanceof Failed) return keys;
     const encoded = keys.encoded as unknown[];
     return keys.value.map((key, i) => ({ key, encoded: encoded[i], encodedKey: canonicalJson(encoded[i]) }));

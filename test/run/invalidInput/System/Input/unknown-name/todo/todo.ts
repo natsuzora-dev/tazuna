@@ -1,4 +1,4 @@
-import { contract, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { bag, contract, emit, entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
@@ -13,7 +13,7 @@ export const addTask = command({
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const taskTitles = query({
-  output: { titles: z.array(Task.fields.title) },
+  output: { titles: bag(Task.fields.title) },
 }).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));
 
 export const todo = contract({ addTask, taskTitles });

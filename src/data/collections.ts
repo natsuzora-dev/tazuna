@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compareKeys, type Marked, type SortKey, valuesOf } from "./bag.ts";
 import { schemaNode } from "./schemaNode.ts";
 import { byCodePoint, canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
 
@@ -13,13 +14,18 @@ export type Collection =
  */
 const collections = new WeakMap<object, Collection>();
 
-function marked<E extends z.ZodType>(
+/** An array schema whose output type carries mark `M`, so that spec functions may produce it from a Bag. */
+type CollectionSchema<E extends z.ZodType, M extends "bag" | "sortedBy"> = z.ZodArray<E> & {
+  readonly _zod: { readonly output: Marked<z.output<E>[], M> };
+};
+
+function marked<E extends z.ZodType, M extends "bag" | "sortedBy">(
   element: E,
   check: z.core.$ZodCheck<never>,
   collection: Collection,
-): z.ZodArray<E> {
+): CollectionSchema<E, M> {
   collections.set(check, collection);
-  return z.array(element).check(check as z.core.$ZodCheck<z.output<E>[]>);
+  return z.array(element).check(check as z.core.$ZodCheck<z.output<E>[]>) as CollectionSchema<E, M>;
 }
 
 const bagCheck = z.check<readonly unknown[]>(() => {});
@@ -35,27 +41,19 @@ const setCheck = z.check<readonly unknown[]>((ctx) => {
 });
 
 /** Returns an array schema whose element order means nothing, like OCL's Bag; `z.array` stays a sequence. */
-export const bag = <E extends z.ZodType>(element: E): z.ZodArray<E> =>
+export const bag = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag"> =>
   marked(element, bagCheck as never, { kind: "bag" });
 
 /**
  * Returns an array schema whose element order means nothing and whose two equal elements are an error, like OCL's Set.
  */
-export const set = <E extends z.ZodType>(element: E): z.ZodArray<E> =>
+export const set = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag"> =>
   marked(element, setCheck as never, { kind: "set" });
 
-/** A value that orders others: a number or a point in time, not a string, whose order differs across languages. */
-export type SortKey = number | Temporal.Instant | Temporal.PlainDate;
 type SortKeyOf<E extends z.ZodObject> = {
   [K in keyof z.output<E>]-?: z.output<E>[K] extends SortKey ? K : never;
 }[keyof z.output<E>] &
   string;
-
-export function compareKeys(a: unknown, b: unknown): number {
-  if (a instanceof Temporal.Instant && b instanceof Temporal.Instant) return Temporal.Instant.compare(a, b);
-  if (a instanceof Temporal.PlainDate && b instanceof Temporal.PlainDate) return Temporal.PlainDate.compare(a, b);
-  return typeof a === "number" && typeof b === "number" ? a - b : 0;
-}
 
 const byKey = (key: string) => (a: unknown, b: unknown) =>
   compareKeys((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]);
@@ -64,7 +62,10 @@ const byKey = (key: string) => (a: unknown, b: unknown) =>
  * Returns an array schema sorted ascending by `key`, like Kotlin's `sortedBy`. tazuna sorts the values that the spec
  * produces, so `resolve` and `decide` do not sort; reading a value out of key order is an error.
  */
-export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(element: E, key: K): z.ZodArray<E> {
+export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(
+  element: E,
+  key: K,
+): CollectionSchema<E, "sortedBy"> {
   const check = z.check<readonly Record<string, unknown>[]>((ctx) => {
     const i = ctx.value.findIndex((row, i) => i > 0 && byKey(key)(ctx.value[i - 1], row) > 0);
     if (i > 0)
@@ -81,17 +82,27 @@ export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(element:
 export const collectionOf = (schema: z.core.$ZodType): Collection | undefined =>
   (schema._zod.def.checks ?? []).map((c) => collections.get(c)).find((c) => c !== undefined);
 
+/** Returns the elements of a marked array that spec code made from Bags, or the value itself if it is no such array. */
+function unbagged(collection: Collection | undefined, value: unknown): unknown {
+  if (collection === undefined) return value;
+  const values = valuesOf(value);
+  if (values !== undefined) return values;
+  return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => valuesOf(v) ?? [v]) : value;
+}
+
 /**
  * Returns the value with the elements of each bag and set in canonical JSON order, and each sortedBy array in key order
- * with equal keys in canonical JSON order, so that the order in which spec code built them leaves no trace.
+ * with equal keys in canonical JSON order, so that the order in which spec code built them leaves no trace. A Bag in a
+ * bag or set, and a Bag or a run of Bags in a sortedBy array, become arrays.
  */
 export function sorted(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
   switch (node.type) {
     case "array": {
-      if (!Array.isArray(value)) return value;
-      const items = value.map((v) => sorted(node.element, v));
       const collection = collectionOf(schema);
+      const array = unbagged(collection, value);
+      if (!Array.isArray(array)) return array;
+      const items = array.map((v) => sorted(node.element, v));
       if (collection === undefined) return items;
       const canonical = items.toSorted((a, b) => byCodePoint(canonicalJson(a), canonicalJson(b)));
       return collection.kind === "sortedBy" ? canonical.toSorted(byKey(collection.key)) : canonical;

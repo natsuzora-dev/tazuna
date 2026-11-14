@@ -11,6 +11,6 @@ export const { query } = service({
 export const itemCount = query({
   input: { owner: z.string() },
   output: { count: z.number() },
-}).resolve(({ input, records }) => ({ ...input, count: records.Item.length }));
+}).resolve(({ input, records }) => ({ ...input, count: records.Item.size }));
 
 export const extraOutputSummary = contract({ itemCount });

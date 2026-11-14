@@ -52,10 +52,12 @@ export const perTask = machine({
 }).chart({
   states: {
     rows: {
-      items: ({ records }) =>
-        records.Task.filter((t) => t.completedAt === null)
-          .map((t) => ({ taskId: t.id }))
-          .toReversed(),
+      // The closure gets the keys in reverse order, which items does not depend on.
+      items: ({ records }) => {
+        const keys: { taskId: string }[] = [];
+        records.Task.filter((t) => t.completedAt === null).map((t) => keys.unshift({ taskId: t.id }));
+        return keys;
+      },
     },
     greeting: { sends: { greet: { input: ({ key }) => key, onAccepted: [{ target: "waiting" }], onRejected: [] } } },
     waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } } },

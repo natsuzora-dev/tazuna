@@ -1,3 +1,4 @@
+import type { Bag } from "../data/bag.ts";
 import type { Delay } from "../data/datetime.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
@@ -152,7 +153,7 @@ interface MapNode<B, Key> {
    * A function that returns the rows of the map state's key fields; each key appears once, and their order does not
    * matter.
    */
-  readonly items: (args: B) => readonly Key[];
+  readonly items: (args: B) => Bag<Key> | readonly Key[];
 }
 
 type MachineRequest<N extends string, Ctx, B, Qs extends Queries, Cs extends Commands> = {

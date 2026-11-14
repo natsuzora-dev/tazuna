@@ -12,9 +12,9 @@ export const addTask = command({
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
-export const taskTitles = query({
-  output: { titles: z.array(Task.fields.title) },
-  ensures: { sorted: ({ output }) => output.titles.every((t, i) => i === 0 || (output.titles[i - 1] ?? "") <= t) },
-}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title).sort() }));
+export const taskCount = query({
+  output: { count: z.number() },
+  ensures: { countsTasks: ({ output, records }) => output.count === records.Task.size },
+}).resolve(({ records }) => ({ count: records.Task.size }));
 
-export const todo = contract({ addTask, taskTitles });
+export const todo = contract({ addTask, taskCount });

@@ -18,4 +18,8 @@ export const titles = query({
 
 export const titlesInArray = query({
   output: { titles: z.array(z.string()) },
-}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));
+}).resolve(({ records }) => {
+  const titles: string[] = [];
+  records.Task.map((t) => titles.push(t.title));
+  return { titles };
+});

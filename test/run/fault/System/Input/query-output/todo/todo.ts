@@ -12,6 +12,6 @@ export const taskCount = query({
       return true;
     }),
   },
-}).resolve(({ records }) => ({ count: records.Task.length }));
+}).resolve(({ records }) => ({ count: records.Task.size }));
 
 export const todo = contract({ taskCount });

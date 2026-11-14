@@ -41,8 +41,8 @@ export const watcher = machine({
   states: { few: {}, many: {} },
 }).chart({
   states: {
-    few: { always: [{ guard: { hasMarks: ({ records }) => records.Mark.length > 0 }, target: "many" }] },
-    many: { always: [{ guard: { hasNoMarks: ({ records }) => records.Mark.length === 0 }, target: "few" }] },
+    few: { always: [{ guard: { hasMarks: ({ records }) => records.Mark.size > 0 }, target: "many" }] },
+    many: { always: [{ guard: { hasNoMarks: ({ records }) => records.Mark.size === 0 }, target: "few" }] },
   },
 });
 

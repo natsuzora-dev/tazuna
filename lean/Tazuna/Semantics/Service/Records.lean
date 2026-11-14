@@ -16,7 +16,10 @@ deriving DecidableEq, Repr, Inhabited
 /-- The records of a service, in write order. -/
 abbrev Records := List Row
 
-/-- The keys of `entity` in the order that functions read `records.<entity>`: code-point order, as String's `≤`. -/
+/--
+The keys of `entity` in code-point order, as String's `≤`. Spec functions receive `records.<entity>` without order; TS
+calls them on the records in this order, so that a run is deterministic.
+-/
 def Records.keys (records : Records) (entity : String) : List String :=
   ((records.filter (·.entity == entity)).filterMap (·.key)).mergeSort fun a b => decide (a ≤ b)
 

@@ -3,7 +3,7 @@ import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { definitionKinds } from "../syntax/structure.ts";
 import type { Conditions } from "./conditions.ts";
-import type { AnyEntity, AnyKeyedEntity, Entities, KeyOf, KeyValue, Ref, Row, RowOf } from "./entity.ts";
+import type { AnyEntity, AnyKeyedEntity, Entities, KeyOf, KeyValue, MadeRow, Ref, Row, RowOf } from "./entity.ts";
 
 export type Definition = AnyEntity | AnyEvent | AnyCommand | AnyQuery | Automation | Machine | AnyScreen;
 
@@ -93,8 +93,8 @@ export type AcceptedOutput<C extends AnyCommand> =
 type InputShape<D> = D extends { readonly input: infer I extends Shape } ? I : never;
 
 export type InputOf<D, Args> = keyof InputShape<D> extends never
-  ? { input?: (args: Args) => Row<InputShape<D>> }
-  : { input: (args: Args) => Row<InputShape<D>> };
+  ? { input?: (args: Args) => MadeRow<InputShape<D>> }
+  : { input: (args: Args) => MadeRow<InputShape<D>> };
 
 /** Named expressions whose values later expressions read as `bound`. */
 export type Binds<Args, B = Record<string, unknown>> = { readonly [K in keyof B]: (args: Args) => B[K] };

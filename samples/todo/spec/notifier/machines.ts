@@ -1,3 +1,4 @@
+import type { Bag } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { device } from "../device/contract.ts";
 import { warn } from "./commands.ts";
@@ -15,7 +16,7 @@ export const workload = machine({
     quiet: {
       always: [
         {
-          guard: { tooMany: ({ records }) => records.OpenTask.length > notifierConstants.openTaskLimit },
+          guard: { tooMany: ({ records }) => records.OpenTask.size > notifierConstants.openTaskLimit },
           target: "warning",
         },
       ],
@@ -23,7 +24,7 @@ export const workload = machine({
     warning: {
       sends: {
         warn: {
-          input: ({ records }) => ({ count: records.OpenTask.length }),
+          input: ({ records }) => ({ count: records.OpenTask.size }),
           onAccepted: [{ target: "warned" }],
         },
       },
@@ -41,8 +42,8 @@ const undetermined = ({ records }: Permission) => records.NotificationPermission
 
 const decided = (args: Permission) => !undetermined(args);
 
-const hasOpenTasks = ({ records }: { readonly records: { readonly OpenTask: readonly unknown[] } }) =>
-  records.OpenTask.length > 0;
+const hasOpenTasks = ({ records }: { readonly records: { readonly OpenTask: Bag<unknown> } }) =>
+  records.OpenTask.size > 0;
 
 const resetAttempts = { assign: { attempts: () => 0 } };
 

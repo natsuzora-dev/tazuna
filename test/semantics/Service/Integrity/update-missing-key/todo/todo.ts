@@ -17,5 +17,5 @@ export const renameTask = command({
 }).decide(({ input }) => [emit(taskRenamed, { id: input.taskId, title: input.title })]);
 
 export const taskCount = query({ output: { count: z.int() } }).resolve(({ records }) => ({
-  count: records.Task.length,
+  count: records.Task.size,
 }));

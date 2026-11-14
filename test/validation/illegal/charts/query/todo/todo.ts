@@ -29,13 +29,13 @@ export const trimTitle = command({
 
 export const taskCount = query({
   output: { count: z.number() },
-}).resolve(({ records }) => ({ count: records.Task.length }));
+}).resolve(({ records }) => ({ count: records.Task.size }));
 
 export const trimFirstTitle = automation({
   receives: { taskAdded },
   commands: { trimTitle },
 }).send({
-  guard: { first: ({ records }) => records.Task.length === 1 },
+  guard: { first: ({ records }) => records.Task.size === 1 },
   input: ({ payload }) => ({ taskId: payload.id }),
 });
 

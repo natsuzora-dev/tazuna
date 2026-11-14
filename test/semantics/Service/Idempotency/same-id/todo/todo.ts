@@ -22,4 +22,4 @@ export const addTask = command({
 
 export const taskCount = query({
   output: { count: z.int() },
-}).resolve(({ records }) => ({ count: records.Task.length }));
+}).resolve(({ records }) => ({ count: records.Task.size }));

@@ -28,7 +28,7 @@ export const markB = command({
   emits: [marked],
 }).decide(({ input, records }) =>
   records.Mark.get(`${input.id}-b`) === undefined
-    ? [emit(marked, { id: `${input.id}-b`, count: records.Mark.length })]
+    ? [emit(marked, { id: `${input.id}-b`, count: records.Mark.size })]
     : [],
 );
 

@@ -1,8 +1,9 @@
 import type { z } from "zod";
+import type { Bag } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { Named, SomeKey } from "./conditions.ts";
 import type { AnyScreen, Control, Events, InputOf, QueryOutput, Screen, ServiceDefinition } from "./definition.ts";
-import type { Entities, Immutable, Records, Row } from "./entity.ts";
+import type { Entities, Immutable, MadeRow, Records, Row } from "./entity.ts";
 import type {
   BaseArgs,
   Commands,
@@ -83,7 +84,9 @@ type Ons<N extends string, Ctx, B, Ps extends Payloads, Rs extends Events> = Key
   OperatedControls<Ps> & ReceivedEvents<Rs>
 >;
 
-type ScreenResolve<O extends Shape, A> = keyof O extends never ? { resolve?: never } : { resolve: (args: A) => Row<O> };
+type ScreenResolve<O extends Shape, A> = keyof O extends never
+  ? { resolve?: never }
+  : { resolve: (args: A) => MadeRow<O> };
 
 type RequiredKeys<S extends Shape> = { [K in keyof S]: S[K] extends z.ZodDefault<z.ZodType> ? never : K }[keyof S];
 type InitialContext<S extends Shape> = { readonly [K in RequiredKeys<S>]: Immutable<z.output<S[K]>> } & {
@@ -162,7 +165,7 @@ type StateOffers<Ps extends Payloads, A> = {
   readonly offers?: [keyof Ps] extends [never]
     ? never
     : SomeKnownKey<{ readonly [K in keyof Ps]: unknown }> & {
-        readonly [K in keyof Ps]?: (args: A) => readonly Row<PayloadOf<Ps[K]>>[];
+        readonly [K in keyof Ps]?: (args: A) => Bag<MadeRow<PayloadOf<Ps[K]>>> | readonly MadeRow<PayloadOf<Ps[K]>>[];
       };
 };
 

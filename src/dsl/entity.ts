@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Bag, Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { Conditions, Named } from "./conditions.ts";
 
@@ -14,6 +15,8 @@ export type Immutable<T> = T extends Temporal.Instant | Temporal.PlainDate | Tem
 
 /** A record's values as expressions receive them; changing one is a type error. */
 export type Row<S extends Shape> = Immutable<z.output<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>>;
+/** Values of shape `S` as expressions return them: a bag, set or sortedBy field also takes a Bag. */
+export type MadeRow<S extends Shape> = Made<z.output<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>>;
 
 export interface KeyedEntity<S extends Shape = Shape, K extends keyof S & string = keyof S & string> {
   readonly kind: "entity";
@@ -110,8 +113,8 @@ export function refTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
 
 export type Entities = Readonly<Record<string, AnyEntity>>;
 
-/** The records of a keyed entity, in code-point order of their keys. */
-interface Table<E extends AnyKeyedEntity> extends ReadonlyArray<RowOf<E>> {
+/** The records of a keyed entity, without order. */
+interface Table<E extends AnyKeyedEntity> extends Bag<RowOf<E>> {
   get(key: KeyValue<E>): RowOf<E> | undefined;
 }
 

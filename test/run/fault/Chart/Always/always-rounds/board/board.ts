@@ -22,7 +22,7 @@ export const flow = machine({
   states: { a: {}, b: {} },
 }).chart({
   states: {
-    a: { always: [{ guard: { open: ({ records }) => records.Task.length === 0 }, target: "b" }] },
+    a: { always: [{ guard: { open: ({ records }) => records.Task.size === 0 }, target: "b" }] },
     b: { on: { taskAdded: [{ target: "a" }] } },
   },
 });

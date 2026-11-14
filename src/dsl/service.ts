@@ -18,7 +18,7 @@ import type {
   Query,
   ServiceDefinition,
 } from "./definition.ts";
-import type { Entities, Records, Row } from "./entity.ts";
+import type { Entities, MadeRow, Records, Row } from "./entity.ts";
 import {
   type CreateEventDefiner,
   type DeleteEventDefiner,
@@ -104,7 +104,7 @@ interface CommandSetup<I extends Shape, Ev extends AnyEvent, B, Rq extends strin
 }
 
 interface QuerySetup<I extends Shape, O extends Shape, Rq extends string, Es extends Entities> {
-  resolve(resolve: (args: { input: Input<I>; records: Records<Es> } & Now) => Row<O>): Query<I, O, Rq, undefined>;
+  resolve(resolve: (args: { input: Input<I>; records: Records<Es> } & Now) => MadeRow<O>): Query<I, O, Rq, undefined>;
 }
 
 type AutomationArgs<Ev extends AnyEvent, Es extends Entities> = Now & {

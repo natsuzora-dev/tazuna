@@ -23,8 +23,8 @@ export const guardedFlow = machine({
   },
 }).chart({
   states: {
-    a: { always: [{ guard: { hasTask: ({ records }) => records.Task.length > 0 }, target: "b" }] },
-    b: { always: [{ guard: { noTask: ({ records }) => records.Task.length === 0 }, target: "a" }] },
+    a: { always: [{ guard: { hasTask: ({ records }) => records.Task.size > 0 }, target: "b" }] },
+    b: { always: [{ guard: { noTask: ({ records }) => records.Task.size === 0 }, target: "a" }] },
   },
 });
 
@@ -35,7 +35,7 @@ export const mixedLeavingOnEvent = machine({
   states: { c: {}, d: {} },
 }).chart({
   states: {
-    c: { always: [{ guard: { hasTask: ({ records }) => records.Task.length > 0 }, target: "d" }] },
+    c: { always: [{ guard: { hasTask: ({ records }) => records.Task.size > 0 }, target: "d" }] },
     d: { on: { taskAdded: [{ target: "c" }] } },
   },
 });
@@ -54,7 +54,7 @@ export const mixed = machine({
   states: { c: {}, d: {} },
 }).chart({
   states: {
-    c: { always: [{ guard: { hasTask: ({ records }) => records.Task.length > 0 }, target: "d" }] },
+    c: { always: [{ guard: { hasTask: ({ records }) => records.Task.size > 0 }, target: "d" }] },
     d: { always: [{ target: "c" }] },
   },
 });

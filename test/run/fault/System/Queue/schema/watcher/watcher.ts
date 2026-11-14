@@ -20,7 +20,7 @@ export const watcher = machine({
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "watching" }] } },
-    watching: { holds: { task: ({ records }) => records.Task[0] }, on: { taskAdded: [{ target: "idle" }] } },
+    watching: { holds: { task: ({ records }) => records.Task.only() }, on: { taskAdded: [{ target: "idle" }] } },
   },
 });
 

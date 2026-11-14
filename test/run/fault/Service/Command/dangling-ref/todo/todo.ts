@@ -40,10 +40,14 @@ export const addComment = command({
 export const deleteTaskAndComments = command({
   input: { taskId: ref(Task) },
   emits: [taskDeleted, commentDeleted],
-}).decide(({ input, records }) => [
-  ...records.Comment.filter((c) => c.taskId === input.taskId).map((c) => emit(commentDeleted, { id: c.id })),
-  emit(taskDeleted, { id: input.taskId }),
-]);
+}).decide(({ input, records }) => {
+  // Deletes one comment at most, since decide cannot yet return the events of a Bag of comments.
+  const comment = records.Comment.filter((c) => c.taskId === input.taskId).only();
+  return [
+    ...(comment === undefined ? [] : [emit(commentDeleted, { id: comment.id })]),
+    emit(taskDeleted, { id: input.taskId }),
+  ];
+});
 
 export const deleteTask = command({
   input: { taskId: ref(Task) },

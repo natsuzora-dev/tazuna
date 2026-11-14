@@ -11,7 +11,10 @@ export const Task = entity({
 export const { command, createEvent } = service({
   description: "Keep the tasks",
   entities: { Task },
-  invariants: { uniqueTitles: ({ records }) => new Set(records.Task.map((t) => t.title)).size === records.Task.length },
+  invariants: {
+    uniqueTitles: ({ records }) =>
+      records.Task.every((t) => records.Task.filter((u) => u.title === t.title).size === 1),
+  },
 });
 
 export const taskAdded = createEvent({ entity: Task });

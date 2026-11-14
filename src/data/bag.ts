@@ -1,4 +1,36 @@
-import { compareKeys, type SortKey } from "./collections.ts";
+/** A value that orders others: a number or a point in time, not a string, whose order differs across languages. */
+export type SortKey = number | Temporal.Instant | Temporal.PlainDate;
+
+export function compareKeys(a: unknown, b: unknown): number {
+  if (a instanceof Temporal.Instant && b instanceof Temporal.Instant) return Temporal.Instant.compare(a, b);
+  if (a instanceof Temporal.PlainDate && b instanceof Temporal.PlainDate) return Temporal.PlainDate.compare(a, b);
+  return typeof a === "number" && typeof b === "number" ? a - b : 0;
+}
+
+declare const collectionMark: unique symbol;
+/** An array type that a bag, set or sortedBy schema outputs; implementations still see a plain array. */
+export type Marked<T, M extends "bag" | "sortedBy"> = T & { readonly [collectionMark]?: M };
+
+type Leaf = Temporal.Instant | Temporal.PlainDate | Temporal.Duration;
+
+/** A value as spec functions may produce it: a bag or set also takes a Bag, and a sortedBy array also takes Runs. */
+export type Made<T> = T extends Leaf
+  ? T
+  : T extends readonly (infer E)[]
+    ? typeof collectionMark extends keyof T
+      ? NonNullable<T[typeof collectionMark]> extends "sortedBy"
+        ? Bag<Made<E>> | readonly (Made<E> | Bag<Made<E>>)[]
+        : Bag<Made<E>> | readonly Made<E>[]
+      : readonly Made<E>[]
+    : T extends object
+      ? { readonly [K in keyof T]: Made<T[K]> }
+      : T;
+
+let itemsOf: (bag: BagValue<unknown>) => readonly unknown[];
+
+/** The values of a Bag, or undefined for any other value. */
+export const valuesOf = (value: unknown): readonly unknown[] | undefined =>
+  value instanceof BagValue ? itemsOf(value) : undefined;
 
 /**
  * Values without order, like OCL's Bag, as spec functions receive records. It has no index and no iterator, and each
@@ -38,6 +70,10 @@ export class BagValue<T> implements Bag<T> {
 
   constructor(items: () => readonly T[]) {
     this.#items = items;
+  }
+
+  static {
+    itemsOf = (bag) => bag.#items();
   }
 
   static #of<T>(items: readonly T[]): Bag<T> {
