@@ -44,7 +44,7 @@ let reversing = false;
 let enumerated = 0;
 
 /** The values of a Bag, or undefined for any other value. */
-export const valuesOf = (value: unknown): readonly unknown[] | undefined =>
+export const bagValues = (value: unknown): readonly unknown[] | undefined =>
   value instanceof BagValue ? itemsOf(value) : undefined;
 
 /**

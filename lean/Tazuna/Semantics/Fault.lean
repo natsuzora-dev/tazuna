@@ -15,10 +15,10 @@ inductive Fault where
   /-- The command emits an event that its emits do not list; `event` is null when the event is no definition. -/
   | unlistedEmittedEvent (definition : Syntax.Ref) (event : Option Syntax.Ref)
   /--
-  Two events of one group of the command's emits write one record of `entity`, so the record would depend on their
-  order; `recordKey` is null for a single entity.
+  Two events of one Bag that the command's decide returns write one record of `entity`, so the record would depend on
+  their order; `recordKey` is null for a single entity.
   -/
-  | sameRecordInGroup (definition : Syntax.Ref) (entity : Syntax.Ref) (recordKey : Option String)
+  | sameRecordInBag (definition : Syntax.Ref) (entity : Syntax.Ref) (recordKey : Option String)
   | outputSchema (definition : Syntax.Ref)
   | automationInputSchema (definition : Syntax.Ref)
   | requestInputSchema (definition : Syntax.Ref) (target : Syntax.Ref)
@@ -70,7 +70,7 @@ derive_group Fault
 
 /-- Whether the fault halts the run, which it does when the behavior after the fault is undefined. -/
 def Fault.halts : Fault → Bool
-  | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .sameRecordInGroup .. | .outputSchema ..
+  | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .sameRecordInBag .. | .outputSchema ..
   | .automationInputSchema .. | .requestInputSchema .. | .showsInputSchema .. | .screenInputSchema ..
   | .failedRequires .. | .heldSchema ..
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..

@@ -1,1 +1,0 @@
-{"kind":"Fault.sameRecordInGroup","definition":{"service":"todo","name":"archiveTitle"},"data":{"entity":{"service":"todo","name":"Archive"},"recordKey":"Buy milk"},"location":{"file":"todo/todo.ts","line":23},"scenario":{"service":"todo","name":"archiveShared"}}

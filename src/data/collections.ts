@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BagValue, compareKeys, type Marked, runsOf, type SortKey, valuesOf } from "./bag.ts";
+import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
 import { schemaNode } from "./schemaNode.ts";
 import { byCodePoint, canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
 
@@ -85,9 +85,9 @@ export const collectionOf = (schema: z.core.$ZodType): Collection | undefined =>
 /** Returns the elements of a marked array that spec code made from Bags, or the value itself if it is no such array. */
 function unbagged(collection: Collection | undefined, value: unknown): unknown {
   if (collection === undefined) return value;
-  const values = valuesOf(value);
+  const values = bagValues(value);
   if (values !== undefined) return values;
-  return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => valuesOf(v) ?? [v]) : value;
+  return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => bagValues(v) ?? [v]) : value;
 }
 
 /**

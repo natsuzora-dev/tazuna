@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Bag, BagValue, enumerations, NotOnly, reversedBags, valuesOf } from "../src/data/bag.ts";
+import { type Bag, BagValue, bagValues, enumerations, NotOnly, reversedBags } from "../src/data/bag.ts";
 
 const bagOf = <T>(items: readonly T[]): Bag<T> => new BagValue(() => items);
 const numbers = (bag: Bag<number>) => bag.sortedBy((n) => n).map((run) => [run.min((n) => n), run.size]);
@@ -101,8 +101,8 @@ test("reversedBags reverses the values of a Bag but not of one that a method ret
     return bag.filter((n) => n !== 2);
   });
   assert.deepEqual(seen, [3, 2, 1]);
-  assert.deepEqual(valuesOf(odds), [3, 1]);
-  assert.deepEqual(valuesOf(bag), [1, 2, 3]);
+  assert.deepEqual(bagValues(odds), [3, 1]);
+  assert.deepEqual(bagValues(bag), [1, 2, 3]);
 });
 
 test("enumerations counts the callbacks that a Bag of two or more values runs", () => {

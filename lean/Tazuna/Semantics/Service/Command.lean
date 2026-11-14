@@ -28,10 +28,10 @@ def Emit.text (e : Emit) : String := (Value.obj [("event", .str e.event), ("payl
 
 /--
 The groups of `decided` with the events of `normalized`, the normalized flattening of `decided`, each group in the
-order of its texts. A group has no order, so the run writes its events in this order; `sameRecordInGroup` keeps the
+order of its texts. A group has no order, so the run writes its events in this order; `sameRecordInBag` keeps the
 records from depending on it.
 -/
-def orderGroups (decided : List (List Emit)) (normalized : List Emit) : List (List Emit) :=
+def orderedGroups (decided : List (List Emit)) (normalized : List Emit) : List (List Emit) :=
   (chunks (decided.map (·.length)) normalized).map (·.mergeSort fun a b => decide (a.text ≤ b.text))
 
 /-- A record that two events of one group write, as its entity and key. -/
@@ -79,9 +79,9 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
       match ← normalizeEmits st fs name decided.flatten with
       | .error v => pure (.halted [v])
       | .ok normalized =>
-      let groups := orderGroups decided normalized
+      let groups := orderedGroups decided normalized
       match twiceWritten st records groups with
-      | some (entity, key) => pure (.halted [.sameRecordInGroup (st.ref name) (st.ref entity) key])
+      | some (entity, key) => pure (.halted [.sameRecordInBag (st.ref name) (st.ref entity) key])
       | none =>
         let written := applyAll st records groups.flatten
         if duplicated st written then pure (.rejected { kind := .alreadyExists })

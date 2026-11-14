@@ -16,8 +16,8 @@ function lists(st: Service, command: string, e: Emit): boolean {
   return emitsOf(st.structure, ref(st, command)).some((l) => l !== null && traceNameOfRef(l, st.service) === e.event);
 }
 
-/** Lean's orderGroups: the groups of `decided` with the events of `events`, each group in canonical JSON order. */
-function orderGroups(decided: readonly (readonly unknown[])[], events: readonly Encoded[]): Encoded[][] {
+/** Lean's orderedGroups: the groups of `decided` with the events of `events`, each group in canonical JSON order. */
+function orderedGroups(decided: readonly (readonly unknown[])[], events: readonly Encoded[]): Encoded[][] {
   const text = (e: Encoded) => canonicalJson({ event: e.emit.event, payload: e.encoded });
   let start = 0;
   return decided.map((g) => {
@@ -89,11 +89,11 @@ export function processCommand(
       );
     return { emit: { event: e.event, payload: payload.value }, encoded: payload.encoded as Fields };
   });
-  const groups = orderGroups(decided, normalized);
+  const groups = orderedGroups(decided, normalized);
   const twice = twiceWritten(r.st, groups);
   if (twice !== undefined)
     return report(s, {
-      kind: "Fault.sameRecordInGroup",
+      kind: "Fault.sameRecordInBag",
       definition,
       data: { entity: ref(r.st, twice.entity), recordKey: twice.key ?? null },
     });

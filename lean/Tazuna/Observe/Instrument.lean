@@ -331,7 +331,7 @@ def decideCollect (name : String) (records : Records) (decided : Except Issue (L
   let .ok decided := decided | pure ()
   if decided.flatten.any (!st.lists name ·) then return
   match ← normalizeEmits (m := m) st fs name decided.flatten with
-  | .ok normalized => modify (·.stepAccess (writesOf st records (orderGroups decided normalized).flatten).values)
+  | .ok normalized => modify (·.stepAccess (writesOf st records (orderedGroups decided normalized).flatten).values)
   | .error _ => pure ()
 
 /-- The keys that the createKey calls of one call gave, with their entity, from the key counts `keys` before it. -/

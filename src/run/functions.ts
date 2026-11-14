@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assumedEnsures } from "../contract/checks.ts";
-import { type Bag, NotOnly, valuesOf } from "../data/bag.ts";
+import { type Bag, bagValues, NotOnly } from "../data/bag.ts";
 import { canonical as canonicalOf, comparableAnswer, orderFree } from "../data/canonical.ts";
 import { bag, bagged, defaultRow, sorted } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
@@ -65,7 +65,7 @@ function attempt<T>(f: () => T, schema?: Schema): T | Failed {
  * Returns a value that author code made, with each Bag in a bag, set or sortedBy field as an array, as Lean's Value can
  * hold it for normalize.
  */
-const unbagged = (shape: Shape | undefined, value: unknown): unknown => sorted(objectOf(shape ?? {}), value);
+const sortedFields = (shape: Shape | undefined, value: unknown): unknown => sorted(objectOf(shape ?? {}), value);
 
 /**
  * Returns the value with every collection sorted, as spec code receives it, and its encoding, or why it does not match
@@ -473,9 +473,9 @@ export class SpecFunctions implements Functions {
     const f = command.decide as ((a: Fields) => readonly (DefinedEmit | Bag<DefinedEmit>)[]) | undefined;
     return attempt(() =>
       (f?.({ ...args, bound }) ?? []).map((item) =>
-        ((valuesOf(item) ?? [item]) as readonly DefinedEmit[]).map((e) => ({
+        ((bagValues(item) ?? [item]) as readonly DefinedEmit[]).map((e) => ({
           event: traceName(this.spec, e.event, this.service),
-          payload: unbagged(e.event.payload, e.payload) as Fields,
+          payload: sortedFields(e.event.payload, e.payload) as Fields,
         })),
       ),
     );
@@ -544,7 +544,10 @@ export class SpecFunctions implements Functions {
   resolve(name: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown {
     const query = this.query(name).definition;
     return attempt(() =>
-      unbagged(query.output, (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now })),
+      sortedFields(
+        query.output,
+        (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now }),
+      ),
     );
   }
 
@@ -576,7 +579,7 @@ export class SpecFunctions implements Functions {
         if (!met) return undefined;
       }
       const command = Object.values(a.commands)[0];
-      return { input: unbagged(command?.input, a.input?.({ ...args, createKey } as never) ?? {}) };
+      return { input: sortedFields(command?.input, a.input?.({ ...args, createKey } as never) ?? {}) };
     });
     if (reacted instanceof Failed) return reacted;
     return reacted === undefined ? { created } : { input: reacted.input, created };
@@ -758,7 +761,7 @@ export class SpecFunctions implements Functions {
         : this.node(scope.machine, scope.state)?.offers?.[control];
     const given = attempt(() => f?.(this.args(scope, records, access) as never) ?? []);
     if (given instanceof Failed) return given;
-    const payloads = valuesOf(given) ?? (given as readonly unknown[]);
+    const payloads = bagValues(given) ?? (given as readonly unknown[]);
     const row = strictObjectOf(named.definition.controls?.[control]?.payload ?? {});
     const checked: { readonly value: Fields; readonly encoded: unknown }[] = [];
     for (const o of payloads) {

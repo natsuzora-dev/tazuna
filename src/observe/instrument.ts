@@ -1,4 +1,4 @@
-import { enumerations, valuesOf } from "../data/bag.ts";
+import { bagValues, enumerations } from "../data/bag.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { OrderDependent } from "../data/orderDependent.generated.ts";
@@ -291,7 +291,7 @@ const silent: Access = { context: () => {}, active: () => {}, assigned: () => {}
 
 /** Returns `value` with each Bag as the array of its values, as Lean's Value holds it. */
 function unbagged(value: unknown): unknown {
-  const values = valuesOf(value);
+  const values = bagValues(value);
   if (values !== undefined) return values.map(unbagged);
   if (Array.isArray(value)) return value.map(unbagged);
   if (value === null || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return value;

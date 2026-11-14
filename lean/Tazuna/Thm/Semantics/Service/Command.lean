@@ -123,9 +123,9 @@ theorem already_exists_iff_duplicated (records : Records) (now : Time) (name : S
     (hr : requirementsRejection st fs records now name input = .ok none)
     (hd : fs.decide name input records now = .ok decided) (hl : ∀ e ∈ decided.flatten, st.lists name e = true)
     (hn : normalizeEmits st fs name decided.flatten = .ok normalized)
-    (ht : twiceWritten st records (orderGroups decided normalized) = none) :
+    (ht : twiceWritten st records (orderedGroups decided normalized) = none) :
     evaluate st fs records now name raw = .rejected { kind := .alreadyExists } ↔
-      duplicated st (applyAll st records (orderGroups decided normalized).flatten) = true := by
+      duplicated st (applyAll st records (orderedGroups decided normalized).flatten) = true := by
   have hf : decided.flatten.find? (!st.lists name ·) = none := List.find?_eq_none.mpr fun e he => by simp [hl e he]
   simp only [evaluate, id_bind, hp, hr, hd, hf, hn, ht]
   split
@@ -164,9 +164,9 @@ theorem mem_chunks {α : Type} : ∀ (ns : List Nat) (xs : List α) (x : α), x 
     · exact List.mem_of_mem_take h
     · exact List.mem_of_mem_drop (mem_chunks ns _ x h)
 
-theorem mem_orderGroups (decided : List (List Emit)) (normalized : List Emit) (e : Emit)
-    (h : e ∈ (orderGroups decided normalized).flatten) : e ∈ normalized := by
-  simp only [orderGroups, List.mem_flatten, List.mem_map] at h
+theorem mem_orderedGroups (decided : List (List Emit)) (normalized : List Emit) (e : Emit)
+    (h : e ∈ (orderedGroups decided normalized).flatten) : e ∈ normalized := by
+  simp only [orderedGroups, List.mem_flatten, List.mem_map] at h
   obtain ⟨_, ⟨g, hg, rfl⟩, he⟩ := h
   exact mem_chunks _ _ e (List.mem_flatten.mpr ⟨g, hg, (List.mergeSort_perm _ _).mem_iff.mp he⟩)
 
@@ -204,7 +204,7 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                   refine ⟨input, decided, hp, hd, fun e he => ?_, fun e he => ?_⟩
                   · simpa using List.find?_eq_none.mp hf e he
                   · obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
-                    obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl (mem_orderGroups _ _ e he)
+                    obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl (mem_orderedGroups _ _ e he)
                     exact ⟨x, (List.of_mem_zip hx).1, (hz _ hx).1⟩
 
 theorem processCommand_mocks (name : String) (raw : Value) (id : Option String) (n : Nat) :

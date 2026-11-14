@@ -24,11 +24,11 @@ export type Fault =
       };
     }
   /**
-   * Two events of one group of the command's emits write one record of `entity`, so the record would depend on their
-   * order; `recordKey` is null for a single entity.
+   * Two events of one Bag that the command's decide returns write one record of `entity`, so the record would depend on
+   * their order; `recordKey` is null for a single entity.
    */
   | {
-      readonly kind: "Fault.sameRecordInGroup";
+      readonly kind: "Fault.sameRecordInBag";
       readonly definition: DefinitionRef;
       readonly data: {
         readonly entity: DefinitionRef;
@@ -282,7 +282,7 @@ export type Fault =
 export const faultKinds = [
   "Fault.emittedPayloadSchema",
   "Fault.unlistedEmittedEvent",
-  "Fault.sameRecordInGroup",
+  "Fault.sameRecordInBag",
   "Fault.outputSchema",
   "Fault.automationInputSchema",
   "Fault.requestInputSchema",
@@ -322,7 +322,7 @@ export const faultKinds = [
 export const haltingFaultKinds = [
   "Fault.emittedPayloadSchema",
   "Fault.unlistedEmittedEvent",
-  "Fault.sameRecordInGroup",
+  "Fault.sameRecordInBag",
   "Fault.outputSchema",
   "Fault.automationInputSchema",
   "Fault.requestInputSchema",
