@@ -23,6 +23,7 @@ import { defaultSchemas } from "./defaults.ts";
 import type { Found } from "./found.ts";
 import { duplicateNames, type NamedExport } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
+import { peerReferences } from "./peers.ts";
 import { unexportedDefinitions } from "./references.ts";
 import { structureOf } from "./structureOf.ts";
 import { inexactDelays, unparsableTimes } from "./times.ts";
@@ -153,7 +154,8 @@ export async function loadSpec(root: string): Promise<Spec> {
       ...duplicateNames(namedExports),
       ...malformed,
       ...unexportedDefinitions(definitions, scenarios, services, contracts, constants, exported),
-      ...unparsableTimes(scenarios),
+      ...unparsableTimes(scenarios, contracts),
+      ...peerReferences(scenarios, services, contracts),
       ...inexactDelays(charts({ definitions, structure })),
       ...opaque,
       ...defaultSchemas(definitions, structure, opaque, thrownDefaults),

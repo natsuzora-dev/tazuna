@@ -22,6 +22,8 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.defaultSchema": true,
   "Malformed.unexportedDefinition": true,
   "Malformed.unparsableTime": true,
+  "Malformed.unknownPeer": true,
+  "Malformed.unlistedState": true,
   "Malformed.inexactDelay": true,
   "NonCanonical.emptyGuard": true,
   "NonCanonical.emptyAfter": true,

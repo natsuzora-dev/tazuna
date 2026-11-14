@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { Delay } from "../data/datetime.ts";
 import type { Malformed } from "../data/malformed.ts";
 import { stateAt } from "../dsl/chart.ts";
-import type { ChartSpec, Definition, Named } from "../dsl/definition.ts";
-import type { Scenario } from "../dsl/scenario.ts";
+import type { ChartSpec, Contract, Definition, Named } from "../dsl/definition.ts";
+import type { Scenario, StateInputs } from "../dsl/scenario.ts";
 import type { ChartStructure } from "../syntax/structure.ts";
 import type { Found } from "./found.ts";
 
@@ -23,28 +23,46 @@ function readable(time: string): boolean {
 }
 
 /**
- * Returns the times of `at` that are not an ISO datetime with seconds and an offset, the time form of steps and trace
- * lines, or that have a part below a millisecond.
+ * Returns the times of `at` in scenarios and in the states of contracts that are not an ISO datetime with seconds and an
+ * offset, the time form of steps and trace lines, or that have a part below a millisecond.
  */
-export function unparsableTimes(scenarios: readonly Named<Scenario>[]): Found<Malformed>[] {
-  return scenarios.flatMap(({ service, name, place, definition }) =>
-    definition.inputs.flatMap((input, i): Found<Malformed>[] =>
-      input.type === "at" && !readable(input.time)
-        ? [
-            {
-              violation: {
-                kind: "Malformed.unparsableTime",
-                definition: null,
-                scenario: { service, name },
-                input: i + 1,
-                data: {},
-              },
-              place,
-            },
-          ]
-        : [],
+export function unparsableTimes(
+  scenarios: readonly Named<Scenario>[],
+  contracts: readonly Contract[],
+): Found<Malformed>[] {
+  const unparsable = (inputs: Scenario["inputs"]) =>
+    inputs.flatMap((input, i) => (input.type === "at" && !readable(input.time) ? [i + 1] : []));
+  return [
+    ...scenarios.flatMap(({ service, name, place, definition }) =>
+      unparsable(definition.inputs).map(
+        (input): Found<Malformed> => ({
+          violation: {
+            kind: "Malformed.unparsableTime",
+            definition: null,
+            scenario: { service, name },
+            input,
+            data: {},
+          },
+          place,
+        }),
+      ),
     ),
-  );
+    ...contracts.flatMap(({ service, place, states }) =>
+      Object.entries(states).flatMap(([state, inputs]) =>
+        unparsable(inputs as StateInputs).map(
+          (input): Found<Malformed> => ({
+            violation: {
+              kind: "Malformed.unparsableTime",
+              definition: null,
+              input,
+              data: { contract: service, state },
+            },
+            place,
+          }),
+        ),
+      ),
+    ),
+  ];
 }
 
 /**

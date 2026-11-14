@@ -3,7 +3,7 @@ import { type Problem, toProblem } from "../data/problem.ts";
 import type { Step } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { Location } from "../data/violation.ts";
-import type { Named } from "../dsl/definition.ts";
+import type { Contract, Named } from "../dsl/definition.ts";
 import { type ElsewhereInput, elsewhereInputs, type Scenario, timed, writtenPositions } from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
@@ -21,12 +21,9 @@ export interface PeerDerivation {
 const isMessage = (l: TraceLine) =>
   l.type === "command" || l.type === "query" || l.type === "subscribe" || l.type === "event";
 
-/** Returns the service whose contract is `value`. */
-function contractService(spec: Spec, value: object): string {
-  const found = spec.contracts.find((c) => c.value === value);
-  if (found === undefined) throw new Error("elsewhere names an object that is not a contract");
-  return found.service;
-}
+/** Returns the service whose exported contract is `value`, which load checks (Malformed.unknownPeer). */
+const contractService = (spec: Spec, value: object): string =>
+  (spec.contracts.find((c) => c.value === value) as Contract).service;
 
 /**
  * Returns the line count of the run before which the elsewhere input arrives: after the lines of the inputs before it
@@ -44,7 +41,9 @@ function linesBefore(run: Run, { input, before }: ElsewhereInput): number {
 
 /**
  * Returns the peers of the scenario's run, the spec services other than its own that it messages or names in `given`
- * or `elsewhere`, each with the arguments of peerInputs. A `given` state is one of its service's contract states.
+ * or `elsewhere`, each with the arguments of peerInputs. Load checks that each service that `given` or `elsewhere` names
+ * is another spec service and that each given state is one of its contract's states (Malformed.unknownPeer,
+ * Malformed.unlistedState).
  */
 export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): PeerDerivation[] {
   const { given } = scenario.definition;
@@ -53,19 +52,12 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
   const others = [...spec.services]
     .filter(([name, s]) => name !== scenario.service && !s.definition.external)
     .map(([name]) => name);
-  const unknown = [...named].filter((n) => !others.includes(n));
-  if (unknown.length > 0) throw new Error(`${unknown.join(", ")} is not another spec service`);
   const peers = others.filter(
     (peer) =>
       named.has(peer) || run.outcome.lines.some((l) => isMessage(l) && "name" in l && l.name.startsWith(`${peer}.`)),
   );
   return peers.map((peer) => {
     const state = given[peer];
-    if (
-      state !== undefined &&
-      !Object.values(spec.contracts.find((c) => c.service === peer)?.states ?? {}).includes(state)
-    )
-      throw new Error(`the given state of ${peer} is not one of the states of its contract`);
     const stateInputs = state === undefined ? [] : timed({ inputs: state });
     const mine = written.filter((e) => e.peer === peer);
     const steps = stepsOf(spec, peer, [...stateInputs, ...mine.map((e) => e.input)]);

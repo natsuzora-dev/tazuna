@@ -1,0 +1,2 @@
+{"kind":"Malformed.unparsableTime","definition":null,"data":{"contract":"todo","state":"milkAndEggs"},"location":{"file":"todo/contract.ts","line":4,"input":1}}
+{"kind":"Malformed.unparsableTime","definition":null,"data":{"contract":"todo","state":"milkAndEggs"},"location":{"file":"todo/contract.ts","line":4,"input":3}}
