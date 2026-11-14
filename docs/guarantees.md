@@ -33,10 +33,30 @@ A tool *passes* when it reports no violation.
 
 - When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
 - When `test` passes, `check` passes, and each scenario's trace equals its snapshot.
-- When `test` and `verify` both pass with the same spec and snapshots, the trace that the implementation records for each scenario matches its snapshot.
+- When `test` and `verify` both pass with the same spec and snapshots, the trace that the implementation records for each scenario matches its snapshot, and so does the trace that each peer's implementation records for the inputs derived from the scenario.
 
 When, in addition, the [assumptions](#assumptions) hold, the implementation sends the messages that the spec defines for the inputs of each scenario.
 tazuna guarantees nothing about inputs that no scenario contains.
+
+### When a scenario talks to another service
+
+A scenario's *peer* is another service of the spec, not an external one, that the scenario sends a request to, receives an event from, or names in `given` or `elsewhere`.
+`test` runs the peer's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the peer at their send times, with the scenario's `elsewhere` inputs at their places.
+A request that a mock answers as `unavailable` never reaches the peer.
+The peer receives the keys that the scenario's service creates renamed, and values compare in the form that `verify` compares, up to that renaming and a one-to-one renaming of the keys that the peer creates.
+`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
+`test` writes the peer's run, unless it took no input, as the snapshot `<scenario>.<peer>.jsonl` beside the scenario's.
+`verify` compares the trace that the peer's implementation records for those inputs, `<scenario>.<peer>.jsonl` in the folder of the scenario's traces, with that snapshot, as the peer's trace.
+
+When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
+
+- each request of the scenario to the peer that no mock answers as `unavailable` reaches the peer once, not before the scenario sends it, and so does the end of its subscription;
+- each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive once each and in the order the peer sends them;
+- each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken.
+
+Lean proves this as `network_realizes` for spec runs, given two facts that it does not prove: the peer's run writes one input line for each derived input, in order, and the peer's run names no definition of the scenario's service.
+So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
+Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
 
 ### When a trace matches a snapshot
 
@@ -108,13 +128,10 @@ tazuna detects breaks of each assumption only partly or not at all.
   `verify` reports a message that the recorder leaves out.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` detects a break of this assumption only on the traces that the recorder writes.
-- **Other services.** The messages from another service of the spec that a scenario gives as inputs are messages that the other service sends at the times that the scenario gives.
-  `test` runs the other service's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the service at their times, with the scenario's `elsewhere` inputs at their places.
-  It reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
-  Values compare up to the keys that the scenario's service creates, which the other service receives renamed, and, one to one, the keys that the other service creates.
-  `test` writes the other service's run, unless it took no input, as the snapshot `<scenario>.<service>.jsonl` beside the scenario's.
-  `verify` compares the trace that the other service's implementation records for those inputs, `<scenario>.<service>.jsonl` in the folder of the scenario's traces, with that snapshot, as the other service's trace.
-  A later step of tazuna replaces this assumption with a guarantee.
+- **Opaque values.** An implementation treats the IDs and keys that it did not create as opaque: renaming them one to one in its inputs renames them the same way in its outputs and changes nothing else.
+  `verify` compares IDs and keys only up to a renaming, and a peer receives the keys of the scenario's service renamed, so a trace stands for every renaming of it.
+- **Reproducible implementations.** One recorded run represents the implementation: given the inputs of a recorded trace, the implementation sends the messages of that trace.
+  The trace that a peer's implementation records for the derived inputs therefore stands for what it does when the scenario's service sends them.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
 
 ## Proven properties
