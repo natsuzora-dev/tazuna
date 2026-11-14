@@ -4,7 +4,7 @@ import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { type Problem, toProblem } from "../data/problem.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { toJsonl } from "../data/trace.ts";
-import { snapshotEntryPath, snapshotPath } from "../data/traceFile.ts";
+import { peerSnapshotName, snapshotEntryPath, snapshotPath } from "../data/traceFile.ts";
 import type { Uncovered } from "../data/uncovered.ts";
 import { canonicalJson } from "../data/values.ts";
 import type { Named, Place } from "../dsl/definition.ts";
@@ -162,7 +162,7 @@ export function testSpec(
     snapshotted.push({ scenario, name: scenario.name, lines: run.outcome.lines });
     for (const check of checkPeers(spec, scenario, run)) {
       problems.push(...check.problems);
-      snapshotted.push({ scenario, name: `${scenario.name}.${check.peer}`, lines: check.lines });
+      snapshotted.push({ scenario, name: peerSnapshotName(scenario.name, check.peer), lines: check.lines });
     }
   }
   const snapshots = testSnapshots(spec, snapshotted, options.update);

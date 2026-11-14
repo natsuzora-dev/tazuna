@@ -21,7 +21,7 @@ import {
   traceFolderOf,
 } from "../src/verify/pairing.ts";
 import { verifyLines } from "../src/verify/prepare.ts";
-import { compareSnapshot, hasSnapshot, pairSnapshots, snapshotFolders } from "../src/verify/snapshot.ts";
+import { compareSnapshot, hasSnapshot, pairSnapshots, snapshotFolders, snapshotRuns } from "../src/verify/snapshot.ts";
 import { folders, groupExamples, runExamples } from "./examples.ts";
 import { VerifyFunctions } from "./lean/functions.ts";
 import { Lean, type VerifyViolation } from "./lean/lean.ts";
@@ -57,16 +57,20 @@ function violationCountOfBoth({ spec, service, snapshot }: Case, trace: readonly
   return ts.length;
 }
 
-const snapshotted = new Map([...specs.values()].map((spec) => [spec, hasSnapshot(spec)]));
+const snapshotRunsOf = new Map([...specs.values()].map((spec) => [spec, snapshotRuns(spec)]));
+
+const snapshotted = new Map(
+  [...specs.values()].map((spec) => [spec, hasSnapshot(spec, snapshotRunsOf.get(spec) ?? [])]),
+);
 
 const snapshotOf = (spec: Spec, ref: DefinitionRef) => snapshotted.get(spec)?.(ref) === true;
 
 const snapshots = [...specs].flatMap(([root, spec]) =>
-  spec.scenarios
+  (snapshotRunsOf.get(spec) ?? [])
     .filter((s) => spec.services.get(s.service)?.definition.external !== true && snapshotOf(spec, s))
     .map((s) => ({
       spec,
-      service: s.service,
+      service: s.runner,
       name: s.name,
       label: `${relative(import.meta.dirname, root)}/${s.service}/${s.name}`,
       read: readSnapshotProblems(snapshotPath(spec, s)),
@@ -524,7 +528,7 @@ function pairBoth(spec: Spec, scenarios: readonly PairingScenario[], folder: Tra
 }
 
 const withSnapshots = (spec: Spec): PairingScenario[] =>
-  spec.scenarios.map(({ service, name }) => ({
+  (snapshotRunsOf.get(spec) ?? []).map(({ service, name }) => ({
     service,
     name,
     compared: snapshotOf(spec, { service, name }),

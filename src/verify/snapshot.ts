@@ -5,7 +5,7 @@ import { entriesOf, pair } from "../data/pairing.ts";
 import type { Problem } from "../data/problem.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { jsonLine } from "../data/trace.ts";
-import { snapshotFolder, snapshotPath } from "../data/traceFile.ts";
+import { peerSnapshotName, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { problemsAt, readSnapshotProblems } from "./lines.ts";
@@ -114,11 +114,32 @@ export function snapshotFolders(spec: Spec): {
   };
 }
 
-export function hasSnapshot(spec: Spec): (scenario: DefinitionRef) => boolean {
+/**
+ * A run that can have a snapshot in the snapshot folder of `service`: a scenario's run, or, named by peerSnapshotName,
+ * the run of another spec service on the inputs that test derives from a scenario's run. `runner` is the service that
+ * makes the run, whose implementation records its trace.
+ */
+export type SnapshotRun = DefinitionRef & { readonly runner: string };
+
+/** Returns each scenario's run, followed by the runs of each other service that is not external on its derived inputs. */
+export function snapshotRuns(spec: Spec): SnapshotRun[] {
+  const peers = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
+  return spec.scenarios.flatMap(({ service, name }) => [
+    { service, name, runner: service },
+    ...peers
+      .filter((peer) => peer !== service)
+      .map((peer) => ({ service, name: peerSnapshotName(name, peer), runner: peer })),
+  ]);
+}
+
+export function hasSnapshot(spec: Spec, runs: readonly DefinitionRef[]): (run: DefinitionRef) => boolean {
   const { services, folders } = snapshotFolders(spec);
-  const scenarios = spec.scenarios.map(({ service, name }) => ({ service, name, compared: true }));
-  const { compare } = pairSnapshots(services, scenarios, folders);
-  return (scenario) => compare.some((s) => sameRef(s, scenario));
+  const { compare } = pairSnapshots(
+    services,
+    runs.map(({ service, name }) => ({ service, name, compared: true })),
+    folders,
+  );
+  return (run) => compare.some((s) => sameRef(s, run));
 }
 
 export function snapshotProblems(spec: Spec, scenario: DefinitionRef, lines: readonly TraceLine[]): Problem[] {

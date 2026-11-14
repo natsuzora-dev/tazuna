@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import type { TraceLine } from "../src/data/trace.generated.ts";
 import { loadSpec } from "../src/load/load.ts";
-import { decodeAnswer, matchRequest, readSnapshot, rename, traceName, verifyTraces } from "../src/verify/index.ts";
+import {
+  decodeAnswer,
+  matchRequest,
+  peerSnapshots,
+  readSnapshot,
+  rename,
+  traceName,
+  verifyTraces,
+} from "../src/verify/index.ts";
 import { semanticsRoot } from "./examples.ts";
 import { createCharge } from "./semantics/Service/Command/command-output/payments/payments.ts";
 import { placeOrder } from "./semantics/Service/Command/command-output/shop/shop.ts";
@@ -28,6 +36,13 @@ test("readSnapshot reads snapshot lines with the trace line schema and throws wh
   const broken = await loadSpec(copyOfCommandOutput("unreadable"));
   writeFileSync(join(broken.root, "shop/__snapshots__/refundCreatedCharge.jsonl"), '{"type":"nothing"}\n');
   assert.throws(() => readSnapshot(broken, refund));
+});
+
+test("peerSnapshots returns the peer runs that have a snapshot, which readSnapshot reads", async () => {
+  const spec = await loadSpec(join(import.meta.dirname, "verify/uncomparable/pairing/peer-runs"));
+  const snapshots = peerSnapshots(spec);
+  assert.deepEqual(snapshots, [{ service: "notifier", name: "announcesAdded.todo", runner: "todo" }]);
+  assert.equal(readSnapshot(spec, snapshots[0] as (typeof snapshots)[number]).length, 4);
 });
 
 test("verifyTraces reports snapshot lines that do not fit the schema as violations without throwing", async () => {
