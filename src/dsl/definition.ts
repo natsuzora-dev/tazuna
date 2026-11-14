@@ -1,3 +1,4 @@
+import type { Bag } from "../data/bag.ts";
 import type { Delay } from "../data/datetime.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
@@ -48,7 +49,7 @@ export interface Command<
   readonly requires: ByName<Rq, (args: never) => boolean>;
   readonly ensures: Conditions<never>;
   /** The decide function, or undefined for a command of an external service. */
-  readonly decide: ((args: never) => readonly Emit[]) | undefined;
+  readonly decide: ((args: never) => Emits) | undefined;
   /** The declared rejection kinds, or undefined for a command of a spec service. */
   readonly rejects: Rj;
 }
@@ -180,6 +181,12 @@ export interface Emit<Ev extends AnyEvent = AnyEvent> {
   readonly event: Ev;
   readonly payload: Payload<Ev>;
 }
+
+/**
+ * The events of a command's `decide`, in order. A Bag of events has no order inside, and two of its events must not
+ * write one record.
+ */
+export type Emits<Ev extends AnyEvent = AnyEvent> = readonly (Emit<Ev> | Bag<Emit<Ev>>)[];
 
 export interface TransitionSpec {
   readonly target?: string;

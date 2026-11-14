@@ -321,8 +321,8 @@ class Listener implements Note, Evaluations {
     this.collected.write(key, keyWrite);
   }
 
-  events(step: number, start: number, count: number): void {
-    this.collected.events(step, start, count);
+  events(step: number, start: number, groups: readonly number[]): void {
+    this.collected.events(step, start, groups);
   }
   deadline(message: number, time: Temporal.Instant): void {
     this.collected.deadline(message, time);

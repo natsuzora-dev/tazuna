@@ -69,8 +69,11 @@ export interface RegionCheck {
  *   (deadlineOrder).
  */
 export interface Note {
-  /** Reports that step `step` wrote `count` event lines from line `start`. */
-  events(step: number, start: number, count: number): void;
+  /**
+   * Reports that step `step` wrote event lines from line `start` in groups of the lengths `groups`. The lines of one
+   * group have no order among them.
+   */
+  events(step: number, start: number, groups: readonly number[]): void;
   /** Reports that message `message` is the deadline message for time `time`. */
   deadline(message: number, time: Temporal.Instant): void;
   stepBegins(step: number, name: StepName, startedResource: string | undefined): void;

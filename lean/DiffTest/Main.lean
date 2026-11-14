@@ -162,7 +162,8 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) : Func
   decide name input records now := do
     let reply ← ask stdin stdout reads memo records
       (.obj [("type", .str "decide"), ("command", .str name), ("input", input), ("now", .str (renderTime now))])
-    IO.ofExcept (issueOr reply fun r => do (← asList (← field r "emits")).mapM Emit.decode)
+    IO.ofExcept (issueOr reply fun r => do
+      (← asList (← field r "groups")).mapM fun g => do (← asList g).mapM Emit.decode)
   resolve name input records now := resolveRequest stdin stdout reads memo name input records now false
   react name payload records now keys := do
     let reply ← ask stdin stdout reads memo records

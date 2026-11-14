@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assumedEnsures } from "../contract/checks.ts";
-import { NotOnly, valuesOf } from "../data/bag.ts";
+import { type Bag, NotOnly, valuesOf } from "../data/bag.ts";
 import { canonical as canonicalOf, comparableAnswer, orderFree } from "../data/canonical.ts";
 import { bag, bagged, defaultRow, sorted } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
@@ -460,17 +460,24 @@ export class SpecFunctions implements Functions {
     return attempt(() => Boolean(f?.({ input })));
   }
 
-  decide(name: string, input: Fields, records: RecordSource, now: Temporal.Instant): readonly Emit[] | Failed {
+  decide(
+    name: string,
+    input: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): readonly (readonly Emit[])[] | Failed {
     const command = this.command(name);
     const args = { input, records: this.view(records), now };
     const bound = this.bound(command, args);
     if (bound instanceof Failed) return bound;
-    const f = command.decide as ((a: Fields) => readonly DefinedEmit[]) | undefined;
+    const f = command.decide as ((a: Fields) => readonly (DefinedEmit | Bag<DefinedEmit>)[]) | undefined;
     return attempt(() =>
-      (f?.({ ...args, bound }) ?? []).map((e) => ({
-        event: traceName(this.spec, e.event, this.service),
-        payload: unbagged(e.event.payload, e.payload) as Fields,
-      })),
+      (f?.({ ...args, bound }) ?? []).map((item) =>
+        ((valuesOf(item) ?? [item]) as readonly DefinedEmit[]).map((e) => ({
+          event: traceName(this.spec, e.event, this.service),
+          payload: unbagged(e.event.payload, e.payload) as Fields,
+        })),
+      ),
     );
   }
 

@@ -30,6 +30,7 @@ Find one record with `get(key)`, or with `filter(...).only()` when another field
 A result that needs an order goes through `sortedBy` with a number or time key, which groups the records with equal keys into runs that have no order inside.
 A page of an ordered result takes whole runs, so it never cuts the records with equal keys apart.
 A value of a `bag`, `set`, or `sortedBy` schema reaches spec functions the same way, as a `Bag` or as runs.
+`decide` returns the events of a `Bag` of records as one `Bag` of events, which comes after the events before it and before the events after it, with no order inside.
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 

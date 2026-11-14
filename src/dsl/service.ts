@@ -12,6 +12,7 @@ import type {
   Command,
   CreateKey,
   Emit,
+  Emits,
   FieldsEvent,
   Now,
   Payload,
@@ -99,7 +100,7 @@ interface Definers<Es extends Entities> {
 
 interface CommandSetup<I extends Shape, Ev extends AnyEvent, B, Rq extends string, Es extends Entities> {
   decide(
-    decide: (args: { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now) => readonly Emit<Ev>[],
+    decide: (args: { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now) => Emits<Ev>,
   ): Command<I, Ev, keyof B & string, Rq, undefined, undefined>;
 }
 
@@ -261,7 +262,7 @@ function serviceDefinition(
 const commandOf = (
   owner: ServiceDefinition,
   d: CommandOptions,
-  decide: ((args: never) => readonly Emit[]) | undefined,
+  decide: ((args: never) => Emits) | undefined,
 ): AnyCommand => ({
   kind: "command",
   service: owner,
@@ -296,7 +297,7 @@ function register(owner: ServiceDefinition, definers: readonly object[]): void {
 
 function definers(owner: ServiceDefinition): Definers<Entities> {
   const command = (d: CommandOptions) => ({
-    decide: (decide: (args: never) => readonly Emit[]) => commandOf(owner, d, decide),
+    decide: (decide: (args: never) => Emits) => commandOf(owner, d, decide),
   });
   const query = (d: QueryOptions) => ({ resolve: (resolve: (args: never) => unknown) => queryOf(owner, d, resolve) });
   const automation = (setup: {

@@ -34,8 +34,9 @@ theorem processCommand_grows (name : String) (raw : Value) (id : Option String) 
   · exact Grows.of_lines (reportAll_lines ..)
 
 theorem evaluate_accepted_applies (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
-    (emits : List Emit) (vs : List Fault) (h : evaluate st fs records now name raw = .accepted written emits vs) :
-    applyAll st records emits = written ∧ duplicated st written = false ∧
+    (groups : List (List Emit)) (vs : List Fault)
+    (h : evaluate st fs records now name raw = .accepted written groups vs) :
+    applyAll st records groups.flatten = written ∧ duplicated st written = false ∧
       ∃ input, fs.parse (.input name) raw = .ok (some input) ∧
         vs = (commandEnsures st fs name input records written now).run ++ (integrityViolations st fs written name).run := by
   simp only [evaluate, id_bind] at h
@@ -54,22 +55,25 @@ theorem evaluate_accepted_applies (records : Records) (now : Time) (name : Strin
           · cases h
           · split at h
             · cases h
-            · rename_i hd
-              split at h
+            · split at h
               · cases h
-              · injection h with h₁ h₂ h₃
-                subst h₁ h₂ h₃
-                exact ⟨rfl, by simpa using hd, input, hp, rfl⟩
+              · rename_i hd
+                split at h
+                · cases h
+                · injection h with h₁ h₂ h₃
+                  subst h₁ h₂ h₃
+                  exact ⟨rfl, by simpa using hd, input, hp, rfl⟩
 
 theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option String) (n : Nat)
     (h : KeysDistinct s.records) : KeysDistinct (processCommand st fs s name raw id n).1.records := by
   simp only [processCommand, id_bind]
   split
   · cases id <;> exact h
-  · rename_i written emits vs he
-    have hr := congrArg Fixed.records (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) emits)
-    show KeysDistinct (State.emitAll _ emits).records
-    rw [show (State.emitAll _ emits).records = _ from hr]
+  · rename_i written groups vs he
+    have hr := congrArg Fixed.records
+      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) groups.flatten)
+    show KeysDistinct (State.emitAll _ groups.flatten).records
+    rw [show (State.emitAll _ groups.flatten).records = _ from hr]
     show KeysDistinct ((State.answer _ id _).records)
     rw [answer_records, reportAll_records]
     exact keysDistinct_of_not_duplicated (evaluate_accepted_applies _ _ _ _ _ _ _ he).2.1
@@ -92,11 +96,11 @@ theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Opt
   exact ⟨hp, by rw [hp]; exact answer_records s id _⟩
 
 theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option String) (n : Nat)
-    (written : Records) (emits : List Emit) (vs : List Fault)
-    (h : evaluate st fs s.records s.now name raw = .accepted written emits vs) :
-    applyAll st s.records emits = written ∧
+    (written : Records) (groups : List (List Emit)) (vs : List Fault)
+    (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
+    applyAll st s.records groups.flatten = written ∧
       (processCommand st fs s name raw id n).1.records = written ∧
-      (processCommand st fs s name raw id n).2.2 = emits := by
+      (processCommand st fs s name raw id n).2.2 = groups.flatten := by
   refine ⟨(evaluate_accepted_applies _ _ _ _ _ _ _ h).1, ?_, ?_⟩
   · simp only [processCommand, id_bind, h]
     exact (congrArg Fixed.records (emitAll_fixed
@@ -115,14 +119,15 @@ theorem command_invalid_input_rejected (records : Records) (now : Time) (name : 
   simp [evaluate, hp]
 
 theorem already_exists_iff_duplicated (records : Records) (now : Time) (name : String) (raw input : Value)
-    (emits normalized : List Emit) (hp : fs.parse (.input name) raw = .ok (some input))
+    (decided : List (List Emit)) (normalized : List Emit) (hp : fs.parse (.input name) raw = .ok (some input))
     (hr : requirementsRejection st fs records now name input = .ok none)
-    (hd : fs.decide name input records now = .ok emits) (hl : ∀ e ∈ emits, st.lists name e = true)
-    (hn : normalizeEmits st fs name emits = .ok normalized) :
+    (hd : fs.decide name input records now = .ok decided) (hl : ∀ e ∈ decided.flatten, st.lists name e = true)
+    (hn : normalizeEmits st fs name decided.flatten = .ok normalized)
+    (ht : twiceWritten st records (orderGroups decided normalized) = none) :
     evaluate st fs records now name raw = .rejected { kind := .alreadyExists } ↔
-      duplicated st (applyAll st records normalized) = true := by
-  have hf : emits.find? (!st.lists name ·) = none := List.find?_eq_none.mpr fun e he => by simp [hl e he]
-  simp only [evaluate, id_bind, hp, hr, hd, hf, hn]
+      duplicated st (applyAll st records (orderGroups decided normalized).flatten) = true := by
+  have hf : decided.flatten.find? (!st.lists name ·) = none := List.find?_eq_none.mpr fun e he => by simp [hl e he]
+  simp only [evaluate, id_bind, hp, hr, hd, hf, hn, ht]
   split
   · simp_all
   · simp only [Bool.not_eq_true] at *
@@ -130,12 +135,12 @@ theorem already_exists_iff_duplicated (records : Records) (now : Time) (name : S
     split <;> simp
 
 theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value)
-    (decided : List Emit) (hp : fs.parse (.input name) raw = .ok (some input))
+    (decided : List (List Emit)) (hp : fs.parse (.input name) raw = .ok (some input))
     (hr : requirementsRejection st fs records now name input = .ok none)
-    (hd : fs.decide name input records now = .ok decided) (hu : ∃ e ∈ decided, st.lists name e = false) :
+    (hd : fs.decide name input records now = .ok decided) (hu : ∃ e ∈ decided.flatten, st.lists name e = false) :
     ∃ v, evaluate st fs records now name raw = .halted [v] ∧ v.halts = true ∧
       ∃ event, v = .unlistedEmittedEvent (st.ref name) event := by
-  cases hf : decided.find? (!st.lists name ·) with
+  cases hf : decided.flatten.find? (!st.lists name ·) with
   | none =>
     obtain ⟨e, he, hl⟩ := hu
     simpa [hl] using List.find?_eq_none.mp hf e he
@@ -151,10 +156,26 @@ theorem decide_payloads_sorted_before_normalize (name : String) (emits out : Lis
   subst ho
   exact ⟨hl, hp⟩
 
+theorem mem_chunks {α : Type} : ∀ (ns : List Nat) (xs : List α) (x : α), x ∈ (chunks ns xs).flatten → x ∈ xs
+  | [], _, _, h => by simp [chunks] at h
+  | n :: ns, xs, x, h => by
+    simp only [chunks, List.flatten_cons, List.mem_append] at h
+    rcases h with h | h
+    · exact List.mem_of_mem_take h
+    · exact List.mem_of_mem_drop (mem_chunks ns _ x h)
+
+theorem mem_orderGroups (decided : List (List Emit)) (normalized : List Emit) (e : Emit)
+    (h : e ∈ (orderGroups decided normalized).flatten) : e ∈ normalized := by
+  simp only [orderGroups, List.mem_flatten, List.mem_map] at h
+  obtain ⟨_, ⟨g, hg, rfl⟩, he⟩ := h
+  exact mem_chunks _ _ e (List.mem_flatten.mpr ⟨g, hg, (List.mergeSort_perm _ _).mem_iff.mp he⟩)
+
 theorem accepted_emits_decided (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
-    (emits : List Emit) (vs : List Fault) (h : evaluate st fs records now name raw = .accepted written emits vs) :
+    (groups : List (List Emit)) (vs : List Fault)
+    (h : evaluate st fs records now name raw = .accepted written groups vs) :
     ∃ input decided, fs.parse (.input name) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
-      (∀ e ∈ decided, st.lists name e = true) ∧ ∀ e ∈ emits, ∃ e' ∈ decided, e.event = e'.event := by
+      (∀ e ∈ decided.flatten, st.lists name e = true) ∧
+      ∀ e ∈ groups.flatten, ∃ e' ∈ decided.flatten, e.event = e'.event := by
   simp only [evaluate, id_bind] at h
   split at h
   · cases h
@@ -176,13 +197,15 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
             · cases h
             · split at h
               · cases h
-              · injection h with _ h₂ _
-                subst h₂
-                refine ⟨input, decided, hp, hd, fun e he => ?_, fun e he => ?_⟩
-                · simpa using List.find?_eq_none.mp hf e he
-                · obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
-                  obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl he
-                  exact ⟨x, (List.of_mem_zip hx).1, (hz _ hx).1⟩
+              · split at h
+                · cases h
+                · injection h with _ h₂ _
+                  subst h₂
+                  refine ⟨input, decided, hp, hd, fun e he => ?_, fun e he => ?_⟩
+                  · simpa using List.find?_eq_none.mp hf e he
+                  · obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
+                    obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl (mem_orderGroups _ _ e he)
+                    exact ⟨x, (List.of_mem_zip hx).1, (hz _ hx).1⟩
 
 theorem processCommand_mocks (name : String) (raw : Value) (id : Option String) (n : Nat) :
     (processCommand st fs s name raw id n).1.mocks = s.mocks := by
@@ -205,17 +228,17 @@ theorem emitAll_halted (t : State) (emits : List Emit) : (t.emitAll emits).halte
   | cons e es ih => simp only [List.foldl_cons]; exact ih _
 
 theorem accepted_command_reports_violations (name : String) (raw : Value) (id : Option String) (n : Nat)
-    (written : Records) (emits : List Emit) (vs : List Fault)
-    (h : evaluate st fs s.records s.now name raw = .accepted written emits vs) :
+    (written : Records) (groups : List (List Emit)) (vs : List Fault)
+    (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
     (processCommand st fs s name raw id n).1.violations = ({ s with records := written }.reportAll vs).violations ∧
       (processCommand st fs s name raw id n).1.halted = ({ s with records := written }.reportAll vs).halted ∧
       (processCommand st fs s name raw id n).2.1 = .accepted none := by
   simp only [processCommand, id_bind, h]
   refine ⟨?_, ?_, rfl⟩
-  · show (State.emitAll _ emits).violations = _
+  · show (State.emitAll _ groups.flatten).violations = _
     rw [emitAll_violations]
     cases id <;> rfl
-  · show (State.emitAll _ emits).halted = _
+  · show (State.emitAll _ groups.flatten).halted = _
     rw [emitAll_halted]
     cases id <;> rfl
 

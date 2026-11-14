@@ -18,13 +18,36 @@ def normalizeEmits [Monad m] (st : Service) (fs : Functions m) (command : String
       | .ok (some payload) => pure (.ok (done ++ [{ e with payload }]))
       | .ok none => pure (.error (.emittedPayloadSchema (st.ref command) (st.refOf e.event)))
 
+/-- `xs` cut into consecutive lists of the lengths `lengths`. -/
+def chunks {α : Type} : List Nat → List α → List (List α)
+  | [], _ => []
+  | n :: ns, xs => xs.take n :: chunks ns (xs.drop n)
+
+/-- The text that orders the events of one group. -/
+def Emit.text (e : Emit) : String := (Value.obj [("event", .str e.event), ("payload", e.payload)]).canonical
+
+/--
+The groups of `decided` with the events of `normalized`, the normalized flattening of `decided`, each group in the
+order of its texts. A group has no order, so the run writes its events in this order; `sameRecordInGroup` keeps the
+records from depending on it.
+-/
+def orderGroups (decided : List (List Emit)) (normalized : List Emit) : List (List Emit) :=
+  (chunks (decided.map (·.length)) normalized).map (·.mergeSort fun a b => decide (a.text ≤ b.text))
+
+/-- A record that two events of one group write, as its entity and key. -/
+def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) :
+    Option (String × Option String) :=
+  groups.findSome? fun g =>
+    let rows := g.filterMap fun e => (evolve st records e).map fun ev => (ev.entity, ev.key)
+    firstDuplicate (fun (entity, key) => s!"{entity}#{key}") rows
+
 /-- Whether the command `command` lists the event of `e` in its emits. -/
 def Service.lists (st : Service) (command : String) (e : Emit) : Bool :=
   (st.«structure».emitsOf (some (st.ref command))).any (·.any (·.traceName st.service == e.event))
 
 inductive Outcome where
   | rejected (rejection : Rejection)
-  | accepted (records : Records) (emits : List Emit) (violations : List Fault)
+  | accepted (records : Records) (groups : List (List Emit)) (violations : List Fault)
   /-- A halt, with the violations in report order up to the first one that halts. -/
   | halted (violations : List Fault)
 deriving Repr, Inhabited
@@ -48,20 +71,24 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
       match ← fs.decide name input records now with
       | .error e => pure (.halted [issueViolation st (st.ref name) e])
       | .ok decided =>
-      match decided.find? (!st.lists name ·) with
+      match decided.flatten.find? (!st.lists name ·) with
       | some e =>
         let event := (st.«structure».named st.service (some e.event) ["event"]).map (·.ref)
         pure (.halted [.unlistedEmittedEvent (st.ref name) event])
       | none =>
-      match ← normalizeEmits st fs name decided with
+      match ← normalizeEmits st fs name decided.flatten with
       | .error v => pure (.halted [v])
-      | .ok emits =>
-        let written := applyAll st records emits
+      | .ok normalized =>
+      let groups := orderGroups decided normalized
+      match twiceWritten st records groups with
+      | some (entity, key) => pure (.halted [.sameRecordInGroup (st.ref name) (st.ref entity) key])
+      | none =>
+        let written := applyAll st records groups.flatten
         if duplicated st written then pure (.rejected { kind := .alreadyExists })
         else
           let ensures ← commandEnsures st fs name input records written now
           let violations := ensures ++ (← integrityViolations st fs written name)
-          pure (if violations.any (·.halts) then .halted violations else .accepted written emits violations)
+          pure (if violations.any (·.halts) then .halted violations else .accepted written groups violations)
 
 /--
 The state, answer, and events after a command. As in CQRS, an own-service command answers without output and the
@@ -73,10 +100,10 @@ def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
   let outcome ← evaluate st fs s.records s.now name raw
   match outcome with
   | .rejected r => pure (s.answer id (.rejected r), .rejected r, [])
-  | .accepted records emits violations =>
+  | .accepted records groups violations =>
     let s := ({ s with records }.reportAll violations).answer id (.accepted none)
-    MonadNote.note (.events step s.lines.size emits.length)
-    pure (s.emitAll emits, .accepted none, emits)
+    MonadNote.note (.events step s.lines.size (groups.map (·.length)))
+    pure (s.emitAll groups.flatten, .accepted none, groups.flatten)
   | .halted violations => pure (s.reportAll violations, outcome.answer, [])
 
 end Tazuna.Semantics

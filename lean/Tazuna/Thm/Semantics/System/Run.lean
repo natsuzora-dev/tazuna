@@ -63,7 +63,8 @@ theorem resent_command_gets_first_answer (name id : String) (raw input : Value)
 /-- The theorem is restricted to the state before `message` because `message` may call decide and react: it takes always
 transitions of screens whose `shown` changed, and handles due deadlines. -/
 theorem resent_command_ignores_decide (name id : String) (raw input : Value)
-    (known : Request × Answer) (decide : String → Value → Records → Time → Id (Except Issue (List Emit)))
+    (known : Request × Answer)
+    (decide : String → Value → Records → Time → Id (Except Issue (List (List Emit))))
     (react : String → Value → Records → Time → List (String × Nat) → Id (Except Issue (Option Value × List String)))
     (hc : name ∈ st.commands) (hi : fs.canonical (.input name) raw = .ok input)
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 = { name, input }) :
@@ -156,7 +157,7 @@ theorem redelivered_event_keeps_records (name id : String) (raw payload : Value)
     (hr : name ∈ st.received) (hd : s.eventDeliveries.find? id = some first)
     (hc : fs.canonical (.payload name) raw = .ok payload)
     (parse : Schema → Value → Id (Except Issue (Option Value)))
-    (decide : String → Value → Records → Time → Id (Except Issue (List Emit)))
+    (decide : String → Value → Records → Time → Id (Except Issue (List (List Emit))))
     (react : String → Value → Records → Time → List (String × Nat) → Id (Except Issue (Option Value × List String))) :
     ∃ s', s'.records = s.records ∧
       arrive st fs s ⟨time, .event (some id) name raw none, order, stepOrder⟩ = message st fs s' {} ∧

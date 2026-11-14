@@ -17,18 +17,20 @@ export function leadsTo(steps: readonly StepInfo[], earlier: number, later: numb
 }
 
 /**
- * The causes of trace lines. `events` holds the step, first line, and line count of each step that wrote event lines,
- * and `deadlines` holds the message number and time of each deadline message.
+ * The causes of trace lines. `events` holds the step, first line, and line count of each group of event lines that a
+ * step wrote, and `deadlines` holds the message number and time of each deadline message.
  */
 export interface Causes {
   readonly events: (readonly [number, number, number])[];
   readonly deadlines: (readonly [number, Temporal.Instant])[];
 }
 
-/** Returns, for each line, the step that wrote it if it is an event line. */
-function lineSteps(lineCount: number, causes: Causes): (number | undefined)[] {
-  const steps: (number | undefined)[] = Array.from({ length: lineCount }, () => undefined);
-  for (const [step, start, count] of causes.events) steps.fill(step, start, start + count);
+/** Returns, for each line, the step that wrote it and the number of its group if it is an event line. */
+function lineSteps(lineCount: number, causes: Causes): (readonly [number, number] | undefined)[] {
+  const steps: (readonly [number, number] | undefined)[] = Array.from({ length: lineCount }, () => undefined);
+  causes.events.forEach(([step, start, count], group) => {
+    steps.fill([step, group], start, start + count);
+  });
   return steps;
 }
 
@@ -54,19 +56,22 @@ function raceScopes(messages: readonly (Temporal.Instant | undefined)[]): number
 
 /**
  * Returns whether line `a` is ordered before line `b`. Only event lines are ordered, because an implementation keeps
- * order only within the events that a service emits.
+ * order only within the events that a service emits, and two lines of one group are not, because decide gives them no
+ * order.
  */
 function ordered(
   lines: readonly TraceLine[],
   steps: readonly StepInfo[],
-  lineSteps: readonly (number | undefined)[],
+  lineSteps: readonly (readonly [number, number] | undefined)[],
   scopes: readonly number[],
   a: number,
   b: number,
 ): boolean {
-  const [stepA, stepB] = [lineSteps[a], lineSteps[b]];
-  if (stepA === undefined || stepB === undefined) return false;
+  const [writerA, writerB] = [lineSteps[a], lineSteps[b]];
+  if (writerA === undefined || writerB === undefined) return false;
   if (lines[a]?.type !== "event" || lines[b]?.type !== "event") return false;
+  const [[stepA, groupA], [stepB, groupB]] = [writerA, writerB];
+  if (groupA === groupB) return false;
   const [earlier, later] = [steps[stepA], steps[stepB]];
   if (earlier === undefined || later === undefined) return false;
   if (scopes[earlier.message] !== scopes[later.message]) return earlier.message < later.message;

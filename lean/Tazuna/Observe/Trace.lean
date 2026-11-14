@@ -33,8 +33,8 @@ def isEvent (l : Line) : Bool :=
   | _ => false
 
 /--
-The causes that the notes record. `events` holds the step, first line and line count of each step that wrote event
-lines. `deadlines` holds the message number and time of each deadline message.
+The causes that the notes record. `events` holds the step, first line and line count of each group of event lines
+that a step wrote. `deadlines` holds the message number and time of each deadline message.
 -/
 structure Causes where
   events : Array (Nat × Nat × Nat) := #[]
@@ -42,15 +42,17 @@ structure Causes where
 deriving Repr, Inhabited
 
 def Causes.notice (c : Causes) : Note → Causes
-  | .events step start count => { c with events := c.events.push (step, start, count) }
+  | .events step start groups =>
+    { c with events := (groups.foldl (fun (events, start) n => (events.push (step, start, n), start + n))
+        (c.events, start)).1 }
   | .deadline message time => { c with deadlines := c.deadlines.push (message, time) }
   | .read .. | .transitionPart _ | .microstepEnds _ | .stepBegins .. | .stepEnds | .settlesAround _ | .readStates _ | .wroteState ..
   | .wroteCopies .. | .wroteShown .. => c
 
-/-- For each line, the step that wrote it if it is an event line. -/
-def lineSteps (s : State) (c : Causes) : Array (Option Nat) :=
-  c.events.foldl (init := Array.replicate s.lines.size none) fun steps (step, start, count) =>
-    (List.range' start count).foldl (fun steps i => steps.setIfInBounds i (some step)) steps
+/-- For each line, the step that wrote it and the number of its group if it is an event line. -/
+def lineSteps (s : State) (c : Causes) : Array (Option (Nat × Nat)) :=
+  c.events.zipIdx.foldl (init := Array.replicate s.lines.size none) fun steps ((step, start, count), group) =>
+    (List.range' start count).foldl (fun steps i => steps.setIfInBounds i (some (step, group))) steps
 
 /-- For each message, numbered from 1, the deadline time if it is a deadline message. -/
 def messages (s : State) (c : Causes) : List (Option Time) :=
@@ -62,12 +64,13 @@ def raceScopeOf (messages : List (Option Time)) (k : Nat) : Nat :=
     (if d.isSome && d == acc.2 then acc.1 else acc.1 + 1, d)) (0, none)).1
 
 /-- Whether line `a` must precede line `b`. Only event lines are ordered, because an implementation keeps order only
-within the events that a service emits. Precedents: Kafka (order within a partition) and HTTP/2 (independent streams).
+within the events that a service emits, and two lines of one group are not, because decide gives them no order.
+Precedents: Kafka (order within a partition) and HTTP/2 (independent streams).
 -/
-def ordered (s : State) (lineSteps : Array (Option Nat)) (messages : List (Option Time)) (a b : Nat) : Bool :=
+def ordered (s : State) (lineSteps : Array (Option (Nat × Nat))) (messages : List (Option Time)) (a b : Nat) : Bool :=
   match s.lines[a]?, s.lines[b]?, lineSteps[a]?, lineSteps[b]? with
-  | some la, some lb, some (some sa), some (some sb) =>
-    isEvent la && isEvent lb &&
+  | some la, some lb, some (some (sa, ga)), some (some (sb, gb)) =>
+    isEvent la && isEvent lb && ga != gb &&
       match s.steps[sa]?, s.steps[sb]? with
       | some ia, some ib =>
         if raceScopeOf messages ia.message != raceScopeOf messages ib.message then ia.message < ib.message
@@ -86,7 +89,8 @@ def window (s : State) (i : Nat) : List Nat :=
 The ids of the earlier lines in the same window that must precede line `i`: event lines ordered before it, and lines
 at a different time.
 -/
-def after (s : State) (lineSteps : Array (Option Nat)) (messages : List (Option Time)) (i : Nat) : List String :=
+def after (s : State) (lineSteps : Array (Option (Nat × Nat))) (messages : List (Option Time)) (i : Nat) :
+    List String :=
   match s.lines[i]? with
   | none => []
   | some line =>

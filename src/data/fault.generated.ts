@@ -23,6 +23,18 @@ export type Fault =
         readonly event: DefinitionRef | null;
       };
     }
+  /**
+   * Two events of one group of the command's emits write one record of `entity`, so the record would depend on their
+   * order; `recordKey` is null for a single entity.
+   */
+  | {
+      readonly kind: "Fault.sameRecordInGroup";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly entity: DefinitionRef;
+        readonly recordKey: string | null;
+      };
+    }
   | {
       readonly kind: "Fault.outputSchema";
       readonly definition: DefinitionRef;
@@ -270,6 +282,7 @@ export type Fault =
 export const faultKinds = [
   "Fault.emittedPayloadSchema",
   "Fault.unlistedEmittedEvent",
+  "Fault.sameRecordInGroup",
   "Fault.outputSchema",
   "Fault.automationInputSchema",
   "Fault.requestInputSchema",
@@ -309,6 +322,7 @@ export const faultKinds = [
 export const haltingFaultKinds = [
   "Fault.emittedPayloadSchema",
   "Fault.unlistedEmittedEvent",
+  "Fault.sameRecordInGroup",
   "Fault.outputSchema",
   "Fault.automationInputSchema",
   "Fault.requestInputSchema",

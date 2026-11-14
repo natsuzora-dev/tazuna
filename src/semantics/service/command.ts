@@ -1,6 +1,6 @@
 import type { Answer } from "../../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../../data/uncovered.ts";
-import type { Fields } from "../../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { emitsOf, named, traceNameOfRef } from "../../syntax/structure.ts";
 import { Failed, issueViolation } from "../functions.ts";
@@ -8,12 +8,33 @@ import type { Emit } from "../message.ts";
 import { halt, type Run, report, reportAll, write } from "../state.ts";
 import { ref, refOf, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
-import { applyAll, type Encoded, integrityViolations } from "./integrity.ts";
+import { applyAll, type Encoded, integrityViolations, writtenRecord } from "./integrity.ts";
 import { recordSource } from "./records.ts";
 
 /** Returns whether the command `command` lists the event of `e` in its emits. */
 function lists(st: Service, command: string, e: Emit): boolean {
   return emitsOf(st.structure, ref(st, command)).some((l) => l !== null && traceNameOfRef(l, st.service) === e.event);
+}
+
+/** Lean's orderGroups: the groups of `decided` with the events of `events`, each group in canonical JSON order. */
+function orderGroups(decided: readonly (readonly unknown[])[], events: readonly Encoded[]): Encoded[][] {
+  const text = (e: Encoded) => canonicalJson({ event: e.emit.event, payload: e.encoded });
+  let start = 0;
+  return decided.map((g) => {
+    start += g.length;
+    return events.slice(start - g.length, start).toSorted((a, b) => byCodePoint(text(a), text(b)));
+  });
+}
+
+/** Lean's twiceWritten: a record that two events of one group write. */
+function twiceWritten(st: Service, groups: readonly (readonly Encoded[])[]) {
+  for (const group of groups) {
+    const rows = group.flatMap((e) => writtenRecord(st, e) ?? []);
+    const name = (row: (typeof rows)[number]) => `${row.entity}#${row.key}`;
+    const twice = rows.find((row, i) => rows.findIndex((other) => name(other) === name(row)) < i);
+    if (twice !== undefined) return twice;
+  }
+  return undefined;
 }
 
 export function processCommand(
@@ -26,9 +47,11 @@ export function processCommand(
   const s = r.state;
   const definition = ref(r.st, name);
   r.note.reached({ kind: "request", definition, data: {} });
-  const done = (answer: Answer, reached?: Obligation, events: readonly Encoded[] = []) => {
+  const done = (answer: Answer, reached?: Obligation, groups: readonly (readonly Encoded[])[] = []) => {
     if (id !== undefined) write(s, { dir: "out", type: "answer", to: id, answer });
-    if (events.length > 0) r.note.events(step, s.lines.length, events.length);
+    const events = groups.flat();
+    const lengths = groups.map((g) => g.length);
+    if (events.length > 0) r.note.events(step, s.lines.length, lengths);
     for (const e of events) write(s, { dir: "out", type: "event", name: e.emit.event, payload: e.encoded });
     if (reached !== undefined) r.note.reached(reached);
     return { answer, emits: events.map((e) => e.emit) };
@@ -46,7 +69,7 @@ export function processCommand(
     );
   const decided = r.functions.decide(name, input, records, s.now);
   if (decided instanceof Failed) return halt(issueViolation(definition, decided));
-  const unlisted = decided.find((e) => !lists(r.st, name, e));
+  const unlisted = decided.flat().find((e) => !lists(r.st, name, e));
   if (unlisted !== undefined) {
     const event = named(r.st.structure, r.st.service, unlisted.event, ["event"]);
     return report(s, {
@@ -55,7 +78,7 @@ export function processCommand(
       data: { event: event === undefined ? null : { service: event.service, name: event.name } },
     });
   }
-  const events = decided.map((e): Encoded => {
+  const normalized = decided.flat().map((e): Encoded => {
     const event = refOf(r.st, e.event);
     const payload = r.functions.normalize({ kind: "payload", event }, e.payload);
     if (payload instanceof Failed) return halt(issueViolation(definition, payload));
@@ -66,12 +89,20 @@ export function processCommand(
       );
     return { emit: { event: e.event, payload: payload.value }, encoded: payload.encoded as Fields };
   });
-  if (applyAll(r, events) === "already-exists")
+  const groups = orderGroups(decided, normalized);
+  const twice = twiceWritten(r.st, groups);
+  if (twice !== undefined)
+    return report(s, {
+      kind: "Fault.sameRecordInGroup",
+      definition,
+      data: { entity: ref(r.st, twice.entity), recordKey: twice.key ?? null },
+    });
+  if (applyAll(r, groups.flat()) === "already-exists")
     return done({ result: "rejected", rejection: { kind: "already-exists" } });
   const violations = r.evaluations.quietly(() => [
     ...commandEnsures(r, name, input, records, recordSource(s.records, r.note)),
     ...integrityViolations(r, definition),
   ]);
   reportAll(s, violations);
-  return done({ result: "accepted" }, { kind: "successAnswer", definition, data: {} }, events);
+  return done({ result: "accepted" }, { kind: "successAnswer", definition, data: {} }, groups);
 }

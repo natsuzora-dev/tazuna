@@ -192,8 +192,12 @@ export class Collect
     this.violations.push(v);
   }
 
-  events(step: number, start: number, count: number): void {
-    this.causes.events.push([step, start, count]);
+  events(step: number, start: number, groups: readonly number[]): void {
+    let first = start;
+    for (const count of groups) {
+      this.causes.events.push([step, first, count]);
+      first += count;
+    }
   }
 
   deadline(message: number, time: Temporal.Instant): void {

@@ -102,7 +102,8 @@ at load) always answer.
 - requirement: whether one requires condition of a command holds.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
   read only the input, or for the external command or query that a mock answers.
-- decide: the events of a command whose binds are all non-null and whose requires all hold.
+- decide: the events of a command whose binds are all non-null and whose requires all hold, in groups: the groups are in
+  order, and the events of one group have none.
 - ensures: the name of the first failing ensures of an accepted command. Binds read the records before the event write
   (the third argument), and `records` in ensures reads those after it (the fourth argument).
 - queryEnsures: the name of the first failing ensures of a fulfilled query; `output` is the answer's output.
@@ -144,7 +145,7 @@ structure Functions (m : Type → Type) where
   binding : String → String → Value → Records → Time → m (Except Issue Bool)
   requirement : String → String → Value → Records → Time → m (Except Issue Bool)
   inputRequirement : String → String → Value → m (Except Issue Bool)
-  decide : String → Value → Records → Time → m (Except Issue (List Emit))
+  decide : String → Value → Records → Time → m (Except Issue (List (List Emit)))
   ensures : String → Value → Records → Records → Time → m (Except Issue (Option String))
   queryEnsures : String → Value → Value → Records → m (Except Issue (Option String))
   resultEnsures : String → Value → Option Value → List Emit → m (Except Issue (Option String))

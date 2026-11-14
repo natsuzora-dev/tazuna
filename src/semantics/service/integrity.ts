@@ -5,7 +5,7 @@ import { type Located, withExtra } from "../../data/violation.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import type { Emit } from "../message.ts";
 import type { Run } from "../state.ts";
-import { ref, schemaOwner, uniqueOf } from "./basic.ts";
+import { ref, type Service, schemaOwner, uniqueOf } from "./basic.ts";
 import { type Records, type Row, recordSource } from "./records.ts";
 
 type Written = {
@@ -30,6 +30,18 @@ function uniqueTaken(r: Run, written: ReadonlyMap<string, readonly string[]>): b
     }
   }
   return taken;
+}
+
+/** Returns the record that an event writes, as its entity and its key (none for a single entity). */
+export function writtenRecord(
+  st: Service,
+  { emit: emitted }: Encoded,
+): { readonly entity: string; readonly key?: string } | undefined {
+  const change = st.events.get(emitted.event);
+  if (change === undefined || change.kind === "none") return undefined;
+  return change.kind === "set"
+    ? { entity: change.entity }
+    : { entity: change.entity, key: String(emitted.payload[change.key]) };
 }
 
 function apply(r: Run, { emit: emitted, encoded }: Encoded, written: Written): void {

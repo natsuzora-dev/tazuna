@@ -142,7 +142,13 @@ export interface Functions {
     now: Temporal.Instant,
   ): boolean | Failed;
   inputRequirement(target: string, condition: string, input: Fields): boolean | Failed;
-  decide(command: string, input: Fields, records: RecordSource, now: Temporal.Instant): readonly Emit[] | Failed;
+  /** Returns the events in groups: the groups are in order, and the events of one group have none. */
+  decide(
+    command: string,
+    input: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): readonly (readonly Emit[])[] | Failed;
   /**
    * Returns the first failing ensures. Binds read `before`, the records before the event write; ensures read `after`.
    */

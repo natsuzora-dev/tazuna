@@ -31,11 +31,12 @@ theorem commands_emit_own_events (s : Structure) :
 
 theorem accepted_command_emits_own_events (j : Structure) (h : Commands.check j = []) (st : Service)
     (hj : st.«structure» = j) (fs : Functions Id) (records : Records) (now : Time) (name : String) (raw : Value)
-    (written : Records) (es : List Emit) (vs : List Fault)
-    (ha : evaluate st fs records now name raw = .accepted written es vs) :
-    ∀ e ∈ es, ∃ r, some r ∈ j.emitsOf (some (st.ref name)) ∧ r.service = st.service ∧ e.event = r.name := by
+    (written : Records) (groups : List (List Emit)) (vs : List Fault)
+    (ha : evaluate st fs records now name raw = .accepted written groups vs) :
+    ∀ e ∈ groups.flatten,
+      ∃ r, some r ∈ j.emitsOf (some (st.ref name)) ∧ r.service = st.service ∧ e.event = r.name := by
   intro e he
-  obtain ⟨_, decided, _, _, hl, hdec⟩ := accepted_emits_decided records now name raw written es vs ha
+  obtain ⟨_, decided, _, _, hl, hdec⟩ := accepted_emits_decided records now name raw written groups vs ha
   obtain ⟨e', he', hev⟩ := hdec e he
   have hlist := hl e' he'
   simp only [Service.lists, hj, List.any_eq_true] at hlist

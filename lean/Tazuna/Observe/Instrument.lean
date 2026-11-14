@@ -307,12 +307,13 @@ def resolveCollect (name : String) (input : Value) (records : Records) (now : Ti
     if let .ok (some output) ← normalizeOutput (m := m) st fs name output then
       orderAudit st fs ifs name input records now output
 
-def decideCollect (name : String) (records : Records) (decided : Except Issue (List Emit)) : StateT Collect m Unit := do
+def decideCollect (name : String) (records : Records) (decided : Except Issue (List (List Emit))) :
+    StateT Collect m Unit := do
   stepCollect ifs none
-  let .ok emits := decided | pure ()
-  if emits.any (!st.lists name ·) then return
-  match ← normalizeEmits (m := m) st fs name emits with
-  | .ok emits => modify (·.stepAccess (writesOf st records emits).values)
+  let .ok decided := decided | pure ()
+  if decided.flatten.any (!st.lists name ·) then return
+  match ← normalizeEmits (m := m) st fs name decided.flatten with
+  | .ok normalized => modify (·.stepAccess (writesOf st records (orderGroups decided normalized).flatten).values)
   | .error _ => pure ()
 
 /-- Functions that return the same values as `fs` and collect what each call reads and writes. -/

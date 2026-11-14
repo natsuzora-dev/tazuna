@@ -8,19 +8,34 @@ open Tazuna.Thm.Data.Basic
 
 variable {s : State}
 
-theorem unrelated_steps_unordered (lineSteps : Array (Option Nat)) (messages : List (Option Time)) (a b sa sb : Nat)
-    (ia ib : StepInfo) (hla : lineSteps[a]? = some (some sa)) (hlb : lineSteps[b]? = some (some sb))
-    (hia : s.steps[sa]? = some ia) (hib : s.steps[sb]? = some ib)
+theorem unrelated_steps_unordered (lineSteps : Array (Option (Nat × Nat))) (messages : List (Option Time))
+    (a b sa sb ga gb : Nat) (ia ib : StepInfo) (hla : lineSteps[a]? = some (some (sa, ga)))
+    (hlb : lineSteps[b]? = some (some (sb, gb))) (hia : s.steps[sa]? = some ia) (hib : s.steps[sb]? = some ib)
     (hscope : raceScopeOf messages ia.message = raceScopeOf messages ib.message) (hreach : leadsTo s sa sb = false) :
     ordered s lineSteps messages a b = false := by
   unfold ordered
   rw [hla, hlb]
   split
-  · simp only [Option.some.injEq] at *
+  · simp only [Option.some.injEq, Prod.mk.injEq] at *
     rename_i hsa hsb
-    subst hsa hsb
+    obtain ⟨rfl, rfl⟩ := hsa
+    obtain ⟨rfl, rfl⟩ := hsb
     rw [hia, hib]
     simp [hscope, hreach]
+  · rfl
+
+/-- Two lines of one group of a decide's emits are unordered. -/
+theorem group_lines_unordered (lineSteps : Array (Option (Nat × Nat))) (messages : List (Option Time))
+    (a b sa sb g : Nat) (hla : lineSteps[a]? = some (some (sa, g))) (hlb : lineSteps[b]? = some (some (sb, g))) :
+    ordered s lineSteps messages a b = false := by
+  unfold ordered
+  rw [hla, hlb]
+  split
+  · simp only [Option.some.injEq, Prod.mk.injEq] at *
+    rename_i hsa hsb
+    obtain ⟨-, rfl⟩ := hsa
+    obtain ⟨-, h⟩ := hsb
+    simp [h]
   · rfl
 
 theorem created_listed_on_first_output (v : String) (i : Nat) :

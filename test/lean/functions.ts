@@ -398,7 +398,7 @@ export class RunFunctions implements Answering {
         const name = String(message["command"]);
         return this.replied(this.inputOf(name, message["input"]), (input) =>
           this.replied(this.functions.decide(name, input, this.records, this.now(message)), (decided) => ({
-            emits: decided.map((e) => ({ event: e.event, payload: json(e.payload) })),
+            groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: json(e.payload) }))),
           })),
         );
       }
