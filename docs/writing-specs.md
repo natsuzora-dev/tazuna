@@ -34,6 +34,13 @@ Keep a callback from changing a variable outside it, through which it sees the o
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 
+## Prepare the other services that a scenario mocks
+
+`test` checks the answers that a scenario mocks and the events that it receives from another service of the spec against that service's run, so write the inputs that the other service needs.
+Write each start state of a service as inputs to it under `states` in its contract, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
+Write an input that the other service takes from someone else, such as the command whose event the scenario receives, as `elsewhere(todo, send(todo.addTask, input))` at its place among the scenario's inputs; the scenario's own service skips it.
+Repeat such inputs with a plain TypeScript function rather than a new option.
+
 ## Reach every part with a scenario
 
 Write scenarios so that the run of some scenario reaches each part of the spec.

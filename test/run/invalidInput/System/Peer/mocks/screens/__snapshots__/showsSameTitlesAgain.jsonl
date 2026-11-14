@@ -1,0 +1,3 @@
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.taskTitles#1","name":"todo.taskTitles","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.taskTitles#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk"]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"todo.taskTitles#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk"]}}}

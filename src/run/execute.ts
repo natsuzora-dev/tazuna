@@ -258,6 +258,64 @@ function stepOf(spec: Spec, service: string, input: Input, inputs: readonly Inpu
   };
 }
 
+/** Returns the inputs of `steps`, as stepsOf would give them back; each resultOf names an input before it. */
+export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): Input[] {
+  const inputs: Input[] = [];
+  const named = <K extends Parameters<typeof definitionOfTraceName>[3]>(name: string, ...kinds: K[]) => {
+    const found = definitionOfTraceName(spec, service, name, ...kinds);
+    if (found === undefined) throw new Error(`no ${kinds.join(" or ")} ${name} from ${service}`);
+    return found;
+  };
+  for (const s of steps) {
+    const scheduled = {
+      ...(s.deadlineOrder === undefined ? {} : { deadlineOrder: s.deadlineOrder }),
+      ...(s.stepOrder === undefined ? {} : { stepOrder: s.stepOrder }),
+    };
+    const { time } = s;
+    const body = (): Input => {
+      switch (s.type) {
+        case "time":
+        case "restart":
+          return { time, type: s.type };
+        case "command":
+          return { time, type: "command", ...given(s), command: named(s.name, "command"), input: s.input };
+        case "query":
+        case "subscribe":
+          return { time, type: s.type, ...given(s), query: named(s.name, "query"), input: s.input };
+        case "unsubscribe":
+          return { time, type: "unsubscribe", to: s.to };
+        case "event": {
+          const resultOf = s.resultOf === undefined ? undefined : inputs[s.resultOf];
+          if (s.resultOf !== undefined && resultOf?.type !== "answer")
+            throw new Error("resultOf names no answer input");
+          return {
+            time,
+            type: "event",
+            ...given(s),
+            event: named(s.name, "event"),
+            payload: s.payload,
+            ...(resultOf === undefined ? {} : { resultOf }),
+          } as Input;
+        }
+        case "operation":
+        case "unacceptedOperation":
+          return { time, type: s.type, screen: named(s.screen, "screen"), control: s.control, payload: s.payload };
+        case "answer":
+          return {
+            time,
+            type: "answer",
+            sender: named(s.sender, "machine", "screen", "automation"),
+            target: named(s.target, "command", "query"),
+            answer: s.answer,
+            ...(s.choice === undefined ? {} : { choice: s.choice }),
+          } as Input;
+      }
+    };
+    inputs.push({ ...body(), ...scheduled } as Input);
+  }
+  return inputs;
+}
+
 /** Returns the steps of `inputs`; each resultOf names an answer input before it. */
 export function stepsOf(spec: Spec, service: string, inputs: readonly Input[]): Step[] {
   return inputs.map((input, i) => stepOf(spec, service, input, inputs.slice(0, i)));

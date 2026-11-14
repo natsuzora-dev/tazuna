@@ -19,6 +19,7 @@ import { comparePlaces, type Found, placeOf, problemOfFound } from "../load/foun
 import type { Spec } from "../load/load.ts";
 import { Coverage } from "../run/coverage.ts";
 import { execute, type Run, stepsOf } from "../run/execute.ts";
+import { checkPeers } from "../run/peers.ts";
 import { pairingProblem } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotProblems } from "../verify/snapshot.ts";
 
@@ -56,37 +57,54 @@ function writeSnapshot(spec: Spec, scenario: DefinitionRef, lines: readonly Trac
 }
 
 /**
- * Compares the run of each scenario that did not halt with its snapshot, or, with `update`, writes that snapshot and
- * removes the snapshots without a scenario. Also reports the other violations in the snapshot folders.
+ * A snapshot that test writes: a scenario's run, or a peer's run of the inputs derived from it, which the scenario's
+ * snapshot folder holds as `<scenario>.<peer>.jsonl`. `lines` is undefined for a run that halted.
+ */
+interface Snapshotted {
+  readonly scenario: Named<Scenario>;
+  readonly name: string;
+  readonly lines: readonly TraceLine[] | undefined;
+}
+
+/**
+ * Compares each run that did not halt with its snapshot, or, with `update`, writes that snapshot and removes the
+ * snapshots without a run. Also reports the other violations in the snapshot folders.
  */
 function testSnapshots(
   spec: Spec,
-  runs: ReadonlyMap<Named<Scenario>, Run>,
+  snapshotted: readonly Snapshotted[],
   update: boolean,
 ): Pick<TestResult, "problems" | "written" | "removed"> {
-  const ended = spec.scenarios.filter((s) => (runs.get(s) as Run).halted === undefined);
-  const linesOf = (s: Named<Scenario>) => (runs.get(s) as Run).outcome.lines;
-  const written = update ? ended.map((s) => writeSnapshot(spec, s, linesOf(s))) : [];
+  const refOf = (s: Snapshotted) => ({ service: s.scenario.service, name: s.name });
+  const ended = snapshotted.filter((s) => s.lines !== undefined);
+  const linesOf = (s: Snapshotted) => s.lines as readonly TraceLine[];
+  const written = update ? ended.map((s) => writeSnapshot(spec, refOf(s), linesOf(s))) : [];
   const { services, folders } = snapshotFolders(spec);
-  const scenarios = spec.scenarios.map((s) => ({ service: s.service, name: s.name, compared: ended.includes(s) }));
+  const scenarios = snapshotted.map((s) => ({ ...refOf(s), compared: s.lines !== undefined }));
   const pairing = pairSnapshots(services, scenarios, folders);
   const problems = update
     ? []
     : ended
-        .filter((s) => pairing.compare.some((r) => sameRef(r, s)))
-        .flatMap((s) => snapshotProblems(spec, { service: s.service, name: s.name }, linesOf(s)));
+        .filter((s) => pairing.compare.some((r) => sameRef(r, refOf(s))))
+        .flatMap((s) => snapshotProblems(spec, refOf(s), linesOf(s)));
   const removed: string[] = [];
   for (const p of pairing.problems)
     if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && "snapshotEntry" in p.at) {
       const path = snapshotEntryPath(spec, p.at);
       rmSync(path);
       removed.push(path);
+    } else if ("scenario" in p.at) {
+      const { scenario } = snapshotted.find((s) =>
+        sameRef(refOf(s), (p.at as { scenario: DefinitionRef }).scenario),
+      ) as Snapshotted;
+      problems.push(toProblem(p.violation, scenario.place));
     } else problems.push(pairingProblem(spec, p));
   return { problems, written, removed };
 }
 
 /**
- * Runs every scenario and explores it in two phases, and then tests the snapshots (testSnapshots). Phase 1 collects the
+ * Runs every scenario and explores it in two phases, checks the mocks that each run that did not halt takes from other
+ * spec services (checkPeers), and then tests the snapshots (testSnapshots). Phase 1 collects the
  * requests to spec services that a sender sent while another waited. Phase 2 explores again the scenarios of the
  * services those pairs go to, comparing both orders of each pair. Phase 2 explores the same paths as phase 1, so it
  * finds no pair that phase 1 did not find.
@@ -134,7 +152,20 @@ export function testSpec(
       );
     }
   }
-  const snapshots = testSnapshots(spec, runs, options.update);
+  const snapshotted: Snapshotted[] = [];
+  for (const scenario of spec.scenarios) {
+    const run = runs.get(scenario) as Run;
+    if (run.halted !== undefined) {
+      snapshotted.push({ scenario, name: scenario.name, lines: undefined });
+      continue;
+    }
+    snapshotted.push({ scenario, name: scenario.name, lines: run.outcome.lines });
+    for (const check of checkPeers(spec, scenario, run)) {
+      problems.push(...check.problems);
+      snapshotted.push({ scenario, name: `${scenario.name}.${check.peer}`, lines: check.lines });
+    }
+  }
+  const snapshots = testSnapshots(spec, snapshotted, options.update);
   return { ...snapshots, problems: [...problems, ...snapshots.problems], reached };
 }
 

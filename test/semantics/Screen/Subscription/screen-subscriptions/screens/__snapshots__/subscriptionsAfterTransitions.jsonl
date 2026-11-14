@@ -3,6 +3,4 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"taskIds":[]}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"todo.taskCount#1","answer":{"result":"fulfilled","output":{"count":0}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"listScreen.reload#1","name":"listScreen.reload"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#3","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"taskIds":[]}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#4","to":"todo.taskCount#1","answer":{"result":"fulfilled","output":{"count":0}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"listScreen.peek#1","name":"listScreen.peek"}

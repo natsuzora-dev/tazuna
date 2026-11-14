@@ -2,6 +2,7 @@ import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Names
 import Tazuna.Observe.ChoiceDependent
+import Tazuna.Semantics.System.Peer
 
 /-!
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).
@@ -458,6 +459,36 @@ def afters (request : Value) : Except String Value := do
   let lines := snapshot.map (·.map fun l : TraceLine => ({ l with value := none } : Verify.Line))
   pure (.obj [("type", .str "afters"), ("findings", .arr ((Verify.unknownAfters lines).map (·.toValue)))])
 
+/--
+The reply to request `peer`, which takes the scenario's service, the peer, the steps of the given state, the elsewhere
+inputs with the line counts before them, the lines of the scenario's run and of the peer's run, the halt of the peer's
+run, and the forms of `normal` that TS computed as `[name, value, form]`, and returns peerInputs and peerFindings. A
+value without a form stays as it is.
+-/
+def peer (request : Value) : Except String Value := do
+  let service ← stringField request "service"
+  let peer ← stringField request "peer"
+  let state : List Step ← FromValue.fromValue (← field request "state")
+  let elsewhere ← (← asList (← field request "elsewhere")).mapM fun
+    | .arr [n, s] => do pure ((← FromValue.fromValue n : Nat), (← FromValue.fromValue s : Step))
+    | _ => throw "expected [count, step]"
+  let lines : List TraceLine ← FromValue.fromValue (← field request "lines")
+  let peerLines : List TraceLine ← FromValue.fromValue (← field request "peerLines")
+  let halted ← match ← field request "halted" with
+    | .null => pure none
+    | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : Origin), kind))
+    | _ => throw "expected null or [origin, kind]"
+  let normals ← (← asList (← field request "normals")).mapM fun
+    | .arr [.str name, v, form] => pure (name, v, form)
+    | _ => throw "expected [name, value, form]"
+  let normal (name : String) (v : Value) : Value :=
+    ((normals.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD v
+  pure (.obj [("type", .str "peer"),
+    ("inputs", .arr ((peerInputs service peer state elsewhere lines).map fun (s, o) =>
+      .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
+    ("findings", .arr ((peerFindings normal service peer lines peerLines halted).map fun (o, f) =>
+      .obj [("origin", ToValue.toValue o), ("violation", f.toValue)]))])
+
 partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do
   let line ← stdin.getLine
   if line.isEmpty then return
@@ -475,6 +506,7 @@ partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : I
       | some (.str "compareSnapshot") => IO.ofExcept (compareSnapshot request)
       | some (.str "afters") => IO.ofExcept (afters request)
       | some (.str "decodeLines") => IO.ofExcept (decodeLines request)
+      | some (.str "peer") => IO.ofExcept (peer request)
       | some (.str "names") =>
         pure (.obj [("type", .str "names"),
           ("byCaller", .obj (rejectionKinds.filterMap fun k =>

@@ -322,14 +322,13 @@ def Structure.hasOutput (s : Structure) (r : Ref) : Bool :=
   (s.definitions.find? (·.ref == r)).any (·.hasOutput)
 
 /--
-Whether an answer to the command or query `r` is checked against `r`'s assumed contract: `r` is a query or a command
-of an external service. A command of another service in the same spec is not, because its conditions read the
-callee's records.
+Whether an answer to the command or query `r` is checked against `r`'s assumed contract: `r` is a command or query of
+an external service. test checks an answer from another service in the same spec against that service's run instead
+(peerFindings).
 -/
 def Structure.isAssumed (s : Structure) (r : Ref) : Bool :=
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.query ..) => true
-  | some (.command ..) => (s.services.find? (·.name == r.service)).any (·.external)
+  | some (.query ..) | some (.command ..) => (s.services.find? (·.name == r.service)).any (·.external)
   | _ => false
 
 /-- Why an event cannot be the result (resultOf) of a request. -/

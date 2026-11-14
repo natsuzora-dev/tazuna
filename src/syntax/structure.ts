@@ -149,13 +149,15 @@ export function hasOutput(structure: Structure, target: DefinitionRef): boolean 
 
 /**
  * Returns whether an answer to the command or query `target` is checked against `target`'s assumed contract, which
- * holds when `target` is a query or a command of an external service. A command of another service in the same spec is
- * not checked, because its conditions read the callee's records.
+ * holds when `target` is a command or query of an external service. test checks an answer from another service in the
+ * same spec against that service's run instead (peerFindings).
  */
 export function isAssumed(structure: Structure, target: DefinitionRef): boolean {
   const definition = structure.definitions.find((d) => sameRef(d, target));
-  if (definition?.kind === "query") return true;
-  return definition?.kind === "command" && structure.services.find((s) => s.name === target.service)?.external === true;
+  return (
+    (definition?.kind === "command" || definition?.kind === "query") &&
+    structure.services.find((s) => s.name === target.service)?.external === true
+  );
 }
 
 /** Why an event cannot be the result (resultOf) of a request. */

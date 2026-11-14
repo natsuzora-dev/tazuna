@@ -67,6 +67,20 @@ inductive InvalidInput where
   yet. An implementation makes its own keys, such as UUIDs, so no caller knows a key before the service gives it.
   -/
   | uncreatedKey (recordKey : String) (entity : Syntax.Ref)
+  /--
+  The mock's answer to the request `requestId` to the spec service of `target` is not the answer that the service's
+  run of the derived inputs gives the request at that place, or that answer comes later than the mock.
+  -/
+  | unproducibleAnswer (requestId : String) (target : Syntax.Ref)
+  /-- The service's run of the derived inputs gives the request `requestId` fewer answers than the mocks. -/
+  | unansweredRequest (requestId : String) (target : Syntax.Ref)
+  /--
+  The service of `event` emits no `event` with the event input's payload in its run of the derived inputs by the time of
+  the input.
+  -/
+  | unproducibleEvent (eventId : String) (event : Syntax.Ref)
+  /-- The spec service `service` halted with `halting` in its run of the derived inputs. -/
+  | haltedPeer (service halting : String)
 
 local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 
@@ -84,6 +98,7 @@ def InvalidInput.halts : InvalidInput → Bool
   | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .uncreatedKey .. => true
   | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
-  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest .. => false
+  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest ..
+  | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .haltedPeer .. => false
 
 end Tazuna.Semantics

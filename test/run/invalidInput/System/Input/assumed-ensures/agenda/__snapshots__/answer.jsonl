@@ -1,3 +1,2 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"todo.taskTitles#1","name":"todo.taskTitles","input":{}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":"2026-10-25T15:00:00Z"}}}

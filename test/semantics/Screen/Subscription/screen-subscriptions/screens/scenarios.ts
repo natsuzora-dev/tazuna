@@ -17,14 +17,6 @@ export const answersOneByOne = scenario(
 );
 
 export const subscriptionsAfterTransitions = scenario(
-  "Answer, reload, answer, and peek; listScreen compares its subscriptions with the shows of the state after all transitions of a message. Reloading reenters open, but the input of tasks stays the same, so listScreen does not subscribe again. Peeking passes through peeking, so listScreen does not subscribe to allTasks",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    tasksShown,
-    countShown,
-    operate(listScreen, "reload"),
-    tasksShown,
-    countShown,
-    operate(listScreen, "peek"),
-  ],
+  "Answer, reload, and peek; listScreen compares its subscriptions with the shows of the state after all transitions of a message. Reloading reenters open, but the input of tasks stays the same, so listScreen does not subscribe again. Peeking passes through peeking, so listScreen does not subscribe to allTasks",
+  [at("2026-10-25T10:00:00+09:00"), tasksShown, countShown, operate(listScreen, "reload"), operate(listScreen, "peek")],
 );

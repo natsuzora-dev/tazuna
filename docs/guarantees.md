@@ -61,7 +61,7 @@ The following table names the side at fault for each group.
 | `NonCanonical` | `check` | The spec. |
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
-| `InvalidInput` | `test` | The scenario: an input that the environment could not give, including an answer of an external service that breaks the contract that the spec assumes of it. |
+| `InvalidInput` | `test` | The scenario: an input that the environment could not give, including an answer of an external service that breaks the contract that the spec assumes of it, and an answer or event of another service of the spec that the other service's run does not give. |
 | `Fault` | `test` | The spec. |
 | `OrderDependent` | `test` | The spec. |
 | `ChoiceDependent` | `test` | The spec. |
@@ -109,7 +109,11 @@ tazuna detects breaks of each assumption only partly or not at all.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` detects a break of this assumption only on the traces that the recorder writes.
 - **Other services.** The messages from another service of the spec that a scenario gives as inputs are messages that the other service sends at the times that the scenario gives.
-  `test` detects only the messages that break the other service's contract.
+  `test` runs the other service's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the service at their times, with the scenario's `elsewhere` inputs at their places.
+  It reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
+  Values compare up to the keys that the scenario's service creates, which the other service receives renamed, and, one to one, the keys that the other service creates.
+  `test` writes the other service's run as the snapshot `<scenario>.<service>.jsonl` beside the scenario's.
+  A later step of tazuna replaces this assumption with a guarantee.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
 
 ## Proven properties

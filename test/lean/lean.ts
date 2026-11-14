@@ -263,6 +263,22 @@ export class Lean {
     };
   }
 
+  peer(request: {
+    readonly service: string;
+    readonly peer: string;
+    readonly state: readonly Step[];
+    readonly elsewhere: readonly (readonly [number, Step])[];
+    readonly lines: readonly TraceLine[];
+    readonly peerLines: readonly TraceLine[];
+    readonly halted: readonly [unknown, string] | null;
+    readonly normals: readonly (readonly [string, unknown, unknown])[];
+  }): { readonly inputs: unknown; readonly findings: unknown } {
+    this.send({ type: "peer", ...request });
+    const { type, ...result } = this.receive();
+    if (type !== "peer") throw new Error(`tazuna-lean answered peer with ${JSON.stringify({ type, ...result })}`);
+    return result as { readonly inputs: unknown; readonly findings: unknown };
+  }
+
   check(structure: Structure): readonly Illegal[] {
     this.send({ type: "check", structure });
     const message = this.receive();

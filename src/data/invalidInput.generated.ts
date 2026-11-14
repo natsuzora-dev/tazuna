@@ -278,6 +278,48 @@ export type InvalidInput =
         readonly recordKey: string;
         readonly entity: DefinitionRef;
       };
+    }
+  /**
+   * The mock's answer to the request `requestId` to the spec service of `target` is not the answer that the service's
+   * run of the derived inputs gives the request at that place, or that answer comes later than the mock.
+   */
+  | {
+      readonly kind: "InvalidInput.unproducibleAnswer";
+      readonly definition: null;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
+    }
+  /** The service's run of the derived inputs gives the request `requestId` fewer answers than the mocks. */
+  | {
+      readonly kind: "InvalidInput.unansweredRequest";
+      readonly definition: null;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
+    }
+  /**
+   * The service of `event` emits no `event` with the event input's payload in its run of the derived inputs by the time of
+   * the input.
+   */
+  | {
+      readonly kind: "InvalidInput.unproducibleEvent";
+      readonly definition: null;
+      readonly data: {
+        readonly eventId: string;
+        readonly event: DefinitionRef;
+      };
+    }
+  /** The spec service `service` halted with `halting` in its run of the derived inputs. */
+  | {
+      readonly kind: "InvalidInput.haltedPeer";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly halting: string;
+      };
     };
 
 export const invalidInputKinds = [
@@ -311,6 +353,10 @@ export const invalidInputKinds = [
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
   "InvalidInput.uncreatedKey",
+  "InvalidInput.unproducibleAnswer",
+  "InvalidInput.unansweredRequest",
+  "InvalidInput.unproducibleEvent",
+  "InvalidInput.haltedPeer",
 ] as const;
 
 /** The kinds whose violations halt the run. */

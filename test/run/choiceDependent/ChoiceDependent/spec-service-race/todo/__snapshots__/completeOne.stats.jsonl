@@ -1,0 +1,6 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"stats.countCompleted#1","name":"countCompleted","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"stats.countCompleted#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"completedCounted#1","name":"completedCounted","payload":{"completed":1}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"stats.resumeCounting#1","name":"resumeCounting","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"stats.resumeCounting#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"countingResumed#1","name":"countingResumed","payload":{"isCounting":true}}

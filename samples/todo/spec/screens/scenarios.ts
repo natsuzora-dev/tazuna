@@ -1,4 +1,4 @@
-import { at, cannotOperate, mock, operate, receive, scenario } from "@natsuzora-dev/tazuna";
+import { at, cannotOperate, elsewhere, mock, operate, receive, scenario, send } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { taskDetailScreen } from "./taskDetailScreen.ts";
 import { taskListScreen } from "./taskListScreen.ts";
@@ -9,7 +9,8 @@ const milk = {
   dueAt: "2026-10-26T18:00:00+09:00",
   completedAt: null,
 };
-const completedMilk = { ...milk, completedAt: "2026-10-25T09:00:00+09:00" };
+const completedMilk = { ...milk, completedAt: "2026-10-25T10:00:00+09:00" };
+const milkCompletedElsewhere = elsewhere(todo, send(todo.completeTask, { taskId: "task-1" }));
 const eggs = { taskId: "task-2", title: "Buy eggs", dueAt: null, completedAt: null };
 const milkDetail = {
   title: "Buy milk",
@@ -18,6 +19,9 @@ const milkDetail = {
   createdAt: "2026-10-25T08:00:00+09:00",
   remindAt: "2026-10-26T18:00:00+09:00",
 };
+
+const fromMilk = { given: { todo: todo.states.milkDueTomorrow } };
+const fromMilkAndEggs = { given: { todo: todo.states.milkAndCompletedEggs } };
 
 const openList = [
   at("2026-10-25T10:00:00+09:00"),
@@ -36,6 +40,7 @@ export const addTask = scenario(
     operate(taskListScreen, "add", { title: "Buy eggs" }),
     mock(taskListScreen, [todo.addTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const completeAddedTask = scenario(
@@ -51,6 +56,7 @@ export const completeAddedTask = scenario(
     operate(taskListScreen, "complete", { taskId: "Task-1" }),
     mock(taskListScreen, [todo.completeTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const completeFromList = scenario(
@@ -60,6 +66,7 @@ export const completeFromList = scenario(
     operate(taskListScreen, "complete", { taskId: "task-1" }),
     mock(taskListScreen, [todo.completeTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const ignoresListOperationsWhileCompleting = scenario(
@@ -82,17 +89,20 @@ export const ignoresListOperationsWhileCompleting = scenario(
     operate(taskListScreen, "reopen", { taskId: "task-2" }),
     mock(taskListScreen, [todo.reopenTask, { result: "accepted" }]),
   ],
+  fromMilkAndEggs,
 );
 
 export const reopenFromList = scenario(
   "Choose the completed filter on the list screen, and press reopen on a completed task; the screen sends reopenTask",
   [
     ...openList,
+    milkCompletedElsewhere,
     operate(taskListScreen, "filter", { filter: "completed" }),
     mock(taskListScreen, [todo.tasks, { result: "fulfilled", output: { tasks: [completedMilk] } }]),
     operate(taskListScreen, "reopen", { taskId: "task-1" }),
     mock(taskListScreen, [todo.reopenTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const offersCompletionOnList = scenario(
@@ -107,6 +117,7 @@ export const offersCompletionOnList = scenario(
     cannotOperate(taskListScreen, "reopen", { taskId: "task-1" }),
     cannotOperate(taskListScreen, "complete", { taskId: "task-2" }),
   ],
+  fromMilkAndEggs,
 );
 
 export const keepsFilter = scenario(
@@ -118,6 +129,7 @@ export const keepsFilter = scenario(
     operate(taskListScreen, "openTask", { taskId: "task-1", title: "Buy milk" }),
     operate(taskDetailScreen, "close"),
   ],
+  fromMilk,
 );
 
 export const completeAndReopenFromDetail = scenario(
@@ -133,12 +145,14 @@ export const completeAndReopenFromDetail = scenario(
     operate(taskDetailScreen, "reopen"),
     mock(taskDetailScreen, [todo.reopenTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const completedTaskNotCompleted = scenario(
   "Open a completed task on the detail screen; the screen accepts no complete",
   [
     ...openList,
+    milkCompletedElsewhere,
     operate(taskListScreen, "openTask", { taskId: "task-1", title: "Buy milk" }),
     mock(taskDetailScreen, [
       todo.taskDetail,
@@ -146,6 +160,7 @@ export const completedTaskNotCompleted = scenario(
     ]),
     cannotOperate(taskDetailScreen, "complete"),
   ],
+  fromMilk,
 );
 
 export const renameFromDetail = scenario(
@@ -156,6 +171,7 @@ export const renameFromDetail = scenario(
     operate(taskDetailScreen, "rename", { title: "Buy soy milk" }),
     mock(taskDetailScreen, [todo.renameTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const keepsOpenWhileRenaming = scenario(
@@ -168,6 +184,7 @@ export const keepsOpenWhileRenaming = scenario(
     mock(taskDetailScreen, [todo.renameTask, { result: "accepted" }]),
     operate(taskDetailScreen, "close"),
   ],
+  fromMilk,
 );
 
 export const changeDueFromDetail = scenario(
@@ -183,6 +200,7 @@ export const changeDueFromDetail = scenario(
     mock(taskDetailScreen, [todo.changeDue, { result: "accepted" }]),
     cannotOperate(taskDetailScreen, "dueClear"),
   ],
+  fromMilk,
 );
 
 export const clearDueFromDetail = scenario(
@@ -195,6 +213,7 @@ export const clearDueFromDetail = scenario(
     operate(taskDetailScreen, "dueClear"),
     mock(taskDetailScreen, [todo.changeDue, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const keepsSameDue = scenario(
@@ -205,12 +224,14 @@ export const keepsSameDue = scenario(
     operate(taskDetailScreen, "dueChoose", { dueAt: "2026-10-26T18:00:00+09:00" }),
     cannotOperate(taskDetailScreen, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" }),
   ],
+  fromMilk,
 );
 
 export const clearsOnlyDue = scenario(
   "Open a task without a due date on the detail screen; the screen accepts no dueClear",
   [
     ...openList,
+    elsewhere(todo, send(todo.changeDue, { taskId: "task-1", dueAt: null })),
     operate(taskListScreen, "openTask", { taskId: "task-1", title: "Buy milk" }),
     mock(taskDetailScreen, [
       todo.taskDetail,
@@ -219,6 +240,7 @@ export const clearsOnlyDue = scenario(
     operate(taskDetailScreen, "dueToggle"),
     cannotOperate(taskDetailScreen, "dueClear"),
   ],
+  fromMilk,
 );
 
 export const completeWhileDueExpanded = scenario(
@@ -231,6 +253,7 @@ export const completeWhileDueExpanded = scenario(
     operate(taskDetailScreen, "dueClear"),
     mock(taskDetailScreen, [todo.changeDue, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const deleteFromDetail = scenario(
@@ -243,13 +266,19 @@ export const deleteFromDetail = scenario(
     cannotOperate(taskDetailScreen, "close"),
     mock(taskDetailScreen, [todo.deleteTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
-export const closesDeletedTask = scenario("Receive taskDeleted for the task on the detail screen; the screen closes", [
-  ...openList,
-  operate(taskListScreen, "openTask", { taskId: "task-1", title: "Buy milk" }),
-  receive(todo.taskDeleted, { taskId: "task-1" }),
-]);
+export const closesDeletedTask = scenario(
+  "Receive taskDeleted for the task on the detail screen; the screen closes",
+  [
+    ...openList,
+    operate(taskListScreen, "openTask", { taskId: "task-1", title: "Buy milk" }),
+    elsewhere(todo, send(todo.deleteTask, { taskId: "task-1" })),
+    receive(todo.taskDeleted, { taskId: "task-1" }),
+  ],
+  fromMilk,
+);
 
 export const changesReminders = scenario(
   "Press remindersToggle on the list screen; the screen sends changeReminders and accepts user operations again after the answer",
@@ -260,6 +289,7 @@ export const changesReminders = scenario(
     mock(taskListScreen, [todo.changeReminders, { result: "accepted" }]),
     operate(taskListScreen, "filter", { filter: "all" }),
   ],
+  fromMilk,
 );
 
 export const ignoresListOperationsWhileSending = scenario(
@@ -278,6 +308,7 @@ export const ignoresListOperationsWhileSending = scenario(
     cannotOperate(taskListScreen, "openTask", { taskId: "task-1", title: "Buy milk" }),
     mock(taskListScreen, [todo.changeReminders, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
@@ -296,6 +327,7 @@ export const retriesAfterListRejections = scenario(
     operate(taskListScreen, "remindersToggle", { shouldRemind: false }),
     mock(taskListScreen, [todo.changeReminders, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const retriesAfterRowRejections = scenario(
@@ -316,6 +348,7 @@ export const retriesAfterRowRejections = scenario(
     operate(taskListScreen, "reopen", { taskId: "task-2" }),
     mock(taskListScreen, [todo.reopenTask, { result: "accepted" }]),
   ],
+  fromMilkAndEggs,
 );
 
 export const retriesAfterRenameAndDueRejections = scenario(
@@ -333,6 +366,7 @@ export const retriesAfterRenameAndDueRejections = scenario(
     operate(taskDetailScreen, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" }),
     mock(taskDetailScreen, [todo.changeDue, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const retriesAfterCompletionRejections = scenario(
@@ -354,6 +388,7 @@ export const retriesAfterCompletionRejections = scenario(
     operate(taskDetailScreen, "reopen"),
     mock(taskDetailScreen, [todo.reopenTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const keepsEditingAfterDeleteRejected = scenario(
@@ -366,19 +401,23 @@ export const keepsEditingAfterDeleteRejected = scenario(
     operate(taskDetailScreen, "complete"),
     mock(taskDetailScreen, [todo.completeTask, { result: "accepted" }]),
   ],
+  fromMilk,
 );
 
 export const keepsDetailWhenOtherTaskDeleted = scenario(
   "Receive taskDeleted for another task while the detail screen is open; the screen stays open",
   [
     ...openDetail,
+    elsewhere(todo, send(todo.deleteTask, { taskId: "task-2" })),
     receive(todo.taskDeleted, { taskId: "task-2" }),
     operate(taskDetailScreen, "complete"),
     mock(taskDetailScreen, [todo.completeTask, { result: "accepted" }]),
   ],
+  fromMilkAndEggs,
 );
 
-export const openTaskNotReopened = scenario("Open an open task on the detail screen; the screen accepts no reopen", [
-  ...openDetail,
-  cannotOperate(taskDetailScreen, "reopen"),
-]);
+export const openTaskNotReopened = scenario(
+  "Open an open task on the detail screen; the screen accepts no reopen",
+  [...openDetail, cannotOperate(taskDetailScreen, "reopen")],
+  fromMilk,
+);

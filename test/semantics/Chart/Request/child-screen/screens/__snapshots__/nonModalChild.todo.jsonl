@@ -1,0 +1,5 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"todo.taskCount#1","name":"taskCount","input":{"filter":"open"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"todo.taskCount#1","answer":{"result":"fulfilled","output":{"count":0}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unsubscribe","id":"unsubscribe#1","to":"todo.taskCount#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"todo.taskCount#2","name":"taskCount","input":{"filter":"all"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"todo.taskCount#2","answer":{"result":"fulfilled","output":{"count":0}}}
