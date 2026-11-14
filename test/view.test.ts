@@ -203,7 +203,7 @@ test("A chart in viewModel has the state tree of its machine or screen, and the 
   ]);
   assert.ok(chart("workload").includes("    always [tooMany] -> warning as always[0] in quiet"));
   assert.ok(
-    chart("reminder").includes("    after reminderTime -> recording as after.reminderTime.onFired[0] in waiting"),
+    chart("reminder").includes("      after reminderTime -> recording as after.reminderTime.onFired[0] in waiting"),
   );
 });
 

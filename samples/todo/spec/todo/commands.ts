@@ -109,12 +109,16 @@ export const recordReminderDecisionFailed = command({
 }).decide(({ input }) => [emit(reminderDecisionFailed, { id: input.taskId, reminderDecision: "failed" })]);
 
 export const recordReminderTimeReached = command({
+  input: { taskId: ref(Task) },
   emits: [reminderTimeReachedRecorded, reminderTimeReached],
-}).decide(({ records, now }) =>
-  records.Task.filter(
-    (t) => t.completedAt === null && t.remindAt !== null && Temporal.Instant.compare(t.remindAt, now) <= 0,
-  ).flatMap((t) => [
-    emit(reminderTimeReachedRecorded, { id: t.id, remindAt: null }),
-    emit(reminderTimeReached, { title: t.title }),
-  ]),
-);
+  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
+  requires: {
+    due: ({ bound, now }) =>
+      bound.task.completedAt === null &&
+      bound.task.remindAt !== null &&
+      Temporal.Instant.compare(bound.task.remindAt, now) <= 0,
+  },
+}).decide(({ bound }) => [
+  emit(reminderTimeReachedRecorded, { id: bound.task.id, remindAt: null }),
+  emit(reminderTimeReached, { title: bound.task.title }),
+]);

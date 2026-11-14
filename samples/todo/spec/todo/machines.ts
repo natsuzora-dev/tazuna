@@ -1,32 +1,32 @@
-import { date, datetime, type RowOf, ref } from "@natsuzora-dev/tazuna";
+import { date, datetime, ref } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { recordReminderDecisionFailed, recordReminderTimeReached, setReminder } from "./commands.ts";
 import { machine, Task, todoConstants } from "./data.ts";
 
-type Tasks = { readonly Task: readonly RowOf<typeof Task>[] };
-
-const nextRemindAt = (records: Tasks) =>
-  records.Task.flatMap((t) => (t.completedAt === null && t.remindAt !== null ? [t.remindAt] : [])).toSorted(
-    Temporal.Instant.compare,
-  )[0] ?? null;
-const scheduled = ({ records }: { readonly records: Tasks }) => nextRemindAt(records) !== null;
-const nothingScheduled = (args: { readonly records: Tasks }) => !scheduled(args);
-
 export const reminder = machine({
-  description: "Wait until the reminder time of an open task arrives",
+  description: "Wait until the reminder time of each open task arrives",
   commands: { recordReminderTimeReached },
-  initial: "idle",
-  states: { idle: {}, waiting: { held: { remindAt: datetime } }, recording: {} },
+  initial: "reminding",
+  states: {
+    reminding: {
+      type: "map",
+      key: { taskId: ref(Task) },
+      initial: "waiting",
+      states: { waiting: { held: { remindAt: datetime } }, recording: {} },
+    },
+  },
 }).chart({
   states: {
-    idle: { always: [{ guard: { scheduled }, target: "waiting" }] },
+    reminding: {
+      items: ({ records }) =>
+        records.Task.filter((t) => t.completedAt === null && t.remindAt !== null).map((t) => ({ taskId: t.id })),
+    },
     waiting: {
-      holds: { remindAt: ({ records }) => nextRemindAt(records) },
-      always: [{ guard: { nothingScheduled }, target: "idle" }],
+      holds: { remindAt: ({ key, records }) => records.Task.get(key.taskId)?.remindAt ?? null },
       after: { reminderTime: { at: ({ held }) => held.remindAt, onFired: [{ target: "recording" }] } },
     },
     recording: {
-      sends: { recordReminderTimeReached: { onAccepted: [{ target: "idle" }], onRejected: [] } },
+      sends: { recordReminderTimeReached: { input: ({ key }) => key, onAccepted: [], onRejected: [] } },
     },
   },
 });
