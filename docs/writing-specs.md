@@ -31,6 +31,8 @@ A result that needs an order goes through `sortedBy` with a number or time key, 
 A page of an ordered result takes whole runs, so it never cuts the records with equal keys apart.
 A value of a `bag`, `set`, or `sortedBy` schema reaches spec functions the same way, as a `Bag` or as runs.
 `decide` returns the events of a `Bag` of records as one `Bag` of events, which comes after the events before it and before the events after it, with no order inside.
+A callback that changes a variable outside it sees the order after all; `test` reports `OrderDependent` when an answer changes with every `Bag` in reverse order.
+`createKey` in a callback is the exception: `test` compares the keys that one call creates up to a renaming, as `verify` does.
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 

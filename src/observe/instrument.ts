@@ -1,10 +1,11 @@
+import { enumerations, valuesOf } from "../data/bag.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { OrderDependent } from "../data/orderDependent.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
-import { canonicalJson, type Fields, plain } from "../data/values.ts";
-import { type Located, withExtra } from "../data/violation.ts";
+import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
+import { type Located, type ProblemError, withExtra } from "../data/violation.ts";
 import {
   type Access,
   type Assignment,
@@ -16,7 +17,7 @@ import {
 } from "../semantics/functions.ts";
 import type { Emit } from "../semantics/message.ts";
 import type { Note, RegionCheck, RegionPair } from "../semantics/note.ts";
-import { ref, type Schema, type Service } from "../semantics/service/basic.ts";
+import { ref, refOf, type Schema, type Service } from "../semantics/service/basic.ts";
 import { normalizeOutput } from "../semantics/service/query.ts";
 import type { RecordSource } from "../semantics/service/records.ts";
 import type { StepInfo } from "../semantics/state.ts";
@@ -118,7 +119,7 @@ export class Collect
   implements
     Pick<Note, "events" | "deadline" | "stepBegins" | "stepEnds" | "settlesAround" | "transitionPart" | "microstepEnds">
 {
-  /** The queries already reported for order-dependent output. */
+  /** The definitions already reported by orderAudit, as JSON. */
   private readonly reportedOrder = new Set<string>();
   private transition: number | undefined;
   private readonly transitions = new Map<number, TransitionAccess>();
@@ -148,12 +149,12 @@ export class Collect
     return copy;
   }
 
-  hasReportedOrder(name: string): boolean {
-    return this.reportedOrder.has(name);
+  hasReportedOrder(definition: DefinitionRef): boolean {
+    return this.reportedOrder.has(JSON.stringify(definition));
   }
 
-  reportOrder(name: string, v: OrderDependent & Located): void {
-    this.reportedOrder.add(name);
+  reportOrder(definition: DefinitionRef, v: OrderDependent & Located): void {
+    this.reportedOrder.add(JSON.stringify(definition));
     this.reported.add(reportedKey(v));
     this.violations.push(v);
   }
@@ -277,12 +278,71 @@ export class Collect
 }
 
 /**
- * Lean's InstrumentFunctions without lastReads and lastAccess, which the TS run tells as it reads. `reversed` returns
- * the query output with records in reverse key order.
+ * Lean's InstrumentFunctions without lastReads and lastAccess, which the TS run tells as it reads, and lastEnumerated,
+ * which `enumerations` tells. `reversed` returns what `call` answers with every Bag in reverse order, without telling
+ * what it reads or reaching coverage.
  */
 export interface InstrumentFunctions {
-  reversed(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown;
+  reversed<T>(call: (fs: Functions) => T): T;
 }
+
+/** The Access of an answer asked again, which tells nothing. */
+const silent: Access = { context: () => {}, active: () => {}, assigned: () => {}, shown: () => {}, now: () => {} };
+
+/** Returns `value` with each Bag as the array of its values, as Lean's Value holds it. */
+function unbagged(value: unknown): unknown {
+  const values = valuesOf(value);
+  if (values !== undefined) return values.map(unbagged);
+  if (Array.isArray(value)) return value.map(unbagged);
+  if (value === null || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, unbagged(v)]));
+}
+
+/** Lean's canonical: the canonical JSON of a value whose Bags are arrays. */
+const text = (value: unknown): string => canonicalJson(unbagged(value));
+
+/** Lean's Value.unorderedText of `value` with each string renamed by `rename`. */
+function unorderedJson(value: unknown, rename: (s: string) => string): string {
+  if (value !== null && typeof value === "object" && "toJSON" in value && typeof value.toJSON === "function")
+    return unorderedJson(value.toJSON(), rename);
+  if (typeof value === "string") return JSON.stringify(rename(value));
+  if (Array.isArray(value)) return `[${value.map((v) => unorderedJson(v, rename)).toSorted(byCodePoint)}]`;
+  if (value === null || typeof value !== "object") return canonicalJson(value);
+  const fields = value as Record<string, unknown>;
+  return `{${Object.keys(fields)
+    .filter((k) => fields[k] !== undefined)
+    .toSorted(byCodePoint)
+    .map((k) => `${JSON.stringify(k)}:${unorderedJson(fields[k], rename)}`)}}`;
+}
+
+type KeyCounts = readonly (readonly [string, number])[];
+
+/** Lean's createdKeys: each key that the createKey calls of one call gave, with its entity. */
+function createdKeys(keys: KeyCounts, created: readonly string[]): Map<string, string> {
+  const counts = new Map(keys);
+  return new Map(
+    created.map((entity) => {
+      const n = (counts.get(entity) ?? 0) + 1;
+      counts.set(entity, n);
+      return [`${entity}-${n}`, entity];
+    }),
+  );
+}
+
+/** Lean's madeText and sameMade: the text that compares a value that one call made and the keys that it created. */
+function madeJson(keys: KeyCounts, created: readonly string[], value: unknown): string {
+  const entities = canonicalJson(created.toSorted(byCodePoint));
+  if (created.length === 0) return `${entities}${text(value)}`;
+  const given = createdKeys(keys, created);
+  const rename = (s: string) => {
+    const entity = given.get(s);
+    return entity === undefined ? s : `${entity}-*`;
+  };
+  return `${entities}${unorderedJson(unbagged(value), rename)}`;
+}
+
+/** Lean's textSet: the texts without order or repetition. */
+const textSet = (texts: readonly string[]): string => canonicalJson([...new Set(texts)].toSorted(byCodePoint));
 
 /** Lean's `instrument`, which returns the same values as `fs`. */
 export class InstrumentedFunctions implements Functions {
@@ -299,35 +359,71 @@ export class InstrumentedFunctions implements Functions {
   }
 
   /**
-   * Runs query `name` again with records in reverse key order and reports OrderDependent.reversedRecords when its
-   * comparable output changes, OrderDependent.reversedOutputSchema when the output fails the schema, or
-   * OrderDependent.reversedException when an Issue stops that run, the check of its output or its comparable value. At
-   * most once per query. An Issue in the comparable value of `output` is no order dependence and reports nothing.
+   * Lean's `audit` in `instrument`: returns what `answer` answers and, when that call ran a Bag callback, audits the
+   * answer as orderAudit does, asking `again` of the functions with Bags in reverse order and telling the two answers
+   * apart by `compared`.
    */
-  private orderAudit(name: string, input: Fields, records: RecordSource, now: Temporal.Instant, output: unknown) {
-    if (this.c.hasReportedOrder(name)) return;
-    const definition = ref(this.st, name);
-    const report = (found: OrderDependent & Located) => this.c.reportOrder(name, found);
-    const exception = ({ error }: Failed) =>
-      report(withExtra({ kind: "OrderDependent.reversedException", definition, data: {} }, { error }));
-    const reversed = this.ifs.reversed(name, input, records, now);
-    if (reversed instanceof Failed) return exception(reversed);
-    const checked = normalizeOutput(this.st, this.fs, name, reversed);
-    if (checked instanceof Failed) return exception(checked);
-    if ("error" in checked)
-      return report(
-        withExtra({ kind: "OrderDependent.reversedOutputSchema", definition, data: {} }, { error: checked.error }),
+  private audited<T>(
+    definition: DefinitionRef,
+    question: string,
+    answer: () => T | Failed,
+    again: (fs: Functions) => T | Failed,
+    compared: (answer: T) => string,
+  ): T | Failed {
+    const before = enumerations();
+    const answered = answer();
+    if (answered instanceof Failed || enumerations() === before || this.c.hasReportedOrder(definition)) return answered;
+    const reversed = this.ifs.reversed(again);
+    const data = { function: question };
+    if (reversed instanceof Failed)
+      this.c.reportOrder(
+        definition,
+        withExtra({ kind: "OrderDependent.reversedException", definition, data }, { error: reversed.error }),
       );
-    const original = this.fs.comparable(name, { result: "fulfilled", output });
+    else if (compared(answered) !== compared(reversed))
+      this.c.reportOrder(definition, { kind: "OrderDependent.reversedResult", definition, data });
+    return answered;
+  }
+
+  /** Lean's audited for a question about a chart, whose access goes to the open transition part. */
+  private chartAudited<T>(
+    scope: Scope,
+    access: Access,
+    question: string,
+    call: (fs: Functions, access: Access) => T | Failed,
+    compared: (answer: T) => string,
+  ): T | Failed {
+    return this.audited(
+      ref(this.st, scope.machine),
+      question,
+      () => call(this.fs, this.c.collecting(scope, access)),
+      (fs) => call(fs, silent),
+      compared,
+    );
+  }
+
+  /** Lean's resolveCollect. */
+  private resolveAudit(name: string, input: Fields, records: RecordSource, now: Temporal.Instant, resolved: unknown) {
+    const definition = ref(this.st, name);
+    if (this.c.hasReportedOrder(definition)) return;
+    const checked = normalizeOutput(this.st, this.fs, name, resolved);
+    if (checked instanceof Failed || "error" in checked) return;
+    const original = this.fs.comparable(name, { result: "fulfilled", output: checked.encoded });
     if (original instanceof Failed) return;
-    const reordered = this.fs.comparable(name, { result: "fulfilled", output: checked.encoded });
-    if (reordered instanceof Failed) return exception(reordered);
-    if (canonicalJson(original) === canonicalJson(reordered)) return;
-    report({
-      kind: "OrderDependent.reversedRecords",
-      definition,
-      data: { original: plain(output), alternative: plain(checked.encoded) },
-    });
+    const data = { function: "resolve" };
+    const exception = (error: ProblemError | undefined) =>
+      this.c.reportOrder(
+        definition,
+        withExtra({ kind: "OrderDependent.reversedException", definition, data }, { error }),
+      );
+    const reversed = this.ifs.reversed((fs) => fs.resolve(name, input, records, now));
+    if (reversed instanceof Failed) return exception(reversed.error);
+    const normalized = normalizeOutput(this.st, this.fs, name, reversed);
+    if (normalized instanceof Failed || "error" in normalized) return exception(normalized.error);
+    const reordered = this.fs.comparable(name, { result: "fulfilled", output: normalized.encoded });
+    if (reordered instanceof Failed) return exception(reordered.error);
+    if (canonicalJson(original) !== canonicalJson(reordered))
+      this.c.reportOrder(definition, { kind: "OrderDependent.reversedResult", definition, data });
   }
 
   parse(schema: Schema, value: unknown) {
@@ -340,92 +436,127 @@ export class InstrumentedFunctions implements Functions {
     return this.fs.normalize(schema, value);
   }
   binding(command: string, binding: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
-    return this.fs.binding(command, binding, input, records, now);
+    const call = (fs: Functions) => fs.binding(command, binding, input, records, now);
+    return this.audited(ref(this.st, command), "binding", () => call(this.fs), call, String);
   }
   requirement(command: string, condition: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
-    return this.fs.requirement(command, condition, input, records, now);
+    const call = (fs: Functions) => fs.requirement(command, condition, input, records, now);
+    return this.audited(ref(this.st, command), "requirement", () => call(this.fs), call, String);
   }
   inputRequirement(target: string, condition: string, input: Fields) {
-    return this.fs.inputRequirement(target, condition, input);
+    const call = (fs: Functions) => fs.inputRequirement(target, condition, input);
+    return this.audited(refOf(this.st, target), "inputRequirement", () => call(this.fs), call, String);
   }
   decide(command: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
-    return this.fs.decide(command, input, records, now);
+    const call = (fs: Functions) => fs.decide(command, input, records, now);
+    const groupTexts = (groups: readonly (readonly Emit[])[]) =>
+      canonicalJson(
+        groups.map((g) => g.map((e) => text({ event: e.event, payload: e.payload })).toSorted(byCodePoint)),
+      );
+    return this.audited(ref(this.st, command), "decide", () => call(this.fs), call, groupTexts);
   }
   ensures(command: string, input: Fields, before: RecordSource, after: RecordSource, now: Temporal.Instant) {
-    return this.fs.ensures(command, input, before, after, now);
+    const call = (fs: Functions) => fs.ensures(command, input, before, after, now);
+    return this.audited(ref(this.st, command), "ensures", () => call(this.fs), call, String);
   }
   queryEnsures(query: string, input: Fields, output: Fields, records: RecordSource) {
-    return this.fs.queryEnsures(query, input, output, records);
+    const call = (fs: Functions) => fs.queryEnsures(query, input, output, records);
+    return this.audited(ref(this.st, query), "queryEnsures", () => call(this.fs), call, String);
   }
   resultEnsures(target: string, input: Fields, output: unknown, events: readonly Emit[]) {
-    return this.fs.resultEnsures(target, input, output, events);
+    const call = (fs: Functions) => fs.resultEnsures(target, input, output, events);
+    return this.audited(refOf(this.st, target), "resultEnsures", () => call(this.fs), call, String);
   }
   invariant(entity: string, record: Fields) {
-    return this.fs.invariant(entity, record);
+    const call = (fs: Functions) => fs.invariant(entity, record);
+    return this.audited(ref(this.st, entity), "invariant", () => call(this.fs), call, String);
   }
   serviceInvariant(records: RecordSource) {
     return this.fs.serviceInvariant(records);
   }
   chartInvariant(scope: Scope, records: RecordSource, access: Access) {
-    return this.fs.chartInvariant(scope, records, access);
+    return this.audited(
+      ref(this.st, scope.machine),
+      "chartInvariant",
+      () => this.fs.chartInvariant(scope, records, access),
+      (fs) => fs.chartInvariant(scope, records, silent),
+      String,
+    );
   }
-  /** Lean's resolveCollect. */
   resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown {
+    const before = enumerations();
     const resolved = this.fs.resolve(query, input, records, now);
-    if (resolved instanceof Failed) return resolved;
-    const checked = normalizeOutput(this.st, this.fs, query, resolved);
-    if (!(checked instanceof Failed) && !("error" in checked))
-      this.orderAudit(query, input, records, now, checked.encoded);
+    if (!(resolved instanceof Failed) && enumerations() !== before)
+      this.resolveAudit(query, input, records, now, resolved);
     return resolved;
   }
-  react(
-    automation: string,
-    payload: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-    keys: readonly (readonly [string, number])[],
-  ) {
-    return this.fs.react(automation, payload, records, now, keys);
+  react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: KeyCounts) {
+    const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
+    return this.audited(
+      ref(this.st, automation),
+      "react",
+      () => call(this.fs),
+      call,
+      ({ input, created }) => madeJson(keys, created, input ?? null),
+    );
   }
   comparable(query: string, answer: Answer): unknown {
     return this.fs.comparable(query, answer);
   }
   initialContext(machine: string, input: Fields) {
-    return this.fs.initialContext(machine, input);
+    const call = (fs: Functions) => fs.initialContext(machine, input);
+    return this.audited(ref(this.st, machine), "initialContext", () => call(this.fs), call, text);
   }
   guard(scope: Scope, records: RecordSource, transition: TransitionRef, extra: Fields, access: Access) {
-    return this.fs.guard(scope, records, transition, extra, this.c.collecting(scope, access));
+    return this.chartAudited(scope, access, "guard", (fs, a) => fs.guard(scope, records, transition, extra, a), String);
   }
-  assign(
-    scope: Scope,
-    records: RecordSource,
-    assignment: Assignment,
-    extra: Fields,
-    keys: readonly (readonly [string, number])[],
-    access: Access,
-  ) {
-    return this.fs.assign(scope, records, assignment, extra, keys, this.c.collecting(scope, access));
+  assign(scope: Scope, records: RecordSource, assignment: Assignment, extra: Fields, keys: KeyCounts, access: Access) {
+    return this.chartAudited(
+      scope,
+      access,
+      "assign",
+      (fs, a) => fs.assign(scope, records, assignment, extra, keys, a),
+      ({ context, copyContext, created }) => madeJson(keys, created, [context, copyContext ?? null]),
+    );
   }
   input(
     scope: Scope,
     records: RecordSource,
     activity: { readonly keyword: string; readonly key: string },
-    keys: readonly (readonly [string, number])[],
+    keys: KeyCounts,
     access: Access,
   ) {
-    return this.fs.input(scope, records, activity, keys, this.c.collecting(scope, access));
+    return this.chartAudited(
+      scope,
+      access,
+      "input",
+      (fs, a) => fs.input(scope, records, activity, keys, a),
+      ({ encoded, created }) => madeJson(keys, created, encoded),
+    );
   }
   holds(scope: Scope, records: RecordSource, access: Access) {
-    return this.fs.holds(scope, records, access);
+    return this.audited(
+      ref(this.st, scope.machine),
+      "holds",
+      () => this.fs.holds(scope, records, access),
+      (fs) => fs.holds(scope, records, silent),
+      () => "",
+    );
   }
   deadlines(machine: string, state: string) {
     return this.fs.deadlines(machine, state);
   }
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access) {
-    return this.fs.deadlineAt(scope, records, name, this.c.collecting(scope, access));
+    return this.chartAudited(scope, access, "deadlineAt", (fs, a) => fs.deadlineAt(scope, records, name, a), String);
   }
   offers(scope: Scope, records: RecordSource, control: string, access: Access) {
-    return this.fs.offers(scope, records, control, this.c.collecting(scope, access));
+    return this.chartAudited(
+      scope,
+      access,
+      "offers",
+      (fs, a) => fs.offers(scope, records, control, a),
+      (payloads) => textSet(payloads.map((p) => canonicalJson(p.encoded))),
+    );
   }
   showInput(
     scope: Scope,
@@ -433,10 +564,22 @@ export class InstrumentedFunctions implements Functions {
     activity: { readonly keyword: string; readonly key: string },
     access: Access,
   ) {
-    return this.fs.showInput(scope, records, activity, this.c.collecting(scope, access));
+    return this.chartAudited(
+      scope,
+      access,
+      "showInput",
+      (fs, a) => fs.showInput(scope, records, activity, a),
+      ({ encoded }) => canonicalJson(encoded),
+    );
   }
   items(scope: Scope, records: RecordSource, access: Access) {
-    return this.fs.items(scope, records, this.c.collecting(scope, access));
+    return this.chartAudited(
+      scope,
+      access,
+      "items",
+      (fs, a) => fs.items(scope, records, a),
+      (keys) => textSet(keys.map((k) => k.encodedKey)),
+    );
   }
   copyContext(machine: string, map: string): Fields {
     return this.fs.copyContext(machine, map);
@@ -448,6 +591,12 @@ export class InstrumentedFunctions implements Functions {
     return this.fs.copyKey(machine, map, payload);
   }
   close(scope: Scope, records: RecordSource, access: Access) {
-    return this.fs.close(scope, records, this.c.collecting(scope, access));
+    return this.chartAudited(
+      scope,
+      access,
+      "close",
+      (fs, a) => fs.close(scope, records, a),
+      ({ output, failed }) => text([output, failed ?? null]),
+    );
   }
 }

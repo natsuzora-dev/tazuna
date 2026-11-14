@@ -617,48 +617,28 @@ theorem observe_agrees {α : Type} (x : Id α) (f : α → StateT Collect Id Uni
 theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) fs := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
 
-theorem reversed_records_reported (name : String) (input : Value) (records : Records) (now : Time)
-    (output raw reversed original reordered : Value) (c : Collect) (hr : ifs.reversed name input records now = .ok raw)
-    (hn : fs.normalize (.output name) (st.sorted (.output name) raw) = .ok (some reversed))
-    (ho : fs.comparable name (.fulfilled output) = .ok original)
-    (hc : fs.comparable name (.fulfilled reversed) = .ok reordered) :
-    ((orderAudit st fs ifs name input records now output).run c).2 =
-      if name ∈ c.reportedOrder ∨ original = reordered then c
-      else c.reportOrder name (OrderDependent.reversedRecords (st.ref name) output reversed).toViolation := by
-  by_cases hm : name ∈ c.reportedOrder
+theorem reversed_result_reported {ε α : Type} (definition : Syntax.Ref) (function : String) (original answer : α)
+    (again : Id (Except ε α)) (same : α → α → Bool) (c : Collect) (ha : again = .ok answer) :
+    ((orderAudit definition function original again same).run c).2 =
+      if definition ∈ c.reportedOrder ∨ same original answer then c
+      else c.reportOrder definition (OrderDependent.reversedResult definition function).toViolation := by
+  by_cases hm : definition ∈ c.reportedOrder
   · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
   · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
-      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, normalizeOutput, hr, hn, ho, hc, beq_iff_eq,
-      modify, modifyGet, MonadStateOf.modifyGet, false_or]
+      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, ha, reportOrder, modify, modifyGet,
+      MonadStateOf.modifyGet, false_or]
     split <;> rfl
 
-theorem reversed_normalize_issue_reported (name : String) (input : Value) (records : Records) (now : Time)
-    (output raw : Value) (e : Issue) (c : Collect) (hr : ifs.reversed name input records now = .ok raw)
-    (hn : fs.normalize (.output name) (st.sorted (.output name) raw) = .error e) :
-    ((orderAudit st fs ifs name input records now output).run c).2 =
-      if name ∈ c.reportedOrder then c
-      else c.reportOrder name (OrderDependent.reversedException (st.ref name)).toViolation := by
-  by_cases hm : name ∈ c.reportedOrder
+theorem reversed_exception_reported {ε α : Type} (definition : Syntax.Ref) (function : String) (original : α)
+    (again : Id (Except ε α)) (same : α → α → Bool) (e : ε) (c : Collect) (ha : again = .error e) :
+    ((orderAudit definition function original again same).run c).2 =
+      if definition ∈ c.reportedOrder then c
+      else c.reportOrder definition (OrderDependent.reversedException definition function).toViolation := by
+  by_cases hm : definition ∈ c.reportedOrder
   · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
   · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
-      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, normalizeOutput, hr, hn, modify, modifyGet,
+      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, ha, reportOrder, modify, modifyGet,
       MonadStateOf.modifyGet]
-    rfl
-
-theorem reversed_comparable_issue_reported (name : String) (input : Value) (records : Records) (now : Time)
-    (output raw reversed original : Value) (e : Issue) (c : Collect)
-    (hr : ifs.reversed name input records now = .ok raw)
-    (hn : fs.normalize (.output name) (st.sorted (.output name) raw) = .ok (some reversed))
-    (ho : fs.comparable name (.fulfilled output) = .ok original)
-    (hc : fs.comparable name (.fulfilled reversed) = .error e) :
-    ((orderAudit st fs ifs name input records now output).run c).2 =
-      if name ∈ c.reportedOrder then c
-      else c.reportOrder name (OrderDependent.reversedException (st.ref name)).toViolation := by
-  by_cases hm : name ∈ c.reportedOrder
-  · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
-  · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
-      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, normalizeOutput, hr, hn, ho, hc, modify,
-      modifyGet, MonadStateOf.modifyGet]
     rfl
 
 theorem report_keeps (c : Collect) (v w : Violation) (h : v ∈ c.violations) : v ∈ (c.report w).violations := by

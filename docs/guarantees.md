@@ -101,6 +101,8 @@ tazuna detects breaks of each assumption only partly or not at all.
   For `check` and `verify`, it covers the example specs and traces.
 - **Spec functions.** Spec functions are deterministic: they read no clock, random source, or mutable global state, and receive the current time as an argument.
 - **Types.** Each value in spec code has the type that the code declares.
+  A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
+  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers.
 - **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
   An input line therefore carries the implementation's IDs and keys, not the snapshot's.
   `verify` reports a message that the recorder leaves out.

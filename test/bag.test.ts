@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Bag, BagValue, NotOnly } from "../src/data/bag.ts";
+import { type Bag, BagValue, enumerations, NotOnly, reversedBags, valuesOf } from "../src/data/bag.ts";
 
 const bagOf = <T>(items: readonly T[]): Bag<T> => new BagValue(() => items);
 const numbers = (bag: Bag<number>) => bag.sortedBy((n) => n).map((run) => [run.min((n) => n), run.size]);
@@ -85,4 +85,25 @@ test("A Bag reads its values on each call", () => {
   void bag.size;
   void bag.only();
   assert.equal(reads, 2);
+});
+
+test("reversedBags reverses the values of a Bag but not of one that a method returns", () => {
+  const bag = bagOf([1, 2, 3]);
+  const seen: number[] = [];
+  const odds = reversedBags(() => {
+    bag.map((n) => seen.push(n));
+    return bag.filter((n) => n !== 2);
+  });
+  assert.deepEqual(seen, [3, 2, 1]);
+  assert.deepEqual(valuesOf(odds), [3, 1]);
+  assert.deepEqual(valuesOf(bag), [1, 2, 3]);
+});
+
+test("enumerations counts the callbacks that a Bag of two or more values runs", () => {
+  const before = enumerations();
+  void bagOf([1]).map((n) => n);
+  void bagOf([1, 2]).size;
+  assert.equal(enumerations(), before);
+  void bagOf([1, 2]).some((n) => n > 1);
+  assert.equal(enumerations(), before + 1);
 });

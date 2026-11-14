@@ -1,3 +1,4 @@
+import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Runs } from "../../src/data/canonical.ts";
 import { bagged, sorted } from "../../src/data/collections.ts";
 import type { Answer } from "../../src/data/trace.generated.ts";
@@ -26,7 +27,7 @@ import {
 } from "../../src/semantics/functions.ts";
 import type { Emit } from "../../src/semantics/message.ts";
 import type { Schema } from "../../src/semantics/service/basic.ts";
-import { type RecordSource, reversedKeys } from "../../src/semantics/service/records.ts";
+import type { RecordSource } from "../../src/semantics/service/records.ts";
 import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/syntax/structure.ts";
 import type { Message } from "./lean.ts";
 
@@ -343,7 +344,17 @@ export class RunFunctions implements Answering {
     return { ...this.replied(this.scopeOf(message["scope"] as LeanScope), (scope) => ask(scope, told)), access };
   }
 
+  /**
+   * Answers Lean's question, with every Bag in reverse order when it has `reversed`, and tells whether a Bag of two or
+   * more values ran a callback while answering, as Lean's lastEnumerated asks.
+   */
   answer(message: Message): Message {
+    const before = enumerations();
+    const reply = message["reversed"] === true ? reversedBags(() => this.answered(message)) : this.answered(message);
+    return enumerations() === before ? reply : { ...reply, enumerated: true };
+  }
+
+  private answered(message: Message): Message {
     const value = message["value"];
     const failedReply = (failed: string | undefined): Message => (failed === undefined ? {} : { failed });
     switch (message["type"]) {
@@ -449,10 +460,9 @@ export class RunFunctions implements Answering {
         );
       case "resolve": {
         const name = String(message["query"]);
-        const records = message["reversed"] === true ? reversedKeys(this.records) : this.records;
         return this.replied(this.inputOf(name, message["input"]), (input) =>
           // Lean's Value has no undefined, so an output that author code left undefined is sent as null.
-          this.replied(this.functions.resolve(name, input, records, this.now(message)), (output) => ({
+          this.replied(this.functions.resolve(name, input, this.records, this.now(message)), (output) => ({
             output: json(output) ?? null,
           })),
         );

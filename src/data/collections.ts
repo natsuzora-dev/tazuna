@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BagValue, compareKeys, type Marked, type SortKey, valuesOf } from "./bag.ts";
+import { BagValue, compareKeys, type Marked, runsOf, type SortKey, valuesOf } from "./bag.ts";
 import { schemaNode } from "./schemaNode.ts";
 import { byCodePoint, canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
 
@@ -137,10 +137,9 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
       const items = value.map((v) => bagged(node.element, v));
       const collection = collectionOf(schema);
       if (collection === undefined) return items;
-      const values = new BagValue(() => items);
-      return collection.kind === "sortedBy"
-        ? values.sortedBy((v) => (v as Record<string, SortKey>)[collection.key] as SortKey)
-        : values;
+      if (collection.kind !== "sortedBy") return new BagValue(() => items);
+      const key = (v: unknown) => (v as Record<string, SortKey>)[collection.key] as SortKey;
+      return runsOf(items, key).map((run) => new BagValue(() => run));
     }
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;

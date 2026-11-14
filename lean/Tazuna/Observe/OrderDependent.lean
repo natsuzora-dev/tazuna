@@ -7,15 +7,16 @@ open Tazuna.Data Tazuna.Semantics
 
 /--
 A result, found while the run evaluates, that depends on an order the spec does not fix. No OrderDependent violation
-halts the run. `definition` is the query that orderAudit runs again with records in reverse key order, or the chart of
-the conflicting transitions. In reversedException, an Issue stopped that second run of the query, the check of its
-output or its comparable value.
+halts the run. In reversedException and reversedResult, orderAudit asked the question `function` of Functions again,
+with every Bag visiting its values in reverse order, and `definition` is the definition whose code answers it: the
+command, query, automation, entity, or chart. In bothAssign and assignRead, it is the chart of the conflicting
+transitions.
 -/
 inductive OrderDependent where
-  | reversedOutputSchema (definition : Syntax.Ref)
-  | reversedException (definition : Syntax.Ref)
-  /-- `alternative` is the output of the query with records in reverse key order. -/
-  | reversedRecords (definition : Syntax.Ref) (original alternative : Value)
+  /-- An Issue stopped the second answer, or the check of a query's output or its comparable value. -/
+  | reversedException (definition : Syntax.Ref) (function : String)
+  /-- The second answer differs from the first. -/
+  | reversedResult (definition : Syntax.Ref) (function : String)
   | bothAssign (definition : Syntax.Ref) (state : String) (firstTransition secondTransition : Syntax.TransitionRef)
       (field : String)
   | assignRead (definition : Syntax.Ref) (state : String) (writer reader : Syntax.TransitionRef) (field : String)

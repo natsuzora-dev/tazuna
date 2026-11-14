@@ -4,8 +4,8 @@ import Tazuna.Observe.Trace
 
 /-!
 This module defines the instrumented run. It wraps Functions without changing the semantic run, collects the values
-that each step and transition reads and writes, and checks whether query output depends on record order. TS records
-reads as functions read records.
+that each step and transition reads and writes, and checks whether the answers of spec functions depend on the order in
+which a Bag visits its values. TS records reads as functions read records.
 -/
 
 namespace Tazuna.Observe
@@ -139,8 +139,8 @@ def overlaps (a b : Footprint) : Bool :=
     a.keyWrites.any b.reads.contains || b.keyWrites.any a.reads.contains
 
 structure Collect where
-  /-- The queries already reported for order-dependent output. -/
-  reportedOrder : List String := []
+  /-- The definitions already reported by orderAudit. -/
+  reportedOrder : List Syntax.Ref := []
   transition : Option Nat := none
   transitions : List (Nat × TransitionAccess) := []
   /-- For each step that began and has not ended, innermost first, the instance or copy that it starts. -/
@@ -153,15 +153,18 @@ deriving Repr, Inhabited
 
 /--
 The functions that the instrumented run asks besides Functions. `lastReads` gives the record parts read during the
-previous call, and `reversed` gives a query's output with records in reverse key order.
+previous call, and `lastEnumerated` whether a Bag of two or more values ran a callback during it, the only way that
+spec code sees the order of a Bag. `reversed` answers as Functions does with every Bag of records or of a decoded value
+visiting its values in reverse order, and without telling what it reads.
 -/
 structure InstrumentFunctions (m : Type → Type) where
   lastReads : m (List RecordPart)
   lastAccess : m Access
-  reversed : String → Value → Records → Time → m (Except Issue Value)
+  lastEnumerated : m Bool
+  reversed : Functions m
 
-def Collect.reportOrder (c : Collect) (name : String) (v : Violation) : Collect :=
-  { c with reportedOrder := c.reportedOrder ++ [name], violations := c.violations ++ [v] }
+def Collect.reportOrder (c : Collect) (definition : Syntax.Ref) (v : Violation) : Collect :=
+  { c with reportedOrder := c.reportedOrder ++ [definition], violations := c.violations ++ [v] }
 
 def Collect.accessOf (c : Collect) (k : Nat) : TransitionAccess := (c.transitions.lookup k).getD {}
 
@@ -271,27 +274,32 @@ def observe {α : Type} (x : m α) (f : α → StateT Collect m Unit) : StateT C
   f r
   pure r
 
+def reportOrder (definition : Syntax.Ref) (found : OrderDependent) : StateT Collect m Unit :=
+  modify (·.reportOrder definition found.toViolation)
+
 /--
-Runs query `name` again with records in reverse key order. It reports OrderDependent.reversedRecords when the
-comparable output changes, OrderDependent.reversedOutputSchema when the output fails the schema, or
-OrderDependent.reversedException when an Issue stops that run, the check of its output or its comparable value. It
-reports at most once per query. An Issue in the comparable value of `output` is no order dependence and reports
-nothing. The one reversed order approximates every order of the keys: an output that depends on the order only as the
-reversal keeps it, such as on the middle of three keys, is not reported.
+Takes the answer of `again`, the question `function` asked again of `ifs.reversed`, and reports
+OrderDependent.reversedException when an Issue stops it, or OrderDependent.reversedResult when `same` tells it apart
+from `original`. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
+answer that depends on the order only as the reversal keeps it, such as on the middle of three values, is not reported.
 -/
-def orderAudit (name : String) (input : Value) (records : Records) (now : Time) (output : Value) :
-    StateT Collect m Unit := do
-  if name ∈ (← get).reportedOrder then return
-  let report (found : OrderDependent) : StateT Collect m Unit := modify (·.reportOrder name found.toViolation)
-  let .ok reversed ← ifs.reversed name input records now | report (.reversedException (st.ref name))
-  match ← normalizeOutput (m := m) st fs name reversed with
-  | .error _ => report (.reversedException (st.ref name))
-  | .ok none => report (.reversedOutputSchema (st.ref name))
-  | .ok (some reversed) =>
-    let .ok original ← fs.comparable name (.fulfilled output) | return
-    let .ok reordered ← fs.comparable name (.fulfilled reversed) | report (.reversedException (st.ref name))
-    if original == reordered then return
-    report (.reversedRecords (st.ref name) output reversed)
+def orderAudit {ε α : Type} (definition : Syntax.Ref) (function : String) (original : α) (again : m (Except ε α))
+    (same : α → α → Bool) : StateT Collect m Unit := do
+  if definition ∈ (← get).reportedOrder then return
+  match ← again with
+  | .error _ => reportOrder definition (.reversedException definition function)
+  | .ok answer => unless same original answer do reportOrder definition (.reversedResult definition function)
+
+/--
+Runs `collect` after the call of `call` that answered `r`, and audits the answer with orderAudit when that call
+enumerated a Bag. An Issue needs no audit: the run halts with its Fault, which names the definition whatever the order,
+and the message of a thrown error, which may name the value visited first, is TS's alone and is never compared.
+-/
+def auditCollect {ε α : Type} (collect : StateT Collect m Unit) (definition : Syntax.Ref) (function : String)
+    (call : Functions m → m (Except ε α)) (same : α → α → Bool) (r : Except ε α) : StateT Collect m Unit := do
+  collect
+  if let .ok answer := r then
+    if ← ifs.lastEnumerated then orderAudit definition function answer (call ifs.reversed) same
 
 def stepCollect (scope : Option Scope) : StateT Collect m Unit := do
   let parts ← ifs.lastReads
@@ -300,47 +308,122 @@ def stepCollect (scope : Option Scope) : StateT Collect m Unit := do
     | none => pure {}
   modify (·.callAccess scope parts a)
 
+/--
+Audits a query's output as auditCollect does, comparing the comparable values of the normalized outputs. An output that
+fails its schema, or whose comparable value an Issue stops, needs no audit, because the run reports it.
+-/
 def resolveCollect (name : String) (input : Value) (records : Records) (now : Time) (r : Except Issue Value) :
     StateT Collect m Unit := do
   stepCollect ifs none
-  if let .ok output := r then
-    if let .ok (some output) ← normalizeOutput (m := m) st fs name output then
-      orderAudit st fs ifs name input records now output
+  let .ok output := r | return
+  unless ← ifs.lastEnumerated do return
+  if st.ref name ∈ (← get).reportedOrder then return
+  let .ok (some output) ← normalizeOutput (m := m) st fs name output | return
+  let .ok original ← fs.comparable name (.fulfilled output) | return
+  let exception := reportOrder (st.ref name) (.reversedException (st.ref name) "resolve")
+  let .ok raw ← ifs.reversed.resolve name input records now | exception
+  let .ok (some reversed) ← normalizeOutput (m := m) st fs name raw | exception
+  let .ok reordered ← fs.comparable name (.fulfilled reversed) | exception
+  unless original == reordered do reportOrder (st.ref name) (.reversedResult (st.ref name) "resolve")
 
 def decideCollect (name : String) (records : Records) (decided : Except Issue (List (List Emit))) :
     StateT Collect m Unit := do
-  stepCollect ifs none
   let .ok decided := decided | pure ()
   if decided.flatten.any (!st.lists name ·) then return
   match ← normalizeEmits (m := m) st fs name decided.flatten with
   | .ok normalized => modify (·.stepAccess (writesOf st records (orderGroups decided normalized).flatten).values)
   | .error _ => pure ()
 
-/-- Functions that return the same values as `fs` and collect what each call reads and writes. -/
+/-- The keys that the createKey calls of one call gave, with their entity, from the key counts `keys` before it. -/
+def createdKeys (keys : List (String × Nat)) (created : List String) : List (String × String) :=
+  created.zipIdx.map fun (e, i) => (s!"{e}-{(keys.lookup e).getD 0 + ((created.take i).filter (· == e)).length + 1}", e)
+
+/--
+The text that compares a value that one call made, as TS madeJson gives it. When the call created keys, each created
+key becomes its entity and arrays lose their order, so that values equal up to a renaming of these keys compare equal.
+-/
+def madeText (keys : List (String × Nat)) (created : List String) (v : Value) : String :=
+  if created.isEmpty then v.canonical else
+  let given := createdKeys keys created
+  (v.mapStrings fun s => match given.lookup s with
+    | some e => s!"{e}-*"
+    | none => s).unorderedText
+
+/-- The texts in code-point order, which compare two lists as multisets. -/
+def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
+
+/-- Whether two answers that made a value and created keys are equal up to a renaming of the created keys. -/
+def sameMade (keys : List (String × Nat)) (a b : Value × List String) : Bool :=
+  sortedTexts a.2 == sortedTexts b.2 && madeText keys a.2 a.1 == madeText keys b.2 b.1
+
+/-- The texts without order or repetition, which compare two lists as sets. -/
+def textSet (texts : List String) : List String := (sortedTexts texts).eraseDups
+
+/-- The texts of the events of each group in code-point order, which compare two answers of decide. -/
+def groupTexts (groups : List (List Emit)) : List (List String) := groups.map fun g => sortedTexts (g.map (·.text))
+
+/-- Whether two values are equal up to field order. -/
+def sameValue (a b : Value) : Bool := a.canonical == b.canonical
+
+/--
+Functions that return the same values as `fs`, collect what each call reads and writes, and audit the answers of the
+spec functions that read records or values. The service invariants are not audited, because they have no definition
+for a report to name.
+-/
 def instrument : Functions (StateT Collect m) :=
+  let audit {ε α : Type} (collect : StateT Collect m Unit) (definition : Syntax.Ref) (function : String)
+      (call : Functions m → m (Except ε α)) (same : α → α → Bool) :=
+    observe (call fs) (auditCollect ifs collect definition function call same)
+  let collect (scope : Option Scope) := stepCollect ifs scope
   { liftFunctions fs with
     binding := fun name b input records now =>
-      observe (fs.binding name b input records now) fun _ => stepCollect ifs none
+      audit (collect none) (st.ref name) "binding" (·.binding name b input records now) (· == ·)
     requirement := fun name c input records now =>
-      observe (fs.requirement name c input records now) fun _ => stepCollect ifs none
-    decide := fun name input records now => observe (fs.decide name input records now) (decideCollect st fs ifs name records)
+      audit (collect none) (st.ref name) "requirement" (·.requirement name c input records now) (· == ·)
+    inputRequirement := fun target c input =>
+      audit (pure ()) (st.refOf target) "inputRequirement" (·.inputRequirement target c input) (· == ·)
+    decide := fun name input records now =>
+      observe (fs.decide name input records now) fun r => do
+        auditCollect ifs (collect none) (st.ref name) "decide" (·.decide name input records now)
+          (fun a b => groupTexts a == groupTexts b) r
+        decideCollect st fs name records r
+    ensures := fun name input before after now =>
+      audit (pure ()) (st.ref name) "ensures" (·.ensures name input before after now) (· == ·)
+    queryEnsures := fun name input output records =>
+      audit (pure ()) (st.ref name) "queryEnsures" (·.queryEnsures name input output records) (· == ·)
+    resultEnsures := fun target input output events =>
+      audit (pure ()) (st.refOf target) "resultEnsures" (·.resultEnsures target input output events) (· == ·)
+    invariant := fun entity record => audit (pure ()) (st.ref entity) "invariant" (·.invariant entity record) (· == ·)
+    chartInvariant := fun scope records =>
+      audit (pure ()) (st.ref scope.machine) "chartInvariant" (·.chartInvariant scope records) (· == ·)
     resolve := fun name input records now =>
       observe (fs.resolve name input records now) (resolveCollect st fs ifs name input records now)
     react := fun name payload records now keys =>
-      observe (fs.react name payload records now keys) fun _ => stepCollect ifs none
+      audit (collect none) (st.ref name) "react" (·.react name payload records now keys)
+        fun a b => sameMade keys (a.1.getD .null, a.2) (b.1.getD .null, b.2)
+    initialContext := fun machine input =>
+      audit (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input) sameValue
     guard := fun scope records t extra =>
-      observe (fs.guard scope records t extra) fun _ => stepCollect ifs (some scope)
+      audit (collect (some scope)) (st.ref scope.machine) "guard" (·.guard scope records t extra) (· == ·)
     assign := fun scope records a extra keys =>
-      observe (fs.assign scope records a extra keys) fun _ => stepCollect ifs (some scope)
+      audit (collect (some scope)) (st.ref scope.machine) "assign" (·.assign scope records a extra keys)
+        fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)
     input := fun scope records a keys =>
-      observe (fs.input scope records a keys) fun _ => stepCollect ifs (some scope)
-    items := fun scope records => observe (fs.items scope records) fun _ => stepCollect ifs (some scope)
+      audit (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
+    holds := fun scope records => audit (pure ()) (st.ref scope.machine) "holds" (·.holds scope records) fun _ _ => true
+    items := fun scope records =>
+      audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
+        fun a b => textSet (a.map (·.2)) == textSet (b.map (·.2))
     offers := fun scope records control =>
-      observe (fs.offers scope records control) fun _ => stepCollect ifs (some scope)
-    showInput := fun scope records a => observe (fs.showInput scope records a) fun _ => stepCollect ifs (some scope)
+      audit (collect (some scope)) (st.ref scope.machine) "offers" (·.offers scope records control)
+        fun a b => textSet (a.map (·.canonical)) == textSet (b.map (·.canonical))
+    showInput := fun scope records a =>
+      audit (collect (some scope)) (st.ref scope.machine) "showInput" (·.showInput scope records a) sameValue
     deadlineAt := fun scope records name =>
-      observe (fs.deadlineAt scope records name) fun _ => stepCollect ifs (some scope)
-    close := fun scope records => observe (fs.close scope records) fun _ => stepCollect ifs (some scope) }
+      audit (collect (some scope)) (st.ref scope.machine) "deadlineAt" (·.deadlineAt scope records name) (· == ·)
+    close := fun scope records =>
+      audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
+        fun a b => sameValue a.1 b.1 && a.2 == b.2 }
 
 def instrumentedRun (inputs : List Step) : StateT Collect m State :=
   runFrom (step st (instrument st fs ifs)) {} inputs

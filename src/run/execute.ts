@@ -1,3 +1,4 @@
+import { reversedBags } from "../data/bag.ts";
 import { alike } from "../data/canonical.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
@@ -22,7 +23,7 @@ import { snapshotLines } from "../observe/trace.ts";
 import type { Activity } from "../semantics/chart/basic.ts";
 import type { Processing } from "../semantics/chart/queue.ts";
 import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../semantics/note.ts";
-import { type Records, reversedKeys } from "../semantics/service/records.ts";
+import type { Records } from "../semantics/service/records.ts";
 import {
   type Evaluations,
   Halt,
@@ -424,13 +425,14 @@ class Listener implements Note, Evaluations {
 }
 
 /**
- * Returns Lean's `instrument st fs ifs` over the spec's functions. The query with records in reverse key order reads
- * quietly, so neither the open step nor the evaluation cache hears its reads.
+ * Returns Lean's `instrument st fs ifs` over the spec's functions. A question asked again with Bags in reverse order
+ * reads quietly, so neither the open step nor the evaluation cache hears its reads, and it asks functions without the
+ * listener, so that it reaches no coverage.
  */
 function instrumented(spec: Spec, service: string, listener: Listener): InstrumentedFunctions {
   const functions = new SpecFunctions(spec, service, listener);
-  const reversed: InstrumentFunctions["reversed"] = (query, input, records, now) =>
-    listener.quietly(() => functions.resolve(query, input, reversedKeys(records), now));
+  const unheard = new SpecFunctions(spec, service);
+  const reversed: InstrumentFunctions["reversed"] = (call) => listener.quietly(() => reversedBags(() => call(unheard)));
   return new InstrumentedFunctions(functions.st, functions, { reversed }, listener.collected);
 }
 

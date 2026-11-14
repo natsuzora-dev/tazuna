@@ -71,10 +71,3 @@ export class LazyRecordSource implements RecordSource {
     return this.taken().field(entity, key, field);
   }
 }
-
-/** Returns a source that lists keys in reverse order, as orderAudit reads them. */
-export const reversedKeys = (source: RecordSource): RecordSource => ({
-  keys: (entity) => source.keys(entity).toReversed(),
-  exists: (entity, key) => source.exists(entity, key),
-  field: (entity, key, field) => source.field(entity, key, field),
-});

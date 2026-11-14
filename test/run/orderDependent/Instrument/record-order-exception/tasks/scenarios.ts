@@ -2,7 +2,7 @@ import { at, call, scenario, send } from "@natsuzora-dev/tazuna";
 import { addTask, subtaskCounts } from "./tasks.ts";
 
 export const addTaskAndSubtask = scenario(
-  "Add a task and its subtask and count the subtasks; the count reads each parent before its subtasks and throws when the records come in reverse key order, so test reports reversedException",
+  "Add a task and its subtask and count the subtasks; the count reads each parent before its subtasks and throws when the Bag visits the records in reverse order, so test reports reversedException",
   [
     at("2026-10-25T09:00:00+09:00"),
     send(addTask, { taskId: "task-1", parentId: null }),
