@@ -1,7 +1,9 @@
 /** A value that orders others: a number or a point in time, not a string, whose order differs across languages. */
 export type SortKey = number | Temporal.Instant | Temporal.PlainDate;
 
+/** Compares two keys; NaN throws, as it is neither less than, equal to nor greater than another number. */
 export function compareKeys(a: unknown, b: unknown): number {
+  if (Number.isNaN(a) || Number.isNaN(b)) throw new RangeError("NaN is not a sort key");
   if (a instanceof Temporal.Instant && b instanceof Temporal.Instant) return Temporal.Instant.compare(a, b);
   if (a instanceof Temporal.PlainDate && b instanceof Temporal.PlainDate) return Temporal.PlainDate.compare(a, b);
   return typeof a === "number" && typeof b === "number" ? a - b : 0;

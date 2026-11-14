@@ -792,13 +792,14 @@ export class SpecFunctions implements Functions {
     const given = attempt(() => node?.items?.(this.args(scope, records, access) as never) ?? []);
     if (given instanceof Failed) return given;
     const chart = this.chartOf(scope.machine).ref;
-    const keys = matching({ kind: "mapKey", chart, map }, bag(objectOf(node?.key ?? {})), given);
+    const element = objectOf(node?.key ?? {});
+    const keys = matching({ kind: "mapKey", chart, map }, bag(element), given);
     if (keys instanceof Failed) return keys;
-    const encoded = keys.encoded as unknown[];
-    return (valuesOf(keys.value) ?? []).map((key, i) => ({
-      key,
-      encoded: encoded[i],
-      encodedKey: canonicalJson(encoded[i]),
+    // Each key is decoded from its encoding, because the Bag of keys visits them in reverse order inside reversedBags.
+    return (keys.encoded as unknown[]).map((encoded) => ({
+      key: bagged(element, z.decode(element, encoded as never)),
+      encoded,
+      encodedKey: canonicalJson(encoded),
     }));
   }
 

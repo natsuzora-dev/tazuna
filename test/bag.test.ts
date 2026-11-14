@@ -37,7 +37,7 @@ test("some and every call the predicate on every value", () => {
   assert.deepEqual(seen, [1, 2, 3, 1, 2, 3]);
 });
 
-test("min and max return the key, sum takes only safe integers", () => {
+test("min and max return the key and throw on NaN, sum takes only safe integers", () => {
   const days = bagOf([Temporal.PlainDate.from("2026-03-01"), Temporal.PlainDate.from("2026-01-31")]);
   assert.equal(days.min((d) => d)?.toString(), "2026-01-31");
   assert.equal(
@@ -52,6 +52,8 @@ test("min and max return the key, sum takes only safe integers", () => {
     bagOf([1, 2]).sum((n) => n),
     3,
   );
+  assert.throws(() => bagOf([1, Number.NaN]).min((n) => n), RangeError);
+  assert.throws(() => bagOf([Number.NaN, 1]).sortedBy((n) => n), RangeError);
   assert.throws(() => bagOf([0.5]).sum((n) => n), RangeError);
   assert.throws(() => bagOf([Number.MAX_SAFE_INTEGER, 1]).sum((n) => n), RangeError);
   assert.equal(
