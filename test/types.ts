@@ -1080,6 +1080,9 @@ contract({ limits: constants(z.object({ limit: z.int() }), { limit: 10 }) });
 // @ts-expect-error a contract holds no object not made by constants()
 contract({ limits: { limit: 10 } });
 
+// A bag constant stays an array, since an implementation reads constants too.
+void constants(z.object({ tags: bag(z.string()) }), { tags: ["a"] }).tags.length;
+
 // A sortedBy key is a number, date or datetime field.
 sortedBy(z.strictObject({ n: z.int(), at: datetime }), "at");
 
