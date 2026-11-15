@@ -43,7 +43,8 @@ tazuna guarantees nothing about inputs that no scenario contains.
 A scenario's *peer* is another service of the spec, not an external one, that the scenario sends a request to, receives an event from, or names in `given` or `elsewhere`.
 `test` runs the peer's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the peer at their send times, with the scenario's `elsewhere` inputs at their places.
 A request that a mock answers as `unavailable` never reaches the peer.
-The peer receives the keys that the scenario's service creates renamed, and values compare in the form that `verify` compares, up to that renaming and a one-to-one renaming of the keys that the peer creates.
+A mock may name each key that the peer creates with any string, one to one.
+The peer receives the keys that the scenario's service creates renamed, and each string by which an earlier mock names one of its keys as that key, and values compare in the form that `verify` compares, up to these renamings.
 `test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
 
 When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
@@ -53,6 +54,7 @@ When `test` reports none of these violations, the scenario's run and the peer's 
 - each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken.
 
 Lean proves this as `network_realizes` for spec runs, given two facts that it does not prove: the peer's run writes one input line for each derived input, in order, and the peer's run names no definition of the scenario's service.
+For a request, it states only that the peer receives the strings renamed by the names that mocks give up to some point of the run, not necessarily up to the request.
 So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
 Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
 

@@ -91,10 +91,11 @@ theorem runOf_isSome {canon : String → Value → Value} {inputs : List Step} {
   rw [h.1] at hk
   exact ⟨_, List.getElem?_eq_getElem hk⟩
 
-theorem mem_peerInputs_line {service peer : String} {state : List Step} {elsewhere : List (Nat × Step)}
-    {aLines : List TraceLine} {st : Step} {i : Nat}
-    (h : (st, Origin.line i) ∈ peerInputs service peer state elsewhere aLines) :
-    ∃ l b, aLines[i]? = some l ∧ peerBody? peer aLines (peerKeys service aLines) l = some b ∧
+theorem mem_peerInputs_line {normal : String → Value → CValue} {service peer : String} {state : List Step}
+    {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {st : Step} {i : Nat}
+    (h : (st, Origin.line i) ∈ peerInputs normal service peer state elsewhere aLines bLines) :
+    ∃ l b, aLines[i]? = some l ∧
+      peerBody? peer aLines (peerForward normal service peer aLines bLines i) l = some b ∧
       st = ⟨l.time, b, none, none⟩ := by
   simp only [peerInputs, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
@@ -110,10 +111,10 @@ theorem mem_peerInputs_line {service peer : String} {state : List Step} {elsewhe
         obtain ⟨rfl, rfl⟩ := he
         exact ⟨l, b, hl, hb, rfl⟩
 
-theorem peerInputs_line_mem {service peer : String} {state : List Step} {elsewhere : List (Nat × Step)}
-    {aLines : List TraceLine} {i : Nat} {l : TraceLine} {b : Step.Body} (hi : aLines[i]? = some l)
-    (hb : peerBody? peer aLines (peerKeys service aLines) l = some b) :
-    (⟨l.time, b, none, none⟩, Origin.line i) ∈ peerInputs service peer state elsewhere aLines := by
+theorem peerInputs_line_mem {normal : String → Value → CValue} {service peer : String} {state : List Step}
+    {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {i : Nat} {l : TraceLine} {b : Step.Body}
+    (hi : aLines[i]? = some l) (hb : peerBody? peer aLines (peerForward normal service peer aLines bLines i) l = some b) :
+    (⟨l.time, b, none, none⟩, Origin.line i) ∈ peerInputs normal service peer state elsewhere aLines bLines := by
   simp only [peerInputs, List.mem_append, List.mem_map, List.mem_flatMap]
   refine .inr ⟨(⟨l.time, b, none, none⟩, Origin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
   · have := (List.getElem?_eq_some_iff.mp hi).1
@@ -196,26 +197,6 @@ theorem peerBody_none {p : String} {lines : List TraceLine} {keys : Bindings} {l
        simp only [Option.map_eq_none_iff, ite_eq_left_iff, Bool.not_eq_true]
        exact fun _ => h l hl _ (by simp [hb, TraceLine.Body.name?]))
 
-theorem sameAnswer_carries {norm seen : Value → Value} {agree : Value → Value → Prop} {a b : Answer}
-    (hagree : ∀ x y, (norm y).canonical = (norm (seen x)).canonical → agree x y)
-    (h : sameAnswer norm seen a b = true) : AnswerCarries agree b a := by
-  cases a with
-  | accepted o =>
-    cases b with
-    | accepted p =>
-      cases o <;> cases p <;> simp_all [sameAnswer, AnswerCarries]
-    | _ => simp [sameAnswer] at h
-  | fulfilled o =>
-    cases b with
-    | fulfilled p => exact hagree _ _ (by simpa [sameAnswer] using h)
-    | _ => simp [sameAnswer] at h
-  | rejected r =>
-    cases b with
-    | rejected q =>
-      simp only [sameAnswer, beq_iff_eq] at h
-      exact h.symm
-    | _ => simp [sameAnswer] at h
-
 theorem unreached_of {lines : List TraceLine} {i : Nat} {l : TraceLine} {id : Option String} {to : String}
     {rejection : Rejection} (hl : lines[i]? = some l) (hb : l.body = .answer .in id to (.rejected rejection))
     (hk : rejection.kind = .unavailable) : unreached lines to = true := by
@@ -227,7 +208,7 @@ open Classical in
 The line of the peer's run that the scenario's line `i` received: the peer's answer at the same place for a mocked
 answer to a request to the peer that reached it, and a line that emits the event for a received event of the peer.
 -/
-noncomputable def sourceA (normal : String → Value → Value) (service peer : String) (aLines bLines : List TraceLine)
+noncomputable def sourceA (normal : String → Value → CValue) (service peer : String) (aLines bLines : List TraceLine)
     (i : Nat) : Option Place :=
   match aLines[i]? with
   | some l =>
@@ -241,7 +222,7 @@ noncomputable def sourceA (normal : String → Value → Value) (service peer : 
       match peerName? peer name with
       | some n =>
         if h : ∃ j b, bLines[j]? = some b ∧
-            emitted (normal n) (peerSeen normal service peer aLines bLines) n payload l.time b = true then
+            PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload l.time b then
           some (1, h.choose)
         else none
       | none => none
@@ -257,14 +238,14 @@ open Classical in
 noncomputable def sourceB (inputs : List (Step × Origin)) (bLines : List TraceLine) (j : Nat) : Option Place :=
   if h : ∃ i, deliveredAt inputs bLines i = some j then some (0, h.choose) else none
 
-theorem sourceA_cases {normal : String → Value → Value} {service peer : String} {aLines bLines : List TraceLine}
+theorem sourceA_cases {normal : String → Value → CValue} {service peer : String} {aLines bLines : List TraceLine}
     {i s j : Nat} (h : sourceA normal service peer aLines bLines i = some (s, j)) :
     s = 1 ∧ ∃ al, aLines[i]? = some al ∧
       ((∃ id to a, al.body = .answer .in id to a ∧ (peerTarget? peer aLines to).isSome ∧
           unreached aLines to = false ∧ AnswerAt bLines .out to (answersTo (aLines.take i) .in to).length j) ∨
         (∃ id name payload resultOf n bl, al.body = .event .in id name payload resultOf ∧
           peerName? peer name = some n ∧ bLines[j]? = some bl ∧
-          emitted (normal n) (peerSeen normal service peer aLines bLines) n payload al.time bl = true)) := by
+          PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload al.time bl)) := by
   unfold sourceA at h
   split at h
   · next al hi =>
@@ -344,6 +325,20 @@ theorem sourceB_of {inputs : List (Step × Origin)} {bLines : List TraceLine} {i
   rw [dite_eq_left hex, deliveredAt_inj hex.choose_spec h]
 
 /--
+How the scenario's service `service`, member 0, and its peer `peer`, member 1, see each other's values. The peer
+receives a value of a request in the form `canon` that its run writes, with each createKey value of the run as its peer
+key and each string that a prefix of the final bindings binds as the peer's createKey value bound to it (peerForward);
+the scenario's service receives a value of an answer or event that stands for the peer's under the final bindings
+(PeerSees).
+-/
+def peerAgree (normal : String → Value → CValue) (canon : String → Value → Value) (service peer : String)
+    (aLines bLines : List TraceLine) : Agree
+  | 0, 1, n, x, y => ∃ bs, bs <+: peerFinal normal service peer aLines bLines ∧
+    y = canon n ((peerKeys service aLines ++ bs.map fun (p : String × String) => (p.2, p.1)).rename x)
+  | 1, 0, n, x, y => PeerSees normal service aLines bLines (peerFinal normal service peer aLines bLines) n x y
+  | _, _, _, _, _ => False
+
+/--
 Stage 2 of the check of a scenario's mocks of a peer. Let `aLines` be the scenario's run of the service `service`, and
 `bLines` a run of the peer `peer`, whose `in` lines are those that a run writes for the derived inputs (peerInputs),
 and which names no definition of `service`. When the check finds no violation, an execution of the two runs on a well
@@ -351,15 +346,15 @@ formed network exists: each request of the scenario's run to the peer that reach
 time, and each mocked answer and received event of the peer comes from the peer's run, sent at or before the time the
 scenario receives it, with the values that the two runs see (peerAgree).
 -/
-theorem network_realizes {normal canon : String → Value → Value} {service peer : String} {state : List Step}
-    {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {halted : Option (Origin × String)}
-    (hrun : RunOf canon ((peerInputs service peer state elsewhere aLines).map (·.1)) bLines)
+theorem network_realizes {normal : String → Value → CValue} {canon : String → Value → Value} {service peer : String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine}
+    {halted : Option (Origin × String)}
+    (hrun : RunOf canon ((peerInputs normal service peer state elsewhere aLines bLines).map (·.1)) bLines)
     (hstar : ∀ l ∈ bLines, ∀ n, l.body.name? = some n → peerName? service n = none)
     (h : peerFindings normal service peer aLines bLines halted = []) :
     ∃ source, WellFormed (peerAgree normal canon service peer aLines bLines)
       ⟨[(service, aLines), (peer, bLines)], source⟩ := by
-  let inputs := peerInputs service peer state elsewhere aLines
-  let keys := peerKeys service aLines
+  let inputs := peerInputs normal service peer state elsewhere aLines bLines
   let source : Place → Option Place
     | (0, i) => sourceA normal service peer aLines bLines i
     | (1, j) => sourceB inputs bLines j
@@ -384,7 +379,7 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
     obtain ⟨al, b, hal, hb, rfl⟩ := mem_peerInputs_line (List.mem_of_getElem? hk)
     have hw := hrun.2 k _ _ (by rw [List.getElem?_map, show inputs[k]? = _ from hk]; rfl) hl
     exact ⟨al, l, hal, (mem_inLines (List.mem_of_getElem? hl)).1,
-      peerBody_carries hname1 (fun _ _ => rfl) hb hw⟩
+      peerBody_carries hname1 (fun _ _ => ⟨_, peerBindings_prefix (Nat.le_of_lt (List.getElem?_eq_some_iff.mp hal).1), rfl⟩) hb hw⟩
   have fromA : ∀ i s j, sourceA normal service peer aLines bLines i = some (s, j) → ∃ al bl,
       aLines[i]? = some al ∧ bLines[j]? = some bl ∧ bl.body.dir = .out ∧ al.body.dir = .in ∧
         bl.time.time ≤ al.time.time ∧ Carries (peerAgree normal canon service peer aLines bLines) e 1 0 bl al := by
@@ -400,16 +395,11 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
       obtain ⟨rfl, rfl⟩ := hat
       refine ⟨al, bl, hal, hbl, by simp [hbb, TraceLine.Body.dir], by simp [hb, TraceLine.Body.dir], hle, ?_⟩
       simp only [Carries, hbb, hb, hname1, hlines0]
-      exact ⟨trivial, target, htarget, sameAnswer_carries (fun _ _ hxy => hxy) hsame⟩
-    · simp only [emitted] at he
-      split at he
-      · next id' m p ro hbb =>
-        simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at he
-        obtain ⟨⟨rfl, hp⟩, hle⟩ := he
-        refine ⟨al, bl, hal, hbl, by simp [hbb, TraceLine.Body.dir], by simp [hb, TraceLine.Body.dir], hle, ?_⟩
-        simp only [Carries, hbb, hb, hname1]
-        exact ⟨hn, hp.symm⟩
-      · simp at he
+      exact ⟨trivial, target, htarget, hsame⟩
+    · obtain ⟨id', p, ro, hbb, hle, hp⟩ := he
+      refine ⟨al, bl, hal, hbl, by simp [hbb, TraceLine.Body.dir], by simp [hb, TraceLine.Body.dir], hle, ?_⟩
+      simp only [Carries, hbb, hb, hname1]
+      exact ⟨hn, hp⟩
   refine ⟨source, show WellFormed _ e from ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩⟩
   · intro r i s j hs
     obtain _ | _ | r := r
@@ -437,16 +427,12 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
               omega
           · rw [hsent] at hbl
             cases hbl
-            simp only [emitted] at he
-            split at he
-            · next hbb => simp [isEventLine, hbb] at hev
-            · simp at he
+            obtain ⟨_, _, _, hbb, -⟩ := he
+            simp [isEventLine, hbb] at hev
         · rw [hsent] at hbl
           cases hbl
-          simp only [emitted] at he
-          split at he
-          · next hbb => simp [isEventLine, hbb] at hev
-          · simp at he
+          obtain ⟨_, _, _, hbb, -⟩ := he
+          simp [isEventLine, hbb] at hev
       · exact absurd (sourceB_spec hq).1 (by decide)
       · exact absurd (hq.symm.trans (hsrc2 r' i')) (by simp)
     · obtain ⟨rfl, hd⟩ := sourceB_spec hp
@@ -537,7 +523,7 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
         obtain ⟨bl, hbm, he⟩ := received_event_emitted h hl0 hb hn'
         obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hbm
         have hex : ∃ j b, bLines[j]? = some b ∧
-            emitted (normal n) (peerSeen normal service peer aLines bLines) n payload l.time b = true :=
+            PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload l.time b :=
           ⟨j, bl, hj, he⟩
         refine ⟨hex.choose, ?_⟩
         show sourceA normal service peer aLines bLines i = some (1, hex.choose)
@@ -559,7 +545,7 @@ theorem network_realizes {normal canon : String → Value → Value} {service pe
       · exact absurd rfl hsr
       · have hl0 : aLines[i]? = some l := hl
         have hsend' : (peerBody? peer aLines [] l).isSome := hsend
-        rw [← peerBody_isSome (keys := keys)] at hsend'
+        rw [← peerBody_isSome (keys := peerForward normal service peer aLines bLines i)] at hsend'
         obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hsend'
         obtain ⟨k, hk⟩ :=
           List.mem_iff_getElem?.mp (peerInputs_line_mem (state := state) (elsewhere := elsewhere) hl0 hb)

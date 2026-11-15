@@ -87,7 +87,7 @@ export interface Answering {
 }
 
 /** Tags each value with its shape for Lean. Objects become [name, value] pairs to keep their key order. */
-function tagged(value: unknown): unknown {
+export function tagged(value: unknown): unknown {
   if (value instanceof Bag) return { bag: value.items.map(tagged) };
   if (value instanceof Runs) return { runs: value.runs.map(tagged) };
   if (Array.isArray(value)) return { arr: value.map(tagged) };

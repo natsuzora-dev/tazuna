@@ -116,16 +116,4 @@ def RunOf (canon : String → Value → Value) (inputs : List Step) (lines : Lis
   inputs.length = (inLines lines).length ∧
     ∀ (k : Nat) s (p : TraceLine × Nat), inputs[k]? = some s → (inLines lines)[k]? = some p → Writes canon s p.1
 
-/--
-How the scenario's service `service`, member 0, and its peer `peer`, member 1, see each other's values. The peer
-receives a value of a request with the createKey values of the scenario's run renamed (peerKeys), in the form `canon`
-that its run writes; the scenario's service receives a value of an answer or event as the scenario sees the peer's
-values (peerSeen), compared in the form `normal` that verify compares.
--/
-def peerAgree (normal canon : String → Value → Value) (service peer : String) (aLines bLines : List TraceLine) :
-    Agree
-  | 0, 1, n, x, y => y = canon n ((peerKeys service aLines).rename x)
-  | 1, 0, n, x, y => (normal n y).canonical = (normal n (peerSeen normal service peer aLines bLines x)).canonical
-  | _, _, _, _, _ => False
-
 end Tazuna.Network

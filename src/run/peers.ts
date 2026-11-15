@@ -1,7 +1,8 @@
-import { comparable, orderFree } from "../data/canonical.ts";
+import { comparable } from "../data/canonical.ts";
 import { type Problem, toProblem } from "../data/problem.ts";
 import type { Step } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
+import { canonicalJson } from "../data/values.ts";
 import type { Location } from "../data/violation.ts";
 import type { Contract, Named } from "../dsl/definition.ts";
 import { type ElsewhereInput, elsewhereInputs, type Scenario, timed, writtenPositions } from "../dsl/scenario.ts";
@@ -69,15 +70,15 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
 }
 
 /**
- * Returns the peer's form of an output or payload that verify compares: bag and set elements in canonical order, as
- * `comparable` gives a subscription its answers. A value that does not match its schema stays as it is.
+ * Returns the peer's form of an output or payload that verify compares (comparable), with its bags and runs. A value
+ * that does not match its schema stays as it is.
  */
 export function peerNormal(spec: Spec, peer: string): PeerNormal {
   return (name, value) => {
     const d = definitionOfTraceName(spec, peer, name, "query", "command", "event");
     const shape = d?.kind === "event" ? d.payload : d?.output;
     try {
-      return orderFree(comparable(shape, value));
+      return comparable(shape, value);
     } catch {
       return value;
     }
@@ -85,23 +86,35 @@ export function peerNormal(spec: Spec, peer: string): PeerNormal {
 }
 
 /**
- * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines`, and returns the derived inputs,
- * the peer's run, and, when it halted, the origin of the input that halted it with the halting violation's kind.
+ * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
+ * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
+ * halting violation's kind. The derivation starts from an empty run of the peer and repeats until the inputs stop
+ * changing: an input depends only on the peer's run of the inputs before it.
  */
 export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[], d: PeerDerivation) {
-  const derived = peerInputs(service, d.peer, d.state, d.elsewhere, lines);
-  const run = execute(
-    spec,
-    d.peer,
-    inputsOf(
+  const normal = peerNormal(spec, d.peer);
+  const derive = (peerLines: readonly TraceLine[]) =>
+    peerInputs(normal, service, d.peer, d.state, d.elsewhere, lines, peerLines);
+  let derived = derive([]);
+  for (let round = 0; ; round += 1) {
+    const run = execute(
       spec,
       d.peer,
-      derived.map((i) => i.step),
-    ),
-  );
-  const { halted } = run;
-  const origin = halted === undefined ? undefined : derived[run.inputOf(halted) ?? 0]?.origin;
-  return { derived, run, halted: halted === undefined ? undefined : ([origin as Origin, halted.kind] as const) };
+      inputsOf(
+        spec,
+        d.peer,
+        derived.map((i) => i.step),
+      ),
+    );
+    const next = derive(run.outcome.lines);
+    if (canonicalJson(next) === canonicalJson(derived)) {
+      const { halted } = run;
+      const origin = halted === undefined ? undefined : derived[run.inputOf(halted) ?? 0]?.origin;
+      return { derived, run, halted: halted === undefined ? undefined : ([origin as Origin, halted.kind] as const) };
+    }
+    if (round > derived.length) throw new Error(`the inputs of the peer ${d.peer} do not settle`);
+    derived = next;
+  }
 }
 
 /** The check of a scenario's mocks of one peer: the peer's run of the derived inputs unless it halted, and the problems. */

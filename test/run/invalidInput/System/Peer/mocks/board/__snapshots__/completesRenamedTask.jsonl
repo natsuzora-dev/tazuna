@@ -1,0 +1,7 @@
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"T-milk","title":"Buy milk"},{"taskId":"T-bread","title":"Buy bread"}]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"boardScreen.complete#1","name":"boardScreen.complete","payload":{"taskId":"T-bread"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"T-bread"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.tasks#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"todo.completeTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#2","name":"todo.tasks","input":{}}

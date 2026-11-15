@@ -463,7 +463,7 @@ def afters (request : Value) : Except String Value := do
 The reply to request `peer`, which takes the scenario's service, the peer, the steps of the given state, the elsewhere
 inputs with the line counts before them, the lines of the scenario's run and of the peer's run, the halt of the peer's
 run, and the forms of `normal` that TS computed as `[name, value, form]`, and returns peerInputs and peerFindings. A
-value without a form stays as it is.
+value without a form takes the form that no schema reads.
 -/
 def peer (request : Value) : Except String Value := do
   let service ← stringField request "service"
@@ -479,12 +479,12 @@ def peer (request : Value) : Except String Value := do
     | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : Origin), kind))
     | _ => throw "expected null or [origin, kind]"
   let normals ← (← asList (← field request "normals")).mapM fun
-    | .arr [.str name, v, form] => pure (name, v, form)
+    | .arr [.str name, v, form] => do pure (name, v, ← CValue.decode form)
     | _ => throw "expected [name, value, form]"
-  let normal (name : String) (v : Value) : Value :=
-    ((normals.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD v
+  let normal (name : String) (v : Value) : CValue :=
+    ((normals.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD (.ofValue v)
   pure (.obj [("type", .str "peer"),
-    ("inputs", .arr ((peerInputs service peer state elsewhere lines).map fun (s, o) =>
+    ("inputs", .arr ((peerInputs normal service peer state elsewhere lines peerLines).map fun (s, o) =>
       .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
     ("findings", .arr ((peerFindings normal service peer lines peerLines halted).map fun (o, f) =>
       .obj [("origin", ToValue.toValue o), ("violation", f.toValue)]))])

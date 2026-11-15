@@ -40,6 +40,7 @@ Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 Write each start state of a service as inputs to it under `states` in its contract, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
 Write an input that the other service takes from someone else, such as the command whose event the scenario receives, as `elsewhere(todo, send(todo.addTask, input))` at its place among the scenario's inputs; the scenario's own service skips it.
 Repeat such inputs with a plain TypeScript function rather than a new option.
+A mock may name a key that the other service creates with any string, one to one, such as `T-bread` for todo's `Task-2`; `test` sends a later request with `T-bread` to todo as `Task-2`.
 
 ## Reach every part with a scenario
 

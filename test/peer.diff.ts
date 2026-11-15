@@ -8,6 +8,7 @@ import { execute } from "../src/run/execute.ts";
 import { peerDerivations, peerNormal, runPeer } from "../src/run/peers.ts";
 import { peerFindings } from "../src/semantics/system/peer.ts";
 import { runExamples } from "./examples.ts";
+import { tagged } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";
 
 const lean = new Lean();
@@ -32,7 +33,7 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
         const normal = peerNormal(spec, d.peer);
         const recorded = (name: string, value: unknown) => {
           const form = normal(name, value);
-          normals.push([name, value, form]);
+          normals.push([name, value, tagged(form)]);
           return form;
         };
         const findings = peerFindings(recorded, scenario.service, d.peer, lines, peerRun.outcome.lines, halted);

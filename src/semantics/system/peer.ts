@@ -1,3 +1,4 @@
+import { Bag, Runs } from "../../data/canonical.ts";
 import type { InvalidInput } from "../../data/invalidInput.generated.ts";
 import type { Step } from "../../data/step.generated.ts";
 import type { Answer, TraceLine } from "../../data/trace.generated.ts";
@@ -102,21 +103,200 @@ export type Origin =
 
 const sameOrigin = (a: Origin, b: Origin) => canonicalJson(a) === canonicalJson(b);
 
+const instant = (time: string) => Temporal.Instant.from(time);
+const atOrBefore = (a: string, b: string) => Temporal.Instant.compare(instant(a), instant(b)) <= 0;
+
+/** Lean's answersTo. */
+function answersTo(lines: readonly TraceLine[], dir: "in" | "out", id: string) {
+  return lines.flatMap((l) =>
+    l.type === "answer" && l.dir === dir && l.to === id ? [{ time: l.time, answer: l.answer }] : [],
+  );
+}
+
+/** Lean's Bindings.bind. */
+function bind(bs: Bindings, v: string, w: string): Bindings | undefined {
+  const x = bs.get(v);
+  if (x !== undefined) return x === w ? bs : undefined;
+  return [...bs.values()].includes(w) ? undefined : new Map([...bs, [v, w]]);
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Bag) && !(v instanceof Runs);
+
+const sameKeys = (s: Record<string, unknown>, t: Record<string, unknown>): boolean =>
+  canonicalJson(Object.keys(s).toSorted()) === canonicalJson(Object.keys(t).toSorted());
+
+/** Lean's unify. */
+function unify(created: ReadonlySet<string>, s: unknown, t: unknown, bs: Bindings): Bindings | undefined {
+  if (typeof s === "string") {
+    if (typeof t !== "string") return undefined;
+    if (created.has(s)) return bind(bs, s, t);
+    return t === s ? bs : undefined;
+  }
+  if (Array.isArray(s)) return Array.isArray(t) && s.length === t.length ? unifyList(created, s, t, bs) : undefined;
+  if (s instanceof Runs)
+    return t instanceof Runs && s.runs.length === t.runs.length ? unifyList(created, s.runs, t.runs, bs) : undefined;
+  if (s instanceof Bag) return t instanceof Bag ? unifyBag(created, s.items, t.items, bs) : undefined;
+  if (isObject(s)) {
+    if (!isObject(t) || !sameKeys(s, t)) return undefined;
+    return unifyList(
+      created,
+      Object.values(s),
+      Object.keys(s).map((k) => t[k]),
+      bs,
+    );
+  }
+  return s === t ? bs : undefined;
+}
+
+/** Lean's unifyList and unifyFields. */
+function unifyList(
+  created: ReadonlySet<string>,
+  xs: readonly unknown[],
+  ys: readonly unknown[],
+  bs: Bindings,
+): Bindings | undefined {
+  let bindings: Bindings | undefined = bs;
+  for (const [i, x] of xs.entries()) {
+    if (bindings === undefined) return undefined;
+    bindings = unify(created, x, ys[i], bindings);
+  }
+  return bindings;
+}
+
+/** Lean's unifyBag and unifyBagFrom. */
+function unifyBag(
+  created: ReadonlySet<string>,
+  ss: readonly unknown[],
+  ts: readonly unknown[],
+  bs: Bindings,
+): Bindings | undefined {
+  if (ss.length !== ts.length) return undefined;
+  const [first, ...rest] = ss;
+  if (ss.length === 0) return bs;
+  for (const [i, t] of ts.entries()) {
+    const once = unify(created, first, t, bs);
+    if (once === undefined) continue;
+    const all = unifyBag(created, rest, ts.toSpliced(i, 1), once);
+    if (all !== undefined) return all;
+  }
+  return undefined;
+}
+
+type Form = (value: unknown) => unknown;
+
+/** Lean's unifyAnswer. */
+function unifyAnswer(
+  created: ReadonlySet<string>,
+  seen: Form,
+  form: Form,
+  bs: Bindings,
+  b: Answer,
+  a: Answer,
+): Bindings | undefined {
+  if (b.result === "rejected" || a.result === "rejected")
+    return b.result === "rejected" && a.result === "rejected" && b.rejection.kind === a.rejection.kind ? bs : undefined;
+  if (b.result !== a.result) return undefined;
+  const [x, y] = ["output" in b ? b.output : undefined, "output" in a ? a.output : undefined];
+  return x === undefined || y === undefined ? (x === y ? bs : undefined) : unify(created, seen(x), form(y), bs);
+}
+
+/** The form of an output or payload of the peer's definition, by the peer's own name, that verify compares. */
+export type PeerNormal = (name: string, value: unknown) => unknown;
+
+type Checked = { readonly bindings: Bindings } | { readonly violation: InvalidInput };
+
+/** Lean's peerLine, with its lets as arguments. */
+function peerLine(
+  normal: PeerNormal,
+  peer: string,
+  created: ReadonlySet<string>,
+  back: Bindings,
+  aLines: readonly TraceLine[],
+  bLines: readonly TraceLine[],
+  bs: Bindings,
+  i: number,
+  l: TraceLine,
+): Checked {
+  const seen = (n: string) => (v: unknown) => normal(n, rename(back, v));
+  if (l.dir !== "in") return { bindings: bs };
+  if (l.type === "answer") {
+    const target = peerTarget(peer, aLines, l.to);
+    if (target === undefined || unreached(aLines, l.to)) return { bindings: bs };
+    const data = { requestId: l.to, target: { service: peer, name: target } };
+    const b = answersTo(bLines, "out", l.to)[answersTo(aLines.slice(0, i), "in", l.to).length];
+    if (b === undefined) return { violation: { kind: "InvalidInput.unansweredRequest", definition: null, data } };
+    const bindings = atOrBefore(b.time, l.time)
+      ? unifyAnswer(created, seen(target), (v) => normal(target, v), bs, b.answer, l.answer)
+      : undefined;
+    return bindings === undefined
+      ? { violation: { kind: "InvalidInput.unproducibleAnswer", definition: null, data } }
+      : { bindings };
+  }
+  if (l.type === "event") {
+    const n = peerName(peer, l.name);
+    if (n === undefined) return { bindings: bs };
+    for (const b of bLines)
+      if (b.type === "event" && b.dir === "out" && b.name === n && atOrBefore(b.time, l.time)) {
+        const bindings = unify(created, seen(n)(b.payload), normal(n, l.payload), bs);
+        if (bindings !== undefined) return { bindings };
+      }
+    return {
+      violation: {
+        kind: "InvalidInput.unproducibleEvent",
+        definition: null,
+        data: { eventId: l.id ?? "", event: { service: peer, name: n } },
+      },
+    };
+  }
+  return { bindings: bs };
+}
+
+/**
+ * Lean's peerBindings for each line count from 0 to the run's length, and the violations of peerFindings of a run that
+ * did not halt, in one pass over the run.
+ */
+function peerChecks(
+  normal: PeerNormal,
+  service: string,
+  peer: string,
+  aLines: readonly TraceLine[],
+  bLines: readonly TraceLine[],
+) {
+  const created = new Set(bLines.flatMap((l) => l.created ?? []));
+  const back = new Map([...peerKeys(service, aLines)].map(([k, v]) => [v, k]));
+  let bs: Bindings = new Map();
+  const bindings = [bs];
+  const findings: { readonly origin: Origin; readonly violation: InvalidInput }[] = [];
+  aLines.forEach((l, i) => {
+    const checked = peerLine(normal, peer, created, back, aLines, bLines, bs, i, l);
+    if ("violation" in checked) findings.push({ origin: { type: "line", line: i }, violation: checked.violation });
+    else bs = checked.bindings;
+    bindings.push(bs);
+  });
+  return { bindings, findings };
+}
+
 /** Lean's peerInputs. */
 export function peerInputs(
+  normal: PeerNormal,
   service: string,
   peer: string,
   state: readonly Step[],
   elsewhere: readonly (readonly [number, Step])[],
-  lines: readonly TraceLine[],
+  aLines: readonly TraceLine[],
+  bLines: readonly TraceLine[],
 ): { readonly step: Step; readonly origin: Origin }[] {
-  const keys = peerKeys(service, lines);
-  const placed = Array.from({ length: lines.length + 1 }, (_, n) => {
+  const keys = peerKeys(service, aLines);
+  const { bindings } = peerChecks(normal, service, peer, aLines, bLines);
+  const forward = (n: number): Bindings =>
+    new Map([...[...(bindings[Math.min(n, aLines.length)] as Bindings)].map(([k, v]) => [v, k] as const), ...keys]);
+  const placed = Array.from({ length: aLines.length + 1 }, (_, n) => {
     const others = elsewhere.flatMap(([p, step], index) =>
-      p === n || (n === lines.length && n < p) ? [{ step, origin: { type: "elsewhere", index } as Origin }] : [],
+      p === n || (n === aLines.length && n < p) ? [{ step, origin: { type: "elsewhere", index } as Origin }] : [],
     );
-    const l = lines[n];
-    const body = l === undefined ? undefined : peerBody(peer, lines, keys, l);
+    const l = aLines[n];
+    const body = l === undefined ? undefined : peerBody(peer, aLines, forward(n), l);
     return l === undefined || body === undefined
       ? others
       : [...others, { step: { time: l.time, ...body } as Step, origin: { type: "line", line: n } as Origin }];
@@ -129,165 +309,11 @@ export function peerInputs(
   return [
     ...state.map((step) => ({ step, origin: { type: "given" } as Origin })),
     ...placed.map(({ step, origin }) =>
-      origin.type === "elsewhere" ? { step: forPeer(keys, index, step), origin } : { step, origin },
+      origin.type === "elsewhere"
+        ? { step: forPeer(forward(elsewhere[origin.index]?.[0] ?? 0), index, step), origin }
+        : { step, origin },
     ),
   ];
-}
-
-const instant = (time: string) => Temporal.Instant.from(time);
-const atOrBefore = (a: string, b: string) => Temporal.Instant.compare(instant(a), instant(b)) <= 0;
-
-/** Lean's answersTo. */
-function answersTo(lines: readonly TraceLine[], dir: "in" | "out", id: string) {
-  return lines.flatMap((l) =>
-    l.type === "answer" && l.dir === dir && l.to === id ? [{ time: l.time, answer: l.answer }] : [],
-  );
-}
-
-const canonical = (v: unknown) => canonicalJson(v as Json);
-
-type Normal = (value: unknown) => unknown;
-
-/** The form of an output or payload of the peer's definition, by the peer's own name, that verify compares. */
-export type PeerNormal = (name: string, value: unknown) => unknown;
-
-/** Lean's sameAnswer. */
-function sameAnswer(norm: Normal, seen: Normal, a: Answer, b: Answer): boolean {
-  if (a.result === "rejected" || b.result === "rejected")
-    return a.result === "rejected" && b.result === "rejected" && a.rejection.kind === b.rejection.kind;
-  if (a.result !== b.result) return false;
-  const [x, y] = ["output" in a ? a.output : undefined, "output" in b ? b.output : undefined];
-  return x === undefined || y === undefined ? x === y : canonical(norm(x)) === canonical(norm(seen(y)));
-}
-
-/** Lean's emitted. */
-const emitted = (norm: Normal, seen: Normal, event: string, payload: unknown, time: string, b: TraceLine) =>
-  b.type === "event" &&
-  b.dir === "out" &&
-  b.name === event &&
-  canonical(norm(seen(b.payload))) === canonical(norm(payload)) &&
-  atOrBefore(b.time, time);
-
-/** Lean's unify: `bs` is extended in place, and false means none. */
-function unify(created: readonly string[], bs: Map<string, string>, a: unknown, b: unknown): boolean {
-  if (typeof a === "string" && typeof b === "string") {
-    const bound = bs.get(b);
-    if (bound !== undefined) return bound === a;
-    if (created.includes(b)) {
-      if ([...bs.values()].includes(a)) return false;
-      bs.set(b, a);
-      return true;
-    }
-    return a === b;
-  }
-  if (Array.isArray(a) && Array.isArray(b))
-    return a.length === b.length && a.every((x, i) => unify(created, bs, x, b[i]));
-  if (
-    a !== null &&
-    b !== null &&
-    typeof a === "object" &&
-    typeof b === "object" &&
-    !Array.isArray(a) &&
-    !Array.isArray(b)
-  ) {
-    const [x, y] = [a as Record<string, unknown>, b as Record<string, unknown>];
-    return (
-      Object.keys(x).length === Object.keys(y).length &&
-      Object.entries(x).every(([k, v]) => Object.hasOwn(y, k) && unify(created, bs, v, y[k]))
-    );
-  }
-  return canonical(a) === canonical(b);
-}
-
-/** Lean's `unify ... |>.getD bs`: `bs` extended when the values unify, else `bs`. */
-function unified(created: readonly string[], bs: Map<string, string>, a: unknown, b: unknown): Map<string, string> {
-  const extended = new Map(bs);
-  return unify(created, extended, a, b) ? extended : bs;
-}
-
-/** Lean's peerBindings. */
-function peerBindings(
-  normal: PeerNormal,
-  peer: string,
-  back: Bindings,
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
-) {
-  const created = bLines.flatMap((l) => l.created ?? []);
-  let bs = new Map<string, string>();
-  aLines.forEach((l, i) => {
-    if (l.dir !== "in") return;
-    if (l.type === "answer") {
-      const target = peerTarget(peer, aLines, l.to);
-      if (target === undefined || unreached(aLines, l.to)) return;
-      const b = answersTo(bLines, "out", l.to)[answersTo(aLines.slice(0, i), "in", l.to).length];
-      const [x, y] = [
-        "output" in l.answer ? l.answer.output : undefined,
-        b !== undefined && "output" in b.answer ? b.answer.output : undefined,
-      ];
-      if (x !== undefined && y !== undefined)
-        bs = unified(created, bs, normal(target, x), normal(target, rename(back, y)));
-    } else if (l.type === "event") {
-      const n = peerName(peer, l.name);
-      if (n === undefined) return;
-      for (const b of bLines)
-        if (b.type === "event" && b.dir === "out" && b.name === n && atOrBefore(b.time, l.time)) {
-          const extended = new Map(bs);
-          if (unify(created, extended, normal(n, l.payload), normal(n, rename(back, b.payload)))) {
-            bs = extended;
-            return;
-          }
-        }
-    }
-  });
-  return bs;
-}
-
-/** Lean's peerSeen. */
-function peerSeen(
-  normal: PeerNormal,
-  service: string,
-  peer: string,
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
-) {
-  const back = new Map([...peerKeys(service, aLines)].map(([k, v]) => [v, k]));
-  const bindings = new Map([...peerBindings(normal, peer, back, aLines, bLines), ...back]);
-  return (v: unknown) => rename(bindings, v);
-}
-
-/** Lean's peerFinding. */
-function peerFinding(
-  normal: PeerNormal,
-  peer: string,
-  seen: (v: unknown) => unknown,
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
-  i: number,
-  l: TraceLine,
-): InvalidInput | undefined {
-  if (l.dir !== "in") return undefined;
-  if (l.type === "answer") {
-    const target = peerTarget(peer, aLines, l.to);
-    if (target === undefined || unreached(aLines, l.to)) return undefined;
-    const data = { requestId: l.to, target: { service: peer, name: target } };
-    const b = answersTo(bLines, "out", l.to)[answersTo(aLines.slice(0, i), "in", l.to).length];
-    if (b === undefined) return { kind: "InvalidInput.unansweredRequest", definition: null, data };
-    return sameAnswer((v) => normal(target, v), seen, l.answer, b.answer) && atOrBefore(b.time, l.time)
-      ? undefined
-      : { kind: "InvalidInput.unproducibleAnswer", definition: null, data };
-  }
-  if (l.type === "event") {
-    const n = peerName(peer, l.name);
-    if (n === undefined || bLines.some((b) => emitted((v) => normal(n, v), seen, n, l.payload, l.time, b)))
-      return undefined;
-    return {
-      kind: "InvalidInput.unproducibleEvent",
-      definition: null,
-      data: { eventId: l.id ?? "", event: { service: peer, name: n } },
-    };
-  }
-  return undefined;
 }
 
 /** Lean's peerFindings. */
@@ -306,9 +332,5 @@ export function peerFindings(
         violation: { kind: "InvalidInput.haltedPeer", definition: null, data: { service: peer, halting: halted[1] } },
       },
     ];
-  const seen = peerSeen(normal, service, peer, aLines, bLines);
-  return aLines.flatMap((l, i) => {
-    const violation = peerFinding(normal, peer, seen, aLines, bLines, i, l);
-    return violation === undefined ? [] : [{ origin: { type: "line", line: i } as Origin, violation }];
-  });
+  return peerChecks(normal, service, peer, aLines, bLines).findings;
 }

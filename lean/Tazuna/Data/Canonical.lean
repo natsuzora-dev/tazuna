@@ -4,8 +4,8 @@ import Tazuna.Data.List
 import Tazuna.Data.Names
 
 /-!
-This module defines the values that verify compares. TS reads a line by its definition's schema, re-encodes it, and
-wraps bags, sets and sortedBy arrays. This module fixes how wrapped values compare.
+This module defines the values that verify and the peer check compare. TS reads a line by its definition's schema,
+re-encodes it, and wraps bags, sets and sortedBy arrays. This module fixes how wrapped values compare.
 -/
 
 namespace Tazuna.Data
