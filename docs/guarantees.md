@@ -54,10 +54,13 @@ When `test` reports none of these violations, the scenario's run and the peer's 
 - each request of the scenario to the peer that no mock answers as `unavailable` reaches the peer once, not before the scenario sends it, and so does the end of its subscription;
 - each event of the scenario's service that the peer receives is one that the scenario emits, not before it emits it;
 - each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive once each and in the order the peer sends them;
-- each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken.
+- each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken;
 - the peer sends each answer or event that the scenario takes before it receives any line that the scenario sends at or after taking it.
 
-Lean proves this as `network_realizes` for spec runs, given two facts that it does not prove: the peer's run writes one input line for each derived input, in order, and the peer's run names a definition of the scenario's service only on an event that it receives.
+Lean proves this as `network_realizes` for spec runs, given that the peer's run writes one input line for each derived input, in order, which it does not prove.
+`network_realizes` covers only a peer's run that sends no request to the scenario's service, one that names a definition of the scenario's service only on an event that it receives.
+A peer's run can send such requests: in a scenario of `todo` whose peer is `screens`, the run of `screens` subscribes to `todo.tasks`.
+`test` neither delivers these requests to the scenario's service nor compares them with the scenario's run; this is an open point.
 That the given state and the `elsewhere` inputs give the peer no event of the scenario's service is checked when the spec loads.
 For a request, `network_realizes` states only that the peer receives the strings renamed by the names that mocks give up to some point of the run, not necessarily up to the request.
 So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.

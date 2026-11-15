@@ -675,8 +675,9 @@ def peerAgree (normal : String → Value → CValue) (canon : String → Value �
 /--
 Stage 2 of the check of a scenario's mocks of a peer. Let `aLines` be the scenario's run of the service `service`, and
 `bLines` a run of the peer `peer`, whose `in` lines are those that a run writes for the derived inputs (peerInputs),
-and which names a definition of `service` only on a received event. The given state and the elsewhere inputs give the
-peer no event of `service`. When the check finds no violation, an execution of the two runs on a well formed network
+and which sends no request to `service`: it names a definition of `service` only on a received event. Nothing checks
+this, and a peer's run can send such requests; the check neither delivers them nor compares them. The given state and
+the elsewhere inputs give the peer no event of `service`. When the check finds no violation, an execution of the two runs on a well formed network
 exists: each request of the scenario's run to the peer that reached it arrives at the peer at its send time, each
 event of `service` that the peer receives comes from the scenario's run at its emit time, and each mocked answer and
 received event of the peer comes from the peer's run, sent at or before the time the scenario receives it and before
