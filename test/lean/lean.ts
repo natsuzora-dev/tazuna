@@ -266,6 +266,7 @@ export class Lean {
   peer(request: {
     readonly service: string;
     readonly peer: string;
+    readonly received: readonly string[];
     readonly state: readonly Step[];
     readonly elsewhere: readonly (readonly [number, Step])[];
     readonly lines: readonly TraceLine[];

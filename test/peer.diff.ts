@@ -40,6 +40,7 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
         const fromLean = lean.peer({
           service: scenario.service,
           peer: d.peer,
+          received: d.received,
           state: d.state,
           elsewhere: d.elsewhere,
           lines,

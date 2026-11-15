@@ -1,0 +1,1 @@
+{"kind":"InvalidInput.haltedPeer","definition":null,"data":{"service":"ledger","halting":"InvalidInput.uncreatedKey"},"location":{"file":"shop/scenarios.ts","line":9},"scenario":{"service":"shop","name":"sellsKeyLikeItem"}}

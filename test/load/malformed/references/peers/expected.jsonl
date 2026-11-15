@@ -4,3 +4,5 @@
 {"kind":"Malformed.unlistedState","definition":null,"data":{"service":"todo"},"location":{"file":"notifier/scenarios.ts","line":12},"scenario":{"service":"notifier","name":"givesUnlistedState"}}
 {"kind":"Malformed.unknownPeer","definition":null,"data":{"service":"calendar"},"location":{"file":"notifier/scenarios.ts","line":20,"input":2},"scenario":{"service":"notifier","name":"addsElsewhereToNoPeer"}}
 {"kind":"Malformed.unknownPeer","definition":null,"data":{"service":null},"location":{"file":"notifier/scenarios.ts","line":20,"input":3},"scenario":{"service":"notifier","name":"addsElsewhereToNoPeer"}}
+{"kind":"Malformed.ownEventToPeer","definition":null,"data":{"service":"notifier"},"location":{"file":"todo/scenarios.ts","line":5},"scenario":{"service":"todo","name":"givesOwnEventToPeer"}}
+{"kind":"Malformed.ownEventToPeer","definition":null,"data":{"service":"notifier"},"location":{"file":"todo/scenarios.ts","line":5,"input":2},"scenario":{"service":"todo","name":"givesOwnEventToPeer"}}

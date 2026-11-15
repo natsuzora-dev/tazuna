@@ -33,13 +33,17 @@ def unreached (lines : List TraceLine) (id : String) : Bool :=
     | .answer .in _ to (.rejected r) => to == id && r.kind == .unavailable
     | _ => false
 
-/-- The peer's own name of the target of the request `id` of the run, when the request went to the peer. -/
-def peerTarget? (peer : String) (lines : List TraceLine) (id : String) : Option String :=
+/-- The trace name of the target of the request `id` that the run sent. -/
+def requestName? (lines : List TraceLine) (id : String) : Option String :=
   lines.findSome? fun l =>
     match l.body with
     | .command .out (some i) name _ | .query .out (some i) name _ | .subscribe .out (some i) name _ =>
-      if i == id then peerName? peer name else none
+      if i == id then some name else none
     | _ => none
+
+/-- The peer's own name of the target of the request `id` of the run, when the request went to the peer. -/
+def peerTarget? (peer : String) (lines : List TraceLine) (id : String) : Option String :=
+  (requestName? lines id).bind (peerName? peer)
 
 /--
 The peer's input of the run's line `l`: a request to the peer that reached it, with the request's id, or the end of a
@@ -53,6 +57,17 @@ def peerBody? (peer : String) (lines : List TraceLine) (keys : Bindings) (l : Tr
   | .subscribe .out (some id) name input => (reached id name).map (.subscribe (some id) · (keys.rename input))
   | .unsubscribe .out _ to =>
     if (peerTarget? peer lines to).isSome && !unreached lines to then some (.unsubscribe to) else none
+  | _ => none
+
+/--
+The peer's input of the run's line `l`: an event that the scenario's service `service` emits and that the peer
+receives, by the peer's trace name of it among `received`, with the event's id and no resultOf. `keys` renames the
+strings of the payload (peerForward).
+-/
+def peerEvent? (service : String) (received : List String) (keys : Bindings) (l : TraceLine) : Option Step.Body :=
+  match l.body with
+  | .event .out id name payload _ =>
+    (received.find? (peerName? service · == some name)).map (.event id · (keys.rename payload) none)
   | _ => none
 
 def _root_.Tazuna.Data.Answer.mapOutput (f : Value → Value) : Answer → Answer
@@ -227,20 +242,22 @@ def peerForward (normal : String → Value → CValue) (service peer : String) (
   peerKeys service aLines ++ (peerBindings normal service peer aLines bLines n).map fun (k, v) => (v, k)
 
 /--
-The peer's inputs, each with its origin: those of the given state `state`, then the run's requests to the peer and
-ends of subscriptions to it at their times, with the scenario's elsewhere inputs among them. `elsewhere` holds each
-elsewhere input with the number of the run's lines before it, and its resultOf indexes `state ++ elsewhere`. The
-run's requests and the elsewhere inputs take the peer's strings (peerForward) of the place where they arrive. `bLines`
-is the peer's run of these inputs.
+The peer's inputs, each with its origin: those of the given state `state`, then the run's requests to the peer, ends
+of subscriptions to it, and events that the peer receives (`received`, by trace name) at their times, with the
+scenario's elsewhere inputs among them. `elsewhere` holds each elsewhere input with the number of the run's lines
+before it, and its resultOf indexes `state ++ elsewhere`. The run's lines and the elsewhere inputs take the peer's
+strings (peerForward) of the place where they arrive. `bLines` is the peer's run of these inputs.
 -/
-def peerInputs (normal : String → Value → CValue) (service peer : String) (state : List Step)
+def peerInputs (normal : String → Value → CValue) (service peer : String) (received : List String) (state : List Step)
     (elsewhere : List (Nat × Step)) (aLines bLines : List TraceLine) : List (Step × Origin) :=
   let forward := peerForward normal service peer aLines bLines
   let placedAt (n : Nat) : List (Step × Origin) :=
     ((elsewhere.zipIdx.filter fun e => e.1.1 == n || (n == aLines.length && n < e.1.1)).map fun e =>
       (e.1.2, Origin.elsewhere e.2)) ++
     match aLines[n]? with
-    | some l => ((peerBody? peer aLines (forward n) l).map fun b => (⟨l.time, b, none, none⟩, Origin.line n)).toList
+    | some l =>
+      (((peerBody? peer aLines (forward n) l).orElse fun _ => peerEvent? service received (forward n) l).map fun b =>
+        (⟨l.time, b, none, none⟩, Origin.line n)).toList
     | none => []
   let placed := (List.range (aLines.length + 1)).flatMap placedAt
   let index (r : Nat) : Nat :=

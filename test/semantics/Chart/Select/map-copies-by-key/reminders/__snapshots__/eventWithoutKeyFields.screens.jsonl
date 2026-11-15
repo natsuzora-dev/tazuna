@@ -1,0 +1,3 @@
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"notified#1","name":"reminders.notified","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"notified#2","name":"reminders.notified","payload":{"taskId":"task-2"}}

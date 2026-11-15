@@ -8,12 +8,14 @@ import type { Contract, Named } from "../dsl/definition.ts";
 import { type ElsewhereInput, elsewhereInputs, type Scenario, timed, writtenPositions } from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
+import { serviceOf } from "../semantics/service/basic.ts";
 import { type Origin, type PeerNormal, peerFindings, peerInputs } from "../semantics/system/peer.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
 /** The arguments of peerInputs for one peer of a scenario's run, with the scenario's elsewhere inputs to the peer. */
 export interface PeerDerivation {
   readonly peer: string;
+  readonly received: readonly string[];
   readonly state: readonly Step[];
   readonly elsewhere: readonly (readonly [number, Step])[];
   readonly written: readonly ElsewhereInput[];
@@ -21,6 +23,10 @@ export interface PeerDerivation {
 
 const isMessage = (l: TraceLine) =>
   l.type === "command" || l.type === "query" || l.type === "subscribe" || l.type === "event";
+
+/** Whether the line is an event of the scenario's service `service` that `received` lists by its trace name. */
+const isReceived = (service: string, received: readonly string[], l: TraceLine) =>
+  l.dir === "out" && l.type === "event" && received.includes(`${service}.${l.name}`);
 
 /** Returns the service whose exported contract is `value`, which load checks (Malformed.unknownPeer). */
 const contractService = (spec: Spec, value: object): string =>
@@ -41,8 +47,8 @@ function linesBefore(run: Run, { input, before }: ElsewhereInput): number {
 }
 
 /**
- * Returns the peers of the scenario's run, the spec services other than its own that it messages or names in `given`
- * or `elsewhere`, each with the arguments of peerInputs.
+ * Returns the peers of the scenario's run, the spec services other than its own that it messages, names in `given` or
+ * `elsewhere`, or emits an event to that they receive, each with the arguments of peerInputs.
  */
 export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): PeerDerivation[] {
   const { given } = scenario.definition;
@@ -51,9 +57,15 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
   const others = [...spec.services]
     .filter(([name, s]) => name !== scenario.service && !s.definition.external)
     .map(([name]) => name);
+  const received = new Map(others.map((peer) => [peer, serviceOf(spec.structure, peer).received]));
   const peers = others.filter(
     (peer) =>
-      named.has(peer) || run.outcome.lines.some((l) => isMessage(l) && "name" in l && l.name.startsWith(`${peer}.`)),
+      named.has(peer) ||
+      run.outcome.lines.some(
+        (l) =>
+          (isMessage(l) && "name" in l && l.name.startsWith(`${peer}.`)) ||
+          isReceived(scenario.service, received.get(peer) ?? [], l),
+      ),
   );
   return peers.map((peer) => {
     const state = given[peer];
@@ -62,6 +74,7 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
     const steps = stepsOf(spec, peer, [...stateInputs, ...mine.map((e) => e.input)]);
     return {
       peer,
+      received: received.get(peer) ?? [],
       state: steps.slice(0, stateInputs.length),
       elsewhere: mine.map((e, i) => [linesBefore(run, e), steps[stateInputs.length + i] as Step] as const),
       written: mine,
@@ -94,7 +107,7 @@ export function peerNormal(spec: Spec, peer: string): PeerNormal {
 export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[], d: PeerDerivation) {
   const normal = peerNormal(spec, d.peer);
   const derive = (peerLines: readonly TraceLine[]) =>
-    peerInputs(normal, service, d.peer, d.state, d.elsewhere, lines, peerLines);
+    peerInputs(normal, service, d.peer, d.received, d.state, d.elsewhere, lines, peerLines);
   let derived = derive([]);
   for (let round = 0; ; round += 1) {
     const run = execute(

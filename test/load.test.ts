@@ -24,6 +24,7 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.unparsableTime": true,
   "Malformed.unknownPeer": true,
   "Malformed.unlistedState": true,
+  "Malformed.ownEventToPeer": true,
   "Malformed.inexactDelay": true,
   "NonCanonical.emptyGuard": true,
   "NonCanonical.emptyAfter": true,

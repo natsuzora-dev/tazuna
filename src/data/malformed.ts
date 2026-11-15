@@ -28,6 +28,8 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  *   external service, or no service of the spec.
  * - `unlistedState`: the scenario's `given` gives `service` a start state that is not one of the states of its
  *   contract.
+ * - `ownEventToPeer`: the start state that the scenario's `given` gives `service`, or its `elsewhere` input to
+ *   `service`, receives an event of the scenario's own service, which reaches `service` only from the scenario's run.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.
  */
@@ -62,4 +64,8 @@ export type Malformed =
       readonly input?: number;
     })
   | (Of<"unlistedState", null, { readonly service: string }> & { readonly scenario: DefinitionRef })
+  | (Of<"ownEventToPeer", null, { readonly service: string }> & {
+      readonly scenario: DefinitionRef;
+      readonly input?: number;
+    })
   | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly deadline: string }>;

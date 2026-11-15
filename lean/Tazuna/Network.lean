@@ -25,8 +25,9 @@ def Execution.lines (e : Execution) (m : Nat) : List TraceLine := (e.members[m]?
 def Execution.line? (e : Execution) (p : Place) : Option TraceLine := (e.lines p.1)[p.2]?
 
 /--
-Whether value `y` that member `r` receives stands for value `x` of definition `name` that member `s` sent. In an
-execution of implementations it is equality; between spec runs, it is equality up to the keys that each run chooses.
+Whether value `y` that member `r` receives stands for value `x` that member `s` sent, of the definition that `r` names
+`name` in its trace. In an execution of implementations it is equality; between spec runs, it is equality up to the
+keys that each run chooses.
 -/
 abbrev Agree := (s r : Nat) → (name : String) → (x y : Value) → Prop
 
@@ -51,8 +52,9 @@ def Carries (agree : Agree) (e : Execution) (s r : Nat) (sent recv : TraceLine) 
     j = i ∧ peerName? (e.name r) name = some n ∧ agree s r n x y
   | .unsubscribe .out _ to, .unsubscribe .in _ to' => to' = to
   | .answer .out _ to b, .answer .in _ to' a =>
-    to' = to ∧ ∃ n, peerTarget? (e.name s) (e.lines r) to = some n ∧ AnswerCarries (agree s r n) b a
-  | .event .out _ n x _, .event .in _ name y _ => peerName? (e.name s) name = some n ∧ agree s r n x y
+    to' = to ∧ ∃ m, requestName? (e.lines r) to = some m ∧ (peerName? (e.name s) m).isSome ∧
+      AnswerCarries (agree s r m) b a
+  | .event .out _ n x _, .event .in _ name y _ => peerName? (e.name s) name = some n ∧ agree s r name x y
   | _, _ => False
 
 def isEventLine (l : TraceLine) : Bool :=
@@ -95,9 +97,9 @@ structure WellFormed (agree : Agree) (e : Execution) : Prop where
     ∃ j, e.source (s, j) = some (r, i)
 
 /--
-Whether `l` is the `in` line that a run writes for input `s`, as far as the network needs: at the input's time, and for
-a request the same request with the input in the form `canon` that the run writes for the definition, keeping a given
-id, and for an end of a subscription the same end.
+Whether `l` is the `in` line that a run writes for input `s`, as far as the network needs: at the input's time; for a
+request or an event the same one with its value in the form `canon` that the run writes for the definition, keeping a
+given id, and an event without resultOf has none; for an end of a subscription the same end; and no event otherwise.
 -/
 def Writes (canon : String → Value → Value) (s : Step) (l : TraceLine) : Prop :=
   l.time = s.time ∧ l.body.dir = .in ∧
@@ -106,7 +108,10 @@ def Writes (canon : String → Value → Value) (s : Step) (l : TraceLine) : Pro
   | .query id name x => ∃ id', l.body = .query .in id' name (canon name x) ∧ ∀ i, id = some i → id' = some i
   | .subscribe id name x => ∃ id', l.body = .subscribe .in id' name (canon name x) ∧ ∀ i, id = some i → id' = some i
   | .unsubscribe to => ∃ id', l.body = .unsubscribe .in id' to
-  | _ => True
+  | .event id name x resultOf =>
+    ∃ id' r, l.body = .event .in id' name (canon name x) r ∧ (∀ i, id = some i → id' = some i) ∧
+      (resultOf = none → r = none)
+  | _ => isEventLine l = false
 
 /-- The `in` lines of a trace, each with its place in the trace. -/
 def inLines (lines : List TraceLine) : List (TraceLine × Nat) := lines.zipIdx.filter (·.1.body.dir == .in)

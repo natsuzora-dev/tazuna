@@ -1,0 +1,4 @@
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"task-1"}}
+{"time":"2026-10-26T01:05:00Z","dir":"in","type":"event","id":"taskAdded#2","name":"todo.taskAdded","payload":{"taskId":"task-2"}}

@@ -27,14 +27,18 @@ const unreached = (lines: readonly TraceLine[], id: string): boolean =>
       l.answer.rejection.kind === "unavailable",
   );
 
+/** Lean's requestName?. */
+function requestName(lines: readonly TraceLine[], id: string): string | undefined {
+  for (const l of lines)
+    if (l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe") && l.id === id)
+      return l.name;
+  return undefined;
+}
+
 /** Lean's peerTarget?. */
 function peerTarget(peer: string, lines: readonly TraceLine[], id: string): string | undefined {
-  for (const l of lines)
-    if (l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe") && l.id === id) {
-      const name = peerName(peer, l.name);
-      if (name !== undefined) return name;
-    }
-  return undefined;
+  const name = requestName(lines, id);
+  return name === undefined ? undefined : peerName(peer, name);
 }
 
 const rename = (keys: Bindings, value: unknown): unknown => renamed(keys, value as Json);
@@ -59,6 +63,15 @@ function peerBody(peer: string, lines: readonly TraceLine[], keys: Bindings, l: 
     default:
       return undefined;
   }
+}
+
+/** Lean's peerEvent?. */
+function peerEvent(service: string, received: readonly string[], keys: Bindings, l: TraceLine): Body | undefined {
+  if (l.dir !== "out" || l.type !== "event") return undefined;
+  const name = received.find((r) => peerName(service, r) === l.name);
+  return name === undefined
+    ? undefined
+    : { type: "event", ...(l.id === undefined ? {} : { id: l.id }), name, payload: rename(keys, l.payload) };
 }
 
 const mapOutput = (answer: Answer, f: (v: unknown) => unknown): Answer =>
@@ -282,6 +295,7 @@ export function peerInputs(
   normal: PeerNormal,
   service: string,
   peer: string,
+  received: readonly string[],
   state: readonly Step[],
   elsewhere: readonly (readonly [number, Step])[],
   aLines: readonly TraceLine[],
@@ -296,7 +310,10 @@ export function peerInputs(
       p === n || (n === aLines.length && n < p) ? [{ step, origin: { type: "elsewhere", index } as Origin }] : [],
     );
     const l = aLines[n];
-    const body = l === undefined ? undefined : peerBody(peer, aLines, forward(n), l);
+    const body =
+      l === undefined
+        ? undefined
+        : (peerBody(peer, aLines, forward(n), l) ?? peerEvent(service, received, forward(n), l));
     return l === undefined || body === undefined
       ? others
       : [...others, { step: { time: l.time, ...body } as Step, origin: { type: "line", line: n } as Origin }];

@@ -91,11 +91,16 @@ theorem runOf_isSome {canon : String → Value → Value} {inputs : List Step} {
   rw [h.1] at hk
   exact ⟨_, List.getElem?_eq_getElem hk⟩
 
-theorem mem_peerInputs_line {normal : String → Value → CValue} {service peer : String} {state : List Step}
-    {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {st : Step} {i : Nat}
-    (h : (st, Origin.line i) ∈ peerInputs normal service peer state elsewhere aLines bLines) :
+/-- The peer's input of the run's line `l`, given the strings `keys` that the peer takes (peerInputs). -/
+abbrev peerInput? (service peer : String) (received : List String) (lines : List TraceLine) (keys : Bindings)
+    (l : TraceLine) : Option Step.Body :=
+  (peerBody? peer lines keys l).orElse fun _ => peerEvent? service received keys l
+
+theorem mem_peerInputs_line {normal : String → Value → CValue} {service peer : String} {received : List String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {st : Step} {i : Nat}
+    (h : (st, Origin.line i) ∈ peerInputs normal service peer received state elsewhere aLines bLines) :
     ∃ l b, aLines[i]? = some l ∧
-      peerBody? peer aLines (peerForward normal service peer aLines bLines i) l = some b ∧
+      peerInput? service peer received aLines (peerForward normal service peer aLines bLines i) l = some b ∧
       st = ⟨l.time, b, none, none⟩ := by
   simp only [peerInputs, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
@@ -111,16 +116,55 @@ theorem mem_peerInputs_line {normal : String → Value → CValue} {service peer
         obtain ⟨rfl, rfl⟩ := he
         exact ⟨l, b, hl, hb, rfl⟩
 
-theorem peerInputs_line_mem {normal : String → Value → CValue} {service peer : String} {state : List Step}
-    {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {i : Nat} {l : TraceLine} {b : Step.Body}
-    (hi : aLines[i]? = some l) (hb : peerBody? peer aLines (peerForward normal service peer aLines bLines i) l = some b) :
-    (⟨l.time, b, none, none⟩, Origin.line i) ∈ peerInputs normal service peer state elsewhere aLines bLines := by
+theorem peerInputs_line_mem {normal : String → Value → CValue} {service peer : String} {received : List String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {i : Nat} {l : TraceLine}
+    {b : Step.Body} (hi : aLines[i]? = some l)
+    (hb : peerBody? peer aLines (peerForward normal service peer aLines bLines i) l = some b) :
+    (⟨l.time, b, none, none⟩, Origin.line i) ∈
+      peerInputs normal service peer received state elsewhere aLines bLines := by
   simp only [peerInputs, List.mem_append, List.mem_map, List.mem_flatMap]
   refine .inr ⟨(⟨l.time, b, none, none⟩, Origin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
   · have := (List.getElem?_eq_some_iff.mp hi).1
     simp only [List.mem_range]
     omega
   · simp [hi, hb]
+
+/-- The line of the scenario's run that an input of the peer comes from. -/
+def _root_.Tazuna.Semantics.Origin.line? : Origin → Option Nat
+  | .line i => some i
+  | _ => none
+
+theorem nodup_flatMap_single {f : Nat → List Nat} {l : List Nat} (hl : l.Nodup) (h : ∀ n, ∀ m ∈ f n, m = n)
+    (h1 : ∀ n, (f n).length ≤ 1) : (l.flatMap f).Nodup := by
+  refine List.pairwise_flatMap.mpr ⟨fun n _ => ?_, hl.imp fun hne => ?_⟩
+  · have := h1 n
+    match hf : f n with
+    | [] => exact List.nodup_nil
+    | [_] => simp
+    | _ :: _ :: _ => rw [hf] at this; simp at this
+  · intro x hx y hy hxy
+    subst hxy
+    exact hne ((h _ x hx).symm.trans (h _ x hy))
+
+theorem peerInputs_lines_nodup {normal : String → Value → CValue} {service peer : String} {received : List String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} :
+    ((peerInputs normal service peer received state elsewhere aLines bLines).filterMap (·.2.line?)).Nodup := by
+  have hnone : ∀ {α : Type} (l : List α), l.filterMap (fun _ => (none : Option Nat)) = [] :=
+    fun _ => List.filterMap_eq_nil_iff.mpr fun _ _ => rfl
+  simp only [peerInputs, List.filterMap_append, List.filterMap_map, List.filterMap_flatMap, Function.comp_def,
+    Origin.line?, hnone, List.nil_append]
+  refine nodup_flatMap_single List.nodup_range (fun n m hm => ?_) (fun n => ?_)
+  · split at hm
+    · simp only [Option.toList_map, List.filterMap_map, Function.comp_def, List.mem_filterMap] at hm
+      obtain ⟨_, _, hm⟩ := hm
+      simpa using hm.symm
+    · simp at hm
+  · split
+    · simp only [Option.toList_map, List.filterMap_map, Function.comp_def]
+      refine Nat.le_trans (List.length_filterMap_le _ _) ?_
+      generalize (Option.orElse _ _ : Option Step.Body) = o
+      cases o <;> simp
+    · simp
 
 theorem peerBody_isSome {peer : String} {lines : List TraceLine} {keys : Bindings} {l : TraceLine} :
     (peerBody? peer lines keys l).isSome = (peerBody? peer lines [] l).isSome := by
@@ -134,8 +178,8 @@ theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Val
     {lines : List TraceLine} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
     (hname : e.name 1 = peer) (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
     (hb : peerBody? peer lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none⟩ l) :
-    al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ isEventLine l = false ∧
-      (∀ id to a, l.body ≠ .answer .in id to a) ∧ Carries agree e 0 1 al l := by
+    al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
+      Carries agree e 0 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
   simp only at ht hw
   simp only [peerBody?] at hb
@@ -145,7 +189,7 @@ theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Val
     obtain ⟨n, ⟨_, hn⟩, rfl⟩ := hb
     obtain ⟨id', hl, hid⟩ := hw
     cases hid id rfl
-    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [isEventLine, hl], by simp [hl], ?_⟩
+    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [hl], ?_⟩
     simp only [Carries, hal, hl, hname]
     exact ⟨trivial, hn, hagree n x⟩
   next _ id name x hal =>
@@ -153,7 +197,7 @@ theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Val
     obtain ⟨n, ⟨_, hn⟩, rfl⟩ := hb
     obtain ⟨id', hl, hid⟩ := hw
     cases hid id rfl
-    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [isEventLine, hl], by simp [hl], ?_⟩
+    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [hl], ?_⟩
     simp only [Carries, hal, hl, hname]
     exact ⟨trivial, hn, hagree n x⟩
   next _ id name x hal =>
@@ -161,32 +205,183 @@ theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Val
     obtain ⟨n, ⟨_, hn⟩, rfl⟩ := hb
     obtain ⟨id', hl, hid⟩ := hw
     cases hid id rfl
-    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [isEventLine, hl], by simp [hl], ?_⟩
+    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [hl], ?_⟩
     simp only [Carries, hal, hl, hname]
     exact ⟨trivial, hn, hagree n x⟩
   next _ _ to hal =>
     simp only [Option.ite_none_right_eq_some, Option.some.injEq] at hb
     obtain ⟨_, rfl⟩ := hb
     obtain ⟨id', hl⟩ := hw
-    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [isEventLine, hl], by simp [hl], ?_⟩
+    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [hl], ?_⟩
     simp only [Carries, hal, hl]
   next => simp at hb
 
+/-- The peer's `in` line for an event of the scenario's run carries that line, at the same time. -/
+theorem peerEvent_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {service : String}
+    {received : List String} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
+    (hname : e.name 0 = service) (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
+    (hb : peerEvent? service received keys al = some b) (hw : Writes canon ⟨al.time, b, none, none⟩ l) :
+    al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
+      Carries agree e 0 1 al l := by
+  obtain ⟨ht, hd, hw⟩ := hw
+  simp only at ht hw
+  simp only [peerEvent?] at hb
+  split at hb
+  next id name x r hal =>
+    obtain ⟨m, hm, rfl⟩ := Option.map_eq_some_iff.mp hb
+    have hn := List.find?_some hm
+    simp only [beq_iff_eq] at hn
+    obtain ⟨id', r', hl, -, -⟩ := hw
+    refine ⟨by simp [hal, TraceLine.Body.dir], ht, hd, by simp [hl], ?_⟩
+    simp only [Carries, hal, hl, hname]
+    exact ⟨hn, hagree m x⟩
+  next => simp at hb
+
+theorem peerInput_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {service peer : String}
+    {received : List String} {lines : List TraceLine} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
+    (hname0 : e.name 0 = service) (hname1 : e.name 1 = peer)
+    (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
+    (hb : peerInput? service peer received lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none⟩ l) :
+    al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
+      Carries agree e 0 1 al l := by
+  cases hp : peerBody? peer lines keys al with
+  | some b' =>
+    simp only [peerInput?, hp, Option.orElse_some, Option.some.injEq] at hb
+    subst hb
+    exact peerBody_carries hname1 hagree hp hw
+  | none =>
+    simp only [peerInput?, hp, Option.orElse_none] at hb
+    exact peerEvent_carries hname0 hagree hb hw
+
+theorem index_unique {α β : Type} {f : α → Option β} :
+    ∀ {l : List α} {k k' : Nat} {a a' : α} {b : β},
+      (l.filterMap f).Nodup → l[k]? = some a → l[k']? = some a' → f a = some b → f a' = some b → k = k'
+  | [], _, _, _, _, _, _, hk, _, _, _ => by simp at hk
+  | _ :: _, 0, 0, _, _, _, _, _, _, _, _ => rfl
+  | x :: xs, 0, k' + 1, a, a', b, hn, hk, hk', ha, ha' => by
+    simp only [List.getElem?_cons_zero, Option.some.injEq] at hk
+    simp only [List.getElem?_cons_succ] at hk'
+    subst hk
+    rw [List.filterMap_cons_some ha, List.nodup_cons] at hn
+    exact absurd (List.mem_filterMap.mpr ⟨a', List.mem_of_getElem? hk', ha'⟩) hn.1
+  | x :: xs, k + 1, 0, a, a', b, hn, hk, hk', ha, ha' => by
+    simp only [List.getElem?_cons_zero, Option.some.injEq] at hk'
+    simp only [List.getElem?_cons_succ] at hk
+    subst hk'
+    rw [List.filterMap_cons_some ha', List.nodup_cons] at hn
+    exact absurd (List.mem_filterMap.mpr ⟨a, List.mem_of_getElem? hk, ha⟩) hn.1
+  | x :: xs, k + 1, k' + 1, a, a', b, hn, hk, hk', ha, ha' => by
+    have hn' : (xs.filterMap f).Nodup := hn.sublist ((List.sublist_cons_self x xs).filterMap f)
+    exact congrArg (· + 1) (index_unique hn' hk hk' ha ha')
+
+theorem peerInputs_line_unique {normal : String → Value → CValue} {service peer : String} {received : List String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {k k' i : Nat}
+    {x x' : Step} (hk : (peerInputs normal service peer received state elsewhere aLines bLines)[k]? = some (x, .line i))
+    (hk' : (peerInputs normal service peer received state elsewhere aLines bLines)[k']? = some (x', .line i)) :
+    k = k' :=
+  index_unique (f := (·.2.line?)) peerInputs_lines_nodup hk hk' rfl rfl
+
+theorem mem_peerInputs_given {normal : String → Value → CValue} {service peer : String} {received : List String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {st : Step}
+    (h : (st, Origin.given) ∈ peerInputs normal service peer received state elsewhere aLines bLines) : st ∈ state := by
+  simp only [peerInputs, List.mem_append, List.mem_map, List.mem_flatMap] at h
+  rcases h with ⟨s, hs, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
+  · simp only [Prod.mk.injEq] at he
+    exact he.1 ▸ hs
+  · exfalso
+    rcases ha with ⟨_, _, rfl⟩ | ha
+    · simp at he
+    · cases hl : aLines[n]? with
+      | none => simp [hl] at ha
+      | some l =>
+        simp only [hl, Option.mem_toList, Option.map_eq_some_iff] at ha
+        obtain ⟨b, -, rfl⟩ := ha
+        simp at he
+
+theorem mem_peerInputs_elsewhere {normal : String → Value → CValue} {service peer : String} {received : List String}
+    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {st : Step} {k : Nat}
+    (h : (st, Origin.elsewhere k) ∈ peerInputs normal service peer received state elsewhere aLines bLines) :
+    ∃ s ∈ elsewhere.map (·.2), ∃ keys index, st.body = s.body.forPeer keys index := by
+  simp only [peerInputs, List.mem_append, List.mem_map, List.mem_flatMap] at h
+  rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
+  · simp at he
+  · rcases ha with ⟨⟨⟨p, s⟩, j⟩, hm, rfl⟩ | ha
+    · simp only [Prod.mk.injEq] at he
+      obtain ⟨rfl, -⟩ := he
+      simp only [List.mem_filter] at hm
+      exact ⟨s, List.mem_map.mpr ⟨(p, s), List.mem_of_getElem? (List.mk_mem_zipIdx_iff_getElem?.mp hm.1), rfl⟩, _, _,
+        rfl⟩
+    · cases hl : aLines[n]? with
+      | none => simp [hl] at ha
+      | some l =>
+        simp only [hl, Option.mem_toList, Option.map_eq_some_iff] at ha
+        obtain ⟨b, -, rfl⟩ := ha
+        simp at he
+
+theorem forPeer_event {b : Step.Body} {keys : Bindings} {index : Nat → Nat} {id : Option String} {name : String}
+    {x : Value} {r : Option Nat} (h : b.forPeer keys index = .event id name x r) :
+    ∃ id' x' r', b = .event id' name x' r' := by
+  cases b <;> simp_all [Step.Body.forPeer]
+
+theorem inLines_of {lines : List TraceLine} {i : Nat} {l : TraceLine} (hl : lines[i]? = some l)
+    (hd : l.body.dir = .in) : ∃ k : Nat, (inLines lines)[k]? = some (l, i) := by
+  have hm : (l, i) ∈ inLines lines := by
+    simp only [inLines, List.mem_filter, beq_iff_eq]
+    exact ⟨List.mk_mem_zipIdx_iff_getElem?.mpr hl, hd⟩
+  exact List.mem_iff_getElem?.mp hm
+
+/-- The input that a run writes an `in` event line for is an event of the same name. -/
+theorem writes_event {canon : String → Value → Value} {st : Step} {l : TraceLine} {id : Option String}
+    {name : String} {payload : Value} {resultOf : Option String} (hw : Writes canon st l)
+    (hb : l.body = .event .in id name payload resultOf) : ∃ sid x r, st.body = .event sid name x r := by
+  obtain ⟨-, -, hw⟩ := hw
+  cases hs : st.body with
+  | event sid n x r =>
+    simp only [hs] at hw
+    obtain ⟨_, _, hl, -⟩ := hw
+    rw [hb] at hl
+    cases hl
+    exact ⟨sid, x, r, rfl⟩
+  | command | query | subscribe =>
+    simp only [hs] at hw
+    obtain ⟨_, hl, -⟩ := hw
+    rw [hb] at hl
+    cases hl
+  | unsubscribe =>
+    simp only [hs] at hw
+    obtain ⟨_, hl⟩ := hw
+    rw [hb] at hl
+    cases hl
+  | _ =>
+    simp only [hs] at hw
+    simp [isEventLine, hb] at hw
+
+theorem AnswerCarries.mono {P Q : Value → Value → Prop} (h : ∀ x y, P x y → Q x y) :
+    ∀ {b a : Answer}, AnswerCarries P b a → AnswerCarries Q b a
+  | .accepted (some _), .accepted (some _), hp => h _ _ hp
+  | .accepted none, .accepted none, _ => trivial
+  | .fulfilled _, .fulfilled _, hp => h _ _ hp
+  | .rejected _, .rejected _, hp => hp
+
 theorem peerTarget_none {p : String} {lines : List TraceLine}
-    (h : ∀ l ∈ lines, ∀ n, l.body.name? = some n → peerName? p n = none) (to : String) :
+    (h : ∀ l ∈ lines, isEventLine l = false → ∀ n, l.body.name? = some n → peerName? p n = none) (to : String) :
     peerTarget? p lines to = none := by
-  simp only [peerTarget?, List.findSome?_eq_none_iff]
-  intro l hl
-  split
-  all_goals first
-    | rfl
-    | (split
-       · apply h l hl
-         simp_all [TraceLine.Body.name?]
-       · rfl)
+  cases hr : requestName? lines to with
+  | none => simp [peerTarget?, hr]
+  | some m =>
+    simp only [peerTarget?, hr, Option.bind_some]
+    obtain ⟨l, hl, hs⟩ := List.exists_of_findSome?_eq_some hr
+    split at hs
+    all_goals first
+      | (split at hs
+         · rename_i hb _
+           cases hs
+           exact h l hl (by simp [isEventLine, hb]) _ (by simp [hb, TraceLine.Body.name?])
+         · cases hs)
+      | cases hs
 
 theorem peerBody_none {p : String} {lines : List TraceLine} {keys : Bindings} {l : TraceLine}
-    (h : ∀ l ∈ lines, ∀ n, l.body.name? = some n → peerName? p n = none) (hl : l ∈ lines) :
+    (h : ∀ l ∈ lines, isEventLine l = false → ∀ n, l.body.name? = some n → peerName? p n = none) (hl : l ∈ lines) :
     peerBody? p lines keys l = none := by
   simp only [peerBody?]
   split
@@ -195,7 +390,7 @@ theorem peerBody_none {p : String} {lines : List TraceLine} {keys : Bindings} {l
     | (simp [peerTarget_none h]; done)
     | (rename_i hb
        simp only [Option.map_eq_none_iff, ite_eq_left_iff, Bool.not_eq_true]
-       exact fun _ => h l hl _ (by simp [hb, TraceLine.Body.name?]))
+       exact fun _ => h l hl (by simp [isEventLine, hb]) _ (by simp [hb, TraceLine.Body.name?]))
 
 theorem unreached_of {lines : List TraceLine} {i : Nat} {l : TraceLine} {id : Option String} {to : String}
     {rejection : Rejection} (hl : lines[i]? = some l) (hb : l.body = .answer .in id to (.rejected rejection))
@@ -326,35 +521,40 @@ theorem sourceB_of {inputs : List (Step × Origin)} {bLines : List TraceLine} {i
 
 /--
 How the scenario's service `service`, member 0, and its peer `peer`, member 1, see each other's values. The peer
-receives a value of a request in the form `canon` that its run writes, with each createKey value of the run as its peer
-key and each string that a prefix of the final bindings binds as the peer's createKey value bound to it (peerForward);
-the scenario's service receives a value of an answer or event that stands for the peer's under the final bindings
-(PeerSees).
+receives a value of a request or event in the form `canon` that its run writes, with each createKey value of the run as
+its peer key and each string that a prefix of the final bindings binds as the peer's createKey value bound to it
+(peerForward); the scenario's service receives a value of an answer or event that stands for the peer's under the final
+bindings (PeerSees).
 -/
 def peerAgree (normal : String → Value → CValue) (canon : String → Value → Value) (service peer : String)
     (aLines bLines : List TraceLine) : Agree
   | 0, 1, n, x, y => ∃ bs, bs <+: peerFinal normal service peer aLines bLines ∧
     y = canon n ((peerKeys service aLines ++ bs.map fun (p : String × String) => (p.2, p.1)).rename x)
-  | 1, 0, n, x, y => PeerSees normal service aLines bLines (peerFinal normal service peer aLines bLines) n x y
+  | 1, 0, m, x, y => ∃ n, peerName? peer m = some n ∧
+    PeerSees normal service aLines bLines (peerFinal normal service peer aLines bLines) n x y
   | _, _, _, _, _ => False
 
 /--
 Stage 2 of the check of a scenario's mocks of a peer. Let `aLines` be the scenario's run of the service `service`, and
 `bLines` a run of the peer `peer`, whose `in` lines are those that a run writes for the derived inputs (peerInputs),
-and which names no definition of `service`. When the check finds no violation, an execution of the two runs on a well
-formed network exists: each request of the scenario's run to the peer that reached it arrives at the peer at its send
-time, and each mocked answer and received event of the peer comes from the peer's run, sent at or before the time the
-scenario receives it, with the values that the two runs see (peerAgree).
+and which names a definition of `service` only on a received event. The given state and the elsewhere inputs give the
+peer no event of `service`. When the check finds no violation, an execution of the two runs on a well formed network
+exists: each request of the scenario's run to the peer that reached it arrives at the peer at its send time, each
+event of `service` that the peer receives comes from the scenario's run at its emit time, and each mocked answer and
+received event of the peer comes from the peer's run, sent at or before the time the scenario receives it, with the
+values that the two runs see (peerAgree).
 -/
 theorem network_realizes {normal : String → Value → CValue} {canon : String → Value → Value} {service peer : String}
-    {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine}
+    {received : List String} {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine}
     {halted : Option (Origin × String)}
-    (hrun : RunOf canon ((peerInputs normal service peer state elsewhere aLines bLines).map (·.1)) bLines)
-    (hstar : ∀ l ∈ bLines, ∀ n, l.body.name? = some n → peerName? service n = none)
+    (hrun : RunOf canon ((peerInputs normal service peer received state elsewhere aLines bLines).map (·.1)) bLines)
+    (hstar : ∀ l ∈ bLines, isEventLine l = false → ∀ n, l.body.name? = some n → peerName? service n = none)
+    (hown : ∀ s ∈ state ++ elsewhere.map (·.2), ∀ id name x r, s.body = .event id name x r →
+      peerName? service name = none)
     (h : peerFindings normal service peer aLines bLines halted = []) :
     ∃ source, WellFormed (peerAgree normal canon service peer aLines bLines)
       ⟨[(service, aLines), (peer, bLines)], source⟩ := by
-  let inputs := peerInputs normal service peer state elsewhere aLines bLines
+  let inputs := peerInputs normal service peer received state elsewhere aLines bLines
   let source : Place → Option Place
     | (0, i) => sourceA normal service peer aLines bLines i
     | (1, j) => sourceB inputs bLines j
@@ -372,14 +572,15 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
   have hlen : e.members.length = 2 := rfl
   have fromB : ∀ j i, sourceB inputs bLines j = some (0, i) → ∃ al l,
       aLines[i]? = some al ∧ bLines[j]? = some l ∧ al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧
-        isEventLine l = false ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
+        (∀ id to a, l.body ≠ .answer .in id to a) ∧
         Carries (peerAgree normal canon service peer aLines bLines) e 0 1 al l := by
     intro j i hs
     obtain ⟨k, st, l, hk, hl⟩ := deliveredAt_spec (sourceB_spec hs).2
     obtain ⟨al, b, hal, hb, rfl⟩ := mem_peerInputs_line (List.mem_of_getElem? hk)
     have hw := hrun.2 k _ _ (by rw [List.getElem?_map, show inputs[k]? = _ from hk]; rfl) hl
     exact ⟨al, l, hal, (mem_inLines (List.mem_of_getElem? hl)).1,
-      peerBody_carries hname1 (fun _ _ => ⟨_, peerBindings_prefix (Nat.le_of_lt (List.getElem?_eq_some_iff.mp hal).1), rfl⟩) hb hw⟩
+      peerInput_carries hname0 hname1
+        (fun _ _ => ⟨_, peerBindings_prefix (Nat.le_of_lt (List.getElem?_eq_some_iff.mp hal).1), rfl⟩) hb hw⟩
   have fromA : ∀ i s j, sourceA normal service peer aLines bLines i = some (s, j) → ∃ al bl,
       aLines[i]? = some al ∧ bLines[j]? = some bl ∧ bl.body.dir = .out ∧ al.body.dir = .in ∧
         bl.time.time ≤ al.time.time ∧ Carries (peerAgree normal canon service peer aLines bLines) e 1 0 bl al := by
@@ -394,12 +595,13 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
       simp only [Option.some.injEq, Prod.mk.injEq] at hat
       obtain ⟨rfl, rfl⟩ := hat
       refine ⟨al, bl, hal, hbl, by simp [hbb, TraceLine.Body.dir], by simp [hb, TraceLine.Body.dir], hle, ?_⟩
+      obtain ⟨m, hm, hmt⟩ := Option.bind_eq_some_iff.mp htarget
       simp only [Carries, hbb, hb, hname1, hlines0]
-      exact ⟨trivial, target, htarget, hsame⟩
+      exact ⟨trivial, m, hm, by simp [hmt], AnswerCarries.mono (fun _ _ hp => ⟨target, hmt, hp⟩) hsame⟩
     · obtain ⟨id', p, ro, hbb, hle, hp⟩ := he
       refine ⟨al, bl, hal, hbl, by simp [hbb, TraceLine.Body.dir], by simp [hb, TraceLine.Body.dir], hle, ?_⟩
       simp only [Carries, hbb, hb, hname1]
-      exact ⟨hn, hp⟩
+      exact ⟨hn, n, hn, hp⟩
   refine ⟨source, show WellFormed _ e from ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩⟩
   · intro r i s j hs
     obtain _ | _ | r := r
@@ -407,7 +609,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
       obtain ⟨al, bl, hal, hbl, h1, h2, h3, h4⟩ := fromA i 1 j hs
       exact ⟨by decide, bl, al, hbl, hal, h1, h2, h3, h4⟩
     · obtain ⟨rfl, -⟩ := sourceB_spec hs
-      obtain ⟨al, l, hal, hl, h1, h2, h3, -, -, h4⟩ := fromB i j hs
+      obtain ⟨al, l, hal, hl, h1, h2, h3, -, h4⟩ := fromB i j hs
       exact ⟨by decide, al, l, hal, hl, h1, h3, by rw [h2]; exact Int.le_refl _, h4⟩
     · exact absurd (hs.symm.trans (hsrc2 r i)) (by simp)
   · rintro ⟨r, i⟩ ⟨r', i'⟩ ⟨s, j⟩ sent hp hq hx hev
@@ -458,7 +660,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
       rcases hc' with ⟨_, _, _, hb2, -, -, hk'⟩ | ⟨_, _, _, _, _, _, hb2, -⟩ <;> rw [hb'] at hb2 <;> cases hb2
       exact answerAt_lt hk hk' (answersTo_take_lt hal hb hlt)
     · obtain ⟨rfl, -⟩ := sourceB_spec hs
-      obtain ⟨_, l1, -, hl1, -, -, -, -, hna, -⟩ := fromB _ _ hs
+      obtain ⟨_, l1, -, hl1, -, -, -, hna, -⟩ := fromB _ _ hs
       have hl1' : bLines[i]? = some l := hl
       rw [hl1] at hl1'
       cases hl1'
@@ -483,7 +685,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
       | some x =>
         obtain ⟨s, j⟩ := x
         obtain ⟨rfl, -⟩ := sourceB_spec hs
-        obtain ⟨_, l1, -, hl1, -, -, -, -, hna, -⟩ := fromB _ _ hs
+        obtain ⟨_, l1, -, hl1, -, -, -, hna, -⟩ := fromB _ _ hs
         have hl1' : bLines[i]? = some l := hl
         rw [hl1] at hl1'
         cases hl1'
@@ -534,8 +736,30 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
     · obtain _ | _ | s := s
       · have hl1 : bLines[i]? = some l := hl
         have hn' : peerName? service name = some n := hn
-        rw [hstar l (List.mem_of_getElem? hl1) name (by simp [hb, TraceLine.Body.name?])] at hn'
-        cases hn'
+        obtain ⟨k, hk⟩ := inLines_of hl1 (by simp [hb, TraceLine.Body.dir])
+        obtain ⟨⟨st, o⟩, hi⟩ : ∃ x, inputs[k]? = some x := by
+          have := (List.getElem?_eq_some_iff.mp hk).1
+          rw [← hrun.1, List.length_map] at this
+          exact ⟨_, List.getElem?_eq_getElem this⟩
+        have hw := hrun.2 k st _ (by rw [List.getElem?_map, hi]; rfl) hk
+        obtain ⟨sid, x, r', hst⟩ := writes_event hw hb
+        have hnone : ∀ s ∈ state ++ elsewhere.map (·.2), ∀ id x r, s.body ≠ .event id name x r :=
+          fun s hs id x r he => by rw [hown s hs id name x r he] at hn'; cases hn'
+        cases o with
+        | given =>
+          exact absurd hst (hnone st (List.mem_append_left _ (mem_peerInputs_given (List.mem_of_getElem? hi))) _ _ _)
+        | elsewhere j =>
+          obtain ⟨s', hs', keys, index, hb'⟩ := mem_peerInputs_elsewhere (List.mem_of_getElem? hi)
+          rw [hb'] at hst
+          obtain ⟨_, _, _, he⟩ := forPeer_event hst
+          exact absurd he (hnone s' (List.mem_append_right _ hs') _ _ _)
+        | line i' =>
+          obtain ⟨j, hj⟩ := deliveredAt_of hi hk
+          obtain ⟨k', _, _, hk1, hk2⟩ := deliveredAt_spec hj
+          cases peerInputs_line_unique hi hk1
+          rw [hk] at hk2
+          cases hk2
+          exact ⟨i', sourceB_of hj⟩
       · exact absurd rfl hsr
       · omega
     · exact absurd (hl.symm.trans (hline2 r i)) (by simp)

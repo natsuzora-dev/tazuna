@@ -1,0 +1,2 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"greeted#1","name":"greeter.greeted","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"greeted#2","name":"greeter.greeted","payload":{"taskId":"task-2"}}
