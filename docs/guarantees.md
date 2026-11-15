@@ -56,7 +56,7 @@ When `test` reports none of these violations, the scenario's run and the peer's 
 
 Lean proves this as `network_realizes` for spec runs, given two facts that it does not prove: the peer's run writes one input line for each derived input, in order, and the peer's run names a definition of the scenario's service only on an event that it receives.
 That the given state and the `elsewhere` inputs give the peer no event of the scenario's service is checked when the spec loads.
-For a request, it states only that the peer receives the strings renamed by the names that mocks give up to some point of the run, not necessarily up to the request.
+For a request, `network_realizes` states only that the peer receives the strings renamed by the names that mocks give up to some point of the run, not necessarily up to the request.
 So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
 Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
 

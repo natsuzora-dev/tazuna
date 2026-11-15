@@ -24,7 +24,6 @@ export interface PeerDerivation {
 const isMessage = (l: TraceLine) =>
   l.type === "command" || l.type === "query" || l.type === "subscribe" || l.type === "event";
 
-/** Whether the line is an event of the scenario's service `service` that `received` lists by its trace name. */
 const isReceived = (service: string, received: readonly string[], l: TraceLine) =>
   l.dir === "out" && l.type === "event" && received.includes(`${service}.${l.name}`);
 

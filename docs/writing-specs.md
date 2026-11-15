@@ -39,7 +39,6 @@ Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 `test` checks a scenario's mocks of another service of the spec against that service's run ([guarantees.md](guarantees.md#when-a-scenario-talks-to-another-service)), so write the inputs that the other service needs.
 Write each start state of a service as inputs to it under `states` in its contract, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
 Write an input that the other service takes from someone else, such as the command whose event the scenario receives, as `elsewhere(todo, send(todo.addTask, input))` at its place among the scenario's inputs; the scenario's own service skips it.
-An event of the scenario's own service reaches the other service only from the scenario's run, so a state or an `elsewhere` input that gives it one is reported as `Malformed.ownEventToPeer`.
 Repeat such inputs with a plain TypeScript function rather than a new option.
 A mock may name a key that the other service creates with any string, one to one, such as `T-bread` for todo's `Task-2`; `test` sends a later request with `T-bread` to todo as `Task-2`.
 

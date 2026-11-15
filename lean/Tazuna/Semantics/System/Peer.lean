@@ -200,8 +200,9 @@ def unifyAnswer (created : List String) (seen form : Value → CValue) (bs : Bin
 The check of the run's line `l`, the line `i` of the run, with the bindings `bs` of the peer's createKey values to the
 strings that the scenario has in their place: its violation, or `bs` extended. A mocked answer to a request to the peer
 that reached it must be the peer's answer at the same place, by its time; a received event of the peer must be one that
-the peer emits by its time, after the `in` line of the request that it names as its result (inputOf?). The peer's values have its peer keys turned back into the run's createKey values, and
-`normal` gives the form of an output or payload of the peer's definition, by the peer's own name, that verify compares.
+the peer emits by its time, after the `in` line of the request that it names as its result (inputOf?). The peer's
+values have its peer keys turned back into the run's createKey values, and `normal` gives the form of an output or
+payload of the peer's definition, by the peer's own name, that verify compares.
 -/
 def peerLine (normal : String → Value → CValue) (service peer : String) (aLines bLines : List TraceLine)
     (bs : Bindings) (i : Nat) (l : TraceLine) : Except InvalidInput Bindings :=
