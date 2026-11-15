@@ -13,7 +13,7 @@ const peerKeys = (service: string, lines: readonly TraceLine[]): Map<string, str
   new Map(lines.flatMap((l) => l.created ?? []).map((k) => [k, peerKey(service, k)]));
 
 /** Lean's peerName?. */
-const peerName = (peer: string, name: string): string | undefined =>
+export const peerName = (peer: string, name: string): string | undefined =>
   name.startsWith(`${peer}.`) ? name.slice(peer.length + 1) : undefined;
 
 /** Lean's unreached. */
@@ -66,7 +66,12 @@ function peerBody(peer: string, lines: readonly TraceLine[], keys: Bindings, l: 
 }
 
 /** Lean's peerEvent?. */
-function peerEvent(service: string, received: readonly string[], keys: Bindings, l: TraceLine): Body | undefined {
+export function peerEvent(
+  service: string,
+  received: readonly string[],
+  keys: Bindings,
+  l: TraceLine,
+): Body | undefined {
   if (l.dir !== "out" || l.type !== "event") return undefined;
   const name = received.find((r) => peerName(service, r) === l.name);
   return name === undefined
@@ -108,8 +113,8 @@ function forPeer(keys: Bindings, index: (r: number) => number, step: Step): Step
   }
 }
 
-/** Lean's inputOf?. */
-const inputOf = (lines: readonly TraceLine[], j: number): string | undefined =>
+/** Lean's requestOfLine?. */
+const requestOfLine = (lines: readonly TraceLine[], j: number): string | undefined =>
   lines.slice(0, j + 1).findLast((l) => l.dir === "in")?.id;
 
 /** Lean's Origin. */
@@ -289,7 +294,7 @@ function peerLine(
         b.dir === "out" &&
         b.name === n &&
         atOrBefore(b.time, l.time) &&
-        (l.resultOf === undefined || inputOf(bLines, j) === l.resultOf)
+        (l.resultOf === undefined || requestOfLine(bLines, j) === l.resultOf)
       ) {
         const bindings = unify(created, seen(n)(b.payload), normal(n, l.payload), bs);
         if (bindings !== undefined) return { bindings };

@@ -306,11 +306,11 @@ def PeerSees (normal : String → Value → CValue) (service : String) (aLines b
 
 /--
 Whether the peer's line `b`, its line `j`, emits the event `n`, at or before `time`, with a payload that `payload`
-stands for, after the `in` line of the request `resultOf` when it is given (inputOf?).
+stands for, after the `in` line of the request `resultOf` when it is given (requestOfLine?).
 -/
 def PeerEmits (normal : String → Value → CValue) (service : String) (aLines bLines : List TraceLine) (bs : Bindings)
     (n : String) (payload : Value) (resultOf : Option String) (time : DateTime) (j : Nat) (b : TraceLine) : Prop :=
-  ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → inputOf? bLines j = some q) ∧
+  ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → requestOfLine? bLines j = some q) ∧
     b.time.time ≤ time.time ∧ PeerSees normal service aLines bLines bs n p payload
 
 theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {to target : String}
@@ -336,7 +336,7 @@ theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Optio
     {payload : Value} {resultOf : Option String} (hl : l.body = .event .in id name payload resultOf)
     (hn : peerName? peer name = some n) (h : peerLine normal service peer aLines bLines bs i l = .ok bs') :
     ∃ j b, bLines[j]? = some b ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
-      (∀ q, resultOf = some q → inputOf? bLines j = some q) ∧ b.time.time ≤ l.time.time ∧
+      (∀ q, resultOf = some q → requestOfLine? bLines j = some q) ∧ b.time.time ≤ l.time.time ∧
       Unified (createdOf bLines) bs bs' (fun f => ValueMatches f (seenOf normal service aLines n p) (normal n payload)) := by
   simp only [peerLine, hl, hn] at h
   split at h

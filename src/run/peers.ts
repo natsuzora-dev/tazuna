@@ -9,7 +9,14 @@ import { type ElsewhereInput, elsewhereInputs, type Scenario, timed, writtenPosi
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
 import { serviceOf } from "../semantics/service/basic.ts";
-import { type Origin, type PeerNormal, peerFindings, peerInputs } from "../semantics/system/peer.ts";
+import {
+  type Origin,
+  type PeerNormal,
+  peerEvent,
+  peerFindings,
+  peerInputs,
+  peerName,
+} from "../semantics/system/peer.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
 /** The arguments of peerInputs for one peer of a scenario's run, with the scenario's elsewhere inputs to the peer. */
@@ -23,9 +30,6 @@ export interface PeerDerivation {
 
 const isMessage = (l: TraceLine) =>
   l.type === "command" || l.type === "query" || l.type === "subscribe" || l.type === "event";
-
-const isReceived = (service: string, received: readonly string[], l: TraceLine) =>
-  l.dir === "out" && l.type === "event" && received.includes(`${service}.${l.name}`);
 
 /** Returns the service whose exported contract is `value`, which load checks (Malformed.unknownPeer). */
 const contractService = (spec: Spec, value: object): string =>
@@ -62,8 +66,8 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
       named.has(peer) ||
       run.outcome.lines.some(
         (l) =>
-          (isMessage(l) && "name" in l && l.name.startsWith(`${peer}.`)) ||
-          isReceived(scenario.service, received.get(peer) ?? [], l),
+          (isMessage(l) && "name" in l && peerName(peer, l.name) !== undefined) ||
+          peerEvent(scenario.service, received.get(peer) ?? [], new Map(), l) !== undefined,
       ),
   );
   return peers.map((peer) => {
@@ -101,10 +105,15 @@ export function peerNormal(spec: Spec, peer: string): PeerNormal {
  * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
  * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
  * halting violation's kind. The derivation starts from an empty run of the peer and repeats until the inputs stop
- * changing: an input depends only on the peer's run of the inputs before it.
+ * changing: an input depends only on the peer's run of the inputs before it. `normal` is the peer's peerNormal.
  */
-export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[], d: PeerDerivation) {
-  const normal = peerNormal(spec, d.peer);
+export function runPeer(
+  spec: Spec,
+  normal: PeerNormal,
+  service: string,
+  lines: readonly TraceLine[],
+  d: PeerDerivation,
+) {
   const derive = (peerLines: readonly TraceLine[]) =>
     peerInputs(normal, service, d.peer, d.received, d.state, d.elsewhere, lines, peerLines);
   let derived = derive([]);
@@ -121,8 +130,10 @@ export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[]
     const next = derive(run.outcome.lines);
     if (canonicalJson(next) === canonicalJson(derived)) {
       const { halted } = run;
-      const origin = halted === undefined ? undefined : derived[run.inputOf(halted) ?? 0]?.origin;
-      return { derived, run, halted: halted === undefined ? undefined : ([origin as Origin, halted.kind] as const) };
+      if (halted === undefined) return { derived, run, halted: undefined };
+      // A run halts on the last input that it takes.
+      const halting = derived[run.execution.inputs.length - 1] as (typeof derived)[number];
+      return { derived, run, halted: [halting.origin, halted.kind] as const };
     }
     if (round > derived.length) throw new Error(`the inputs of the peer ${d.peer} do not settle`);
     derived = next;
@@ -150,19 +161,13 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
   });
   const lines = run.outcome.lines;
   return peerDerivations(spec, scenario, run).map((d) => {
-    const peerRun = runPeer(spec, scenario.service, lines, d);
+    const normal = peerNormal(spec, d.peer);
+    const peerRun = runPeer(spec, normal, scenario.service, lines, d);
     const locationOf = (o: Origin): Location =>
       o.type === "line"
         ? at(positions[run.inputLines.findLastIndex((l) => l <= o.line)])
         : at(o.type === "elsewhere" ? d.written[o.index]?.position : undefined);
-    const findings = peerFindings(
-      peerNormal(spec, d.peer),
-      scenario.service,
-      d.peer,
-      lines,
-      peerRun.run.outcome.lines,
-      peerRun.halted,
-    );
+    const findings = peerFindings(normal, scenario.service, d.peer, lines, peerRun.run.outcome.lines, peerRun.halted);
     return {
       peer: d.peer,
       lines: peerRun.halted === undefined ? peerRun.run.outcome.lines : undefined,

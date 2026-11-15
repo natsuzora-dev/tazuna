@@ -28,9 +28,9 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
       for (const d of peerDerivations(spec, scenario, run)) {
         const at = `${relative(join(import.meta.dirname, ".."), root)} ${scenario.service}.${scenario.name} ${d.peer}`;
         const lines = run.outcome.lines;
-        const { derived, run: peerRun, halted } = runPeer(spec, scenario.service, lines, d);
-        const normals: [string, unknown, unknown][] = [];
         const normal = peerNormal(spec, d.peer);
+        const { derived, run: peerRun, halted } = runPeer(spec, normal, scenario.service, lines, d);
+        const normals: [string, unknown, unknown][] = [];
         const recorded = (name: string, value: unknown) => {
           const form = normal(name, value);
           normals.push([name, value, tagged(form)]);
