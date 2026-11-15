@@ -81,9 +81,6 @@ structure Compared where
   findings : List Finding
   bindings : Bindings
 
-/-- The number of steps after which a search stops: a window's search, or the search of one pair of `in` lines. -/
-def searchLimit : Nat := 100000
-
 /-- A one-to-one renaming of snapshot values to implementation values, with the lines that bound each value. -/
 abbrev Renaming := List Use
 

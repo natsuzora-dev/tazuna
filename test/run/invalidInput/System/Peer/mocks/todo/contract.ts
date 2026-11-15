@@ -16,5 +16,9 @@ export const todo = contract({
       send(addTitle, { title: "Buy milk" }),
       send(addTitle, { title: "Buy bread" }),
     ],
+    thirtyMilks: [
+      at("2026-10-25T08:00:00+09:00"),
+      ...Array.from({ length: 30 }, () => send(addTitle, { title: "Buy milk" })),
+    ],
   },
 });

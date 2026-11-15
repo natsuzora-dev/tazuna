@@ -1,4 +1,4 @@
-import { alike, Bag, Runs } from "../data/canonical.ts";
+import { alike, Bag, Runs, searchLimit } from "../data/canonical.ts";
 import type { Mismatch, Use } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
@@ -19,9 +19,6 @@ import { plain } from "../data/values.ts";
 import { type Found, lineSchema, resolveAfters } from "./lines.ts";
 
 const json = (value: unknown) => JSON.stringify(value);
-
-/** The number of steps after which a search stops: a window's search, or the search of one pair of `in` lines. */
-const searchLimit = 100000;
 
 /** A one-to-one renaming of snapshot values to implementation values, with the lines that bound each value. */
 type Renaming = readonly Use[];

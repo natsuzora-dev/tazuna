@@ -1,4 +1,4 @@
-import { Bag, Runs } from "../../data/canonical.ts";
+import { Bag, Runs, searchLimit } from "../../data/canonical.ts";
 import type { InvalidInput } from "../../data/invalidInput.generated.ts";
 import type { Step } from "../../data/step.generated.ts";
 import type { Answer, TraceLine } from "../../data/trace.generated.ts";
@@ -153,7 +153,11 @@ function unify(created: ReadonlySet<string>, s: unknown, t: unknown, bs: Binding
   if (Array.isArray(s)) return Array.isArray(t) && s.length === t.length ? unifyList(created, s, t, bs) : undefined;
   if (s instanceof Runs)
     return t instanceof Runs && s.runs.length === t.runs.length ? unifyList(created, s.runs, t.runs, bs) : undefined;
-  if (s instanceof Bag) return t instanceof Bag ? unifyBag(created, s.items, t.items, bs) : undefined;
+  if (s instanceof Bag) {
+    if (!(t instanceof Bag) || !bagFits(created, s.items, t.items)) return undefined;
+    const found = unifyBag(created, s.items, t.items, bs, searchLimit);
+    return "bindings" in found ? found.bindings : undefined;
+  }
   if (isObject(s)) {
     if (!isObject(t) || !sameKeys(s, t)) return undefined;
     return unifyList(
@@ -181,23 +185,49 @@ function unifyList(
   return bindings;
 }
 
+/** Lean's fits, fitsList and fitsFields. */
+function fits(created: ReadonlySet<string>, s: unknown, t: unknown): boolean {
+  if (typeof s === "string") return typeof t === "string" && (created.has(s) || t === s);
+  const all = (xs: readonly unknown[], ys: readonly unknown[]) =>
+    xs.length === ys.length && xs.every((x, i) => fits(created, x, ys[i]));
+  if (Array.isArray(s)) return Array.isArray(t) && all(s, t);
+  if (s instanceof Runs) return t instanceof Runs && all(s.runs, t.runs);
+  if (s instanceof Bag) return t instanceof Bag && s.items.length === t.items.length;
+  if (isObject(s)) return isObject(t) && sameKeys(s, t) && Object.keys(s).every((k) => fits(created, s[k], t[k]));
+  return s === t;
+}
+
+/** Lean's bagFits. */
+function bagFits(created: ReadonlySet<string>, ss: readonly unknown[], ts: readonly unknown[]): boolean {
+  const fitting = ss.map((s) => ts.flatMap((t, k) => (fits(created, s, t) ? [k] : [])));
+  const keys = fitting.map((ks) => ks.join(","));
+  return keys.every((key, i) => keys.filter((k) => k === key).length <= (fitting[i] as number[]).length);
+}
+
+type Search = { readonly bindings: Bindings } | { readonly left: number };
+
 /** Lean's unifyBag and unifyBagFrom. */
 function unifyBag(
   created: ReadonlySet<string>,
   ss: readonly unknown[],
   ts: readonly unknown[],
   bs: Bindings,
-): Bindings | undefined {
-  if (ss.length !== ts.length) return undefined;
+  left: number,
+): Search {
+  if (ss.length !== ts.length) return { left };
   const [first, ...rest] = ss;
-  if (ss.length === 0) return bs;
+  if (ss.length === 0) return { bindings: bs };
+  let tries = left;
   for (const [i, t] of ts.entries()) {
+    if (tries === 0) return { left: 0 };
+    tries -= 1;
     const once = unify(created, first, t, bs);
     if (once === undefined) continue;
-    const all = unifyBag(created, rest, ts.toSpliced(i, 1), once);
-    if (all !== undefined) return all;
+    const all = unifyBag(created, rest, ts.toSpliced(i, 1), once, tries);
+    if ("bindings" in all) return all;
+    tries = all.left;
   }
-  return undefined;
+  return { left: tries };
 }
 
 type Form = (value: unknown) => unknown;

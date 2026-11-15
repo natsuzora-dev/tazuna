@@ -124,9 +124,43 @@ def _root_.Tazuna.Data.Bindings.bind (bs : Bindings) (v w : String) : Option Bin
 mutual
 
 /--
+Whether the peer's value `s` can equal the scenario's value `t` under some bindings: unify's comparison with each
+string of `created` equal to any string, and bags compared by their sizes.
+-/
+def fits (created : List String) : CValue → CValue → Bool
+  | .leaf (.str v), .leaf (.str w) => created.contains v || w == v
+  | .leaf v, .leaf w => w == v
+  | .arr xs, .arr ys | .runs xs, .runs ys => fitsList created xs ys
+  | .bag xs, .bag ys => xs.length == ys.length
+  | .obj fs, .obj gs => sameKeys fs gs && fitsFields created fs gs
+  | _, _ => false
+
+def fitsList (created : List String) : List CValue → List CValue → Bool
+  | x :: xs, y :: ys => fits created x y && fitsList created xs ys
+  | [], [] => true
+  | _, _ => false
+
+def fitsFields (created : List String) : List (String × CValue) → List (String × CValue) → Bool
+  | [], _ => true
+  | (k, v) :: fs, gs => (gs.lookup k).any (fits created v) && fitsFields created fs gs
+
+end
+
+/--
+Whether the elements of `ss` can pair one to one with those of `ts` as far as fits tells: the elements of `ss` that
+fit the same elements of `ts` are no more than those elements. unify fails at once otherwise, before it searches.
+-/
+def bagFits (created : List String) (ss ts : List CValue) : Bool :=
+  let fitting (s : CValue) : List Nat := ts.zipIdx.filterMap fun (t, k) => if fits created s t then some k else none
+  ss.all fun s => (ss.filter (fitting · == fitting s)).length ≤ (fitting s).length
+
+mutual
+
+/--
 `bs` extended so that the peer's value `s` equals the scenario's value `t`, or none. A string of `created` equals the
 string that it is bound to, and is bound when it is not (Bindings.bind); other strings equal themselves. Bags pair their
-elements by backtracking, as verify's `free` does.
+elements by backtracking, as verify's `free` does, after bagFits; a bag whose search takes more than `searchLimit`
+tries does not equal (unifyBag).
 -/
 def unify (created : List String) (s t : CValue) (bs : Bindings) : Option Bindings :=
   match s, t with
@@ -137,7 +171,7 @@ def unify (created : List String) (s t : CValue) (bs : Bindings) : Option Bindin
   | .leaf v, .leaf w => if w == v then some bs else none
   | .arr xs, .arr ys => if xs.length == ys.length then unifyList created xs ys bs else none
   | .runs xs, .runs ys => if xs.length == ys.length then unifyList created xs ys bs else none
-  | .bag xs, .bag ys => unifyBag created xs ys bs
+  | .bag xs, .bag ys => if bagFits created xs ys then (unifyBag created xs ys bs searchLimit).toOption else none
   | .obj fs, .obj gs => if sameKeys fs gs then unifyFields created fs gs bs else none
   | _, _ => none
 termination_by (sizeOf s, 0)
@@ -158,28 +192,32 @@ def unifyFields (created : List String) (fs gs : List (String × CValue)) (bs : 
 termination_by (sizeOf fs, 0)
 decreasing_by all_goals lex_decreasing
 
-def unifyBag (created : List String) (ss ts : List CValue) (bs : Bindings) : Option Bindings :=
-  if ss.length != ts.length then none
+/--
+`bs` extended so that the elements of `ss` equal those of `ts` in some order, or, when no order is found within `left`
+tries, the tries left. A try unifies an element of `ss` with an element of `ts`.
+-/
+def unifyBag (created : List String) (ss ts : List CValue) (bs : Bindings) (left : Nat) : Except Nat Bindings :=
+  if ss.length != ts.length then .error left
   else
     match ss with
-    | [] => some bs
-    | first :: rest => unifyBagFrom created first rest ts [] bs
+    | [] => .ok bs
+    | first :: rest => unifyBagFrom created first rest ts [] bs left
 termination_by (sizeOf ss, ts.length + 1)
 decreasing_by all_goals lex_decreasing
 
 /-- The search of unifyBag for `first`. `passed` holds the candidates tried. -/
-def unifyBagFrom (created : List String) (first : CValue) (rest cands passed : List CValue) (bs : Bindings) :
-    Option Bindings :=
-  match cands with
-  | [] => none
-  | t :: more =>
-    let next := unifyBagFrom created first rest more (t :: passed) bs
+def unifyBagFrom (created : List String) (first : CValue) (rest cands passed : List CValue) (bs : Bindings)
+    (left : Nat) : Except Nat Bindings :=
+  match cands, left with
+  | [], left => .error left
+  | _ :: _, 0 => .error 0
+  | t :: more, left + 1 =>
     match unify created first t bs with
     | some bs' =>
-      match unifyBag created rest (passed.reverse ++ more) bs' with
-      | some bs'' => some bs''
-      | none => next
-    | none => next
+      match unifyBag created rest (passed.reverse ++ more) bs' left with
+      | .ok bs'' => .ok bs''
+      | .error left' => unifyBagFrom created first rest more (t :: passed) bs left'
+    | none => unifyBagFrom created first rest more (t :: passed) bs left
 termination_by (sizeOf first + sizeOf rest + 1, cands.length)
 decreasing_by all_goals lex_decreasing
 

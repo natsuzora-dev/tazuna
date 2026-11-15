@@ -23,3 +23,23 @@ export const completesRenamedTask = scenario(
   ],
   { given: { todo: todo.states.milkAndBread } },
 );
+
+export const showsOneWrongTitleOfThirty = scenario(
+  "Answer thirty tasks with one title that todo does not have; the tasks are alike but for the keys that todo creates, so test reports unproducibleAnswer at once instead of trying each order of them",
+  [
+    at("2026-10-25T10:00:00+09:00"),
+    mock(boardScreen, [
+      todo.tasks,
+      {
+        result: "fulfilled",
+        output: {
+          tasks: Array.from({ length: 30 }, (_, i) => ({
+            taskId: `T-${i + 1}`,
+            title: i === 0 ? "Buy bread" : "Buy milk",
+          })),
+        },
+      },
+    ]),
+  ],
+  { given: { todo: todo.states.thirtyMilks } },
+);

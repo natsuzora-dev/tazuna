@@ -1,0 +1,152 @@
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#1","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTitle#1","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#1","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"Task-1","title":"Buy milk"},"after":["titleAdded#1"],"created":["Task-1"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"Task-1"},"after":["titleAdded#1","taskAddedRecorded#1"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#2","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTitle#2","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#2","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#2","name":"taskAddedRecorded","payload":{"id":"Task-2","title":"Buy milk"},"after":["titleAdded#2"],"created":["Task-2"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"Task-2"},"after":["titleAdded#2","taskAddedRecorded#2"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#3","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"addTitle#3","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#3","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#3","name":"taskAddedRecorded","payload":{"id":"Task-3","title":"Buy milk"},"after":["titleAdded#3"],"created":["Task-3"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"taskId":"Task-3"},"after":["titleAdded#3","taskAddedRecorded#3"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#4","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"addTitle#4","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#4","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#4","name":"taskAddedRecorded","payload":{"id":"Task-4","title":"Buy milk"},"after":["titleAdded#4"],"created":["Task-4"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"taskId":"Task-4"},"after":["titleAdded#4","taskAddedRecorded#4"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#5","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#5","to":"addTitle#5","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#5","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#5","name":"taskAddedRecorded","payload":{"id":"Task-5","title":"Buy milk"},"after":["titleAdded#5"],"created":["Task-5"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#5","name":"taskAdded","payload":{"taskId":"Task-5"},"after":["titleAdded#5","taskAddedRecorded#5"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#6","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#6","to":"addTitle#6","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#6","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#6","name":"taskAddedRecorded","payload":{"id":"Task-6","title":"Buy milk"},"after":["titleAdded#6"],"created":["Task-6"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#6","name":"taskAdded","payload":{"taskId":"Task-6"},"after":["titleAdded#6","taskAddedRecorded#6"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#7","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#7","to":"addTitle#7","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#7","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#7","name":"taskAddedRecorded","payload":{"id":"Task-7","title":"Buy milk"},"after":["titleAdded#7"],"created":["Task-7"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#7","name":"taskAdded","payload":{"taskId":"Task-7"},"after":["titleAdded#7","taskAddedRecorded#7"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#8","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#8","to":"addTitle#8","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#8","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#8","name":"taskAddedRecorded","payload":{"id":"Task-8","title":"Buy milk"},"after":["titleAdded#8"],"created":["Task-8"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#8","name":"taskAdded","payload":{"taskId":"Task-8"},"after":["titleAdded#8","taskAddedRecorded#8"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#9","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#9","to":"addTitle#9","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#9","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#9","name":"taskAddedRecorded","payload":{"id":"Task-9","title":"Buy milk"},"after":["titleAdded#9"],"created":["Task-9"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#9","name":"taskAdded","payload":{"taskId":"Task-9"},"after":["titleAdded#9","taskAddedRecorded#9"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#10","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#10","to":"addTitle#10","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#10","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#10","name":"taskAddedRecorded","payload":{"id":"Task-10","title":"Buy milk"},"after":["titleAdded#10"],"created":["Task-10"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#10","name":"taskAdded","payload":{"taskId":"Task-10"},"after":["titleAdded#10","taskAddedRecorded#10"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#11","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#11","to":"addTitle#11","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#11","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#11","name":"taskAddedRecorded","payload":{"id":"Task-11","title":"Buy milk"},"after":["titleAdded#11"],"created":["Task-11"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#11","name":"taskAdded","payload":{"taskId":"Task-11"},"after":["titleAdded#11","taskAddedRecorded#11"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#12","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#12","to":"addTitle#12","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#12","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#12","name":"taskAddedRecorded","payload":{"id":"Task-12","title":"Buy milk"},"after":["titleAdded#12"],"created":["Task-12"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#12","name":"taskAdded","payload":{"taskId":"Task-12"},"after":["titleAdded#12","taskAddedRecorded#12"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#13","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#13","to":"addTitle#13","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#13","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#13","name":"taskAddedRecorded","payload":{"id":"Task-13","title":"Buy milk"},"after":["titleAdded#13"],"created":["Task-13"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#13","name":"taskAdded","payload":{"taskId":"Task-13"},"after":["titleAdded#13","taskAddedRecorded#13"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#14","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#14","to":"addTitle#14","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#14","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#14","name":"taskAddedRecorded","payload":{"id":"Task-14","title":"Buy milk"},"after":["titleAdded#14"],"created":["Task-14"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#14","name":"taskAdded","payload":{"taskId":"Task-14"},"after":["titleAdded#14","taskAddedRecorded#14"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#15","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#15","to":"addTitle#15","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#15","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#15","name":"taskAddedRecorded","payload":{"id":"Task-15","title":"Buy milk"},"after":["titleAdded#15"],"created":["Task-15"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#15","name":"taskAdded","payload":{"taskId":"Task-15"},"after":["titleAdded#15","taskAddedRecorded#15"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#16","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#16","to":"addTitle#16","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#16","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#16","name":"taskAddedRecorded","payload":{"id":"Task-16","title":"Buy milk"},"after":["titleAdded#16"],"created":["Task-16"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#16","name":"taskAdded","payload":{"taskId":"Task-16"},"after":["titleAdded#16","taskAddedRecorded#16"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#17","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#17","to":"addTitle#17","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#17","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#17","name":"taskAddedRecorded","payload":{"id":"Task-17","title":"Buy milk"},"after":["titleAdded#17"],"created":["Task-17"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#17","name":"taskAdded","payload":{"taskId":"Task-17"},"after":["titleAdded#17","taskAddedRecorded#17"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#18","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#18","to":"addTitle#18","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#18","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#18","name":"taskAddedRecorded","payload":{"id":"Task-18","title":"Buy milk"},"after":["titleAdded#18"],"created":["Task-18"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#18","name":"taskAdded","payload":{"taskId":"Task-18"},"after":["titleAdded#18","taskAddedRecorded#18"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#19","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#19","to":"addTitle#19","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#19","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#19","name":"taskAddedRecorded","payload":{"id":"Task-19","title":"Buy milk"},"after":["titleAdded#19"],"created":["Task-19"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#19","name":"taskAdded","payload":{"taskId":"Task-19"},"after":["titleAdded#19","taskAddedRecorded#19"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#20","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#20","to":"addTitle#20","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#20","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#20","name":"taskAddedRecorded","payload":{"id":"Task-20","title":"Buy milk"},"after":["titleAdded#20"],"created":["Task-20"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#20","name":"taskAdded","payload":{"taskId":"Task-20"},"after":["titleAdded#20","taskAddedRecorded#20"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#21","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#21","to":"addTitle#21","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#21","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#21","name":"taskAddedRecorded","payload":{"id":"Task-21","title":"Buy milk"},"after":["titleAdded#21"],"created":["Task-21"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#21","name":"taskAdded","payload":{"taskId":"Task-21"},"after":["titleAdded#21","taskAddedRecorded#21"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#22","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#22","to":"addTitle#22","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#22","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#22","name":"taskAddedRecorded","payload":{"id":"Task-22","title":"Buy milk"},"after":["titleAdded#22"],"created":["Task-22"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#22","name":"taskAdded","payload":{"taskId":"Task-22"},"after":["titleAdded#22","taskAddedRecorded#22"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#23","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#23","to":"addTitle#23","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#23","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#23","name":"taskAddedRecorded","payload":{"id":"Task-23","title":"Buy milk"},"after":["titleAdded#23"],"created":["Task-23"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#23","name":"taskAdded","payload":{"taskId":"Task-23"},"after":["titleAdded#23","taskAddedRecorded#23"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#24","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#24","to":"addTitle#24","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#24","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#24","name":"taskAddedRecorded","payload":{"id":"Task-24","title":"Buy milk"},"after":["titleAdded#24"],"created":["Task-24"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#24","name":"taskAdded","payload":{"taskId":"Task-24"},"after":["titleAdded#24","taskAddedRecorded#24"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#25","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#25","to":"addTitle#25","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#25","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#25","name":"taskAddedRecorded","payload":{"id":"Task-25","title":"Buy milk"},"after":["titleAdded#25"],"created":["Task-25"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#25","name":"taskAdded","payload":{"taskId":"Task-25"},"after":["titleAdded#25","taskAddedRecorded#25"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#26","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#26","to":"addTitle#26","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#26","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#26","name":"taskAddedRecorded","payload":{"id":"Task-26","title":"Buy milk"},"after":["titleAdded#26"],"created":["Task-26"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#26","name":"taskAdded","payload":{"taskId":"Task-26"},"after":["titleAdded#26","taskAddedRecorded#26"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#27","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#27","to":"addTitle#27","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#27","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#27","name":"taskAddedRecorded","payload":{"id":"Task-27","title":"Buy milk"},"after":["titleAdded#27"],"created":["Task-27"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#27","name":"taskAdded","payload":{"taskId":"Task-27"},"after":["titleAdded#27","taskAddedRecorded#27"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#28","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#28","to":"addTitle#28","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#28","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#28","name":"taskAddedRecorded","payload":{"id":"Task-28","title":"Buy milk"},"after":["titleAdded#28"],"created":["Task-28"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#28","name":"taskAdded","payload":{"taskId":"Task-28"},"after":["titleAdded#28","taskAddedRecorded#28"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#29","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#29","to":"addTitle#29","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#29","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#29","name":"taskAddedRecorded","payload":{"id":"Task-29","title":"Buy milk"},"after":["titleAdded#29"],"created":["Task-29"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#29","name":"taskAdded","payload":{"taskId":"Task-29"},"after":["titleAdded#29","taskAddedRecorded#29"]}
+{"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTitle#30","name":"addTitle","input":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#30","to":"addTitle#30","answer":{"result":"accepted"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"titleAdded#30","name":"titleAdded","payload":{"title":"Buy milk"}}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#30","name":"taskAddedRecorded","payload":{"id":"Task-30","title":"Buy milk"},"after":["titleAdded#30"],"created":["Task-30"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#30","name":"taskAdded","payload":{"taskId":"Task-30"},"after":["titleAdded#30","taskAddedRecorded#30"]}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"todo.tasks#1","name":"tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#31","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"Task-1","title":"Buy milk"},{"taskId":"Task-10","title":"Buy milk"},{"taskId":"Task-11","title":"Buy milk"},{"taskId":"Task-12","title":"Buy milk"},{"taskId":"Task-13","title":"Buy milk"},{"taskId":"Task-14","title":"Buy milk"},{"taskId":"Task-15","title":"Buy milk"},{"taskId":"Task-16","title":"Buy milk"},{"taskId":"Task-17","title":"Buy milk"},{"taskId":"Task-18","title":"Buy milk"},{"taskId":"Task-19","title":"Buy milk"},{"taskId":"Task-2","title":"Buy milk"},{"taskId":"Task-20","title":"Buy milk"},{"taskId":"Task-21","title":"Buy milk"},{"taskId":"Task-22","title":"Buy milk"},{"taskId":"Task-23","title":"Buy milk"},{"taskId":"Task-24","title":"Buy milk"},{"taskId":"Task-25","title":"Buy milk"},{"taskId":"Task-26","title":"Buy milk"},{"taskId":"Task-27","title":"Buy milk"},{"taskId":"Task-28","title":"Buy milk"},{"taskId":"Task-29","title":"Buy milk"},{"taskId":"Task-3","title":"Buy milk"},{"taskId":"Task-30","title":"Buy milk"},{"taskId":"Task-4","title":"Buy milk"},{"taskId":"Task-5","title":"Buy milk"},{"taskId":"Task-6","title":"Buy milk"},{"taskId":"Task-7","title":"Buy milk"},{"taskId":"Task-8","title":"Buy milk"},{"taskId":"Task-9","title":"Buy milk"}]}}}

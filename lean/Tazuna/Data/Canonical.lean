@@ -27,6 +27,12 @@ macro "lex_decreasing" : tactic =>
   `(tactic| (simp_wf; simp only [Prod.lex_def] at *; first | done | omega | (simp_all; done) | (simp_all; omega)))
 
 /--
+The number of steps after which a search stops: in verify, a window's search or the search of one pair of `in` lines;
+in the peer check, the search of one bag.
+-/
+def searchLimit : Nat := 100000
+
+/--
 A value as verify compares it. `bag` is an array compared without element order. `runs` is a sortedBy array as runs
 of elements with equal keys, each a bag. `leaf` is null, a boolean, a number or a string.
 -/

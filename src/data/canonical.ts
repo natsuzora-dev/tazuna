@@ -50,6 +50,12 @@ export function canonical(shape: Shape, value: unknown, options: { readonly tole
   );
 }
 
+/**
+ * The number of steps after which a search stops: in verify, a window's search or the search of one pair of `in` lines;
+ * in the peer check, the search of one bag.
+ */
+export const searchLimit = 100000;
+
 export class Bag {
   readonly items: readonly unknown[];
   constructor(items: readonly unknown[]) {
