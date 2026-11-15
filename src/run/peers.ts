@@ -137,7 +137,10 @@ export interface PeerCheck {
   readonly problems: readonly Problem[];
 }
 
-/** Checks the mocks that the scenario's run, which did not halt, takes from each of its peers (peerFindings). */
+/**
+ * Checks the mocks that the scenario's run, which did not halt, takes from each of its peers (peerFindings). A problem
+ * caused by a line of the run is located at the scenario's input whose processing wrote that line.
+ */
 export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): PeerCheck[] {
   const positions = writtenPositions(scenario.definition);
   const ref = { service: scenario.service, name: scenario.name };
@@ -151,7 +154,7 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
     const peerRun = runPeer(spec, scenario.service, lines, d);
     const locationOf = (o: Origin): Location =>
       o.type === "line"
-        ? at(positions[run.inputLines.indexOf(o.line)])
+        ? at(positions[run.inputLines.findLastIndex((l) => l <= o.line)])
         : at(o.type === "elsewhere" ? d.written[o.index]?.position : undefined);
     const findings = peerFindings(
       peerNormal(spec, d.peer),
