@@ -316,7 +316,7 @@ def extend (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) (request 
 
 /-- The comparable value that verify reads, which TS computes. -/
 def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Syntax.Definition) (part : Verify.Part)
-    (value : Value) : IO Verify.CValue := do
+    (value : Value) : IO CValue := do
   let { reply, .. } ← exchange stdin stdout reads [] []
     (.obj ([("type", .str "comparableValue"),
       ("definition", .obj [("kind", .str d.kind), ("service", .str d.service), ("name", .str d.name)])] ++
@@ -356,7 +356,7 @@ The first violation, by line, that verify finds in `actual` with `expected` as t
 returns.
 -/
 def compareOf (spec : Syntax.Structure) (service : String)
-    (ask : Syntax.Definition → Verify.Part → Value → IO Verify.CValue) : Compare IO := fun expected actual => do
+    (ask : Syntax.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun expected actual => do
   let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line)
   let numbered := compared.findings.map fun f =>
     let v : Violation := match f with

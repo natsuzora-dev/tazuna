@@ -204,7 +204,7 @@ def FileLine.decode (v : Value) : Except String (FileLine TraceLine) :=
 The compared value that `v` encodes as an object with one field, whose name tells the variant (leaf, arr, obj, bag,
 runs).
 -/
-partial def CValue.decode (v : Value) : Except String Verify.CValue := do
+partial def CValue.decode (v : Value) : Except String CValue := do
   match v with
   | .obj [("leaf", x)] => pure (.leaf x)
   | .obj [("arr", xs)] => pure (.arr (← (← asList xs).mapM CValue.decode))

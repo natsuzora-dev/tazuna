@@ -1,4 +1,4 @@
-import Tazuna.Verify.Canonical
+import Tazuna.Data.Canonical
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Pairing
 

@@ -8,9 +8,7 @@ This module defines the values that verify compares. TS reads a line by its defi
 wraps bags, sets and sortedBy arrays. This module fixes how wrapped values compare.
 -/
 
-namespace Tazuna.Verify
-
-open Tazuna.Data
+namespace Tazuna.Data
 
 theorem sizeOf_snd_lt {α β : Type} [SizeOf α] [SizeOf β] {p : α × β} {l : List (α × β)} (h : p ∈ l) :
     sizeOf p.2 < sizeOf l := by
@@ -24,6 +22,10 @@ macro "nested_decreasing" : tactic =>
     | (have := List.sizeOf_lt_of_mem (by assumption); omega)
     | (have := sizeOf_snd_lt (by assumption); omega)))
 
+/-- Proves that a recursion whose measure is a lexicographic pair decreases. -/
+macro "lex_decreasing" : tactic =>
+  `(tactic| (simp_wf; simp only [Prod.lex_def] at *; first | done | omega | (simp_all; done) | (simp_all; omega)))
+
 /--
 A value as verify compares it. `bag` is an array compared without element order. `runs` is a sortedBy array as runs
 of elements with equal keys, each a bag. `leaf` is null, a boolean, a number or a string.
@@ -35,6 +37,12 @@ inductive CValue where
   | bag (elements : List CValue)
   | runs (runs : List CValue)
 deriving Repr, Inhabited
+
+/-- Whether two field lists have the same keys. -/
+def sameKeys (fs gs : List (String × CValue)) : Bool :=
+  let ks := fs.map (·.1)
+  let kt := gs.map (·.1)
+  ks.length == kt.length && ks.all kt.contains && kt.all ks.contains
 
 /-- The CValue of a value that no schema reads. -/
 def CValue.ofValue : Value → CValue
@@ -95,6 +103,26 @@ def CValue.runKeys : List CValue → List String
   | [] => []
   | .bag xs :: rs => sortStrings (CValue.keyList xs) ++ CValue.runKeys rs
   | r :: rs => r.key :: CValue.runKeys rs
+
+end
+
+mutual
+
+def CValue.mapStrings (f : String → String) : CValue → CValue
+  | .leaf (.str s) => .leaf (.str (f s))
+  | .leaf v => .leaf v
+  | .arr xs => .arr (CValue.mapStringsList f xs)
+  | .obj fs => .obj (CValue.mapStringsFields f fs)
+  | .bag xs => .bag (CValue.mapStringsList f xs)
+  | .runs rs => .runs (CValue.mapStringsList f rs)
+
+def CValue.mapStringsList (f : String → String) : List CValue → List CValue
+  | [] => []
+  | x :: xs => x.mapStrings f :: CValue.mapStringsList f xs
+
+def CValue.mapStringsFields (f : String → String) : List (String × CValue) → List (String × CValue)
+  | [] => []
+  | (k, v) :: fs => (k, v.mapStrings f) :: CValue.mapStringsFields f fs
 
 end
 
@@ -166,4 +194,4 @@ def plainEqual (s t : Option CValue) : Bool :=
 termination_by (s.map sizeOf).getD 0
 decreasing_by simp_wf; omega
 
-end Tazuna.Verify
+end Tazuna.Data

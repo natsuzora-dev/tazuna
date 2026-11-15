@@ -1,5 +1,5 @@
 import Tazuna.Thm.Verify.Pairing
-import Tazuna.Verify.Canonical
+import Tazuna.Data.Canonical
 
 namespace Tazuna.Thm.Verify.Canonical
 

@@ -1,5 +1,5 @@
 import Tazuna.Data.Trace
-import Tazuna.Verify.Canonical
+import Tazuna.Data.Canonical
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
 
@@ -97,29 +97,6 @@ def Renaming.bind (r : Renaming) (u : Use) : Option Renaming :=
   | some t => if t == u.trace then some r else none
   | none => if r.takes u.trace then none else some (r ++ [u])
 
-macro "lex_decreasing" : tactic =>
-  `(tactic| (simp_wf; simp only [Prod.lex_def] at *; first | done | omega | (simp_all; done) | (simp_all; omega)))
-
-mutual
-
-def CValue.mapStrings (f : String → String) : CValue → CValue
-  | .leaf (.str s) => .leaf (.str (f s))
-  | .leaf v => .leaf v
-  | .arr xs => .arr (CValue.mapStringsList f xs)
-  | .obj fs => .obj (CValue.mapStringsFields f fs)
-  | .bag xs => .bag (CValue.mapStringsList f xs)
-  | .runs rs => .runs (CValue.mapStringsList f rs)
-
-def CValue.mapStringsList (f : String → String) : List CValue → List CValue
-  | [] => []
-  | x :: xs => x.mapStrings f :: CValue.mapStringsList f xs
-
-def CValue.mapStringsFields (f : String → String) : List (String × CValue) → List (String × CValue)
-  | [] => []
-  | (k, v) :: fs => (k, v.mapStrings f) :: CValue.mapStringsFields f fs
-
-end
-
 /-- `v` with its renamed createKey values replaced by their implementation values, for reports. -/
 def substitute (r : Renaming) (v : CValue) : CValue :=
   v.mapStrings fun s => (r.traceOf? s).getD s
@@ -129,11 +106,6 @@ inductive Goal where
   | out (s : Out)
   | subscription (id : String)
   | bag (line snapshotLine : Nat) (xs ys : List CValue)
-
-def sameKeys (fs gs : List (String × CValue)) : Bool :=
-  let ks := fs.map (·.1)
-  let kt := gs.map (·.1)
-  ks.length == kt.length && ks.all kt.contains && kt.all ks.contains
 
 mutual
 
