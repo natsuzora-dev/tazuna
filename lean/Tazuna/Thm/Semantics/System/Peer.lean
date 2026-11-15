@@ -292,11 +292,14 @@ def PeerSees (normal : String → Value → CValue) (service : String) (aLines b
     (n : String) (x y : Value) : Prop :=
   ValueMatches (standsFor (createdOf bLines) bs) (seenOf normal service aLines n x) (normal n y)
 
-/-- Whether the peer's line `b` emits the event `n`, at or before `time`, with a payload that `payload` stands for. -/
+/--
+Whether the peer's line `b`, its line `j`, emits the event `n`, at or before `time`, with a payload that `payload`
+stands for, after the `in` line of the request `resultOf` when it is given (inputOf?).
+-/
 def PeerEmits (normal : String → Value → CValue) (service : String) (aLines bLines : List TraceLine) (bs : Bindings)
-    (n : String) (payload : Value) (time : DateTime) (b : TraceLine) : Prop :=
-  ∃ id p resultOf, b.body = .event .out id n p resultOf ∧ b.time.time ≤ time.time ∧
-    PeerSees normal service aLines bLines bs n p payload
+    (n : String) (payload : Value) (resultOf : Option String) (time : DateTime) (j : Nat) (b : TraceLine) : Prop :=
+  ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → inputOf? bLines j = some q) ∧
+    b.time.time ≤ time.time ∧ PeerSees normal service aLines bLines bs n p payload
 
 theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {to target : String}
     {a : Answer} (hl : l.body = .answer .in id to a) (ht : peerTarget? peer aLines to = some target)
@@ -320,20 +323,22 @@ theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Opti
 theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {name n : String}
     {payload : Value} {resultOf : Option String} (hl : l.body = .event .in id name payload resultOf)
     (hn : peerName? peer name = some n) (h : peerLine normal service peer aLines bLines bs i l = .ok bs') :
-    ∃ b ∈ bLines, ∃ id' p r, b.body = .event .out id' n p r ∧ b.time.time ≤ l.time.time ∧
+    ∃ j b, bLines[j]? = some b ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
+      (∀ q, resultOf = some q → inputOf? bLines j = some q) ∧ b.time.time ≤ l.time.time ∧
       Unified (createdOf bLines) bs bs' (fun f => ValueMatches f (seenOf normal service aLines n p) (normal n payload)) := by
   simp only [peerLine, hl, hn] at h
   split at h
   · next bs'' hf =>
     cases h
-    obtain ⟨b, hb, hs⟩ := List.exists_of_findSome?_eq_some hf
+    obtain ⟨⟨b, j⟩, hb, hs⟩ := List.exists_of_findSome?_eq_some hf
     split at hs
     · next id' m p r hbody =>
       split at hs
       · next hc =>
-        simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
-        obtain ⟨rfl, htime⟩ := hc
-        exact ⟨b, hb, id', p, r, hbody, htime, (unify_sound _).1 _ _ _ _ hs⟩
+        simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Option.all_eq_true] at hc
+        obtain ⟨⟨rfl, htime⟩, hr⟩ := hc
+        exact ⟨j, b, List.mk_mem_zipIdx_iff_getElem?.mp hb, id', p, r, hbody, fun q hq => by simpa using hr q hq,
+          htime, (unify_sound _).1 _ _ _ _ hs⟩
       · cases hs
     · cases hs
   · cases h
@@ -361,7 +366,7 @@ theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}
       cases hn : peerName? peer name with
       | none => simp [peerLine, hb, hn] at h; subst h; exact ⟨List.prefix_refl _, id⟩
       | some n =>
-        obtain ⟨_, _, _, _, _, _, _, hU⟩ := peerLine_event hb hn h
+        obtain ⟨_, _, _, _, _, _, _, _, _, hU⟩ := peerLine_event hb hn h
         exact ⟨hU.grows, hU.oneToOne⟩
   | _ => simp [peerLine, hb] at h; subst h; exact ⟨List.prefix_refl _, id⟩
 
@@ -508,15 +513,17 @@ theorem mocked_answers_prefix {halted : Option (Origin × String)} {to target : 
 
 /--
 Stage 1 for events: with no violation, the peer emits each event of the peer that the scenario receives, at or before
-the time the scenario receives it, with a payload that the scenario's stands for under the final bindings (PeerEmits).
+the time the scenario receives it, with a payload that the scenario's stands for under the final bindings, after the
+`in` line of the request that the scenario names as its result (PeerEmits).
 Two deliveries of one event may name the same line of the peer.
 -/
 theorem received_event_emitted {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : Option String}
     {name n : String} {payload : Value} {resultOf : Option String}
     (h : peerFindings normal service peer aLines bLines halted = []) (hi : aLines[i]? = some l)
     (hl : l.body = .event .in id name payload resultOf) (hn : peerName? peer name = some n) :
-    ∃ b ∈ bLines, PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload l.time b := by
-  obtain ⟨b, hb, id', p, r, hbody, htime, hU⟩ := peerLine_event hl hn (peerLine_ok h hi)
-  exact ⟨b, hb, id', p, r, hbody, htime, hU.sound _ (final_of hi)⟩
+    ∃ j b, bLines[j]? = some b ∧
+      PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload resultOf l.time j b := by
+  obtain ⟨j, b, hb, id', p, r, hbody, hr, htime, hU⟩ := peerLine_event hl hn (peerLine_ok h hi)
+  exact ⟨j, b, hb, id', p, r, hbody, hr, htime, hU.sound _ (final_of hi)⟩
 
 end Tazuna.Thm.Semantics.System.Peer

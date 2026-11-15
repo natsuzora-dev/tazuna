@@ -76,7 +76,7 @@ inductive InvalidInput where
   | unansweredRequest (requestId : String) (target : Syntax.Ref)
   /--
   The service of `event` emits no `event` with the event input's payload in its run of the derived inputs by the time of
-  the input.
+  the input, while it takes the request that the input names as its resultOf when it names one.
   -/
   | unproducibleEvent (eventId : String) (event : Syntax.Ref)
   /-- The spec service `service` halted with `halting` in its run of the derived inputs. -/

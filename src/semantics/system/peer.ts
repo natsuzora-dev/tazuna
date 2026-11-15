@@ -108,6 +108,10 @@ function forPeer(keys: Bindings, index: (r: number) => number, step: Step): Step
   }
 }
 
+/** Lean's inputOf?. */
+const inputOf = (lines: readonly TraceLine[], j: number): string | undefined =>
+  lines.slice(0, j + 1).findLast((l) => l.dir === "in")?.id;
+
 /** Lean's Origin. */
 export type Origin =
   | { readonly type: "given" }
@@ -249,8 +253,14 @@ function peerLine(
   if (l.type === "event") {
     const n = peerName(peer, l.name);
     if (n === undefined) return { bindings: bs };
-    for (const b of bLines)
-      if (b.type === "event" && b.dir === "out" && b.name === n && atOrBefore(b.time, l.time)) {
+    for (const [j, b] of bLines.entries())
+      if (
+        b.type === "event" &&
+        b.dir === "out" &&
+        b.name === n &&
+        atOrBefore(b.time, l.time) &&
+        (l.resultOf === undefined || inputOf(bLines, j) === l.resultOf)
+      ) {
         const bindings = unify(created, seen(n)(b.payload), normal(n, l.payload), bs);
         if (bindings !== undefined) return { bindings };
       }

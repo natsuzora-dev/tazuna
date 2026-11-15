@@ -45,7 +45,7 @@ A scenario's *peer* is another service of the spec, not an external one, that th
 A request that a mock answers as `unavailable` never reaches the peer.
 A mock may name each key that the peer creates with any string, one to one.
 The peer receives the keys that the scenario's service creates renamed, and each string by which an earlier mock names one of its keys as that key, and values compare in the form that `verify` compares, up to these renamings.
-`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time (`unproducibleEvent`), and a run that halts (`haltedPeer`).
+`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit while it takes that request (`unproducibleEvent`), and a run that halts (`haltedPeer`).
 
 When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
 

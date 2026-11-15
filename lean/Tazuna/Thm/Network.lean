@@ -413,11 +413,11 @@ noncomputable def sourceA (normal : String → Value → CValue) (service peer :
         if h : ∃ j, AnswerAt bLines .out to (answersTo (aLines.take i) .in to).length j then some (1, h.choose)
         else none
       else none
-    | .event .in _ name payload _ =>
+    | .event .in _ name payload resultOf =>
       match peerName? peer name with
       | some n =>
-        if h : ∃ j b, bLines[j]? = some b ∧
-            PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload l.time b then
+        if h : ∃ j b, bLines[j]? = some b ∧ PeerEmits normal service aLines bLines
+            (peerFinal normal service peer aLines bLines) n payload resultOf l.time j b then
           some (1, h.choose)
         else none
       | none => none
@@ -440,7 +440,8 @@ theorem sourceA_cases {normal : String → Value → CValue} {service peer : Str
           unreached aLines to = false ∧ AnswerAt bLines .out to (answersTo (aLines.take i) .in to).length j) ∨
         (∃ id name payload resultOf n bl, al.body = .event .in id name payload resultOf ∧
           peerName? peer name = some n ∧ bLines[j]? = some bl ∧
-          PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload al.time bl)) := by
+          PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload resultOf al.time j
+            bl)) := by
   unfold sourceA at h
   split at h
   · next al hi =>
@@ -598,7 +599,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
       obtain ⟨m, hm, hmt⟩ := Option.bind_eq_some_iff.mp htarget
       simp only [Carries, hbb, hb, hname1, hlines0]
       exact ⟨trivial, m, hm, by simp [hmt], AnswerCarries.mono (fun _ _ hp => ⟨target, hmt, hp⟩) hsame⟩
-    · obtain ⟨id', p, ro, hbb, hle, hp⟩ := he
+    · obtain ⟨id', p, ro, hbb, hr, hle, hp⟩ := he
       refine ⟨al, bl, hal, hbl, by simp [hbb, TraceLine.Body.dir], by simp [hb, TraceLine.Body.dir], hle, ?_⟩
       simp only [Carries, hbb, hb, hname1]
       exact ⟨hn, n, hn, hp⟩
@@ -722,11 +723,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
       · exact absurd rfl hsr
       · have hl0 : aLines[i]? = some l := hl
         have hn' : peerName? peer name = some n := hn
-        obtain ⟨bl, hbm, he⟩ := received_event_emitted h hl0 hb hn'
-        obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hbm
-        have hex : ∃ j b, bLines[j]? = some b ∧
-            PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload l.time b :=
-          ⟨j, bl, hj, he⟩
+        have hex := received_event_emitted h hl0 hb hn'
         refine ⟨hex.choose, ?_⟩
         show sourceA normal service peer aLines bLines i = some (1, hex.choose)
         unfold sourceA

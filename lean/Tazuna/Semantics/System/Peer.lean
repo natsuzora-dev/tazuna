@@ -89,6 +89,13 @@ def Step.Body.forPeer (keys : Bindings) (index : Nat → Nat) : Step.Body → St
       | c => c)
   | b => b
 
+/--
+The id of the `in` line at or before the run's line `j`, from 0: an event that the run emits as the result of a request
+follows the request's `in` line before the next input.
+-/
+def inputOf? (lines : List TraceLine) (j : Nat) : Option String :=
+  ((lines.take (j + 1)).reverse.find? (·.body.dir == .in)).bind (·.body.id)
+
 /-- Where an input of the peer comes from. -/
 inductive Origin where
   /-- The given state of the peer. -/
@@ -193,7 +200,7 @@ def unifyAnswer (created : List String) (seen form : Value → CValue) (bs : Bin
 The check of the run's line `l`, the line `i` of the run, with the bindings `bs` of the peer's createKey values to the
 strings that the scenario has in their place: its violation, or `bs` extended. A mocked answer to a request to the peer
 that reached it must be the peer's answer at the same place, by its time; a received event of the peer must be one that
-the peer emits by its time. The peer's values have its peer keys turned back into the run's createKey values, and
+the peer emits by its time, after the `in` line of the request that it names as its result (inputOf?). The peer's values have its peer keys turned back into the run's createKey values, and
 `normal` gives the form of an output or payload of the peer's definition, by the peer's own name, that verify compares.
 -/
 def peerLine (normal : String → Value → CValue) (service peer : String) (aLines bLines : List TraceLine)
@@ -213,14 +220,16 @@ def peerLine (normal : String → Value → CValue) (service peer : String) (aLi
         match if t.time ≤ l.time.time then unifyAnswer created (seen target) (normal target) bs b a else none with
         | some bs => .ok bs
         | none => .error (.unproducibleAnswer to ⟨peer, target⟩)
-  | .event .in id name payload _ =>
+  | .event .in id name payload resultOf =>
     match peerName? peer name with
     | none => .ok bs
     | some n =>
-      let found := bLines.findSome? fun b =>
+      let found := bLines.zipIdx.findSome? fun (b, j) =>
         match b.body with
         | .event .out _ m p _ =>
-          if m == n && b.time.time ≤ l.time.time then unify created (seen n p) (normal n payload) bs else none
+          if m == n && b.time.time ≤ l.time.time && resultOf.all (inputOf? bLines j == some ·) then
+            unify created (seen n p) (normal n payload) bs
+          else none
         | _ => none
       match found with
       | some bs => .ok bs
