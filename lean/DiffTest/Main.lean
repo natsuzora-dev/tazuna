@@ -488,7 +488,8 @@ def peer (request : Value) : Except String Value := do
   pure (.obj [("type", .str "peer"),
     ("inputs", .arr ((peerInputs normal service peer received state elsewhere lines peerLines).map fun (s, o) =>
       .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
-    ("findings", .arr ((peerFindings normal service peer lines peerLines halted).map fun (o, f) =>
+    ("findings", .arr ((peerFindings normal service peer (peerArrivals service peer received state elsewhere lines) lines
+        peerLines halted).map fun (o, f) =>
       .obj [("origin", ToValue.toValue o), ("violation", f.toValue)]))])
 
 partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do

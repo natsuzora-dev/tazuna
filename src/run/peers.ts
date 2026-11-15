@@ -12,6 +12,7 @@ import { serviceOf } from "../semantics/service/basic.ts";
 import {
   type Origin,
   type PeerNormal,
+  peerArrivals,
   peerEvent,
   peerFindings,
   peerInputs,
@@ -167,7 +168,15 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
       o.type === "line"
         ? at(positions[run.inputLines.findLastIndex((l) => l <= o.line)])
         : at(o.type === "elsewhere" ? d.written[o.index]?.position : undefined);
-    const findings = peerFindings(normal, scenario.service, d.peer, lines, peerRun.run.outcome.lines, peerRun.halted);
+    const findings = peerFindings(
+      normal,
+      scenario.service,
+      d.peer,
+      peerArrivals(scenario.service, d.peer, d.received, d.state, d.elsewhere, lines),
+      lines,
+      peerRun.run.outcome.lines,
+      peerRun.halted,
+    );
     return {
       peer: d.peer,
       lines: peerRun.halted === undefined ? peerRun.run.outcome.lines : undefined,

@@ -285,7 +285,8 @@ theorem unifyAnswer_sound {c : List String} {seen form : Value → CValue} {bs b
     · cases h
   · cases h
 
-variable {normal : String → Value → CValue} {service peer : String} {aLines bLines : List TraceLine}
+variable {normal : String → Value → CValue} {service peer : String} {arrivals : List Nat}
+  {aLines bLines : List TraceLine}
 
 /-- The peer's createKey values, which the bindings bind. -/
 abbrev createdOf (bLines : List TraceLine) : List String := bLines.flatMap (·.created.getD [])
@@ -315,27 +316,36 @@ def PeerEmits (normal : String → Value → CValue) (service : String) (aLines 
 
 theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {to target : String}
     {a : Answer} (hl : l.body = .answer .in id to a) (ht : peerTarget? peer aLines to = some target)
-    (hu : unreached aLines to = false) (h : peerLine normal service peer aLines bLines bs i l = .ok bs') :
-    ∃ t b, (answersTo bLines .out to)[(answersTo (aLines.take i) .in to).length]? = some (t, b) ∧
-      t.time ≤ l.time.time ∧ Unified (createdOf bLines) bs bs'
-        (fun f => AnswerCarries (fun x y => ValueMatches f (seenOf normal service aLines target x)
-          (normal target y)) b a) := by
+    (hu : unreached aLines to = false) (h : peerLine normal service peer arrivals aLines bLines bs i l = .ok bs') :
+    ∃ t b, (answersTo (bLines.take (peerBefore arrivals bLines i)) .out to)[(answersTo (aLines.take i) .in to).length]? =
+        some (t, b) ∧ t.time ≤ l.time.time ∧ Unified (createdOf bLines) bs bs'
+          (fun f => AnswerCarries (fun x y => ValueMatches f (seenOf normal service aLines target x)
+            (normal target y)) b a) := by
   simp only [peerLine, hl, ht, hu, Bool.false_eq_true, ite_false] at h
   split at h
   · cases h
-  · next t b hb =>
-    split at h
-    · next bs'' hs =>
-      cases h
-      split at hs
-      · next htime => exact ⟨t, b, hb, htime, unifyAnswer_sound hs⟩
-      · cases hs
+  · split at h
     · cases h
+    · next t b hb =>
+      split at h
+      · next bs'' hs =>
+        cases h
+        split at hs
+        · next htime => exact ⟨t, b, hb, htime, unifyAnswer_sound hs⟩
+        · cases hs
+      · cases h
+
+theorem getElem?_take_some {α : Type} {xs : List α} {n j : Nat} {x : α} (h : (xs.take n)[j]? = some x) :
+    j < n ∧ xs[j]? = some x := by
+  rw [List.getElem?_take] at h
+  split at h
+  · exact ⟨by assumption, h⟩
+  · cases h
 
 theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {name n : String}
     {payload : Value} {resultOf : Option String} (hl : l.body = .event .in id name payload resultOf)
-    (hn : peerName? peer name = some n) (h : peerLine normal service peer aLines bLines bs i l = .ok bs') :
-    ∃ j b, bLines[j]? = some b ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
+    (hn : peerName? peer name = some n) (h : peerLine normal service peer arrivals aLines bLines bs i l = .ok bs') :
+    ∃ j b, bLines[j]? = some b ∧ j < peerBefore arrivals bLines i ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
       (∀ q, resultOf = some q → requestOfLine? bLines j = some q) ∧ b.time.time ≤ l.time.time ∧
       Unified (createdOf bLines) bs bs' (fun f => ValueMatches f (seenOf normal service aLines n p) (normal n payload)) := by
   simp only [peerLine, hl, hn] at h
@@ -349,14 +359,15 @@ theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Optio
       · next hc =>
         simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Option.all_eq_true] at hc
         obtain ⟨⟨rfl, htime⟩, hr⟩ := hc
-        exact ⟨j, b, List.mk_mem_zipIdx_iff_getElem?.mp hb, id', p, r, hbody, fun q hq => by simpa using hr q hq,
+        obtain ⟨hj, hb⟩ := getElem?_take_some (List.mk_mem_zipIdx_iff_getElem?.mp hb)
+        exact ⟨j, b, hb, hj, id', p, r, hbody, fun q hq => by simpa using hr q hq,
           htime, (unify_sound _).1 _ _ _ _ hs⟩
       · cases hs
     · cases hs
   · cases h
 
 theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}
-    (h : peerLine normal service peer aLines bLines bs i l = .ok bs') :
+    (h : peerLine normal service peer arrivals aLines bLines bs i l = .ok bs') :
     bs <+: bs' ∧ (OneToOne bs → OneToOne bs') := by
   cases hb : l.body with
   | answer d _ to a =>
@@ -378,61 +389,61 @@ theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}
       cases hn : peerName? peer name with
       | none => simp [peerLine, hb, hn] at h; subst h; exact ⟨List.prefix_refl _, id⟩
       | some n =>
-        obtain ⟨_, _, _, _, _, _, _, _, _, hU⟩ := peerLine_event hb hn h
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, hU⟩ := peerLine_event hb hn h
         exact ⟨hU.grows, hU.oneToOne⟩
   | _ => simp [peerLine, hb] at h; subst h; exact ⟨List.prefix_refl _, id⟩
 
 theorem peerBindings_succ {i : Nat} {l : TraceLine} (hi : aLines[i]? = some l) :
-    peerBindings normal service peer aLines bLines (i + 1) =
-      (peerLine normal service peer aLines bLines (peerBindings normal service peer aLines bLines i) i l).toOption.getD
-        (peerBindings normal service peer aLines bLines i) := by
+    peerBindings normal service peer arrivals aLines bLines (i + 1) =
+      (peerLine normal service peer arrivals aLines bLines (peerBindings normal service peer arrivals aLines bLines i) i l).toOption.getD
+        (peerBindings normal service peer arrivals aLines bLines i) := by
   have hz : aLines.zipIdx[i]? = some (l, i) := by simp [List.getElem?_zipIdx, hi]
   simp only [peerBindings, List.take_add_one, List.foldl_append, hz]
   rfl
 
 theorem peerBindings_grows (i : Nat) :
-    peerBindings normal service peer aLines bLines i <+: peerBindings normal service peer aLines bLines (i + 1) ∧
-      (OneToOne (peerBindings normal service peer aLines bLines i) →
-        OneToOne (peerBindings normal service peer aLines bLines (i + 1))) := by
+    peerBindings normal service peer arrivals aLines bLines i <+: peerBindings normal service peer arrivals aLines bLines (i + 1) ∧
+      (OneToOne (peerBindings normal service peer arrivals aLines bLines i) →
+        OneToOne (peerBindings normal service peer arrivals aLines bLines (i + 1))) := by
   cases hi : aLines[i]? with
   | none =>
     have hz : aLines.zipIdx[i]? = none := by simp [List.getElem?_zipIdx, hi]
-    have he : peerBindings normal service peer aLines bLines (i + 1) =
-        peerBindings normal service peer aLines bLines i := by
+    have he : peerBindings normal service peer arrivals aLines bLines (i + 1) =
+        peerBindings normal service peer arrivals aLines bLines i := by
       simp only [peerBindings, List.take_add_one, List.foldl_append, hz]
       rfl
     rw [he]
     exact ⟨List.prefix_refl _, id⟩
   | some l =>
     rw [peerBindings_succ hi]
-    cases h : peerLine normal service peer aLines bLines (peerBindings normal service peer aLines bLines i) i l with
+    cases h : peerLine normal service peer arrivals aLines bLines (peerBindings normal service peer arrivals aLines bLines i) i l with
     | error _ => exact ⟨List.prefix_refl _, id⟩
     | ok bs' => exact peerLine_grows h
 
 theorem peerBindings_prefix {i j : Nat} (h : i ≤ j) :
-    peerBindings normal service peer aLines bLines i <+: peerBindings normal service peer aLines bLines j := by
+    peerBindings normal service peer arrivals aLines bLines i <+: peerBindings normal service peer arrivals aLines bLines j := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
   induction k with
   | zero => exact List.prefix_refl _
   | succ k ih => exact (ih (by omega)).trans (peerBindings_grows (i + k)).1
 
 /-- The bindings that the check builds are one-to-one. -/
-theorem peerBindings_oneToOne (n : Nat) : OneToOne (peerBindings normal service peer aLines bLines n) := by
+theorem peerBindings_oneToOne (n : Nat) : OneToOne (peerBindings normal service peer arrivals aLines bLines n) := by
   induction n with
   | zero => simp [peerBindings, OneToOne]
   | succ n ih => exact (peerBindings_grows n).2 ih
 
 /-- No violation means that the peer's run of the derived inputs did not halt. -/
 theorem peerFindings_halted {halted : Option (Origin × String)}
-    (h : peerFindings normal service peer aLines bLines halted = []) : halted = none := by
+    (h : peerFindings normal service peer arrivals aLines bLines halted = []) : halted = none := by
   cases halted with
   | none => rfl
   | some p => simp [peerFindings] at h
 
 theorem peerLine_ok {halted : Option (Origin × String)} {i : Nat} {l : TraceLine}
-    (h : peerFindings normal service peer aLines bLines halted = []) (hi : aLines[i]? = some l) :
-    peerLine normal service peer aLines bLines (peerBindings normal service peer aLines bLines i) i l =
-      .ok (peerBindings normal service peer aLines bLines (i + 1)) := by
+    (h : peerFindings normal service peer arrivals aLines bLines halted = []) (hi : aLines[i]? = some l) :
+    peerLine normal service peer arrivals aLines bLines (peerBindings normal service peer arrivals aLines bLines i) i l =
+      .ok (peerBindings normal service peer arrivals aLines bLines (i + 1)) := by
   cases peerFindings_halted h
   simp only [peerFindings] at h
   have hz : (l, i) ∈ aLines.zipIdx := List.mem_zipIdx_iff_getElem?.mpr hi
@@ -443,29 +454,38 @@ theorem peerLine_ok {halted : Option (Origin × String)} {i : Nat} {l : TraceLin
   · next bs' hb => rw [hb]; rfl
 
 /-- The bindings after the whole run: the one renaming under which the stage 1 theorems hold. -/
-abbrev peerFinal (normal : String → Value → CValue) (service peer : String) (aLines bLines : List TraceLine) :
-    Bindings :=
-  peerBindings normal service peer aLines bLines aLines.length
+abbrev peerFinal (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
+    (aLines bLines : List TraceLine) : Bindings :=
+  peerBindings normal service peer arrivals aLines bLines aLines.length
 
 theorem final_of {i : Nat} {l : TraceLine} (hi : aLines[i]? = some l) :
-    peerBindings normal service peer aLines bLines (i + 1) <+: peerFinal normal service peer aLines bLines :=
+    peerBindings normal service peer arrivals aLines bLines (i + 1) <+: peerFinal normal service peer arrivals aLines bLines :=
   peerBindings_prefix (List.getElem?_eq_some_iff.mp hi).1
 
 /--
 Stage 1 for answers: with no violation, each answer that a mock gives to a request to the peer that reached it is the
 peer's answer to the request at the same place, the k-th answer to it when the mock is the k-th, as the scenario sees
-the peer's values under the final bindings (PeerSees), and the peer gives it at or before the mock's time.
+the peer's values under the final bindings (PeerSees), and the peer gives it at or before the mock's time, before it
+takes an input that arrives after the mock (peerBefore).
 -/
 theorem mocked_answer_given {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : Option String}
     {to target : String} {a : Answer}
-    (h : peerFindings normal service peer aLines bLines halted = []) (hi : aLines[i]? = some l)
+    (h : peerFindings normal service peer arrivals aLines bLines halted = []) (hi : aLines[i]? = some l)
     (hl : l.body = .answer .in id to a) (ht : peerTarget? peer aLines to = some target)
     (hu : unreached aLines to = false) :
-    ∃ t b, (answersTo bLines .out to)[(answersTo (aLines.take i) .in to).length]? = some (t, b) ∧
-      AnswerCarries (PeerSees normal service aLines bLines (peerFinal normal service peer aLines bLines) target) b a ∧
+    ∃ t b, (answersTo (bLines.take (peerBefore arrivals bLines i)) .out to)[(answersTo (aLines.take i) .in to).length]? =
+        some (t, b) ∧
+      AnswerCarries (PeerSees normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) target) b a ∧
         t.time ≤ l.time.time := by
   obtain ⟨t, b, hb, htime, hU⟩ := peerLine_answer hl ht hu (peerLine_ok h hi)
   exact ⟨t, b, hb, hU.sound _ (final_of hi), htime⟩
+
+theorem answersTo_take_getElem? {lines : List TraceLine} {n k : Nat} {d : Dir} {to : String} {x : DateTime × Answer}
+    (h : (answersTo (lines.take n) d to)[k]? = some x) : (answersTo lines d to)[k]? = some x := by
+  have e : answersTo lines d to = answersTo (lines.take n) d to ++ answersTo (lines.drop n) d to := by
+    simp only [answersTo, ← List.filterMap_append, List.take_append_drop]
+  rw [e, List.getElem?_append_left (List.getElem?_eq_some_iff.mp h).1]
+  exact h
 
 theorem filterMap_getElem? {α β : Type} (f : α → Option β) :
     ∀ (xs : List α) (k : Nat) (y : β), (xs.filterMap f)[k]? = some y →
@@ -514,28 +534,30 @@ peer that reached it are, in order and as the scenario sees the peer's values un
 prefix of the peer's answers to the request, each given at or before the mock's time.
 -/
 theorem mocked_answers_prefix {halted : Option (Origin × String)} {to target : String} {k : Nat} {t : DateTime}
-    {a : Answer} (h : peerFindings normal service peer aLines bLines halted = [])
+    {a : Answer} (h : peerFindings normal service peer arrivals aLines bLines halted = [])
     (ht : peerTarget? peer aLines to = some target)
     (hu : unreached aLines to = false) (hk : (answersTo aLines .in to)[k]? = some (t, a)) :
     ∃ t' b, (answersTo bLines .out to)[k]? = some (t', b) ∧
-      AnswerCarries (PeerSees normal service aLines bLines (peerFinal normal service peer aLines bLines) target) b a ∧
+      AnswerCarries (PeerSees normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) target) b a ∧
         t'.time ≤ t.time := by
   obtain ⟨i, l, id, hi, hl, rfl, rfl⟩ := answersTo_getElem? hk
-  exact mocked_answer_given h hi hl ht hu
+  obtain ⟨t', b, hb, hc, hle⟩ := mocked_answer_given h hi hl ht hu
+  exact ⟨t', b, answersTo_take_getElem? hb, hc, hle⟩
 
 /--
 Stage 1 for events: with no violation, the peer emits each event of the peer that the scenario receives, at or before
 the time the scenario receives it, with a payload that the scenario's stands for under the final bindings, after the
-`in` line of the request that the scenario names as its result (PeerEmits).
+`in` line of the request that the scenario names as its result (PeerEmits), and before it takes an input that arrives
+after the scenario's line (peerBefore).
 Two deliveries of one event may name the same line of the peer.
 -/
 theorem received_event_emitted {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : Option String}
     {name n : String} {payload : Value} {resultOf : Option String}
-    (h : peerFindings normal service peer aLines bLines halted = []) (hi : aLines[i]? = some l)
+    (h : peerFindings normal service peer arrivals aLines bLines halted = []) (hi : aLines[i]? = some l)
     (hl : l.body = .event .in id name payload resultOf) (hn : peerName? peer name = some n) :
-    ∃ j b, bLines[j]? = some b ∧
-      PeerEmits normal service aLines bLines (peerFinal normal service peer aLines bLines) n payload resultOf l.time j b := by
-  obtain ⟨j, b, hb, id', p, r, hbody, hr, htime, hU⟩ := peerLine_event hl hn (peerLine_ok h hi)
-  exact ⟨j, b, hb, id', p, r, hbody, hr, htime, hU.sound _ (final_of hi)⟩
+    ∃ j b, bLines[j]? = some b ∧ j < peerBefore arrivals bLines i ∧
+      PeerEmits normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) n payload resultOf l.time j b := by
+  obtain ⟨j, b, hb, hj, id', p, r, hbody, hr, htime, hU⟩ := peerLine_event hl hn (peerLine_ok h hi)
+  exact ⟨j, b, hb, hj, id', p, r, hbody, hr, htime, hU.sound _ (final_of hi)⟩
 
 end Tazuna.Thm.Semantics.System.Peer

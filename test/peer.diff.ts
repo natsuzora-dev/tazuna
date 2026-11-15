@@ -6,7 +6,7 @@ import { timed } from "../src/dsl/scenario.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { execute } from "../src/run/execute.ts";
 import { peerDerivations, peerNormal, runPeer } from "../src/run/peers.ts";
-import { peerFindings } from "../src/semantics/system/peer.ts";
+import { peerArrivals, peerFindings } from "../src/semantics/system/peer.ts";
 import { runExamples } from "./examples.ts";
 import { tagged } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";
@@ -36,7 +36,16 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
           normals.push([name, value, tagged(form)]);
           return form;
         };
-        const findings = peerFindings(recorded, scenario.service, d.peer, lines, peerRun.outcome.lines, halted);
+        const arrivals = peerArrivals(scenario.service, d.peer, d.received, d.state, d.elsewhere, lines);
+        const findings = peerFindings(
+          recorded,
+          scenario.service,
+          d.peer,
+          arrivals,
+          lines,
+          peerRun.outcome.lines,
+          halted,
+        );
         const fromLean = lean.peer({
           service: scenario.service,
           peer: d.peer,

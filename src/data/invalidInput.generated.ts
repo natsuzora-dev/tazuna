@@ -281,7 +281,8 @@ export type InvalidInput =
     }
   /**
    * The mock's answer to the request `requestId` to the spec service of `target` is not the answer that the service's
-   * run of the derived inputs gives the request at that place, or that answer comes later than the mock.
+   * run of the derived inputs gives the request at that place, or that answer comes later than the mock or after the
+   * service takes an input that arrives after the mock.
    */
   | {
       readonly kind: "InvalidInput.unproducibleAnswer";
@@ -302,7 +303,8 @@ export type InvalidInput =
     }
   /**
    * The service of `event` emits no `event` with the event input's payload in its run of the derived inputs by the time of
-   * the input, while it takes the request that the input names as its resultOf when it names one.
+   * the input and before it takes an input that arrives after the event input, while it takes the request that the input
+   * names as its resultOf when it names one.
    */
   | {
       readonly kind: "InvalidInput.unproducibleEvent";

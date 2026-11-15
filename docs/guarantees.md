@@ -47,6 +47,7 @@ A mock may name each key that the peer creates with any string, one to one.
 The peer receives the keys that the scenario's service creates renamed, and each string by which an earlier mock names one of its keys as that key, and values compare in the form that `verify` compares, up to these renamings.
 `test` pairs the elements of two bags by a search, and counts bags whose search takes more than 100000 tries as unequal, so it may then report an answer or event that the peer's run gives.
 `test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit while it takes that request (`unproducibleEvent`), and a run that halts (`haltedPeer`).
+The answer or event must come from the run before the peer takes an input that arrives after the scenario takes it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
 
 When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
 
@@ -54,6 +55,7 @@ When `test` reports none of these violations, the scenario's run and the peer's 
 - each event of the scenario's service that the peer receives is one that the scenario emits, not before it emits it;
 - each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive once each and in the order the peer sends them;
 - each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken.
+- the peer sends each answer or event that the scenario takes before it receives any line that the scenario sends at or after taking it.
 
 Lean proves this as `network_realizes` for spec runs, given two facts that it does not prove: the peer's run writes one input line for each derived input, in order, and the peer's run names a definition of the scenario's service only on an event that it receives.
 That the given state and the `elsewhere` inputs give the peer no event of the scenario's service is checked when the spec loads.

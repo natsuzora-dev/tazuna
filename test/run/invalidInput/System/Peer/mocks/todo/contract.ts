@@ -1,5 +1,5 @@
 import { at, contract, ref, send } from "@natsuzora-dev/tazuna";
-import { addTask, addTitle, completeTask, Task, taskAdded, tasks, taskTitles } from "./todo.ts";
+import { addTask, addTitle, completeTask, Task, taskAdded, taskCompleted, tasks, taskTitles } from "./todo.ts";
 
 export const todo = contract({
   TaskId: ref(Task),
@@ -7,6 +7,7 @@ export const todo = contract({
   addTitle,
   completeTask,
   taskAdded,
+  taskCompleted,
   taskTitles,
   tasks,
   states: {

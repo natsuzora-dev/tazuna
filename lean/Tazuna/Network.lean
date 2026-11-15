@@ -73,8 +73,9 @@ The network that an execution runs on. Each received line that another member se
 it was sent; a request or an answer arrives at most once, and the answers to one request arrive in the order they were
 sent; an answer `unavailable` comes from no member, since its request reached no one. Every answer to a request to a
 member that no answer rejects as unavailable, and every event of a member, that a member receives was sent; every
-request to a member that no answer rejects as unavailable arrives, with the end of its subscription. An event may be
-delayed, lost, delivered more than once, or overtaken, and an answer may be lost.
+request to a member that no answer rejects as unavailable arrives, with the end of its subscription. A member sends a
+line that another member receives before it receives a line that the other member sends at or after receiving it. An
+event may be delayed, lost, delivered more than once, or overtaken, and an answer may be lost.
 -/
 structure WellFormed (agree : Agree) (e : Execution) : Prop where
   delivered : ∀ r i s j, e.source (r, i) = some (s, j) → s ≠ r ∧
@@ -95,6 +96,7 @@ structure WellFormed (agree : Agree) (e : Execution) : Prop where
     ∃ j, e.source (r, i) = some (s, j)
   arrives : ∀ r s i l, s ≠ r → s < e.members.length → e.line? (r, i) = some l → Sends (e.name s) (e.lines r) l →
     ∃ j, e.source (s, j) = some (r, i)
+  causal : ∀ r i s j i' j', e.source (r, i) = some (s, j) → j' ≤ j → e.source (s, j') = some (r, i') → i' < i
 
 /--
 Whether `l` is the `in` line that a run writes for input `s`, as far as the network needs: at the input's time; for a
@@ -112,9 +114,6 @@ def Writes (canon : String → Value → Value) (s : Step) (l : TraceLine) : Pro
     ∃ id' r, l.body = .event .in id' name (canon name x) r ∧ (∀ i, id = some i → id' = some i) ∧
       (resultOf = none → r = none)
   | _ => isEventLine l = false
-
-/-- The `in` lines of a trace, each with its place in the trace. -/
-def inLines (lines : List TraceLine) : List (TraceLine × Nat) := lines.zipIdx.filter (·.1.body.dir == .in)
 
 /-- Whether the `in` lines of `lines` are the lines that a run writes for `inputs`, one for each, in order. -/
 def RunOf (canon : String → Value → Value) (inputs : List Step) (lines : List TraceLine) : Prop :=
