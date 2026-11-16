@@ -3,10 +3,10 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { ChoiceDependent } from "../../src/data/choiceDependent.generated.ts";
+import type { ChoiceDependent, StepName } from "../../src/data/choiceDependent.generated.ts";
 import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
-import type { Scenario } from "../../src/data/scenario.generated.ts";
+import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
 import type { Step } from "../../src/data/step.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
 import { type FileLine, isMalformed } from "../../src/data/trace.ts";
@@ -60,6 +60,7 @@ export interface LeanRun extends LeanOutcome {
 interface LeanNames {
   readonly byCaller: Readonly<Record<string, boolean>>;
   readonly limits: Readonly<Record<string, number>>;
+  readonly stepOrderLimit: number;
 }
 
 /**
@@ -254,6 +255,23 @@ export class Lean {
     return message["mismatch"] as VerifyViolation | null;
   }
 
+  /** Lean's verdict on the step order `order` of the processing `origin` of `service`, the last of `scenario`. */
+  stepOrder(
+    spec: Spec,
+    scenario: Scenario,
+    origin: Origin,
+    service: string,
+    order: readonly StepName[],
+    functions: Answering,
+  ): ChoiceDependent | null {
+    const result = this.exchange(
+      { type: "stepOrder", structure: spec.structure, scenario, origin, service, order },
+      "decided",
+      functions,
+    );
+    return result["found"] as ChoiceDependent | null;
+  }
+
   names(): LeanNames {
     this.send({ type: "names" });
     const message = this.receive();
@@ -261,6 +279,7 @@ export class Lean {
     return {
       byCaller: message["byCaller"] as Record<string, boolean>,
       limits: message["limits"] as Record<string, number>,
+      stepOrderLimit: message["stepOrderLimit"] as number,
     };
   }
 

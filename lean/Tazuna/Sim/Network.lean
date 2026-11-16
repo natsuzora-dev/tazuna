@@ -57,12 +57,17 @@ def Message.describe (m : Message) : Value :=
 def Message.sameChannel (m n : Message) : Bool :=
   m.sender == n.sender && m.receiver == n.receiver && m.channel == n.channel
 
-/-- The lines `from` to `to` (exclusive) that `service` wrote while `origin` was processed. -/
+/--
+The lines `from` to `to` (exclusive) that `service` wrote while `origin` was processed, and the steps `stepsFrom` to
+`stepsTo` (exclusive) that it took.
+-/
 structure Span where
   origin : Origin
   service : String
   «from» : Nat
   to : Nat
+  stepsFrom : Nat
+  stepsTo : Nat
 deriving Repr, Inhabited
 
 /-- The screen instance `resource` of chart `chart` of `service` that opened while `origin` was processed. -/
@@ -104,6 +109,11 @@ structure World where
   looked : List (Nat × Bool) := []
   reports : List Report := []
   halted : Option Report := none
+  /--
+  The steps that the internal queue of `service` takes first while `origin` is processed, as State.stepOrder: the
+  order of steps that test's search runs, which no line writes.
+  -/
+  stepOrders : List (Origin × String × List StepName) := []
 deriving Inhabited
 
 def World.state (w : World) (service : String) : State := (w.states.lookup service).getD {}
@@ -172,29 +182,47 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
     | _ => w
 
 /--
-The world after `service` processes what `f` gives it while `origin` is processed: its state, the span of lines it
-wrote, the screens that opened, and the messages it sent. Under `reopen`, as after a restart, every screen open after it
-opened anew.
+A monad that is told whose processing runs, so that what the processing notes belongs to that running service: an
+instrumented simulation keeps one Collect per participant. Any other monad ignores it.
 -/
-def World.act {m : Type → Type} [Monad m] (w : World) (fsOf : String → Functions m) (o : Origin) (service : String)
-    (f : Service → Functions m → State → m State) (reopen : Bool := false) : m World := do
+class MonadActing (m : Type → Type) where
+  acting {α : Type} (service : String) (x : m α) : m α
+
+instance (priority := low) {m : Type → Type} : MonadActing m := ⟨fun _ x => x⟩
+
+/-- The state after a processing that took the steps of `order` first, with the entries it left unused reported. -/
+def checkStepOrder (s : State) : State :=
+  let t := { s with stepOrder := [] }
+  if s.halted.isNone && !s.stepOrder.isEmpty then t.report (.invalidInput (.unusedStepOrder s.stepOrder)) else t
+
+/--
+The world after `service` processes what `f` gives it while `origin` is processed, taking first the steps of its entry
+of `stepOrders`, which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages it sent.
+Under `reopen`, as after a restart, every screen open after it opened anew.
+-/
+def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : String → Functions m) (o : Origin)
+    (service : String) (f : Service → Functions m → State → m State) (reopen : Bool := false) : m World := do
   match w.services.lookup service with
   | none => pure w
   | some st =>
     let s := w.state service
     let before := s.lines.size
+    let stepsFrom := s.steps.size
     let screens := screensOf s
-    let t ← f st (fsOf service) s
+    let order := (w.stepOrders.find? fun (o', q, _) => o' == o && q == service).map (·.2.2)
+    let t ← MonadActing.acting service (f st (fsOf service) { s with stepOrder := order.getD [] })
+    let t := if order.isSome then checkStepOrder t else t
     let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun (chart, resource) =>
       { origin := o, service, chart, resource : Opened }
+    let span : Span := { origin := o, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
-                      spans := w.spans ++ [({ origin := o, service, «from» := before, to := t.lines.size } : Span)],
-                      opened := w.opened ++ opened }
+                      spans := w.spans ++ [span], opened := w.opened ++ opened,
+                      stepOrders := w.stepOrders.filter fun (o', q, _) => !(o' == o && q == service) }
     pure (w.route o service (t.lines.extract before t.lines.size).toList)
 
 /-- The world after the message `k` arrives at its running receiver while `origin` is processed. -/
-def World.deliver {m : Type → Type} [Monad m] [MonadNote m] (w : World) (fsOf : String → Functions m) (o : Origin)
-    (k : Nat) : m World :=
+def World.deliver {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (w : World) (fsOf : String → Functions m)
+    (o : Origin) (k : Nat) : m World :=
   match w.messages[k]? with
   | none => pure w
   | some msg =>

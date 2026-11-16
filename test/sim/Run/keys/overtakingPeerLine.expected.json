@@ -14,7 +14,8 @@
           "id": "tags.register#1"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "tags",
@@ -73,7 +74,8 @@
           "id": "labelAddedRecorded#1"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

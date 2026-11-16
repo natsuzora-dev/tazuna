@@ -1,1 +1,1 @@
-{"kind":"OrderDependent.reversedResult","definition":{"service":"todo","name":"titlesInArray"},"data":{"function":"resolve"},"location":{"file":"todo/todo.ts","line":19},"scenario":{"service":"todo","name":"addTwo"},"appendedInputs":[{"time":"2026-10-25T00:00:00Z","type":"query","name":"titlesInArray","input":{}}]}
+{"kind":"OrderDependent.reversedResult","definition":{"service":"todo","name":"titlesInArray"},"data":{"function":"resolve"},"location":{"file":"todo/todo.ts","line":22},"scenario":{"service":"todo","name":"addTwoAndReadArray"}}

@@ -121,7 +121,8 @@
           "id": "noted#2"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
@@ -183,7 +184,8 @@
           "id": "todo.ping#2"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

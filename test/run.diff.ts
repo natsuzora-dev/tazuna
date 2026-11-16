@@ -168,8 +168,8 @@ for (const { name, spec } of specs) {
 function walkedOutcome(walked: Walked) {
   const { world } = walked;
   return {
-    ...outcomeOf(world),
-    participants: outcomeOf(world).participants.map((p) => {
+    ...outcomeOf(walked),
+    participants: outcomeOf(walked).participants.map((p) => {
       const { processing, halted } = world.participants.get(p.service) as Participant;
       if (halted !== undefined) return p;
       try {

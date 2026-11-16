@@ -1,7 +1,12 @@
-import { at, scenario, send } from "@natsuzora-dev/tazuna";
-import { addTask } from "./flags.ts";
+import { addTask, scenario } from "./flags.ts";
 
 export const addOne = scenario(
   "Add a task; flagger sends raise and lower from one state, and the one taken last decides the flag, so test reports stepOrder",
-  [at("2026-10-25T09:00:00+09:00"), send(addTask, { taskId: "task-1" })],
+  {
+    given: { start: "2026-10-25T09:00:00+09:00", records: { Flag: { isOn: false } }, peers: {} },
+    when: (w) => {
+      w.client.send(addTask, { taskId: "task-1" });
+    },
+    then: () => [],
+  },
 );

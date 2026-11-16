@@ -135,7 +135,8 @@
           "id": "unsubscribe#1"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
@@ -187,7 +188,8 @@
           "payload": {}
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

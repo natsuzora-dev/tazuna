@@ -209,12 +209,14 @@
           "id": "taskSeenRecorded#1"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

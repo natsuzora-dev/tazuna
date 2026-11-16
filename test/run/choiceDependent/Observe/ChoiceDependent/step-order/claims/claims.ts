@@ -8,7 +8,7 @@ export const Winner = singleEntity({
   fields: { taskId: z.string().default("") },
 });
 
-export const { command, machine, createEvent, updateEvent, contract } = service({
+export const { command, machine, createEvent, updateEvent, contract, scenario } = service({
   description: "Let each added task claim the winner",
   entities: { Task, Winner },
 });

@@ -3,7 +3,8 @@
     {
       "service": "notifier",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "todo",
@@ -73,7 +74,8 @@
           "id": "calendar.book#1"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

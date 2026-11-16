@@ -13,6 +13,7 @@ import { type Explored, explore } from "../explore/index.ts";
 import { seenValues, valuesPerPayload } from "../explore/moves.ts";
 import type { Concurrent, Decided, Target } from "../explore/orders.ts";
 import { exploreLines, seenLines } from "../explore/paths.ts";
+import { stepOrderChanges } from "../explore/stepOrders.ts";
 import * as automations from "../explore/uncovered/automations.ts";
 import * as charts from "../explore/uncovered/charts.ts";
 import * as requests from "../explore/uncovered/requests.ts";
@@ -22,7 +23,7 @@ import type { LoadedScenario } from "../load/scenarios.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { execute, type Run, stepsOf } from "../sim/spec/execute.ts";
 import { checkPeers } from "../sim/spec/peers.ts";
-import { simulateWithSnapshots } from "../sim/spec/simulate.ts";
+import { participantViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
 import { pairingProblem } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotProblems } from "../verify/snapshot.ts";
 
@@ -196,7 +197,8 @@ export function testSpec(
 }
 
 /**
- * Simulates each scenario and returns the problems that it reports, each at the line it names, and the trace of each
+ * Simulates each scenario and returns the problems that it reports, each at the line it names, with the step orders
+ * that change the result of one of its processings, and the trace of each
  * running service when the simulation did not halt: the own service's under the scenario's name, and each running
  * peer's that has lines under peerSnapshotName.
  */
@@ -206,7 +208,9 @@ function simulateScenarios(spec: Spec): { readonly problems: Problem[]; readonly
   for (const named of spec.scenarios) {
     const { scenario, linePlaces } = named.definition as LoadedScenario;
     const ref = { service: named.service, name: named.name };
-    const { world, snapshots } = simulateWithSnapshots(spec, scenario);
+    const simulated = simulateSpec(spec, scenario);
+    const { world } = simulated;
+    const snapshots = snapshotsOf(simulated);
     const at = (line: number | null | undefined) =>
       line === null || line === undefined ? undefined : linePlaces[line];
     for (const report of [...world.reports, ...(world.halted === undefined ? [] : [world.halted])]) {
@@ -214,9 +218,10 @@ function simulateScenarios(spec: Spec): { readonly problems: Problem[]; readonly
       problems.push(toProblem(report, at(line) ?? named.place, { scenario: ref }));
     }
     const halted = world.halted !== undefined || [...world.participants.values()].some((p) => p.halted !== undefined);
-    for (const [service, p] of world.participants) {
-      const violations = [...p.processing.state.violations, ...(p.halted === undefined ? [] : [p.halted])];
-      for (const v of violations)
+    const orderChanges = halted ? [] : stepOrderChanges(spec, scenario, simulated, 0);
+    for (const v of orderChanges) problems.push(toProblem(v, v.location ?? named.place, { scenario: ref }));
+    for (const service of world.participants.keys()) {
+      for (const v of participantViolations(simulated, service))
         problems.push(
           toProblem(v, v.location ?? (v.definition === null ? named.place : placeOf(spec, v.definition)), {
             scenario: ref,

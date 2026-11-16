@@ -513,38 +513,117 @@ def peer (request : Value) : Except String Value := do
     ("runFindings", .arr ((peerRunFindings reported).map fun (o, v) =>
       .obj [("origin", ToValue.toValue o), ("violation", ToValue.toValue v)]))])
 
-instance : MonadNote IO where
-  note _ := pure ()
+/-- What an instrumented simulation collects: one Collect per running service, and the service whose processing runs. -/
+structure Acting where
+  current : String := ""
+  collects : List (String × Collect) := []
+
+abbrev ActingIO := StateT Acting IO
+
+def Acting.collect (a : Acting) (service : String) : Collect := (a.collects.lookup service).getD {}
+
+/-- `x` run on the Collect of `service`. -/
+def focus {α : Type} (service : String) (x : StateT Collect IO α) : ActingIO α := fun a => do
+  let (r, c) ← x.run (a.collect service)
+  pure (r, { a with collects := (service, c) :: a.collects.filter (·.1 != service) })
+
+instance : MonadNote ActingIO where
+  note n := do focus (← get).current (MonadNote.note n : StateT Collect IO Unit)
+
+instance : Sim.MonadActing ActingIO where
+  acting service x := do
+    let previous := (← get).current
+    modify ({ · with current := service })
+    let r ← x
+    modify ({ · with current := previous })
+    pure r
 
 /--
-The reply to request `simulate`, which takes a structure and a scenario, and returns each running service's trace lines
-and violations, and the simulation's reports and halting report. Each question to TS names its service. With `walk`
-true, the lines take place as explore runs them (Sim.walk), and each running service that did not halt also returns
-what it enables next.
+The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
+Collect. Each question to TS names its service.
 -/
-def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
-  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
-  let sc : Scenario ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "scenario")))
-  let walking := request.field? "walk" == some (.bool true)
-  let start ← IO.ofExcept (Sim.World.start spec sc)
+def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (String → Functions ActingIO) := do
   let reads ← IO.mkRef {}
   let memo ← IO.mkRef {}
-  let fsOf := fun s => functions stdin stdout reads memo false (some s)
-  let w ← (if walking then Sim.walk else Sim.simulate) spec fsOf start sc
-  let participants ← w.states.mapM fun (service, s) => do
+  pure fun service =>
+    let fs := functions stdin stdout reads memo false (some service)
+    match start.services.lookup service with
+    | none => liftFunctions fs
+    | some st =>
+      let ifs : InstrumentFunctions IO := {
+        lastReads := do pure (← reads.get).parts
+        lastAccess := do IO.ofExcept (Access.decode (((← reads.get).reply.field? "access").getD (.obj [])))
+        lastEnumerated := do pure ((← reads.get).reply.field? "enumerated" == some (.bool true))
+        reversed := functions stdin stdout reads memo true (some service) }
+      (instrument st fs ifs).hoist (focus service)
+
+/-- The scenario of a request, with the start of its world and the step orders that it names. -/
+def worldOf (request : Value) : IO (Syntax.Structure × Scenario × Sim.World) := do
+  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
+  let sc : Scenario ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "scenario")))
+  let stepOrders ← match request.field? "stepOrders" with
+    | none => pure []
+    | some v => IO.ofExcept do
+      (← asList v).mapM fun e => do
+        pure ((← FromValue.fromValue (← field e "origin") : Scenario.Origin), ← stringField e "service",
+          (← FromValue.fromValue (← field e "order") : List StepName))
+  let start ← IO.ofExcept (Sim.World.start spec sc)
+  pure (spec, sc, { start with stepOrders })
+
+/--
+The reply to request `simulate`, which takes a structure, a scenario, and step orders, and returns each running
+service's trace lines, violations (its own, then those Instrument collected, then its halt), and candidates, and the
+simulation's reports and halting report. With `walk` true, the lines take place as explore runs them (Sim.walk), and
+each running service that did not halt also returns what it enables next.
+-/
+def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
+  let (spec, sc, start) ← worldOf request
+  let walking := request.field? "walk" == some (.bool true)
+  let fsOf ← instrumentedOf stdin stdout start
+  let ran : ActingIO Sim.World :=
+    if walking then Sim.walk spec fsOf start sc else Sim.simulate spec fsOf start sc
+  let (w, acting) ← ran.run {}
+  let (participants, _) ← (w.states.mapM fun ((service, s) : String × State) => do
+    let c := acting.collect service
     let enabled ← match walking, s.halted, w.services.lookup service with
       | true, none, some st => do
         match ← Observe.enabled st (fsOf service) s with
         | .ok e => pure [("enabled", Tazuna.Json.Enabled.toValue e)]
         | .error f => pure [("enabled", .obj [("fault", ToValue.toValue (Finding.fault f).toViolation)])]
       | _, _, _ => pure []
-    pure (.obj ([("service", .str service),
+    let fields : List (String × Value) := [("service", .str service),
       ("lines", .arr (s.lines.toList.map fun l => lineValue l [] [])),
-      ("violations", .arr ((s.violations ++ s.halted.toList).map ToValue.toValue))] ++ enabled))
+      ("violations", .arr ((reportedViolations s c none).map ToValue.toValue)),
+      ("candidates", .arr ((candidates s c none).map fun ((i, j) : Nat × Nat) => .arr [.num i, .num j]))]
+    pure (Value.obj (fields ++ enabled))).run acting
   pure (.obj [("type", .str "simulated"),
     ("participants", .arr participants),
-    ("reports", .arr (w.reports.map (·.toValue))),
-    ("halted", (w.halted.map (·.toValue)).getD .null)])
+    ("reports", .arr (w.reports.map Sim.Report.toValue)),
+    ("halted", (w.halted.map Sim.Report.toValue).getD .null)])
+
+/--
+The reply to request `stepOrder`, which takes a structure, a scenario whose last line (or begin, when it has none) is
+the processing `origin` of `service`, and the step order `order` of that processing, and returns the ChoiceDependent
+violation or null: the scenario walked with the order against walked without it, compared as the outcome of `service`.
+The last two entries of the order take the second step of the pair and then the first.
+-/
+def stepOrderRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
+  let (spec, sc, start) ← worldOf request
+  let service ← IO.ofExcept (stringField request "service")
+  let origin : Scenario.Origin ← IO.ofExcept do FromValue.fromValue (← field request "origin")
+  let order : List StepName ← IO.ofExcept do FromValue.fromValue (← field request "order")
+  let [y, x] := order.drop (order.length - 2) | throw (IO.userError "the order has no two entries")
+  let outcome (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Observe.Outcome := do
+    let start := { start with stepOrders }
+    let ran : ActingIO Sim.World := Sim.walk spec (← instrumentedOf stdin stdout start) start sc
+    let (w, acting) ← ran.run {}
+    let some st := w.services.lookup service | throw (IO.userError s!"{service} does not run")
+    let s := w.state service
+    let lines := (trace s (acting.collect service).causes).map fun (line, after, created) => traceLineOf line after created
+    pure (Outcome.of st s.halted lines s.records none)
+  let compare := compareOf spec service (askComparable stdin stdout (← IO.mkRef {}))
+  let found ← stepOrder compare x y (← outcome []) (← outcome [(origin, service, order)])
+  pure (.obj [("type", .str "decided"), ("found", (found.map (·.toValue)).getD .null)])
 
 partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do
   let line ← stdin.getLine
@@ -565,13 +644,15 @@ partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : I
       | some (.str "decodeLines") => IO.ofExcept (decodeLines request)
       | some (.str "peer") => IO.ofExcept (peer request)
       | some (.str "simulate") => simulateRequest stdin stdout request
+      | some (.str "stepOrder") => stepOrderRequest stdin stdout request
       | some (.str "names") =>
         pure (.obj [("type", .str "names"),
           ("byCaller", .obj (rejectionKinds.filterMap fun k =>
             match ToValue.toValue k with
             | .str s => some (s, .bool (RejectionKind.byCaller k))
             | _ => none)),
-          ("limits", .obj (limits.map fun l => (l.name, .num (.fromInt l.max))))])
+          ("limits", .obj (limits.map fun l => (l.name, .num (.fromInt l.max)))),
+          ("stepOrderLimit", .num stepOrderLimit)])
       | _ => throw (IO.userError s!"unknown request {line.trimAscii}")
     catch e => pure (.obj [("type", .str "error"), ("message", .str (toString e))])
   send stdout reply

@@ -12,7 +12,7 @@ namespace Tazuna.Sim
 open Tazuna.Data Tazuna.Semantics
 open Tazuna.Scenario (Fact Origin Template RequestType Expectation GivenRecord Peer)
 
-variable {m : Type → Type} [Monad m] [MonadNote m]
+variable {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m]
 
 def World.attempt {α : Type} (w : World) (r : Except Report α) (k : α → m World) : m World :=
   match r with

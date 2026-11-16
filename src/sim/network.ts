@@ -1,9 +1,10 @@
+import type { StepName } from "../data/choiceDependent.generated.ts";
 import { haltingReportKinds, type Report } from "../data/report.generated.ts";
 import type { Origin } from "../data/scenario.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { Violation } from "../data/violation.ts";
 import type { Processing } from "../service/chart/queue.ts";
-import { Halt, type State } from "../service/state.ts";
+import { Halt, report, type State } from "../service/state.ts";
 import { refOfTraceName } from "../syntax/structure.ts";
 import { arriveFrom, receivedId, renamed, senderOf } from "./participant.ts";
 
@@ -35,11 +36,20 @@ export const sameChannel = (m: Message, n: Message): boolean =>
 export const sameOrigin = (a: Origin, b: Origin): boolean =>
   a.type === b.type && (a.type === "begin" || (b.type === "line" && a.index === b.index));
 
-interface Span {
+export interface Span {
   readonly origin: Origin;
   readonly service: string;
   readonly from: number;
   readonly to: number;
+  readonly stepsFrom: number;
+  readonly stepsTo: number;
+}
+
+/** Lean's World.stepOrders entry. */
+export interface StepOrder {
+  readonly origin: Origin;
+  readonly service: string;
+  readonly order: readonly StepName[];
 }
 
 export interface Opened {
@@ -79,6 +89,8 @@ export interface World {
   readonly looked: (readonly [number, boolean])[];
   readonly reports: Report[];
   halted: Report | undefined;
+  /** Lean's World.stepOrders. */
+  stepOrders: readonly StepOrder[];
 }
 
 export const stateOf = (w: World, service: string): State | undefined => w.participants.get(service)?.processing.state;
@@ -175,18 +187,27 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
   const r = p.processing;
   const s = r.state;
   const before = s.lines.length;
+  const stepsFrom = s.steps.length;
   const screens = screensOf(s);
+  const entry = w.stepOrders.find((e) => sameOrigin(e.origin, o) && e.service === service);
+  s.stepOrder = entry?.order ?? [];
+  if (entry !== undefined) w.stepOrders = w.stepOrders.filter((e) => e !== entry);
   try {
     f(r);
+    const left = s.stepOrder;
+    s.stepOrder = [];
+    if (entry !== undefined && left.length > 0)
+      report(s, { kind: "InvalidInput.unusedStepOrder", definition: null, data: { entries: left } });
   } catch (error) {
     if (!(error instanceof Halt)) throw error;
+    s.stepOrder = [];
     p.halted = error.violation;
   }
   for (const key of screensOf(s).filter((k) => reopen || !screens.includes(k))) {
     const [chart = "", resource = ""] = key.split("\u0000");
     w.opened.push({ origin: o, service, chart, resource });
   }
-  w.spans.push({ origin: o, service, from: before, to: s.lines.length });
+  w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
   route(w, o, service, s.lines.slice(before));
 }
 

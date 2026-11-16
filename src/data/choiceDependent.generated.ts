@@ -142,6 +142,18 @@ export type ChoiceDependent =
         readonly secondStep: StepName;
         readonly difference: Difference;
       };
+    }
+  /**
+   * The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
+   * a result that only those change is not reported. `definition` is the definition of the first step of the first pair
+   * that the search swapped.
+   */
+  | {
+      readonly kind: "ChoiceDependent.searchLimit";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly limit: number;
+      };
     };
 
 export const choiceDependentKinds = [
@@ -150,4 +162,5 @@ export const choiceDependentKinds = [
   "ChoiceDependent.answerOrder",
   "ChoiceDependent.requestOrder",
   "ChoiceDependent.stepOrder",
+  "ChoiceDependent.searchLimit",
 ] as const;

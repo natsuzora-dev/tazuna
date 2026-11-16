@@ -16,6 +16,7 @@ import { fingerprint } from "../sim/spec/fingerprint.ts";
 import { walkSpec } from "../sim/spec/simulate.ts";
 import { refOfTraceName, rejectionKinds, traceNameOfRef } from "../syntax/structure.ts";
 import { search } from "./search.ts";
+import { stepOrderChanges } from "./stepOrders.ts";
 import { stringsIn, valuesFor } from "./values.ts";
 
 /** The world after a scenario's lines and the lines appended to them, with the listener of each running service. */
@@ -255,13 +256,19 @@ export const walkAppended = (spec: Spec, sc: Scenario, appended: readonly Line[]
 
 const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
 
-/** The violations of each participant of `child` that its walk added after the walk of `parent`. */
-function violationsSince(parent: World, child: World): Violation[] {
-  return [...child.participants].flatMap(([service, p]) => {
-    const before = parent.participants.get(service);
+/**
+ * The violations of each participant of `child` that its walk added after the walk of `parent`: its own, those its
+ * listener collected, and its halt.
+ */
+function violationsSince(parent: Walked, child: Walked): Violation[] {
+  return [...child.world.participants].flatMap(([service, p]) => {
+    const before = parent.world.participants.get(service);
     const was = before?.processing.state.violations.length ?? 0;
+    const collected = child.listeners.get(service)?.collected.violations ?? [];
+    const collectedWas = parent.listeners.get(service)?.collected.violations.length ?? 0;
     return [
       ...p.processing.state.violations.slice(was),
+      ...collected.slice(collectedWas),
       ...(p.halted !== undefined && before?.halted === undefined ? [p.halted] : []),
     ];
   });
@@ -274,9 +281,9 @@ const halted = (w: World): boolean =>
  * Returns whether the lines appended after `parent` are lines that someone could write: no report of the simulation
  * and no InvalidInput violation of a participant. explore discards the others.
  */
-const givable = (parent: World, child: World): boolean =>
-  child.reports.length === parent.reports.length &&
-  (child.halted === undefined || parent.halted !== undefined) &&
+const givable = (parent: Walked, child: Walked): boolean =>
+  child.world.reports.length === parent.world.reports.length &&
+  (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
 
 /**
@@ -337,7 +344,8 @@ const coverageOf = (walked: Walked, reached: Coverage) => {
 /**
  * Explores the scenario: walks its lines, and the paths that append up to `depth` lines that face the own service,
  * breadth-first, without extending a path whose world an earlier path reached, discarding a path whose last line no one
- * could write (givable). Returns the violations of the participants that each path added, and what the walks reached.
+ * could write (givable). Returns the violations of the participants that each path added, the step orders of its last
+ * move's processings that change their result, and what the walks reached.
  */
 export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: Seen, bounds: Bounds): ExploredLines {
   const sc = named.definition.scenario;
@@ -364,7 +372,7 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
     }
     for (const move of moves)
       for (const c of orderedMoves(move, (m) => walkAppended(spec, sc, [...appended, ...m])))
-        if (givable(walked.world, c.walked.world)) made.set(c.move, c.walked);
+        if (givable(walked, c.walked)) made.set(c.move, c.walked);
     if (made.size > 0) children.set(walked, made);
     return [...made.keys()];
   };
@@ -386,7 +394,10 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
     const appended = path.flat();
     paths.push(appended);
     coverageOf(result, reached);
-    for (const violation of violationsSince(parent.world, result.world)) found.push({ violation, appended });
+    for (const violation of violationsSince(parent, result)) found.push({ violation, appended });
+    const from = sc.lines.length + path.slice(0, -1).flat().length;
+    for (const violation of stepOrderChanges(spec, { ...sc, lines: [...sc.lines, ...appended] }, result, from))
+      found.push({ violation, appended });
   }
   return { found, paths, reached };
 }

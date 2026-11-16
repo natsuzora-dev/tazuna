@@ -7,6 +7,9 @@ import type { ViolationValue } from "../data/violation.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import type { Records } from "../service/records.ts";
 
+/** Lean's stepOrderLimit: the number of step orders that the search of one processing runs at most. */
+export const stepOrderLimit = 64;
+
 /** What a run gives the relation: the violation that halted it, the trace lines that verify reads, and its records. */
 export interface Outcome {
   readonly halted: ViolationValue | null;

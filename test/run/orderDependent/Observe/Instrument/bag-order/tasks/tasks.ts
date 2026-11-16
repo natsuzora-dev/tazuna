@@ -9,7 +9,7 @@ export const Note = entity({
   key: "id",
 });
 
-export const { automation, command, createEvent, event, machine, contract } = service({
+export const { automation, command, createEvent, event, machine, contract, scenario } = service({
   description: "Keep tasks, their notes and their ranks",
   entities: { Task, Note },
 });

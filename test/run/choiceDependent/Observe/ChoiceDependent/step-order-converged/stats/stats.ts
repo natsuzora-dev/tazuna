@@ -8,7 +8,7 @@ export const Stats = singleEntity({
   fields: { added: z.number().default(0), lastTitle: z.string().default("") },
 });
 
-export const { automation, command, createEvent, updateEvent, contract } = service({
+export const { automation, command, createEvent, updateEvent, contract, scenario } = service({
   description: "Keep the tasks and their statistics",
   entities: { Task, Stats },
 });

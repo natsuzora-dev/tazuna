@@ -64,7 +64,8 @@
           "id": "answer#2"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "tags",
@@ -159,7 +160,8 @@
           "id": "answer#3"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

@@ -157,12 +157,14 @@
           "id": "answer#5"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

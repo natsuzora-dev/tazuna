@@ -74,6 +74,7 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     looked: [],
     reports: [],
     halted: undefined,
+    stepOrders: [],
   };
 }
 

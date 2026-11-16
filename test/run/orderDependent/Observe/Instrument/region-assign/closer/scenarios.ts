@@ -1,7 +1,12 @@
-import { at, scenario, send } from "@natsuzora-dev/tazuna";
-import { closeTasks } from "./closer.ts";
+import { closeTasks, scenario } from "./closer.ts";
 
 export const closeOnce = scenario(
   "Close the tasks; each machine assigns notes in two regions or copies in one microstep, which have no order, so test reports bothAssign",
-  [at("2026-10-25T09:00:00+09:00"), send(closeTasks, {})],
+  {
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} },
+    when: (w) => {
+      w.client.send(closeTasks, {});
+    },
+    then: () => [],
+  },
 );

@@ -108,12 +108,14 @@
           "id": "answer#3"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],

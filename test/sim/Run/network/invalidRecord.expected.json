@@ -3,12 +3,14 @@
     {
       "service": "todo",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [

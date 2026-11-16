@@ -525,7 +525,7 @@ export class Listener implements Note, Evaluations {
  * reads quietly, so neither the open step nor the evaluation cache hears its reads, and it asks functions without the
  * listener, so that it reaches no coverage.
  */
-function instrumented(spec: Spec, service: string, listener: Listener): InstrumentedFunctions {
+export function instrumented(spec: Spec, service: string, listener: Listener): InstrumentedFunctions {
   const functions = new SpecFunctions(spec, service, listener);
   const unheard = new SpecFunctions(spec, service);
   const reversed: InstrumentFunctions["reversed"] = (call) => listener.quietly(() => reversedBags(() => call(unheard)));

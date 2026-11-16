@@ -42,9 +42,22 @@ inductive ChoiceDependent where
   | requestOrder (definition secondRequest : Syntax.Ref) (difference : Difference)
   /-- `definition` is the definition of the first step. -/
   | stepOrder (definition : Syntax.Ref) (firstStep secondStep : StepName) (difference : Difference)
+  /--
+  The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
+  a result that only those change is not reported. `definition` is the definition of the first step of the first pair
+  that the search swapped.
+  -/
+  | searchLimit (definition : Syntax.Ref) (limit : Nat)
 deriving Repr, Inhabited
 
 derive_group ChoiceDependent
+
+/--
+The number of step orders that the search of one processing runs at most. The search runs the other order of each pair
+of a run's candidates, and of each run it reaches so, until no new order is left; this bounds the orders of a
+processing with many steps that touch the same values, whose count grows factorially.
+-/
+def stepOrderLimit : Nat := 64
 
 /-- The result of a run: the violation that halted it, the trace lines that verify reads, and its records. -/
 structure Outcome where

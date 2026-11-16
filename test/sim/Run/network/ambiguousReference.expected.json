@@ -81,17 +81,20 @@
           "id": "answer#2"
         }
       ],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     },
     {
       "service": "audit",
       "lines": [],
-      "violations": []
+      "violations": [],
+      "candidates": []
     }
   ],
   "reports": [],
