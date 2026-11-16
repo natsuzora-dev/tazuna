@@ -284,11 +284,11 @@ theorem before_le {arrivals : List Nat} {bLines : List TraceLine} {i k p a : Nat
 The peer's `in` line for a request or end of subscription of the scenario's run carries that line, at the same time.
 -/
 theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {peer : String}
-    {lines : List TraceLine} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
-    (hname : e.name 1 = peer) (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
+    {lines : List TraceLine} {keys : Bindings} {i : Nat} {al l : TraceLine} {b : Step.Body}
+    (hname : e.name 1 = peer) (hagree : ∀ n x, agree (0, i) 1 n x (canon n (keys.rename x)))
     (hb : peerBody? peer lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
-      Carries agree e 0 1 al l := by
+      Carries agree e (0, i) 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
   simp only at ht hw
   simp only [peerBody?] at hb
@@ -327,11 +327,11 @@ theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Val
 
 /-- The peer's `in` line for an event of the scenario's run carries that line, at the same time. -/
 theorem peerEvent_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {service : String}
-    {received : List String} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
-    (hname : e.name 0 = service) (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
+    {received : List String} {keys : Bindings} {i : Nat} {al l : TraceLine} {b : Step.Body}
+    (hname : e.name 0 = service) (hagree : ∀ n x, agree (0, i) 1 n x (canon n (keys.rename x)))
     (hb : peerEvent? service received keys al = some b) (hw : Writes canon ⟨al.time, b, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
-      Carries agree e 0 1 al l := by
+      Carries agree e (0, i) 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
   simp only at ht hw
   simp only [peerEvent?] at hb
@@ -347,12 +347,12 @@ theorem peerEvent_carries {agree : Agree} {e : Execution} {canon : String → Va
   next => simp at hb
 
 theorem peerInput_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {service peer : String}
-    {received : List String} {lines : List TraceLine} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
+    {received : List String} {lines : List TraceLine} {keys : Bindings} {i : Nat} {al l : TraceLine} {b : Step.Body}
     (hname0 : e.name 0 = service) (hname1 : e.name 1 = peer)
-    (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
+    (hagree : ∀ n x, agree (0, i) 1 n x (canon n (keys.rename x)))
     (hb : peerInput? service peer received lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
-      Carries agree e 0 1 al l := by
+      Carries agree e (0, i) 1 al l := by
   cases hp : peerBody? peer lines keys al with
   | some b' =>
     simp only [peerInput?, hp, Option.orElse_some, Option.some.injEq] at hb
@@ -662,16 +662,14 @@ theorem sourceB_of {inputs : List (Step × Origin)} {bLines : List TraceLine} {i
 
 /--
 How the scenario's service `service`, member 0, and its peer `peer`, member 1, see each other's values. The peer
-receives a value of a request or event in the form `canon` that its run writes, with each createKey value of the run as
-its peer key and each string that a prefix of the final bindings binds as the peer's createKey value bound to it
-(peerForward); the scenario's service receives a value of an answer or event that stands for the peer's under the final
-bindings (PeerSees).
+receives a value of a request or event of the scenario's line `i` in the form `canon` that its run writes, with the
+strings that the peer takes in place of the scenario's before that line (peerForward); the scenario's service receives
+a value of an answer or event that stands for the peer's under the final bindings (PeerSees).
 -/
 def peerAgree (normal : String → Value → CValue) (canon : String → Value → Value) (service peer : String)
     (arrivals : List Nat) (aLines bLines : List TraceLine) : Agree
-  | 0, 1, n, x, y => ∃ bs, bs <+: peerFinal normal service peer arrivals aLines bLines ∧
-    y = canon n ((peerKeys service aLines ++ bs.map fun (p : String × String) => (p.2, p.1)).rename x)
-  | 1, 0, m, x, y => ∃ n, peerName? peer m = some n ∧
+  | (0, i), 1, n, x, y => y = canon n ((peerForward normal service peer arrivals aLines bLines i).rename x)
+  | (1, _), 0, m, x, y => ∃ n, peerName? peer m = some n ∧
     PeerSees normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) n x y
   | _, _, _, _, _ => False
 
@@ -716,17 +714,16 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
   have fromB : ∀ j i, sourceB inputs bLines j = some (0, i) → ∃ al l,
       aLines[i]? = some al ∧ bLines[j]? = some l ∧ al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧
         (∀ id to a, l.body ≠ .answer .in id to a) ∧
-        Carries (peerAgree normal canon service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines) e 0 1 al l := by
+        Carries (peerAgree normal canon service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines) e (0, i) 1 al l := by
     intro j i hs
     obtain ⟨k, st, l, hk, hl⟩ := deliveredAt_spec (sourceB_spec hs).2
     obtain ⟨al, b, hal, hb, rfl⟩ := mem_peerInputs_line (List.mem_of_getElem? hk)
     have hw := hrun.2 k _ _ (by rw [List.getElem?_map, show inputs[k]? = _ from hk]; rfl) hl
     exact ⟨al, l, hal, (mem_inLines (List.mem_of_getElem? hl)).1,
-      peerInput_carries hname0 hname1
-        (fun _ _ => ⟨_, peerBindings_prefix (Nat.le_of_lt (List.getElem?_eq_some_iff.mp hal).1), rfl⟩) hb hw⟩
+      peerInput_carries hname0 hname1 (fun _ _ => rfl) hb hw⟩
   have fromA : ∀ i s j, sourceA normal service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines i = some (s, j) → ∃ al bl,
       aLines[i]? = some al ∧ bLines[j]? = some bl ∧ bl.body.dir = .out ∧ al.body.dir = .in ∧
-        bl.time.time ≤ al.time.time ∧ Carries (peerAgree normal canon service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines) e 1 0 bl al := by
+        bl.time.time ≤ al.time.time ∧ Carries (peerAgree normal canon service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines) e (1, j) 0 bl al := by
     intro i s j hs
     obtain ⟨_, al, hal, hc⟩ := sourceA_cases hs
     rcases hc with ⟨id, to, a, hb, ht, hu, bl, id', b, hbl, hbb, hk⟩ |

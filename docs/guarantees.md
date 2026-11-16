@@ -61,7 +61,6 @@ Lean proves this as `network_realizes` for spec runs, given that the peer's run 
 A peer's run can send such requests: in a scenario of `todo` whose peer is `screens`, the run of `screens` subscribes to `todo.tasks`.
 `test` neither delivers these requests to the scenario's service nor compares them with the scenario's run; this is an open point.
 That the given state and the `elsewhere` inputs give the peer no event of the scenario's service is checked when the spec loads.
-For a request, `network_realizes` states only that the peer receives the strings renamed by the names that mocks give up to some point of the run, not necessarily up to the request.
 So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
 Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
 

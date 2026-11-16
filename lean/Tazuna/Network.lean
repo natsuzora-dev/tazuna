@@ -25,11 +25,11 @@ def Execution.lines (e : Execution) (m : Nat) : List TraceLine := (e.members[m]?
 def Execution.line? (e : Execution) (p : Place) : Option TraceLine := (e.lines p.1)[p.2]?
 
 /--
-Whether value `y` that member `r` receives stands for value `x` that member `s` sent, of the definition that `r` names
-`name` in its trace. In an execution of implementations it is equality; between spec runs, it is equality up to the
-keys that each run chooses.
+Whether value `y` that member `r` receives stands for value `x` of the line at the place `sent`, of the definition that
+`r` names `name` in its trace. In an execution of implementations it is equality; between spec runs, it is equality up
+to the keys that each run chooses, which can depend on where the sender is in its run.
 -/
-abbrev Agree := (s r : Nat) → (name : String) → (x y : Value) → Prop
+abbrev Agree := (sent : Place) → (r : Nat) → (name : String) → (x y : Value) → Prop
 
 /-- Whether the received answer `a` carries the sent answer `b`, values compared by `agree`, rejections by kind. -/
 def AnswerCarries (agree : Value → Value → Prop) : Answer → Answer → Prop
@@ -40,21 +40,21 @@ def AnswerCarries (agree : Value → Value → Prop) : Answer → Answer → Pro
   | _, _ => False
 
 /--
-Whether the line `recv` that member `r` received carries the line `sent` that member `s` sent: a request to `r` with
-the same id, an end of a subscription, an answer to a request of `r` to `s`, or an event of `s`. A name of the other
-service has its name before a dot, as in a trace.
+Whether the line `recv` that member `r` received carries the line `sent` at the place `p` of another member: a request
+to `r` with the same id, an end of a subscription, an answer to a request of `r` to the sender, or an event of the
+sender. A name of the other service has its name before a dot, as in a trace.
 -/
-def Carries (agree : Agree) (e : Execution) (s r : Nat) (sent recv : TraceLine) : Prop :=
+def Carries (agree : Agree) (e : Execution) (p : Place) (r : Nat) (sent recv : TraceLine) : Prop :=
   match sent.body, recv.body with
   | .command .out i name x, .command .in j n y
   | .query .out i name x, .query .in j n y
   | .subscribe .out i name x, .subscribe .in j n y =>
-    j = i ∧ peerName? (e.name r) name = some n ∧ agree s r n x y
+    j = i ∧ peerName? (e.name r) name = some n ∧ agree p r n x y
   | .unsubscribe .out _ to, .unsubscribe .in _ to' => to' = to
   | .answer .out _ to b, .answer .in _ to' a =>
-    to' = to ∧ ∃ m, requestName? (e.lines r) to = some m ∧ (peerName? (e.name s) m).isSome ∧
-      AnswerCarries (agree s r m) b a
-  | .event .out _ n x _, .event .in _ name y _ => peerName? (e.name s) name = some n ∧ agree s r name x y
+    to' = to ∧ ∃ m, requestName? (e.lines r) to = some m ∧ (peerName? (e.name p.1) m).isSome ∧
+      AnswerCarries (agree p r m) b a
+  | .event .out _ n x _, .event .in _ name y _ => peerName? (e.name p.1) name = some n ∧ agree p r name x y
   | _, _ => False
 
 def isEventLine (l : TraceLine) : Bool :=
@@ -80,7 +80,7 @@ event may be delayed, lost, delivered more than once, or overtaken, and an answe
 structure WellFormed (agree : Agree) (e : Execution) : Prop where
   delivered : ∀ r i s j, e.source (r, i) = some (s, j) → s ≠ r ∧
     ∃ sent recv, e.line? (s, j) = some sent ∧ e.line? (r, i) = some recv ∧ sent.body.dir = .out ∧
-      recv.body.dir = .in ∧ sent.time.time ≤ recv.time.time ∧ Carries agree e s r sent recv
+      recv.body.dir = .in ∧ sent.time.time ≤ recv.time.time ∧ Carries agree e (s, j) r sent recv
   once : ∀ p q x sent, e.source p = some x → e.source q = some x → e.line? x = some sent → isEventLine sent = false →
     p = q
   ordered : ∀ r i i' s j j' l l' id id' to a a', i < i' → e.source (r, i) = some (s, j) →
