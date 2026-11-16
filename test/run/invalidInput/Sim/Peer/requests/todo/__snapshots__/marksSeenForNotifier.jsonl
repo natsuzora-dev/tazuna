@@ -1,7 +1,0 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk","seen":false},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"markSeen#1","name":"markSeen","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"markSeen#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskSeenRecorded#1","name":"taskSeenRecorded","payload":{"id":"task-1","seen":true},"resultOf":"markSeen#1"}

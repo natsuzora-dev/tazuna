@@ -1,2 +1,1 @@
-{"kind":"InvalidInput.missingWaitingRequest","definition":null,"data":{"sender":{"service":"app","name":"permission"},"target":{"service":"device","name":"requestPermission"}},"location":{"file":"app/scenarios.ts","line":5,"input":4},"scenario":{"service":"app","name":"answerAfterRestart"}}
-{"kind":"InvalidInput.unopenedSubscription","definition":null,"data":{"subscriptionId":"status#1"},"location":{"file":"app/scenarios.ts","line":17,"input":4},"scenario":{"service":"app","name":"unsubscribeAfterRestart"}}
+{"kind":"InvalidInput.unopenedSubscription","definition":null,"data":{"subscriptionId":"status#1"},"location":{"file":"app/scenarios.ts","line":19},"scenario":{"service":"app","name":"unsubscribeAfterRestart"}}

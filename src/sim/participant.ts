@@ -48,10 +48,10 @@ export function arriveFrom(r: Processing, sender: string, id: string, line: Trac
       call(r, name(line.name), line.input, given);
       return;
     case "subscribe":
-      subscribe(r, name(line.name), line.input, given, undefined);
+      subscribe(r, name(line.name), line.input, given);
       return;
     case "unsubscribe":
-      endSubscription(r, { to: receivedId(sender, line.to) });
+      endSubscription(r, receivedId(sender, line.to));
       return;
     case "answer": {
       const own = sentId(r.st.service, line.to);

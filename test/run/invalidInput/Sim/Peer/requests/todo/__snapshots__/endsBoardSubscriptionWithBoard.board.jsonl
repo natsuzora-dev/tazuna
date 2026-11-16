@@ -1,5 +1,0 @@
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"close"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.tasks#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"close","title":"Close the board","seen":false}]}}}

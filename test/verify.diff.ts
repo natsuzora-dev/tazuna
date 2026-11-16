@@ -11,6 +11,7 @@ import { readTrace, snapshotPath } from "../src/data/traceFile.ts";
 import type { Json } from "../src/data/values.ts";
 import type { Placed, ViolationValue } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
+import { simulateSpec, snapshotsOf } from "../src/sim/spec/simulate.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
 import { readSnapshotProblems, resolveAfters } from "../src/verify/lines.ts";
 import {
@@ -35,6 +36,8 @@ const examples = groupExamples("verify");
 
 // Run and validation examples too: the resultOf mutations need snapshots with resultOf on `in` lines.
 const snapshotExamples = [...examples, ...runExamples(), ...groupExamples("validation")];
+
+const samples = await loadSpec(join(import.meta.dirname, "../samples/todo/spec"));
 
 const specs = new Map(await Promise.all(snapshotExamples.map(async (root) => [root, await loadSpec(root)] as const)));
 
@@ -339,12 +342,24 @@ describe("Content comparison", () => {
   });
 
   test("TS and Lean find the same renaming when one key of a trace with thirty equal tasks changes, without trying every order of the tasks' bag", () => {
-    const base = bases.find((b) => b.label.endsWith("Peer/mocks/board/showsOneWrongTitleOfThirty.todo"));
-    assert.ok(base !== undefined);
+    const own = samples.scenarios.find((s) => s.service === "todo");
+    assert.ok(own !== undefined);
+    const lines = Array.from({ length: 30 }, (_, i) => ({
+      type: "request" as const,
+      kind: "command" as const,
+      target: { service: "todo", name: "addTask" },
+      input: { value: { taskId: `task-${i + 1}`, title: "Buy milk" }, holes: [] },
+    }));
+    const snapshot = snapshotsOf(simulateSpec(samples, { ...own.definition.scenario, lines, expectations: [] })).get(
+      "todo",
+    );
+    assert.ok(snapshot !== undefined);
+    const base: Case = { spec: samples, service: "todo", snapshot };
+    const label = "thirty equal tasks";
     const trace = structuredClone(base.snapshot) as unknown as Line[];
     const changed = trace.findIndex((l) => l?.["type"] === "event" && l["name"] === "taskAdded");
     trace[changed] = { ...trace[changed], payload: { taskId: "event" } } as Line;
-    assert.ok(violationCountOfBoth(base, trace, base.label) > 0);
+    assert.ok(violationCountOfBoth(base, trace, label) > 0);
   });
 
   const caseOf = (folder: string, service: string, snapshot: readonly Line[]): Case => {

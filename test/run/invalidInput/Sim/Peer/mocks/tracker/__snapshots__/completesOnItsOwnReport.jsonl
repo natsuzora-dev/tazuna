@@ -1,3 +1,0 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"todo.taskCompleted#1","name":"todo.taskCompleted","payload":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.completeTask#1","answer":{"result":"accepted"}}

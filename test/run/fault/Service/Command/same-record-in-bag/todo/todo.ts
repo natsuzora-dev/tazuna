@@ -9,7 +9,7 @@ export const Archive = entity({
   key: "title",
 });
 
-export const { command, createEvent, contract } = service({
+export const { command, createEvent, contract, scenario } = service({
   description: "Keep the tasks",
   entities: { Task, Archive },
 });

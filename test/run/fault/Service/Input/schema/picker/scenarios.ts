@@ -1,12 +1,17 @@
-import { at, operate, scenario } from "@natsuzora-dev/tazuna";
-import { filteredScreen, listScreen } from "./picker.ts";
+import { filteredScreen, listScreen, scenario } from "./picker.ts";
 
-export const pickListed = scenario("Pick a task from the list; test reports offersSchema", [
-  at("2026-10-25T09:00:00+09:00"),
-  operate(listScreen, "pick", { taskId: "task-1" }),
-]);
+export const pickListed = scenario("Pick a task from the list; test reports offersSchema", {
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} },
+  when: (w) => {
+    w.user.operate(w.begin.screen(listScreen), "pick", { taskId: "task-1" });
+  },
+  then: () => [],
+});
 
-export const pickFiltered = scenario("Pick a task from the filtered list; test reports offersSchema", [
-  at("2026-10-25T09:00:00+09:00"),
-  operate(filteredScreen, "pick", { taskId: "task-1" }),
-]);
+export const pickFiltered = scenario("Pick a task from the filtered list; test reports offersSchema", {
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} },
+  when: (w) => {
+    w.user.operate(w.begin.screen(filteredScreen), "pick", { taskId: "task-1" });
+  },
+  then: () => [],
+});

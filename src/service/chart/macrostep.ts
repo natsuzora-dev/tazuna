@@ -13,7 +13,6 @@ import { refreshScreens } from "../screen/subscription.ts";
 import {
   answered,
   awaitAnswer,
-  awaitedActivities,
   chartName,
   createKeys,
   halt,
@@ -237,7 +236,6 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (activity.own)
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });
       else {
-        r.note.requested(activity, senderOf(r.state, requester), awaitedActivities(r.state));
         awaitAnswer(
           r.state,
           { dir: "out", type: "command", name: activity.target, input },

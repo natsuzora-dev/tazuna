@@ -10,7 +10,7 @@ import type { Structure } from "../../syntax/structure.generated.ts";
 import { start } from "../given.ts";
 import type { StepOrder, World } from "../network.ts";
 import { simulate, walk } from "../run.ts";
-import { instrumented, Listener } from "./execute.ts";
+import { instrumented, Listener } from "./listener.ts";
 import { newProcessing } from "./processing.ts";
 
 /**
@@ -36,7 +36,7 @@ function made(
 ): Made {
   const listeners = new Map<string, Listener>();
   const w = start(sc, (service) => {
-    const listener = new Listener(spec, service, new Collect());
+    const listener = new Listener(spec, new Collect());
     listeners.set(service, listener);
     return processingFor(spec, service, listener);
   });

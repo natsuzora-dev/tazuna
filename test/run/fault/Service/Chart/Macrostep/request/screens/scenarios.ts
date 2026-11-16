@@ -1,9 +1,14 @@
-import { at, mock, scenario } from "@natsuzora-dev/tazuna";
+import { run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
-import { titledScreen } from "./screens.ts";
+import { scenario } from "./screens.ts";
 
-export const show = scenario("Answer the shown query, then reject it as unavailable; no violation", [
-  at("2026-10-25T09:00:00+09:00"),
-  mock(titledScreen, [todo.titled, { result: "fulfilled", output: { titles: ["Buy milk"] } }]),
-  mock(titledScreen, [todo.titled, { result: "rejected", rejection: { kind: "unavailable" } }]),
-]);
+export const show = scenario(
+  "The network fails the subscription of the shown query, so titledScreen gets unavailable, which does not fail shows; no violation",
+  {
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { todo: run(todo, { Task: [] }) } },
+    when: (w) => {
+      w.net.fail(w.begin.subscription(todo.titled));
+    },
+    then: () => [],
+  },
+);

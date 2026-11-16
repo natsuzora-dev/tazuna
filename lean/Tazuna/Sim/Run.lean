@@ -69,7 +69,7 @@ def requestOf (type : RequestType) (name : String) (id : Option String) (v : Val
   fun st fs s => match type with
     | .command => send st fs s name id v
     | .query => call st fs s name id v
-    | .subscribe => subscribe st fs s name id v none
+    | .subscribe => subscribe st fs s name id v
 
 def bodyOf (type : RequestType) (name : String) (v : Value) : LineBody :=
   match type with
@@ -221,7 +221,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
   | .unsubscribe none subscription => do
     let some s := w.sentBy subscription
       | return w.report (.unresolvedReference i (ToValue.toValue (Fact.line subscription)))
-    w.act fsOf (.line i) s.receiver fun st fs t => endSubscription st fs t (.id s.id)
+    w.act fsOf (.line i) s.receiver fun st fs t => endSubscription st fs t s.id
   | .unsubscribe (some p) subscription =>
     w.resolving (w.messageOf fsOf i (.line subscription)) fun k => do
       let some sub := w.messages[k]? | return w
@@ -248,7 +248,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       w.resolving (w.fill fsOf i payload) fun v => do
         if let .ok top := (w.state o.service).accepting o.chart then
           if top.resource != o.resource then return w.report (.unoperableScreen i o.resource)
-        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.chart control v true
+        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.chart control v
   | .look screen =>
     w.attempt (w.screenOf i screen) fun o => do
       let some st := w.services.lookup o.service | return w.report (.wrongRole i o.service)

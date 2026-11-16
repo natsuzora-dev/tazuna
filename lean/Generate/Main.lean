@@ -1,6 +1,5 @@
 import Lean.Elab.Term
 import Tazuna.Data.Names
-import Tazuna.Service.Step
 import Tazuna.Data.Trace
 import Tazuna.Observe.ChoiceDependent
 import Tazuna.Observe.OrderDependent
@@ -28,6 +27,16 @@ structure TsType where
   lean : Name
   ts : String
   module : Option String
+
+/--
+The TS constant `name`: the strings `values` as a const array, on one line when it fits in 120 columns and one string
+per line otherwise, as Biome formats it.
+-/
+def constArray (name : String) (values : List String) : String :=
+  let quoted := values.map fun v => s!"\"{v}\""
+  let oneLine := s!"export const {name} = [{", ".intercalate quoted}] as const;"
+  if oneLine.length ≤ 120 then oneLine ++ "\n"
+  else s!"export const {name} = [\n" ++ String.join (quoted.map fun q => s!"  {q},\n") ++ "] as const;\n"
 
 def tsTypes : List TsType :=
   [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
@@ -113,11 +122,10 @@ def group (type : Name) : StateT (List (String × String)) MetaM String := do
       s!"      readonly definition: {definition};\n" ++ String.join place ++
       s!"      readonly data: {← object fields.data "        "};\n" ++ "    }")
   let name := type.getString!
-  let kinds := String.join (ctors.map fun ctor => s!"  \"{kindName type ctor}\",\n")
   let typeDoc := (← findDocString? (← getEnv) type).map (jsdoc "") |>.getD ""
   return typeDoc ++ s!"export type {name} =\n" ++
     "\n".intercalate (members.map fun (doc, m) => doc ++ "  | " ++ m) ++ ";\n\n" ++
-    s!"export const {lowerFirst name}Kinds = [\n{kinds}] as const;\n"
+    constArray s!"{lowerFirst name}Kinds" (ctors.map (kindName type ·))
 
 /-- The `import type` lines, one per module, for the TS types that `imports` names. -/
 def importLines (imports : List (String × String)) : List String :=
@@ -315,8 +323,7 @@ The TS constant `halting<type>Kinds`: the kinds, in declaration order, whose vio
 only on the constructor, so one sample per constructor decides it.
 -/
 def halting (type : String) (kinds : List String) : String :=
-  s!"\n/** The kinds whose violations halt the run. */\nexport const halting{type}Kinds = [\n" ++
-    String.join (kinds.map fun k => s!"  \"{k}\",\n") ++ "] as const;\n"
+  "\n/** The kinds whose violations halt the run. */\n" ++ constArray s!"halting{type}Kinds" kinds
 
 def files : List (String × String) :=
   [("data/illegal.generated.ts", typescript% Tazuna.Validation.Illegal),
@@ -344,10 +351,7 @@ def files : List (String × String) :=
    ("syntax/structure.generated.ts",
     zodType% Tazuna.Syntax.Structure Tazuna.Data.RejectionKind Tazuna.Syntax.Ref Tazuna.Syntax.Activity
       Tazuna.Syntax.Transition Tazuna.Syntax.State Tazuna.Syntax.ChartFields Tazuna.Syntax.Reference
-      Tazuna.Syntax.Definition Tazuna.Syntax.Contract Tazuna.Syntax.ServiceInfo Tazuna.Syntax.ScenarioLine Tazuna.Syntax.Scenario),
-   ("data/step.generated.ts",
-    zodType% Tazuna.Semantics.Step Tazuna.Data.Rejection Tazuna.Data.Answer Tazuna.Data.DeadlineId
-      Tazuna.Semantics.Choice Tazuna.Semantics.Ended)]
+      Tazuna.Syntax.Definition Tazuna.Syntax.Contract Tazuna.Syntax.ServiceInfo)]
 
 /--
 The entry point. Without `--write`, it exits 1 when a file differs from the Lean definitions or is missing, and writes

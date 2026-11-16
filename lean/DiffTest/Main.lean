@@ -2,7 +2,6 @@ import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Names
 import Tazuna.Observe.ChoiceDependent
-import Tazuna.Sim.PeerCheck
 import Tazuna.Sim.Run
 
 /-!
@@ -96,7 +95,7 @@ def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : 
 
 def nextKeys (keys : Keys) : Value :=
   .obj ((keys.owner.map fun o => ("owner", .str o)).toList ++
-    [("next", .obj (keys.next.map fun (e, k) => (e, .obj [("count", .num k.count), ("names", .arr (k.names.map .str))])))])
+    [("next", .obj (keys.next.map fun (e, k) => (e, .obj [("count", .num k.count)])))])
 
 def schemaRequest (type : String) (schema : Schema) (value : Value) : Value :=
   .obj [("type", .str type), ("schema", Schema.toValue schema), ("value", value)]
@@ -255,78 +254,6 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "output", ← (optional r "failed").mapM FromValue.fromValue))
 
-/-- The semantic state with what Instrument collected and the enabled log. -/
-abbrev Checkpoint := State × Collect × EnabledLog
-
-abbrev EnabledCollectIO := StateT EnabledLog (StateT Collect IO)
-
-/--
-The saved states (`Checkpoint`) of the paths of the latest `run`, which `extend` continues, indexed by handle, and the
-replies that TS gave along them.
--/
-structure Tree where
-  st : Service
-  checkpoints : Array Checkpoint
-  memo : Memo
-
-def stepperOf (stdin stdout : IO.FS.Stream) (st : Service) (memo : Memo) : IO (Stepper EnabledCollectIO) := do
-  let reads ← IO.mkRef {}
-  let fs := functions stdin stdout reads memo false
-  let ifs : InstrumentFunctions IO := {
-    lastReads := do pure (← reads.get).parts
-    lastAccess := do IO.ofExcept (Access.decode (((← reads.get).reply.field? "access").getD (.obj [])))
-    lastEnumerated := do pure ((← reads.get).reply.field? "enumerated" == some (.bool true))
-    reversed := functions stdin stdout reads memo true }
-  pure (enabledStep st (step st (instrument st fs ifs)) (instrument st fs ifs))
-
-def checkpointOf (stepper : Stepper EnabledCollectIO) (inputs : List Step) : IO Checkpoint := do
-  let ((s, log), collected) ← ((runFrom stepper {} inputs).run {}).run {}
-  pure (s, collected, log)
-
-def stepOnce (stepper : Stepper EnabledCollectIO) : Checkpoint → Step → IO Checkpoint
-  | (s, collected, log), input => do
-    let ((s, log), collected) ← ((stepper s input).run log).run collected
-    pure (s, collected, log)
-
-def resultValue (handle : Nat) : Checkpoint → Value
-  | (s, collected, log) =>
-    .obj [("type", .str "result"), ("handle", .num handle),
-      ("lines", .arr ((trace s collected.causes).map fun (line, after, created) => lineValue line after created)),
-      ("violations", .arr ((reportedViolations s collected log.stopped).map ToValue.toValue)),
-      ("candidates", .arr ((candidates s collected log.stopped).map fun (i, j) => .arr [.num i, .num j])),
-      ("enabled", .arr (log.enabled.map Enabled.toValue))]
-
-/--
-The reply to request `run`, which takes a structure, a service, and steps, and returns the trace lines, the
-violations, the pairs of steps whose other order test runs, the `Enabled` value of each step, and the path's handle.
-It drops the handles and TS replies of earlier runs.
--/
-def run (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) (request : Value) : IO Value := do
-  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
-  let service ← IO.ofExcept (stringField request "service")
-  let st ← IO.ofExcept (spec.service service)
-  let inputs : List Step ← IO.ofExcept do FromValue.fromValue (← field request "steps")
-  let memo ← IO.mkRef {}
-  let checkpoint ← checkpointOf (← stepperOf stdin stdout st memo) inputs
-  tree.set (some { st, checkpoints := #[checkpoint], memo })
-  pure (resultValue 0 checkpoint)
-
-/--
-The reply to request `extend`, which takes a handle and one step, and returns the result of the handle's path
-followed by the step, and its handle. A halted path takes no more inputs, as in `runFrom`, so it returns the halted
-path's result and handle unchanged.
--/
-def extend (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) (request : Value) : IO Value := do
-  let some t ← tree.get | throw (IO.userError "extend before run")
-  let handle : Nat ← IO.ofExcept (do FromValue.fromValue (← field request "handle"))
-  let some checkpoint := t.checkpoints[handle]? | throw (IO.userError s!"no handle {handle}")
-  let (s, _, log) := checkpoint
-  if s.halted.isSome || log.stopped.isSome then return resultValue handle checkpoint
-  let input : Step ← IO.ofExcept do FromValue.fromValue (← field request "step")
-  let next ← stepOnce (← stepperOf stdin stdout t.st t.memo) checkpoint input
-  tree.set (some { t with checkpoints := t.checkpoints.push next })
-  pure (resultValue t.checkpoints.size next)
-
 /-- The comparable value that verify reads, which TS computes. -/
 def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Syntax.Definition) (part : Verify.Part)
     (value : Value) : IO CValue := do
@@ -335,34 +262,6 @@ def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Syntax.Defi
       ("definition", .obj [("kind", .str d.kind), ("service", .str d.service), ("name", .str d.name)])] ++
       part.toValue ++ [("value", value)]))
   IO.ofExcept (CValue.decode (← IO.ofExcept (field reply "value")))
-
-/-- The index of the first step where the two lists differ. -/
-def firstDifference (xs ys : List Step) : Option Nat :=
-  (List.range (max xs.length ys.length)).find? fun i =>
-    (xs[i]?.map fun x => (ToValue.toValue x).canonical) != (ys[i]?.map fun y => (ToValue.toValue y).canonical)
-
-/-- The request id that an answer step chooses, with the trace name of the answer's sender. -/
-def chosen (step : Step) : Except String (String × String) :=
-  match step.body with
-  | .answer sender _ _ (some (.id to)) _ => pure (to, sender)
-  | _ => throw "expected an answer step that chooses a request"
-
-/-- The trace name of the command or query that a step requests. -/
-def requested (step : Step) : Except String String :=
-  match step.body with
-  | .command _ name _ | .query _ name _ => pure name
-  | _ => throw "expected a command or query step"
-
-/-- The saved state after the steps, run one at a time, and the number of lines after each prefix. -/
-def runCounting (stepper : Stepper EnabledCollectIO) (steps : List Step) : IO (Checkpoint × List Nat) := do
-  let start ← checkpointOf stepper []
-  steps.foldlM (init := (start, [start.1.lines.size])) fun (checkpoint, counts) step => do
-    let next ← stepOnce stepper checkpoint step
-    pure (next, counts ++ [next.1.lines.size])
-
-/-- The line of the input that arrives after `count` lines: the first `in` line from there. -/
-def inputLineAfter (lines : List TraceLine) (count : Nat) : Option Nat :=
-  ((lines.zipIdx.drop count).find? fun (l, _) => l.body.dir == .in).map (·.2)
 
 /--
 The first violation, by line, that verify finds in `actual` with `expected` as the snapshot, as TS `compareTrace`
@@ -379,68 +278,6 @@ def compareOf (spec : Syntax.Structure) (service : String)
   pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
     | some (_, v) => .error v
     | none => .ok compared.bindings)
-
-/--
-The reply to request `choice`, which takes a structure, a service, the kind of choice, and the steps of the two runs in
-the order that the relation takes them, and returns the ChoiceDependent violation or null. The choice is at the first
-step where the runs differ: the deadlines at the first place where the orders of that step differ, the requests that two
-answers choose, the last two entries of the second run's `stepOrder` at that step, which take the second step of the
-pair and then the first, or, for two swapped inputs, that step and the next of the first run. TS computes the functions
-of both runs and the values that verify compares.
--/
-def choice (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
-  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
-  let service ← IO.ofExcept (stringField request "service")
-  let st ← IO.ofExcept (spec.service service)
-  let stepsOf (key : String) : IO (List Step) := IO.ofExcept do FromValue.fromValue (← field request key)
-  let (first, second) := (← stepsOf "first", ← stepsOf "second")
-  let some k := firstDifference first second | throw (IO.userError "the two runs have the same steps")
-  let stepper ← stepperOf stdin stdout st (← IO.mkRef {})
-  let runOf (steps : List Step) : IO (Checkpoint × List TraceLine × List Nat) := do
-    let (checkpoint, counts) ← runCounting stepper steps
-    let (s, collected, _) := checkpoint
-    pure (checkpoint, (trace s collected.causes).map (fun (line, after, created) => traceLineOf line after created), counts)
-  let (a, b) := (← runOf first, ← runOf second)
-  let outcome (run : Checkpoint × List TraceLine × List Nat) (swapped : Option (List Nat)) : Observe.Outcome :=
-    let ((s, _, log), lines, _) := run
-    Outcome.of st (s.halted <|> log.stopped) lines s.records swapped
-  -- Two swapped inputs: each run lists the line of the first run's input k first.
-  let swapped (run : Checkpoint × List TraceLine × List Nat) (reversed : Bool) : List Nat :=
-    let (_, lines, counts) := run
-    let positions := [k, k + 1].filterMap fun i => (counts[i]?).bind (inputLineAfter lines)
-    if reversed then positions.reverse else positions
-  let compare := compareOf spec service (askComparable stdin stdout (← IO.mkRef {}))
-  let step (steps : List Step) (i : Nat) : IO Step := match steps[i]? with
-    | some s => pure s
-    | none => throw (IO.userError s!"no step {i}")
-  let found ← match ← IO.ofExcept (stringField request "kind") with
-    | "deadlineOrder" =>
-      let (orderA, orderB) := ((← step first k).deadlineOrder.getD [], (← step second k).deadlineOrder.getD [])
-      let some (y, j) := orderB.zipIdx.find? (fun (d, i) => orderA[i]? != some d)
-        | throw (IO.userError "the orders of the step do not differ")
-      let some x := orderA[j]? | throw (IO.userError "the first order ends early")
-      let ((s, _, _), _, _) := a
-      let chart (d : DeadlineId) := (s.machine? d.instance).map (st.ref ·.chart.name)
-      deadlineOrder compare chart x y (outcome a none) (outcome b none)
-    | "answerChoice" =>
-      let (request, sender) ← IO.ofExcept (chosen (← step first k))
-      answerChoice compare (st.refOf sender) request (← IO.ofExcept (chosen (← step second k))).1
-        (outcome a none) (outcome b none)
-    | "answerOrder" =>
-      let (x, xSender) ← IO.ofExcept (chosen (← step first k))
-      let (y, ySender) ← IO.ofExcept (chosen (← step first (k + 1)))
-      answerOrder compare x y (st.refOf xSender) (st.refOf ySender)
-        (outcome a (some (swapped a false))) (outcome b (some (swapped b true)))
-    | "requestOrder" =>
-      requestOrder compare (st.refOf (← IO.ofExcept (requested (← step first k))))
-        (st.refOf (← IO.ofExcept (requested (← step first (k + 1))))) (outcome a (some (swapped a false)))
-        (outcome b (some (swapped b true)))
-    | "stepOrder" =>
-      let entries := (← step second k).stepOrder.getD []
-      let [y, x] := entries.drop (entries.length - 2) | throw (IO.userError "the stepOrder has no two entries")
-      stepOrder compare x y (outcome a none) (outcome b none)
-    | other => throw (IO.userError s!"unknown choice {other}")
-  pure (.obj [("type", .str "decided"), ("found", (found.map (·.toValue)).getD .null)])
 
 /-- The reply to request `check`, which takes a structure and returns the Illegal violations. -/
 def check (request : Value) : Except String Value := do
@@ -471,47 +308,6 @@ def afters (request : Value) : Except String Value := do
     if l == .null then pure none else some <$> FromValue.fromValue l
   let lines := snapshot.map (·.map fun l : TraceLine => ({ l with value := none } : Verify.Line))
   pure (.obj [("type", .str "afters"), ("findings", .arr ((Verify.unknownAfters lines).map (·.toValue)))])
-
-/--
-The reply to request `peer`, which takes the scenario's service, the fields of PeerDerivation, the forms of
-`peerForm` and `ownInputForm` that TS computed as `[name, value, form]`, the lines of the scenario's run and of the
-peer's run, the halt of the peer's run, and the violations of a run that did not halt with their origins, and
-returns peerInputs, peerFindings and peerRunFindings. A value without a form takes the form that no schema reads.
--/
-def peer (request : Value) : Except String Value := do
-  let service ← stringField request "service"
-  let peer ← stringField request "peer"
-  let received : List String ← FromValue.fromValue (← field request "received")
-  let fromLines : List Nat ← FromValue.fromValue (← field request "fromLines")
-  let state : List Step ← FromValue.fromValue (← field request "state")
-  let elsewhere ← (← asList (← field request "elsewhere")).mapM fun
-    | .arr [n, s] => do pure ((← FromValue.fromValue n : Nat), (← FromValue.fromValue s : Step))
-    | _ => throw "expected [count, step]"
-  let lines : List TraceLine ← FromValue.fromValue (← field request "lines")
-  let peerLines : List TraceLine ← FromValue.fromValue (← field request "peerLines")
-  let halted ← match ← field request "halted" with
-    | .null => pure none
-    | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : PeerOrigin), kind))
-    | _ => throw "expected null or [origin, kind]"
-  let reported ← (← asList (← field request "reported")).mapM fun
-    | .arr [o, v] => do pure ((← FromValue.fromValue o : PeerOrigin), (← FromValue.fromValue v : Violation))
-    | _ => throw "expected [origin, violation]"
-  let forms (key : String) := do
-    let recorded ← (← asList (← field request key)).mapM fun
-      | .arr [.str name, v, form] => do pure (name, v, ← CValue.decode form)
-      | _ => throw "expected [name, value, form]"
-    pure fun (name : String) (v : Value) =>
-      ((recorded.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD (.ofValue v)
-  let d : PeerDerivation :=
-    { peer, received, fromLines, state, elsewhere, peerForm := ← forms "peerForms",
-      ownInputForm := ← forms "ownInputForms" }
-  pure (.obj [("type", .str "peer"),
-    ("inputs", .arr ((peerInputs service d lines peerLines).map
-      fun (s, o) => .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
-    ("findings", .arr ((peerFindings service d (peerArrivals service d lines) lines peerLines halted).map fun (o, f) =>
-      .obj [("origin", ToValue.toValue o), ("violation", f.toValue)])),
-    ("runFindings", .arr ((peerRunFindings reported).map fun (o, v) =>
-      .obj [("origin", ToValue.toValue o), ("violation", ToValue.toValue v)]))])
 
 /-- What an instrumented simulation collects: one Collect per running service, and the service whose processing runs. -/
 structure Acting where
@@ -620,29 +416,25 @@ def stepOrderRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value 
     let some st := w.services.lookup service | throw (IO.userError s!"{service} does not run")
     let s := w.state service
     let lines := (trace s (acting.collect service).causes).map fun (line, after, created) => traceLineOf line after created
-    pure (Outcome.of st s.halted lines s.records none)
+    pure (Outcome.of st s.halted lines s.records)
   let compare := compareOf spec service (askComparable stdin stdout (← IO.mkRef {}))
   let found ← stepOrder compare x y (← outcome []) (← outcome [(origin, service, order)])
   pure (.obj [("type", .str "decided"), ("found", (found.map (·.toValue)).getD .null)])
 
-partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do
+partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
   let line ← stdin.getLine
   if line.isEmpty then return
   let reply ← try
       let request ← IO.ofExcept (parse line)
       match request.field? "type" with
-      | some (.str "run") => run stdin stdout tree request
-      | some (.str "extend") => extend stdin stdout tree request
       | some (.str "check") => IO.ofExcept (check request)
       | some (.str "verify") => verify stdin stdout request
-      | some (.str "choice") => choice stdin stdout request
       | some (.str "checkExternal") => IO.ofExcept (checkExternal request)
       | some (.str "pair") => IO.ofExcept (pair request)
       | some (.str "pairSnapshots") => IO.ofExcept (pairSnapshots request)
       | some (.str "compareSnapshot") => IO.ofExcept (compareSnapshot request)
       | some (.str "afters") => IO.ofExcept (afters request)
       | some (.str "decodeLines") => IO.ofExcept (decodeLines request)
-      | some (.str "peer") => IO.ofExcept (peer request)
       | some (.str "simulate") => simulateRequest stdin stdout request
       | some (.str "stepOrder") => stepOrderRequest stdin stdout request
       | some (.str "names") =>
@@ -656,7 +448,7 @@ partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : I
       | _ => throw (IO.userError s!"unknown request {line.trimAscii}")
     catch e => pure (.obj [("type", .str "error"), ("message", .str (toString e))])
   send stdout reply
-  loop stdin stdout tree
+  loop stdin stdout
 
 def main : IO Unit := do
-  loop (← IO.getStdin) (← IO.getStdout) (← IO.mkRef none)
+  loop (← IO.getStdin) (← IO.getStdout)

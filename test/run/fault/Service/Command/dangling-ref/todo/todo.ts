@@ -14,7 +14,7 @@ export const Pin = singleEntity({
   fields: { taskId: ref(Task).nullable().default(null) },
 });
 
-export const { command, createEvent, deleteEvent, updateEvent, contract } = service({
+export const { command, createEvent, deleteEvent, updateEvent, contract, scenario } = service({
   description: "Keep the tasks",
   entities: { Task, Comment, Pin },
 });

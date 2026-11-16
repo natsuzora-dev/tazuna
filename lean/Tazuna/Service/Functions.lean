@@ -10,13 +10,9 @@ namespace Tazuna.Semantics
 
 open Tazuna.Data
 
-/--
-What createKey returns next for an entity: each of `names` in order, then `<entity>-<n>` for the entity's `n`-th
-createKey value, `count` being the number of its createKey values so far.
--/
+/-- What createKey returns next for an entity: `<entity>-<n>` for its `n`-th createKey value, after `count` so far. -/
 structure NextKeys where
   count : Nat
-  names : List String
 deriving DecidableEq, Repr, Inhabited
 
 /--
@@ -35,12 +31,12 @@ when `keys` holds what it returns next.
 -/
 def givenKeys (keys : Keys) (created : List String) : List (String × String) :=
   created.zipIdx.map fun (e, i) =>
-    let k := (keys.next.lookup e).getD ⟨0, []⟩
+    let k := (keys.next.lookup e).getD ⟨0⟩
     let before := ((created.take i).filter (· == e)).length
     let counted := s!"{e}-{k.count + before + 1}"
-    (e, k.names[before]?.getD (match keys.owner with
+    (e, match keys.owner with
       | some owner => s!"{owner}/{counted}"
-      | none => counted))
+      | none => counted)
 
 /-- The scope of a copy whose map state is `map`. -/
 structure CopyScope where

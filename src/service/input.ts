@@ -1,15 +1,13 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
-import type { Step } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import { type Json, overlay, plain, stringsOf } from "../data/values.ts";
+import { plain } from "../data/values.ts";
 import { type ProblemError, withExtra } from "../data/violation.ts";
 import {
   type AssumptionMismatch,
   assumptionMismatch,
   hasOutput,
   isAssumed,
-  isKeyOf,
   rejectionKinds,
   rejectionReasons,
   requiresOf,
@@ -27,7 +25,7 @@ import { Failed, issueViolation } from "./functions.ts";
 import { answerAgain, type Delivery, keep, malformedRedelivery, type Request, sameDelivery } from "./idempotency.ts";
 import type { Emit } from "./message.ts";
 import { resolveChecked } from "./query.ts";
-import { fireDue, message } from "./queue.ts";
+import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
 import {
   type Accepted,
@@ -38,8 +36,6 @@ import {
   newStep,
   type Pending,
   report,
-  type State,
-  senderOf,
   write,
   writeInput,
 } from "./state.ts";
@@ -79,36 +75,21 @@ export function call(r: Processing, name: string, input: unknown, given: { reado
   message(r);
 }
 
-export function subscribe(
-  r: Processing,
-  name: string,
-  input: unknown,
-  given: { readonly id?: string },
-  handle: string | undefined,
-): void {
+export function subscribe(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
   if (!r.st.queries.includes(name)) unownedTarget(r, name);
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
   const id = writeInput(s, { dir: "in", type: "subscribe", ...given, name, input: canonicalInput });
-  if (handle !== undefined) s.subscribed.set(handle, id);
   if (!s.subscriptions.subscribe(id, { query: name, input }))
     report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
   newMessage(s);
   message(r);
 }
 
-/**
- * Lean's endSubscription. A checked scenario names by handle only a subscribe input before it
- * (Illegal.namedInputUnplaced), so the handle names a subscription that the input opened.
- */
-export function endSubscription(r: Processing, subscription: Ended): void {
-  const id = "to" in subscription ? subscription.to : r.state.subscribed.get(subscription.handle);
-  if (id !== undefined) endOpened(r, id);
-}
-
-function endOpened(r: Processing, id: string): void {
+/** Lean's endSubscription: the unsubscribe input that ends the subscription `id`. */
+export function endSubscription(r: Processing, id: string): void {
   const s = r.state;
   writeInput(s, { dir: "in", type: "unsubscribe", to: id });
   if (!s.subscriptions.unsubscribe(id))
@@ -117,12 +98,7 @@ function endOpened(r: Processing, id: string): void {
   message(r);
 }
 
-/**
- * Returns the request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input
- * before the event (Illegal.namedInputUnplaced), so that mock has been processed. Returns undefined when that mock
- * answered no request (ambiguousMock, missingWaitingRequest, missingStaleRequest), and after reporting that the request
- * cannot have the event as its result (resultOfMismatch).
- */
+/** Lean's resultRequest: the request `handle` whose answer the service took, which an event names as its resultOf. */
 function resultRequest(r: Processing, name: string, handle: string): Pending | undefined {
   const answered = r.state.mocks.get(handle);
   if (answered === undefined) return undefined;
@@ -227,65 +203,6 @@ export function receive(
   const step = newStep(s, undefined);
   r.queue.tasks.push(...reactions(r.st, s, [e], false, step));
   message(r);
-}
-
-type Mock = Extract<Step, { readonly type: "answer" }>;
-
-type Ended = Extract<Step, { readonly type: "unsubscribe" }>["subscription"];
-
-type Choice = NonNullable<Mock["choice"]>;
-
-const choosesStale = (choice: Choice | undefined): boolean =>
-  choice !== undefined && !("to" in choice) && choice.stale === true;
-
-/** Lean's State.waiting: the requests from `sender` to `name` that wait, stale exactly when `stale` is, in sending order. */
-function waiting(s: State, sender: string, name: string, stale: boolean): Pending[] {
-  return s.pending.filter(
-    (p) => p.stale === stale && p.activity.target === name && senderOf(s, p.requester) === sender,
-  );
-}
-
-/**
- * Lean's chosen: the requests of `ps` whose input is the canonical form of their input overlaid with the mock input
- * `input`.
- */
-function chosen(r: Processing, name: string, input: unknown, ps: readonly Pending[]): Pending[] {
-  const definition = refOf(r.st, name);
-  return ps.filter((p) => {
-    const v = r.functions.canonical({ kind: "input", definition }, overlay(JSON.parse(p.input), input));
-    if (v instanceof Failed) return halt(issueViolation(definition, v));
-    return JSON.stringify(v) === p.input;
-  });
-}
-
-/**
- * Lean's State.answering: the request that the mock answers, the longest-waiting of those that its choice allows, or why
- * it answers none.
- */
-function answering(r: Processing, sender: string, name: string, choice: Choice | undefined): Pending | InvalidInput {
-  const s = r.state;
-  const stale = choosesStale(choice);
-  const ps =
-    choice !== undefined && "to" in choice
-      ? s.pending.filter((p) => p.id === choice.to && p.activity.target === name && senderOf(s, p.requester) === sender)
-      : choice?.input === undefined
-        ? waiting(s, sender, name, stale)
-        : chosen(r, name, choice.input, waiting(s, sender, name, stale));
-  const refs = { sender: refOf(r.st, sender), target: refOf(r.st, name) };
-  const inputs = [...new Set(ps.map((p) => p.input))];
-  if (inputs.length > 1)
-    return {
-      kind: "InvalidInput.ambiguousMock",
-      definition: null,
-      data: { ...refs, inputs: inputs.map((i) => JSON.parse(i) as Json) },
-    };
-  const p = ps.toSorted((a, b) => a.turn - b.turn)[0];
-  if (p !== undefined) return p;
-  return {
-    kind: stale ? "InvalidInput.missingStaleRequest" : "InvalidInput.missingWaitingRequest",
-    definition: null,
-    data: refs,
-  };
 }
 
 type Assumption = Extract<
@@ -406,27 +323,6 @@ function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
   };
 }
 
-export function mock(r: Processing, value: Mock): Pending | undefined {
-  const s = r.state;
-  const { sender, target: name } = value;
-  const p = answering(r, sender, name, value.choice);
-  if ("kind" in p) return report(s, p);
-  if (value.handle !== undefined) s.mocks.set(value.handle, { request: p, answer: value.answer });
-  return answerRequest(r, p, value.answer);
-}
-
-/** Lean's answerById. */
-export function answerById(r: Processing, value: Extract<Step, { readonly type: "answerById" }>): Pending | undefined {
-  const s = r.state;
-  const p = s.pending.find((q) => q.id === value.to && q.activity.target === value.target);
-  if (p !== undefined) return answerRequest(r, p, value.answer);
-  return report(s, {
-    kind: "InvalidInput.unwaitedRequest",
-    definition: null,
-    data: { requestId: value.to, target: refOf(r.st, value.target) },
-  });
-}
-
 /** Lean's answerRequest. */
 export function answerRequest(r: Processing, p: Pending, answer: Answer): Pending | undefined {
   const s = r.state;
@@ -476,23 +372,7 @@ export function begin(r: Processing): void {
   message(r);
 }
 
-/** Lean's State.takeKeys: puts the names `keys` in place of the current ones, reporting the first entity's names left. */
-export function takeKeys(r: Processing, keys: Readonly<Record<string, readonly string[]>> | undefined): void {
-  const s = r.state;
-  const unused = [...s.keyNames].find(([, names]) => names.length > 0);
-  s.keyNames = new Map(Object.entries(keys ?? {}));
-  if (unused !== undefined)
-    report(r.state, {
-      kind: "InvalidInput.unusedKeys",
-      definition: null,
-      data: { entity: unused[0], names: unused[1] },
-    });
-}
-
-/**
- * Ends the input: reports the entries of its `deadlineOrder` that no tie used, then those of its `stepOrder` left
- * unused, then the names of its `keys` left.
- */
+/** Ends the input: reports the entries of its `deadlineOrder` that no tie used, then those of its `stepOrder` left unused. */
 export function checkOrderUsed(r: Processing): void {
   const s = r.state;
   s.inputDeadlineOrder = [];
@@ -500,65 +380,6 @@ export function checkOrderUsed(r: Processing): void {
     report(r.state, { kind: "InvalidInput.unusedDeadlineOrder", definition: null, data: { entries: s.deadlineOrder } });
   if (s.stepOrder.length > 0)
     report(r.state, { kind: "InvalidInput.unusedStepOrder", definition: null, data: { entries: s.stepOrder } });
-  takeKeys(r, undefined);
-}
-
-/** Lean's Step.Body.values: the values that the input gives the service, an input, a payload, or an answer's output. */
-function valuesOf(input: Step): unknown[] {
-  switch (input.type) {
-    case "command":
-    case "query":
-    case "subscribe":
-      return [input.input];
-    case "event":
-    case "operation":
-    case "unacceptedOperation":
-      return [input.payload];
-    case "answer":
-    case "answerById":
-      return input.answer.result === "rejected" || input.answer.output === undefined ? [] : [input.answer.output];
-    default:
-      return [];
-  }
-}
-
-/**
- * Reports the first string of the input's values that has the form of a createKey value of an own entity that createKey
- * has not given yet (InvalidInput.uncreatedKey).
- */
-export function checkUncreatedKeys(r: Processing, input: Step): void {
-  const { st, state: s } = r;
-  for (const value of valuesOf(input).flatMap(stringsOf)) {
-    if (s.created.some(([, key]) => key === value)) continue;
-    const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(e, value));
-    if (entity !== undefined)
-      report(s, {
-        kind: "InvalidInput.uncreatedKey",
-        definition: null,
-        data: { recordKey: value, entity: ref(st, entity) },
-      });
-  }
-}
-
-/**
- * Makes the state in which `input` arrives. Every input first advances the time to its own, firing the deadlines due by
- * then; then every input but a restart, which begins the service itself, begins the service if it has not begun.
- */
-export function advance(r: Processing, input: Step): void {
-  const s = r.state;
-  const to = Temporal.Instant.from(input.time);
-  if (Temporal.Instant.compare(to, s.now) < 0)
-    report(r.state, {
-      kind: "InvalidInput.earlierAt",
-      definition: null,
-      data: { at: to.toString(), now: s.now.toString() },
-    });
-  fireDue(r, to);
-  if (Temporal.Instant.compare(to, s.now) > 0) {
-    s.now = to;
-    r.note.wroteNow();
-  }
-  if (input.type !== "restart") begin(r);
 }
 
 export function operate(r: Processing, screen: string, key: string, payload: unknown): void {
@@ -584,18 +405,6 @@ export function operate(r: Processing, screen: string, key: string, payload: unk
   newMessage(s);
   const step = newStep(s, undefined);
   settled(r, top.resource, step, () => dispatch(r, top.resource, key, decoded, step));
-  message(r);
-}
-
-export function cannotOperate(r: Processing, screen: string, key: string, payload: unknown): void {
-  const operation = writeOperation(r, "unacceptedOperation", screen, key, payload);
-  if ("top" in operation.found)
-    report(r.state, {
-      kind: "InvalidInput.unexpectedlyAccepted",
-      definition: null,
-      data: { screen: ref(r.st, screen), control: key },
-    });
-  newMessage(r.state);
   message(r);
 }
 

@@ -3,7 +3,10 @@ import { z } from "zod";
 
 export const Counter = singleEntity({ description: "A counter", fields: { value: z.number().default(0) } });
 
-export const { command, machine, updateEvent } = service({ description: "Keep the tasks", entities: { Counter } });
+export const { command, machine, updateEvent, scenario } = service({
+  description: "Keep the tasks",
+  entities: { Counter },
+});
 
 export const counted = updateEvent({ entity: Counter, writes: ["value"] });
 

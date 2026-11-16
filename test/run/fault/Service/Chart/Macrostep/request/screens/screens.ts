@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
-export const { screen } = service({ description: "Show the tasks" });
+export const { screen, scenario } = service({ description: "Show the tasks" });
 
 export const titledScreen = screen({
   description: "The tasks whose title starts with a prefix",

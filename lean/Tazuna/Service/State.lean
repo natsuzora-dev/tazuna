@@ -179,8 +179,6 @@ structure State where
   messageCount : Nat := 0
   /-- The createKey values with their entity, in creation order. -/
   created : List (String × String) := []
-  /-- The names of the current input's `keys` that createKey has not returned yet, by entity. -/
-  keyNames : List (String × List String) := []
   /-- The participant of a simulation that the service is, whose name qualifies its createKey values (Keys). -/
   keyOwner : Option String := none
   /-- Whether a tie of deadlines that no `deadlineOrder` entry decides is reported, as a simulation's clock line does. -/
@@ -190,8 +188,6 @@ structure State where
   results : List Accepted := []
   /-- The processed mocks that have a handle, latest first: the handle, the request answered, and the answer. -/
   mocks : List (String × Pending × Answer) := []
-  /-- The processed subscribe inputs that have a handle, latest first: the handle and the subscription's id. -/
-  subscribed : List (String × String) := []
   violations : List Violation := []
   /-- The halting violation; after it, no input changes the state. -/
   halted : Option Violation := none
@@ -218,17 +214,15 @@ def State.await (s : State) (body : LineBody) (requester : Requester) (activity 
 def State.keyCount (s : State) (entity : String) : Nat := (s.created.filter (·.1 == entity)).length
 
 /--
-What createKey returns next for each entity that has a createKey value or a name left: the names left, in order, and
-after them `<entity>-<n>` for the entity's `n`-th createKey value, qualified by `keyOwner`.
+What createKey returns next for each entity that has a createKey value: `<entity>-<n>` for the entity's `n`-th createKey
+value, qualified by `keyOwner`.
 -/
 def State.nextKeys (s : State) : Keys :=
   { owner := s.keyOwner,
-    next := (s.created.map (·.1) ++ s.keyNames.map (·.1)).eraseDups.map fun e =>
-      (e, { count := s.keyCount e, names := (s.keyNames.lookup e).getD [] }) }
+    next := (s.created.map (·.1)).eraseDups.map fun e => (e, { count := s.keyCount e }) }
 
 def State.createKeys (s : State) (entities : List String) : State :=
-  { s with created := s.created ++ givenKeys s.nextKeys entities,
-           keyNames := s.keyNames.map fun (e, names) => (e, names.drop (entities.count e)) }
+  { s with created := s.created ++ givenKeys s.nextKeys entities }
 
 def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
 

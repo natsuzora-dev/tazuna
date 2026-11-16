@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { machine } = service({ description: "Hold the limit, starting below its minimum" });
+export const { machine, scenario } = service({ description: "Hold the limit, starting below its minimum" });
 
 export const limits = machine({
   description: "Hold the limit",

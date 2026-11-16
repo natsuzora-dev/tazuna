@@ -1,6 +1,0 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"saveScreen.save#1","name":"saveScreen.save"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"todo.saveTask#1","name":"todo.saveTask","input":{"title":"Buy milk"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"notes.saveNote#1","name":"notes.saveNote","input":{"text":"Milk"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.saveTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"notes.saveNote#1","answer":{"result":"accepted"}}

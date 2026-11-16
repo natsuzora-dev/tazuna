@@ -212,7 +212,7 @@ function requestOf(type: RequestType, name: string, id: string | undefined, v: u
   return (r) => {
     if (type === "command") send(r, name, v, given);
     else if (type === "query") call(r, name, v, given);
-    else subscribe(r, name, v, given, undefined);
+    else subscribe(r, name, v, given);
   };
 }
 
@@ -441,7 +441,7 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
             definition: null,
             data: { scenarioLine: i, fact: { type: "line", index: l.subscription } },
           });
-        return act(w, origin, s.receiver, (r) => endSubscription(r, { to: s.id }));
+        return act(w, origin, s.receiver, (r) => endSubscription(r, s.id));
       }
       const peer = l.peer;
       const sub = w.messages[messageOf(w, i, { type: "line", index: l.subscription })] as Message;

@@ -14,7 +14,7 @@ export const Tally = singleEntity({
   invariants: { belowTwo: ({ record }) => record.added < 2 },
 });
 
-export const { command, createEvent, updateEvent, contract } = service({
+export const { command, createEvent, updateEvent, contract, scenario } = service({
   description: "Keep the tasks while breaking the invariants of Task, Tally, and the service",
   entities: { Task, Tally },
   invariants: {

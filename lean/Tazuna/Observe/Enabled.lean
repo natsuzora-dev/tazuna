@@ -1,4 +1,4 @@
-import Tazuna.Service.Run
+import Tazuna.Service.Restart
 
 /-! This module computes what can happen next right after an input, for the explorer. -/
 
@@ -47,23 +47,5 @@ def enabled [Monad m] (st : Service) (fs : Functions m) (s : State) :
       | .error v => pure (.error v)
       | .ok ops => pure (.ok (done ++ ops))
   pure (operations.map fun operations => { operations, awaiting := awaiting s, nextDeadline := nextDeadline s })
-
-/-- What can happen next after each input of a run. `stopped` is a violation from evaluating enabled. Later inputs are
-not processed, and `stopped` is reported as the violation that halted the run. -/
-structure EnabledLog where
-  enabled : List Enabled := []
-  stopped : Option Violation := none
-deriving Repr, Inhabited
-
-/-- The stepper that logs what can happen next after each input. It leaves the semantic state unchanged. -/
-def enabledStep [Monad m] (st : Service) (stepper : Stepper m) (fs : Functions m) : Stepper (StateT EnabledLog m) :=
-  fun s input => do
-    if (← get).stopped.isSome then return s
-    let s ← liftM (stepper s input)
-    if s.halted.isSome then return s
-    match ← liftM (enabled st fs s) with
-    | .error fault => modify fun l => { l with stopped := some (Finding.fault fault).toViolation }
-    | .ok e => modify fun l => { l with enabled := l.enabled ++ [e] }
-    return s
 
 end Tazuna.Observe

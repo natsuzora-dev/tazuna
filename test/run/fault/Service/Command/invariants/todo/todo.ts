@@ -8,7 +8,7 @@ export const Task = entity({
   invariants: { titleNotBlank: ({ record }) => record.title.trim() !== "" },
 });
 
-export const { command, createEvent, contract } = service({
+export const { command, createEvent, contract, scenario } = service({
   description: "Keep the tasks",
   entities: { Task },
   invariants: {

@@ -1,2 +1,0 @@
-{"kind":"InvalidInput.unownedTarget","definition":null,"data":{"target":{"service":"device","name":"requestPermission"}},"location":{"file":"app/scenarios.ts","line":18,"input":2},"scenario":{"service":"app","name":"askDevice"}}
-{"kind":"InvalidInput.unlistedEvent","definition":null,"data":{"event":{"service":"todo","name":"taskAdded"}},"location":{"file":"todo/scenarios.ts","line":9,"input":2},"scenario":{"service":"todo","name":"receiveOwnEvent"}}

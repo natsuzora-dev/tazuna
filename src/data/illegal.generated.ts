@@ -76,83 +76,6 @@ export type Illegal =
         readonly contract: string;
         readonly key: string;
       };
-    }
-  /**
-   * The sender of the answer input does not request its target. The `scenario` of this and the following kinds is a
-   * scenario, or a contract's start state named `states.<state>`.
-   */
-  | {
-      readonly kind: "Illegal.unrequestedAnswer";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-      readonly data: Readonly<Record<string, never>>;
-    }
-  /**
-   * The input names an input that its run takes more than once: the mock of an event's resultOf, or the subscribe input of
-   * an unsubscribe. A run takes the scenario's inputs to its service, or a state with the scenario's elsewhere inputs to
-   * the state's service.
-   */
-  | {
-      readonly kind: "Illegal.namedInputPlacedTwice";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-      readonly data: Readonly<Record<string, never>>;
-    }
-  /**
-   * The run of the input takes the input that it names (ScenarioLine.names) only after it, from another sender, or not at
-   * all: a subscription that a from line opens is ended by a from line of the same peer, and any other by a plain line.
-   */
-  | {
-      readonly kind: "Illegal.namedInputUnplaced";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-      readonly data: Readonly<Record<string, never>>;
-    }
-  | {
-      readonly kind: "Illegal.scenarioOfExternalService";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
-    }
-  /**
-   * The input has `value`, among its values or `keys` names, of the form of a createKey value of the keyed entity
-   * `entity` of the scenario's service or of a peer that counts the entity's keys. A scenario names a createKey value on
-   * the line that creates it (Step.keys), as no caller knows how many keys an implementation has made. Any string field
-   * counts, such as a title.
-   */
-  | {
-      readonly kind: "Illegal.countedKey";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-      readonly data: {
-        readonly value: string;
-        readonly entity: DefinitionRef;
-      };
-    }
-  /** The input's `keys` gives `name` to a createKey value of `entity` that an earlier line of its run, or the input, named. */
-  | {
-      readonly kind: "Illegal.keyNamedTwice";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-      readonly data: {
-        readonly entity: string;
-        readonly name: string;
-      };
-    }
-  /** The input has the value `name`, which a later line's `keys` gives a createKey value. */
-  | {
-      readonly kind: "Illegal.keyUsedBeforeNamed";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-      readonly data: {
-        readonly name: string;
-      };
     };
 
 export const illegalKinds = [
@@ -164,11 +87,4 @@ export const illegalKinds = [
   "Illegal.foreignEvent",
   "Illegal.indexReason",
   "Illegal.foreignMember",
-  "Illegal.unrequestedAnswer",
-  "Illegal.namedInputPlacedTwice",
-  "Illegal.namedInputUnplaced",
-  "Illegal.scenarioOfExternalService",
-  "Illegal.countedKey",
-  "Illegal.keyNamedTwice",
-  "Illegal.keyUsedBeforeNamed",
 ] as const;

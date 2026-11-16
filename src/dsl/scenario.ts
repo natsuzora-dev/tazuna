@@ -1,6 +1,7 @@
+// Only verify's examples still write scenarios as input lists, which test does not run; verify's move to the
+// simulation (P5) moves them to given/when/then and deletes this file.
 import type { z } from "zod";
-import type { StepName } from "../data/choiceDependent.generated.ts";
-import type { Answer, DeadlineId, Rejection } from "../data/trace.generated.ts";
+import type { Answer, Rejection } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen, Command, Control, Query } from "./definition.ts";
 import type { EncodedPayload } from "./event.ts";
@@ -54,10 +55,7 @@ type QueryLine = {
   readonly id?: string;
 } & CreatesKeys;
 
-/**
- * A subscribe input. `handle`, which only timed() sets, is the name by which a later unsubscribe names the subscription
- * (Lean's Step.Body.subscribe).
- */
+/** A subscribe input. */
 type SubscribeLine = {
   readonly type: "subscribe";
   readonly query: AnyQuery;
@@ -85,65 +83,7 @@ interface AnswerFields<C> extends CreatesKeys {
   readonly choice?: C;
 }
 
-interface Timed {
-  readonly time: string;
-}
-
-/**
- * The orders of an input, which only test's search sets; a scenario does not write them. `deadlineOrder` names, in
- * firing order, the deadlines that fire first in the ties during the input (InvalidInput.unreadyDeadline,
- * InvalidInput.unusedDeadlineOrder); after its entries, the first due in entry order fires. `stepOrder` names, in
- * order, the steps that the internal queue takes first during the input (InvalidInput.unreadyStep,
- * InvalidInput.unusedStepOrder).
- */
-interface Scheduled {
-  readonly deadlineOrder?: readonly DeadlineId[];
-  readonly stepOrder?: readonly StepName[];
-}
-
-/**
- * The names of the createKey values that the advance to the input's time creates, the deadlines due by then and the
- * service's begin, as the `at` line that moves the time writes them (Lean's Step.advanceKeys).
- */
-interface Advanced {
-  readonly advanceKeys?: Keys;
-}
-
-/** An input to the run: it arrives at `time`, after the deadlines due by then. */
-export type Input = (LineFields<AnswerInput, UnsubscribeInput> | AnswerByIdInput | { readonly type: "time" }) &
-  Timed &
-  Advanced &
-  Scheduled;
-
-/**
- * An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs give (Lean's
- * Step.Body.answerById).
- */
-type AnswerByIdInput = {
-  readonly type: "answerById";
-  readonly to: string;
-  readonly target: AnyCommand | AnyQuery;
-  readonly answer: Answer;
-};
-
-/**
- * An unsubscribe input: `subscription` is the subscribe input that opened the subscription, or `to`, which only test's
- * search sets, its id.
- */
-type UnsubscribeInput =
-  | { readonly type: "unsubscribe"; readonly subscription: SubscribeLine & Timed }
-  | { readonly type: "unsubscribe"; readonly to: string };
-
-/** `handle` is the name by which a later event's `resultOf` names the answer (Lean's Step.Body.answer). */
-type AnswerInput = AnswerFields<MockChoice | IdChoice> & Timed & { readonly handle?: string };
-
-/**
- * An answer choice whose `to` names the request by the id of its trace line. Only test's search sets it; a scenario
- * does not write it.
- */
-type IdChoice = { readonly to: string; readonly input?: never; readonly stale?: never };
-
-/** An input as a scenario writes it, before timed() gives it the time of the `at` before it. */
+/** An input as a scenario writes it. */
 export type UntimedInput = LineFields<UntimedAnswer, UntimedUnsubscribe>;
 
 type UntimedUnsubscribe = { readonly type: "unsubscribe"; readonly subscription: SubscribeLine };
@@ -153,8 +93,9 @@ type RequestLine = CommandLine | QueryLine | SubscribeLine | UntimedUnsubscribe;
 
 type UntimedAnswer = AnswerFields<MockChoice>;
 
-export interface At extends Timed, CreatesKeys {
+export interface At extends CreatesKeys {
   readonly type: "at";
+  readonly time: string;
 }
 
 /**
@@ -183,16 +124,11 @@ export type ScenarioInputs = readonly [At, ...(UntimedInput | At | Elsewhere | F
  * The options of a scenario. `given` names, by service, the start state of each spec service whose messages the
  * scenario mocks; a service it does not name starts empty.
  */
-interface ScenarioOptions {
-  readonly given?: Readonly<Record<string, StateInputs>>;
-}
-
 /** A scenario: the inputs given to one service, as the scenario file writes them. */
 export interface Scenario {
   readonly kind: "scenario";
   readonly description: string;
   readonly inputs: ScenarioInputs;
-  readonly given: Readonly<Record<string, StateInputs>>;
 }
 
 /** The options of an input. `id` is the message id, and a given id has no `#`; `keys` names the created keys (Keys). */
@@ -200,170 +136,11 @@ type Options<Id extends string> = { readonly id?: GivenId<Id>; readonly keys?: K
 type GivenId<Id extends string> = Id extends `${string}#${string}` ? never : Id;
 
 /**
- * Defines a scenario: inputs to one service in time order, in trace form (datetime and date values as strings). The
- * export name of the scenario is its name; test compares the trace of its run with its snapshot (Mismatch.line).
+ * Defines a scenario written as inputs to one service in time order, which only verify's examples keep: test reads its
+ * name and keeps its snapshot, and runs nothing.
  */
-export function scenario(description: string, inputs: ScenarioInputs, options: ScenarioOptions = {}): Scenario {
-  return { kind: "scenario", description, inputs, given: options.given ?? {} };
-}
-
-type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string } & Advanced;
-
-/** The input that `input` names: the mock of an event's `resultOf`, or the subscribe input that an unsubscribe ends. */
-export function namedBy(input: Entry["input"] | At): UntimedInput | undefined {
-  if (input.type === "event") return input.resultOf;
-  return input.type === "unsubscribe" ? input.subscription : undefined;
-}
-
-/** Returns the input that a written line gives its run: the input that an elsewhere or from line wraps, or the line. */
-export function unwrapped(w: ScenarioInputs[number]): UntimedInput | At {
-  return w.type === "elsewhere" || w.type === "from" ? w.input : w;
-}
-
-/** Returns the definitions that the input names: its target, event or screen, and an answer's sender. */
-export function namedDefinitions(input: UntimedInput | At): unknown[] {
-  switch (input.type) {
-    case "command":
-      return [input.command];
-    case "query":
-    case "subscribe":
-      return [input.query];
-    case "unsubscribe":
-      return [input.subscription.query];
-    case "event":
-      return [input.event];
-    case "operation":
-    case "unacceptedOperation":
-      return [input.screen];
-    case "answer":
-      return [input.sender, input.target];
-    default:
-      return [];
-  }
-}
-
-/**
- * Returns the entries with times. An event's `resultOf` names the answer input of the mock's first placement, which has
- * the handle `mock#n` for the `n`-th mock that a `resultOf` names; an unsubscribe names the subscribe input's first
- * placement, which has the handle `subscription#n` for the `n`-th subscribe input that an unsubscribe names.
- */
-function timedEntries(entries: readonly Entry[]): Input[] {
-  const timedOf = ({ input, time, advanceKeys }: Entry) =>
-    ({ ...input, time, ...(advanceKeys === undefined ? {} : { advanceKeys }) }) as Input;
-  const named = [...new Set(entries.flatMap(({ input }) => namedBy(input) ?? []))];
-  const numbered = (type: string, prefix: string) =>
-    named.filter((n) => n.type === type).map((n, i) => [n, `${prefix}#${i + 1}`] as const);
-  const handles = new Map([...numbered("answer", "mock"), ...numbered("subscribe", "subscription")]);
-  const first = new Map<UntimedInput, Input>();
-  const placed = entries.map((e): Input => {
-    const { input } = e;
-    if (input.type === "time" || first.has(input)) return timedOf(e);
-    const handle = handles.get(input);
-    const timed = { ...timedOf(e), ...(handle === undefined ? {} : { handle }) } as Input;
-    first.set(input, timed);
-    return timed;
-  });
-  return entries.map((e, i): Input => {
-    const { input, time } = e;
-    const target = namedBy(input);
-    if (target === undefined) return placed[i] as Input;
-    const found = first.get(target) ?? timedOf({ input: target, time });
-    return { ...timedOf(e), [input.type === "event" ? "resultOf" : "subscription"]: found } as Input;
-  });
-}
-
-/**
- * The written lines with times: each of the service's inputs with its position from 1 and, for a from input, the
- * contract of its sender, and each elsewhere input with its position and the number of the service's inputs before it.
- * Each input takes the time of the `at` before it. An `at` that another `at` or the end follows, with elsewhere inputs
- * skipped, becomes a time input. The `keys` of an `at` become the advanceKeys of the service's first input after it.
- */
-function written(inputs: ScenarioInputs | StateInputs) {
-  const own: { readonly entry: Entry; readonly position: number; readonly sender?: object }[] = [];
-  const others: {
-    readonly entry: Entry;
-    readonly position: number;
-    readonly service: object;
-    readonly before: number;
-  }[] = [];
-  let at = inputs[0];
-  let advanceKeys: Keys | undefined;
-  const timedAt = (input: Entry["input"]): Entry => {
-    const entry = { input, time: at.time, ...(advanceKeys === undefined ? {} : { advanceKeys }) };
-    advanceKeys = undefined;
-    return entry;
-  };
-  for (const [i, w] of inputs.entries()) {
-    if (w.type === "at") {
-      at = w;
-      advanceKeys = w.keys;
-      const next = inputs.slice(i + 1).find((n) => n.type !== "elsewhere");
-      if (next === undefined || next.type === "at") own.push({ entry: timedAt({ type: "time" }), position: i + 1 });
-    } else if (w.type === "elsewhere")
-      others.push({
-        entry: { input: w.input, time: at.time },
-        position: i + 1,
-        service: w.service,
-        before: own.length,
-      });
-    else if (w.type === "from") own.push({ entry: timedAt(w.input), position: i + 1, sender: w.service });
-    else own.push({ entry: timedAt(w), position: i + 1 });
-  }
-  return { own, others };
-}
-
-/**
- * Returns the inputs with times, as a run takes them: the scenario's inputs to its service, or the inputs of a state.
- * The service does not take the elsewhere inputs.
- */
-export function timed(scenario: { readonly inputs: ScenarioInputs | StateInputs }): Input[] {
-  return timedEntries(written(scenario.inputs).own.map((o) => o.entry));
-}
-
-/**
- * Returns, for each input that `timed` returns, its position in the scenario as written, from 1 with `at` and elsewhere
- * inputs included.
- */
-export function writtenPositions(scenario: Scenario): number[] {
-  return written(scenario.inputs).own.map((o) => o.position);
-}
-
-/** Returns, for each from input of the scenario, the contract of its sender and its index in what `timed` returns. */
-export function fromInputs(scenario: Scenario): { readonly service: object; readonly index: number }[] {
-  return written(scenario.inputs).own.flatMap(({ sender }, index) =>
-    sender === undefined ? [] : [{ service: sender, index }],
-  );
-}
-
-/** An elsewhere input of a scenario with its time, written position, and the number of the service's inputs before it. */
-export interface ElsewhereInput {
-  readonly service: object;
-  readonly input: Input;
-  readonly position: number;
-  readonly before: number;
-}
-
-/**
- * Returns the inputs of one run of a peer: those of its start state `state`, then the scenario's elsewhere inputs to the
- * contract that `toPeer` accepts in written order. Handles are numbered across both, as one run takes them.
- */
-export function peerRunInputs(
-  scenario: Scenario,
-  toPeer: (service: object) => boolean,
-  state: StateInputs | undefined,
-): { readonly state: Input[]; readonly elsewhere: ElsewhereInput[] } {
-  const stateEntries = state === undefined ? [] : written(state).own.map((o) => o.entry);
-  const others = written(scenario.inputs).others.filter((o) => toPeer(o.service));
-  const inputs = timedEntries([...stateEntries, ...others.map((o) => o.entry)]);
-  return {
-    state: inputs.slice(0, stateEntries.length),
-    elsewhere: others.map(({ service, position, before }, i) => ({
-      service,
-      input: inputs[stateEntries.length + i] as Input,
-      position,
-      before,
-    })),
-  };
+export function scenario(description: string, inputs: ScenarioInputs): Scenario {
+  return { kind: "scenario", description, inputs };
 }
 
 /**
@@ -471,13 +248,7 @@ type AcceptedAnswer<O> = [O] extends [undefined]
     ? { result: "accepted"; output: Encoded<O> }
     : never;
 
-/**
- * Answers, from another service, a request that a definition of kind `sender.kind` has sent and that the choice chooses
- * by its content. When the requests that the mock may answer have different inputs, test reports
- * InvalidInput.ambiguousMock and answers none; of requests with equal inputs, it answers the longest-waiting. The target
- * in `pair` is a query or command that the sender uses (Illegal.unrequestedAnswer). `keys` names the keys that the
- * sender's reaction to the answer creates (Keys).
- */
+/** Answers, from another service, a request that a definition of kind `sender.kind` has sent. */
 export function mock<const T extends AnyCommand | AnyQuery>(
   sender: Sender,
   pair: readonly [T, MockAnswer<T>] | readonly [T, MockAnswer<T>, MockChoice<InputOfTarget<T>>],
@@ -524,12 +295,7 @@ export function unchecked(value: unknown): never {
   return value as never;
 }
 
-/**
- * Sets the time at which the following inputs arrive: an ISO datetime with seconds, an offset, and no part below a
- * millisecond (Malformed.unparsableTime), not before the time that the inputs before it reached
- * (InvalidInput.earlierAt). `keys` names the keys that the deadlines due by then and the service's begin create (Keys),
- * before the service's next input arrives.
- */
+/** Sets the time at which the following inputs arrive. */
 export function at(time: string, options?: { readonly keys?: Keys }): At {
   return { type: "at", time, ...options };
 }

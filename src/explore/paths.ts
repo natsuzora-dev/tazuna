@@ -11,8 +11,8 @@ import { serviceOf } from "../service/basic.ts";
 import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
-import type { Listener } from "../sim/spec/execute.ts";
 import { fingerprint } from "../sim/spec/fingerprint.ts";
+import type { Listener } from "../sim/spec/listener.ts";
 import { walkSpec } from "../sim/spec/simulate.ts";
 import { refOfTraceName, rejectionKinds, traceNameOfRef } from "../syntax/structure.ts";
 import { search } from "./search.ts";
@@ -315,6 +315,9 @@ function worldFingerprint(w: World): string {
     w.messages.flatMap((m) => (m.status === "inFlight" ? [[m.sender, m.receiver, m.body as never]] : [])),
   ]);
 }
+
+/** The number of values tried for each payload, input, and answer. */
+export const valuesPerPayload = 2;
 
 export interface Bounds {
   /** The maximum number of lines appended to a scenario. */

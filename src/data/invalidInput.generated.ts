@@ -6,15 +6,6 @@ import type { Json } from "./values.ts";
 
 /** A scenario input that no caller or external service gives. The input is the subject, so `definition` is null. */
 export type InvalidInput =
-  /** The time of the input is before `now`, the time that the inputs before it reached. */
-  | {
-      readonly kind: "InvalidInput.earlierAt";
-      readonly definition: null;
-      readonly data: {
-        readonly at: string;
-        readonly now: string;
-      };
-    }
   /** The input names a command, query, or screen that the service does not own. */
   | {
       readonly kind: "InvalidInput.unownedTarget";
@@ -169,46 +160,6 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
-  /** No request from `sender` to `target` waits for the answer input. */
-  | {
-      readonly kind: "InvalidInput.missingWaitingRequest";
-      readonly definition: null;
-      readonly data: {
-        readonly sender: DefinitionRef;
-        readonly target: DefinitionRef;
-      };
-    }
-  /** No stale request from `sender` to `target` waits for the answer input that chooses a stale request. */
-  | {
-      readonly kind: "InvalidInput.missingStaleRequest";
-      readonly definition: null;
-      readonly data: {
-        readonly sender: DefinitionRef;
-        readonly target: DefinitionRef;
-      };
-    }
-  /** No request to `target` whose trace line has id `requestId` waits for the answer input. */
-  | {
-      readonly kind: "InvalidInput.unwaitedRequest";
-      readonly definition: null;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-      };
-    }
-  /**
-   * The requests from `sender` to `target` that the answer input may answer have the different inputs `inputs`, so it
-   * answers none: a mock's `input` chooses among them by content, and no order decides.
-   */
-  | {
-      readonly kind: "InvalidInput.ambiguousMock";
-      readonly definition: null;
-      readonly data: {
-        readonly sender: DefinitionRef;
-        readonly target: DefinitionRef;
-        readonly inputs: readonly Json[];
-      };
-    }
   | {
       readonly kind: "InvalidInput.unknownControl";
       readonly definition: null;
@@ -244,15 +195,6 @@ export type InvalidInput =
         readonly screen: DefinitionRef;
         readonly control: string;
         readonly payload: Json;
-      };
-    }
-  /** The screen accepts the operation of the cannotOperate input. */
-  | {
-      readonly kind: "InvalidInput.unexpectedlyAccepted";
-      readonly definition: null;
-      readonly data: {
-        readonly screen: DefinitionRef;
-        readonly control: string;
       };
     }
   /** The deadlineOrder entry `named` is not among the deadlines due in the tie, `candidates`. */
@@ -296,103 +238,9 @@ export type InvalidInput =
       readonly data: {
         readonly entries: readonly StepName[];
       };
-    }
-  /**
-   * createKey returned none of the names `names` of the entity `entity`: of the input's `keys` during its processing, or
-   * of its `advanceKeys` during the advance to its time.
-   */
-  | {
-      readonly kind: "InvalidInput.unusedKeys";
-      readonly definition: null;
-      readonly data: {
-        readonly entity: string;
-        readonly names: readonly string[];
-      };
-    }
-  /**
-   * A value of the input has the form of a createKey value of the service's entity `entity` that createKey has not given
-   * yet. An implementation makes its own keys, such as UUIDs, so no caller knows a key before the service gives it.
-   */
-  | {
-      readonly kind: "InvalidInput.uncreatedKey";
-      readonly definition: null;
-      readonly data: {
-        readonly recordKey: string;
-        readonly entity: DefinitionRef;
-      };
-    }
-  /**
-   * The mock's answer to the request `requestId` to the spec service of `target` is not the answer that the service's
-   * run of the derived inputs gives the request at that place, or that answer comes later than the mock or after the
-   * service takes an input that arrives after the mock.
-   */
-  | {
-      readonly kind: "InvalidInput.unproducibleAnswer";
-      readonly definition: null;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-      };
-    }
-  /** The service's run of the derived inputs gives the request `requestId` fewer answers than the mocks. */
-  | {
-      readonly kind: "InvalidInput.unansweredRequest";
-      readonly definition: null;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-      };
-    }
-  /**
-   * The service of `event` emits no `event` with the event input's payload in its run of the derived inputs by the time of
-   * the input and before it takes an input that arrives after the event input, while it takes the request that the input
-   * names as its resultOf when it names one.
-   */
-  | {
-      readonly kind: "InvalidInput.unproducibleEvent";
-      readonly definition: null;
-      readonly data: {
-        readonly eventId: string;
-        readonly event: DefinitionRef;
-      };
-    }
-  /**
-   * The run of the spec service `service` of the derived inputs sends no request, or end of a subscription, that the
-   * scenario's from input with id `requestId` stands for by the time of the input and before it takes an input that
-   * arrives after the input.
-   */
-  | {
-      readonly kind: "InvalidInput.unproducibleRequest";
-      readonly definition: null;
-      readonly data: {
-        readonly requestId: string;
-        readonly service: string;
-      };
-    }
-  /**
-   * The comparison of the scenario's line `lineId`, an answer or a received event, with the run of the spec service
-   * `service` of the derived inputs did not finish: pairing the elements of a bag used up its tries.
-   */
-  | {
-      readonly kind: "InvalidInput.peerSearchLimit";
-      readonly definition: null;
-      readonly data: {
-        readonly lineId: string;
-        readonly service: string;
-      };
-    }
-  /** The spec service `service` halted with `halting` in its run of the derived inputs. */
-  | {
-      readonly kind: "InvalidInput.haltedPeer";
-      readonly definition: null;
-      readonly data: {
-        readonly service: string;
-        readonly halting: string;
-      };
     };
 
 export const invalidInputKinds = [
-  "InvalidInput.earlierAt",
   "InvalidInput.unownedTarget",
   "InvalidInput.unlistedEvent",
   "InvalidInput.eventPayloadSchema",
@@ -410,33 +258,19 @@ export const invalidInputKinds = [
   "InvalidInput.resultOfNonCommand",
   "InvalidInput.resultOfUnacceptedRequest",
   "InvalidInput.resultOfUnlistedEvent",
-  "InvalidInput.missingWaitingRequest",
-  "InvalidInput.missingStaleRequest",
-  "InvalidInput.unwaitedRequest",
-  "InvalidInput.ambiguousMock",
   "InvalidInput.unknownControl",
   "InvalidInput.unopenedScreen",
   "InvalidInput.coveredByModal",
   "InvalidInput.unofferedPayload",
-  "InvalidInput.unexpectedlyAccepted",
   "InvalidInput.unreadyDeadline",
   "InvalidInput.unorderedDeadlines",
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
-  "InvalidInput.unusedKeys",
-  "InvalidInput.uncreatedKey",
-  "InvalidInput.unproducibleAnswer",
-  "InvalidInput.unansweredRequest",
-  "InvalidInput.unproducibleEvent",
-  "InvalidInput.unproducibleRequest",
-  "InvalidInput.peerSearchLimit",
-  "InvalidInput.haltedPeer",
 ] as const;
 
 /** The kinds whose violations halt the run. */
 export const haltingInvalidInputKinds = [
-  "InvalidInput.earlierAt",
   "InvalidInput.unownedTarget",
   "InvalidInput.unlistedEvent",
   "InvalidInput.eventPayloadSchema",
@@ -448,12 +282,9 @@ export const haltingInvalidInputKinds = [
   "InvalidInput.unopenedScreen",
   "InvalidInput.coveredByModal",
   "InvalidInput.unofferedPayload",
-  "InvalidInput.unexpectedlyAccepted",
   "InvalidInput.unreadyDeadline",
   "InvalidInput.unorderedDeadlines",
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
-  "InvalidInput.unusedKeys",
-  "InvalidInput.uncreatedKey",
 ] as const;

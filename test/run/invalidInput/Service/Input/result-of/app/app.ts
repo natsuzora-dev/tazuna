@@ -1,11 +1,11 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 
-export const { machine } = service({ description: "Use the device" });
+export const { machine, scenario } = service({ description: "Use the device" });
 
 export const permission = machine({
   description: "Ask for the permission until the device takes the request",
-  receives: { granted: device.granted },
+  receives: { granted: device.granted, denied: device.denied },
   commands: { requestPermission: device.requestPermission },
   initial: "asking",
   states: { asking: {}, answering: {}, allowed: { type: "final" } },

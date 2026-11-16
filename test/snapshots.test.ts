@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, type Dirent, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, type Dirent, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { testSpec } from "../src/cli/test.ts";
@@ -11,7 +11,9 @@ import { loadSpec } from "../src/load/load.ts";
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "snapshots-"));
 after(() => rmSync(copy, { recursive: true, force: true }));
-cpSync(join(import.meta.dirname, "verify/uncomparable/snapshot/unpaired"), copy, { recursive: true });
+cpSync(join(import.meta.dirname, "service/Query/subscription-answers"), copy, { recursive: true });
+writeFileSync(join(copy, "todo/__snapshots__/removed.jsonl"), "");
+mkdirSync(join(copy, "todo/__snapshots__/notes"));
 
 test("test writes no snapshot, and test --update rewrites snapshots without comparing, deletes snapshots without a scenario, and keeps and reports entries that are not snapshots", async () => {
   const spec = await loadSpec(copy);
@@ -19,14 +21,14 @@ test("test writes no snapshot, and test --update rewrites snapshots without comp
   const entries = readdirSync(snapshots, { withFileTypes: true });
   const isSnapshot = (e: Dirent) => e.isFile() && e.name.endsWith(".jsonl");
   const obsolete = entries
-    .filter((e) => isSnapshot(e) && !spec.legacyScenarios.some((s) => `${s.name}.jsonl` === e.name))
+    .filter((e) => isSnapshot(e) && !spec.scenarios.some((s) => `${s.name}.jsonl` === e.name))
     .map((e) => e.name);
   const unknown = entries.filter((e) => !isSnapshot(e)).map((e) => `todo/__snapshots__/${e.name}`);
   assert.notDeepEqual(obsolete, []);
   assert.notDeepEqual(unknown, []);
   const unknownEntries = (problems: readonly Problem[]) => problems.map((p) => [p.kind, p.location.file]);
   const reported = unknown.map((path) => ["Uncomparable.unknownSnapshotEntry", path]);
-  const [scenario] = spec.legacyScenarios;
+  const [scenario] = spec.scenarios;
   assert.ok(scenario !== undefined);
   rmSync(snapshotPath(spec, scenario));
   const compared = testSpec(spec, { update: false, depth: 0 });

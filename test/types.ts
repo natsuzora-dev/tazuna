@@ -39,7 +39,6 @@ import {
   ref,
   requested,
   run,
-  scenario,
   send,
   service,
   set,
@@ -390,12 +389,6 @@ command({ description: "", emits: [] });
 
 // @ts-expect-error a service has a description
 service({});
-
-// @ts-expect-error a scenario has a description
-scenario([send(addTask, { taskId: "task-1", title: "t" })]);
-
-// @ts-expect-error a scenario's first input is at
-scenario("", [send(addTask, { taskId: "task-1", title: "t" })]);
 
 // @ts-expect-error send has input when the command has input fields
 automation({ receives: { taskAddedRecorded }, commands: { setReminder } }).send({});

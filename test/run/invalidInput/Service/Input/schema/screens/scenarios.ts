@@ -1,12 +1,9 @@
-import { at, operate, scenario, unchecked } from "@natsuzora-dev/tazuna";
-import { counterScreen } from "./screens.ts";
+import { counterScreen, scenario } from "./screens.ts";
 
-export const setCount = scenario("Set the count; no violation", [
-  at("2026-10-25T09:00:00+09:00"),
-  operate(counterScreen, "countSet", { count: 3 }),
-]);
-
-export const setCountToText = scenario(
-  "Set the count to a text; the payload schema of countSet rejects it, so test reports controlPayloadSchema",
-  [at("2026-10-25T09:00:00+09:00"), operate(counterScreen, "countSet", { count: unchecked("three") })],
-);
+export const setCount = scenario("Set the count; no violation", {
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} },
+  when: (w) => {
+    w.user.operate(w.begin.screen(counterScreen), "countSet", { count: 3 });
+  },
+  then: () => [],
+});

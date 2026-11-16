@@ -23,8 +23,6 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.unexportedDefinition": true,
   "Malformed.unparsableTime": true,
   "Malformed.unknownPeer": true,
-  "Malformed.unlistedState": true,
-  "Malformed.ownMessageToPeer": true,
   "Malformed.inexactDelay": true,
   "Malformed.misnamedPeer": true,
   "Malformed.lineAfterWhen": true,

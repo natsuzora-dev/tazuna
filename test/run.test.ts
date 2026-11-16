@@ -37,21 +37,28 @@ const groups: Readonly<Record<string, readonly string[]>> = {
 
 const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   InvalidInput: {
-    "InvalidInput.resultOfNonCommand": "The type of resultOf in receive accepts only mocks of commands",
+    "InvalidInput.unownedTarget":
+      "The DSL's types let the client send only the own service's or a running peer's definitions, and the simulation sends each message to the service that owns its definition",
+    "InvalidInput.unlistedEvent":
+      "The simulation delivers an event only to the services whose definitions receive it (Service.receives), all listed by a contract",
+    "InvalidInput.reusedEventId":
+      "The simulation gives each event its sender's id, and redelivers a message with its own name and payload",
+    "InvalidInput.changedRedeliveryPayload":
+      "The simulation gives each event its sender's id, and redelivers a message with its own name and payload",
+    "InvalidInput.resultOfNonCommand":
+      "The type of resultOf in an emit line accepts only a request handle of a command",
     "InvalidInput.unknownControl":
-      "The types of operate and cannotOperate accept only the controls of the screen, and the exploration of test operates only those",
+      "The type of operate accepts only the controls of the screen, and the exploration of test operates only those",
     "InvalidInput.unreadyDeadline":
-      "Scenarios do not write deadlineOrder, and the exploration of test names only the deadlines of the ties that a run reaches",
+      "An order of the clock line names the deadline of a tie only through a deadline handle, and the exploration names only the deadlines of the ties that a walk reaches",
     "InvalidInput.unusedDeadlineOrder":
-      "Scenarios do not write deadlineOrder, and the exploration of test names only the deadlines of the ties that a run reaches",
+      "No example writes an order for a clock line without a tie; the exploration orders only the ties that a walk reaches",
     "InvalidInput.unreadyStep":
-      "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
+      "Only test's step-order search writes a step order, naming only the steps that a walk took",
     "InvalidInput.unusedStepOrder":
-      "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
+      "Only test's step-order search writes a step order, naming only the steps that a walk took",
     "InvalidInput.unorderedDeadlines":
       "Only the clock line of a simulation requires a tie order; test/sim/Run/network/unorderedDeadlines exemplifies it",
-    "InvalidInput.uncreatedKey":
-      "check reports such a value on a scenario or state line (Illegal.countedKey), so only a peer's run reaches it, which test reports as haltedPeer",
   },
   Fault: {
     "Fault.exceededMessageWork":

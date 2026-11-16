@@ -17,21 +17,12 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `duplicateName`: `name` also names another definition, scenario, or `constants()` call of the service in the file
  *   `elsewhere`.
  * - `alias`: the definition, scenario, or `constants()` call is already exported as `name`.
- * - `unexportedDefinition` and `opaqueCollection`: `path` leads from the definition, scenario, service definer, or
+ * - `unexportedDefinition` and `opaqueCollection`: `path` leads from the definition, service definer, or
  *   `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema
  *   has the path of the field that holds it, and a chart holds each state's `held` under `held` by the state's name.
- * - `unparsableTime`: the time of the `at` input of the scenario, or of the state `state` of the contract of
- *   `contract`, is not an ISO datetime with seconds and an offset, or has a part below a millisecond, so the run cannot
- *   read it as an instant in milliseconds.
- * - `unknownPeer`: the scenario's `given` names `service`, or its `elsewhere` or `from` input names the contract of
- *   `service`, or an object that is no exported contract (null), and `service` is the scenario's own service, an
- *   external service, or no service of the spec. A Given peer is unknown when it is the own service's contract or no
- *   contract (null).
- * - `unlistedState`: the scenario's `given` gives `service` a start state that is not one of the states of its
- *   contract.
- * - `ownMessageToPeer`: the start state that the scenario's `given` gives `service`, or its `elsewhere` input to
- *   `service`, receives an event of the scenario's own service or answers a request to it, which reach `service` only
- *   from the scenario's run.
+ * - `unparsableTime`: a time of the scenario, Given's start or a clock line `input`, is not an ISO datetime with
+ *   seconds and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds.
+ * - `unknownPeer`: Given lists as a peer the own service's contract or no contract (null).
  * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`; a peer is keyed by its
  *   service name.
  * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
@@ -66,13 +57,7 @@ export type Malformed =
       readonly scenario: DefinitionRef;
       readonly input: number;
     })
-  | (Of<"unparsableTime", null, { readonly contract: string; readonly state: string }> & { readonly input: number })
   | (Of<"unknownPeer", null, { readonly service: string | null }> & {
-      readonly scenario: DefinitionRef;
-      readonly input?: number;
-    })
-  | (Of<"unlistedState", null, { readonly service: string }> & { readonly scenario: DefinitionRef })
-  | (Of<"ownMessageToPeer", null, { readonly service: string }> & {
       readonly scenario: DefinitionRef;
       readonly input?: number;
     })

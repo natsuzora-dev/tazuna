@@ -1,7 +1,7 @@
 import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen } = service({ description: "Show the tasks" });
+export const { screen, scenario } = service({ description: "Show the tasks" });
 
 export const confirmDialog = screen({
   description: "A dialog that asks whether to clear the list",

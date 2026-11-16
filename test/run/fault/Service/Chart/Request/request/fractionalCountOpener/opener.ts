@@ -1,7 +1,9 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen } = service({ description: "Pick a number, opening the picker with a fractional count" });
+export const { screen, scenario } = service({
+  description: "Pick a number, opening the picker with a fractional count",
+});
 
 export const pickScreen = screen({
   description: "Pick a number below a whole count",

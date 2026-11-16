@@ -1,3 +1,0 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"sell#1","name":"sell","input":{"item":"Fresh milk"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"sell#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"sold#1","name":"sold","payload":{"item":"Fresh milk"},"resultOf":"sell#1"}

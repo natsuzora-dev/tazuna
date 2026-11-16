@@ -1,8 +1,10 @@
-import { at, scenario, send } from "@natsuzora-dev/tazuna";
-import { tick } from "./countdown.ts";
+import { scenario, tick } from "./countdown.ts";
 
-export const tickTwice = scenario("tickTwice; no violation", [
-  at("2026-10-25T09:00:00+09:00"),
-  send(tick, {}),
-  send(tick, {}),
-]);
+export const tickTwice = scenario("tickTwice; no violation", {
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} },
+  when: (w) => {
+    w.client.send(tick, {});
+    w.client.send(tick, {});
+  },
+  then: () => [],
+});

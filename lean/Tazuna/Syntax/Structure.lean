@@ -224,67 +224,6 @@ deriving Repr, Inhabited
 
 derive_wire ServiceInfo
 
-/-- The kind of a written input of a scenario or a state, with an answer's definitions. -/
-inductive ScenarioInput where
-  | «at»
-  | command
-  | query
-  | subscribe
-  | unsubscribe
-  | restart
-  | event
-  | operation
-  | unacceptedOperation
-  | answer (sender : Option Ref) (target : Option Ref)
-deriving Repr, Inhabited
-
-derive_wire ScenarioInput tag "type"
-
-/--
-A written line of a scenario or of a contract's state, as check needs it: the input as the run takes it, an elsewhere or
-from line by the input that it wraps.
--/
-structure ScenarioLine where
-  input : ScenarioInput
-  /-- The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. -/
-  run : Option String
-  /-- The peer that sends a from input; null for any other input. -/
-  sentBy : Option String
-  /--
-  The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
-  unsubscribe. It is the same wherever the input is placed.
-  -/
-  handle : Option Nat
-  /-- The handle of the input that the input names: the mock of its resultOf, or its subscribe input. -/
-  names : Option Nat
-  /-- The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. -/
-  strings : List String
-  /-- The names that the line's `keys` gives the createKey values, by entity name. -/
-  keys : List (String × List String)
-deriving Repr, Inhabited
-
-derive_wire ScenarioLine flatten input
-
-/--
-The written lines of a scenario, or of a start state of a contract's `states`, whose name is `states.<state>`. `given`
-names the states that the scenario gives its peers, and `peers` the other services whose definitions or contracts its
-lines name.
--/
-structure Scenario where
-  service : String
-  name : String
-  given : List Ref
-  peers : List String
-  inputs : List ScenarioLine
-deriving Repr, Inhabited
-
-derive_wire Scenario
-
-def Scenario.ref (sc : Scenario) : Ref := { service := sc.service, name := sc.name }
-
-/-- The names that the line's `keys` gives, each with its entity name, in written order. -/
-def ScenarioLine.keyNames (l : ScenarioLine) : List (String × String) := l.keys.flatMap fun (e, ns) => ns.map (e, ·)
-
 /-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e` that no `keys` name gives. -/
 def isKeyOf (e v : String) : Bool :=
   match (v.drop (e.length + 1)).toNat? with
@@ -297,8 +236,6 @@ structure Structure where
   contracts : List Contract
   /-- The definitions, in the order of the spec. -/
   definitions : List Definition
-  /-- The scenarios, then the start states of the contracts. -/
-  scenarios : List Scenario
 deriving Repr, Inhabited
 
 derive_wire Structure

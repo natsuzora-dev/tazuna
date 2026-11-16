@@ -1,4 +1,4 @@
-import Tazuna.Service.Run
+import Tazuna.Service.Restart
 import Tazuna.Observe.OrderDependent
 import Tazuna.Observe.Trace
 
@@ -424,9 +424,6 @@ def instrument : Functions (StateT Collect m) :=
     close := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
         fun a b => sameValue a.1 b.1 && a.2 == b.2 }
-
-def instrumentedRun (inputs : List Step) : StateT Collect m State :=
-  runFrom (step st (instrument st fs ifs)) {} inputs
 
 /--
 The pairs of steps whose other order test runs: steps of one message, by step number in the order they began, whose

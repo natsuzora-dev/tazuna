@@ -1,7 +1,7 @@
 import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen } = service({ description: "Close a screen" });
+export const { screen, scenario } = service({ description: "Close a screen" });
 
 export const doneScreen = screen({
   description: "A screen that closes with a negative count",

@@ -499,17 +499,13 @@ theorem call_agrees (s : State) (name : String) (id : Option String) (raw : Valu
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
   unfold call; agree [h.canonical, resolveChecked_agrees h, message_agrees h]
 
-theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) (handle : Option String) :
-    Agrees (subscribe st fsI s name id raw handle) (subscribe st fs s name id raw handle) := by
+theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
+    Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
   unfold subscribe; agree [h.canonical, message_agrees h]
 
-theorem endOpened_agrees (s : State) (id : String) :
-    Agrees (endOpened st fsI s id) (endOpened st fs s id) := by
-  unfold endOpened; agree [message_agrees h]
-
-theorem endSubscription_agrees (s : State) (subscription : Ended) :
-    Agrees (endSubscription st fsI s subscription) (endSubscription st fs s subscription) := by
-  unfold endSubscription; agree [endOpened_agrees h]
+theorem endSubscription_agrees (s : State) (id : String) :
+    Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
+  unfold endSubscription; agree [message_agrees h]
 
 theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload : Value) (request : Option Pending) :
     Agrees (deliver st fsI s name id payload request) (deliver st fs s name id payload request) := by
@@ -530,18 +526,6 @@ theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : V
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem chosen_agrees (name : String) (input : Value) (ps : List Pending) :
-    Agrees (chosen st fsI name input ps) (chosen st fs name input ps) := by
-  induction ps with
-  | nil => exact Agrees.pure _
-  | cons p ps ih => simp only [chosen]; agree [h.canonical, ih]
-
-omit [MonadNote (StateT C Id)] in
-theorem answerable_agrees (s : State) (sender name : String) (choice : Option Choice) :
-    Agrees (s.answerable st fsI sender name choice) (s.answerable st fs sender name choice) := by
-  unfold State.answerable; agree [chosen_agrees h]
-
-omit [MonadNote (StateT C Id)] in
 theorem writtenAnswer_agrees (a : Activity) (answer : Answer) :
     Agrees (writtenAnswer st fsI a answer) (writtenAnswer st fs a answer) := by
   unfold writtenAnswer; agree [h.parse]
@@ -553,48 +537,19 @@ theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
   dsimp only
   agree [firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
 
-omit [MonadNote (StateT C Id)] in
-theorem answering_agrees (s : State) (sender name : String) (choice : Option Choice) :
-    Agrees (s.answering st fsI sender name choice) (s.answering st fs sender name choice) := by
-  unfold State.answering; agree [answerable_agrees h]
-
 theorem answerRequest_agrees (s : State) (p : Pending) (answer : Answer) :
     Agrees (answerRequest st fsI s p answer) (answerRequest st fs s p answer) := by
   unfold answerRequest
   agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
-theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice : Option Choice)
-    (handle : Option String) :
-    Agrees (mock st fsI s sender name answer choice handle) (mock st fs s sender name answer choice handle) := by
-  unfold mock
-  agree [answering_agrees h, answerRequest_agrees h]
-
-theorem answerById_agrees (s : State) (to target : String) (answer : Answer) :
-    Agrees (answerById st fsI s to target answer) (answerById st fs s to target answer) := by
-  unfold answerById
-  agree [answerRequest_agrees h]
-
-omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.singleRecord]
 
 theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
   unfold begin startInstances; agree [startRecords_agrees h, startInstance_agrees h, message_agrees h]
 
-theorem advance_agrees (s : State) (input : Step) : Agrees (advance st fsI s input) (advance st fs s input) := by
-  unfold advance
-  dsimp only
-  split
-  · exact Agrees.pure _
-  refine Agrees.bind (fireDue_agrees h _ _ _ _) (fun _ => ?_)
-  split
-  · exact Agrees.pure _
-  split
-  · exact Agrees.pure _
-  · exact begin_agrees h _
-
-theorem operate_agrees (s : State) (screen control : String) (payload : Value) (accepted : Bool) :
-    Agrees (operate st fsI s screen control payload accepted) (operate st fs s screen control payload accepted) := by
+theorem operate_agrees (s : State) (screen control : String) (payload : Value) :
+    Agrees (operate st fsI s screen control payload) (operate st fs s screen control payload) := by
   unfold operate
   dsimp only
   split
@@ -608,23 +563,11 @@ theorem operate_agrees (s : State) (screen control : String) (payload : Value) (
   refine Agrees.bind (acceptsOperation_agrees h _ _ _ _) (fun _ => ?_)
   split
   · exact Agrees.pure _
-  split
   · exact Agrees.bind (settled_agrees h _ _ (dispatch_agrees h _ _ _ _) _) (fun _ => message_agrees h _ _)
-  · exact message_agrees h _ _
-  · exact Agrees.pure _
   · exact Agrees.pure _
 
 theorem restart_agrees (s : State) : Agrees (restart st fsI s) (restart st fs s) := by
   unfold restart; exact begin_agrees h _
-
-theorem arrive_agrees (s : State) (input : Step) : Agrees (arrive st fsI s input) (arrive st fs s input) := by
-  unfold arrive
-  agree [restart_agrees h, send_agrees h, call_agrees h, subscribe_agrees h, endSubscription_agrees h, receive_agrees h, mock_agrees h,
-    answerById_agrees h, operate_agrees h]
-
-theorem step_agrees (s : State) (input : Step) : Agrees (step st fsI s input) (step st fs s input) := by
-  unfold step
-  agree [advance_agrees h, arrive_agrees h]
 
 end
 
@@ -775,18 +718,5 @@ theorem candidate_unordered (s : State) (c : Collect) (stopped : Option Violatio
     bne_iff_ne, ne_eq, Prod.mk.injEq] at he
   obtain ⟨⟨⟨⟨⟨hm, ho⟩, hc⟩, hn⟩, hl⟩, rfl, rfl⟩ := he
   exact ⟨a, b, hia, hjb, hm, hl, hc, hn, ho⟩
-
-theorem runFrom_agrees {stepperI : Stepper (StateT C Id)} {stepper : Stepper Id}
-    (hs : ∀ s i, Agrees (stepperI s i) (stepper s i)) (s : State) (inputs : List Step) :
-    Agrees (runFrom stepperI s inputs) (runFrom stepper s inputs) := by
-  induction inputs generalizing s with
-  | nil => exact Agrees.pure _
-  | cons i rest ih => unfold runFrom; agree [hs, ih]
-
-theorem instrumented_run_eq (inputs : List Step) (c : Collect) :
-    ((instrumentedRun st fs ifs inputs).run c).1 = run st fs inputs := by
-  have := runFrom_agrees (step_agrees (st := st) (instrument_agrees (st := st) (fs := fs) (ifs := ifs))) {} inputs
-  unfold Agrees at this
-  exact this c
 
 end Tazuna.Thm.Observe.Instrument

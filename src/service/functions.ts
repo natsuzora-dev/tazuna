@@ -114,13 +114,9 @@ export type Assignment =
  * How the time of a deadline is set: `delay` is milliseconds after entering the state, and an `atExpression` time is
  * recomputed whenever a message finishes.
  */
-/**
- * What createKey returns next for an entity: each of `names` in order, then `<entity>-<n>` for the entity's `n`-th
- * createKey value, `count` being the number of its createKey values so far.
- */
+/** What createKey returns next for an entity: `<entity>-<n>` for its `n`-th createKey value, after `count` so far. */
 export interface NextKeys {
   readonly count: number;
-  readonly names: readonly string[];
 }
 
 /** Lean's Keys: what createKey returns next per entity, qualified by the participant `owner` of a simulation. */
@@ -136,10 +132,10 @@ export interface Keys {
 export function givenKeys(keys: Keys, created: readonly string[]): [string, string][] {
   const next = new Map(keys.next);
   return created.map((e, i) => {
-    const k = next.get(e) ?? { count: 0, names: [] };
+    const k = next.get(e) ?? { count: 0 };
     const before = created.slice(0, i).filter((c) => c === e).length;
     const counted = `${e}-${k.count + before + 1}`;
-    return [e, k.names[before] ?? (keys.owner === undefined ? counted : `${keys.owner}/${counted}`)];
+    return [e, keys.owner === undefined ? counted : `${keys.owner}/${counted}`];
   });
 }
 

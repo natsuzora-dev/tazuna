@@ -5,7 +5,6 @@ import { Failed, issueViolation } from "../functions.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   awaitAnswer,
-  awaitedActivities,
   createKeys,
   documentOrder,
   halt,
@@ -20,7 +19,6 @@ import {
   type Requester,
   report,
   scopeOf,
-  senderOf,
   startQueued,
   who,
 } from "../state.ts";
@@ -86,7 +84,6 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
     });
     return;
   }
-  r.note.requested(a, senderOf(r.state, requester), awaitedActivities(r.state));
   const type = a.keyword === "calls" ? "query" : "command";
   awaitAnswer(r.state, { dir: "out", type, name: a.target, input: encoded }, requester, a, value);
   r.note.reached({ kind: "request", definition: target, data: {} });

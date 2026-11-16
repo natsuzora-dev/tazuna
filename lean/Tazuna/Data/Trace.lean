@@ -98,16 +98,6 @@ abbrev Bindings := List (String × String)
 def Bindings.rename (bindings : Bindings) (v : Value) : Value :=
   v.mapStrings fun s => (bindings.lookup s).getD s
 
-/-- `bs` with `v` bound to `w`, unless `v` is bound to another string or another string to `w`. -/
-def Bindings.bind (bs : Bindings) (v w : String) : Option Bindings :=
-  match bs.lookup v with
-  | some x => if x == w then some bs else none
-  | none => if bs.any (·.2 == w) then none else some (bs ++ [(v, w)])
-
-/-- `bs` with `v` bound to `w`, when neither is bound yet. -/
-def Bindings.bindNew (bs : Bindings) (v w : String) : Option Bindings :=
-  if (bs.lookup v).isNone && !bs.any (·.2 == w) then some (bs ++ [(v, w)]) else none
-
 inductive FileLine (α : Type) where
   | blank
   /-- The trace line schema cannot read the line. -/

@@ -11,7 +11,6 @@ import {
   type ServiceDefinition,
 } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
-import type { Scenario } from "../dsl/scenario.ts";
 import type { Found } from "./found.ts";
 import { definitionSchemas, type SchemaAt, schemasIn } from "./schemas.ts";
 
@@ -68,39 +67,13 @@ const definitionReferences = (definition: Definition): Reference[] => [
   ...schemaReferences(definitionSchemas(definition)),
 ];
 
-function inputReferences(input: Scenario["inputs"][number], i: number): Reference[] {
-  const field = (role: string, target: unknown): Reference => ({ path: ["inputs", i, role], target });
-  switch (input.type) {
-    case "elsewhere":
-    case "from":
-      return inputReferences(input.input, i).map((r) => ({ ...r, path: ["inputs", i, "input", ...r.path.slice(2)] }));
-    case "at":
-    case "unsubscribe":
-    case "restart":
-      return [];
-    case "command":
-      return [field("command", input.command)];
-    case "query":
-    case "subscribe":
-      return [field("query", input.query)];
-    case "event":
-      return [field("event", input.event)];
-    case "operation":
-    case "unacceptedOperation":
-      return [field("screen", input.screen)];
-    case "answer":
-      return [field("sender", input.sender), field("target", input.target)];
-  }
-}
-
 /**
- * Returns the references of definitions, scenarios, service definers, `constants()` calls, and contracts to definition
+ * Returns the references of definitions, service definers, `constants()` calls, and contracts to definition
  * objects that no export of the spec names. A reference to an exported definition that no service owns is left to
  * owners, which reports the cause. A definer is read under the first folder whose service it is, as owners names it.
  */
 export function unexportedDefinitions(
   definitions: readonly Named<Definition>[],
-  scenarios: readonly Named<Scenario>[],
   services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>,
   contracts: readonly Contract[],
   constants: readonly Named<{ readonly schema: z.ZodObject }>[],
@@ -119,7 +92,6 @@ export function unexportedDefinitions(
   );
   return [
     ...definitions.flatMap((d) => referredBy(d, definitionReferences(d.definition))),
-    ...scenarios.flatMap((s) => referredBy(s, s.definition.inputs.flatMap(inputReferences))),
     ...definers.flatMap(([service, { definition, place }]) =>
       unexported(entries("entities", definition.entities)).map(
         ({ path }): Found<Malformed> => ({

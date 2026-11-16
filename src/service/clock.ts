@@ -43,7 +43,6 @@ export function chooseDeadline<T extends Deadline>(r: Processing, first: T, due:
         definition: null,
         data: { candidates: deadlines },
       });
-    r.note.unchosenTie(deadlines);
     return first;
   }
   const deadline = due.find((t) => canonicalJson(deadlineId(t)) === canonicalJson(named));

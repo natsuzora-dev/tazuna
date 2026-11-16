@@ -1,26 +1,24 @@
-import { at, mock, receive, scenario } from "@natsuzora-dev/tazuna";
+import { external } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
-import { permission } from "./app.ts";
-
-const unavailable = mock(permission, [
-  device.requestPermission,
-  { result: "rejected", rejection: { kind: "unavailable" } },
-]);
-const accepted = mock(permission, [device.requestPermission, { result: "accepted" }]);
-const acceptedAgain = mock(permission, [device.requestPermission, { result: "accepted" }]);
+import { scenario } from "./app.ts";
 
 export const grantAfterRetry = scenario(
   "Link results to a rejected request and to a request that cannot have them; test reports resultOfUnacceptedRequest and resultOfUnlistedEvent",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    unavailable,
-    receive(device.granted, {}, { resultOf: unavailable }),
-    accepted,
-    receive(device.denied, {}, { resultOf: accepted }),
-  ],
-);
-
-export const grantAfterExtraAnswer = scenario(
-  "Link a result to a mock that comes after the request is answered; test reports missingWaitingRequest",
-  [at("2026-10-25T09:00:00+09:00"), accepted, acceptedAgain, receive(device.granted, {}, { resultOf: acceptedAgain })],
+  {
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { device: external(device) } },
+    when: (w) => {
+      w.net.deliver(w.begin.request(device.requestPermission));
+      const retried = w.net.deliver(
+        w.peer.device.answer(w.begin.request(device.requestPermission), {
+          result: "rejected",
+          rejection: { kind: "unavailable" },
+        }),
+      );
+      w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: w.begin.request(device.requestPermission) }));
+      w.net.deliver(retried.request(device.requestPermission));
+      w.net.deliver(w.peer.device.answer(retried.request(device.requestPermission), { result: "accepted" }));
+      w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: retried.request(device.requestPermission) }));
+    },
+    then: () => [],
+  },
 );

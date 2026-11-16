@@ -36,7 +36,7 @@ const commands: Readonly<Record<string, Command>> = {
   test: {
     positionals: ["spec"],
     description:
-      "Run the checks of check first; if they report a violation, report those violations and run no scenario. Otherwise run every scenario and the paths that --depth appends to it, report the violations found on every path, and compare the trace of each scenario whose run did not halt with its snapshot (<service>/__snapshots__/<scenario>.jsonl). For each other spec service <peer> that the scenario sends a request to, emits an event to, receives an event from, or names in given, elsewhere or from, test runs <peer>'s spec on the inputs that it derives from the scenario, reports the scenario's answers, events and requests of <peer> that this run does not give, and compares the run, unless it halted or took no input, with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl. test reports a violation once per kind, definition, data, and the location that the violation itself names, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first; a deadlineOrder, answerOrder, or stepOrder violation counts as the same violation whichever of its two sides comes first. A violation that only a path with appended inputs reports lists those inputs in its appendedInputs field, as trace-shaped steps; for a scenario written with given, when and then, the paths append lines that face the own service, and such a violation lists them in its appendedLines field. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
+      "Run the checks of check first; if they report a violation, report those violations and run no scenario. Otherwise simulate every scenario, explore the paths that --depth appends to it (lines that face the own service), and search the orders of the steps of each processing that no cause orders. Report the violations of every path once per kind, definition, data and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first; a stepOrder violation counts as the same violation whichever of its two steps comes first, and a violation that only a path reports lists the lines it appended in its appendedLines field. Compare the trace of each running service of a scenario that did not halt with its snapshot: the own service's <service>/__snapshots__/<scenario>.jsonl, and each running peer's with lines <service>/__snapshots__/<scenario>.<peer>.jsonl. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
     options: {
       "--depth": {
         value: "n",
@@ -195,12 +195,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     for (const removed of result.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
     const problems = [...(options.has("--coverage") ? uncoveredOf(spec, result.reached) : []), ...result.problems];
     const paths = `the paths that append up to ${count(depth, "input")}`;
-    return report(
-      io,
-      spec.root,
-      problems,
-      `Tested ${count(spec.scenarios.length + spec.legacyScenarios.length, "scenario")} and ${paths}`,
-    );
+    return report(io, spec.root, problems, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
   }
   const traces = resolve(io.cwd, traceFolder ?? "");
   if (!isFolder(traces)) return misused(`no such folder ${traceFolder}`);

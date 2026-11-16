@@ -1,12 +1,13 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
+import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 
-export const { automation, command, event } = service({ description: "Notify about tasks" });
+export const { automation, command, event, scenario } = service({ description: "Notify about tasks" });
 
-export const announced = event({ payload: { taskId: todo.TaskId } });
+export const announced = event({ payload: { taskId: z.string() } });
 
 export const announce = command({
-  input: { taskId: todo.TaskId },
+  input: { taskId: z.string() },
   emits: [announced],
 }).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);
 

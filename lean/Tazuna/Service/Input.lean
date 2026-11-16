@@ -1,6 +1,5 @@
 import Tazuna.Service.Queue
 import Tazuna.Service.Screen.Operable
-import Tazuna.Service.Step
 
 /-! Each input is one message, which the service processes to completion. -/
 
@@ -44,35 +43,25 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
 
 /-- The state after a subscribe input. The first answer is sent when the message finishes. -/
 def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (raw : Value) (handle : Option String) : m State := do
+    (raw : Value) : m State := do
   if name ∈ st.queries then
     match ← fs.canonical (.input name) raw with
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref name) e)))
     | .ok input =>
     let (s, id) := s.writeInput givenId (.subscribe name input)
-    let s := { s with subscribed := (handle.map (·, id)).toList ++ s.subscribed }
     let s := if s.subscriptions.any (·.id == id) then
         s.report (.invalidInput (.reusedSubscriptionId id))
       else { s with subscriptions := s.subscriptions ++ [{ id, query := name, input := raw }] }
     message st fs s.newMessage {}
   else pure (s.report (.invalidInput (.unownedTarget (st.refOf name))))
 
-def endOpened [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
+/-- The state after an unsubscribe input that ends the subscription `id`. -/
+def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
   let s := (s.writeInput none (.unsubscribe id)).1
   let s := if s.subscriptions.any (·.id == id) then { s with subscriptions := s.subscriptions.filter (·.id != id) }
     else s.report (.invalidInput (.unopenedSubscription id))
   message st fs s.newMessage {}
-
-/--
-The state after an unsubscribe input. A checked scenario names by handle only a subscribe input before it
-(Illegal.namedInputUnplaced), so the handle names a subscription that the input opened.
--/
-def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : Ended → m State
-  | .id id => endOpened st fs s id
-  | .handle h => match s.subscribed.lookup h with
-    | some id => endOpened st fs s id
-    | none => pure s
 
 def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref) : Syntax.ResultOfMismatch → Finding
   | .resultOfNonCommand => .invalidInput (.resultOfNonCommand event requestId target)
@@ -80,10 +69,9 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
 
 /--
-The request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input before
-the event (Illegal.namedInputUnplaced), so the mock has been processed. It is none when that mock answered no request
-(ambiguousMock, missingWaitingRequest, missingStaleRequest), and after reporting that the request cannot have the event
-as its result (resultOfMismatch).
+The request `handle` whose answer the service took (State.mocks), which an event names as its resultOf. It is none when
+the service took no answer to it, and after reporting that the request cannot have the event as its result
+(resultOfMismatch).
 -/
 def resultRequest (st : Service) (s : State) (name handle : String) : State × Option Pending :=
   match s.mocks.lookup handle with
@@ -150,44 +138,6 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
         let (s, request) := withResultOf st s name resultOf
         deliver st fs s name givenId payload request
   else pure (s.report (.invalidInput (.unlistedEvent (st.refOf name))))
-
-def earliestTurn (ps : List Pending) : Option Pending :=
-  ps.foldl (fun best p => match best with
-    | some b => if p.turn < b.turn then some p else some b
-    | none => some p) none
-
-/-- The requests from `sender` to `name` that wait, stale exactly when `stale` is true, in sending order. -/
-def State.waiting (s : State) (sender name : String) (stale : Bool) : List Pending :=
-  s.pending.filter fun p => p.stale == stale && p.activity.target == name && s.senderOf p.requester == sender
-
-/--
-The requests of `ps` that the mock input `input` chooses: those whose input is the canonical form of their input
-overlaid with `input` (Value.overlay), so that `input` gives fields, at any depth, an array or any other value as a
-whole, that the request's input has.
--/
-def chosen [Monad m] (st : Service) (fs : Functions m) (name : String) (input : Value) :
-    List Pending → m (Except Fault (List Pending))
-  | [] => pure (.ok [])
-  | p :: ps => do
-    match ← fs.canonical (.input name) (p.input.overlay input) with
-    | .error e => pure (.error (issueViolation st (st.refOf name) e))
-    | .ok v =>
-      match ← chosen st fs name input ps with
-      | .error f => pure (.error f)
-      | .ok rest => pure (.ok (if v == p.input then p :: rest else rest))
-
-def choosesStale : Option Choice → Bool
-  | some (.mock _ stale) => stale == some true
-  | _ => false
-
-/-- The requests from `sender` to `name` that the answer input may answer by its choice. -/
-def State.answerable [Monad m] (st : Service) (fs : Functions m) (s : State) (sender name : String) :
-    Option Choice → m (Except Fault (List Pending))
-  | some (.id to) =>
-    pure (.ok (s.pending.filter fun p => p.id == to && p.activity.target == name && s.senderOf p.requester == sender))
-  | some (.mock (some input) stale) => chosen st fs name input (s.waiting sender name (stale == some true))
-  | some (.mock none stale) => pure (.ok (s.waiting sender name (stale == some true)))
-  | none => pure (.ok (s.waiting sender name false))
 
 def assumptionFinding (requestId : String) (target : Syntax.Ref) : Syntax.AssumptionMismatch → Finding
   | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)
@@ -260,24 +210,6 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
         return .ok { assumption := broken failedEnsures, written := .ok written,
                      recorded := p.activity.keyword == "sends" }
 
-/--
-The request that the answer input answers: the longest-waiting of those that it may answer, unless their inputs differ,
-which no order that the scenario wrote decides (ambiguousMock).
--/
-def State.answering [Monad m] (st : Service) (fs : Functions m) (s : State) (sender name : String)
-    (choice : Option Choice) : m (Except Finding Pending) := do
-  match ← s.answerable st fs sender name choice with
-  | .error fault => pure (.error (.fault fault))
-  | .ok ps =>
-  let inputs := (ps.map (·.input)).eraseDups
-  if 1 < inputs.length then pure (.error (.invalidInput (.ambiguousMock (st.refOf sender) (st.refOf name) inputs)))
-  else
-  match earliestTurn ps with
-  | none => pure (.error (.invalidInput
-      ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest) (st.refOf sender)
-        (st.refOf name))))
-  | some p => pure (.ok p)
-
 /-- The state after an answer input answers the request `p`, as checkAnswer checks the answer. -/
 def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
     m State := do
@@ -298,19 +230,6 @@ def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
     let started := (s.writeInput none (.answer p.id written)).1.newMessage.newStep none
     let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
     message st fs r.state r.queue
-
-def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sender name : String) (answer : Answer)
-    (choice : Option Choice) (handle : Option String) : m State := do
-  match ← s.answering st fs sender name choice with
-  | .error f => pure (s.report f)
-  | .ok p => answerRequest st fs { s with mocks := (handle.map (·, p, answer)).toList ++ s.mocks } p answer
-
-/-- The state after an answer input answers the request to `target` whose trace line has id `to`. -/
-def answerById [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (to target : String)
-    (answer : Answer) : m State :=
-  match s.pending.find? fun p => p.id == to && p.activity.target == target with
-  | some p => answerRequest st fs s p answer
-  | none => pure (s.report (.invalidInput (.unwaitedRequest to (st.refOf target))))
 
 def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do
   if s.halted.isSome then pure s else
@@ -338,56 +257,23 @@ def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) 
   let s ← startInstances st fs (← startRecords st fs { s with started := true }.newMessage)
   message st fs s { tasks := st.starting.map (.start ·.name none) }
 
-/-- The state with the names `keys` in place of the current ones, of which it reports the first entity's names left. -/
-def State.takeKeys (s : State) (keys : List (String × List String)) : State :=
-  let t := { s with keyNames := keys }
-  match s.halted, s.keyNames.find? (!·.2.isEmpty) with
-  | none, some (entity, names) => t.report (.invalidInput (.unusedKeys entity names))
-  | _, _ => t
-
 /--
 The state at the end of an input, with the entries of its `deadlineOrder` that no tie used reported, or else the
-entries of its `stepOrder` left unused, or else the first entity's names of its `keys` that no createKey returned.
+entries of its `stepOrder` left unused.
 -/
 def State.checkOrderUsed (s : State) : State :=
   let t := { s with inputDeadlineOrder := [] }
   match s.halted, s.deadlineOrder, s.stepOrder with
-  | none, _ :: _, _ => { t with keyNames := [] }.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
-  | none, [], _ :: _ => { t with keyNames := [] }.report (.invalidInput (.unusedStepOrder s.stepOrder))
-  | _, _, _ => t.takeKeys []
+  | none, _ :: _, _ => t.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
+  | none, [], _ :: _ => t.report (.invalidInput (.unusedStepOrder s.stepOrder))
+  | _, _, _ => t
 
 /--
-The first string of the values of `body` that has the form of a createKey value of an own entity that createKey has
-not given yet, with the entity.
+The state after an operate input. As Playwright's click fails on a covered or missing element, operate reports an
+operation that the screen does not accept.
 -/
-def State.uncreatedKey (s : State) (st : Service) (body : Step.Body) : Option (String × String) :=
-  (body.values.flatMap Value.strings).findSome? fun v =>
-    if s.created.any (·.2 == v) then none
-    else (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf e v).map (v, ·)
-
-/--
-The state in which `input` arrives. Every input first advances the time to its own, firing the deadlines due by then;
-then every input but a restart, which begins the service itself, begins the service if it has not begun.
--/
-def advance [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (input : Step) : m State := do
-  let time := input.time.time
-  if time < s.now then
-    pure (s.report (.invalidInput (.earlierAt time s.now)))
-  else
-    let s ← fireDue st fs time Limit.dueDeadlines.max none s
-    if s.halted.isSome then pure s else
-    let s := { s with now := max s.now time }
-    match input.body with
-    | .restart => pure s
-    | _ => begin st fs s
-
-/--
-The state after an operate or cannotOperate input. As Playwright's click fails on a covered or missing element and
-toBeDisabled and toBeHidden assert that it cannot be used, operate and cannotOperate check the expectation of whether
-the screen accepts the operation.
--/
-def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (screen control : String) (payload : Value)
-    (accepted : Bool) : m State := do
+def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (screen control : String) (payload : Value) :
+    m State := do
   let name := s!"{screen}.{control}"
   match st.chart? screen with
   | none => pure (s.report (.invalidInput (.unownedTarget (st.refOf screen))))
@@ -395,7 +281,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   match c.controls.find? (·.name == control) with
   | none => pure (s.report (.invalidInput (.unknownControl (st.ref screen) control)))
   | some ctl =>
-    let s := (s.writeInput none (.operation name (if ctl.hasPayload then some payload else none) accepted)).1
+    let s := (s.writeInput none (.operation name (if ctl.hasPayload then some payload else none) true)).1
     match ← fs.parse (.control screen control) payload with
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref screen) e)))
@@ -403,14 +289,10 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     | .ok (some decoded) =>
       match ← acceptsOperation fs st s screen control decoded with
       | .error fault => pure (s.report (.fault fault))
-      | .ok top =>
-        match accepted, top with
-        | true, .ok i =>
-          let (s, step) := s.newMessage.newStep none
-          let r ← settled fs st step (some i.resource) (dispatch fs st step i.resource control decoded) ⟨s, {}⟩
-          message st fs r.state r.queue
-        | false, .error _ => message st fs s.newMessage {}
-        | true, .error r => pure (s.report (r.finding st screen control decoded))
-        | false, .ok _ => pure (s.report (.invalidInput (.unexpectedlyAccepted (st.ref screen) control)))
+      | .ok (.ok i) =>
+        let (s, step) := s.newMessage.newStep none
+        let r ← settled fs st step (some i.resource) (dispatch fs st step i.resource control decoded) ⟨s, {}⟩
+        message st fs r.state r.queue
+      | .ok (.error r) => pure (s.report (r.finding st screen control decoded))
 
 end Tazuna.Semantics

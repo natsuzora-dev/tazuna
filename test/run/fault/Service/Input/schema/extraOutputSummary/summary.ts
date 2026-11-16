@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Item = entity({ description: "An item", fields: { id: z.string() }, key: "id" });
 
-export const { query, contract } = service({
+export const { query, contract, scenario } = service({
   description: "Count items, returning the input with the count",
   entities: { Item },
 });

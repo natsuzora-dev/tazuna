@@ -1,3 +1,0 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"resetCount#1","name":"resetCount","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"resetCount#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"countReset#1","name":"countReset","payload":{"completed":0},"resultOf":"resetCount#1"}

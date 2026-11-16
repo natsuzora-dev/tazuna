@@ -1,6 +1,5 @@
 import type { ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
-import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { DeadlineId, TraceLine } from "../data/trace.generated.ts";
+import type { TraceLine } from "../data/trace.generated.ts";
 import { type Bindings, renamed } from "../data/trace.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
@@ -15,16 +14,6 @@ export interface Outcome {
   readonly halted: ViolationValue | null;
   readonly lines: readonly TraceLine[];
   readonly records: Json;
-}
-
-/**
- * Moves the lines at `positions` together to the earliest of them, so that both orders of two swapped inputs emit their
- * outputs after both inputs, as verify reads them.
- */
-function gathered<T>(lines: readonly T[], positions: readonly number[]): T[] {
-  const rest = lines.filter((_, i) => !positions.includes(i));
-  rest.splice(Math.min(...positions), 0, ...positions.flatMap((i) => (i < lines.length ? [lines[i] as T] : [])));
-  return rest;
 }
 
 /**
@@ -43,22 +32,10 @@ function recordsValue(records: Records): Json {
   } as Json;
 }
 
-/**
- * Returns what the relation compares of a run: the violation that halted it, or its trace lines, with the lines at
- * `swapped` gathered, and its records.
- */
-export function outcomeOf(
-  halted: ViolationValue | null,
-  lines: readonly TraceLine[],
-  records: Records,
-  swapped?: readonly number[],
-): Outcome {
+/** Returns what the relation compares of a run: the violation that halted it, or its trace lines and records. */
+export function outcomeOf(halted: ViolationValue | null, lines: readonly TraceLine[], records: Records): Outcome {
   if (halted !== null) return { halted, lines: [], records: null };
-  return {
-    halted: null,
-    lines: swapped === undefined ? lines : gathered(lines, swapped),
-    records: recordsValue(records),
-  };
+  return { halted: null, lines, records: recordsValue(records) };
 }
 
 /**
@@ -108,95 +85,6 @@ function difference(compare: Compare, original: Outcome, alternative: Outcome): 
   return recordsText(compared.bindings, original.records) === recordsText(new Map(), alternative.records)
     ? undefined
     : { aspect: "records", original: original.records, alternative: alternative.records };
-}
-
-/**
- * Returns the violation when the two deadline orders differ. `aFirst` fires `a` first, and `bFirst` fires `b` first;
- * `chart` gives the chart of a deadline's instance.
- * The pair is in the order of their canonical texts.
- */
-export function deadlineOrder(
-  compare: Compare,
-  chart: (deadline: DeadlineId) => DefinitionRef | null,
-  a: DeadlineId,
-  b: DeadlineId,
-  aFirst: Outcome,
-  bFirst: Outcome,
-): Of<"ChoiceDependent.deadlineOrder"> | undefined {
-  const [first, second, original, alternative] =
-    byCodePoint(canonicalJson(a), canonicalJson(b)) <= 0 ? [a, b, aFirst, bFirst] : [b, a, bFirst, aFirst];
-  const found = difference(compare, original, alternative);
-  return found === undefined
-    ? undefined
-    : {
-        kind: "ChoiceDependent.deadlineOrder",
-        definition: chart(first),
-        data: { firstDeadline: first, secondDeadline: second, difference: found },
-      };
-}
-
-/**
- * Returns the violation when the two answer targets differ in outcome. `answered` gives the answer from `sender` to
- * `request`, and `alternative` gives it to `other`.
- */
-export function answerChoice(
-  compare: Compare,
-  sender: DefinitionRef,
-  request: string,
-  other: string,
-  answered: Outcome,
-  alternative: Outcome,
-): Of<"ChoiceDependent.answerChoice"> | undefined {
-  const found = difference(compare, answered, alternative);
-  return found === undefined
-    ? undefined
-    : {
-        kind: "ChoiceDependent.answerChoice",
-        definition: sender,
-        data: { requestId: request, otherRequestId: other, difference: found },
-      };
-}
-
-/**
- * Returns the violation when the two answer orders differ. `xFirst` answers request `x` from `xSender` first, and
- * `yFirst` answers `y` from `ySender` first. The pair is in the order of the ids.
- */
-export function answerOrder(
-  compare: Compare,
-  x: string,
-  y: string,
-  xSender: DefinitionRef,
-  ySender: DefinitionRef,
-  xFirst: Outcome,
-  yFirst: Outcome,
-): Of<"ChoiceDependent.answerOrder"> | undefined {
-  const [first, second, sender, original, alternative] =
-    byCodePoint(x, y) <= 0 ? [x, y, xSender, xFirst, yFirst] : [y, x, ySender, yFirst, xFirst];
-  const found = difference(compare, original, alternative);
-  return found === undefined
-    ? undefined
-    : {
-        kind: "ChoiceDependent.answerOrder",
-        definition: sender,
-        data: { firstRequestId: first, secondRequestId: second, difference: found },
-      };
-}
-
-/**
- * Returns the violation when the two request orders differ. `forward` sends `first` first, as one sender did while the
- * other request waited, and `backward` sends `second` first.
- */
-export function requestOrder(
-  compare: Compare,
-  first: DefinitionRef,
-  second: DefinitionRef,
-  forward: Outcome,
-  backward: Outcome,
-): Of<"ChoiceDependent.requestOrder"> | undefined {
-  const found = difference(compare, forward, backward);
-  return found === undefined
-    ? undefined
-    : { kind: "ChoiceDependent.requestOrder", definition: first, data: { secondRequest: second, difference: found } };
 }
 
 /**

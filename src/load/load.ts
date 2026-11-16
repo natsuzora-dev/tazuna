@@ -24,11 +24,10 @@ import { defaultSchemas } from "./defaults.ts";
 import type { Found } from "./found.ts";
 import { duplicateNames, type NamedExport } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
-import { peerReferences } from "./peers.ts";
 import { unexportedDefinitions } from "./references.ts";
 import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
 import { structureOf } from "./structureOf.ts";
-import { inexactDelays, unparsableTimes } from "./times.ts";
+import { inexactDelays } from "./times.ts";
 
 export interface Constants {
   readonly schema: z.ZodObject;
@@ -141,8 +140,7 @@ export async function loadSpec(root: string): Promise<Spec> {
       } else if (definer !== undefined) {
         definerExports.push({ folder: service, definition: definer, place });
       } else if (isContract(value)) {
-        const { states, ...members } = value;
-        foundContracts.push({ service, place, members, states: (states ?? {}) as Contract["states"], value });
+        foundContracts.push({ service, place, members: value, value });
       } else if (schema !== undefined) {
         namedExports.push({ name, service, place, value });
         if (!constants.some((c) => c.definition.values === value))
@@ -159,7 +157,7 @@ export async function loadSpec(root: string): Promise<Spec> {
     return { ...c, service: (owner === undefined ? undefined : serviceNames.get(owner)) ?? c.service };
   });
   const names = new Map<unknown, Named<Definition>>(definitions.map((d) => [d.definition, d]));
-  const { structure, thrownDefaults } = structureOf(definitions, names, services, contracts, scenarios);
+  const { structure, thrownDefaults } = structureOf(definitions, names, services, contracts);
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
   const loaded = loadScenarios(root, defined, services, (d) => {
@@ -172,9 +170,7 @@ export async function loadSpec(root: string): Promise<Spec> {
     malformed: [
       ...duplicateNames(namedExports),
       ...owned.malformed,
-      ...unexportedDefinitions(definitions, scenarios, services, contracts, constants, exported),
-      ...unparsableTimes(scenarios, contracts),
-      ...peerReferences(scenarios, services, contracts),
+      ...unexportedDefinitions(definitions, services, contracts, constants, exported),
       ...inexactDelays(charts({ definitions, structure })),
       ...opaque,
       ...defaultSchemas(definitions, structure, opaque, thrownDefaults),

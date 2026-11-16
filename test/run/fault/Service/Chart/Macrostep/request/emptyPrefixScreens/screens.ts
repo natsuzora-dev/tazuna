@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
-export const { screen } = service({ description: "Show the tasks whose title starts with an empty prefix" });
+export const { screen, scenario } = service({ description: "Show the tasks whose title starts with an empty prefix" });
 
 export const titledScreen = screen({
   description: "The tasks whose title starts with a prefix",

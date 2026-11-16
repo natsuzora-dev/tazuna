@@ -1,9 +1,7 @@
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { DeadlineId } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Obligation } from "../data/uncovered.ts";
-import type { Activity } from "./chart/basic.ts";
 
 /**
  * A part of the records: the entity's key set when there is no key and no field, the record's existence when there is
@@ -64,9 +62,7 @@ export interface RegionCheck {
  * - Lean's `read` (record parts read without asking Functions) has no member: readRecord reports those reads too.
  * - readNow and wroteNow are TS only: reading and advancing the time, which only the evaluation cache hears, since
  *   the time advances only between steps.
- * - reached, requested and unchosenTie are TS only: the coverage hits that explore reads, the requests sent while
- *   others await an answer, whose orders explore compares (requestOrder), and the ties whose other orders explore runs
- *   (deadlineOrder).
+ * - reached is TS only: the coverage hits that explore reads.
  */
 export interface Note {
   /** Reports that step `step` wrote event lines from line `start` in groups of the lengths `groups`. */
@@ -95,11 +91,4 @@ export interface Note {
   readNow(): void;
   wroteNow(): void;
   reached(obligation: Obligation): void;
-  /**
-   * Reports that chart or automation `sender` sent the request of `activity` while the requests of the `waiting`
-   * activities awaited answers.
-   */
-  requested(activity: Activity, sender: string, waiting: readonly Activity[]): void;
-  /** Reports that no entry of `deadlineOrder` was left for a tie among `deadlines`, so the first of them fires. */
-  unchosenTie(deadlines: readonly DeadlineId[]): void;
 }

@@ -46,7 +46,6 @@ const charts = (s: Structure) =>
   s.definitions.filter((d): d is ChartStructure => d.kind === "machine" || d.kind === "screen");
 const refsOf = (s: Structure, kinds: readonly DefinitionStructure["kind"][]) =>
   s.definitions.filter((d) => kinds.includes(d.kind)).map((d) => ({ service: d.service, name: d.name }));
-const senderKinds: readonly DefinitionStructure["kind"][] = ["automation", "machine", "screen"];
 const transitionsOf = (c: ChartStructure) => [c.on, ...c.states.map((st) => st.transitions)];
 const mapAbove = (c: ChartStructure, name: string | null) =>
   name === null
@@ -154,82 +153,6 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     const chart = pick(charts(s), a);
     if (chart)
       (chart.queries as Record<string, unknown>)[`k${b % 3}`] = pick([null, ...refsOf(s, ["query"])], c) ?? null;
-  },
-  answer(s, [a, b, c]) {
-    const input = pick(
-      s.scenarios.flatMap((sc) => sc.inputs).filter((i) => i.type === "answer"),
-      a,
-    );
-    if (input?.type !== "answer") return;
-    if (b % 2 === 0) (input as { sender: unknown }).sender = pick([null, ...refsOf(s, senderKinds)], c) ?? null;
-    else (input as { target: unknown }).target = pick([null, ...refsOf(s, ["command", "query"])], c) ?? null;
-  },
-  named(s, [a, b, c]) {
-    const line = pick(
-      s.scenarios.flatMap((sc) => sc.inputs),
-      a,
-    );
-    if (line === undefined) return;
-    const value = c % 3 === 0 ? null : b % 4;
-    if (c % 2 === 0) (line as { names: number | null }).names = value;
-    else (line as { handle: number | null }).handle = value;
-  },
-  scope(s, [a, b, c]) {
-    const line = pick(
-      s.scenarios.flatMap((sc) => sc.inputs),
-      a,
-    );
-    if (line === undefined) return;
-    const peer = pick([null, ...s.services.map((sv) => sv.name)], c) ?? null;
-    if (b % 2 === 0) (line as { run: string | null }).run = peer;
-    else (line as { sentBy: string | null }).sentBy = peer;
-  },
-  given(s, [a, b]) {
-    const scenario = pick(s.scenarios, a);
-    const state = pick(s.scenarios, b);
-    if (scenario && state) (scenario.given as unknown[]).push({ service: state.service, name: state.name });
-  },
-  keys(s, [a, b, c]) {
-    const line = pick(
-      s.scenarios.flatMap((sc) => sc.inputs),
-      a,
-    );
-    if (line === undefined) return;
-    const entity =
-      pick([...s.definitions.filter((d) => d.kind === "entity").map((d) => d.name), "Other"], b) ?? "Other";
-    const name = pick([`K-${c % 3}`, `${entity}-${c + 1}`, ...line.strings], c) ?? "K-0";
-    (line.keys as Record<string, string[]>)[entity] = [...(line.keys[entity] ?? []), name];
-  },
-  scenarioInput(s, [a, b, c]) {
-    const scenario = pick(s.scenarios, a);
-    if (!scenario) return;
-    const fields = {
-      run: b % 3 === 0 ? (pick(s.services, c)?.name ?? null) : null,
-      sentBy: b % 5 === 1 ? (pick(s.services, b)?.name ?? null) : null,
-      handle: c % 3 === 0 ? b % 4 : null,
-      names: c % 3 === 1 ? b % 4 : null,
-      strings: [],
-      keys: {},
-    };
-    (scenario.inputs as unknown[]).push(
-      b % 2 === 0
-        ? {
-            type: "answer",
-            sender: pick([null, ...refsOf(s, senderKinds)], c) ?? null,
-            target: pick([null, ...refsOf(s, ["command", "query"])], b) ?? null,
-            ...fields,
-          }
-        : { type: b % 4 === 1 ? "event" : "subscribe", ...fields },
-    );
-  },
-  strings(s, [a, b, c]) {
-    const input = pick(
-      s.scenarios.flatMap((sc) => sc.inputs),
-      a,
-    );
-    if (input === undefined) return;
-    const name = pick([...s.definitions.filter((d) => d.kind === "entity").map((d) => d.name), "Other"], b) ?? "Other";
-    (input.strings as string[]).push(pick([`${name}-${c + 1}`, `${name}-0`, `${name}-0${c + 1}`, name], c) ?? name);
   },
   offers(s, [a, b]) {
     const chart = pick(

@@ -7,13 +7,11 @@ import type { ChoiceDependent, StepName } from "../../src/data/choiceDependent.g
 import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
-import type { Step } from "../../src/data/step.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
 import { type FileLine, isMalformed } from "../../src/data/trace.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
 import type { Json } from "../../src/data/values.ts";
 import type { Spec } from "../../src/load/load.ts";
-import type { Enabled } from "../../src/observe/enabled.ts";
 import type { Structure } from "../../src/syntax/structure.generated.ts";
 import type { Folder, PairingScenario } from "../../src/verify/pairing.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
@@ -44,18 +42,6 @@ export type VerifyViolation = Mismatch | Uncomparable;
 
 const fileLines = (lines: readonly FileLine[]) =>
   lines.map((l) => (l === undefined ? null : isMalformed(l) ? "malformed" : l));
-
-export interface LeanOutcome {
-  readonly lines: readonly TraceLine[];
-  readonly violations: readonly LeanViolation[];
-  /** The pairs of steps whose other order test runs, by step number. */
-  readonly candidates: readonly (readonly [number, number])[];
-  readonly enabled: readonly Enabled[];
-}
-
-export interface LeanRun extends LeanOutcome {
-  readonly handle: number;
-}
 
 interface LeanNames {
   readonly byCaller: Readonly<Record<string, boolean>>;
@@ -142,41 +128,6 @@ export class Lean {
     const served = this.receive();
     if (served["type"] !== "served") throw new Error(`tazuna-lean answered a read with ${JSON.stringify(served)}`);
     return served["value"];
-  }
-
-  /**
-   * Runs `steps` in Lean. The returned handle names the path's state in Lean, which extend continues until the next
-   * run.
-   */
-  run(spec: Spec, service: string, steps: readonly Step[], functions: Answering): LeanRun {
-    const result = this.exchange({ type: "run", structure: spec.structure, service, steps }, "result", functions);
-    return result as unknown as LeanRun;
-  }
-
-  /** Returns the run of the handle's path followed by `step`, continued from the handle's state. */
-  extend(handle: number, step: Step, functions: Answering): LeanRun {
-    const result = this.exchange({ type: "extend", handle, step }, "result", functions);
-    return result as unknown as LeanRun;
-  }
-
-  /**
-   * Returns Lean's ChoiceDependent violation, or null, for the choice of `kind` between the runs of the steps `first`
-   * and `second`, in the order the relation takes them.
-   */
-  choice(
-    spec: Spec,
-    service: string,
-    kind: string,
-    first: readonly Step[],
-    second: readonly Step[],
-    functions: Answering,
-  ): ChoiceDependent | null {
-    const result = this.exchange(
-      { type: "choice", structure: spec.structure, service, kind, first, second },
-      "decided",
-      functions,
-    );
-    return result["found"] as ChoiceDependent | null;
   }
 
   verify(
@@ -281,26 +232,6 @@ export class Lean {
       limits: message["limits"] as Record<string, number>,
       stepOrderLimit: message["stepOrderLimit"] as number,
     };
-  }
-
-  peer(request: {
-    readonly service: string;
-    readonly peer: string;
-    readonly received: readonly string[];
-    readonly fromLines: readonly number[];
-    readonly state: readonly Step[];
-    readonly elsewhere: readonly (readonly [number, Step])[];
-    readonly lines: readonly TraceLine[];
-    readonly peerLines: readonly TraceLine[];
-    readonly halted: readonly [unknown, string] | null;
-    readonly peerForms: readonly (readonly [string, unknown, unknown])[];
-    readonly ownInputForms: readonly (readonly [string, unknown, unknown])[];
-    readonly reported: readonly (readonly [unknown, unknown])[];
-  }): { readonly inputs: unknown; readonly findings: unknown; readonly runFindings: unknown } {
-    this.send({ type: "peer", ...request });
-    const { type, ...result } = this.receive();
-    if (type !== "peer") throw new Error(`tazuna-lean answered peer with ${JSON.stringify({ type, ...result })}`);
-    return result as { readonly inputs: unknown; readonly findings: unknown; readonly runFindings: unknown };
   }
 
   /** Returns Lean's simulation of the scenario: each running service's trace and violations, and the reports. */

@@ -1,4 +1,1 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"unacceptedOperation","id":"confirmDialog.cancel#1","name":"confirmDialog.cancel"}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"unacceptedOperation","id":"listScreen.pick#1","name":"listScreen.pick","payload":{"taskId":"task-3"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"listScreen.clear#1","name":"listScreen.clear"}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"unacceptedOperation","id":"listScreen.pick#2","name":"listScreen.pick","payload":{"taskId":"task-1"}}

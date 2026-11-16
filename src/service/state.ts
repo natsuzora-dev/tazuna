@@ -285,8 +285,6 @@ export interface State {
   messageCount: number;
   /** The createKey values and the names of their entities, in creation order. */
   readonly created: (readonly [string, string])[];
-  /** The names of the current input's `keys` that createKey has not returned yet, by entity. */
-  keyNames: Map<string, readonly string[]>;
   /** Lean's State.keyOwner. */
   keyOwner: string | undefined;
   /** Lean's State.tieOrderRequired. */
@@ -296,8 +294,6 @@ export interface State {
   readonly results: Map<string, Accepted>;
   /** For each handle of a processed mock input, the request that the latest such input answered and the answer. */
   readonly mocks: Map<string, { readonly request: Pending; readonly answer: Answer }>;
-  /** For each handle of a processed subscribe input, the id of the subscription that the latest such input opened. */
-  readonly subscribed: Map<string, string>;
   readonly violations: Violation[];
 }
 
@@ -326,13 +322,11 @@ export function newState(st: Service): State {
     steps: [],
     messageCount: 0,
     created: [],
-    keyNames: new Map(),
     keyOwner: undefined,
     tieOrderRequired: false,
     subscriptions: new Subscriptions(),
     results: new Map(),
     mocks: new Map(),
-    subscribed: new Map(),
     violations: [],
   };
 }
@@ -384,21 +378,18 @@ export function keyCounts(s: State): [string, number][] {
 }
 
 /**
- * Returns what createKey returns next for each entity that has a createKey value or a name left: the names left, in
- * order, and after them `<entity>-<n>` for the entity's `n`-th createKey value, qualified by `keyOwner`.
+ * Returns what createKey returns next for each entity that has a createKey value: `<entity>-<n>` for the entity's
+ * `n`-th createKey value, qualified by `keyOwner`.
  */
 export function nextKeys(s: State): Keys {
   return {
     ...(s.keyOwner === undefined ? {} : { owner: s.keyOwner }),
-    next: [...new Set([...s.created.map(([e]) => e), ...s.keyNames.keys()])].map(
-      (e) => [e, { count: keyCount(s, e), names: s.keyNames.get(e) ?? [] }] as const,
-    ),
+    next: [...new Set(s.created.map(([e]) => e))].map((e) => [e, { count: keyCount(s, e) }] as const),
   };
 }
 
 export function createKeys(s: State, entities: readonly string[]): void {
   s.created.push(...givenKeys(nextKeys(s), entities));
-  for (const [e, names] of s.keyNames) s.keyNames.set(e, names.slice(entities.filter((c) => c === e).length));
 }
 
 export function newMessage(s: State): void {
@@ -616,9 +607,4 @@ export function answered(s: State, request: Pending): boolean {
     s.turn += 1;
   } else if (index >= 0) s.pending.splice(index, 1);
   return index >= 0 && !request.stale;
-}
-
-/** Returns the activities of the requests that await answers, except subscriptions, which answer until they end. */
-export function awaitedActivities(s: State): Activity[] {
-  return s.pending.filter((p) => p.requester.kind !== "slot").map((p) => p.activity);
 }

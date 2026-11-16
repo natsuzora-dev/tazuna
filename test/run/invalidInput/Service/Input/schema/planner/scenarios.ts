@@ -1,36 +1,36 @@
-import { at, mock, scenario } from "@natsuzora-dev/tazuna";
+import { external, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
-import { adder } from "./planner.ts";
+import { scenario } from "./planner.ts";
 
-export const rejectAdd = scenario(
-  "Reject the task as already existing; no violation",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    mock(adder, [todo.addTask, { result: "rejected", rejection: { kind: "already-exists" } }]),
-  ],
-  { given: { todo: todo.states.milk } },
-);
+const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 
-export const rejectLongTitle = scenario(
-  "Reject the task with a requires of addTask; the answer fits addTask's contract, and only todo's run, which accepts the short title, gives unproducibleAnswer",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    mock(adder, [todo.addTask, { result: "rejected", rejection: { kind: "requires", reason: "short" } }]),
-  ],
-);
+/** The network delivers the addTask that adder sent at the begin, and todo's answer back. */
+const answered = (w: When<typeof given.peers>, answer: Parameters<typeof w.peer.todo.answer>[1]) => {
+  const adding = w.begin.request(todo.addTask);
+  w.net.deliver(adding);
+  w.net.deliver(w.peer.todo.answer(adding, answer));
+};
+
+export const rejectAdd = scenario("Reject the task as already existing; no violation", {
+  given,
+  when: (w) => answered(w, { result: "rejected", rejection: { kind: "already-exists" } }),
+  then: () => [],
+});
 
 export const rejectAddNotFound = scenario(
   "Reject the task as not-found although its input has no ref; addTask cannot answer with that kind, so test reports unlistedRejectionKind",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    mock(adder, [todo.addTask, { result: "rejected", rejection: { kind: "not-found" } }]),
-  ],
+  {
+    given,
+    when: (w) => answered(w, { result: "rejected", rejection: { kind: "not-found" } }),
+    then: () => [],
+  },
 );
 
 export const rejectUnknownReason = scenario(
-  "Reject the task with the reason long; long is not a requires of addTask, so test reports unlistedRejectionReason",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    mock(adder, [todo.addTask, { result: "rejected", rejection: { kind: "requires", reason: "long" } }]),
-  ],
+  "Reject the task with the reason long; long is not a requires of addTask, so test reports unlistedRejectionReason, and the title meets the assumed requires short, so it also reports rejectedAssumedRequires",
+  {
+    given,
+    when: (w) => answered(w, { result: "rejected", rejection: { kind: "requires", reason: "long" } }),
+    then: () => [],
+  },
 );

@@ -1,32 +1,79 @@
-import { at, mock, receive, scenario } from "@natsuzora-dev/tazuna";
+import { external } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
-import { reminder } from "./alarm.ts";
+import { scenario } from "./alarm.ts";
 
-const added = mock(reminder, [calendar.addReminder, { result: "accepted", output: { reminderId: "r-1" } }]);
-
-export const addOnce = scenario("The calendar adds the reminder once; no violation", [
-  at("2026-10-25T09:00:00+09:00"),
-  added,
-  receive(calendar.reminderAdded, { reminderId: "r-1" }, { resultOf: added }),
-]);
+export const addOnce = scenario("The calendar adds the reminder once; no violation", {
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+  when: (w) => {
+    w.net.deliver(w.begin.request(calendar.addReminder));
+    w.net.deliver(
+      w.peer.calendar.answer(w.begin.request(calendar.addReminder), {
+        result: "accepted",
+        output: { reminderId: "r-1" },
+      }),
+    );
+    w.net.deliver(
+      w.peer.calendar.emit(
+        calendar.reminderAdded,
+        { reminderId: "r-1" },
+        { resultOf: w.begin.request(calendar.addReminder) },
+      ),
+    );
+  },
+  then: () => [],
+});
 
 export const addTwice = scenario(
   "Receive reminderAdded twice for one addReminder; this breaks the assumed ensures once, so test reports failedAssumedEnsures",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    added,
-    receive(calendar.reminderAdded, { reminderId: "r-1" }, { resultOf: added }),
-    receive(calendar.reminderAdded, { reminderId: "r-1" }, { resultOf: added }),
-  ],
+  {
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    when: (w) => {
+      w.net.deliver(w.begin.request(calendar.addReminder));
+      w.net.deliver(
+        w.peer.calendar.answer(w.begin.request(calendar.addReminder), {
+          result: "accepted",
+          output: { reminderId: "r-1" },
+        }),
+      );
+      w.net.deliver(
+        w.peer.calendar.emit(
+          calendar.reminderAdded,
+          { reminderId: "r-1" },
+          { resultOf: w.begin.request(calendar.addReminder) },
+        ),
+      );
+      w.net.deliver(
+        w.peer.calendar.emit(
+          calendar.reminderAdded,
+          { reminderId: "r-1" },
+          { resultOf: w.begin.request(calendar.addReminder) },
+        ),
+      );
+    },
+    then: () => [],
+  },
 );
-
-const addedOther = mock(reminder, [calendar.addReminder, { result: "accepted", output: { reminderId: "r-1" } }]);
 
 export const addOther = scenario(
   "Receive reminderAdded with another id than the answer to addReminder; this breaks the assumed ensures answeredId, so test reports failedAssumedEnsures",
-  [
-    at("2026-10-25T09:00:00+09:00"),
-    addedOther,
-    receive(calendar.reminderAdded, { reminderId: "r-2" }, { resultOf: addedOther }),
-  ],
+  {
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    when: (w) => {
+      w.net.deliver(w.begin.request(calendar.addReminder));
+      w.net.deliver(
+        w.peer.calendar.answer(w.begin.request(calendar.addReminder), {
+          result: "accepted",
+          output: { reminderId: "r-1" },
+        }),
+      );
+      w.net.deliver(
+        w.peer.calendar.emit(
+          calendar.reminderAdded,
+          { reminderId: "r-2" },
+          { resultOf: w.begin.request(calendar.addReminder) },
+        ),
+      );
+    },
+    then: () => [],
+  },
 );

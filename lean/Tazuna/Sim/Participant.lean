@@ -1,4 +1,4 @@
-import Tazuna.Service.Run
+import Tazuna.Service.Restart
 
 /-!
 A running service of a simulation is a participant: the one-service semantics (Service) take each message it receives.
@@ -49,8 +49,8 @@ def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender id : String
   match body with
   | .command n input => send st fs s (name n) given input
   | .query n input => call st fs s (name n) given input
-  | .subscribe n input => subscribe st fs s (name n) given input none
-  | .unsubscribe to => endSubscription st fs s (.id (receivedId sender to))
+  | .subscribe n input => subscribe st fs s (name n) given input
+  | .unsubscribe to => endSubscription st fs s (receivedId sender to)
   | .answer to a => match sentId? st.service to with
     | some own => answerIn st fs s own a
     | none => pure s

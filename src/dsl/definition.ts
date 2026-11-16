@@ -311,12 +311,11 @@ export interface Screen<I extends Shape = Shape, O extends Shape = Shape, Cs ext
 // biome-ignore lint/suspicious/noExplicitAny: a screen of any shape
 export type AnyScreen = Screen<any, any, any>;
 
-/** A contract: its members without `states`, its start states, and the object that `contract()` returned. */
+/** A contract: its members and the object that `contract()` returned. */
 export interface Contract {
   readonly service: string;
   readonly place: Place;
   readonly members: Readonly<Record<string, unknown>>;
-  readonly states: Readonly<Record<string, readonly unknown[]>>;
   readonly value: object;
 }
 
