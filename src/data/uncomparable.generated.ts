@@ -107,8 +107,8 @@ export type Uncomparable =
       };
     }
   /**
-   * The comparison takes more steps than verify searches: of the window after the `in` lines `line` and `snapshotLine`
-   * (1 for the first window), or of those `in` lines.
+   * The comparison takes more steps than verify searches, over all its tries: of the window after the `in` lines `line`
+   * and `snapshotLine` (1 for the first window), or of those `in` lines.
    */
   | {
       readonly kind: "Uncomparable.searchLimit";

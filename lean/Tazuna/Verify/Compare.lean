@@ -16,10 +16,13 @@ This module compares an implementation trace with a snapshot.
 - Alike requests of one window bind their ids when a later line names one of them.
 - The order of paired lines must follow the snapshot's `after` (mustFollow). Verify reports an `after` id that names no
   earlier `out` line of the same window, and compares nothing.
-- When the search finds no pairing, verify pairs the lines one by one to report the differences, and reports the uses
-  of a value that stands for two values when no line differs. A search that takes more than `searchLimit` steps is
-  reported, and nothing later is compared.
 - Each `in` line is compared with the `in` line at the same position. After a difference, nothing later is compared.
+- A window's search may pair a value in more than one way, and a later line decides which. So a search across windows
+  first looks for a pairing of every window and `in` line, trying the other pairings of earlier ones when a later one
+  has none (guideFor). The windows are then compared one by one, keeping to its renamings when it found one.
+- When a window has no pairing, verify pairs the lines one by one to report the differences, and reports the uses of a
+  value that stands for two values when no line differs. A search that takes more than `searchLimit` steps in one
+  window or pair of `in` lines, over all its tries, is reported, and nothing later is compared.
 - Verify reports the first malformed line of the trace, and compares neither its window nor any later line.
 -/
 
@@ -310,6 +313,20 @@ def Ids.join (ids : Ids) (window : Nat) (l : Line) (u : Use) : Option Ids :=
 def Ids.uses (ids : Ids) : List Use :=
   ids.bound ++ ids.blocks.flatMap fun b => if b.uses.length == 1 then b.uses else []
 
+/--
+The renamings of a pairing of every window that the search across windows found (guideFor). A search that keeps to them
+pairs no value that they pair with another value.
+-/
+structure Guide where
+  ids : Renaming := []
+  keys : Renaming := []
+
+/-- Whether `u` pairs no value that `r` pairs with another value. -/
+def Renaming.allows (r : Renaming) (u : Use) : Bool :=
+  match r.traceOf? u.snapshot with
+  | some t => t == u.trace
+  | none => !r.takes u.trace
+
 structure Ctx where
   /-- The line of each snapshot id. The later line wins (JS `new Map`). -/
   requests : List (String × Line)
@@ -319,6 +336,8 @@ structure Ctx where
   placed : List Nat
   /-- Whether a line is an event that no contract lists, which verify does not compare. -/
   internal : Line → Bool
+  /-- The renamings that each search keeps to. -/
+  guide : Guide := {}
 
 /-- An open subscription: its subscribe line and the subscribed query's name. -/
 structure Subscription where
@@ -375,6 +394,10 @@ structure Pairing where
   keys : Renaming
   pairs : List (Out × Out) := []
   subscriptions : List (String × String) := []
+
+/-- Whether the uses that pairing `q` adds to pairing `p` keep to the guide. -/
+def Guide.allows (g : Guide) (p q : Pairing) : Bool :=
+  (q.ids.bound.drop p.ids.bound.length).all g.ids.allows && (q.keys.drop p.keys.length).all g.keys.allows
 
 /-- Whether pairing `s` with `t` keeps the snapshot's `after` order among the pairs. -/
 def ordered (c : Ctx) (pairs : List (Out × Out)) (s t : Out) : Bool :=
@@ -437,7 +460,7 @@ def pairingKey (sc : Scope) (s t : Out) : Value :=
 The ways to meet goal `g`, each with the goals left. Candidates with the same pairingKey give the same result in the
 same pairing, so only the first of them is tried.
 -/
-def expand (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List Goal × Pairing) :=
+def ways (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List Goal × Pairing) :=
   match g with
   | .out s =>
     (distinct (pairingKey sc s) (candidates sc p s)).filterMap fun t =>
@@ -454,6 +477,10 @@ def expand (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List
       (distinct (fun (y, _) => y.flatten) ys.zipIdx).filterMap fun (y, i) =>
         (walk sc.declared line snapshotLine x y p.keys).map fun (keys, goals) =>
           (goals ++ [.bag line snapshotLine more (ys.eraseIdx i)] ++ rest, { p with keys })
+
+/-- The ways to meet goal `g` that keep to the guide. -/
+def expand (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List Goal × Pairing) :=
+  (ways sc g rest p).filter fun (_, q) => sc.ctx.guide.allows p q
 
 inductive Outcome where
   | paired (p : Pairing)
@@ -478,14 +505,14 @@ def rank (l : Line) : Nat :=
 def byRank (ss : List Out) : List Out :=
   [0, 1, 2].flatMap fun r => ss.filter (rank ·.line == r)
 
-/--
-The pairing of all `goals`. It is unpaired at once when the counts differ or a goal has no candidate at the start.
--/
+/-- Whether a search may pair all `goals`: the counts agree, and each goal has a way at the start. -/
+def pairable (sc : Scope) (goals : List Goal) (start : Pairing) : Bool :=
+  (goals.filter fun | .out _ => true | _ => false).length == sc.traceOut.length &&
+    sc.openSnapshot.length == sc.openTrace.length && goals.all fun g => !(expand sc g [] start).isEmpty
+
+/-- The pairing of all `goals`, unpaired at once unless they are pairable. -/
 def pairAll (sc : Scope) (goals : List Goal) (start : Pairing) : Outcome :=
-  let lines := goals.filter fun | .out _ => true | _ => false
-  if lines.length != sc.traceOut.length || sc.openSnapshot.length != sc.openTrace.length ||
-      goals.any (fun g => (expand sc g [] start).isEmpty) then .unpaired
-  else search sc searchLimit [(goals, start)]
+  if pairable sc goals start then search sc searchLimit [(goals, start)] else .unpaired
 
 structure St where
   findings : List Mismatch := []
@@ -660,6 +687,31 @@ def follow (open_ : List (String × Subscription)) (lines : List Out) : List (St
     | .unsubscribe _ _ to => o.filter (·.1 != to)
     | _ => o
 
+/-- The state in which the search of a window with `out` lines `specOut` and `traceOut` starts. -/
+def enter (st : St) (specOut traceOut : List Out) : St :=
+  { st with findings := []
+            declared := specOut.foldl (fun d s => d ++ s.line.created.getD []) st.declared
+            window := st.window + 1
+            openSnapshot := follow st.openSnapshot (specOut.filter (·.line.isSubscribing))
+            openTrace := follow st.openTrace (traceOut.filter (·.line.isSubscribing)) }
+
+/-- The scope of a window's search, with the window's implementation `out` lines `traceOut`. -/
+def scopeOf (c : Ctx) (st : St) (traceOut : List Out) : Scope :=
+  { ctx := c, declared := st.declared, window := st.window,
+    traceOut := traceOut.filter fun t => !t.line.isSubscribing && !c.internal t.line,
+    openSnapshot := st.openSnapshot, openTrace := st.openTrace }
+
+/-- The snapshot `out` lines that a window's search pairs. -/
+def comparedOut (c : Ctx) (specOut : List Out) : List Out :=
+  specOut.filter fun s => !s.line.isSubscribing && !c.internal s.line
+
+def goalsOf (c : Ctx) (st : St) (specOut : List Out) : List Goal :=
+  (byRank (comparedOut c specOut)).map .out ++ st.openSnapshot.map (.subscription ·.1)
+
+/-- The state after a window whose search in scope `sc` found `p`. -/
+def St.paired (st : St) (sc : Scope) (p : Pairing) : St :=
+  { st with ids := p.ids, keys := p.keys, subscriptionIds := explain.subscribed sc st.subscriptionIds p.subscriptions }
+
 /--
 Compares the `out` lines between two `in` lines, which follow the `in` lines `missingAt` and `snapshotAt`. It returns
 the violation when the search stops at `searchLimit`.
@@ -667,26 +719,16 @@ the violation when the search stops at `searchLimit`.
 def compareWindow (allSpecOut allTraceOut : List Out) (missingAt snapshotAt : Nat) :
     CompareM (Option Uncomparable) := do
   let c ← read
-  modify fun st =>
-    { st with declared := allSpecOut.foldl (fun d s => d ++ s.line.created.getD []) st.declared
-              window := st.window + 1
-              openSnapshot := follow st.openSnapshot (allSpecOut.filter (·.line.isSubscribing))
-              openTrace := follow st.openTrace (allTraceOut.filter (·.line.isSubscribing)) }
+  modify (enter · allSpecOut allTraceOut)
   let st ← get
-  let specOut := allSpecOut.filter fun s => !s.line.isSubscribing && !c.internal s.line
-  let sc : Scope := {
-    ctx := c, declared := st.declared, window := st.window,
-    traceOut := allTraceOut.filter fun t => !t.line.isSubscribing && !c.internal t.line,
-    openSnapshot := st.openSnapshot, openTrace := st.openTrace }
-  let goals := (byRank specOut).map .out ++ st.openSnapshot.map (.subscription ·.1)
-  match pairAll sc goals { ids := st.ids, keys := st.keys } with
+  let sc := scopeOf c st allTraceOut
+  match pairAll sc (goalsOf c st allSpecOut) { ids := st.ids, keys := st.keys } with
   | .paired p =>
-    set { st with ids := p.ids, keys := p.keys
-                  subscriptionIds := explain.subscribed sc st.subscriptionIds p.subscriptions }
+    set (st.paired sc p)
     pure none
   | .limited => pure (some (.searchLimit missingAt snapshotAt))
   | .unpaired =>
-    explain sc specOut missingAt
+    explain sc (comparedOut c allSpecOut) missingAt
     pure none
 
 /-- Whether answer `t` answers the request that answer `s` answers, through a like subscription or the ids. -/
@@ -698,13 +740,13 @@ def answersPlaced (st : St) (s t : Out) : Option Ids :=
     | none => st.ids.useIds t.index s.index (some snapshotTo) (some to)
   | _, _ => none
 
-/-- The comparison of two `in` lines: the renamings under which they are the same. -/
-def sameInput (sc : Scope) (st : St) (s t : Out) : Outcome :=
+/-- The pairing of two `in` lines apart from the elements of bags, and the bags left to pair. -/
+def inputStart (st : St) (s t : Out) : Option (List Goal × Pairing) :=
   let (sl, tl) := (s.line, t.line)
-  if sl.body.type != tl.body.type || sl.body.name? != tl.body.name? || !sameTime sl tl then .unpaired
+  if sl.body.type != tl.body.type || sl.body.name? != tl.body.name? || !sameTime sl tl then none
   else
     match st.ids.use (s.idUse t) with
-    | none => .unpaired
+    | none => none
     | some ids =>
       let st := { st with ids }
       let placed : Option Ids :=
@@ -714,14 +756,19 @@ def sameInput (sc : Scope) (st : St) (s t : Out) : Outcome :=
         | .answer .. => answersPlaced st s t
         | _ => ids.useIds t.index s.index sl.body.resultOf? tl.body.resultOf?
       match placed with
-      | none => .unpaired
+      | none => none
       | some ids =>
         match sl.body with
-        | .time .. | .restart .. | .unsubscribe .. => .paired { ids, keys := st.keys }
+        | .time .. | .restart .. | .unsubscribe .. => some ([], { ids, keys := st.keys })
         | _ =>
-          match walkContent st.declared t.index s.index sl.content tl.content st.keys with
-          | none => .unpaired
-          | some (keys, goals) => search sc searchLimit [(goals, { ids, keys })]
+          (walkContent st.declared t.index s.index sl.content tl.content st.keys).map fun (keys, goals) =>
+            (goals, { ids, keys })
+
+/-- The comparison of two `in` lines: the renamings under which they are the same. -/
+def sameInput (sc : Scope) (st : St) (s t : Out) : Outcome :=
+  match inputStart st s t with
+  | none => .unpaired
+  | some (goals, p) => search sc searchLimit [(goals, p)]
 
 def runWindow (c : Ctx) (st : St) (specOut traceOut : List Out) (missingAt snapshotAt : Nat) :
     List Mismatch × Option Uncomparable × St :=
@@ -783,6 +830,91 @@ def compareInputs (c : Ctx) (lineCount : Nat) (malformed : Option Nat) (expected
 termination_by 2 * rest.length + 1
 
 end
+
+/-- A part of the comparison that one search pairs: the `out` lines of a window, or two `in` lines. -/
+inductive Stage where
+  /-- The `out` lines of a window that follows the `in` lines `missingAt` and `snapshotAt`. -/
+  | outs (specOut traceOut : List Out) (missingAt snapshotAt : Nat)
+  | input (s t : Out)
+
+/-- The violation when the search of the stage takes more than `searchLimit` steps. -/
+def Stage.limited : Stage → Uncomparable
+  | .outs _ _ missingAt snapshotAt => .searchLimit missingAt snapshotAt
+  | .input s t => .searchLimit t.index s.index
+
+/-- The stages of compareFrom's windows, up to an `in` line that only one side has. -/
+def stagesOf : List (Option Window × Option Window × Option Out × Option Out) → List Stage
+  | [] => []
+  | (expected, actual, previous, previousSnapshot) :: rest =>
+    .outs ((expected.map (·.before)).getD []) ((actual.map (·.before)).getD []) ((previous.map (·.index)).getD 1)
+        ((previousSnapshot.map (·.index)).getD 1) ::
+      match expected.bind (·.input), actual.bind (·.input) with
+      | some s, some t => .input s t :: stagesOf rest
+      | _, _ => []
+
+/-- A frame of the search across stages: the goals left of stage number `stage`, and the pairing so far. -/
+structure Frame where
+  goals : List Goal
+  pairing : Pairing
+  scope : Scope
+  /-- The state before the stage. -/
+  st : St
+  stage : Nat
+
+/-- The frame that starts the stage, number `k`, in state `st`, unless the stage has no pairing at once. -/
+def Stage.start (c : Ctx) (k : Nat) (st : St) : Stage → Option Frame
+  | .outs specOut traceOut _ _ =>
+    let st := enter st specOut traceOut
+    let scope := scopeOf c st traceOut
+    let goals := goalsOf c st specOut
+    let pairing : Pairing := { ids := st.ids, keys := st.keys }
+    if pairable scope goals pairing then some { goals, pairing, scope, st, stage := k } else none
+  | .input s t =>
+    (inputStart st s t).map fun (goals, pairing) => { goals, pairing, scope := inputScope c st, st, stage := k }
+
+/-- The state after the stage of `f`, whose goals are met. -/
+def Frame.commit (f : Frame) : Stage → St
+  | .outs .. => f.st.paired f.scope f.pairing
+  | .input .. => { f.st with ids := f.pairing.ids, keys := f.pairing.keys }
+
+/--
+Depth-first search over the frames of `stack` for a pairing of every stage, with the steps left of each stage in
+`left`. A step expands a goal or starts a stage, so `fuel` covers every step. It returns the renamings of the pairing,
+or no guide when there is no pairing.
+-/
+def searchAcross (c : Ctx) (stages : List Stage) : Nat → List Nat → List Frame → Except Uncomparable Guide
+  | 0, _, _ | _, _, [] => .ok {}
+  | fuel + 1, left, f :: stack =>
+    match f.goals, stages[f.stage]? with
+    | _, none => .ok {}
+    | g :: rest, some stage =>
+      match left[f.stage]? with
+      | some (n + 1) =>
+        searchAcross c stages fuel (left.set f.stage n)
+          ((expand f.scope g rest f.pairing).map (fun (goals, pairing) => { f with goals, pairing }) ++ stack)
+      | _ => .error stage.limited
+    | [], some stage =>
+      let st := f.commit stage
+      let k := f.stage + 1
+      match stages[k]?, left[k]? with
+      | none, _ => .ok { ids := st.ids.bound, keys := st.keys }
+      | some next, some (n + 1) => searchAcross c stages fuel (left.set k n) ((next.start c k st).toList ++ stack)
+      | some next, _ => .error next.limited
+
+/--
+The guide of the comparison of the windows: the renamings of a pairing of every window and `in` line, found by trying
+the other pairings of earlier stages when a later stage has none, or no guide when there is no such pairing. Each stage
+has `searchLimit` steps, its start included, over all the times that the search returns to it; the violation names the
+stage that runs out.
+-/
+def guideFor (c : Ctx) (windows : List (Option Window × Option Window × Option Out × Option Out)) :
+    Except Uncomparable Guide :=
+  let stages := stagesOf windows
+  match stages with
+  | [] => .ok {}
+  | first :: _ =>
+    searchAcross c stages (stages.length * (searchLimit + 1))
+      ((stages.map fun _ => searchLimit + 1).set 0 searchLimit) (first.start c 0 {}).toList
 
 /-- The latest of the earlier lines with the id, as an index counted from 0. -/
 def earlierWithId (earlier : List Out) (id : String) : Option Nat :=
@@ -847,6 +979,8 @@ def compare (snapshot lines : List (Option Line)) (malformed : Option Nat) (inte
     follows := mustFollow snapshot,
     placed := placedLines snapshot,
     internal }
-  compareFrom ctx lines.length malformed windows {}
+  match guideFor ctx windows with
+  | .ok guide => compareFrom { ctx with guide } lines.length malformed windows {}
+  | .error u => { findings := [.uncomparable u], bindings := [] }
 
 end Tazuna.Verify

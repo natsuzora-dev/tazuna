@@ -365,6 +365,56 @@ type Outcome =
 
 type Frame = readonly [readonly Goal[], Pairing];
 
+/**
+ * The renamings of a pairing of every window that the search across windows found (guideFor). A search that keeps to
+ * them pairs no value that they pair with another value.
+ */
+interface Guide {
+  readonly ids: Renaming;
+  readonly keys: Renaming;
+}
+
+/** Returns whether `u` pairs no value that `r` pairs with another value. */
+const allows = (r: Renaming, u: Use): boolean => {
+  const t = traceOf(r, u.snapshot);
+  return t !== undefined ? t === u.trace : !takes(r, u.trace);
+};
+
+/** Returns whether the uses that pairing `q` adds to pairing `p` keep to the guide. */
+const keepsTo = (g: Guide, p: Pairing, q: Pairing): boolean =>
+  q.ids.bound.slice(p.ids.bound.length).every((u) => allows(g.ids, u)) &&
+  q.keys.slice(p.keys.length).every((u) => allows(g.keys, u));
+
+/** The renamings and subscriptions that a comparison carries from one window to the next. */
+interface State {
+  readonly ids: Ids;
+  readonly keys: Renaming;
+  /** Each paired snapshot subscription with the implementation subscriptions paired with alike subscriptions. */
+  readonly subscriptionIds: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+/** A part of the comparison that one search pairs: the `out` lines of a window, or two `in` lines. */
+type Stage =
+  | {
+      readonly kind: "outs";
+      readonly specOut: readonly NumberedLine[];
+      readonly traceOut: readonly NumberedLine[];
+      readonly missingAt: number;
+      readonly snapshotAt: number;
+    }
+  | { readonly kind: "input"; readonly s: NumberedLine; readonly t: NumberedLine };
+
+/** A frame of the search across stages: the goals left of stage number `stage`, and the pairing so far. */
+interface StageFrame {
+  readonly goals: readonly Goal[];
+  readonly pairing: Pairing;
+  readonly scope: Scope;
+  /** The state before the stage, and the scope of the window that the stage is part of. */
+  readonly st: State;
+  readonly window: Scope;
+  readonly stage: number;
+}
+
 /** Returns the elements of `xs` whose key no earlier element has. */
 function distinct<T>(key: (x: T) => string, xs: readonly T[]): T[] {
   const seen = new Set<string>();
@@ -422,11 +472,15 @@ export function compare(
   const requestsById = new Map(snapshot.flatMap((l) => (l === undefined ? [] : [[l.id, l] as const])));
   let ids: Ids = { bound: [], blocks: [] };
   let keys: Renaming = [];
-  let window = 0;
-  const declared = new Set<string>();
-  const openInSnapshot: Open = new Subscriptions();
-  const openInTrace: Open = new Subscriptions();
-  const subscriptionIds = new Map<string, Set<string>>();
+  let subscriptionIds: State["subscriptionIds"] = new Map();
+  const outside: Scope = {
+    declared: new Set(),
+    window: 0,
+    traceOut: [],
+    openSnapshot: new Subscriptions(),
+    openTrace: new Subscriptions(),
+  };
+  let guide: Guide = { ids: [], keys: [] };
   const reportedMissing = new Set<string>();
   const reportedUnexpected = new Set<string>();
   const bindings = () => new Map(keys.map((u) => [u.snapshot, u.trace]));
@@ -521,7 +575,7 @@ export function compare(
   const expand = (sc: Scope, g: Goal, rest: readonly Goal[], p: Pairing): Frame[] => {
     const frames: Frame[] = [];
     const add = (found: readonly [Pairing, readonly Goal[]] | undefined, after: readonly Goal[] = []) => {
-      if (found !== undefined) frames.push([[...found[1], ...after, ...rest], found[0]]);
+      if (found !== undefined && keepsTo(guide, p, found[0])) frames.push([[...found[1], ...after, ...rest], found[0]]);
     };
     if (g.kind === "out")
       for (const t of distinct((t) => pairingKey(g.s, t), candidates(sc, p, g.s))) add(pairOut(sc, p, g.s, t));
@@ -558,13 +612,15 @@ export function compare(
     }
   };
 
-  /** Returns the pairing of all `goals`, unpaired at once when the counts differ or a goal has no candidate at the start. */
+  /** Returns whether a search may pair all `goals`: the counts agree, and each goal has a way at the start. */
+  const pairable = (sc: Scope, goals: readonly Goal[], start: Pairing): boolean =>
+    goals.filter((g) => g.kind === "out").length === sc.traceOut.length &&
+    sc.openSnapshot.entries().length === sc.openTrace.entries().length &&
+    goals.every((g) => expand(sc, g, [], start).length > 0);
+
+  /** Returns the pairing of all `goals`, unpaired at once unless they are pairable. */
   const pairAll = (sc: Scope, goals: readonly Goal[], start: Pairing): Outcome =>
-    goals.filter((g) => g.kind === "out").length !== sc.traceOut.length ||
-    sc.openSnapshot.entries().length !== sc.openTrace.entries().length ||
-    goals.some((g) => expand(sc, g, [], start).length === 0)
-      ? { kind: "unpaired" }
-      : search(sc, [[goals, start]]);
+    pairable(sc, goals, start) ? search(sc, [[goals, start]]) : { kind: "unpaired" };
 
   const valueMismatch = (s: TraceLine, t: NumberedLine): Mismatch | undefined => {
     const at = t.at;
@@ -656,14 +712,23 @@ export function compare(
     return found.kind === "paired" ? found.pairing.keys : undefined;
   };
 
-  /** Adds to each paired snapshot subscription the implementation subscriptions paired with alike subscriptions. */
-  const subscribe = (sc: Scope, pairs: readonly (readonly [string, string])[]) => {
+  /**
+   * Returns `known` with each paired snapshot subscription given the implementation subscriptions paired with alike
+   * subscriptions.
+   */
+  const subscribed = (
+    sc: Scope,
+    known: State["subscriptionIds"],
+    pairs: readonly (readonly [string, string])[],
+  ): State["subscriptionIds"] => {
     const lineOf = (s: string) => sc.openSnapshot.get(s)?.line as TraceLine;
+    const all = new Map(known);
     for (const [s] of pairs) {
-      const found = subscriptionIds.get(s) ?? new Set();
+      const found = new Set(all.get(s));
       for (const [other, t] of pairs) if (alike(lineOf(s), lineOf(other))) found.add(t);
-      subscriptionIds.set(s, found);
+      all.set(s, found);
     }
+    return all;
   };
 
   /**
@@ -693,7 +758,7 @@ export function compare(
       };
       const usesOf = (t: NumberedLine) => {
         const [expectedValue, actualValue] = compared(s.line, t.line);
-        return freeContent(declared, t.at, s.at, expectedValue, actualValue);
+        return freeContent(sc.declared, t.at, s.at, expectedValue, actualValue);
       };
       const equal = (t: NumberedLine) => pairIds(sc, ids, s, t) !== undefined && keysOf(t) !== undefined;
       const t =
@@ -739,7 +804,7 @@ export function compare(
         .entries()
         .filter(([tid, t]) => !subscriptions.some(([, u]) => u === tid) && t.line.name === s.line.name);
       const keysOf = (t: typeof s) => contentKeys(sc, t.at, s.at, contentOf(s.line), contentOf(t.line), p);
-      const usesOf = (t: typeof s) => freeContent(declared, t.at, s.at, contentOf(s.line), contentOf(t.line));
+      const usesOf = (t: typeof s) => freeContent(sc.declared, t.at, s.at, contentOf(s.line), contentOf(t.line));
       const chosen = cands.find(([, t]) => keysOf(t) !== undefined) ?? cands.find(([, t]) => usesOf(t) !== undefined);
       if (chosen !== undefined) {
         const [tid, t] = chosen;
@@ -774,7 +839,7 @@ export function compare(
           data: { subject: subjectOf(t.line), content: plain(contentOf(t.line)) },
         });
       }
-    subscribe(sc, subscriptions);
+    subscriptionIds = subscribed(sc, subscriptionIds, subscriptions);
     for (const { spec: s, trace: t } of pairs) {
       const before = pairs.find((p) => p.trace.at > t.at && follows.get(s.at)?.has(p.spec.at) === true);
       if (before !== undefined)
@@ -804,46 +869,58 @@ export function compare(
     else for (const uses of found) problems.push({ kind: "Mismatch.renaming", definition: null, data: { uses } });
   };
 
-  const follow = (open: Open, lines: readonly NumberedLine[]) => {
+  const follow = (before: Open, lines: readonly NumberedLine[]): Open => {
+    const open = before.clone((v) => v);
     for (const o of lines)
       if (o.line.type === "subscribe") open.subscribe(o.line.id, { line: o.line, at: o.at });
       else if (o.line.type === "unsubscribe") open.unsubscribe(o.line.to);
+    return open;
   };
   const isSubscribing = (l: TraceLine) => l.type === "subscribe" || l.type === "unsubscribe";
 
+  /** Returns the scope of the search of a window with `out` lines `allSpecOut` and `allTraceOut`, after `before`. */
+  const enter = (before: Scope, allSpecOut: readonly NumberedLine[], allTraceOut: readonly NumberedLine[]): Scope => ({
+    declared: new Set([...before.declared, ...allSpecOut.flatMap((s) => s.line.created ?? [])]),
+    window: before.window + 1,
+    traceOut: allTraceOut.filter((t) => !isSubscribing(t.line) && !internal(t.line)),
+    openSnapshot: follow(
+      before.openSnapshot,
+      allSpecOut.filter((s) => isSubscribing(s.line)),
+    ),
+    openTrace: follow(
+      before.openTrace,
+      allTraceOut.filter((t) => isSubscribing(t.line)),
+    ),
+  });
+
+  /** Returns the snapshot `out` lines that a window's search pairs. */
+  const comparedOut = (allSpecOut: readonly NumberedLine[]) =>
+    allSpecOut.filter((s) => !isSubscribing(s.line) && !internal(s.line));
+
+  const goalsOf = (sc: Scope, allSpecOut: readonly NumberedLine[]): Goal[] => [
+    ...byRank(comparedOut(allSpecOut)).map((s): Goal => ({ kind: "out", s })),
+    ...sc.openSnapshot.entries().map(([id]): Goal => ({ kind: "subscription", id })),
+  ];
+
+  /** Returns the scope of the search of an `in` line's bags, in the window of scope `sc`. */
+  const inputScope = (sc: Scope): Scope => ({
+    ...sc,
+    traceOut: [],
+    openSnapshot: new Subscriptions(),
+    openTrace: new Subscriptions(),
+  });
+
   /**
-   * Compares the `out` lines between two `in` lines, which follow the `in` lines `missingAt` and `snapshotAt`. Returns
-   * the violation when the search stops at searchLimit.
+   * Compares the `out` lines between two `in` lines, which follow the `in` lines `missingAt` and `snapshotAt`, in the
+   * window's scope `sc`. Returns the violation when the search stops at searchLimit.
    */
   const compareWindow = (
+    sc: Scope,
     allSpecOut: readonly NumberedLine[],
-    allTraceOut: readonly NumberedLine[],
     missingAt: number,
     snapshotAt: number,
   ): Uncomparable | undefined => {
-    for (const s of allSpecOut) for (const v of s.line.created ?? []) declared.add(v);
-    window += 1;
-    follow(
-      openInSnapshot,
-      allSpecOut.filter((s) => isSubscribing(s.line)),
-    );
-    follow(
-      openInTrace,
-      allTraceOut.filter((t) => isSubscribing(t.line)),
-    );
-    const specOut = allSpecOut.filter((s) => !isSubscribing(s.line) && !internal(s.line));
-    const sc: Scope = {
-      declared,
-      window,
-      traceOut: allTraceOut.filter((t) => !isSubscribing(t.line) && !internal(t.line)),
-      openSnapshot: openInSnapshot,
-      openTrace: openInTrace,
-    };
-    const goals: Goal[] = [
-      ...byRank(specOut).map((s): Goal => ({ kind: "out", s })),
-      ...openInSnapshot.entries().map(([id]): Goal => ({ kind: "subscription", id })),
-    ];
-    const found = pairAll(sc, goals, { ids, keys, pairs: [], subscriptions: [] });
+    const found = pairAll(sc, goalsOf(sc, allSpecOut), { ids, keys, pairs: [], subscriptions: [] });
     if (found.kind === "limited")
       return {
         kind: "Uncomparable.searchLimit",
@@ -851,62 +928,156 @@ export function compare(
         line: missingAt,
         data: { snapshotLine: snapshotAt },
       };
-    if (found.kind === "unpaired") explain(sc, specOut, missingAt);
+    if (found.kind === "unpaired") explain(sc, comparedOut(allSpecOut), missingAt);
     else {
       ids = found.pairing.ids;
       keys = found.pairing.keys;
-      subscribe(sc, found.pairing.subscriptions);
+      subscriptionIds = subscribed(sc, subscriptionIds, found.pairing.subscriptions);
     }
     return undefined;
   };
 
   /** Returns whether answer `t` answers the request that answer `s` answers, through a like subscription or the ids. */
-  const answersPlaced = (current: Ids, s: NumberedLine, t: NumberedLine): Ids | undefined => {
+  const answersPlaced = (st: State, s: NumberedLine, t: NumberedLine): Ids | undefined => {
     if (s.line.type !== "answer" || t.line.type !== "answer") return undefined;
-    const subscribed = subscriptionIds.get(s.line.to);
-    if (subscribed !== undefined) return subscribed.has(t.line.to) ? current : undefined;
-    return useIds(current, t.at, s.at, s.line.to, t.line.to);
+    const subscribedTo = st.subscriptionIds.get(s.line.to);
+    if (subscribedTo !== undefined) return subscribedTo.has(t.line.to) ? st.ids : undefined;
+    return useIds(st.ids, t.at, s.at, s.line.to, t.line.to);
   };
 
-  /** Returns the comparison of two `in` lines: the renamings under which they are the same. */
-  const sameInput = (s: NumberedLine, t: NumberedLine): Outcome => {
+  /**
+   * Returns the pairing of two `in` lines apart from the elements of bags, and the bags left to pair, in state `st` and
+   * the window's scope `sc`.
+   */
+  const inputStart = (
+    sc: Scope,
+    st: State,
+    s: NumberedLine,
+    t: NumberedLine,
+  ): readonly [readonly Goal[], Pairing] | undefined => {
     const [sl, tl] = [s.line, t.line];
-    if (sl.type !== tl.type || nameOf(sl) !== nameOf(tl) || !sameTime(sl, tl)) return { kind: "unpaired" };
-    const withId = use(ids, idUse(s, t));
-    if (withId === undefined) return { kind: "unpaired" };
+    if (sl.type !== tl.type || nameOf(sl) !== nameOf(tl) || !sameTime(sl, tl)) return undefined;
+    const withId = use(st.ids, idUse(s, t));
+    if (withId === undefined) return undefined;
     const placed =
       sl.type === "time" || sl.type === "restart"
         ? withId
         : sl.type === "unsubscribe"
           ? useIds(withId, t.at, s.at, sl.to, toOf(tl))
           : sl.type === "answer"
-            ? answersPlaced(withId, s, t)
+            ? answersPlaced({ ...st, ids: withId }, s, t)
             : useIds(withId, t.at, s.at, resultOf(sl), resultOf(tl));
-    if (placed === undefined) return { kind: "unpaired" };
+    if (placed === undefined) return undefined;
     if (sl.type === "time" || sl.type === "restart" || sl.type === "unsubscribe")
-      return { kind: "paired", pairing: { ids: placed, keys, pairs: [], subscriptions: [] } };
-    const walked = walkContent(declared, t.at, s.at, contentOf(sl), contentOf(tl), keys);
-    if (walked === undefined) return { kind: "unpaired" };
-    const sc: Scope = {
-      declared,
-      window,
-      traceOut: [],
-      openSnapshot: new Subscriptions(),
-      openTrace: new Subscriptions(),
-    };
-    return search(sc, [[walked[1], { ids: placed, keys: walked[0], pairs: [], subscriptions: [] }]]);
+      return [[], { ids: placed, keys: st.keys, pairs: [], subscriptions: [] }];
+    const walked = walkContent(sc.declared, t.at, s.at, contentOf(sl), contentOf(tl), st.keys);
+    if (walked === undefined) return undefined;
+    return [walked[1], { ids: placed, keys: walked[0], pairs: [], subscriptions: [] }];
+  };
+
+  /** Returns the comparison of two `in` lines: the renamings under which they are the same. */
+  const sameInput = (sc: Scope, s: NumberedLine, t: NumberedLine): Outcome => {
+    const started = inputStart(sc, { ids, keys, subscriptionIds }, s, t);
+    return started === undefined ? { kind: "unpaired" } : search(inputScope(sc), [[started[0], started[1]]]);
   };
 
   const count = malformed === undefined ? Math.max(expected.length, actual.length) : actual.length - 1;
+  const at = (input: NumberedLine | undefined) => (input === undefined ? 1 : input.at);
+
+  /** The stages of the windows, up to an `in` line that only one side has. */
+  const stages: Stage[] = [];
+  for (let k = 0; k < count; k += 1) {
+    stages.push({
+      kind: "outs",
+      specOut: expected[k]?.before ?? [],
+      traceOut: actual[k]?.before ?? [],
+      missingAt: at(actual[k - 1]?.input),
+      snapshotAt: at(expected[k - 1]?.input),
+    });
+    const s = expected[k]?.input;
+    const t = actual[k]?.input;
+    if (s === undefined || t === undefined) break;
+    stages.push({ kind: "input", s, t });
+  }
+
+  const limitedAt = (stage: Stage): Uncomparable =>
+    stage.kind === "outs"
+      ? {
+          kind: "Uncomparable.searchLimit",
+          definition: null,
+          line: stage.missingAt,
+          data: { snapshotLine: stage.snapshotAt },
+        }
+      : { kind: "Uncomparable.searchLimit", definition: null, line: stage.t.at, data: { snapshotLine: stage.s.at } };
+
+  /** Returns the frame that starts stage number `k` in state `st`, unless the stage has no pairing at once. */
+  const start = (stage: Stage, k: number, st: State, window: Scope): StageFrame[] => {
+    if (stage.kind === "input") {
+      const started = inputStart(window, st, stage.s, stage.t);
+      return started === undefined
+        ? []
+        : [{ goals: started[0], pairing: started[1], scope: inputScope(window), st, window, stage: k }];
+    }
+    const sc = enter(window, stage.specOut, stage.traceOut);
+    const goals = goalsOf(sc, stage.specOut);
+    const pairing: Pairing = { ids: st.ids, keys: st.keys, pairs: [], subscriptions: [] };
+    return pairable(sc, goals, pairing) ? [{ goals, pairing, scope: sc, st, window: sc, stage: k }] : [];
+  };
+
+  /**
+   * Returns the guide of the comparison: the renamings of a pairing of every window and `in` line, found by trying the
+   * other pairings of earlier stages when a later stage has none, or no guide when there is no such pairing. Each stage
+   * has searchLimit steps, its start included, over all the times that the search returns to it; the violation names
+   * the stage that runs out.
+   */
+  const guideFor = (): Guide | Uncomparable => {
+    const none: Guide = { ids: [], keys: [] };
+    const first = stages[0];
+    if (first === undefined) return none;
+    const left = stages.map((_, k) => (k === 0 ? searchLimit : searchLimit + 1));
+    const stack = start(first, 0, { ids, keys, subscriptionIds }, outside);
+    for (;;) {
+      const f = stack.pop();
+      if (f === undefined) return none;
+      const stage = stages[f.stage] as Stage;
+      const [g, ...rest] = f.goals;
+      if (g !== undefined) {
+        if (left[f.stage] === 0) return limitedAt(stage);
+        left[f.stage] = (left[f.stage] as number) - 1;
+        stack.push(
+          ...expand(f.scope, g, rest, f.pairing)
+            .map(([goals, pairing]): StageFrame => ({ ...f, goals, pairing }))
+            .toReversed(),
+        );
+        continue;
+      }
+      const st: State =
+        stage.kind === "outs"
+          ? {
+              ids: f.pairing.ids,
+              keys: f.pairing.keys,
+              subscriptionIds: subscribed(f.scope, f.st.subscriptionIds, f.pairing.subscriptions),
+            }
+          : { ...f.st, ids: f.pairing.ids, keys: f.pairing.keys };
+      const k = f.stage + 1;
+      const next = stages[k];
+      if (next === undefined) return { ids: st.ids.bound, keys: st.keys };
+      if (left[k] === 0) return limitedAt(next);
+      left[k] = (left[k] as number) - 1;
+      stack.push(...start(next, k, st, f.window).toReversed());
+    }
+  };
+
+  const found = guideFor();
+  if ("kind" in found) return { found: [found], bindings: new Map() };
+  guide = found;
+
+  let window = outside;
   for (let k = 0; k < count; k += 1) {
     const previous = actual[k - 1]?.input;
     const previousSnapshot = expected[k - 1]?.input;
-    const limited = compareWindow(
-      expected[k]?.before ?? [],
-      actual[k]?.before ?? [],
-      previous === undefined ? 1 : previous.at,
-      previousSnapshot === undefined ? 1 : previousSnapshot.at,
-    );
+    window = enter(window, expected[k]?.before ?? [], actual[k]?.before ?? []);
+    const limited = compareWindow(window, expected[k]?.before ?? [], at(previous), at(previousSnapshot));
     if (limited !== undefined) {
       problems.push(limited);
       return { found: problems, bindings: bindings() };
@@ -928,14 +1099,16 @@ export function compare(
       });
       return { found: problems, bindings: bindings() };
     }
-    const same = sameInput(s, t);
+    const same = sameInput(window, s, t);
     if (same.kind === "limited") {
       problems.push({ kind: "Uncomparable.searchLimit", definition: null, line: t.at, data: { snapshotLine: s.at } });
       return { found: problems, bindings: bindings() };
     }
     if (same.kind === "unpaired") {
       problems.push(
-        s.line.type === "answer" && t.line.type === "answer" && answersPlaced(ids, s, t) === undefined
+        s.line.type === "answer" &&
+          t.line.type === "answer" &&
+          answersPlaced({ ids, keys, subscriptionIds }, s, t) === undefined
           ? {
               kind: "Uncomparable.differentRequest",
               definition: null,

@@ -27,9 +27,16 @@ theorem placed_of {ids : Ids} {F : Renaming} (hg : ids.bound <+: F) {sub : Strin
 theorem time_eq {s t : Line} (h : sameTime s t = true) : t.time.time = s.time.time := by
   simp only [sameTime, beq_iff_eq] at h; exact h.symm
 
+/-- compare reports only the stage whose search across windows runs out, or compares the windows with a guide. -/
 theorem compare_eq (snapshot lines : List (Option Line)) (internal : Line → Bool) :
-    Verify.compare snapshot lines none internal =
-      compareFrom (context snapshot internal) lines.length none (windowsOf (steps snapshot) (steps lines)) {} := rfl
+    (∃ u, Verify.compare snapshot lines none internal = { findings := [.uncomparable u], bindings := [] }) ∨
+      ∃ g, Verify.compare snapshot lines none internal =
+        compareFrom (context snapshot internal g) lines.length none (windowsOf (steps snapshot) (steps lines)) {} := by
+  unfold Verify.compare
+  dsimp only
+  split
+  · exact .inr ⟨_, rfl⟩
+  · exact .inl ⟨_, rfl⟩
 
 
 theorem chain_prefix {α : Type} (f : Nat → List α) (N : Nat) (hstep : ∀ k, k + 1 < N → f k <+: f (k + 1)) :
@@ -49,12 +56,14 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
     (h : (Verify.compare snapshot lines none internal).findings = []) : Matches snapshot lines internal := by
   have hlen : (steps snapshot).length = (steps lines).length :=
     (inputs_align snapshot lines none internal (by simp [h])).2
-  rw [compare_eq] at h
+  obtain ⟨u, hu⟩ | ⟨g, hg⟩ := compare_eq snapshot lines internal
+  · rw [hu] at h; cases h
+  rw [hg] at h
   have hE := input_isSome_iff snapshot
   have hA := input_isSome_iff lines
   have quietAll : ∀ k, k < (steps snapshot).length →
-      (compareFrom (context snapshot internal) lines.length none ((windowsOf (steps snapshot) (steps lines)).drop k)
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)).findings = [] := by
+      (compareFrom (context snapshot internal g) lines.length none ((windowsOf (steps snapshot) (steps lines)).drop k)
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)).findings = [] := by
     intro k
     induction k with
     | zero => intro _; exact h
@@ -68,8 +77,8 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
   have getA : ∀ k, k < (steps snapshot).length → ∃ a, (steps lines)[k]? = some a :=
     fun k hk => ⟨_, List.getElem?_eq_getElem (by omega)⟩
   have invAll : ∀ k, k < (steps snapshot).length →
-      Inv snapshot (steps lines) (subsOf (context snapshot internal) (steps snapshot) (steps lines)) k
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) k) := by
+      Inv snapshot (steps lines) (subsOf (context snapshot internal g) (steps snapshot) (steps lines)) k
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k) := by
     intro k
     induction k with
     | zero => intro _; exact Inv.zero _ _ _
@@ -78,27 +87,27 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
       obtain ⟨e, he⟩ := getE k (by omega)
       obtain ⟨a, ha⟩ := getA k (by omega)
       have q := quietW k (by omega)
-      have WS := window_step snapshot (steps lines) internal k e a he ha (ih (by omega)) q.1 q.2.1
+      have WS := window_step snapshot (steps lines) internal g k e a he ha (ih (by omega)) q.1 q.2.1
       obtain ⟨s, t, p, hs, ht, hsame, _⟩ := q.2.2 hk
       rw [stateAt_succ _ _ _ k hs ht hsame]
       exact (input_step WS.inv hsame).1
   have WS : ∀ k e a, (steps snapshot)[k]? = some e → (steps lines)[k]? = some a →
-      WindowStep snapshot (steps lines) internal k e a
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)
-        (windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-          (stateAt (context snapshot internal) (steps snapshot) (steps lines) k))
-        (pairingAt (context snapshot internal) (steps snapshot) (steps lines) k) := by
+      WindowStep snapshot (steps lines) internal g k e a
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)
+        (windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+          (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k))
+        (pairingAt (context snapshot internal g) (steps snapshot) (steps lines) k) := by
     intro k e a he ha
     have hk : k < (steps snapshot).length := (List.getElem?_eq_some_iff.mp he).1
-    exact window_step snapshot (steps lines) internal k e a he ha (invAll k hk) (quietW k hk).1 (quietW k hk).2.1
+    exact window_step snapshot (steps lines) internal g k e a he ha (invAll k hk) (quietW k hk).1 (quietW k hk).2.1
   -- The state after window `k`, and the input facts of window `k`.
   have inputOf : ∀ k, k + 1 < (steps snapshot).length → ∃ s t p,
       (steps snapshot)[k]?.bind (·.input) = some s ∧ (steps lines)[k]?.bind (·.input) = some t ∧
-      InputOK (windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)) s t p ∧
-      stateAt (context snapshot internal) (steps snapshot) (steps lines) (k + 1) =
-        { windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-          (stateAt (context snapshot internal) (steps snapshot) (steps lines) k) with
+      InputOK (windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)) s t p ∧
+      stateAt (context snapshot internal g) (steps snapshot) (steps lines) (k + 1) =
+        { windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+          (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k) with
           ids := p.ids, keys := p.keys } := by
     intro k hk
     obtain ⟨e, he⟩ := getE k (by omega)
@@ -106,14 +115,14 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
     obtain ⟨s, t, p, hs, ht, hsame, _⟩ := (quietW k (by omega)).2.2 hk
     exact ⟨s, t, p, hs, ht, (input_step (WS k e a he ha).inv hsame).2, stateAt_succ _ _ _ k hs ht hsame⟩
   have stepKeys : ∀ k, k + 1 < (steps snapshot).length →
-      (windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)).keys <+:
-      (windowRun (context snapshot internal) (steps snapshot) (steps lines) (k + 1)
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) (k + 1))).keys ∧
-      (windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)).ids.bound <+:
-      (windowRun (context snapshot internal) (steps snapshot) (steps lines) (k + 1)
-        (stateAt (context snapshot internal) (steps snapshot) (steps lines) (k + 1))).ids.bound := by
+      (windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)).keys <+:
+      (windowRun (context snapshot internal g) (steps snapshot) (steps lines) (k + 1)
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) (k + 1))).keys ∧
+      (windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)).ids.bound <+:
+      (windowRun (context snapshot internal g) (steps snapshot) (steps lines) (k + 1)
+        (stateAt (context snapshot internal g) (steps snapshot) (steps lines) (k + 1))).ids.bound := by
     intro k hk
     obtain ⟨s, t, p, _, _, I, hst⟩ := inputOf k hk
     obtain ⟨e, he⟩ := getE (k + 1) hk
@@ -129,15 +138,15 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
     have := congrArg List.length hi
     simp only [List.length_map, List.length_append, List.length_singleton] at this
     omega
-  have monoK := chain_prefix (fun k => (windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-    (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)).keys) _ (fun k hk => (stepKeys k hk).1)
-  have monoI := chain_prefix (fun k => (windowRun (context snapshot internal) (steps snapshot) (steps lines) k
-    (stateAt (context snapshot internal) (steps snapshot) (steps lines) k)).ids.bound) _
+  have monoK := chain_prefix (fun k => (windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+    (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)).keys) _ (fun k hk => (stepKeys k hk).1)
+  have monoI := chain_prefix (fun k => (windowRun (context snapshot internal g) (steps snapshot) (steps lines) k
+    (stateAt (context snapshot internal g) (steps snapshot) (steps lines) k)).ids.bound) _
     (fun k hk => (stepKeys k hk).2)
-  generalize hF : windowRun (context snapshot internal) (steps snapshot) (steps lines) ((steps snapshot).length - 1)
-    (stateAt (context snapshot internal) (steps snapshot) (steps lines) ((steps snapshot).length - 1)) = F
+  generalize hF : windowRun (context snapshot internal g) (steps snapshot) (steps lines) ((steps snapshot).length - 1)
+    (stateAt (context snapshot internal g) (steps snapshot) (steps lines) ((steps snapshot).length - 1)) = F
     at monoK monoI
-  have last : Inv snapshot (steps lines) (subsOf (context snapshot internal) (steps snapshot) (steps lines))
+  have last : Inv snapshot (steps lines) (subsOf (context snapshot internal g) (steps snapshot) (steps lines))
       (steps snapshot).length F := by
     obtain ⟨e, he⟩ := getE _ (by omega : (steps snapshot).length - 1 < (steps snapshot).length)
     obtain ⟨a, ha⟩ := getA _ (by omega : (steps snapshot).length - 1 < (steps snapshot).length)
@@ -145,8 +154,8 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
     rw [hF, show (steps snapshot).length - 1 + 1 = (steps snapshot).length by omega] at this
     exact this
   refine ⟨hlen, F.keys.traceOf?, F.ids.bound.traceOf?,
-    fun k => (pairingAt (context snapshot internal) (steps snapshot) (steps lines) k).pairs,
-    subsOf (context snapshot internal) (steps snapshot) (steps lines),
+    fun k => (pairingAt (context snapshot internal g) (steps snapshot) (steps lines) k).pairs,
+    subsOf (context snapshot internal g) (steps snapshot) (steps lines),
     fun a b x ha hb => traceOf?_inj last.oneToOne ha hb, fun a x ha => ?_,
     fun a b x ha hb => traceOf?_inj last.idsWf.oneToOne ha hb, ?_⟩
   · obtain ⟨u, hu, rfl, _⟩ := traceOf?_mem ha
@@ -155,9 +164,9 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
   have hk : k < (steps snapshot).length := (List.getElem?_eq_some_iff.mp he).1
   have W1 := WS k e a he ha
   have Fr := W1.ok.frame
-  have hK : (pairingAt (context snapshot internal) (steps snapshot) (steps lines) k).keys <+: F.keys := by
+  have hK : (pairingAt (context snapshot internal g) (steps snapshot) (steps lines) k).keys <+: F.keys := by
     rw [← W1.keys]; exact monoK k hk
-  have hI : (pairingAt (context snapshot internal) (steps snapshot) (steps lines) k).ids.bound <+: F.ids.bound := by
+  have hI : (pairingAt (context snapshot internal g) (steps snapshot) (steps lines) k).ids.bound <+: F.ids.bound := by
     rw [← W1.ids]; exact monoI k hk
   have cont := Fr.content F.keys hK (fun _ _ _ _ h => nomatch h)
   have hren := renameBy_eq _ _ _ W1.declared F.keys

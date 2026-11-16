@@ -79,28 +79,28 @@ theorem renameBy_eq (d : List String) (ws : List Window) (k : Nat) (hd : d = dec
 def subsOf (c : Ctx) (E A : List Window) (j : Nat) : List (String × String) := (pairingAt c E A j).subscriptions
 
 /-- What a quiet window `k` gives, with `st` the state before it and `p` the pairing of its search. -/
-structure WindowStep (S : List (Option Line)) (A : List Window) (internal : Line → Bool) (k : Nat) (e a : Window)
+structure WindowStep (S : List (Option Line)) (A : List Window) (internal : Line → Bool) (g : Guide) (k : Nat) (e a : Window)
     (st W : St) (p : Pairing) : Prop where
-  inv : Inv S A (subsOf (context S internal) (steps S) A) (k + 1) W
+  inv : Inv S A (subsOf (context S internal g) (steps S) A) (k + 1) W
   keys : W.keys = p.keys
   ids : W.ids = p.ids
-  ok : WindowOK (scopeOf (context S internal) (enter st e.before a.before) a.before) (pairedOut internal e)
+  ok : WindowOK (scopeOf (context S internal g) (enter st e.before a.before) a.before) (pairedOut internal e)
     st.ids st.keys p
   declared : (enter st e.before a.before).declared = declaredBy (steps S) k
   openS : (enter st e.before a.before).openSnapshot = openAfter (steps S) k
   openT : (enter st e.before a.before).openTrace = openAfter A k
 
-theorem window_step (S : List (Option Line)) (A : List Window) (internal : Line → Bool) (k : Nat) (e a : Window)
+theorem window_step (S : List (Option Line)) (A : List Window) (internal : Line → Bool) (g : Guide) (k : Nat) (e a : Window)
     (he : (steps S)[k]? = some e) (ha : A[k]? = some a)
-    (hinv : Inv S A (subsOf (context S internal) (steps S) A) k (stateAt (context S internal) (steps S) A k))
-    (h1 : (runWindow (context S internal) (stateAt (context S internal) (steps S) A k) (befores (steps S) k)
+    (hinv : Inv S A (subsOf (context S internal g) (steps S) A) k (stateAt (context S internal g) (steps S) A k))
+    (h1 : (runWindow (context S internal g) (stateAt (context S internal g) (steps S) A k) (befores (steps S) k)
       (befores A k) (prevAt A k) (prevAt (steps S) k)).1 = [])
-    (h2 : (runWindow (context S internal) (stateAt (context S internal) (steps S) A k) (befores (steps S) k)
+    (h2 : (runWindow (context S internal g) (stateAt (context S internal g) (steps S) A k) (befores (steps S) k)
       (befores A k) (prevAt A k) (prevAt (steps S) k)).2.1 = none) :
-    WindowStep S A internal k e a (stateAt (context S internal) (steps S) A k)
-      (windowRun (context S internal) (steps S) A k (stateAt (context S internal) (steps S) A k))
-      (pairingAt (context S internal) (steps S) A k) := by
-  generalize hc : context S internal = c at *
+    WindowStep S A internal g k e a (stateAt (context S internal g) (steps S) A k)
+      (windowRun (context S internal g) (steps S) A k (stateAt (context S internal g) (steps S) A k))
+      (pairingAt (context S internal g) (steps S) A k) := by
+  generalize hc : context S internal g = c at *
   generalize hst : stateAt c (steps S) A k = st at *
   have hbe : befores (steps S) k = e.before := by simp [befores, he]
   have hba : befores A k = a.before := by simp [befores, ha]
@@ -114,7 +114,7 @@ theorem window_step (S : List (Option Line)) (A : List Window) (internal : Line 
   rw [hpa, hWr]
   have ok := window_ok (specOut := comparedOut c e.before) hp
   subst hc
-  have hcomp : comparedOut (context S internal) e.before = pairedOut internal e := rfl
+  have hcomp : comparedOut (context S internal g) e.before = pairedOut internal e := rfl
   rw [hcomp] at ok
   have F := ok.frame
   have hdecl : (enter st e.before a.before).declared = declaredBy (steps S) k := by

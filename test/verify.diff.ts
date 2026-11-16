@@ -431,6 +431,32 @@ describe("Content comparison", () => {
     );
   });
 
+  test("TS and Lean find no violation when a later window names one key of a bag of keys that an earlier window creates", () => {
+    const seenIds = (id: string): Line => ({ time: at, dir: "in", type: "query", id, name: "seenIds", input: {} });
+    const answer = (id: string, to: string, ids: string[], listed: string[], more: Line = {}): Line => ({
+      time: at,
+      dir: "out",
+      type: "answer",
+      id,
+      to,
+      answer: { result: "fulfilled", output: { repeated: [], none: [], ids, listed } },
+      ...more,
+    });
+    const created = caseOf("compare/created-keys", "todo", [
+      seenIds("seenIds#1"),
+      answer("answer#1", "seenIds#1", ["Seen-1", "Seen-2"], [], { created: ["Seen-1", "Seen-2"] }),
+      seenIds("seenIds#2"),
+      answer("answer#2", "seenIds#2", ["Seen-1", "Seen-2"], ["Seen-1"]),
+    ]);
+    const trace = [
+      seenIds("q1"),
+      answer("a1", "q1", ["x", "y"], []),
+      seenIds("q2"),
+      answer("a2", "q2", ["x", "y"], ["y"]),
+    ];
+    assert.equal(violationCountOfBoth(created, trace, "named later"), 0);
+  });
+
   test("TS and Lean find the same comparison violations for traces with a mutated resultOf on an in event line", () => {
     fc.assert(
       fc.property(

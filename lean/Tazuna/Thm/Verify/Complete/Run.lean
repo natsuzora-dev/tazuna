@@ -38,12 +38,11 @@ theorem pairAll_spec {sc : Scope} {goals : List Goal} {start : Pairing} {p : Pai
     (goals.filter fun | .out _ => true | _ => false).length = sc.traceOut.length ∧
       sc.openSnapshot.length = sc.openTrace.length ∧ search sc searchLimit [(goals, start)] = .paired p := by
   unfold pairAll at h
-  dsimp only at h
   split at h
-  · cases h
   · rename_i hc
-    simp only [Bool.or_eq_true, bne_iff_ne, ne_eq, not_or, Decidable.not_not] at hc
+    simp only [pairable, Bool.and_eq_true, beq_iff_eq] at hc
     exact ⟨hc.1.1, hc.1.2, h⟩
+  · cases h
 
 
 theorem outGoals_map_out (L : List Out) : outGoals (L.map Goal.out) = L := by
@@ -189,61 +188,78 @@ structure InputOK (st : St) (s t : Out) (p : Pairing) : Prop where
 theorem input_ok {c : Ctx} {st : St} {s t : Out} {p : Pairing}
     (h : sameInput (inputScope c st) st s t = .paired p) : InputOK st s t p := by
   unfold sameInput at h
+  cases hs : inputStart st s t with
+  | none => rw [hs] at h; cases h
+  | some r =>
+  obtain ⟨goals, p₀⟩ := r
+  rw [hs] at h
   dsimp only at h
-  split at h
-  · cases h
+  unfold inputStart at hs
+  dsimp only at hs
+  split at hs
+  · cases hs
   rename_i hc
   simp only [Bool.or_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true', not_or, Decidable.not_not,
     Bool.not_eq_false] at hc
   obtain ⟨⟨hty, hna⟩, hti⟩ := hc
   cases hown : st.ids.use (s.idUse t) with
-  | none => rw [hown] at h; cases h
+  | none => rw [hown] at hs; cases hs
   | some ids₁ =>
-  rw [hown] at h
-  dsimp only at h
+  rw [hown] at hs
+  dsimp only at hs
   obtain ⟨g₁, ho₁, w₁⟩ := use_spec hown
   have content : ∀ ids₂ : Ids, Grows ids₁ ids₂ → (IdsWf ids₁ → IdsWf ids₂) →
-      (match walkContent st.declared t.index s.index s.line.content t.line.content st.keys with
-        | none => Outcome.unpaired
-        | some (keys, goals) => search (inputScope c st) searchLimit [(goals, { ids := ids₂, keys })]) =
-        .paired p →
+      (walkContent st.declared t.index s.index s.line.content t.line.content st.keys).map
+        (fun (keys, goals) => (goals, ({ ids := ids₂, keys } : Pairing))) = some (goals, p₀) →
       Grows st.ids p.ids ∧ (IdsWf st.ids → IdsWf p.ids) ∧ st.keys <+: p.keys ∧ (OneToOne st.keys → OneToOne p.keys) ∧
         (∀ u ∈ p.keys, u ∈ st.keys ∨ st.declared.contains u.snapshot = true) ∧ Grows ids₂ p.ids ∧
         ∀ R, p.keys <+: R → ContentMatches (renameBy st.declared R) s.line.content t.line.content := by
     intro ids₂ g₂ w₂ hc
-    split at hc
-    · cases hc
-    · rename_i keys goals hw
-      obtain ⟨g₃, w₃, k₃, o₃, d₃, c₃⟩ := input_search hw hc
+    cases hw : walkContent st.declared t.index s.index s.line.content t.line.content st.keys with
+    | none => rw [hw] at hc; cases hc
+    | some r =>
+      obtain ⟨keys, goals'⟩ := r
+      rw [hw] at hc
+      simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at hc
+      obtain ⟨rfl, rfl⟩ := hc
+      obtain ⟨g₃, w₃, k₃, o₃, d₃, c₃⟩ := input_search hw h
       exact ⟨g₁.trans (g₂.trans g₃), fun w => w₃ (w₂ (w₁ w)), k₃, o₃, d₃, g₃, c₃⟩
   have own : ∀ ids : Ids, Grows ids₁ ids → ids.bound.traceOf? s.line.body.id = some t.line.body.id :=
     fun ids g => traceOf?_prefix g ho₁
   have hti' : sameTime s.line t.line = true := by simpa using hti
+  have empty : ∀ q : Pairing, ([], q) = (goals, p₀) → p = q := by
+    intro q e
+    simp only [Prod.mk.injEq] at e
+    obtain ⟨rfl, rfl⟩ := e
+    simp only [search] at h
+    cases h
+    rfl
   cases hb : s.line.body with
   | time | restart =>
-    simp only [hb] at h
-    cases h
+    simp only [hb, Option.some.injEq] at hs
+    cases empty _ hs
     exact ⟨hty.symm, hna.symm, hti', g₁, w₁, List.prefix_refl _, id, fun u hu => .inl hu,
       own _ (List.prefix_refl _), by simp only [hb]⟩
   | unsubscribe d i to =>
-    simp only [hb] at h
+    simp only [hb] at hs
     cases hu : ids₁.useIds t.index s.index (some to) t.line.body.to? with
-    | none => rw [hu] at h; cases h
+    | none => rw [hu] at hs; cases hs
     | some ids₂ =>
-      rw [hu] at h
-      cases h
+      rw [hu] at hs
+      simp only [Option.some.injEq] at hs
+      cases empty _ hs
       obtain ⟨g₂, _, _, w₂⟩ := useIds_spec hu
       exact ⟨hty.symm, hna.symm, hti', g₁.trans g₂, fun w => w₂ (w₁ w), List.prefix_refl _, id, fun u hu => .inl hu,
         own _ g₂, by simp only [hb]; exact useIds_placed hu⟩
   | answer d i to x =>
-    simp only [hb] at h
+    simp only [hb] at hs
     cases ha : answersPlaced { st with ids := ids₁ } s t with
-    | none => rw [ha] at h; cases h
+    | none => rw [ha] at hs; cases hs
     | some ids₂ =>
-      rw [ha] at h
-      dsimp only at h
+      rw [ha] at hs
+      dsimp only at hs
       obtain ⟨g₂, w₂, hp⟩ := answersPlaced_spec ha
-      obtain ⟨g, w, k, o, dl, g₃, cm⟩ := content ids₂ g₂ w₂ h
+      obtain ⟨g, w, k, o, dl, g₃, cm⟩ := content ids₂ g₂ w₂ hs
       refine ⟨hty.symm, hna.symm, hti', g, w, k, o, dl, own _ (g₂.trans g₃), ?_⟩
       simp only [hb]
       refine ⟨?_, cm⟩
@@ -251,15 +267,15 @@ theorem input_ok {c : Ctx} {st : St} {s t : Out} {p : Pairing}
       · exact .inl hl
       · exact .inr (hl.mono g₃)
   | _ =>
-    simp only [hb] at h
-    rw [← hb] at h
+    simp only [hb] at hs
+    rw [← hb] at hs
     cases hu : ids₁.useIds t.index s.index s.line.body.resultOf? t.line.body.resultOf? with
-    | none => rw [hu] at h; cases h
+    | none => rw [hu] at hs; cases hs
     | some ids₂ =>
-      rw [hu] at h
-      dsimp only at h
+      rw [hu] at hs
+      dsimp only at hs
       obtain ⟨g₂, _, _, w₂⟩ := useIds_spec hu
-      obtain ⟨g, w, k, o, dl, g₃, cm⟩ := content ids₂ g₂ w₂ h
+      obtain ⟨g, w, k, o, dl, g₃, cm⟩ := content ids₂ g₂ w₂ hs
       refine ⟨hty.symm, hna.symm, hti', g, w, k, o, dl, own _ (g₂.trans g₃), ?_⟩
       simp only [hb]
       rw [← hb]

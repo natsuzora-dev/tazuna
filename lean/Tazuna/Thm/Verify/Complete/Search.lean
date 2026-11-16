@@ -256,9 +256,9 @@ theorem mem_candidates {sc : Scope} {p : Pairing} {s t : Out} (h : t ∈ candida
 
 
 theorem expand_out {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {s : Out} {rest : List Goal} {p : Pairing}
-    (h : FrameOK sc G₀ p₀ (.out s :: rest) p) : ∀ f ∈ expand sc (.out s) rest p, FrameOK sc G₀ p₀ f.1 f.2 := by
+    (h : FrameOK sc G₀ p₀ (.out s :: rest) p) : ∀ f ∈ ways sc (.out s) rest p, FrameOK sc G₀ p₀ f.1 f.2 := by
   intro f hf
-  simp only [expand, List.mem_filterMap, Option.map_eq_some_iff] at hf
+  simp only [ways, List.mem_filterMap, Option.map_eq_some_iff] at hf
   obtain ⟨t, htd, ⟨p', goals⟩, hpo, rfl⟩ := hf
   have htc := mem_of_mem_distinct htd
   obtain ⟨htr, hnp, hty, hti, hnm⟩ := mem_candidates htc
@@ -321,9 +321,9 @@ theorem expand_out {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {s : Out} {r
 
 theorem expand_subscription {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {id : String} {rest : List Goal}
     {p : Pairing} (h : FrameOK sc G₀ p₀ (.subscription id :: rest) p) :
-    ∀ f ∈ expand sc (.subscription id) rest p, FrameOK sc G₀ p₀ f.1 f.2 := by
+    ∀ f ∈ ways sc (.subscription id) rest p, FrameOK sc G₀ p₀ f.1 f.2 := by
   intro f hf
-  simp only [expand, List.mem_filterMap, Option.map_eq_some_iff] at hf
+  simp only [ways, List.mem_filterMap, Option.map_eq_some_iff] at hf
   obtain ⟨⟨tid, t₀⟩, htd, ⟨p', goals⟩, hps, rfl⟩ := hf
   have htc := mem_of_mem_distinct htd
   simp only [List.mem_filter, Bool.and_eq_true, Bool.not_eq_true'] at htc
@@ -377,12 +377,12 @@ theorem expand_subscription {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {id
 
 theorem expand_bag {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {l sl : Nat} {xs ys : List CValue}
     {rest : List Goal} {p : Pairing} (h : FrameOK sc G₀ p₀ (.bag l sl xs ys :: rest) p) :
-    ∀ f ∈ expand sc (.bag l sl xs ys) rest p, FrameOK sc G₀ p₀ f.1 f.2 := by
+    ∀ f ∈ ways sc (.bag l sl xs ys) rest p, FrameOK sc G₀ p₀ f.1 f.2 := by
   intro f hf
   have hlen := h.bagLens l sl xs ys List.mem_cons_self
   cases xs with
   | nil =>
-    simp only [expand, List.mem_singleton] at hf
+    simp only [ways, List.mem_singleton] at hf
     subst hf
     have hys : ys = [] := List.eq_nil_of_length_eq_zero (by simpa using hlen.symm)
     subst hys
@@ -394,7 +394,7 @@ theorem expand_bag {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {l sl : Nat}
     · cases e; exact ⟨[], List.Perm.refl _, trivial⟩
     · exact hb l' sl' xs' ys' hm
   | cons x more =>
-    simp only [expand, List.mem_filterMap, Option.map_eq_some_iff] at hf
+    simp only [ways, List.mem_filterMap, Option.map_eq_some_iff] at hf
     obtain ⟨⟨y, i⟩, hyd, ⟨keys, goals⟩, hw, rfl⟩ := hf
     have hyi : ys[i]? = some y := List.mem_zipIdx_iff_getElem?.mp (mem_of_mem_distinct hyd)
     have hil : i < ys.length := (List.getElem?_eq_some_iff.mp hyi).1
@@ -431,11 +431,15 @@ theorem expand_bag {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {l sl : Nat}
         exact ⟨y :: zs, (perm_cons_eraseIdx hyi).trans ((List.perm_cons y).mpr hp), hv, hl⟩
       · exact hb.right l' sl' xs' ys' hm
 
-theorem expand_ok {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} :
-    ∀ g rest p, FrameOK sc G₀ p₀ (g :: rest) p → ∀ f ∈ expand sc g rest p, FrameOK sc G₀ p₀ f.1 f.2
+theorem ways_ok {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} :
+    ∀ g rest p, FrameOK sc G₀ p₀ (g :: rest) p → ∀ f ∈ ways sc g rest p, FrameOK sc G₀ p₀ f.1 f.2
   | .out _, _, _, h => expand_out h
   | .subscription _, _, _, h => expand_subscription h
   | .bag .., _, _, h => expand_bag h
+
+theorem expand_ok {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} (g : Goal) (rest : List Goal) (p : Pairing)
+    (h : FrameOK sc G₀ p₀ (g :: rest) p) : ∀ f ∈ expand sc g rest p, FrameOK sc G₀ p₀ f.1 f.2 :=
+  fun f hf => ways_ok g rest p h f (List.mem_filter.mp hf).1
 
 /-- A search from goals `G₀` and pairing `p₀` that finds `p` meets every goal. -/
 theorem search_frame {sc : Scope} {G₀ : List Goal} {ids : Ids} {keys : Renaming} {n : Nat} {p : Pairing}

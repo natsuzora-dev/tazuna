@@ -147,6 +147,9 @@ theorem compare_malformed (snapshot lines : List (Option Line)) (n : Nat) (inter
     ∃ (ms : List Mismatch) (u : Uncomparable),
       (Verify.compare snapshot lines (some n) internal).findings = ms.map .mismatch ++ [.uncomparable u] := by
   unfold Verify.compare
+  dsimp only
+  split
+  case h_2 u _ => exact ⟨[], u, rfl⟩
   apply compareFrom_malformed
   intro w hw
   simp only [List.mem_map, List.mem_range] at hw
@@ -165,6 +168,9 @@ theorem inputs_align (snapshot lines : List (Option Line)) (malformed : Option N
   subst hm
   refine ⟨rfl, ?_⟩
   unfold Verify.compare at h
+  dsimp only at h
+  split at h
+  case h_2 u _ => exact False.elim (h (.uncomparable u) (by simp))
   generalize hE : steps snapshot = E at h
   generalize hA : steps lines = A at h
   have hEi := input_isSome_iff snapshot
