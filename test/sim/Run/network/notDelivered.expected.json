@@ -66,19 +66,6 @@
             "taskId": "task-1"
           },
           "id": "calendar.book#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "answer",
-          "to": "calendar.book#1",
-          "answer": {
-            "result": "accepted",
-            "output": {
-              "slot": "10:00"
-            }
-          },
-          "id": "answer#2"
         }
       ],
       "violations": []
@@ -94,11 +81,15 @@
     "kind": "Report.notDelivered",
     "definition": null,
     "data": {
-      "scenarioLine": 2,
+      "scenarioLine": 1,
       "message": {
         "sender": "todo",
-        "receiver": "notifier",
-        "id": "taskAdded#1"
+        "receiver": "calendar",
+        "id": "calendar.book#1",
+        "origin": {
+          "type": "line",
+          "index": 0
+        }
       }
     }
   }

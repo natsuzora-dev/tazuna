@@ -97,7 +97,11 @@
         "message": {
           "sender": "todo",
           "receiver": "notifier",
-          "id": "taskAdded#1"
+          "id": "taskAdded#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
         }
       }
     },
@@ -108,7 +112,11 @@
         "message": {
           "sender": "todo",
           "receiver": "notifier",
-          "id": "noted#1"
+          "id": "noted#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
         }
       }
     }

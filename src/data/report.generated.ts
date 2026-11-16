@@ -4,7 +4,8 @@ import type { Json } from "./values.ts";
 
 /**
  * What the simulation of a scenario reports about the scenario. `scenarioLine` is the line of When, from 0. A message is
- * named by its sender, its receiver, and the sender's id of it.
+ * named by its sender, its receiver, the sender's id of it, and its origin: the line, or the begin, whose processing sent
+ * it.
  *
  * Given is checked first, and each of its reports is given; after any of them, nothing begins. A report of a line of When
  * stops the simulation, unless `halts` says otherwise, since later lines may depend on what the line did. An expectation
@@ -150,7 +151,7 @@ export type Report =
         readonly service: string;
       };
     }
-  /** The line delivers, loses or answers `message`, which is not in flight. */
+  /** The line delivers, loses or fails `message`, or a running peer's line states it, and it is not in flight. */
   | {
       readonly kind: "Report.notInFlight";
       readonly definition: null;
@@ -159,9 +160,21 @@ export type Report =
         readonly message: Json;
       };
     }
-  /** The line delivers `message` again, which was not delivered. */
+  /**
+   * The line delivers `message` again, or its external receiver answers it or leaves it unanswered, and no line delivered
+   * it.
+   */
   | {
       readonly kind: "Report.notDelivered";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
+        readonly message: Json;
+      };
+    }
+  /** The external peer answers the request `message` again, which is no subscription and has its answer. */
+  | {
+      readonly kind: "Report.repeatedAnswer";
       readonly definition: null;
       readonly data: {
         readonly scenarioLine: number;
@@ -207,14 +220,25 @@ export type Report =
         readonly now: string;
       };
     }
-  /** A written value has the form of a key `key` of `entity` that no running service has created. */
+  /**
+   * A written value holds `key`, of the form of a key of `entity` that a running service creates: a scenario names a
+   * created key only through a handle.
+   */
   | {
-      readonly kind: "Report.uncreatedKey";
+      readonly kind: "Report.writtenKey";
       readonly definition: null;
       readonly data: {
         readonly scenarioLine: number;
         readonly key: string;
         readonly entity: DefinitionRef;
+      };
+    }
+  /** The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick. */
+  | {
+      readonly kind: "Report.misplacedCreated";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
       };
     }
   /** The screen instance `screen` that the line operates is not the one that takes operations of its screen. */
@@ -236,7 +260,7 @@ export type Report =
         readonly actual: Json;
       };
     }
-  /** The message `message` is undelivered at the end, and no inFlight line covers its channel. */
+  /** The message `message` is undelivered at the end, and no inFlight line names it. */
   | {
       readonly kind: "Report.leftInFlight";
       readonly definition: null;
@@ -244,12 +268,20 @@ export type Report =
         readonly message: Json;
       };
     }
-  /** No message is undelivered at the end on the channel that the inFlight line covers. */
+  /** The message that the inFlight line names is not undelivered at the end. */
   | {
       readonly kind: "Report.unusedInFlight";
       readonly definition: null;
       readonly data: {
         readonly scenarioLine: number;
+      };
+    }
+  /** The external peer received the request `message`, and no line answers it or leaves it unanswered. */
+  | {
+      readonly kind: "Report.awaitingAnswer";
+      readonly definition: null;
+      readonly data: {
+        readonly message: Json;
       };
     }
   /** The offered expectation `expectation` names the line `scenarioLine`, which is no look line. */
@@ -289,15 +321,18 @@ export const reportKinds = [
   "Report.wrongRole",
   "Report.notInFlight",
   "Report.notDelivered",
+  "Report.repeatedAnswer",
   "Report.overtaking",
   "Report.unpairedPeerLine",
   "Report.ambiguousPeerLine",
   "Report.notLater",
-  "Report.uncreatedKey",
+  "Report.writtenKey",
+  "Report.misplacedCreated",
   "Report.unoperableScreen",
   "Report.differentPeerAnswer",
   "Report.leftInFlight",
   "Report.unusedInFlight",
+  "Report.awaitingAnswer",
   "Report.notLook",
   "Report.unmetExpectation",
 ] as const;
@@ -314,10 +349,12 @@ export const haltingReportKinds = [
   "Report.wrongRole",
   "Report.notInFlight",
   "Report.notDelivered",
+  "Report.repeatedAnswer",
   "Report.overtaking",
   "Report.unpairedPeerLine",
   "Report.ambiguousPeerLine",
   "Report.notLater",
-  "Report.uncreatedKey",
+  "Report.writtenKey",
+  "Report.misplacedCreated",
   "Report.unoperableScreen",
 ] as const;

@@ -269,10 +269,10 @@
       "kind": "Report.unresolvedReference",
       "definition": null,
       "data": {
-        "scenarioLine": 3,
+        "scenarioLine": 4,
         "fact": {
           "type": "line",
-          "index": 3
+          "index": 4
         }
       }
     },

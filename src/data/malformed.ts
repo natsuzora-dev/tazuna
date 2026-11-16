@@ -35,6 +35,9 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`; a peer is keyed by its
  *   service name.
  * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
+ * - `misusedObserved`: the line `input` of the scenario uses the observed value at the field `path` of a handle in the
+ *   way `use` (LoweringProblem's ObservedUse) instead of placing it whole in a value; the value exists only when the
+ *   scenario runs.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.
  */
@@ -77,4 +80,8 @@ export type Malformed =
       readonly scenario: DefinitionRef;
     })
   | (Of<"lineAfterWhen", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
+  | (Of<"misusedObserved", null, { readonly use: string; readonly path: readonly string[] }> & {
+      readonly scenario: DefinitionRef;
+      readonly input: number;
+    })
   | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly deadline: string }>;

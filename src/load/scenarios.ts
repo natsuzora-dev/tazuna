@@ -66,6 +66,14 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Problem
       return { kind: "Malformed.lineAfterWhen", definition: null, scenario, data: {} };
     case "unparsableTime":
       return { kind: "Malformed.unparsableTime", definition: null, scenario, input: p.line + 1, data: {} } as Problem;
+    case "misusedObserved":
+      return {
+        kind: "Malformed.misusedObserved",
+        definition: null,
+        scenario,
+        input: p.line + 1,
+        data: { use: p.use, path: p.path },
+      };
   }
 }
 
@@ -101,7 +109,10 @@ export function loadScenarios(
     const start = instant(definition.given.start);
     if (start === undefined)
       report({ kind: "Malformed.unparsableTime", definition: null, scenario: ref, input: 0, data: {} } as Problem);
-    const lowered = lower(definition, refOf);
+    const lowered = lower(definition, refOf, (contract) => {
+      const owner = contractService(contract);
+      return owner === undefined ? undefined : serviceNames.get(owner);
+    });
     for (const p of lowered.problems) report(loweringMalformed(ref, p));
     return {
       ...named,

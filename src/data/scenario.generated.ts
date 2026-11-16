@@ -35,33 +35,52 @@ export type Origin = z.infer<typeof origin>;
 
 const fact = z.discriminatedUnion("type", [
   /**
-   * The request to `target` that a running service sent while `origin` was processed, whose input has each field of
-   * `input`, when given, equal.
+   * The request of kind `kind` to `target` that a participant sent while `origin` was processed, whose input has each
+   * field of `input`, when given, equal as the target's input schema compares it.
    */
   z.object({
     type: z.literal("request"),
     origin: origin,
+    kind: z.enum(["command", "query", "subscribe"]),
     target: ref,
-    input: z.unknown().exactOptional(),
+    get input() {
+      return template.exactOptional();
+    },
   }),
   /**
-   * The event `event` that its service emitted while `origin` was processed, with `payload` when given, as it travels to
-   * `receiver` when given, or to its only receiver.
+   * The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
+   * given, as it travels to `receiver` when given, or to its only receiver.
    */
   z.object({
     type: z.literal("event"),
     origin: origin,
     event: ref,
-    payload: z.unknown().exactOptional(),
+    get payload() {
+      return template.exactOptional();
+    },
     receiver: z.string().exactOptional(),
   }),
-  /** The answer to the request that line `to` delivered, which its receiver gave while `origin` was processed. */
+  /** The answer to the request that line `to` sent or delivered, which its receiver gave while `origin` was processed. */
   z.object({
     type: z.literal("answer"),
     origin: origin,
     to: z.int().nonnegative(),
   }),
-  /** The message that line `index` itself carried: a request it sent, or a message it delivered. */
+  /**
+   * The end of the subscription that the request `subscription` opened, which its sender sent while `origin` was
+   * processed.
+   */
+  z.object({
+    type: z.literal("end"),
+    origin: origin,
+    get subscription() {
+      return fact;
+    },
+  }),
+  /**
+   * The message that line `index` itself carried: a request it sent, a message that a peer line stated, or one that it
+   * delivered.
+   */
   z.object({
     type: z.literal("line"),
     index: z.int().nonnegative(),
@@ -128,9 +147,8 @@ export type OrderEntry = z.infer<typeof orderEntry>;
 
 const line = z.discriminatedUnion("type", [
   /**
-   * A request to `target`'s service from the client or from the peer `peer`: a running peer's run must have sent it, and
-   * an external peer sends it as the client does, straight to its receiver. With `sameIdAs`, the request has the id of
-   * the request of that line.
+   * A request to `target`'s service from the client, which reaches its running receiver directly, or from the peer
+   * `peer`, in flight. With `sameIdAs`, the client's request has the id of the request of that line.
    */
   z.object({
     type: z.literal("request"),
@@ -141,8 +159,8 @@ const line = z.discriminatedUnion("type", [
     sameIdAs: z.int().nonnegative().exactOptional(),
   }),
   /**
-   * The end of the subscription that line `subscription` opened, from the client or the peer `peer`: a running peer's run
-   * must have sent it.
+   * The end of the subscription that line `subscription` opened: from the client, which reaches its receiver directly, or
+   * from the peer `peer`, in flight.
    */
   z.object({
     type: z.literal("unsubscribe"),
@@ -167,8 +185,8 @@ const line = z.discriminatedUnion("type", [
     screen: fact,
   }),
   /**
-   * The peer `peer` answers the request `request`: an external peer gives the answer, and a running peer's answer, which
-   * its run gave, is delivered and must be `answer`.
+   * The peer `peer` answers the request `request`, which it received: an external peer once, or each time for a
+   * subscription, and a running peer as its run did.
    */
   z.object({
     type: z.literal("answer"),
@@ -177,8 +195,8 @@ const line = z.discriminatedUnion("type", [
     answer: template,
   }),
   /**
-   * The peer `peer` emits `event`, the result of the request `resultOf` or of none: an external peer emits it to every
-   * running service that receives it, and a running peer's event, which its run emitted, is delivered to the own service.
+   * The peer `peer` emits `event`, the result of the request `resultOf` or of none, to every running service that
+   * receives it.
    */
   z.object({
     type: z.literal("emit"),
@@ -187,13 +205,13 @@ const line = z.discriminatedUnion("type", [
     payload: template,
     resultOf: fact.exactOptional(),
   }),
-  /** The external peer `peer` never answers the request `request`. */
+  /** The external peer `peer` never answers the request `request`, which it received. */
   z.object({
     type: z.literal("leaveUnanswered"),
     peer: z.string(),
     request: fact,
   }),
-  /** The network delivers the message `message` to its running receiver. */
+  /** The network delivers the message `message` to its receiver. */
   z.object({
     type: z.literal("deliver"),
     message: fact,
@@ -216,11 +234,7 @@ const line = z.discriminatedUnion("type", [
     type: z.literal("fail"),
     message: fact,
   }),
-  /**
-   * The messages on the channel of `message`, either way between its sender and its receiver, that are undelivered at the
-   * end are in flight. A channel is a request's: the request, its answers and its end, and the events that name it as
-   * resultOf; an event without resultOf travels on the channel of its sender and receiver alone.
-   */
+  /** The message `message` is undelivered at the end. */
   z.object({
     type: z.literal("inFlight"),
     message: fact,
@@ -234,7 +248,7 @@ const line = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     order: z.array(orderEntry),
   }),
-  /** The host restarts the own service. */
+  /** The host restarts the own service, which reopens its screens as new instances. */
   z.object({
     type: z.literal("restart"),
   }),
@@ -244,6 +258,10 @@ const line = z.discriminatedUnion("type", [
  * A line of a scenario's When, in written order. The sender is named by the line: the client and the user are outside
  * every service, a peer is named by its service, and the receiver is the owner of the definition written or the sender of
  * the request answered.
+ *
+ * A line of a peer only states what the peer sends, a message in flight: what an external peer sends is the line's, and
+ * what a running peer sends is its run's, which must equal the line. Every message between participants reaches its
+ * receiver only by a line of the network.
  */
 export type Line = z.infer<typeof line>;
 

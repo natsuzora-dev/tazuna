@@ -123,11 +123,15 @@
     "kind": "Report.notInFlight",
     "definition": null,
     "data": {
-      "scenarioLine": 3,
+      "scenarioLine": 5,
       "message": {
         "sender": "todo",
         "receiver": "notifier",
-        "id": "taskAdded#1"
+        "id": "taskAdded#1",
+        "origin": {
+          "type": "line",
+          "index": 0
+        }
       }
     }
   }

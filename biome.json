@@ -74,7 +74,7 @@
       }
     },
     {
-      "includes": ["**/scenarios.ts"],
+      "includes": ["**/scenarios.ts", "test/lower.test.ts", "test/types.ts"],
       "linter": {
         "rules": {
           "suspicious": {

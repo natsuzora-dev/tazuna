@@ -209,7 +209,7 @@
       "kind": "Report.differentPeerAnswer",
       "definition": null,
       "data": {
-        "scenarioLine": 7,
+        "scenarioLine": 10,
         "expected": {
           "result": "rejected",
           "rejection": {

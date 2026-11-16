@@ -39,6 +39,21 @@
       }
     },
     {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "kind": "command",
+        "target": {
+          "service": "calendar",
+          "name": "book"
+        }
+      }
+    },
+    {
       "type": "answer",
       "peer": "calendar",
       "request": {
@@ -47,6 +62,7 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -65,79 +81,8 @@
     {
       "type": "deliver",
       "message": {
-        "type": "event",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "event": {
-          "service": "todo",
-          "name": "taskAdded"
-        }
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "event",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "event": {
-          "service": "todo",
-          "name": "noted"
-        }
-      }
-    },
-    {
-      "type": "request",
-      "peer": "notifier",
-      "kind": "command",
-      "target": {
-        "service": "todo",
-        "name": "markSeen"
-      },
-      "input": {
-        "value": {
-          "taskId": "task-1"
-        },
-        "holes": []
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "answer",
-        "origin": {
-          "type": "line",
-          "index": 4
-        },
-        "to": 4
-      }
-    },
-    {
-      "type": "request",
-      "peer": "notifier",
-      "kind": "command",
-      "target": {
-        "service": "todo",
-        "name": "ping"
-      },
-      "input": {
-        "value": {},
-        "holes": []
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "answer",
-        "origin": {
-          "type": "line",
-          "index": 6
-        },
-        "to": 6
+        "type": "line",
+        "index": 2
       }
     },
     {
@@ -149,31 +94,9 @@
       },
       "payload": {
         "value": {
-          "bookingId": null
+          "bookingId": "b"
         },
-        "holes": [
-          {
-            "path": ["bookingId"],
-            "fill": {
-              "type": "ref",
-              "value": {
-                "fact": {
-                  "type": "request",
-                  "origin": {
-                    "type": "line",
-                    "index": 0
-                  },
-                  "target": {
-                    "service": "calendar",
-                    "name": "book"
-                  }
-                },
-                "part": "input",
-                "path": ["bookingId"]
-              }
-            }
-          }
-        ]
+        "holes": []
       },
       "resultOf": {
         "type": "request",
@@ -181,6 +104,7 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -188,10 +112,10 @@
       }
     },
     {
-      "type": "redeliver",
+      "type": "deliver",
       "message": {
         "type": "line",
-        "index": 8
+        "index": 4
       }
     }
   ],

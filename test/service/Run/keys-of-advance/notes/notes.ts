@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Note = entity({ description: "A note", fields: { id: z.string(), label: z.string() }, key: "id" });
 
-export const { automation, command, event, createEvent, machine, contract, scenario } = service({
+export const { automation, command, event, createEvent, machine, query, contract, scenario } = service({
   description: "Add a note for each task, and an hourly note an hour after the service begins",
   entities: { Note },
 });
@@ -18,6 +18,14 @@ export const addTask = command({ input: { taskId: z.string() }, emits: [taskAdde
 export const addNote = command({ input: { noteId: Note.fields.id, label: z.string() }, emits: [noteAdded] }).decide(
   ({ input }) => [emit(noteAdded, { id: input.noteId, label: input.label })],
 );
+
+export const noteByLabel = query({
+  input: { label: z.string() },
+  output: { noteId: Note.fields.id.describe('The key of the one note with the label, or "" for none or several') },
+}).resolve(({ input, records }) => {
+  const labeled = records.Note.filter((n) => n.label === input.label);
+  return { noteId: labeled.size === 1 ? (labeled.only()?.id ?? "") : "" };
+});
 
 export const noteOnTask = automation({ receives: { taskAdded }, commands: { addNote } }).send({
   input: ({ createKey, payload }) => ({ noteId: createKey(ref(Note)), label: payload.id }),

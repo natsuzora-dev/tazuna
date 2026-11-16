@@ -46,6 +46,7 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"

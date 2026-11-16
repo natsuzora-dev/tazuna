@@ -19,11 +19,10 @@ def World.attempt {α : Type} (w : World) (r : Except Report α) (k : α → m W
   | .error e => pure (w.report e)
   | .ok a => k a
 
-/-- `v` as the simulation compares it for `schema` (Functions.unordered), or as it is when it does not match it. -/
-def comparedOr (fs : Functions m) (schema : Schema) (v : Value) : m Value := do
-  match ← fs.unordered schema v with
-  | .ok c => pure c
-  | .error _ => pure v
+def World.resolving {α : Type} (w : World) (r : ExceptT Report m α) (k : α → m World) : m World := do
+  match ← r.run with
+  | .error e => pure (w.report e)
+  | .ok a => k a
 
 /-- The answer with its output as the simulation compares it for the output of `target`. -/
 def comparedAnswer (fs : Functions m) (target : String) (a : Answer) : m Value := do
@@ -38,19 +37,22 @@ def comparedAnswerValue (fs : Functions m) (target : String) (v : Value) : m Val
   | .ok a => comparedAnswer fs target a
   | .error _ => pure v
 
-/--
-The first string of `v` of the form `<participant>/<key>` of a createKey value of an entity of `st` that no running
-service has created.
--/
-def World.uncreated (w : World) (st : Service) (v : Value) : Option (String × String) :=
-  let created := w.states.flatMap fun (_, s) => s.created.map (·.2)
+/-- The first string of `v` of the form `<participant>/<key>` of a key of an entity of a running participant. -/
+def World.writtenKey? (w : World) (v : Value) : Option (String × Syntax.Ref) :=
   v.strings.findSome? fun x =>
-    if created.contains x then none
-    else match x.splitOn "/" with
-      | [owner, key] =>
-        if (w.services.lookup owner).isNone then none
-        else (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf e key).map (x, ·)
-      | _ => none
+    match x.splitOn "/" with
+    | [owner, key] =>
+      (w.services.lookup owner).bind fun st =>
+        (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf e key).map fun e => (x, st.ref e)
+    | _ => none
+
+/--
+What the values that a line or an expectation of `line` writes report: `created()` that is not `allowed` at the top or
+that a pick writes, or a created key written as a literal.
+-/
+def World.checkWritten (w : World) (line : Nat) (written picks : List Template) (allowed : Bool) : Option Report :=
+  if picks.any (·.created) || (!allowed && written.any (·.created)) then some (.misplacedCreated line)
+  else ((written ++ picks).findSome? fun t => w.writtenKey? t.value).map fun (key, e) => .writtenKey line key e
 
 def requestName? : LineBody → Option String
   | .command name _ | .query name _ | .subscribe name _ => some name
@@ -69,15 +71,18 @@ def requestOf (type : RequestType) (name : String) (id : Option String) (v : Val
     | .query => call st fs s name id v
     | .subscribe => subscribe st fs s name id v none
 
+def bodyOf (type : RequestType) (name : String) (v : Value) : LineBody :=
+  match type with
+  | .command => .command name v
+  | .query => .query name v
+  | .subscribe => .subscribe name v
+
 /-- The world after the client's request of line `i`, with the id of the request of line `sameIdAs`, if any. -/
 def World.clientRequest (w : World) (fsOf : String → Functions m) (i : Nat) (type : RequestType)
     (target : Syntax.Ref) (input : Template) (sameIdAs : Option Nat) : m World := do
   let receiver := target.service
   if !((w.role receiver).any (·.running)) then return w.report (.wrongRole i receiver)
-  let some st := w.services.lookup receiver | return w.report (.wrongRole i receiver)
-  w.attempt (w.fill i input) fun v => do
-    if let some (key, entity) := w.uncreated st input.value then
-      return w.report (.uncreatedKey i key (st.ref entity))
+  w.resolving (w.fill fsOf i input) fun v => do
     let given ← match sameIdAs with
       | none => pure (some none)
       | some j => pure ((w.sentBy j).map (some ·.id))
@@ -85,6 +90,20 @@ def World.clientRequest (w : World) (fsOf : String → Functions m) (i : Nat) (t
     let before := (w.state receiver).lines.size
     let w ← w.act fsOf (.line i) receiver (requestOf type target.name id v)
     pure (w.recordSent i receiver before)
+
+/-- The world with the message `k` carried by line `i`. -/
+def World.carry (w : World) (i k : Nat) : World := { w with carried := w.carried ++ [(i, k)] }
+
+/-- The world with the message that the external peer's line `i` sends, in flight to its running receiver. -/
+def World.stated (w : World) (i : Nat) (msg : Message) : World :=
+  if !((w.role msg.receiver).any (·.running)) then w.report (.wrongRole i msg.receiver)
+  else { w with messages := w.messages.push msg }.carry i w.messages.size
+
+/-- The world with the next id of the messages of `name` that the external peer `peer` sends. -/
+def World.nextId (w : World) (peer name : String) : World × String :=
+  let key := s!"{peer}.{name}"
+  let n := (w.counts.lookup key).getD 0 + 1
+  ({ w with counts := (key, n) :: w.counts.filter (·.1 != key) }, s!"{name}#{n}")
 
 /--
 Whether the running peer's message carries `actual` equal to the line's `expected`, compared for `schema` of the peer,
@@ -97,29 +116,32 @@ def World.sameValue (w : World) (fs : Functions m) (schema : Schema) (peer : Str
   pure ((← comparedOr fs schema e).canonical == (← comparedOr fs schema masked).canonical)
 
 /--
-The message in flight from the running peer `peer` that is the line `i`'s, among those that `fits` accepts: of each
-channel the oldest, which FIFO delivers first; the only such one, or the report of none or of several channels.
+The message in flight from the running peer `peer` that the line `i` states, among those that `fits` accepts and no
+earlier line stated: of each channel the oldest, which FIFO delivers first; the only such one, or the report of none or
+of several channels.
 -/
 def World.peerMessage (w : World) (i : Nat) (peer : String) (fits : Message → m Bool) : m (Except Report Nat) := do
-  let found ← w.messages.toList.zipIdx.filterM fun (msg, _) =>
-    if msg.status == .inFlight && msg.sender == peer then fits msg else pure false
+  let found ← w.messages.toList.zipIdx.filterM fun (msg, k) =>
+    if msg.status == .inFlight && msg.sender == peer && !w.carried.any (·.2 == k) then fits msg else pure false
   let oldest := found.filter fun (msg, k) => !found.any fun (n, j) => j < k && n.sameChannel msg
   pure (match oldest with
     | [(_, k)] => .ok k
     | [] => .error (.unpairedPeerLine i peer)
     | several => .error (.ambiguousPeerLine i peer (several.map (·.1.describe))))
 
-/-- The world after the message `k` that line `i` carried is delivered, with the line's request recorded. -/
+/--
+The world after the message `k` reaches its receiver by line `i`: a running receiver processes it, and a request that
+it processes is recorded as the request of each line that carried it.
+-/
 def World.deliverCarried (w : World) (fsOf : String → Functions m) (i k : Nat) : m World := do
-  let w := { w with carried := w.carried ++ [(i, k)] }
-  match w.messages[k]? with
-  | none => pure w
-  | some msg =>
-    let before := (w.state msg.receiver).lines.size
-    let w ← w.deliver fsOf (.line i) k
-    pure (match msg.body with
-      | .command .. | .query .. | .subscribe .. => w.recordSent i msg.receiver before
-      | _ => w)
+  let w := w.carry i k
+  let some msg := w.messages[k]? | return w
+  if !((w.role msg.receiver).any (·.running)) then return w.setStatus k .delivered
+  let before := (w.state msg.receiver).lines.size
+  let w ← w.deliver fsOf (.line i) k
+  if (requestName? msg.body).isNone then return w
+  let carriers := (w.carried.filter (·.2 == k)).map (·.1)
+  pure (carriers.foldl (init := w) fun w l => if (w.sentBy l).isSome then w else w.recordSent l msg.receiver before)
 
 /--
 The world after line `i` delivers the in-flight message `k`, unless an earlier message on its channel is in flight,
@@ -134,17 +156,17 @@ def World.deliverInOrder (w : World) (fsOf : String → Functions m) (i k : Nat)
     | none => w.deliverCarried fsOf i k
 
 /-- The id by which a peer names the request that the handle `fact` of line `i` names. -/
-def World.requestId (w : World) (i : Nat) (fact : Fact) : Except Report String :=
+def World.requestId (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) : ExceptT Report m String :=
   match fact with
   | .line j =>
     match w.sentBy j with
-    | some s => .ok s.id
-    | none => .error (.unresolvedReference i (ToValue.toValue fact))
+    | some s => pure s.id
+    | none => throw (.unresolvedReference i (ToValue.toValue fact))
   | _ => do
-    let k ← w.messageOf i fact
+    let k ← w.messageOf fsOf i fact
     match w.messages[k]? with
-    | some msg => .ok (receivedId msg.sender msg.id)
-    | none => .error (.unresolvedReference i (ToValue.toValue fact))
+    | some msg => pure (receivedId msg.sender msg.id)
+    | none => throw (.unresolvedReference i (ToValue.toValue fact))
 
 def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (control : String) (payload : Value) :
     m Bool := do
@@ -166,45 +188,55 @@ def fireTo (time : Time) (order : List DeadlineId) : Service → Functions m →
     let s := { s.checkOrderUsed with now := max s.now time, tieOrderRequired := false }
     pure (if s.halted.isSome then s else (s.writeInput none .time).1)
 
+/-- Whether an answer to the request `to` from `sender` is among the messages. -/
+def World.answered (w : World) (sender to : String) : Bool :=
+  w.messages.any fun n => n.sender == sender && n.channel == some to && match n.body with
+    | .answer .. => true
+    | _ => false
+
 /-- The world after line `i` of the scenario of the own service `own`, which `expectations` follow. -/
-def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
+def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
     (expectations : List Expectation) (i : Nat) : Scenario.Line → m World
   | .request none type target input sameIdAs => w.clientRequest fsOf i type target input sameIdAs
-  | .request (some peer) type target input sameIdAs => do
+  | .request (some peer) type target input _ => do
     match w.role peer with
-    | some .external => w.clientRequest fsOf i type target input sameIdAs
+    | some .external =>
+      w.resolving (w.fill fsOf i input) fun v => do
+        let name := target.traceName peer
+        let (w, id) := w.nextId peer target.name
+        pure (w.stated i { sender := peer, receiver := target.service, id, body := bodyOf type name v,
+                           origin := .line i, channel := some (receivedId peer id), status := .inFlight })
     | some .run =>
-      w.attempt (w.fill i input) fun v => do
+      w.resolving (w.fill fsOf i input) fun v => do
         let name := target.traceName peer
         let fits (msg : Message) : m Bool :=
-          let typed := match type, msg.body with
-            | .command, .command n x | .query, .query n x | .subscribe, .subscribe n x =>
-              if n == name then some x else none
-            | _, _ => none
-          match typed with
-          | some x => if msg.receiver == target.service then
-              w.sameValue (fsOf peer) (.input name) peer input v x else pure false
-          | none => pure false
+          if msg.body.requestType? == some type && requestName? msg.body == some name &&
+              msg.receiver == target.service then
+            w.sameValue (fsOf peer) (.input name) peer input v ((msg.body.value?).getD .null)
+          else pure false
         match ← w.peerMessage i peer fits with
         | .error e => pure (w.report e)
-        | .ok k => w.deliverInOrder fsOf i k
+        | .ok k => pure (w.carry i k)
     | _ => pure (w.report (.wrongRole i peer))
-  | .unsubscribe peer subscription => do
+  | .unsubscribe none subscription => do
     let some s := w.sentBy subscription
       | return w.report (.unresolvedReference i (ToValue.toValue (Fact.line subscription)))
-    let direct := w.act fsOf (.line i) s.receiver fun st fs t => endSubscription st fs t (.id s.id)
-    match peer with
-    | none => direct
-    | some p =>
+    w.act fsOf (.line i) s.receiver fun st fs t => endSubscription st fs t (.id s.id)
+  | .unsubscribe (some p) subscription =>
+    w.resolving (w.messageOf fsOf i (.line subscription)) fun k => do
+      let some sub := w.messages[k]? | return w
       match w.role p with
-      | some .external => direct
+      | some .external =>
+        let (w, id) := w.nextId p "unsubscribe"
+        pure (w.stated i { sender := p, receiver := sub.receiver, id, body := .unsubscribe sub.id, origin := .line i,
+                           channel := some (receivedId p sub.id), status := .inFlight })
       | some .run =>
-        let fits (msg : Message) : m Bool := pure (msg.receiver == s.receiver && match msg.body with
-          | .unsubscribe to => receivedId p to == s.id
+        let fits (msg : Message) : m Bool := pure (msg.receiver == sub.receiver && match msg.body with
+          | .unsubscribe to => to == sub.id
           | _ => false)
         match ← w.peerMessage i p fits with
         | .error e => pure (w.report e)
-        | .ok k => w.deliverInOrder fsOf i k
+        | .ok k => pure (w.carry i k)
       | _ => pure (w.report (.wrongRole i p))
   | .resend j =>
     match lines[j]? with
@@ -213,7 +245,7 @@ def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines
   | .operate screen control payload =>
     w.attempt (w.screenOf i screen) fun o => do
       if w.role o.service != some .own then return w.report (.wrongRole i o.service)
-      w.attempt (w.fill i payload) fun v => do
+      w.resolving (w.fill fsOf i payload) fun v => do
         if let .ok top := (w.state o.service).accepting o.chart then
           if top.resource != o.resource then return w.report (.unoperableScreen i o.resource)
         w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.chart control v true
@@ -224,63 +256,59 @@ def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines
         match e with
         | .offered look control payload _ =>
           if look != i || w.stopped then pure w else
-          w.attempt ((payload.map (w.fill i)).getD (.ok (.obj []))) fun v => do
+          w.resolving ((payload.map (w.fill fsOf i)).getD (pure (.obj []))) fun v => do
             let found ← offeredAt st (fsOf o.service) (w.state o.service) o control v
             pure { w with looked := w.looked ++ [(k, found)] }
         | _ => pure w
   | .answer peer request answer =>
-    w.attempt (w.messageOf i request) fun k => do
+    w.resolving (w.messageOf fsOf i request) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.receiver != peer then return w.report (.unresolvedReference i (ToValue.toValue request))
       let to := receivedId msg.sender msg.id
       match w.role peer with
       | some .external =>
-        if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
-        w.attempt (w.fill i answer) fun v => do
+        if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
+        if w.answered peer to && msg.body.requestType? != some .subscribe then
+          return w.report (.repeatedAnswer i msg.describe)
+        w.resolving (w.fill fsOf i answer) fun v => do
           let .ok (a : Answer) := FromValue.fromValue v | return w.report (.malformedValue i v)
-          let reply : Message := { sender := peer, receiver := msg.sender, id := s!"answer:{to}",
-                                   body := .answer to a, origin := .line i, channel := some to, status := .inFlight }
-          let w := w.setStatus k .delivered
-          let w := { w with messages := w.messages.push reply }
-          w.deliverCarried fsOf i w.messages.size.pred
+          let (w, id) := w.nextId peer "answer"
+          pure (w.stated i { sender := peer, receiver := msg.sender, id, body := .answer to a, origin := .line i,
+                             channel := some to, status := .inFlight })
       | some .run =>
-        match w.messages.toList.zipIdx.find? fun (n, _) =>
-            n.status == .inFlight && n.sender == peer && n.receiver == msg.sender && match n.body with
+        match w.messages.toList.zipIdx.find? fun (n, j) =>
+            n.status == .inFlight && n.sender == peer && n.receiver == msg.sender && !w.carried.any (·.2 == j) &&
+              match n.body with
               | .answer t _ => t == to
               | _ => false with
         | none => pure (w.report (.unpairedPeerLine i peer))
         | some (reply, j) =>
-          w.attempt (w.fill i answer) fun v => do
+          w.resolving (w.fill fsOf i answer) fun v => do
             let actual := match reply.body with
               | .answer _ a => a
               | _ => .accepted none
             let fs := fsOf peer
             let target := (msg.target?.map (·.traceName peer)).getD ""
-            let written := markCreated answer v
             let shown ← comparedAnswerValue fs target (w.maskCreated peer answer v (ToValue.toValue actual))
-            let expected ← comparedAnswerValue fs target written
+            let expected ← comparedAnswerValue fs target (markCreated answer v)
             let w := if expected.canonical == shown.canonical then w
               else w.report (.differentPeerAnswer i expected shown)
-            w.deliverInOrder fsOf i j
+            pure (w.carry i j)
       | _ => pure (w.report (.wrongRole i peer))
   | .emit peer event payload resultOf => do
-    let resultId ← match resultOf with
-      | none => pure (.ok none)
-      | some f => pure ((w.requestId i f).map some)
-    w.attempt resultId fun resultId =>
-    w.attempt (w.fill i payload) fun v => do
+    let resultId : ExceptT Report m (Option String) := match resultOf with
+      | none => pure none
+      | some f => some <$> w.requestId fsOf i f
+    w.resolving resultId fun resultId =>
+    w.resolving (w.fill fsOf i payload) fun v => do
       match w.role peer with
       | some .external =>
-        let key := s!"{peer}.{event.name}"
-        let n := (w.emitted.lookup key).getD 0 + 1
-        let w := { w with emitted := (key, n) :: w.emitted.filter (·.1 != key) }
+        let (w, id) := w.nextId peer event.name
         let body : LineBody := .event event.name v resultId
-        w.services.foldlM (init := w) fun w (r, st) => do
-          if w.stopped || !st.received.contains (event.traceName r) then return w
-          let msg : Message := { sender := peer, receiver := r, id := s!"{event.name}#{n}", body, origin := .line i,
-                                 channel := resultId, status := .inFlight }
-          let w := { w with messages := w.messages.push msg }
-          w.deliverCarried fsOf i w.messages.size.pred
+        pure (w.services.foldl (init := w) fun w (r, st) =>
+          if !st.received.contains (event.traceName r) then w else
+          w.stated i { sender := peer, receiver := r, id, body, origin := .line i, channel := resultId,
+                       status := .inFlight })
       | some .run =>
         let fits (msg : Message) : m Bool :=
           match msg.body with
@@ -291,32 +319,31 @@ def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines
           | _ => pure false
         match ← w.peerMessage i peer fits with
         | .error e => pure (w.report e)
-        | .ok k => w.deliverInOrder fsOf i k
+        | .ok k => pure (w.carry i k)
       | _ => pure (w.report (.wrongRole i peer))
   | .leaveUnanswered peer request =>
-    w.attempt (w.messageOf i request) fun k => do
+    w.resolving (w.messageOf fsOf i request) fun k => do
       let some msg := w.messages[k]? | return w
       if w.role peer != some .external || msg.receiver != peer then return w.report (.wrongRole i peer)
-      if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
+      if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
       pure (w.setStatus k .unanswered)
   | .deliver message =>
-    w.attempt (w.messageOf i message) fun k => do
+    w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
-      if !((w.role msg.receiver).any (·.running)) then return w.report (.wrongRole i msg.receiver)
       w.deliverInOrder fsOf i k
   | .redeliver message =>
-    w.attempt (w.messageOf i message) fun k => do
+    w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
       w.deliverCarried fsOf i k
   | .lose message =>
-    w.attempt (w.messageOf i message) fun k => do
+    w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
       pure (w.setStatus k .lost)
   | .fail message =>
-    w.attempt (w.messageOf i message) fun k => do
+    w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
       if requestName? msg.body |>.isNone then return w.report (.unfailable i msg.describe)
@@ -328,9 +355,8 @@ def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines
       let w := { w with messages := w.messages.push reply }
       w.deliverCarried fsOf i w.messages.size.pred
   | .inFlight message =>
-    w.attempt (w.messageOf i message) fun k => do
-      let some msg := w.messages[k]? | return w
-      pure { w with inFlight := w.inFlight ++ [(i, msg.sender, msg.receiver, msg.channel)] }
+    w.resolving (w.messageOf fsOf i message) fun k =>
+      pure { w with inFlight := w.inFlight ++ [(i, k)] }
   | .at time order => do
     if time.time ≤ w.now then return w.report (.notLater i time.time w.now)
     if let some e := order.find? fun e => !((w.role e.service).any (·.running)) then
@@ -339,44 +365,60 @@ def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines
       if w.stopped then pure w else
       w.act fsOf (.line i) service (fireTo time.time ((order.filter (·.service == service)).map (·.deadline)))
     pure { w with now := time.time }
-  | .restart => w.act fsOf (.line i) own restart
-
-/-- Whether the inFlight entry covers the message: it is on the entry's channel, either way. -/
-def covers (entry : Nat × String × String × Option String) (msg : Message) : Bool :=
-  let (_, a, b, c) := entry
-  c == msg.channel && ((a, b) == (msg.sender, msg.receiver) || (a, b) == (msg.receiver, msg.sender))
+  | .restart => w.act fsOf (.line i) own restart (reopen := true)
 
 /--
-The world with each message left in flight reported, unless an inFlight line covers its channel, and each inFlight line
-that covers no message left in flight reported.
+The world after line `i`, unless the values it writes report: a running peer's request, answer and event may write
+`created()`.
+-/
+def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
+    (expectations : List Expectation) (i : Nat) (l : Scenario.Line) : m World :=
+  let allowed := match l with
+    | .request (some p) .. | .answer p .. | .emit p .. => w.role p == some .run
+    | _ => false
+  match w.checkWritten i l.written l.picks allowed with
+  | some r => pure (w.report r)
+  | none => w.take fsOf own lines expectations i l
+
+/--
+The world with each message left in flight reported, unless an inFlight line names it, each inFlight line whose message
+is not left in flight reported, and each request that an external peer received and neither answers nor leaves
+unanswered reported.
 -/
 def World.checkEnd (w : World) : World :=
-  let left := w.messages.toList.filter (·.status == .inFlight)
-  let w := left.foldl (init := w) fun w msg =>
-    if w.inFlight.any (covers · msg) then w else w.report (.leftInFlight msg.describe)
-  w.inFlight.foldl (init := w) fun w entry =>
-    if left.any (covers entry) then w else w.report (.unusedInFlight entry.1)
+  let indexed := w.messages.toList.zipIdx
+  let w := indexed.foldl (init := w) fun w (msg, k) =>
+    if msg.status == .inFlight && !w.inFlight.any (·.2 == k) then w.report (.leftInFlight msg.describe) else w
+  let w := w.inFlight.foldl (init := w) fun w (i, k) =>
+    if (w.messages[k]?.map (·.status)) == some .inFlight then w else w.report (.unusedInFlight i)
+  indexed.foldl (init := w) fun w (msg, _) =>
+    if msg.status == .delivered && w.role msg.receiver == some .external && (requestName? msg.body).isSome &&
+        !w.answered msg.receiver (receivedId msg.sender msg.id) then w.report (.awaitingAnswer msg.describe)
+    else w
 
 /-- The values in canonical form, in a bag's order: by their canonical JSON. -/
 def bag (vs : List Value) : List Value := vs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
 
 /-- The actual and expected values of the expectation `e`, which Then compares. -/
 def World.compared (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (k : Nat)
-    (e : Expectation) : m (Except Report (Option (Value × Value))) := do
-  let some st := w.services.lookup own | return .ok none
+    (e : Expectation) : ExceptT Report m (Option (Value × Value)) := do
+  let some st := w.services.lookup own | return none
   let fs := fsOf own
+  let comparedOr (fs : Functions m) (schema : Schema) (v : Value) : ExceptT Report m Value :=
+    ExceptT.lift (comparedOr fs schema v)
+  let comparedAnswer (fs : Functions m) (target : String) (a : Answer) : ExceptT Report m Value :=
+    ExceptT.lift (comparedAnswer fs target a)
+  let comparedAnswerValue (fs : Functions m) (target : String) (v : Value) : ExceptT Report m Value :=
+    ExceptT.lift (comparedAnswerValue fs target v)
   match e with
   | .answered line answers =>
-    let some s := w.sentBy line | return .error (.unresolvedReference line (ToValue.toValue (Fact.line line)))
+    let some s := w.sentBy line | throw (.unresolvedReference line (ToValue.toValue (Fact.line line)))
     let lines := (w.state s.receiver).lines
     let target := ((lines[s.position]?).bind (requestName? ·.body)).getD ""
     let rfs := fsOf s.receiver
     let actual ← (w.answersOf s).mapM (comparedAnswer rfs target)
-    match answers.mapM (w.fill line) with
-    | .error r => pure (.error r)
-    | .ok vs =>
-      let expected ← vs.mapM (comparedAnswerValue rfs target)
-      pure (.ok (some (.arr expected, .arr actual)))
+    let expected ← (← answers.mapM (w.fill fsOf line)).mapM (comparedAnswerValue rfs target)
+    pure (some (.arr expected, .arr actual))
   | .emitted line events =>
     let actual ← ((w.spanLines (.line line) own).filterMap fun l => match l.dir, l.body with
       | .out, .event name payload _ =>
@@ -384,20 +426,18 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       | _, _ => none).mapM fun (name, payload) => do
         let compared ← comparedOr fs (.payload name) payload
         pure (Value.obj [("event", ToValue.toValue (st.refOf name)), ("payload", compared)])
-    match events.mapM fun ev => (w.fill line ev.payload).map (ev.event, ·) with
-    | .error r => pure (.error r)
-    | .ok filled =>
-      let expected ← filled.mapM fun (ref, v) => do
-        let compared ← comparedOr fs (.payload (ref.traceName own)) v
-        pure (Value.obj [("event", ToValue.toValue ref), ("payload", compared)])
-      pure (.ok (some (.arr (bag expected), .arr (bag actual))))
+    let expected ← events.mapM fun ev => do
+      let compared ← comparedOr fs (.payload (ev.event.traceName own)) (← w.fill fsOf line ev.payload)
+      pure (Value.obj [("event", ToValue.toValue ev.event), ("payload", compared)])
+    pure (some (.arr (bag expected), .arr (bag actual)))
   | .requested line requests ends =>
     let span := w.spanLines (.line line) own
     let actualEnds := span.filterMap fun l => match l.dir, l.body with
       | .out, .unsubscribe to => some (Value.str to)
       | _, _ => none
-    let expectedEnds := ends.mapM fun f => (w.messageOf line f).map fun k =>
-      Value.str ((w.messages[k]?.map (·.id)).getD "")
+    let endIds ← ends.mapM fun f => do
+      let k ← w.messageOf fsOf line f
+      pure (Value.str ((w.messages[k]?.map (·.id)).getD ""))
     let actual ← (span.filterMap fun l =>
       match l.dir, l.body with
       | .out, .command name input => some (RequestType.command, name, input)
@@ -406,24 +446,26 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       | _, _ => none).mapM fun (type, name, input) => do
         pure (Value.obj [("kind", ToValue.toValue type), ("target", ToValue.toValue (st.refOf name)),
           ("input", ← comparedOr fs (.input name) input)])
-    match requests.mapM fun r => (w.fill line r.input).map (r, ·), expectedEnds with
-    | .error r, _ | _, .error r => pure (.error r)
-    | .ok filled, .ok endIds =>
-      let expected ← filled.mapM fun (r, v) => do
-        pure (Value.obj [("kind", ToValue.toValue r.kind), ("target", ToValue.toValue r.target),
-          ("input", ← comparedOr fs (.input (r.target.traceName own)) v)])
-      pure (.ok (some (.obj [("requests", .arr (bag expected)), ("ends", .arr (bag endIds))],
-        .obj [("requests", .arr (bag actual)), ("ends", .arr (bag actualEnds))])))
+    let expected ← requests.mapM fun r => do
+      let v ← w.fill fsOf line r.input
+      pure (Value.obj [("kind", ToValue.toValue r.kind), ("target", ToValue.toValue r.target),
+        ("input", ← comparedOr fs (.input (r.target.traceName own)) v)])
+    pure (some (.obj [("requests", .arr (bag expected)), ("ends", .arr (bag endIds))],
+      .obj [("requests", .arr (bag actual)), ("ends", .arr (bag actualEnds))]))
   | .offered look _ _ offered =>
     match lines[look]? with
-    | some (.look _) => pure (.ok ((w.looked.lookup k).map fun found => (.bool offered, .bool found)))
-    | _ => pure (.error (.notLook k look))
+    | some (.look _) => pure ((w.looked.lookup k).map fun found => (.bool offered, .bool found))
+    | _ => throw (.notLook k look)
 
-/-- The world with each expectation of Then compared; what one reports never stops the others. -/
+/--
+The world with each expectation of Then compared, unless the values it writes report; what one reports never stops the
+others.
+-/
 def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
     (expectations : List Expectation) : m World :=
   expectations.zipIdx.foldlM (init := w) fun w (e, k) => do
-    match ← w.compared fsOf own lines k e with
+    if let some r := w.checkWritten e.line e.written e.picks false then return w.note r
+    match ← (w.compared fsOf own lines k e).run with
     | .error r => pure (w.note r)
     | .ok none => pure w
     | .ok (some (expected, actual)) =>

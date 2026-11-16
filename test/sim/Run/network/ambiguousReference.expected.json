@@ -79,150 +79,13 @@
             }
           },
           "id": "answer#2"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "command",
-          "id": "notifier/todo.markSeen#1",
-          "name": "markSeen",
-          "input": {
-            "taskId": "task-1"
-          }
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "answer",
-          "to": "notifier/todo.markSeen#1",
-          "answer": {
-            "result": "accepted"
-          },
-          "id": "answer#3"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "event",
-          "name": "taskSeenRecorded",
-          "payload": {
-            "id": "task-1",
-            "seen": true
-          },
-          "resultOf": "notifier/todo.markSeen#1",
-          "id": "taskSeenRecorded#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "command",
-          "id": "notifier/todo.ping#1",
-          "name": "ping",
-          "input": {}
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "answer",
-          "to": "notifier/todo.ping#1",
-          "answer": {
-            "result": "accepted"
-          },
-          "id": "answer#4"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "event",
-          "name": "pinged",
-          "payload": {},
-          "resultOf": "notifier/todo.ping#1",
-          "id": "pinged#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "event",
-          "id": "calendar/bookingConfirmed#1",
-          "name": "calendar.bookingConfirmed",
-          "payload": {
-            "bookingId": "todo/Booking-1"
-          },
-          "resultOf": "calendar.book#1"
         }
       ],
       "violations": []
     },
     {
       "service": "notifier",
-      "lines": [
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "event",
-          "id": "todo/taskAdded#1",
-          "name": "todo.taskAdded",
-          "payload": {
-            "taskId": "task-1"
-          }
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "command",
-          "name": "todo.markSeen",
-          "input": {
-            "taskId": "task-1"
-          },
-          "id": "todo.markSeen#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "command",
-          "name": "todo.ping",
-          "input": {},
-          "id": "todo.ping#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "event",
-          "id": "todo/noted#1",
-          "name": "todo.noted",
-          "payload": {}
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "answer",
-          "to": "todo.markSeen#1",
-          "answer": {
-            "result": "accepted"
-          },
-          "id": "answer#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "answer",
-          "to": "todo.ping#1",
-          "answer": {
-            "result": "accepted"
-          },
-          "id": "answer#2"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "event",
-          "id": "calendar/bookingConfirmed#1",
-          "name": "calendar.bookingConfirmed",
-          "payload": {
-            "bookingId": "todo/Booking-1"
-          }
-        }
-      ],
+      "lines": [],
       "violations": []
     }
   ],
@@ -231,21 +94,29 @@
     "kind": "Report.ambiguousReference",
     "definition": null,
     "data": {
-      "scenarioLine": 9,
+      "scenarioLine": 5,
       "fact": {
         "type": "line",
-        "index": 8
+        "index": 4
       },
       "candidates": [
         {
           "sender": "calendar",
           "receiver": "todo",
-          "id": "bookingConfirmed#1"
+          "id": "bookingConfirmed#1",
+          "origin": {
+            "type": "line",
+            "index": 4
+          }
         },
         {
           "sender": "calendar",
           "receiver": "notifier",
-          "id": "bookingConfirmed#1"
+          "id": "bookingConfirmed#1",
+          "origin": {
+            "type": "line",
+            "index": 4
+          }
         }
       ]
     }

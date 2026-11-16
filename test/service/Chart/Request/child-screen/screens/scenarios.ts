@@ -1,35 +1,25 @@
-import { type OutRequest, run, type When } from "@natsuzora-dev/tazuna";
+import { run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { helpPanel, homeScreen, taskListScreen } from "./screens.ts";
 
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } } as const;
-type W = When<typeof given.peers>;
-
-/**
- * The network delivers the subscription to todo. todo's answers and the end of the subscription stay in flight: no line
- * delivers an end that the own service sends to a running peer.
- */
-const delivered = (w: W, subscription: OutRequest) => {
-  w.net.deliver(subscription);
-  w.net.inFlight(subscription);
-};
-
-/** The home screen that begin opens, with its subscription to taskCount delivered. */
-const openHome = (w: W) => {
-  delivered(w, w.begin.request(todo.taskCount));
-  return w.begin.screen(homeScreen);
-};
 
 export const listClosedByParent = scenario(
   "Open the list at 10:00 and again at 10:02; homeScreen opens one taskListScreen each time it enters listing, and when it exits listing at the one-minute deadline at 10:01, it closes taskListScreen, which ends its subscription to tasks. homeScreen keeps its subscription to taskCount while taskListScreen is open",
   {
     given,
     when: (w) => {
-      const home = openHome(w);
-      delivered(w, w.user.operate(home, "openList").request(todo.tasks));
-      w.clock.at("2026-10-25T10:02:00+09:00");
-      delivered(w, w.user.operate(home, "openList").request(todo.tasks));
+      const home = w.begin.screen(homeScreen);
+      const count = w.net.deliver(w.begin.subscription(todo.taskCount));
+      w.net.inFlight(count.answer(count));
+      const firstList = w.user.operate(home, "openList").subscription(todo.tasks);
+      const first = w.net.deliver(firstList);
+      w.net.inFlight(first.answer(first));
+      const closing = w.clock.at("2026-10-25T10:02:00+09:00");
+      w.net.inFlight(closing.end(firstList));
+      const second = w.net.deliver(w.user.operate(home, "openList").subscription(todo.tasks));
+      w.net.inFlight(second.answer(second));
     },
     then: () => [],
   },
@@ -40,11 +30,19 @@ export const modalChild = scenario(
   {
     given,
     when: (w) => {
-      const home = openHome(w);
+      const home = w.begin.screen(homeScreen);
+      const countSubscription = w.begin.subscription(todo.taskCount);
+      const count = w.net.deliver(countSubscription);
+      w.net.inFlight(count.answer(count));
       const opening = w.user.operate(home, "openList");
-      delivered(w, opening.request(todo.tasks));
-      w.user.operate(opening.screen(taskListScreen), "close");
-      delivered(w, w.user.operate(home, "countAll").request(todo.taskCount));
+      const list = w.net.deliver(opening.subscription(todo.tasks));
+      w.net.inFlight(list.answer(list));
+      const closing = w.user.operate(opening.screen(taskListScreen), "close");
+      w.net.inFlight(closing.end(opening.subscription(todo.tasks)));
+      const countingAll = w.user.operate(home, "countAll");
+      w.net.inFlight(countingAll.end(countSubscription));
+      const all = w.net.deliver(countingAll.subscription(todo.taskCount));
+      w.net.inFlight(all.answer(all));
     },
     then: () => [],
   },
@@ -55,9 +53,15 @@ export const nonModalChild = scenario(
   {
     given,
     when: (w) => {
-      const home = openHome(w);
+      const home = w.begin.screen(homeScreen);
+      const countSubscription = w.begin.subscription(todo.taskCount);
+      const count = w.net.deliver(countSubscription);
+      w.net.inFlight(count.answer(count));
       const opening = w.user.operate(home, "openHelp");
-      delivered(w, w.user.operate(home, "countAll").request(todo.taskCount));
+      const countingAll = w.user.operate(home, "countAll");
+      w.net.inFlight(countingAll.end(countSubscription));
+      const all = w.net.deliver(countingAll.subscription(todo.taskCount));
+      w.net.inFlight(all.answer(all));
       w.user.operate(opening.screen(helpPanel), "closeHelp");
     },
     then: () => [],

@@ -26,7 +26,8 @@ export interface Message {
   status: Status;
 }
 
-export const describe = (m: Message) => ({ sender: m.sender, receiver: m.receiver, id: m.id });
+/** Lean's Message.describe. */
+export const describe = (m: Message) => ({ sender: m.sender, receiver: m.receiver, id: m.id, origin: m.origin });
 
 export const sameChannel = (m: Message, n: Message): boolean =>
   m.sender === n.sender && m.receiver === n.receiver && m.channel === n.channel;
@@ -71,9 +72,10 @@ export interface World {
   readonly opened: Opened[];
   readonly sent: Sent[];
   readonly carried: (readonly [number, number])[];
-  /** The channels that inFlight lines cover: the line, sender, receiver, channel. */
-  readonly inFlight: (readonly [number, string, string, string | undefined])[];
-  readonly emitted: Map<string, number>;
+  /** The messages that inFlight lines name: the line, and the message. */
+  readonly inFlight: (readonly [number, number])[];
+  /** Lean's World.counts. */
+  readonly counts: Map<string, number>;
   readonly looked: (readonly [number, boolean])[];
   readonly reports: Report[];
   halted: Report | undefined;
@@ -167,7 +169,7 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
 }
 
 /** Lean's World.act. */
-export function act(w: World, o: Origin, service: string, f: (r: Processing) => void): void {
+export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
   const p = w.participants.get(service);
   if (p === undefined) return;
   const r = p.processing;
@@ -180,7 +182,7 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
     if (!(error instanceof Halt)) throw error;
     p.halted = error.violation;
   }
-  for (const key of screensOf(s).filter((k) => !screens.includes(k))) {
+  for (const key of screensOf(s).filter((k) => reopen || !screens.includes(k))) {
     const [chart = "", resource = ""] = key.split("\u0000");
     w.opened.push({ origin: o, service, chart, resource });
   }

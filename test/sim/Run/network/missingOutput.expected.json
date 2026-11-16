@@ -94,7 +94,7 @@
     "kind": "Report.missingOutput",
     "definition": null,
     "data": {
-      "scenarioLine": 2,
+      "scenarioLine": 4,
       "fact": {
         "type": "line",
         "index": 0

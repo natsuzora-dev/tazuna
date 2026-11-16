@@ -8,12 +8,13 @@ export const refundCreatedCharge = scenario(
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { payments: external(payments) } },
     when: (w) => {
       const place = w.client.send(placeOrder, { amount: 1200 });
-      w.peer.payments.answer(place.request(payments.createCharge), {
-        result: "accepted",
-        output: { chargeId: "ch_1" },
-      });
+      const charge = place.request(payments.createCharge);
+      w.net.deliver(charge);
+      w.net.deliver(w.peer.payments.answer(charge, { result: "accepted", output: { chargeId: "ch_1" } }));
       const cancel = w.client.send(cancelOrder, {});
-      w.peer.payments.answer(cancel.request(payments.refundCharge), { result: "accepted" });
+      const refund = cancel.request(payments.refundCharge);
+      w.net.deliver(refund);
+      w.net.deliver(w.peer.payments.answer(refund, { result: "accepted" }));
     },
     then: () => [],
   },

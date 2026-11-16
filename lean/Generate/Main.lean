@@ -157,6 +157,10 @@ structure Emitted where
   inlined : List Name := []
   imports : List (String × String) := []
   custom : Bool
+  /-- The types that the file declares, so that a schema may name one declared after it. -/
+  declared : List Name := []
+  /-- Whether the schema being written names a type declared after it, which a getter defers. -/
+  forward : Bool := false
 
 abbrev Emit := StateT Emitted MetaM
 
@@ -172,6 +176,9 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
   | .const ``Tazuna.Data.DateTime _ => return "z.iso.datetime({ offset: true })"
   | .const name _ => do
     if listed.contains name then return schemaName name
+    if (← get).declared.contains name then
+      modify fun e => { e with forward := true }
+      return schemaName name
     if let .enum ctors ← wireShape name then
       modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
       return enumSchema ctors
@@ -182,13 +189,22 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
     return s!"z.custom<{ts}>()"
   | type => throwError "no Zod schema for {type}"
 
+/-- A property of an object schema: `name: schema`, or a getter that returns the schema when it names a later type. -/
 structure Property where
   text : String
   doc : Option String := none
+  getter : Option (String × String) := none
+
+/-- The property `name` of schema `schema`, a getter when the schema names a type declared after it. -/
+def namedProperty (doc : Option String) (name : String) (schema : Emit String) : Emit Property := do
+  modify fun e => { e with forward := false }
+  let schema ← schema
+  if (← get).forward then return { text := "", doc, getter := some (name, schema) }
+  return { text := s!"{name}: {schema}", doc }
 
 def property (listed : List Name) (doc : Option String) : WireField → Emit Property
-  | .required name type => do pure { text := s!"{name}: {← zodSchema listed type}", doc }
-  | .optional name type => do pure { text := s!"{name}: {← zodSchema listed type}.exactOptional()", doc }
+  | .required name type => namedProperty doc name (zodSchema listed type)
+  | .optional name type => namedProperty doc name do pure s!"{← zodSchema listed type}.exactOptional()"
   | .flattened _ written => do
     unless listed.contains written do throwError "list {written} before the wire types that flatten it"
     pure { text := s!"...{schemaName written}.shape", doc }
@@ -196,7 +212,10 @@ def property (listed : List Name) (doc : Option String) : WireField → Emit Pro
 def objectSchema (indent : String) (properties : List Property) : String :=
   "z.object({\n" ++
     String.join (properties.map fun p =>
-      ((p.doc.map (jsdoc s!"{indent}  ")).getD "") ++ s!"{indent}  {p.text},\n") ++
+      ((p.doc.map (jsdoc s!"{indent}  ")).getD "") ++ match p.getter with
+        | some (name, schema) =>
+          s!"{indent}  get {name}() \{\n{indent}    return {schema};\n{indent}  },\n"
+        | none => s!"{indent}  {p.text},\n") ++
     s!"{indent}})"
 
 /-- A `z.discriminatedUnion` of `members`: each variant's schema, after its constructor's docstring. -/
@@ -265,6 +284,7 @@ elab "zod% " t:ident parts:ident* : term => do
   let root ← realizeGlobalConstNoOverloadWithInfo t
   let parts ← parts.toList.mapM fun p => realizeGlobalConstNoOverloadWithInfo p.raw
   let declarations : Emit (List String) := do
+    modify fun e => { e with declared := parts ++ [root] }
     let mut listed : List Name := []
     let mut declarations : List String := []
     for type in parts do
@@ -307,8 +327,8 @@ def files : List (String × String) :=
    ("data/report.generated.ts", typescript% Tazuna.Sim.Report ++
       halting "Report" (((samples% Tazuna.Sim.Report).filter (·.halts)).map (·.kind))),
    ("data/scenario.generated.ts",
-    zod% Tazuna.Scenario Tazuna.Syntax.Ref Tazuna.Data.DeadlineId Tazuna.Scenario.Origin Tazuna.Scenario.Fact
-      Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
+    zod% Tazuna.Scenario Tazuna.Syntax.Ref Tazuna.Data.DeadlineId Tazuna.Scenario.Origin
+      Tazuna.Scenario.Fact Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
       Tazuna.Scenario.OrderEntry Tazuna.Scenario.Line Tazuna.Scenario.SentRequest Tazuna.Scenario.EmittedEvent
       Tazuna.Scenario.Expectation Tazuna.Scenario.GivenRecord Tazuna.Scenario.Peer Tazuna.Scenario.PeerEntry
       Tazuna.Scenario.Given),

@@ -18,27 +18,13 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Origin tag "type"
 
-/-- A fact that a line or the begin caused, named by content. -/
-inductive Fact where
-  /--
-  The request to `target` that a running service sent while `origin` was processed, whose input has each field of
-  `input`, when given, equal.
-  -/
-  | request (origin : Origin) (target : Syntax.Ref) (input : Option Value)
-  /--
-  The event `event` that its service emitted while `origin` was processed, with `payload` when given, as it travels to
-  `receiver` when given, or to its only receiver.
-  -/
-  | event (origin : Origin) (event : Syntax.Ref) (payload : Option Value) (receiver : Option String)
-  /-- The answer to the request that line `to` delivered, which its receiver gave while `origin` was processed. -/
-  | answer (origin : Origin) (to : Nat)
-  /-- The message that line `index` itself carried: a request it sent, or a message it delivered. -/
-  | line (index : Nat)
-  /-- The instance of screen `screen` that opened while `origin` was processed. -/
-  | screen (origin : Origin) (screen : Syntax.Ref)
+inductive RequestType where
+  | command
+  | query
+  | subscribe
 deriving DecidableEq, Repr, Inhabited
 
-derive_wire Fact tag "type" skip_serializing_none
+derive_wire RequestType
 
 inductive Part where
   | input
@@ -46,6 +32,37 @@ inductive Part where
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Part
+
+mutual
+/-- A fact that a line or the begin caused, named by content. -/
+inductive Fact where
+  /--
+  The request of kind `kind` to `target` that a participant sent while `origin` was processed, whose input has each
+  field of `input`, when given, equal as the target's input schema compares it.
+  -/
+  | request (origin : Origin) (kind : RequestType) (target : Syntax.Ref) (input : Option Template)
+  /--
+  The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
+  given, as it travels to `receiver` when given, or to its only receiver.
+  -/
+  | event (origin : Origin) (event : Syntax.Ref) (payload : Option Template) (receiver : Option String)
+  /--
+  The answer to the request that line `to` sent or delivered, which its receiver gave while `origin` was processed.
+  -/
+  | answer (origin : Origin) (to : Nat)
+  /--
+  The end of the subscription that the request `subscription` opened, which its sender sent while `origin` was
+  processed.
+  -/
+  | «end» (origin : Origin) (subscription : Fact)
+  /--
+  The message that line `index` itself carried: a request it sent, a message that a peer line stated, or one that it
+  delivered.
+  -/
+  | line (index : Nat)
+  /-- The instance of screen `screen` that opened while `origin` was processed. -/
+  | screen (origin : Origin) (screen : Syntax.Ref)
+deriving BEq, Repr, Inhabited
 
 /--
 A value observed when the scenario runs: the field at `path` of the input of the request that `fact` names, or of the
@@ -55,32 +72,45 @@ structure ValueRef where
   fact : Fact
   part : Part
   path : List String
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire ValueRef
+deriving BEq, Repr, Inhabited
 
 inductive Fill where
   | ref (value : ValueRef)
   /-- A key that a running peer creates: the peer's run gives the value, which the scenario never writes. -/
   | created
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Fill tag "type"
+deriving BEq, Repr, Inhabited
 
 /-- The place `path` of a template's value that the run fills. -/
 structure Hole where
   path : List String
   fill : Fill
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Hole
+deriving BEq, Repr, Inhabited
 
 /-- A written value whose `holes` the run fills. -/
 structure Template where
   value : Value
   holes : List Hole := []
-deriving DecidableEq, Repr, Inhabited
+deriving BEq, Repr, Inhabited
+end
 
-derive_wire Template
+derive_wire_mutual (Fact tag "type" skip_serializing_none) (ValueRef) (Fill tag "type") (Hole) (Template)
+
+/-- Whether the template writes `created()`. -/
+def Template.created (t : Template) : Bool := t.holes.any (·.fill == .created)
+
+mutual
+/-- The templates that the handle writes as picks, with the picks of the handles that their holes read, at any depth. -/
+partial def Fact.picks : Fact → List Template
+  | .request _ _ _ input => (input.map fun t => t :: t.picks).getD []
+  | .event _ _ payload _ => (payload.map fun t => t :: t.picks).getD []
+  | .«end» _ subscription => subscription.picks
+  | _ => []
+
+/-- The picks of the handles that the template's holes read, at any depth. -/
+partial def Template.picks (t : Template) : List Template :=
+  t.holes.flatMap fun h => match h.fill with
+    | .ref r => r.fact.picks
+    | .created => []
+end
 
 end Tazuna.Scenario

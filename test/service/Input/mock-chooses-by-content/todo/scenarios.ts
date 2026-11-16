@@ -10,10 +10,14 @@ export const chosenByContent = scenario(
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
       const add = w.client.send(addTask, {});
-      const at = (from: string) => add.request(calendar.nextDay, { input: { from } });
-      w.peer.calendar.answer(at("2026-10-25T02:00:00Z"), nextDay);
-      w.peer.calendar.answer(at("2026-10-25T01:00:00Z"), nextDay);
-      w.peer.calendar.answer(at("2026-10-25T03:00:00Z"), nextDay);
+      const deliverAndAnswer = (from: string) => {
+        const request = add.request(calendar.nextDay, { input: { from } });
+        w.net.deliver(request);
+        w.net.deliver(w.peer.calendar.answer(request, nextDay));
+      };
+      deliverAndAnswer("2026-10-25T02:00:00Z");
+      deliverAndAnswer("2026-10-25T01:00:00Z");
+      deliverAndAnswer("2026-10-25T03:00:00Z");
     },
     then: () => [],
   },

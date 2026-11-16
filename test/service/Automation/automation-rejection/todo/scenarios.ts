@@ -14,7 +14,9 @@ export const notifiedAfterAdd = scenario(
     given,
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-      w.peer.device.answer(add.request(device.showNotification), { result: "accepted" });
+      const notification = add.request(device.showNotification);
+      w.net.deliver(notification);
+      w.net.deliver(w.peer.device.answer(notification, { result: "accepted" }));
     },
     then: () => [],
   },
@@ -26,10 +28,14 @@ export const ignoredUnavailable = scenario(
     given,
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-      w.peer.device.answer(add.request(device.showNotification), {
-        result: "rejected",
-        rejection: { kind: "unavailable" },
-      });
+      const notification = add.request(device.showNotification);
+      w.net.deliver(notification);
+      w.net.deliver(
+        w.peer.device.answer(notification, {
+          result: "rejected",
+          rejection: { kind: "unavailable" },
+        }),
+      );
     },
     then: () => [],
   },

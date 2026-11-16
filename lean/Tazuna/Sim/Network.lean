@@ -50,8 +50,9 @@ structure Message where
   status : Status
 deriving Repr, Inhabited
 
+/-- The message as a report names it: its sender, its receiver, the sender's id of it, and what caused it. -/
 def Message.describe (m : Message) : Value :=
-  .obj [("sender", .str m.sender), ("receiver", .str m.receiver), ("id", .str m.id)]
+  .obj [("sender", .str m.sender), ("receiver", .str m.receiver), ("id", .str m.id), ("origin", ToValue.toValue m.origin)]
 
 def Message.sameChannel (m n : Message) : Bool :=
   m.sender == n.sender && m.receiver == n.receiver && m.channel == n.channel
@@ -95,10 +96,10 @@ structure World where
   sent : List Sent := []
   /-- The message that each line carried, by line. -/
   carried : List (Nat × Nat) := []
-  /-- The channels whose undelivered messages are in flight at the end: the inFlight line, sender, receiver, channel. -/
-  inFlight : List (Nat × String × String × Option String) := []
-  /-- The number of events of each name that each external peer emitted, by `<peer>.<event>`. -/
-  emitted : List (String × Nat) := []
+  /-- The messages that inFlight lines name: the line, and the message. -/
+  inFlight : List (Nat × Nat) := []
+  /-- The number of messages of each definition that each external peer sent, by `<peer>.<name>`: their ids count. -/
+  counts : List (String × Nat) := []
   /-- What each look line found for the offered expectations of Then, by expectation. -/
   looked : List (Nat × Bool) := []
   reports : List Report := []
@@ -172,10 +173,11 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
 
 /--
 The world after `service` processes what `f` gives it while `origin` is processed: its state, the span of lines it
-wrote, the screens that opened, and the messages it sent.
+wrote, the screens that opened, and the messages it sent. Under `reopen`, as after a restart, every screen open after it
+opened anew.
 -/
 def World.act {m : Type → Type} [Monad m] (w : World) (fsOf : String → Functions m) (o : Origin) (service : String)
-    (f : Service → Functions m → State → m State) : m World := do
+    (f : Service → Functions m → State → m State) (reopen : Bool := false) : m World := do
   match w.services.lookup service with
   | none => pure w
   | some st =>
@@ -183,7 +185,7 @@ def World.act {m : Type → Type} [Monad m] (w : World) (fsOf : String → Funct
     let before := s.lines.size
     let screens := screensOf s
     let t ← f st (fsOf service) s
-    let opened := ((screensOf t).filter (!screens.contains ·)).map fun (chart, resource) =>
+    let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun (chart, resource) =>
       { origin := o, service, chart, resource : Opened }
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
                       spans := w.spans ++ [({ origin := o, service, «from» := before, to := t.lines.size } : Span)],

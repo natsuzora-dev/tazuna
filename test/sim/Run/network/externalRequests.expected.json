@@ -7,18 +7,18 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "command",
+          "id": "calendar/addTask#1",
           "name": "addTask",
           "input": {
             "taskId": "task-1",
             "title": "Buy milk"
-          },
-          "id": "addTask#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "answer",
-          "to": "addTask#1",
+          "to": "calendar/addTask#1",
           "answer": {
             "result": "accepted"
           },
@@ -34,7 +34,7 @@
             "title": "Buy milk",
             "seen": false
           },
-          "resultOf": "addTask#1",
+          "resultOf": "calendar/addTask#1",
           "id": "taskAddedRecorded#1"
         },
         {
@@ -45,7 +45,7 @@
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1",
+          "resultOf": "calendar/addTask#1",
           "id": "taskAdded#1"
         },
         {

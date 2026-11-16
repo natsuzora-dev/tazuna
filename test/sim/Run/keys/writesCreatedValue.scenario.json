@@ -19,6 +19,7 @@
         "origin": {
           "type": "begin"
         },
+        "kind": "command",
         "target": {
           "service": "tags",
           "name": "register"
@@ -33,6 +34,7 @@
         "origin": {
           "type": "begin"
         },
+        "kind": "command",
         "target": {
           "service": "tags",
           "name": "register"
@@ -43,6 +45,13 @@
           "result": "accepted"
         },
         "holes": []
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 1
       }
     },
     {
@@ -67,6 +76,7 @@
                   "origin": {
                     "type": "begin"
                   },
+                  "kind": "command",
                   "target": {
                     "service": "tags",
                     "name": "register"
@@ -84,10 +94,18 @@
         "origin": {
           "type": "begin"
         },
+        "kind": "command",
         "target": {
           "service": "tags",
           "name": "register"
         }
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 3
       }
     },
     {
@@ -120,6 +138,7 @@
                   "origin": {
                     "type": "begin"
                   },
+                  "kind": "command",
                   "target": {
                     "service": "tags",
                     "name": "register"
@@ -136,12 +155,19 @@
     {
       "type": "deliver",
       "message": {
+        "type": "line",
+        "index": 5
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
         "type": "answer",
         "origin": {
           "type": "line",
-          "index": 3
+          "index": 6
         },
-        "to": 3
+        "to": 5
       }
     },
     {
@@ -150,8 +176,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 1
+          "index": 2
         },
+        "kind": "query",
         "target": {
           "service": "tags",
           "name": "labels"
@@ -165,8 +192,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 1
+          "index": 2
         },
+        "kind": "query",
         "target": {
           "service": "tags",
           "name": "labels"
@@ -195,6 +223,7 @@
                   "origin": {
                     "type": "begin"
                   },
+                  "kind": "command",
                   "target": {
                     "service": "tags",
                     "name": "register"
@@ -207,7 +236,45 @@
           }
         ]
       }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 9
+      }
     }
   ],
-  "expectations": []
+  "expectations": [
+    {
+      "type": "requested",
+      "line": 2,
+      "ends": [],
+      "requests": [
+        {
+          "kind": "query",
+          "target": {
+            "service": "tags",
+            "name": "labels"
+          },
+          "input": {
+            "value": {},
+            "holes": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "answered",
+      "line": 5,
+      "answers": [
+        {
+          "value": {
+            "result": "accepted"
+          },
+          "holes": []
+        }
+      ]
+    }
+  ]
 }

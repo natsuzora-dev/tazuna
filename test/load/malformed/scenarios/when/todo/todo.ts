@@ -7,7 +7,7 @@ export const Task = entity({
   key: "id",
 });
 
-export const { command, createEvent, event, contract, scenario } = service({
+export const { command, createEvent, event, query, contract, scenario } = service({
   description: "Keep tasks",
   entities: { Task },
 });
@@ -23,3 +23,5 @@ export const addTask = command({
   emit(taskRecorded, { id: input.taskId, title: input.title }),
   emit(taskAdded, { taskId: input.taskId }),
 ]);
+
+export const taskCount = query({ output: { count: z.number() } }).resolve(() => ({ count: 0 }));

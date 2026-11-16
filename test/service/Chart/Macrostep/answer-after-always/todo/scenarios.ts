@@ -8,11 +8,15 @@ export const answerAfterAlways = scenario(
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
       const adding = w.client.send(addTask, { taskId: "task-1" });
+      const nextDay = adding.request(calendar.nextDay);
+      w.net.deliver(nextDay);
       w.clock.at("2026-10-25T12:00:00+09:00");
-      w.peer.calendar.answer(adding.request(calendar.nextDay), {
-        result: "fulfilled",
-        output: { day: "2026-10-26T00:00:00+09:00" },
-      });
+      w.net.deliver(
+        w.peer.calendar.answer(nextDay, {
+          result: "fulfilled",
+          output: { day: "2026-10-26T00:00:00+09:00" },
+        }),
+      );
     },
     then: () => [],
   },

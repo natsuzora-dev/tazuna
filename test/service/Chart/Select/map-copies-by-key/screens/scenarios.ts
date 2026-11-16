@@ -1,4 +1,4 @@
-import { type Caused, external, type When } from "@natsuzora-dev/tazuna";
+import { external, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { listScreen } from "./listScreen.ts";
@@ -6,14 +6,15 @@ import { listScreen } from "./listScreen.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 type W = When<typeof given.peers>;
 
-/** The list screen that begin opens, showing todo's answer of `taskIds`. */
-const shown = (w: W, ...taskIds: string[]) => {
-  w.peer.todo.answer(w.begin.request(todo.tasks), { result: "fulfilled", output: { taskIds } });
+/**
+ * The list screen that begin opens, after the network delivers its subscription to todo and todo's answer of
+ * `taskIds`.
+ */
+const deliveredList = (w: W, ...taskIds: string[]) => {
+  const tasks = w.begin.subscription(todo.tasks);
+  w.net.deliver(tasks);
+  w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds } }));
   return w.begin.screen(listScreen);
-};
-const completed = (w: W, line: Caused) => w.peer.todo.answer(line.request(todo.completeTask), { result: "accepted" });
-const unanswered = (w: W, ...lines: readonly Caused[]) => {
-  for (const line of lines) w.peer.todo.leaveUnanswered(line.request(todo.completeTask));
 };
 
 export const routedByKey = scenario(
@@ -21,14 +22,17 @@ export const routedByKey = scenario(
   {
     given,
     when: (w) => {
-      const list = shown(w, "task-1", "task-2");
-      const first = w.user.operate(list, "complete", { taskId: "task-1" });
+      const list = deliveredList(w, "task-1", "task-2");
+      const first = w.user.operate(list, "complete", { taskId: "task-1" }).request(todo.completeTask);
       w.user.operate(list, "complete", { taskId: "task-1" });
-      const second = w.user.operate(list, "complete", { taskId: "task-2" });
-      completed(w, second);
-      completed(w, first);
-      const third = w.user.operate(list, "complete", { taskId: "task-1" });
-      unanswered(w, third);
+      const second = w.user.operate(list, "complete", { taskId: "task-2" }).request(todo.completeTask);
+      w.net.deliver(second);
+      w.net.deliver(w.peer.todo.answer(second, { result: "accepted" }));
+      w.net.deliver(first);
+      w.net.deliver(w.peer.todo.answer(first, { result: "accepted" }));
+      const third = w.user.operate(list, "complete", { taskId: "task-1" }).request(todo.completeTask);
+      w.net.deliver(third);
+      w.peer.todo.leaveUnanswered(third);
     },
     then: () => [],
   },
@@ -39,7 +43,7 @@ export const noCopyForKey = scenario(
   {
     given,
     when: (w) => {
-      w.user.operate(shown(w, "task-1"), "complete", { taskId: "task-3" });
+      w.user.operate(deliveredList(w, "task-1"), "complete", { taskId: "task-3" });
     },
     then: () => [],
   },
@@ -50,9 +54,13 @@ export const withoutKeyFields = scenario(
   {
     given,
     when: (w) => {
-      const all = w.user.operate(shown(w, "task-1", "task-2"), "completeAll");
-      w.peer.todo.leaveUnanswered(all.request(todo.completeTask, { input: { taskId: "task-1" } }));
-      w.peer.todo.leaveUnanswered(all.request(todo.completeTask, { input: { taskId: "task-2" } }));
+      const all = w.user.operate(deliveredList(w, "task-1", "task-2"), "completeAll");
+      const first = all.request(todo.completeTask, { input: { taskId: "task-1" } });
+      const second = all.request(todo.completeTask, { input: { taskId: "task-2" } });
+      w.net.deliver(first);
+      w.peer.todo.leaveUnanswered(first);
+      w.net.deliver(second);
+      w.peer.todo.leaveUnanswered(second);
     },
     then: () => [],
   },

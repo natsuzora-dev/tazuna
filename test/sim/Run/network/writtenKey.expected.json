@@ -1,0 +1,27 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.writtenKey",
+    "definition": null,
+    "data": {
+      "scenarioLine": 0,
+      "key": "todo/Task-7",
+      "entity": {
+        "service": "todo",
+        "name": "Task"
+      }
+    }
+  }
+}

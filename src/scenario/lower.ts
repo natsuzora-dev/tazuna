@@ -1,3 +1,5 @@
+import type { z } from "zod";
+import { collectionOf } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type {
   Expectation as DataExpectation,
@@ -8,16 +10,47 @@ import type {
   Template,
   ValueRef,
 } from "../data/scenario.generated.ts";
+import { schemaNode } from "../data/schemaNode.ts";
+import type { Shape } from "../data/values.ts";
+import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen } from "../dsl/definition.ts";
 import {
+  type AnswerRef,
+  type Caused,
+  type ClientRequestLine,
+  type ClientSubscribeLine,
   createdMark,
   type DeadlineOf,
+  type Delivered,
+  type EndRef,
+  type EventMessage,
   type Expectation,
   factOf,
   type Line,
+  type Look,
   lineIndex,
+  type Message,
+  type OutRequest,
+  type OutSubscription,
   observedRef,
+  type ProcessingLine,
+  rawMark,
   type ScenarioDefinition,
+  type ScreenRef,
+  type When,
 } from "./define.ts";
+
+/** How a scenario reads an observed value that exists only when the scenario runs. */
+export type ObservedUse =
+  /** It lists its fields: a spread, `Object.keys`, or a loop over it. */
+  | "spread"
+  /** It asks whether a field is present (`in`). */
+  | "presence"
+  /** It converts the value to a string or number: a template literal, arithmetic, or a comparison. */
+  | "conversion"
+  /** It reads a field that the value's schema does not have, such as an array method. */
+  | "unknownField"
+  /** It reads an element of a bag, set or sortedBy array by position, which means nothing there. */
+  | "position";
 
 /** Why the lines of a scenario cannot be read as data. */
 export type LoweringProblem =
@@ -26,7 +59,14 @@ export type LoweringProblem =
   /** A line was placed after When returned. */
   | { readonly kind: "lineAfterWhen" }
   /** The time of clock line `line` is not an instant in whole milliseconds. */
-  | { readonly kind: "unparsableTime"; readonly line: number };
+  | { readonly kind: "unparsableTime"; readonly line: number }
+  /** Line `line` uses an observed value in the way `use`, at the field `path`, instead of placing it whole. */
+  | {
+      readonly kind: "misusedObserved";
+      readonly line: number;
+      readonly use: ObservedUse;
+      readonly path: readonly string[];
+    };
 
 /** The lines and expectations of a scenario as data, with the call stack of each line. */
 export interface Lowered {
@@ -56,13 +96,62 @@ class Unnamed extends Error {
 
 class LineAfterWhen extends Error {}
 
+class Misused extends Error {
+  readonly use: ObservedUse;
+  readonly path: readonly string[];
+  constructor(use: ObservedUse, path: readonly string[]) {
+    super(`observed value used as ${use}`);
+    this.use = use;
+    this.path = path;
+  }
+}
+
 const isRecord = (v: unknown): v is Record<PropertyKey, unknown> => typeof v === "object" && v !== null;
 
-/** A placeholder that stands for the value that `ref` observes when the scenario runs. */
-function observed(ref: ValueRef): unknown {
+/** The schema of a value: an object of shape `Shape` at the top, a Zod schema below, or unknown. */
+type Schema = { readonly shape: Shape } | z.ZodType | undefined;
+
+/** The schema of the field `key` of a value of `schema`, or whether `key` is no field of it. */
+function fieldOf(schema: Schema, key: string): { readonly schema: Schema } | ObservedUse {
+  if (schema === undefined) return { schema: undefined };
+  if ("shape" in schema && !("def" in schema))
+    return Object.hasOwn(schema.shape, key) ? { schema: schema.shape[key] } : "unknownField";
+  const node = schemaNode(schema as z.ZodType);
+  switch (node.type) {
+    case "optional":
+    case "nullable":
+    case "default":
+      return fieldOf(node.inner, key);
+    case "object":
+      return Object.hasOwn(node.shape, key) ? { schema: node.shape[key] } : "unknownField";
+    case "array":
+      if (!/^(0|[1-9][0-9]*)$/.test(key)) return "unknownField";
+      return collectionOf(schema as z.ZodType) === undefined ? { schema: node.element } : "position";
+    default:
+      return { schema: undefined };
+  }
+}
+
+/**
+ * A placeholder that stands for the value that `ref` observes when the scenario runs, of `schema`. It is placed whole:
+ * reading a field of its schema gives the field's placeholder, and any other use throws.
+ */
+function observed(ref: ValueRef, schema: Schema): unknown {
+  const misused = (use: ObservedUse): never => {
+    throw new Misused(use, ref.path);
+  };
   return new Proxy(Object.create(null), {
-    get: (_, key) =>
-      key === observedRef ? ref : typeof key === "symbol" ? undefined : observed({ ...ref, path: [...ref.path, key] }),
+    get: (_, key) => {
+      if (key === observedRef) return ref;
+      if (key === Symbol.toPrimitive) return () => misused("conversion");
+      if (typeof key === "symbol") return undefined;
+      if (key === "toString" || key === "valueOf") return () => misused("conversion");
+      const field = fieldOf(schema, key);
+      if (typeof field === "string") return misused(field);
+      return observed({ ...ref, path: [...ref.path, key] }, field.schema);
+    },
+    has: () => misused("presence"),
+    ownKeys: () => misused("spread"),
   });
 }
 
@@ -80,6 +169,7 @@ function template(value: unknown): Template {
       holes.push({ path: [...path], fill: { type: "created" } });
       return null;
     }
+    if (rawMark in v) return v[rawMark];
     if (Array.isArray(v)) return v.map((x, i) => walk(x, [...path, String(i)]));
     return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, [...path, k])]));
   };
@@ -87,12 +177,25 @@ function template(value: unknown): Template {
 }
 
 const factOfHandle = (handle: unknown): Fact => {
-  if (isRecord(handle) && typeof handle[lineIndex] === "number")
-    return { type: "line", index: handle[lineIndex] as number };
-  return (handle as { [factOf]: Fact })[factOf];
+  if (isRecord(handle) && factOf in handle) return handle[factOf] as Fact;
+  return { type: "line", index: indexOf(handle) };
 };
 
 const indexOf = (handle: unknown): number => (handle as Line)[lineIndex];
+
+/** The shapes of a request definition: its input, and its output when it has one. */
+interface RequestShapes {
+  readonly kind: "command" | "query";
+  readonly input: Shape;
+  readonly output?: Shape;
+}
+
+const shapeOf = (shape: Shape | undefined): Schema => (shape === undefined ? undefined : { shape });
+
+/** The handle `o` as the type that When gives it; its brands exist only in types. */
+const handle = <H>(o: object): H => o as H;
+
+type Peers = ScenarioDefinition["given"]["peers"];
 
 /**
  * Runs When with recording actors and Then on what When returned, and returns the lines and expectations as data.
@@ -101,6 +204,7 @@ const indexOf = (handle: unknown): number => (handle as Line)[lineIndex];
 export function lower(
   definition: ScenarioDefinition,
   refOf: (definition: unknown) => DefinitionRef | undefined,
+  serviceOf: (contract: unknown) => string | undefined,
 ): Lowered {
   const lines: DataLine[] = [];
   const stacks: (string | undefined)[] = [];
@@ -112,112 +216,211 @@ export function lower(
     return ref;
   };
   const at = () => ["lines", lines.length];
+  const serviceNamed = (contract: unknown, path: readonly (string | number)[]): string => {
+    const service = serviceOf(contract);
+    if (service === undefined) throw new Unnamed(path);
+    return service;
+  };
+  const outputOf = (fact: Fact, target: unknown) =>
+    observed({ fact, part: "output", path: [] }, shapeOf((target as RequestShapes | undefined)?.output));
+  /** The request message `fact` of `target`, as a handle names it. */
+  const requestMessage = (fact: Fact, target: unknown) => ({
+    [factOf]: fact,
+    target,
+    input: observed({ fact, part: "input", path: [] }, shapeOf((target as RequestShapes).input)),
+  });
 
-  const caused = (origin: Origin) => ({
-    request: (target: unknown, pick?: { readonly input?: unknown }) => {
+  const caused = (origin: Origin): Caused => {
+    const request = (subscribe: boolean) => (target: unknown, pick?: { readonly input?: unknown }) => {
       const fact: Fact = {
         type: "request",
         origin,
+        kind: subscribe ? "subscribe" : (target as RequestShapes).kind,
         target: named(target, at()),
-        ...(pick?.input === undefined ? {} : { input: pick.input }),
+        ...(pick?.input === undefined ? {} : { input: template(pick.input) }),
       };
-      return { [factOf]: fact, target, input: observed({ fact, part: "input", path: [] }) };
-    },
-    event: (event: unknown, pick?: { readonly payload?: unknown }) => {
-      const fact: Fact = {
-        type: "event",
-        origin,
-        event: named(event, at()),
-        ...(pick?.payload === undefined ? {} : { payload: pick.payload }),
-      };
-      return { [factOf]: fact, event, payload: observed({ fact, part: "input", path: [] }) };
-    },
-    screen: (screen: unknown) => ({
-      [factOf]: { type: "screen", origin, screen: named(screen, at()) } satisfies Fact,
-      screen,
-    }),
-    answer: (request: unknown) => {
-      const fact: Fact = { type: "answer", origin, to: indexOf(request) };
-      return { [factOf]: fact, output: observed({ fact, part: "output", path: [] }) };
-    },
-  });
+      return requestMessage(fact, target);
+    };
+    return {
+      request: <T extends AnyCommand | AnyQuery>(target: T, pick?: { readonly input?: unknown }) =>
+        handle<OutRequest<T>>(request(false)(target, pick)),
+      subscription: <Q extends AnyQuery>(query: Q, pick?: { readonly input?: unknown }) =>
+        handle<OutSubscription<Q>>(request(true)(query, pick)),
+      event: <Ev extends AnyEvent>(event: Ev, pick?: { readonly payload?: unknown; readonly to?: unknown }) => {
+        const fact: Fact = {
+          type: "event",
+          origin,
+          event: named(event, at()),
+          ...(pick?.payload === undefined ? {} : { payload: template(pick.payload) }),
+          ...(pick?.to === undefined ? {} : { receiver: serviceNamed(pick.to, [...at(), "to"]) }),
+        };
+        const shape = (event as { readonly payload: Shape }).payload;
+        return handle<EventMessage<Ev>>({
+          [factOf]: fact,
+          event,
+          payload: observed({ fact, part: "input", path: [] }, { shape }),
+        });
+      },
+      screen: <Sc extends AnyScreen>(screen: Sc) =>
+        handle<ScreenRef<Sc>>({
+          [factOf]: { type: "screen", origin, screen: named(screen, at()) } satisfies Fact,
+          screen,
+        }),
+      answer: <T>(request: { readonly target: T }) => {
+        const fact: Fact = { type: "answer", origin, to: indexOf(request) };
+        return handle<AnswerRef<T>>({ [factOf]: fact, output: outputOf(fact, request.target) });
+      },
+      end: (subscription: unknown) =>
+        handle<EndRef>({
+          [factOf]: { type: "end", origin, subscription: factOfHandle(subscription) } satisfies Fact,
+        }),
+    };
+  };
 
-  /** Places `line` and returns its handle, which `extra` extends. */
-  const place = (line: DataLine, extra: (index: number) => object = () => ({})) => {
+  /** Places `line` and returns its index. */
+  const place = (line: DataLine): number => {
     if (closed) throw new LineAfterWhen();
-    const index = lines.length;
     lines.push(line);
     stacks.push(new Error().stack);
-    return { [lineIndex]: index, ...caused({ type: "line", index }), ...extra(index) };
+    return lines.length - 1;
   };
-  const output = (fact: Fact) => ({ output: observed({ fact, part: "output", path: [] }) });
-  const requestLine = (
+  /** Places `line`, whose processing by a running service names what it caused. */
+  const processingLine = (line: DataLine) => {
+    const index = place(line);
+    return { [lineIndex]: index, ...caused({ type: "line", index }) };
+  };
+  const processing = (line: DataLine) => handle<ProcessingLine>(processingLine(line));
+  const self = (index: number): Fact => ({ type: "line", index });
+  const clientRequest = (
     kind: "command" | "query" | "subscribe",
     target: unknown,
     input: unknown,
-    more: { readonly peer?: string; readonly sameIdAs?: number },
-  ) =>
-    place(
-      { type: "request", ...more, kind, target: named(target, at()), input: template(input) } as DataLine,
-      (index) => ({ target, subscription: kind === "subscribe", ...output({ type: "line", index }) }),
-    );
+    sameIdAs?: number,
+  ) => {
+    const handle = processingLine({
+      type: "request",
+      kind,
+      target: named(target, at()),
+      input: template(input),
+      ...(sameIdAs === undefined ? {} : { sameIdAs }),
+    });
+    const index = handle[lineIndex];
+    return { ...handle, target, subscribes: kind === "subscribe", output: outputOf(self(index), target) };
+  };
 
-  const peerActor = (peer: string) => ({
-    answer: (request: unknown, answer: unknown) => {
-      const fact = factOfHandle(request);
-      return place({ type: "answer", peer, request: fact, answer: template(answer) }, () => output(fact));
-    },
-    emit: (event: unknown, payload: unknown, options: { readonly resultOf: unknown }) =>
-      place({
-        type: "emit",
-        peer,
-        event: named(event, at()),
-        payload: template(payload),
-        ...(options.resultOf === null ? {} : { resultOf: factOfHandle(options.resultOf) }),
+  const peerActor = (peer: string) => {
+    /** Places the peer's line `line`, which states the message that its handle names. */
+    const stated = (line: DataLine) => {
+      const index = place(line);
+      return { [lineIndex]: index, [factOf]: self(index) };
+    };
+    const requestLine = (kind: "command" | "query" | "subscribe") => (target: unknown, input: unknown) => {
+      const handle = stated({ type: "request", peer, kind, target: named(target, at()), input: template(input) });
+      const index = handle[lineIndex];
+      return {
+        ...handle,
+        ...requestMessage(self(index), target),
+        subscribes: kind === "subscribe",
+        output: outputOf(self(index), target),
+      };
+    };
+    return {
+      answer: (request: { readonly target: unknown }, answer: unknown) => {
+        const handle = stated({ type: "answer", peer, request: factOfHandle(request), answer: template(answer) });
+        return { ...handle, output: outputOf(self(handle[lineIndex]), request.target) };
+      },
+      emit: (event: unknown, payload: unknown, options: { readonly resultOf: unknown }) => {
+        const ref = named(event, at());
+        const handle = stated({
+          type: "emit",
+          peer,
+          event: ref,
+          payload: template(payload),
+          ...(options.resultOf === null ? {} : { resultOf: factOfHandle(options.resultOf) }),
+        });
+        const origin: Origin = { type: "line", index: handle[lineIndex] };
+        return {
+          ...handle,
+          to: (receiver: unknown) => ({
+            [factOf]: {
+              type: "event",
+              origin,
+              event: ref,
+              receiver: serviceNamed(receiver, [...at(), "to"]),
+            } satisfies Fact,
+          }),
+        };
+      },
+      leaveUnanswered: (request: unknown) => ({
+        [lineIndex]: place({ type: "leaveUnanswered", peer, request: factOfHandle(request) }),
       }),
-    leaveUnanswered: (request: unknown) => place({ type: "leaveUnanswered", peer, request: factOfHandle(request) }),
-    send: (command: unknown, input: unknown) => requestLine("command", command, input, { peer }),
-    call: (query: unknown, input: unknown) => requestLine("query", query, input, { peer }),
-    subscribe: (query: unknown, input: unknown) => requestLine("subscribe", query, input, { peer }),
-    unsubscribe: (subscription: unknown) => place({ type: "unsubscribe", peer, subscription: indexOf(subscription) }),
-  });
+      send: requestLine("command"),
+      call: requestLine("query"),
+      subscribe: requestLine("subscribe"),
+      unsubscribe: (subscription: unknown) =>
+        stated({ type: "unsubscribe", peer, subscription: indexOf(subscription) }),
+    };
+  };
+
+  /** Places the network's line `line` about `message`, which names the same message. */
+  const delivery = (line: DataLine, message: unknown) => {
+    const handle = processingLine(line);
+    const target = isRecord(message) ? message["target"] : undefined;
+    return {
+      ...handle,
+      [factOf]: self(handle[lineIndex]),
+      ...(target === undefined ? {} : { target, output: outputOf(self(handle[lineIndex]), target) }),
+    };
+  };
 
   const w = {
     begin: caused({ type: "begin" }),
     client: {
-      send: (command: unknown, input: unknown, options?: { readonly sameIdAs?: unknown }) =>
-        requestLine(
-          "command",
-          command,
-          input,
-          options?.sameIdAs === undefined ? {} : { sameIdAs: indexOf(options.sameIdAs) },
+      send: <C extends AnyCommand>(command: C, input: unknown, options?: { readonly sameIdAs?: Line }) =>
+        handle<ClientRequestLine<C>>(
+          clientRequest(
+            "command",
+            command,
+            input,
+            options?.sameIdAs === undefined ? undefined : indexOf(options.sameIdAs),
+          ),
         ),
-      call: (query: unknown, input: unknown) => requestLine("query", query, input, {}),
-      subscribe: (query: unknown, input: unknown) => requestLine("subscribe", query, input, {}),
-      unsubscribe: (subscription: unknown) => place({ type: "unsubscribe", subscription: indexOf(subscription) }),
-      resend: (line: { readonly target: unknown; readonly subscription: boolean }) =>
-        place({ type: "resend", line: indexOf(line) }, (index) => ({
+      call: <Q extends AnyQuery>(query: Q, input: unknown) =>
+        handle<ClientRequestLine<Q>>(clientRequest("query", query, input)),
+      subscribe: <Q extends AnyQuery>(query: Q, input: unknown) =>
+        handle<ClientSubscribeLine<Q>>(clientRequest("subscribe", query, input)),
+      unsubscribe: (subscription: Line) => processing({ type: "unsubscribe", subscription: indexOf(subscription) }),
+      resend: <L extends ClientRequestLine | ClientSubscribeLine>(line: L) => {
+        const placed = processingLine({ type: "resend", line: indexOf(line) });
+        return handle<L>({
+          ...placed,
           target: line.target,
-          subscription: line.subscription,
-          ...output({ type: "line", index }),
-        })),
+          subscribes: line.subscribes,
+          output: outputOf(self(placed[lineIndex]), line.target),
+        });
+      },
     },
     user: {
       operate: (screen: unknown, control: string, payload?: unknown) =>
-        place({ type: "operate", screen: factOfHandle(screen), control, payload: template(payload ?? {}) }),
-      look: (screen: { readonly screen: unknown }) =>
-        place({ type: "look", screen: factOfHandle(screen) }, () => ({ looked: screen.screen })),
+        processing({ type: "operate", screen: factOfHandle(screen), control, payload: template(payload ?? {}) }),
+      look: <Sc extends AnyScreen>(screen: ScreenRef<Sc>) =>
+        handle<Look<Sc>>({ [lineIndex]: place({ type: "look", screen: factOfHandle(screen) }), looked: screen.screen }),
     },
-    peer: new Proxy({}, { get: (_, key) => (typeof key === "string" ? peerActor(key) : undefined) }) as Record<
-      string,
-      ReturnType<typeof peerActor>
-    >,
+    // A peer's actor is the same for every peer kind: the simulation tells a running peer from an external one.
+    peer: new Proxy(
+      {},
+      { get: (_, key) => (typeof key === "string" ? peerActor(key) : undefined) },
+    ) as When<Peers>["peer"],
     net: {
-      deliver: (message: unknown) => place({ type: "deliver", message: factOfHandle(message) }),
-      redeliver: (message: unknown) => place({ type: "redeliver", message: factOfHandle(message) }),
-      lose: (message: unknown) => place({ type: "lose", message: factOfHandle(message) }),
-      fail: (message: unknown) => place({ type: "fail", message: factOfHandle(message) }),
-      inFlight: (message: unknown) => place({ type: "inFlight", message: factOfHandle(message) }),
+      deliver: <M extends Message>(message: M) =>
+        handle<Delivered<M>>(delivery({ type: "deliver", message: factOfHandle(message) }, message)),
+      redeliver: <M extends Message>(message: M) =>
+        handle<Delivered<M>>(delivery({ type: "redeliver", message: factOfHandle(message) }, message)),
+      lose: (message: Message) =>
+        handle<Line>({ [lineIndex]: place({ type: "lose", message: factOfHandle(message) }) }),
+      fail: (message: Message) => processing({ type: "fail", message: factOfHandle(message) }),
+      inFlight: (message: Message) =>
+        handle<Line>({ [lineIndex]: place({ type: "inFlight", message: factOfHandle(message) }) }),
     },
     clock: {
       at: (time: string, options?: { readonly order?: readonly DeadlineOf[] }) => {
@@ -227,11 +430,11 @@ export function lower(
           const chart = named(d.chart, [...at(), "order", k]);
           return { service: chart.service, deadline: { instance: chart.name, state: d.state, name: d.name } };
         });
-        return place({ type: "at", time: t ?? time, order });
+        return processing({ type: "at", time: t ?? time, order });
       },
     },
-    host: { restart: () => place({ type: "restart" }) },
-  };
+    host: { restart: () => processing({ type: "restart" }) },
+  } satisfies When<Peers>;
 
   const expectations: DataExpectation[] = [];
   const lowerExpectation = (e: Expectation, k: number): DataExpectation => {
@@ -269,7 +472,7 @@ export function lower(
     }
   };
   try {
-    const returned = definition.when(w as never);
+    const returned = definition.when(w);
     closed = true;
     (definition.expect as (lines: unknown) => readonly Expectation[])(returned).forEach((e, k) => {
       expectations.push(lowerExpectation(e, k));
@@ -277,6 +480,8 @@ export function lower(
   } catch (error) {
     if (error instanceof Unnamed) problems.push({ kind: "unnamed", path: error.path });
     else if (error instanceof LineAfterWhen) problems.push({ kind: "lineAfterWhen" });
+    else if (error instanceof Misused)
+      problems.push({ kind: "misusedObserved", line: lines.length, use: error.use, path: error.path });
     else throw error;
   }
   return { lines, expectations, stacks, problems };

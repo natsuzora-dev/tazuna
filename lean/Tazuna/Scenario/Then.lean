@@ -9,7 +9,7 @@ structure SentRequest where
   kind : RequestType
   target : Syntax.Ref
   input : Template
-deriving DecidableEq, Repr, Inhabited
+deriving BEq, Repr, Inhabited
 
 derive_wire SentRequest
 
@@ -17,7 +17,7 @@ derive_wire SentRequest
 structure EmittedEvent where
   event : Syntax.Ref
   payload : Template
-deriving DecidableEq, Repr, Inhabited
+deriving BEq, Repr, Inhabited
 
 derive_wire EmittedEvent
 
@@ -40,8 +40,25 @@ inductive Expectation where
   true for offered and false for not offered.
   -/
   | offered (look : Nat) (control : String) (payload : Option Template) (offered : Bool)
-deriving DecidableEq, Repr, Inhabited
+deriving BEq, Repr, Inhabited
 
 derive_wire Expectation tag "type" skip_serializing_none
+
+/-- The line that the expectation is about. -/
+def Expectation.line : Expectation → Nat
+  | .answered line _ | .emitted line _ | .requested line _ _ | .offered line _ _ _ => line
+
+/-- The values that the expectation writes. -/
+def Expectation.written : Expectation → List Template
+  | .answered _ answers => answers
+  | .emitted _ events => events.map (·.payload)
+  | .requested _ requests _ => requests.map (·.input)
+  | .offered _ _ payload _ => payload.toList
+
+/-- The picks of the expectation's handles and of the handles that its written values read, at any depth. -/
+def Expectation.picks (e : Expectation) : List Template :=
+  (match e with
+    | .requested _ _ ends => ends.flatMap Fact.picks
+    | _ => []) ++ e.written.flatMap Template.picks
 
 end Tazuna.Scenario

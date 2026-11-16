@@ -1,4 +1,4 @@
-import { type CausedLine, external, notOffered, type When } from "@natsuzora-dev/tazuna";
+import { external, notOffered, type ProcessingLine, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { editScreen } from "./editScreen.ts";
@@ -7,23 +7,35 @@ import { taskScreen } from "./taskScreen.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 type W = When<typeof given.peers>;
 
-/** todo answers the task subscription of the task screen that begin opened. */
-const shown = (w: W, isCompleted: boolean) =>
-  w.peer.todo.answer(w.begin.request(todo.task), { result: "fulfilled", output: { isCompleted } });
-/** todo never answers the task subscription. */
-const neverShown = (w: W) => w.peer.todo.leaveUnanswered(w.begin.request(todo.task));
-const accepted = (w: W, line: CausedLine) =>
-  w.peer.todo.answer(line.request(todo.completeTask), { result: "accepted" });
+/** The network delivers the task subscription of the task screen that begin opened to todo. */
+const deliverTaskSubscription = (w: W) => w.net.deliver(w.begin.subscription(todo.task));
+/** todo answers the task subscription, and the network delivers the answer. */
+const deliverShown = (w: W, isCompleted: boolean) =>
+  w.net.deliver(w.peer.todo.answer(w.begin.subscription(todo.task), { result: "fulfilled", output: { isCompleted } }));
+/** The network delivers the task subscription to todo, which never answers it. */
+const deliverNeverShown = (w: W) => {
+  deliverTaskSubscription(w);
+  w.peer.todo.leaveUnanswered(w.begin.subscription(todo.task));
+};
+/** The network delivers the completeTask that `line` caused to todo, and todo's acceptance back. */
+const deliverAccepted = (w: W, line: ProcessingLine) => {
+  const complete = line.request(todo.completeTask);
+  w.net.deliver(complete);
+  w.net.deliver(w.peer.todo.answer(complete, { result: "accepted" }));
+};
 
 export const offersDecide = scenario(
-  "Look at complete before the task answer and while a completed task is shown; the offers of complete return [] before the task answer arrives and while a completed task is shown, so taskScreen does not offer complete then. innermostOffers shows that taskScreen accepts complete and sends completeTask while an open task is shown: an external peer answers a subscription only once",
+  "Look at complete before the task answer and while a completed task is shown, and operate it while an open task is shown; the offers of complete return [] before the task answer arrives and while a completed task is shown, so taskScreen does not offer complete then. While an open task is shown, taskScreen accepts complete and sends completeTask",
   {
     given,
     when: (w) => {
       const task = w.begin.screen(taskScreen);
       const beforeAnswer = w.user.look(task);
-      shown(w, true);
+      deliverTaskSubscription(w);
+      deliverShown(w, true);
       const completedShown = w.user.look(task);
+      deliverShown(w, false);
+      deliverAccepted(w, w.user.operate(task, "complete"));
       return { beforeAnswer, completedShown };
     },
     then: ({ beforeAnswer, completedShown }) => [
@@ -39,8 +51,9 @@ export const innermostOffers = scenario(
     given,
     when: (w) => {
       const task = w.begin.screen(taskScreen);
-      shown(w, false);
-      accepted(w, w.user.operate(task, "complete"));
+      deliverTaskSubscription(w);
+      deliverShown(w, false);
+      deliverAccepted(w, w.user.operate(task, "complete"));
       return { look: w.user.look(task) };
     },
     then: ({ look }) => [notOffered(look, "complete")],
@@ -53,10 +66,11 @@ export const acceptedWithoutTransition = scenario(
     given,
     when: (w) => {
       const task = w.begin.screen(taskScreen);
-      shown(w, false);
+      deliverTaskSubscription(w);
+      deliverShown(w, false);
       const first = w.user.operate(task, "complete");
       w.user.operate(task, "complete");
-      accepted(w, first);
+      deliverAccepted(w, first);
     },
     then: () => [],
   },
@@ -70,7 +84,7 @@ export const unionOfRegionOffers = scenario(
       const edit = w.begin.screen(editScreen);
       w.user.operate(edit, "save");
       w.user.operate(edit, "save");
-      neverShown(w);
+      deliverNeverShown(w);
     },
     then: () => [],
   },
@@ -83,10 +97,13 @@ export const parentlessSideBySide = scenario(
     when: (w) => {
       const edit = w.begin.screen(editScreen);
       w.user.operate(edit, "save");
-      shown(w, false);
+      deliverTaskSubscription(w);
+      deliverShown(w, false);
       const completing = w.user.operate(w.begin.screen(taskScreen), "complete");
       w.user.operate(edit, "save");
-      w.peer.todo.leaveUnanswered(completing.request(todo.completeTask));
+      const complete = completing.request(todo.completeTask);
+      w.net.deliver(complete);
+      w.peer.todo.leaveUnanswered(complete);
     },
     then: () => [],
   },
@@ -98,7 +115,7 @@ export const datetimeOffers = scenario(
     given,
     when: (w) => {
       w.user.operate(w.begin.screen(taskScreen), "remind", { at: "2026-10-25T03:00:00Z" });
-      neverShown(w);
+      deliverNeverShown(w);
     },
     then: () => [],
   },

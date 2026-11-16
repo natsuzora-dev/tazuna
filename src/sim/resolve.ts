@@ -3,8 +3,11 @@ import type { Report } from "../data/report.generated.ts";
 import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
+import { refOf, type Schema } from "../service/basic.ts";
+import { Failed } from "../service/functions.ts";
 import { refOfTraceName } from "../syntax/structure.ts";
-import { describe, type Message, type Opened, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
+import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
+import { renamed } from "./participant.ts";
 
 /** A report that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
@@ -57,9 +60,30 @@ function setValueAt(v: unknown, x: unknown, path: readonly string[]): unknown {
   return { [k]: setValueAt({}, x, rest) };
 }
 
+/** Lean's comparedOr. */
+function comparedOr(w: World, service: string, schema: Schema, v: unknown): unknown {
+  const r = w.participants.get(service)?.processing;
+  if (r === undefined) return v;
+  const c = r.functions.unordered(schema, v);
+  return c instanceof Failed ? v : c;
+}
+
 /** Lean's picks. */
-const picks = (pick: unknown, v: unknown): boolean =>
-  pick === undefined || canonicalJson(overlay(v, pick)) === canonicalJson(v);
+const picks = (w: World, service: string, schema: Schema, pick: unknown, v: unknown): boolean =>
+  pick === undefined ||
+  canonicalJson(comparedOr(w, service, schema, overlay(v, pick))) === canonicalJson(comparedOr(w, service, schema, v));
+
+/** Lean's World.schemaOf?. */
+function schemaOf(w: World, m: Message): readonly [string, Schema] | undefined {
+  const side = running(w.roles.get(m.sender)) ? m.sender : m.receiver;
+  const st = w.participants.get(side)?.processing.st;
+  if (st === undefined) return undefined;
+  const b = m.body;
+  if (b.type === "command" || b.type === "query" || b.type === "subscribe")
+    return [side, { kind: "input", definition: refOf(st, renamed(m.sender, side, b.name)) }];
+  if (b.type === "event") return [side, { kind: "payload", event: refOf(st, renamed(m.sender, side, b.name)) }];
+  return undefined;
+}
 
 /** Lean's LineBody.value?. */
 function valueOfLine(l: TraceLine): unknown {
@@ -115,17 +139,24 @@ function only(w: World, i: number, fact: Fact, found: readonly number[]): number
 /** Lean's World.messageOf. */
 export function messageOf(w: World, i: number, fact: Fact): number {
   const matching = (p: (m: Message) => boolean) => w.messages.flatMap((m, k) => (p(m) ? [k] : []));
+  const picked = (p: (m: Message) => boolean, pick: Template | undefined) => {
+    const filled = pick === undefined ? undefined : fill(w, i, pick);
+    return matching((m) => {
+      if (!p(m)) return false;
+      const schema = schemaOf(w, m);
+      const v = valueOfLine(m.body);
+      return schema !== undefined && v !== undefined && picks(w, schema[0], schema[1], filled, v);
+    });
+  };
   switch (fact.type) {
     case "request":
       return only(
         w,
         i,
         fact,
-        matching(
-          (m) =>
-            sameOrigin(m.origin, fact.origin) &&
-            sameRef(targetOf(m), fact.target) &&
-            picks(fact.input, valueOfLine(m.body) ?? null),
+        picked(
+          (m) => sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m), fact.target),
+          fact.input,
         ),
       );
     case "event":
@@ -133,12 +164,12 @@ export function messageOf(w: World, i: number, fact: Fact): number {
         w,
         i,
         fact,
-        matching(
+        picked(
           (m) =>
             sameOrigin(m.origin, fact.origin) &&
             sameRef(eventOf(m), fact.event) &&
-            picks(fact.payload, valueOfLine(m.body) ?? null) &&
             (fact.receiver === undefined || fact.receiver === m.receiver),
+          fact.payload,
         ),
       );
     case "answer": {
@@ -154,6 +185,23 @@ export function messageOf(w: World, i: number, fact: Fact): number {
             m.sender === s.receiver &&
             m.body.type === "answer" &&
             m.body.to === s.id,
+        ),
+      );
+    }
+    case "end": {
+      const sub = w.messages[messageOf(w, i, fact.subscription)];
+      if (sub === undefined) return unresolved(i, fact);
+      return only(
+        w,
+        i,
+        fact,
+        matching(
+          (m) =>
+            sameOrigin(m.origin, fact.origin) &&
+            m.sender === sub.sender &&
+            m.receiver === sub.receiver &&
+            m.body.type === "unsubscribe" &&
+            m.body.to === sub.id,
         ),
       );
     }
@@ -215,6 +263,7 @@ function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
   const viaMessage = () => {
     const m = w.messages[messageOf(w, i, fact)];
     if (m === undefined) return missing();
+    if (m.body.type === "answer" && part === "output") return present(outputOf(m.body.answer));
     if (part === "input") return present(valueOfLine(m.body));
     const received = (stateOf(w, m.sender)?.lines ?? []).find(
       (l) => l.dir === "in" && l.type === "answer" && l.to === m.id,

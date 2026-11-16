@@ -75,7 +75,7 @@ function payloadOf(change: AnyEvent["change"], d: EventOptions): Shape {
   return Object.fromEntries(keys.map((k: string) => [k, fields[k] as z.ZodType]));
 }
 
-type PayloadShape<Ev extends AnyEvent> =
+export type PayloadShape<Ev extends AnyEvent> =
   Ev extends CreateEvent<KeyedEntity<infer S>>
     ? S
     : Ev extends UpdateEvent<infer E, infer W>

@@ -1,13 +1,16 @@
-import { type Caused, external, type When } from "@natsuzora-dev/tazuna";
+import { type Caused, external, raw, type When } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { addTask, completeTask, scenario, swapTitles, titledCount } from "./todo.ts";
 
 const peers = { device: external(device) } as const;
 const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers } as const;
 
-/** device accepts the notification that `line` caused. */
-const shown = (w: When<typeof peers>, line: Caused) =>
-  w.peer.device.answer(line.request(device.showNotification), { result: "accepted" });
+/** The network delivers the notification that `line` caused to device, and device's acceptance back. */
+const deliverAndAccept = (w: When<typeof peers>, line: Caused) => {
+  const notification = line.request(device.showNotification);
+  w.net.deliver(notification);
+  w.net.deliver(w.peer.device.answer(notification, { result: "accepted" }));
+};
 
 export const commandRejections = scenario(
   "Add a task with an empty title, complete a missing task, add tasks with a duplicate key and a duplicate unique title, and complete a task twice; todo rejects them with invalid-input, not-found, already-exists, and, for the second completion, requires with the condition name isOpen",
@@ -16,7 +19,7 @@ export const commandRejections = scenario(
     when: (w) => {
       w.client.send(addTask, { taskId: "task-1", title: "" });
       w.client.send(completeTask, { taskId: "task-9" });
-      shown(w, w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
+      deliverAndAccept(w, w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
       w.client.send(addTask, { taskId: "task-1", title: "Buy eggs" });
       w.client.send(addTask, { taskId: "task-2", title: "Buy milk" });
       w.client.send(completeTask, { taskId: "task-1" });
@@ -27,10 +30,11 @@ export const commandRejections = scenario(
 );
 
 export const queryRejections = scenario(
-  "Ask for titledCount with an empty title and with a title; todo rejects the first, for which the requires condition hasTitle fails, with requires and the condition name",
+  "Ask for titledCount with a title that is not a string, with an empty title, and with a title; todo rejects the first with invalid-input and the second, for which the requires condition hasTitle fails, with requires and the condition name",
   {
     given,
     when: (w) => {
+      w.client.call(titledCount, raw({ title: 1 }));
       w.client.call(titledCount, { title: "" });
       w.client.call(titledCount, { title: "Buy milk" });
     },
@@ -44,11 +48,10 @@ export const unavailableAnswer = scenario(
     given,
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-      w.peer.device.answer(add.request(device.showNotification), {
-        result: "rejected",
-        rejection: { kind: "unavailable" },
-      });
-      shown(w, w.clock.at("2026-10-25T10:01:00+09:00"));
+      const notification = add.request(device.showNotification);
+      w.net.deliver(notification);
+      w.net.deliver(w.peer.device.answer(notification, { result: "rejected", rejection: { kind: "unavailable" } }));
+      deliverAndAccept(w, w.clock.at("2026-10-25T10:01:00+09:00"));
     },
     then: () => [],
   },
@@ -59,8 +62,8 @@ export const swappedTitles = scenario(
   {
     given,
     when: (w) => {
-      shown(w, w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
-      shown(w, w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }));
+      deliverAndAccept(w, w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
+      deliverAndAccept(w, w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }));
       w.client.send(swapTitles, { firstId: "task-1", secondId: "task-2" });
     },
     then: () => [],

@@ -94,11 +94,15 @@
     "kind": "Report.unfailable",
     "definition": null,
     "data": {
-      "scenarioLine": 2,
+      "scenarioLine": 4,
       "message": {
         "sender": "todo",
         "receiver": "notifier",
-        "id": "taskAdded#1"
+        "id": "taskAdded#1",
+        "origin": {
+          "type": "line",
+          "index": 0
+        }
       }
     }
   }

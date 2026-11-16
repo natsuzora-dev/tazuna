@@ -1,3 +1,3 @@
-import { addNote, addTask, contract } from "./notes.ts";
+import { addNote, addTask, contract, noteByLabel } from "./notes.ts";
 
-export const notes = contract({ addTask, addNote });
+export const notes = contract({ addTask, addNote, noteByLabel });

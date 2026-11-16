@@ -207,18 +207,67 @@ def encodeEntry : WireField → CommandElabM Term
 def applied (ctor : Name) (args : List Term) : CommandElabM Term := do
   args.foldlM (init := ← `(pure $(mkIdent ctor))) fun acc arg => `($acc <*> $arg)
 
-def objectInstances (self v : Ident) (ctor : Name) (decoded : List Term) (entries : List Term) : CommandElabM Unit := do
+def objectFunctions (v : Ident) (ctor : Name) (decoded : List Term) (entries : List Term) :
+    CommandElabM (Term × Term) := do
   let decode ← applied ctor decoded
-  elabCommand (← `(instance : FromValue $self := ⟨fun $v:ident => do
-    expectObject $v
-    $decode:term⟩))
   let encodeAlt ← matchAlt ctor ((← namedFields ctor).map (·.1)) (← `(Value.obj (List.flatten [$(entries.toArray),*])))
-  elabCommand (← `(instance : ToValue $self := ⟨fun $encodeAlt:matchAlt⟩))
+  pure (← `(fun $encodeAlt:matchAlt), ← `(fun $v:ident => do
+    expectObject $v
+    $decode:term))
 
 /--
-`derive_wire T options*` defines `FromValue T` and `ToValue T` in the shape that `wireShape` decides. A type with a
-tag also gets `T.<tag>`, the constructor's name, in kebab case under rename_all. Under try_from S, T is a structure that
-extends S with proofs: it is read as S and converted by `T.tryFrom : S → Except String T`, and written as its S.
+The functions that write and read `type` in the shape that `wireShape` decides, as terms of `type → Value` and
+`Value → Except String type`. A type with a tag also gets `T.<tag>`, the constructor's name, in kebab case under
+rename_all.
+-/
+def wireFunctions (type : Name) : CommandElabM (Term × Term) := do
+  let self := mkIdent type
+  let v := mkIdent `v
+  match ← wireShape type with
+  | .enum ctors =>
+    let names := ", ".intercalate (ctors.map (·.name))
+    let decodeAlts ← ctors.toArray.mapM fun c =>
+      `(Lean.Parser.Term.matchAltExpr| | .str $(quote c.name) => pure $(mkIdent c.ctor):ident)
+    let otherwise ← `(Lean.Parser.Term.matchAltExpr| | _ => throw $(quote s!"expected one of {names}"))
+    let encodeAlts ← ctors.toArray.mapM fun c => do matchAlt c.ctor [] (← `(Value.str $(quote c.name)))
+    pure (← `(fun $encodeAlts:matchAlt*), ← `(fun $(decodeAlts.push otherwise):matchAlt*))
+  | .tagged tag ctors =>
+    let decodeAlts ← ctors.toArray.mapM fun c => do
+      let decoded ← applied c.ctor (← c.fields.mapM (decodeField v))
+      `(Lean.Parser.Term.matchAltExpr| | $(quote c.name) => $decoded)
+    let otherwise ← `(Lean.Parser.Term.matchAltExpr| | other => throw ($(quote s!"unknown {tag.name} ") ++ other))
+    let encodeAlts ← ctors.toArray.mapM fun c => do
+      let (beforeTag, afterTag) := tag.split c.fields
+      let entries := (← beforeTag.mapM encodeEntry) ++ [(← `(requiredEntry $(quote tag.name) $(quote c.name)))] ++
+        (← afterTag.mapM encodeEntry)
+      matchAlt c.ctor (c.fields.map (·.name)) (← `(Value.obj (List.flatten [$(entries.toArray),*])))
+    let nameAlts ← ctors.toArray.mapM fun c => matchAlt c.ctor [] (quote c.name)
+    let nameOf := mkIdent (`_root_ ++ type ++ .mkSimple tag.name)
+    elabCommand (← `(def $nameOf : $self → String := fun $nameAlts:matchAlt*))
+    pure (← `(fun $encodeAlts:matchAlt*), ← `(fun $v:ident => do
+      expectObject $v
+      let name : String ← requiredField $v $(quote tag.name)
+      (match name with $(decodeAlts.push otherwise):matchAlt*)))
+  | .object ctor fields =>
+    objectFunctions v ctor (← fields.mapM (decodeField v)) (← fields.mapM encodeEntry)
+  | .untagged ctors =>
+    let otherwise ← `(throw $(quote s!"expected the fields of a constructor of {type}"))
+    let decode ← ctors.foldrM (init := otherwise) fun c rest => do
+      `($(← applied c.ctor (← c.fields.mapM (decodeField v))) <|> $rest)
+    let encodeAlts ← ctors.toArray.mapM fun c => do
+      let entries ← c.fields.mapM encodeEntry
+      matchAlt c.ctor (c.fields.map (·.name)) (← `(Value.obj (List.flatten [$(entries.toArray),*])))
+    pure (← `(fun $encodeAlts:matchAlt*), ← `(fun $v:ident => do
+      expectObject $v
+      $decode:term))
+  | .flattened ctor before body _ _ after =>
+    let fields := before ++ [body] ++ after
+    objectFunctions v ctor (← fields.mapM (decodeField v)) (← fields.mapM encodeEntry)
+
+/--
+`derive_wire T options*` defines `FromValue T` and `ToValue T` in the shape that `wireShape` decides. Under try_from S,
+T is a structure that extends S with proofs: it is read as S and converted by `T.tryFrom : S → Except String T`, and
+written as its S.
 -/
 elab "derive_wire " t:ident options:wireOption* : command => do
   let type ← liftCoreM (realizeGlobalConstNoOverloadWithInfo t)
@@ -232,48 +281,43 @@ elab "derive_wire " t:ident options:wireOption* : command => do
     elabCommand (← `(instance : FromValue $self := ⟨fun $v:ident => FromValue.fromValue $v >>= $tryFrom:ident⟩))
     elabCommand (← `(instance : ToValue $self := ⟨fun x => ToValue.toValue ($toSource:ident x)⟩))
     return
-  match ← wireShape type with
-  | .enum ctors =>
-    let names := ", ".intercalate (ctors.map (·.name))
-    let decodeAlts ← ctors.toArray.mapM fun c =>
-      `(Lean.Parser.Term.matchAltExpr| | .str $(quote c.name) => pure $(mkIdent c.ctor):ident)
-    let otherwise ← `(Lean.Parser.Term.matchAltExpr| | _ => throw $(quote s!"expected one of {names}"))
-    elabCommand (← `(instance : FromValue $self := ⟨fun $(decodeAlts.push otherwise):matchAlt*⟩))
-    let encodeAlts ← ctors.toArray.mapM fun c => do matchAlt c.ctor [] (← `(Value.str $(quote c.name)))
-    elabCommand (← `(instance : ToValue $self := ⟨fun $encodeAlts:matchAlt*⟩))
-  | .tagged tag ctors =>
-    let decodeAlts ← ctors.toArray.mapM fun c => do
-      let decoded ← applied c.ctor (← c.fields.mapM (decodeField v))
-      `(Lean.Parser.Term.matchAltExpr| | $(quote c.name) => $decoded)
-    let otherwise ← `(Lean.Parser.Term.matchAltExpr| | other => throw ($(quote s!"unknown {tag.name} ") ++ other))
-    elabCommand (← `(instance : FromValue $self := ⟨fun $v:ident => do
-      expectObject $v
-      let name : String ← requiredField $v $(quote tag.name)
-      (match name with $(decodeAlts.push otherwise):matchAlt*)⟩))
-    let encodeAlts ← ctors.toArray.mapM fun c => do
-      let (beforeTag, afterTag) := tag.split c.fields
-      let entries := (← beforeTag.mapM encodeEntry) ++ [(← `(requiredEntry $(quote tag.name) $(quote c.name)))] ++
-        (← afterTag.mapM encodeEntry)
-      matchAlt c.ctor (c.fields.map (·.name)) (← `(Value.obj (List.flatten [$(entries.toArray),*])))
-    elabCommand (← `(instance : ToValue $self := ⟨fun $encodeAlts:matchAlt*⟩))
-    let nameAlts ← ctors.toArray.mapM fun c => matchAlt c.ctor [] (quote c.name)
-    let nameOf := mkIdent (`_root_ ++ type ++ .mkSimple tag.name)
-    elabCommand (← `(def $nameOf : $self → String := fun $nameAlts:matchAlt*))
-  | .object ctor fields =>
-    objectInstances self v ctor (← fields.mapM (decodeField v)) (← fields.mapM encodeEntry)
-  | .untagged ctors =>
-    let otherwise ← `(throw $(quote s!"expected the fields of a constructor of {type}"))
-    let decode ← ctors.foldrM (init := otherwise) fun c rest => do
-      `($(← applied c.ctor (← c.fields.mapM (decodeField v))) <|> $rest)
-    elabCommand (← `(instance : FromValue $self := ⟨fun $v:ident => do
-      expectObject $v
-      $decode:term⟩))
-    let encodeAlts ← ctors.toArray.mapM fun c => do
-      let entries ← c.fields.mapM encodeEntry
-      matchAlt c.ctor (c.fields.map (·.name)) (← `(Value.obj (List.flatten [$(entries.toArray),*])))
-    elabCommand (← `(instance : ToValue $self := ⟨fun $encodeAlts:matchAlt*⟩))
-  | .flattened ctor before body _ _ after =>
-    let fields := before ++ [body] ++ after
-    objectInstances self v ctor (← fields.mapM (decodeField v)) (← fields.mapM encodeEntry)
+  let (encode, decode) ← wireFunctions type
+  elabCommand (← `(instance : FromValue $self := ⟨$decode⟩))
+  elabCommand (← `(instance : ToValue $self := ⟨$encode⟩))
+
+syntax wireMember := "(" ident wireOption* ")"
+
+/--
+`derive_wire_mutual (T options*)+` is `derive_wire` for the types of one mutual block, whose codecs call each other:
+each is a partial function that sees the instances of every type of the block.
+-/
+elab "derive_wire_mutual " members:wireMember+ : command => do
+  let types ← members.mapM fun
+    | `(wireMember| ($t:ident $options:wireOption*)) => do
+      let type ← liftCoreM (realizeGlobalConstNoOverloadWithInfo t)
+      let wire ← wireOptionsOf options
+      if wire.tryFrom.isSome then throwErrorAt t "derive_wire_mutual has no try_from"
+      modifyEnv (wireOptions.insert · type wire)
+      pure type
+    | member => throwErrorAt member "expected (T options*)"
+  let declared (type : Name) (suffix : String) := mkIdent (`_root_ ++ type ++ .mkSimple suffix)
+  let named (type : Name) (suffix : String) := mkIdent (type ++ .mkSimple suffix)
+  let withInstances (body : Term) : CommandElabM Term :=
+    types.foldrM (init := body) fun type body =>
+      `(have : ToValue $(mkIdent type) := ⟨$(named type "toWire")⟩
+        have : FromValue $(mkIdent type) := ⟨$(named type "ofWire")⟩
+        $body)
+  let functions ← types.mapM fun type => do pure (type, ← wireFunctions type)
+  let defs ← functions.flatMapM fun (type, encode, decode) => do
+    let self := mkIdent type
+    let x := mkIdent `x
+    pure #[← `(command| partial def $(declared type "toWire") ($x : $self) : Value :=
+        $(← withInstances (← `($encode $x)))),
+      ← `(command| partial def $(declared type "ofWire") ($x : Value) : Except String $self :=
+        $(← withInstances (← `($decode $x))))]
+  elabCommand (← `(mutual $defs* end))
+  for type in types do
+    elabCommand (← `(instance : FromValue $(mkIdent type) := ⟨$(named type "ofWire")⟩))
+    elabCommand (← `(instance : ToValue $(mkIdent type) := ⟨$(named type "toWire")⟩))
 
 end Tazuna.Data

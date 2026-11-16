@@ -13,15 +13,10 @@
   ],
   "reports": [],
   "halted": {
-    "kind": "Report.uncreatedKey",
+    "kind": "Report.misplacedCreated",
     "definition": null,
     "data": {
-      "scenarioLine": 0,
-      "key": "todo/Task-7",
-      "entity": {
-        "service": "todo",
-        "name": "Task"
-      }
+      "scenarioLine": 0
     }
   }
 }

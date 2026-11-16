@@ -13,11 +13,11 @@ export const settlesAfterShownChange = scenario(
     },
     when: (w) => {
       const list = w.begin.screen(listScreen);
-      const tasks = w.begin.request(todo.tasks);
+      const tasks = w.begin.subscription(todo.tasks);
       w.net.deliver(tasks);
-      w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds: [] } });
-      w.user.operate(list, "leave");
-      w.net.inFlight(tasks);
+      w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds: [] } }));
+      const leaving = w.user.operate(list, "leave");
+      w.net.inFlight(leaving.end(tasks));
     },
     then: () => [],
   },

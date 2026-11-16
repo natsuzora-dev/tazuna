@@ -191,18 +191,26 @@
     "kind": "Report.ambiguousPeerLine",
     "definition": null,
     "data": {
-      "scenarioLine": 5,
+      "scenarioLine": 6,
       "peer": "notifier",
       "candidates": [
         {
           "sender": "notifier",
           "receiver": "todo",
-          "id": "todo.ping#1"
+          "id": "todo.ping#1",
+          "origin": {
+            "type": "line",
+            "index": 4
+          }
         },
         {
           "sender": "notifier",
           "receiver": "todo",
-          "id": "todo.ping#2"
+          "id": "todo.ping#2",
+          "origin": {
+            "type": "line",
+            "index": 5
+          }
         }
       ]
     }

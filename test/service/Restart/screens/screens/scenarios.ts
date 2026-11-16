@@ -1,4 +1,4 @@
-import { notOffered, type OutRequest, requested, run, subscription, type When } from "@natsuzora-dev/tazuna";
+import { notOffered, type OutSubscription, requested, run, subscription, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { homeScreen, taskListScreen } from "./screens.ts";
@@ -6,10 +6,10 @@ import { homeScreen, taskListScreen } from "./screens.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } } as const;
 type W = When<typeof given.peers>;
 
-/** The network delivers the subscription to todo; todo's answers on it stay in flight. */
-const delivered = (w: W, sub: OutRequest) => {
-  w.net.deliver(sub);
-  w.net.inFlight(sub);
+/** The network delivers the subscription to todo; todo's first answer on it stays in flight. */
+const deliverSubscription = (w: W, sub: OutSubscription) => {
+  const reached = w.net.deliver(sub);
+  w.net.inFlight(reached.answer(reached));
 };
 
 export const screensReopen = scenario(
@@ -19,11 +19,11 @@ export const screensReopen = scenario(
     when: (w) => {
       const home = w.begin.screen(homeScreen);
       const opening = w.user.operate(home, "openList");
-      delivered(w, opening.request(todo.tasks));
+      deliverSubscription(w, opening.subscription(todo.tasks));
       const restarting = w.host.restart();
       const closedList = w.user.look(opening.screen(taskListScreen));
-      const reopening = w.user.operate(home, "openList");
-      delivered(w, reopening.request(todo.tasks));
+      const reopening = w.user.operate(restarting.screen(homeScreen), "openList");
+      deliverSubscription(w, reopening.subscription(todo.tasks));
       return { restarting, closedList, reopening };
     },
     then: ({ restarting, closedList, reopening }) => [

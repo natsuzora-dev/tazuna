@@ -1,14 +1,4 @@
-import {
-  answered,
-  emitted,
-  event,
-  external,
-  request,
-  requested,
-  skip,
-  unchecked,
-  type When,
-} from "@natsuzora-dev/tazuna";
+import { answered, emitted, event, external, raw, request, requested, skip, type When } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { device } from "../device/contract.ts";
 import { notifier } from "../notifier/contract.ts";
@@ -51,10 +41,14 @@ const showMilk = request(device.showNotification, { text: "Buy milk" });
 /** client adds task-1; calendar has not answered yet. */
 const addMilkUnanswered = (w: W) => w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
 
-/** client adds task-1, and calendar answers the business-day request that adding caused. */
-const addMilk = (w: W) => {
+/**
+ * client adds task-1; the network delivers todo's business-day request to calendar, and calendar's answer, that the
+ * next business day is `nextBusinessDay`, to todo.
+ */
+const addMilk = (w: W, nextBusinessDay: string) => {
   const add = addMilkUnanswered(w);
-  w.peer.calendar.answer(add.request(calendar.nextBusinessDay), day("2026-10-26"));
+  w.net.deliver(add.request(calendar.nextBusinessDay));
+  w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), day(nextBusinessDay)));
   return add;
 };
 
@@ -63,7 +57,7 @@ export const completeTwice = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.clock.at("2026-10-25T10:01:00+09:00");
       const first = w.client.send(completeTask, { taskId: "task-1" });
       const second = w.client.send(completeTask, { taskId: "task-1" });
@@ -82,7 +76,8 @@ export const remindAtDue = scenario("Change the due date of a task; todo sets th
   given: noTasks,
   when: (w) => {
     const add = addMilkUnanswered(w);
-    w.peer.calendar.answer(add.request(calendar.nextBusinessDay), unavailable);
+    w.net.deliver(add.request(calendar.nextBusinessDay));
+    w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), unavailable));
     w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-26T18:00:00+09:00" });
     const detail = w.client.call(taskDetail, { taskId: "task-1" });
     return { detail };
@@ -102,10 +97,11 @@ export const clearsDue = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-27T18:00:00+09:00" });
       const clear = w.client.send(changeDue, { taskId: "task-1", dueAt: null });
-      w.peer.calendar.answer(clear.request(calendar.nextBusinessDay), day("2026-10-26"));
+      w.net.deliver(clear.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(clear.request(calendar.nextBusinessDay), day("2026-10-26")));
       const open = w.client.call(tasks, { filter: "open" });
       return { clear, open };
     },
@@ -122,9 +118,10 @@ export const filtersTasks = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
-      w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-26"));
+      w.net.deliver(eggs.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-26")));
       w.client.send(completeTask, { taskId: "task-1" });
       const open = w.client.call(tasks, { filter: "open" });
       const completed = w.client.call(tasks, { filter: "completed" });
@@ -146,7 +143,7 @@ export const filtersTasks = scenario(
 export const reopenCompleted = scenario("Complete a task and reopen it; tasks with filter open returns the task", {
   given: noTasks,
   when: (w) => {
-    addMilk(w);
+    addMilk(w, "2026-10-26");
     w.clock.at("2026-10-25T10:01:00+09:00");
     w.client.send(completeTask, { taskId: "task-1" });
     const reopen = w.client.send(reopenTask, { taskId: "task-1" });
@@ -163,7 +160,7 @@ export const reopenCompleted = scenario("Complete a task and reopen it; tasks wi
 export const rejectsReopenOpen = scenario("Reopen an open task; todo rejects reopenTask by requires completed", {
   given: noTasks,
   when: (w) => {
-    addMilk(w);
+    addMilk(w, "2026-10-26");
     const reopen = w.client.send(reopenTask, { taskId: "task-1" });
     return { reopen };
   },
@@ -175,7 +172,7 @@ export const skipsPassedReminderOnReopen = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.client.send(completeTask, { taskId: "task-1" });
       const morning = w.clock.at("2026-10-26T09:00:00+09:00");
       const reopen = w.client.send(reopenTask, { taskId: "task-1" });
@@ -195,10 +192,11 @@ export const remindsReopenedAtReminder = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.client.send(completeTask, { taskId: "task-1" });
       w.client.send(reopenTask, { taskId: "task-1" });
       const midnight = w.clock.at("2026-10-26T00:00:00+09:00");
+      w.net.deliver(midnight.request(device.showNotification));
       w.peer.device.leaveUnanswered(midnight.request(device.showNotification));
       return { midnight };
     },
@@ -209,7 +207,7 @@ export const remindsReopenedAtReminder = scenario(
 export const deletesTask = scenario("Delete a task; tasks no longer returns the task, and taskDetail returns null", {
   given: noTasks,
   when: (w) => {
-    addMilk(w);
+    addMilk(w, "2026-10-26");
     const del = w.client.send(deleteTask, { taskId: "task-1" });
     const all = w.client.call(tasks, { filter: "all" });
     const detail = w.client.call(taskDetail, { taskId: "task-1" });
@@ -227,7 +225,7 @@ export const rejectsPastDue = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       const change = w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-25T09:00:00+09:00" });
       return { change };
     },
@@ -238,9 +236,10 @@ export const rejectsPastDue = scenario(
 export const remindAtRemindAt = scenario("Let the reminder time of a task arrive; todo reminds the user of the task", {
   given: noTasks,
   when: (w) => {
-    addMilk(w);
+    addMilk(w, "2026-10-26");
     const before = w.clock.at("2026-10-25T23:59:59+09:00");
     const midnight = w.clock.at("2026-10-26T00:00:00+09:00");
+    w.net.deliver(midnight.request(device.showNotification));
     w.peer.device.leaveUnanswered(midnight.request(device.showNotification));
     return { before, midnight };
   },
@@ -252,13 +251,16 @@ export const remindsAfterNotShown = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
-      w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-27"));
+      w.net.deliver(eggs.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-27")));
       const first = w.clock.at("2026-10-26T00:00:00+09:00");
-      w.peer.device.answer(first.request(device.showNotification), unavailable);
+      w.net.deliver(first.request(device.showNotification));
+      w.net.deliver(w.peer.device.answer(first.request(device.showNotification), unavailable));
       const second = w.clock.at("2026-10-27T00:00:00+09:00");
-      w.peer.device.answer(second.request(device.showNotification), accepted);
+      w.net.deliver(second.request(device.showNotification));
+      w.net.deliver(w.peer.device.answer(second.request(device.showNotification), accepted));
       return { first, second };
     },
     then: ({ first, second }) => [
@@ -273,7 +275,7 @@ export const answersSubscriptions = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       const openTasks = w.client.subscribe(tasks, { filter: "open" });
       const milk = w.client.subscribe(taskDetail, { taskId: "task-1" });
       w.client.send(completeTask, { taskId: "task-1" });
@@ -293,7 +295,7 @@ export const completeRedelivered = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       const first = w.client.send(completeTask, { taskId: "task-1" });
       const again = w.client.resend(first);
       return { first, again };
@@ -314,8 +316,10 @@ export const remindAddedWhileAsking = scenario(
     when: (w) => {
       const milk = addMilkUnanswered(w);
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
-      w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), day("2026-10-26"));
-      w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-26"));
+      w.net.deliver(milk.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), day("2026-10-26")));
+      w.net.deliver(eggs.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-26")));
       return { eggs };
     },
     then: ({ eggs }) => [requested(eggs, [request(calendar.nextBusinessDay, { from: "2026-10-25" })])],
@@ -330,9 +334,11 @@ export const remindInAnswerOrder = scenario(
       const milk = addMilkUnanswered(w);
       w.clock.at("2026-10-26T10:05:00+09:00");
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
-      w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-27"));
+      w.net.deliver(eggs.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-27")));
       const eggsDetail = w.client.call(taskDetail, { taskId: "task-2" });
-      w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), unavailable);
+      w.net.deliver(milk.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), unavailable));
       const milkDetailAfter = w.client.call(taskDetail, { taskId: "task-1" });
       return { eggs, eggsDetail, milkDetailAfter };
     },
@@ -360,7 +366,7 @@ export const skipsBusinessDayReminderWhenDisabled = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.client.send(changeReminders, { shouldRemind: false });
       const settings = w.client.call(reminderSettings, {});
       const midnight = w.clock.at("2026-10-26T00:00:00+09:00");
@@ -375,7 +381,7 @@ export const skipsDueReminderWhenDisabled = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.client.send(changeReminders, { shouldRemind: false });
       w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-27T18:00:00+09:00" });
       const due = w.clock.at("2026-10-27T18:00:00+09:00");
@@ -390,10 +396,11 @@ export const remindsWhenReenabled = scenario(
   {
     given: noTasks,
     when: (w) => {
-      addMilk(w);
+      addMilk(w, "2026-10-26");
       w.client.send(changeReminders, { shouldRemind: false });
       w.client.send(changeReminders, { shouldRemind: true });
       const midnight = w.clock.at("2026-10-26T00:00:00+09:00");
+      w.net.deliver(midnight.request(device.showNotification));
       w.peer.device.leaveUnanswered(midnight.request(device.showNotification));
       return { midnight };
     },
@@ -406,7 +413,7 @@ export const rejectsMalformedTitle = scenario(
   {
     given: noTasks,
     when: (w) => {
-      const add = w.client.send(addTask, { taskId: "task-1", title: unchecked(7) });
+      const add = w.client.send(addTask, raw({ taskId: "task-1", title: 7 }));
       return { add };
     },
     then: ({ add }) => [answered(add, { result: "rejected", rejection: { kind: "invalid-input" } })],
@@ -432,7 +439,7 @@ export const rejectsMissingTask = scenario(
 export const renamesTask = scenario("Rename a task; taskDetail returns the new title", {
   given: noTasks,
   when: (w) => {
-    addMilk(w);
+    addMilk(w, "2026-10-26");
     w.client.send(renameTask, { taskId: "task-1", title: "Buy soy milk" });
     const detail = w.client.call(taskDetail, { taskId: "task-1" });
     return { detail };
@@ -447,10 +454,12 @@ export const asksBusinessDayAgainOnStart = scenario(
     when: (w) => {
       const add = addMilkUnanswered(w);
       // The restart drops the waiting request, which calendar never answers.
+      w.net.deliver(add.request(calendar.nextBusinessDay));
       w.peer.calendar.leaveUnanswered(add.request(calendar.nextBusinessDay));
       w.clock.at("2026-10-25T10:05:00+09:00");
       const restart = w.host.restart();
-      w.peer.calendar.answer(restart.request(calendar.nextBusinessDay), day("2026-10-26"));
+      w.net.deliver(restart.request(calendar.nextBusinessDay));
+      w.net.deliver(w.peer.calendar.answer(restart.request(calendar.nextBusinessDay), day("2026-10-26")));
       const detail = w.client.call(taskDetail, { taskId: "task-1" });
       return { restart, detail };
     },

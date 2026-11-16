@@ -9,8 +9,13 @@ export const firstRestart = scenario(
   {
     given,
     when: (w) => {
-      w.peer.device.leaveUnanswered(w.begin.request(device.requestPermission));
-      w.peer.device.leaveUnanswered(w.host.restart().request(device.requestPermission));
+      const restarting = w.host.restart();
+      const first = w.begin.request(device.requestPermission);
+      w.net.deliver(first);
+      w.peer.device.leaveUnanswered(first);
+      const second = restarting.request(device.requestPermission);
+      w.net.deliver(second);
+      w.peer.device.leaveUnanswered(second);
     },
     then: () => [],
   },
@@ -21,10 +26,13 @@ export const requestsDiscarded = scenario(
   {
     given,
     when: (w) => {
-      w.peer.device.leaveUnanswered(w.begin.request(device.requestPermission));
+      const first = w.begin.request(device.requestPermission);
+      w.net.deliver(first);
+      w.peer.device.leaveUnanswered(first);
       w.clock.at("2026-10-25T10:05:00+09:00");
-      const restarting = w.host.restart();
-      w.peer.device.answer(restarting.request(device.requestPermission), { result: "accepted" });
+      const second = w.host.restart().request(device.requestPermission);
+      w.net.deliver(second);
+      w.net.deliver(w.peer.device.answer(second, { result: "accepted" }));
     },
     then: () => [],
   },

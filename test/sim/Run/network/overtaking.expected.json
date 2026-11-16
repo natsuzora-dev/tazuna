@@ -134,16 +134,24 @@
     "kind": "Report.overtaking",
     "definition": null,
     "data": {
-      "scenarioLine": 3,
+      "scenarioLine": 4,
       "message": {
         "sender": "todo",
         "receiver": "notifier",
-        "id": "noted#2"
+        "id": "noted#2",
+        "origin": {
+          "type": "line",
+          "index": 3
+        }
       },
       "earlier": {
         "sender": "todo",
         "receiver": "notifier",
-        "id": "noted#1"
+        "id": "noted#1",
+        "origin": {
+          "type": "line",
+          "index": 0
+        }
       }
     }
   }

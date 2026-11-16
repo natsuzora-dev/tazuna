@@ -47,6 +47,7 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -54,26 +55,9 @@
       },
       "answer": {
         "value": {
-          "result": "accepted",
-          "output": {
-            "slot": "10:00"
-          }
+          "result": "accepted"
         },
         "holes": []
-      }
-    },
-    {
-      "type": "redeliver",
-      "message": {
-        "type": "event",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "event": {
-          "service": "todo",
-          "name": "taskAdded"
-        }
       }
     }
   ],

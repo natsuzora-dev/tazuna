@@ -51,6 +51,21 @@
       }
     },
     {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 1
+        },
+        "kind": "command",
+        "target": {
+          "service": "calendar",
+          "name": "book"
+        }
+      }
+    },
+    {
       "type": "leaveUnanswered",
       "peer": "calendar",
       "request": {
@@ -59,6 +74,7 @@
           "type": "line",
           "index": 1
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -113,8 +129,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 3
+          "index": 4
         },
+        "kind": "command",
         "target": {
           "service": "todo",
           "name": "markSeen"
@@ -127,8 +144,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 3
+          "index": 4
         },
+        "kind": "command",
         "target": {
           "service": "todo",
           "name": "ping"
@@ -188,7 +206,7 @@
     },
     {
       "type": "answered",
-      "line": 8,
+      "line": 9,
       "answers": [
         {
           "value": {

@@ -10,11 +10,13 @@ export const answerAfterExit = scenario(
   {
     given,
     when: (w) => {
-      const first = w.client.send(addTask, { taskId: "task-1" });
+      const first = w.client.send(addTask, { taskId: "task-1" }).request(calendar.nextDay);
+      w.net.deliver(first);
       w.client.send(completeTask, { taskId: "task-1" });
-      w.peer.calendar.answer(first.request(calendar.nextDay), nextDay);
-      const second = w.client.send(addTask, { taskId: "task-2" });
-      w.peer.calendar.answer(second.request(calendar.nextDay), nextDay);
+      w.net.deliver(w.peer.calendar.answer(first, nextDay));
+      const second = w.client.send(addTask, { taskId: "task-2" }).request(calendar.nextDay);
+      w.net.deliver(second);
+      w.net.deliver(w.peer.calendar.answer(second, nextDay));
     },
     then: () => [],
   },

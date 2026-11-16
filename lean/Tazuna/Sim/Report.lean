@@ -8,7 +8,8 @@ open Tazuna.Data
 
 /--
 What the simulation of a scenario reports about the scenario. `scenarioLine` is the line of When, from 0. A message is
-named by its sender, its receiver, and the sender's id of it.
+named by its sender, its receiver, the sender's id of it, and its origin: the line, or the begin, whose processing sent
+it.
 
 Given is checked first, and each of its reports is given; after any of them, nothing begins. A report of a line of When
 stops the simulation, unless `halts` says otherwise, since later lines may depend on what the line did. An expectation
@@ -52,10 +53,15 @@ inductive Report where
   | unfailable (scenarioLine : Nat) (message : Value)
   /-- The line needs `service` to take part in another way than Given says: running, external, or the own service. -/
   | wrongRole (scenarioLine : Nat) (service : String)
-  /-- The line delivers, loses or answers `message`, which is not in flight. -/
+  /-- The line delivers, loses or fails `message`, or a running peer's line states it, and it is not in flight. -/
   | notInFlight (scenarioLine : Nat) (message : Value)
-  /-- The line delivers `message` again, which was not delivered. -/
+  /--
+  The line delivers `message` again, or its external receiver answers it or leaves it unanswered, and no line delivered
+  it.
+  -/
   | notDelivered (scenarioLine : Nat) (message : Value)
+  /-- The external peer answers the request `message` again, which is no subscription and has its answer. -/
+  | repeatedAnswer (scenarioLine : Nat) (message : Value)
   /-- The line delivers `message` while the earlier `earlier` on the same channel is in flight. -/
   | overtaking (scenarioLine : Nat) (message earlier : Value)
   /-- No message in flight from the running peer `peer` to the own service is the line's. -/
@@ -64,16 +70,23 @@ inductive Report where
   | ambiguousPeerLine (scenarioLine : Nat) (peer : String) (candidates : List Value)
   /-- The clock line's time `at` is not later than `now`. -/
   | notLater (scenarioLine : Nat) («at» now : Time)
-  /-- A written value has the form of a key `key` of `entity` that no running service has created. -/
-  | uncreatedKey (scenarioLine : Nat) (key : String) (entity : Syntax.Ref)
+  /--
+  A written value holds `key`, of the form of a key of `entity` that a running service creates: a scenario names a
+  created key only through a handle.
+  -/
+  | writtenKey (scenarioLine : Nat) (key : String) (entity : Syntax.Ref)
+  /-- The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick. -/
+  | misplacedCreated (scenarioLine : Nat)
   /-- The screen instance `screen` that the line operates is not the one that takes operations of its screen. -/
   | unoperableScreen (scenarioLine : Nat) (screen : String)
   /-- The running peer's answer `actual`, which the line delivers, is not the line's `expected`. -/
   | differentPeerAnswer (scenarioLine : Nat) (expected actual : Value)
-  /-- The message `message` is undelivered at the end, and no inFlight line covers its channel. -/
+  /-- The message `message` is undelivered at the end, and no inFlight line names it. -/
   | leftInFlight (message : Value)
-  /-- No message is undelivered at the end on the channel that the inFlight line covers. -/
+  /-- The message that the inFlight line names is not undelivered at the end. -/
   | unusedInFlight (scenarioLine : Nat)
+  /-- The external peer received the request `message`, and no line answers it or leaves it unanswered. -/
+  | awaitingAnswer (message : Value)
   /-- The offered expectation `expectation` names the line `scenarioLine`, which is no look line. -/
   | notLook (expectation scenarioLine : Nat)
   /-- The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`. -/
@@ -86,7 +99,8 @@ derive_group Report
 
 /-- Whether the report of a line stops the simulation: a line that cannot take place does. -/
 def Report.halts : Report → Bool
-  | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight .. | .unmetExpectation .. | .notLook .. => false
+  | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight .. | .awaitingAnswer .. | .unmetExpectation ..
+  | .notLook .. => false
   | .repeatedPeer .. | .unlistedPeer .. | .invalidRecord .. | .duplicateRecord .. | .brokenGivenInvariant .. => false
   | .missingRecord .. => false
   | _ => true

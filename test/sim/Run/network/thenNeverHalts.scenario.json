@@ -39,6 +39,21 @@
       }
     },
     {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "kind": "command",
+        "target": {
+          "service": "calendar",
+          "name": "book"
+        }
+      }
+    },
+    {
       "type": "answer",
       "peer": "calendar",
       "request": {
@@ -47,6 +62,7 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -60,6 +76,13 @@
           }
         },
         "holes": []
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 2
       }
     },
     {
@@ -108,12 +131,19 @@
     {
       "type": "deliver",
       "message": {
+        "type": "line",
+        "index": 6
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
         "type": "answer",
         "origin": {
           "type": "line",
-          "index": 4
+          "index": 7
         },
-        "to": 4
+        "to": 6
       }
     },
     {
@@ -132,12 +162,19 @@
     {
       "type": "deliver",
       "message": {
+        "type": "line",
+        "index": 9
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
         "type": "answer",
         "origin": {
           "type": "line",
-          "index": 6
+          "index": 10
         },
-        "to": 6
+        "to": 9
       }
     },
     {
@@ -163,6 +200,7 @@
                     "type": "line",
                     "index": 0
                   },
+                  "kind": "command",
                   "target": {
                     "service": "calendar",
                     "name": "book"
@@ -181,10 +219,41 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
         }
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 12
+        },
+        "event": {
+          "service": "calendar",
+          "name": "bookingConfirmed"
+        },
+        "receiver": "todo"
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 12
+        },
+        "event": {
+          "service": "calendar",
+          "name": "bookingConfirmed"
+        },
+        "receiver": "notifier"
       }
     },
     {
@@ -225,7 +294,7 @@
   "expectations": [
     {
       "type": "answered",
-      "line": 3,
+      "line": 4,
       "answers": [
         {
           "value": {
@@ -237,7 +306,7 @@
     },
     {
       "type": "answered",
-      "line": 9,
+      "line": 15,
       "answers": [
         {
           "value": {

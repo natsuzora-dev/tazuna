@@ -40,14 +40,48 @@
       }
     },
     {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 0
+      }
+    },
+    {
+      "type": "inFlight",
+      "message": {
+        "type": "answer",
+        "origin": {
+          "type": "line",
+          "index": 1
+        },
+        "to": 0
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 1
+        },
+        "kind": "command",
+        "target": {
+          "service": "calendar",
+          "name": "book"
+        }
+      }
+    },
+    {
       "type": "leaveUnanswered",
       "peer": "calendar",
       "request": {
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 0
+          "index": 1
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -60,7 +94,7 @@
         "type": "event",
         "origin": {
           "type": "line",
-          "index": 0
+          "index": 1
         },
         "event": {
           "service": "todo",
@@ -74,7 +108,7 @@
         "type": "event",
         "origin": {
           "type": "line",
-          "index": 0
+          "index": 1
         },
         "event": {
           "service": "todo",

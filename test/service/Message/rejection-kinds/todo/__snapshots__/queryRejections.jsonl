@@ -1,4 +1,6 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"titledCount#1","name":"titledCount","input":{"title":""}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"titledCount#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"hasTitle"}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"titledCount#2","name":"titledCount","input":{"title":"Buy milk"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"titledCount#2","answer":{"result":"fulfilled","output":{"count":0}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"titledCount#1","name":"titledCount","input":{"title":1}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"titledCount#1","answer":{"result":"rejected","rejection":{"kind":"invalid-input"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"titledCount#2","name":"titledCount","input":{"title":""}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"titledCount#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"hasTitle"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"titledCount#3","name":"titledCount","input":{"title":"Buy milk"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"titledCount#3","answer":{"result":"fulfilled","output":{"count":0}}}

@@ -31,13 +31,32 @@ def setValueAt (v x : Value) : List String → Value
       | none => v
     | _ => .obj [(k, setValueAt (.obj []) x ks)]
 
-/-- Whether `v` has each field of `pick`, at any depth, equal. -/
-def picks (pick : Option Value) (v : Value) : Bool :=
-  pick.all fun p => (v.overlay p).canonical == v.canonical
+variable {m : Type → Type} [Monad m]
+
+local instance {α : Type} : Inhabited (ExceptT Report m α) := ⟨throw default⟩
+
+/-- `v` as the simulation compares it for `schema` (Functions.unordered), or as it is when it does not match it. -/
+def comparedOr (fs : Functions m) (schema : Schema) (v : Value) : m Value := do
+  match ← fs.unordered schema v with
+  | .ok c => pure c
+  | .error _ => pure v
+
+/-- Whether `v` has each field of `pick`, at any depth, equal, as the simulation compares values of `schema`. -/
+def picks (fs : Functions m) (schema : Schema) (pick : Option Value) (v : Value) : m Bool := do
+  match pick with
+  | none => pure true
+  | some p => pure ((← comparedOr fs schema (v.overlay p)).canonical == (← comparedOr fs schema v).canonical)
 
 /-- The input of a request line, or the payload of an event line. -/
 def _root_.Tazuna.Semantics.LineBody.value? : LineBody → Option Value
   | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => some v
+  | _ => none
+
+/-- The kind of a request line. -/
+def _root_.Tazuna.Semantics.LineBody.requestType? : LineBody → Option Scenario.RequestType
+  | .command .. => some .command
+  | .query .. => some .query
+  | .subscribe .. => some .subscribe
   | _ => none
 
 /-- The target of a message that is a request. -/
@@ -52,6 +71,17 @@ def Message.event? (m : Message) : Option Syntax.Ref :=
   | .event name _ _ => some (Syntax.Ref.ofTraceName m.sender name)
   | _ => none
 
+/--
+The running end of the message, and the schema of the value that the message carries in its names: a request's input,
+an event's payload. The sender is that end when it runs, and the receiver otherwise.
+-/
+def World.schemaOf? (w : World) (msg : Message) : Option (String × Schema) :=
+  let side := if (w.role msg.sender).any (·.running) then msg.sender else msg.receiver
+  match msg.body with
+  | .command name _ | .query name _ | .subscribe name _ => some (side, .input (renamed msg.sender side name))
+  | .event name _ _ => some (side, .payload (renamed msg.sender side name))
+  | _ => none
+
 def World.sentBy (w : World) (line : Nat) : Option Sent := w.sent.find? (·.line == line)
 
 /-- The only one of `found`, or the report of none or several for the handle `fact` of line `i`. -/
@@ -60,25 +90,9 @@ def World.only (w : World) (i : Nat) (fact : Fact) : List Nat → Except Report 
   | [] => .error (.unresolvedReference i (ToValue.toValue fact))
   | ks => .error (.ambiguousReference i (ToValue.toValue fact) (ks.filterMap (w.messages[·]?) |>.map (·.describe)))
 
-/-- The message that the handle `fact` of line `i` names. -/
-def World.messageOf (w : World) (i : Nat) (fact : Fact) : Except Report Nat :=
-  let indexed := w.messages.toList.zipIdx
-  let matching (p : Message → Bool) := indexed.filterMap fun (m, k) => if p m then some k else none
-  match fact with
-  | .request o target input =>
-    w.only i fact (matching fun m => m.origin == o && m.target? == some target && picks input ((m.body.value?).getD .null))
-  | .event o event payload receiver =>
-    w.only i fact (matching fun m => m.origin == o && m.event? == some event &&
-      picks payload ((m.body.value?).getD .null) && receiver.all (· == m.receiver))
-  | .answer o to =>
-    match w.sentBy to with
-    | none => .error (.unresolvedReference i (ToValue.toValue fact))
-    | some s =>
-      w.only i fact (matching fun m => m.origin == o && m.sender == s.receiver && match m.body with
-        | .answer t _ => t == s.id
-        | _ => false)
-  | .line j => w.only i fact (w.carried.filterMap fun (l, k) => if l == j then some k else none)
-  | .screen .. => .error (.unresolvedReference i (ToValue.toValue fact))
+def ofExcept {α : Type} : Except Report α → ExceptT Report m α
+  | .ok a => pure a
+  | .error e => throw e
 
 /-- The screen instance that the handle `fact` of line `i` names. -/
 def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except Report Opened :=
@@ -108,25 +122,68 @@ def World.answersOf (w : World) (s : Sent) : List Answer :=
     | .answer t a => if l.dir == .out && t == s.id && next.all (n < ·) then some a else none
     | _ => none
 
+mutual
+/--
+The message that the handle `fact` of line `i` names. A pick's value is filled as the line fills its values, and
+compared with the message's as the schema of its sender compares them.
+-/
+partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
+    ExceptT Report m Nat := do
+  let indexed := w.messages.toList.zipIdx
+  let matching (p : Message → Bool) := indexed.filterMap fun (msg, k) => if p msg then some k else none
+  let picked (p : Message → Bool) (pick : Option Template) : ExceptT Report m (List Nat) := do
+    let pick ← pick.mapM (w.fill fsOf i)
+    let found ← indexed.filterM fun (msg, _) => do
+      if !p msg then return false
+      match w.schemaOf? msg, msg.body.value? with
+      | some (side, schema), some v => (picks (fsOf side) schema pick v : m Bool)
+      | _, _ => pure false
+    pure (found.map (·.2))
+  match fact with
+  | .request o kind target input =>
+    ofExcept (w.only i fact (← picked (fun msg => msg.origin == o && msg.body.requestType? == some kind &&
+      msg.target? == some target) input))
+  | .event o event payload receiver =>
+    ofExcept (w.only i fact (← picked (fun msg => msg.origin == o && msg.event? == some event &&
+      receiver.all (· == msg.receiver)) payload))
+  | .answer o to =>
+    match w.sentBy to with
+    | none => throw (.unresolvedReference i (ToValue.toValue fact))
+    | some s =>
+      ofExcept (w.only i fact (matching fun msg => msg.origin == o && msg.sender == s.receiver && match msg.body with
+        | .answer t _ => t == s.id
+        | _ => false))
+  | .«end» o subscription =>
+    let k ← w.messageOf fsOf i subscription
+    let some sub := w.messages[k]? | throw (.unresolvedReference i (ToValue.toValue fact))
+    ofExcept (w.only i fact (matching fun msg => msg.origin == o && msg.sender == sub.sender &&
+      msg.receiver == sub.receiver && match msg.body with
+        | .unsubscribe to => to == sub.id
+        | _ => false))
+  | .line j => ofExcept (w.only i fact (w.carried.filterMap fun (l, k) => if l == j then some k else none))
+  | .screen .. => throw (.unresolvedReference i (ToValue.toValue fact))
+
 /--
 The value of the part `part` of the request that the handle `fact` of line `i` names: of a line's request or of a
-request that a running service sent, its input and the output of the first answer to it; of an answer, the output of
-the one answer that the receiver of the line's request gave to it while the answer's origin was processed, which names
-each answer of a subscription by the line that caused it.
+request that a participant sent, its input and the output of the first answer to it; of an answer, the output of the
+one answer that the receiver of the line's request gave to it while the answer's origin was processed, which names
+each answer of a subscription by the line that caused it; of an answer that a line states, its output.
 -/
-def World.partOf (w : World) (i : Nat) (fact : Fact) (part : Part) : Except Report Value := do
-  let missing : Except Report Value := .error (.missingOutput i (ToValue.toValue fact))
-  let present : Option Value → Except Report Value
+partial def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) (part : Part) :
+    ExceptT Report m Value := do
+  let missing : ExceptT Report m Value := throw (.missingOutput i (ToValue.toValue fact))
+  let present : Option Value → ExceptT Report m Value
     | some v => pure v
     | none => missing
-  let viaMessage : Except Report Value := do
-    let k ← w.messageOf i fact
-    let some m := w.messages[k]? | missing
-    match part with
-    | .input => present m.body.value?
-    | .output => present (((w.state m.sender).lines.toList.findSome? fun l =>
+  let viaMessage : ExceptT Report m Value := do
+    let k ← w.messageOf fsOf i fact
+    let some msg := w.messages[k]? | missing
+    match msg.body, part with
+    | .answer _ a, .output => present a.output?
+    | _, .input => present msg.body.value?
+    | _, .output => present (((w.state msg.sender).lines.toList.findSome? fun l =>
         match l.dir, l.body with
-        | .in, .answer t a => if t == m.id then some a else none
+        | .in, .answer t a => if t == msg.id then some a else none
         | _, _ => none).bind (·.output?))
   match fact, part with
   | .line j, _ =>
@@ -138,28 +195,31 @@ def World.partOf (w : World) (i : Nat) (fact : Fact) (part : Part) : Except Repo
     | none => viaMessage
   | .answer o to, .output =>
     match w.sentBy to with
-    | none => .error (.unresolvedReference i (ToValue.toValue fact))
+    | none => throw (.unresolvedReference i (ToValue.toValue fact))
     | some s =>
       match (w.spanLines o s.receiver).filterMap fun l => match l.dir, l.body with
           | .out, .answer t a => if t == s.id then some a else none
           | _, _ => none with
       | [a] => present a.output?
-      | [] => .error (.unresolvedReference i (ToValue.toValue fact))
-      | several => .error (.ambiguousReference i (ToValue.toValue fact) (several.map ToValue.toValue))
+      | [] => throw (.unresolvedReference i (ToValue.toValue fact))
+      | several => throw (.ambiguousReference i (ToValue.toValue fact) (several.map ToValue.toValue))
   | _, _ => viaMessage
 
-def World.observed (w : World) (i : Nat) (r : ValueRef) : Except Report Value := do
-  let v ← w.partOf i r.fact r.part
+partial def World.observed (w : World) (fsOf : String → Functions m) (i : Nat) (r : ValueRef) :
+    ExceptT Report m Value := do
+  let v ← w.partOf fsOf i r.fact r.part
   match valueAt? v r.path with
   | some x => pure x
-  | none => .error (.missingField i r.path v)
+  | none => throw (.missingField i r.path v)
 
 /-- The template's value with each referenced hole filled; a created hole keeps the written value. -/
-def World.fill (w : World) (i : Nat) (t : Template) : Except Report Value :=
+partial def World.fill (w : World) (fsOf : String → Functions m) (i : Nat) (t : Template) :
+    ExceptT Report m Value :=
   t.holes.foldlM (init := t.value) fun v h =>
     match h.fill with
-    | .ref r => do pure (setValueAt v (← w.observed i r) h.path)
+    | .ref r => do pure (setValueAt v (← w.observed fsOf i r) h.path)
     | .created => pure v
+end
 
 /-- What a created hole holds when the simulation compares: a key that the peer created and that no handle names. -/
 def createdMark : String := "<created>"

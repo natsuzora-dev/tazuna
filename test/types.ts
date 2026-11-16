@@ -1,9 +1,12 @@
 import { z } from "zod";
+import { calendar as calendarPeer } from "../samples/todo/spec/calendar/contract.ts";
 import { contract as externalContract, query as externalQuery } from "../samples/todo/spec/calendar/data.ts";
 import { command as externalCommand } from "../samples/todo/spec/device/data.ts";
+import { scenario as scenarioOfScreens } from "../samples/todo/spec/screens/data.ts";
 import { taskDetailScreen } from "../samples/todo/spec/screens/taskDetailScreen.ts";
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
 import { addTask, completeTask, setReminder } from "../samples/todo/spec/todo/commands.ts";
+import { todo as todoPeer } from "../samples/todo/spec/todo/contract.ts";
 import { automation, command, query, Settings, Task } from "../samples/todo/spec/todo/data.ts";
 import {
   dueChanged,
@@ -19,16 +22,23 @@ import {
   type Bag,
   bag,
   constants,
+  created,
   datetime,
   emit,
+  emitted,
+  endOf,
   entity,
+  external,
   type KindOf,
   mock,
   operate,
   type RecordsOf,
   type RowOf,
+  raw,
   receive,
   ref,
+  requested,
+  run,
   scenario,
   send,
   service,
@@ -1353,4 +1363,57 @@ screen({
   // @ts-expect-error an expression outside the states reads no state
   resolve: ({ active }) => ({ isClosed: active.closed }),
   states: { list: { on: { close: [{ target: "closed" }] } } },
+});
+
+// The scenario grammar: what a line names and writes.
+scenarioOfScreens("types", {
+  given: {
+    start: "2026-10-25T10:00:00+09:00",
+    records: {},
+    peers: {
+      todo: run(todoPeer, { Task: [], Settings: { shouldRemind: true } }),
+      calendar: external(calendarPeer),
+    },
+  },
+  when: (w) => {
+    const list = w.begin.screen(taskListScreen);
+    const watching = w.begin.subscription(todoPeer.tasks);
+    const look = w.user.look(list);
+    const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
+    const asking = adding.request(calendarPeer.nextBusinessDay);
+    // @ts-expect-error the client reaches running services only, not an external peer
+    w.client.call(calendarPeer.nextBusinessDay, { from: "2026-10-25" });
+    // @ts-expect-error a client line reaches its receiver directly; no message is delivered
+    w.net.deliver(adding);
+    // @ts-expect-error only a request can fail
+    w.net.fail(adding.event(todoPeer.taskAdded));
+    // @ts-expect-error a look line carries no message
+    w.net.inFlight(look);
+    // @ts-expect-error created() is written only in a running peer's message
+    w.client.send(todoPeer.completeTask, { taskId: created() });
+    // @ts-expect-error an external peer's values are its own, never created()
+    w.peer.calendar.answer(asking, { result: "fulfilled", output: { day: created() } });
+    const sent = w.peer.todo.send(todoPeer.completeTask, { taskId: created() });
+    // @ts-expect-error the client resends only its own lines
+    w.client.resend(sent);
+    // @ts-expect-error an observed value is no string
+    w.client.send(todoPeer.addTask, { taskId: "task-2", title: `${asking.input.from}` });
+    // @ts-expect-error an observed value is not compared
+    if (asking.input.from === "2026-10-25") w.host.restart();
+    // @ts-expect-error an observed value is not spread
+    w.client.call(todoPeer.tasks, { ...watching.input });
+    const listed = w.client.call(todoPeer.tasks, { filter: "all" });
+    w.client.call(todoPeer.taskDetail, { taskId: adding.request(todoPeer.addTask).input.taskId });
+    // @ts-expect-error a bag's elements have no position: name one by content or by the line that sent it
+    w.client.send(todoPeer.completeTask, { taskId: listed.output.tasks[0].taskId });
+    w.client.send(todoPeer.addTask, raw({ taskId: "task-3", title: 7 }));
+    return { look, watching, adding };
+  },
+  then: ({ look, watching, adding }) => [
+    // @ts-expect-error a look line's processing emits nothing
+    emitted(look, []),
+    // @ts-expect-error endOf takes a subscription, not a command
+    requested(adding, [endOf(adding.request(calendarPeer.nextBusinessDay))]),
+    requested(adding, [endOf(watching)]),
+  ],
 });

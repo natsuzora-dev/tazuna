@@ -94,7 +94,7 @@
     "kind": "Report.missingField",
     "definition": null,
     "data": {
-      "scenarioLine": 2,
+      "scenarioLine": 4,
       "path": [
         "id"
       ],

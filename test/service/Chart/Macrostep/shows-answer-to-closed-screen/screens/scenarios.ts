@@ -7,14 +7,16 @@ export const answerToClosedScreen = scenario(
   {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } },
     when: (w) => {
+      const tasks = w.begin.subscription(todo.tasks);
+      w.net.deliver(tasks);
       w.clock.at("2026-10-25T11:00:00+09:00");
-      const tasks = w.begin.request(todo.tasks);
-      w.peer.todo.answer(tasks, {
-        result: "rejected",
-        rejection: { kind: "requires", reason: "isListed" },
-      });
-      // The end of the subscription that closing listScreen sent.
-      w.net.inFlight(tasks);
+      const answered = w.net.deliver(
+        w.peer.todo.answer(tasks, {
+          result: "rejected",
+          rejection: { kind: "requires", reason: "isListed" },
+        }),
+      );
+      w.net.inFlight(answered.end(tasks));
     },
     then: () => [],
   },

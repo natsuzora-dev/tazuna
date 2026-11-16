@@ -10,9 +10,13 @@ export const answerToReplacedCopy = scenario(
     given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: { calendar: external(calendar) } },
     when: (w) => {
       const adding = w.client.send(addTask, { taskId: "task-1" });
+      const first = adding.request(calendar.nextDay);
+      w.net.deliver(first);
       w.clock.at("2026-10-25T11:00:00+09:00");
-      const first = w.peer.calendar.answer(adding.request(calendar.nextDay), nextDay);
-      w.peer.calendar.answer(first.request(calendar.nextDay), nextDay);
+      const answered = w.net.deliver(w.peer.calendar.answer(first, nextDay));
+      const second = answered.request(calendar.nextDay);
+      w.net.deliver(second);
+      w.net.deliver(w.peer.calendar.answer(second, nextDay));
     },
     then: () => [],
   },

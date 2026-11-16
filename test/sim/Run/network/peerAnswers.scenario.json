@@ -39,6 +39,21 @@
       }
     },
     {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "kind": "command",
+        "target": {
+          "service": "calendar",
+          "name": "book"
+        }
+      }
+    },
+    {
       "type": "leaveUnanswered",
       "peer": "calendar",
       "request": {
@@ -47,6 +62,7 @@
           "type": "line",
           "index": 0
         },
+        "kind": "command",
         "target": {
           "service": "calendar",
           "name": "book"
@@ -74,6 +90,13 @@
     {
       "type": "deliver",
       "message": {
+        "type": "line",
+        "index": 3
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
         "type": "event",
         "origin": {
           "type": "line",
@@ -91,8 +114,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 2
+          "index": 4
         },
+        "kind": "command",
         "target": {
           "service": "todo",
           "name": "markSeen"
@@ -106,8 +130,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 2
+          "index": 4
         },
+        "kind": "command",
         "target": {
           "service": "todo",
           "name": "markSeen"
@@ -123,11 +148,19 @@
     {
       "type": "deliver",
       "message": {
+        "type": "line",
+        "index": 7
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 2
+          "index": 4
         },
+        "kind": "command",
         "target": {
           "service": "todo",
           "name": "ping"
@@ -141,8 +174,9 @@
         "type": "request",
         "origin": {
           "type": "line",
-          "index": 2
+          "index": 4
         },
+        "kind": "command",
         "target": {
           "service": "todo",
           "name": "ping"
@@ -157,6 +191,13 @@
           }
         },
         "holes": []
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 10
       }
     },
     {
@@ -185,7 +226,7 @@
   "expectations": [
     {
       "type": "requested",
-      "line": 2,
+      "line": 4,
       "ends": [],
       "requests": [
         {

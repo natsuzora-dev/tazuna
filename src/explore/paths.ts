@@ -70,37 +70,47 @@ const reject: Answer = { result: "rejected", rejection: { kind: "unavailable" } 
 const isAnswer = (v: unknown): v is Answer =>
   typeof v === "object" && v !== null && "result" in v && typeof (v as { result: unknown }).result === "string";
 
-/** The request message that the own service sent with its id `id`, still in flight to an external peer. */
+/** The request message that the own service sent to an external peer with its id `id`, in flight or delivered. */
 function awaitedMessage(w: World, own: string, id: string): Message | undefined {
   return w.messages.find(
     (m) =>
       m.sender === own &&
       m.id === id &&
-      m.status === "inFlight" &&
+      (m.status === "inFlight" || m.status === "delivered") &&
       w.roles.get(m.receiver) === "external" &&
       (m.body.type === "command" || m.body.type === "query" || m.body.type === "subscribe"),
   );
 }
 
-/** The fact that names the request `m` by its origin, its target, and its whole input. */
+/** The fact that names the request `m` by its origin, its kind, its target, and its whole input. */
 function requestFact(m: Message): Fact | undefined {
   if (m.body.type !== "command" && m.body.type !== "query" && m.body.type !== "subscribe") return undefined;
-  return { type: "request", origin: m.origin, target: refOfTraceName(m.sender, m.body.name), input: m.body.input };
+  return {
+    type: "request",
+    origin: m.origin,
+    kind: m.body.type,
+    target: refOfTraceName(m.sender, m.body.name),
+    input: literal(m.body.input),
+  };
 }
 
+/** The lines of one step of explore, which a path appends together: a message stated and the line delivering it. */
+export type Move = readonly Line[];
+
 /**
- * Returns a function that lists the lines that may come next after a walked world, all facing the own service: a
+ * Returns a function that lists the moves that may come next after a walked world, all facing the own service: a
  * client's request to each of its commands and queries, a subscription's end for each subscription a client line opened
- * and no line ended, an external peer's answer to each request the own service awaits from it and each event of an
- * external peer that the own service receives, an operation of each open screen, the clock just before and at the next
- * deadline, and a restart. A running peer's messages stay as the scenario left them.
+ * and no line ended, an external peer's answer to each request the own service awaits from it (delivering the request
+ * first when it is in flight) and each event of an external peer that the own service receives, each delivered to the
+ * own service, an operation of each open screen, the clock just before and at the next deadline, and a restart. A
+ * running peer's messages stay as the scenario left them.
  */
 export function enabledLines(
   spec: Spec,
   sc: Scenario,
   seen: Seen,
   valuesPerInput: number,
-): (lines: readonly Line[], walked: Walked) => Line[] {
+): (lines: readonly Line[], walked: Walked) => Move[] {
   const own = sc.service;
   const values = (key: string, shape: Shape) =>
     valuesFor(shape, seen.messages.get(key) ?? [], seen.words, valuesPerInput);
@@ -136,6 +146,7 @@ export function enabledLines(
     );
   });
   return (lines, { world: w }) => {
+    const self = (k: number): Fact => ({ type: "line", index: lines.length + k });
     const r = w.participants.get(own)?.processing;
     if (r === undefined) return [];
     const next = enabled(r);
@@ -170,9 +181,16 @@ export function enabledLines(
         ...generated,
       ])
         if (answer !== undefined) pool.set(canonicalJson(answer), answer);
+      const delivering: Line[] = m.status === "inFlight" ? [{ type: "deliver", message: request }] : [];
       return [...pool.values()]
         .slice(0, valuesPerInput)
-        .map((answer): Line => ({ type: "answer", peer: m.receiver, request, answer: literal(answer) }));
+        .map(
+          (answer): Move => [
+            ...delivering,
+            { type: "answer", peer: m.receiver, request, answer: literal(answer) },
+            { type: "deliver", message: self(delivering.length) },
+          ],
+        );
     });
     const times =
       next.nextDeadline === undefined
@@ -215,7 +233,22 @@ export function enabledLines(
         ? [{ type: "unsubscribe", subscription: i }]
         : [],
     );
-    return [...answers, ...times, ...operations, ...unsubscribes, ...requests, ...events, { type: "restart" }];
+    const emitted = events.map((line): Move => {
+      const event = line.type === "emit" ? line.event : { service: "", name: "" };
+      return [
+        line,
+        {
+          type: "deliver",
+          message: { type: "event", origin: { type: "line", index: lines.length }, event, receiver: own },
+        },
+      ];
+    });
+    return [
+      ...answers,
+      ...[...times, ...operations, ...unsubscribes, ...requests].map((line): Move => [line]),
+      ...emitted,
+      [{ type: "restart" }],
+    ];
   };
 }
 
@@ -250,22 +283,23 @@ const givable = (parent: World, child: World): boolean =>
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
 
 /**
- * Returns the copies of the clock line `line` with every order of the deadlines in its ties: a clock line whose walk
- * reports an unordered tie of a running service becomes, recursively, one line per deadline of the tie, appended to its
- * order. Any other line is itself.
+ * Returns the copies of the move of the clock line `line` with every order of the deadlines in its ties: a clock line
+ * whose walk reports an unordered tie of a running service becomes, recursively, one line per deadline of the tie,
+ * appended to its order. Any other move is itself.
  */
-export function orderedLines(line: Line, walk: (line: Line) => Walked): { line: Line; walked: Walked }[] {
-  const walked = walk(line);
-  if (line.type !== "at") return [{ line, walked }];
+export function orderedMoves(move: Move, walk: (move: Move) => Walked): { move: Move; walked: Walked }[] {
+  const walked = walk(move);
+  const [line] = move;
+  if (move.length !== 1 || line?.type !== "at") return [{ move, walked }];
   for (const [service, p] of walked.world.participants) {
     const v = p.halted;
     if (v?.kind !== "InvalidInput.unorderedDeadlines") continue;
     const { candidates } = v.data as unknown as { readonly candidates: readonly DeadlineId[] };
     return candidates.flatMap((deadline) =>
-      orderedLines({ ...line, order: [...line.order, { service, deadline }] }, walk),
+      orderedMoves([{ ...line, order: [...line.order, { service, deadline }] }], walk),
     );
   }
-  return [{ line, walked }];
+  return [{ move, walked }];
 }
 
 /** The state of a world that explore merges paths by: each participant's and the messages in flight. */
@@ -317,42 +351,42 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   coverageOf(base, reached);
   if (halted(base.world) || base.world.reports.length > 0) return { found, paths, reached };
   const enabledAfter = enabledLines(spec, sc, seen, bounds.valuesPerPayload);
-  const children = new Map<Walked, Map<Line, Walked>>();
-  const next = (path: readonly Line[], walked: Walked): Line[] => {
+  const children = new Map<Walked, Map<Move, Walked>>();
+  const next = (path: readonly Move[], walked: Walked): Move[] => {
     if (halted(walked.world)) return [];
-    const appended = path.slice(sc.lines.length);
-    const made = new Map<Line, Walked>();
-    let lines: Line[];
+    const appended = path.flat();
+    const made = new Map<Move, Walked>();
+    let moves: Move[];
     try {
-      lines = enabledAfter(path, walked);
+      moves = enabledAfter([...sc.lines, ...appended], walked);
     } catch (error) {
       // What the own service enables next is evaluated after the path, so a Fault there is the path's.
       if (!(error instanceof Halt)) throw error;
       found.push({ violation: error.violation, appended });
       return [];
     }
-    for (const line of lines)
-      for (const c of orderedLines(line, (l) => walkAppended(spec, sc, [...appended, l])))
-        if (givable(walked.world, c.walked.world)) made.set(c.line, c.walked);
+    for (const move of moves)
+      for (const c of orderedMoves(move, (m) => walkAppended(spec, sc, [...appended, ...m])))
+        if (givable(walked.world, c.walked.world)) made.set(c.move, c.walked);
     if (made.size > 0) children.set(walked, made);
     return [...made.keys()];
   };
-  const step = (parent: Walked, line: Line): Walked => {
-    const made = children.get(parent) as Map<Line, Walked>;
-    const walked = made.get(line) as Walked;
-    made.delete(line);
+  const step = (parent: Walked, move: Move): Walked => {
+    const made = children.get(parent) as Map<Move, Walked>;
+    const walked = made.get(move) as Walked;
+    made.delete(move);
     if (made.size === 0) children.delete(parent);
     return walked;
   };
-  for (const { path, result, parent } of search<Line, Walked>({
-    start: { path: sc.lines, result: base },
+  for (const { path, result, parent } of search<Move, Walked>({
+    start: { path: [], result: base },
     bound: bounds.depth,
     step,
     next,
     merge: { fingerprint: (walked) => worldFingerprint(walked.world) },
   })) {
     if (parent === undefined) continue;
-    const appended = path.slice(sc.lines.length);
+    const appended = path.flat();
     paths.push(appended);
     coverageOf(result, reached);
     for (const violation of violationsSince(parent.world, result.world)) found.push({ violation, appended });

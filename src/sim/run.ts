@@ -1,4 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { Report } from "../data/report.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer, DeadlineId, TraceLine } from "../data/trace.generated.ts";
 import { byCodePoint, canonicalJson, stringsOf } from "../data/values.ts";
@@ -75,16 +76,124 @@ function reportedHere(report: Parameters<typeof reportTo>[1]): never {
 
 const processingOf = (w: World, service: string): Processing | undefined => w.participants.get(service)?.processing;
 
-/** Lean's World.uncreated. */
-function uncreated(w: World, st: Service, v: unknown): readonly [string, string] | undefined {
-  const created = [...w.participants.values()].flatMap((p) => p.processing.state.created.map(([, key]) => key));
+/** Lean's World.writtenKey?. */
+function writtenKey(w: World, v: unknown): readonly [string, DefinitionRef] | undefined {
   for (const x of stringsOf(v)) {
-    if (created.includes(x)) continue;
     const parts = x.split("/");
     const [owner, key] = parts;
-    if (parts.length !== 2 || owner === undefined || key === undefined || !w.participants.has(owner)) continue;
-    const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(e, key));
-    if (entity !== undefined) return [x, entity];
+    if (parts.length !== 2 || owner === undefined || key === undefined) continue;
+    const st = w.participants.get(owner)?.processing.st;
+    const entity = st?.entities.find((e) => !st.singles.includes(e) && isKeyOf(e, key));
+    if (st !== undefined && entity !== undefined) return [x, ref(st, entity)];
+  }
+  return undefined;
+}
+
+const hasCreated = (t: Template): boolean => t.holes.some((h) => h.fill.type === "created");
+
+/** Lean's Fact.picks. */
+function factPicks(f: Fact): Template[] {
+  switch (f.type) {
+    case "request":
+      return f.input === undefined ? [] : [f.input, ...templatePicks(f.input)];
+    case "event":
+      return f.payload === undefined ? [] : [f.payload, ...templatePicks(f.payload)];
+    case "end":
+      return factPicks(f.subscription);
+    default:
+      return [];
+  }
+}
+
+/** Lean's Template.picks. */
+const templatePicks = (t: Template): Template[] =>
+  t.holes.flatMap((h) => (h.fill.type === "ref" ? factPicks(h.fill.value.fact) : []));
+
+/** Lean's Line.written. */
+function lineWritten(l: Line): Template[] {
+  switch (l.type) {
+    case "request":
+      return [l.input];
+    case "operate":
+      return [l.payload];
+    case "answer":
+      return [l.answer];
+    case "emit":
+      return [l.payload];
+    default:
+      return [];
+  }
+}
+
+/** Lean's Line.facts. */
+function lineFacts(l: Line): Fact[] {
+  switch (l.type) {
+    case "operate":
+    case "look":
+      return [l.screen];
+    case "answer":
+    case "leaveUnanswered":
+      return [l.request];
+    case "deliver":
+    case "redeliver":
+    case "lose":
+    case "fail":
+    case "inFlight":
+      return [l.message];
+    case "emit":
+      return l.resultOf === undefined ? [] : [l.resultOf];
+    default:
+      return [];
+  }
+}
+
+/** Lean's Line.picks. */
+const linePicks = (l: Line): Template[] => [
+  ...lineFacts(l).flatMap(factPicks),
+  ...lineWritten(l).flatMap(templatePicks),
+];
+
+/** Lean's Expectation.line. */
+const expectationLine = (e: Expectation): number => (e.type === "offered" ? e.look : e.line);
+
+/** Lean's Expectation.written. */
+function expectationWritten(e: Expectation): Template[] {
+  switch (e.type) {
+    case "answered":
+      return [...e.answers];
+    case "emitted":
+      return e.events.map((ev) => ev.payload);
+    case "requested":
+      return e.requests.map((q) => q.input);
+    case "offered":
+      return e.payload === undefined ? [] : [e.payload];
+  }
+}
+
+/** Lean's Expectation.picks. */
+const expectationPicks = (e: Expectation): Template[] => [
+  ...(e.type === "requested" ? e.ends.flatMap(factPicks) : []),
+  ...expectationWritten(e).flatMap(templatePicks),
+];
+
+/** Lean's World.checkWritten. */
+function checkWritten(
+  w: World,
+  line: number,
+  written: readonly Template[],
+  picks: readonly Template[],
+  allowed: boolean,
+): Report | undefined {
+  if (picks.some(hasCreated) || (!allowed && written.some(hasCreated)))
+    return { kind: "Report.misplacedCreated", definition: null, data: { scenarioLine: line } };
+  for (const t of [...written, ...picks]) {
+    const found = writtenKey(w, t.value);
+    if (found !== undefined)
+      return {
+        kind: "Report.writtenKey",
+        definition: null,
+        data: { scenarioLine: line, key: found[0], entity: found[1] },
+      };
   }
   return undefined;
 }
@@ -118,16 +227,8 @@ function clientRequest(
 ): void {
   const receiver = target.service;
   const p = processingOf(w, receiver);
-  if (!running(w.roles.get(receiver)) || p === undefined)
-    reportedHere({ kind: "Report.wrongRole", definition: null, data: { scenarioLine: i, service: receiver } });
+  if (!running(w.roles.get(receiver)) || p === undefined) wrongRole(i, receiver);
   const v = fill(w, i, input);
-  const found = uncreated(w, p.st, input.value);
-  if (found !== undefined)
-    reportedHere({
-      kind: "Report.uncreatedKey",
-      definition: null,
-      data: { scenarioLine: i, key: found[0], entity: ref(p.st, found[1]) },
-    });
   let id: string | undefined;
   if (sameIdAs !== undefined) {
     const s = sentBy(w, sameIdAs);
@@ -143,6 +244,33 @@ function clientRequest(
   act(w, { type: "line", index: i }, receiver, requestOf(type, target.name, id, v));
   recordSent(w, i, receiver, before);
 }
+
+/** Lean's World.carry. */
+const carry = (w: World, i: number, k: number): void => {
+  w.carried.push([i, k]);
+};
+
+/** Lean's World.stated. */
+function stated(w: World, i: number, m: Message): void {
+  if (!running(w.roles.get(m.receiver))) {
+    reportTo(w, { kind: "Report.wrongRole", definition: null, data: { scenarioLine: i, service: m.receiver } });
+    return;
+  }
+  w.messages.push(m);
+  carry(w, i, w.messages.length - 1);
+}
+
+/** Lean's World.nextId. */
+function nextId(w: World, peer: string, name: string): string {
+  const key = `${peer}.${name}`;
+  const n = (w.counts.get(key) ?? 0) + 1;
+  w.counts.set(key, n);
+  return `${name}#${n}`;
+}
+
+/** Lean's bodyOf. */
+const bodyOf = (type: RequestType, name: string, id: string, v: unknown): TraceLine =>
+  ({ time: "", dir: "out", type, id, name, input: v }) as TraceLine;
 
 /** Lean's World.sameValue. */
 function sameValue(
@@ -161,9 +289,13 @@ function sameValue(
   );
 }
 
+const isCarried = (w: World, k: number): boolean => w.carried.some(([, j]) => j === k);
+
 /** Lean's World.peerMessage. */
 function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => boolean): number {
-  const found = w.messages.flatMap((m, k) => (m.status === "inFlight" && m.sender === peer && fits(m) ? [k] : []));
+  const found = w.messages.flatMap((m, k) =>
+    m.status === "inFlight" && m.sender === peer && !isCarried(w, k) && fits(m) ? [k] : [],
+  );
   const oldest = found.filter(
     (k) => !found.some((j) => j < k && sameChannel(w.messages[j] as Message, w.messages[k] as Message)),
   );
@@ -177,15 +309,21 @@ function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => bo
   });
 }
 
+const isRequest = (l: TraceLine): boolean => l.type === "command" || l.type === "query" || l.type === "subscribe";
+
 /** Lean's World.deliverCarried. */
 function deliverCarried(w: World, i: number, k: number): void {
-  w.carried.push([i, k]);
+  carry(w, i, k);
   const m = w.messages[k];
   if (m === undefined) return;
+  if (!running(w.roles.get(m.receiver))) {
+    m.status = "delivered";
+    return;
+  }
   const before = stateOf(w, m.receiver)?.lines.length ?? 0;
   deliver(w, { type: "line", index: i }, k);
-  if (m.body.type === "command" || m.body.type === "query" || m.body.type === "subscribe")
-    recordSent(w, i, m.receiver, before);
+  if (!isRequest(m.body)) return;
+  for (const [l, j] of [...w.carried]) if (j === k && sentBy(w, l) === undefined) recordSent(w, l, m.receiver, before);
 }
 
 /** Lean's World.deliverInOrder. */
@@ -255,15 +393,34 @@ function wrongRole(i: number, service: string): never {
 const notInFlight = (i: number, m: Message): never =>
   reportedHere({ kind: "Report.notInFlight", definition: null, data: { scenarioLine: i, message: describe(m) } });
 
-/** Lean's World.line. */
-function line(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[], i: number, l: Line) {
+const notDelivered = (i: number, m: Message): never =>
+  reportedHere({ kind: "Report.notDelivered", definition: null, data: { scenarioLine: i, message: describe(m) } });
+
+/** Lean's World.answered. */
+const answered = (w: World, sender: string, to: string): boolean =>
+  w.messages.some((n) => n.sender === sender && n.channel === to && n.body.type === "answer");
+
+/** Lean's World.take. */
+function take(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[], i: number, l: Line) {
   const origin = { type: "line", index: i } as const;
   switch (l.type) {
     case "request": {
       if (l.peer === undefined) return clientRequest(w, i, l.kind, l.target, l.input, l.sameIdAs);
       const peer = l.peer;
       const role = w.roles.get(peer);
-      if (role === "external") return clientRequest(w, i, l.kind, l.target, l.input, l.sameIdAs);
+      if (role === "external") {
+        const v = fill(w, i, l.input);
+        const id = nextId(w, peer, l.target.name);
+        return stated(w, i, {
+          sender: peer,
+          receiver: l.target.service,
+          id,
+          body: bodyOf(l.kind, traceNameOfRef(l.target, peer), id, v),
+          origin,
+          channel: receivedId(peer, id),
+          status: "inFlight",
+        });
+      }
       if (role !== "run") return wrongRole(i, peer);
       const v = fill(w, i, l.input);
       const name = traceNameOfRef(l.target, peer);
@@ -273,29 +430,42 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
         if (b.type !== l.kind || b.name !== name) return false;
         return m.receiver === l.target.service && sameValue(w, r, inputSchema(r.st, name), peer, l.input, v, b.input);
       });
-      return deliverInOrder(w, i, k);
+      return carry(w, i, k);
     }
     case "unsubscribe": {
-      const s = sentBy(w, l.subscription);
-      if (s === undefined)
-        return reportedHere({
-          kind: "Report.unresolvedReference",
-          definition: null,
-          data: { scenarioLine: i, fact: { type: "line", index: l.subscription } },
-        });
-      const direct = () => act(w, origin, s.receiver, (r) => endSubscription(r, { to: s.id }));
-      if (l.peer === undefined) return direct();
+      if (l.peer === undefined) {
+        const s = sentBy(w, l.subscription);
+        if (s === undefined)
+          return reportedHere({
+            kind: "Report.unresolvedReference",
+            definition: null,
+            data: { scenarioLine: i, fact: { type: "line", index: l.subscription } },
+          });
+        return act(w, origin, s.receiver, (r) => endSubscription(r, { to: s.id }));
+      }
       const peer = l.peer;
+      const sub = w.messages[messageOf(w, i, { type: "line", index: l.subscription })] as Message;
       const role = w.roles.get(peer);
-      if (role === "external") return direct();
+      if (role === "external") {
+        const id = nextId(w, peer, "unsubscribe");
+        return stated(w, i, {
+          sender: peer,
+          receiver: sub.receiver,
+          id,
+          body: { time: "", dir: "out", type: "unsubscribe", id, to: sub.id },
+          origin,
+          channel: receivedId(peer, sub.id),
+          status: "inFlight",
+        });
+      }
       if (role !== "run") return wrongRole(i, peer);
       const k = peerMessage(
         w,
         i,
         peer,
-        (m) => m.receiver === s.receiver && m.body.type === "unsubscribe" && receivedId(peer, m.body.to) === s.id,
+        (m) => m.receiver === sub.receiver && m.body.type === "unsubscribe" && m.body.to === sub.id,
       );
-      return deliverInOrder(w, i, k);
+      return carry(w, i, k);
     }
     case "resend": {
       const original = lines[l.line];
@@ -344,7 +514,13 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       const to = receivedId(m.sender, m.id);
       const role = w.roles.get(l.peer);
       if (role === "external") {
-        if (m.status !== "inFlight") return notInFlight(i, m);
+        if (m.status !== "delivered") return notDelivered(i, m);
+        if (answered(w, l.peer, to) && m.body.type !== "subscribe")
+          return reportedHere({
+            kind: "Report.repeatedAnswer",
+            definition: null,
+            data: { scenarioLine: i, message: describe(m) },
+          });
         const v = fill(w, i, l.answer);
         const a = answerOfValue(v);
         if (a === undefined)
@@ -353,16 +529,24 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
             definition: null,
             data: { scenarioLine: i, value: json(v) },
           });
-        m.status = "delivered";
-        w.messages.push(answerMessage(l.peer, m.sender, to, a, origin));
-        return deliverCarried(w, i, w.messages.length - 1);
+        const id = nextId(w, l.peer, "answer");
+        return stated(w, i, {
+          sender: l.peer,
+          receiver: m.sender,
+          id,
+          body: { time: "", dir: "out", type: "answer", id, to, answer: a },
+          origin,
+          channel: to,
+          status: "inFlight",
+        });
       }
       if (role === "run") {
         const j = w.messages.findIndex(
-          (n) =>
+          (n, k) =>
             n.status === "inFlight" &&
             n.sender === l.peer &&
             n.receiver === m.sender &&
+            !isCarried(w, k) &&
             n.body.type === "answer" &&
             n.body.to === to,
         );
@@ -378,16 +562,15 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
         const r = processingOf(w, l.peer) as Processing;
         const t = targetOf(m);
         const peerTarget = t === undefined ? "" : traceNameOfRef(t, l.peer);
-        const written = markCreated(l.answer, v);
         const shown = comparedAnswerValue(r, peerTarget, maskCreated(w, l.peer, l.answer, v, actual));
-        const expected = comparedAnswerValue(r, peerTarget, written);
+        const expected = comparedAnswerValue(r, peerTarget, markCreated(l.answer, v));
         if (canonicalJson(expected) !== canonicalJson(shown))
           reportTo(w, {
             kind: "Report.differentPeerAnswer",
             definition: null,
             data: { scenarioLine: i, expected: json(expected), actual: json(shown) },
           });
-        return deliverInOrder(w, i, j);
+        return carry(w, i, j);
       }
       return wrongRole(i, l.peer);
     }
@@ -396,10 +579,7 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       const v = fill(w, i, l.payload);
       const role = w.roles.get(l.peer);
       if (role === "external") {
-        const key = `${l.peer}.${l.event.name}`;
-        const n = (w.emitted.get(key) ?? 0) + 1;
-        w.emitted.set(key, n);
-        const id = `${l.event.name}#${n}`;
+        const id = nextId(w, l.peer, l.event.name);
         const body: TraceLine = {
           time: "",
           dir: "out",
@@ -409,11 +589,9 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
           payload: v,
           ...(resultId === undefined ? {} : { resultOf: resultId }),
         };
-        for (const [r, p] of w.participants) {
-          if (stopped(w) || !p.processing.st.received.includes(traceNameOfRef(l.event, r))) continue;
-          w.messages.push({ sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
-          deliverCarried(w, i, w.messages.length - 1);
-        }
+        for (const [r, p] of w.participants)
+          if (p.processing.st.received.includes(traceNameOfRef(l.event, r)))
+            stated(w, i, { sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
         return;
       }
       if (role === "run") {
@@ -431,7 +609,7 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
             sameValue(w, r, payloadSchema(r.st, b.name), peer, l.payload, v, b.payload)
           );
         });
-        return deliverInOrder(w, i, k);
+        return carry(w, i, k);
       }
       return wrongRole(i, l.peer);
     }
@@ -439,7 +617,7 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       const k = messageOf(w, i, l.request);
       const m = w.messages[k] as Message;
       if (w.roles.get(l.peer) !== "external" || m.receiver !== l.peer) return wrongRole(i, l.peer);
-      if (m.status !== "inFlight") return notInFlight(i, m);
+      if (m.status !== "delivered") return notDelivered(i, m);
       m.status = "unanswered";
       return;
     }
@@ -447,18 +625,12 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       const k = messageOf(w, i, l.message);
       const m = w.messages[k] as Message;
       if (m.status !== "inFlight") return notInFlight(i, m);
-      if (!running(w.roles.get(m.receiver))) return wrongRole(i, m.receiver);
       return deliverInOrder(w, i, k);
     }
     case "redeliver": {
       const k = messageOf(w, i, l.message);
       const m = w.messages[k] as Message;
-      if (m.status !== "delivered")
-        return reportedHere({
-          kind: "Report.notDelivered",
-          definition: null,
-          data: { scenarioLine: i, message: describe(m) },
-        });
+      if (m.status !== "delivered") return notDelivered(i, m);
       return deliverCarried(w, i, k);
     }
     case "lose": {
@@ -472,20 +644,29 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       const k = messageOf(w, i, l.message);
       const m = w.messages[k] as Message;
       if (m.status !== "inFlight") return notInFlight(i, m);
-      if (m.body.type !== "command" && m.body.type !== "query" && m.body.type !== "subscribe")
+      if (!isRequest(m.body))
         return reportedHere({
           kind: "Report.unfailable",
           definition: null,
           data: { scenarioLine: i, message: describe(m) },
         });
       m.status = "lost";
+      const to = receivedId(m.sender, m.id);
+      const id = `answer:${to}`;
       const unavailable: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
-      w.messages.push(answerMessage(m.receiver, m.sender, receivedId(m.sender, m.id), unavailable, origin));
+      w.messages.push({
+        sender: m.receiver,
+        receiver: m.sender,
+        id,
+        body: { time: "", dir: "out", type: "answer", id, to, answer: unavailable },
+        origin,
+        channel: to,
+        status: "inFlight",
+      });
       return deliverCarried(w, i, w.messages.length - 1);
     }
     case "inFlight": {
-      const m = w.messages[messageOf(w, i, l.message)] as Message;
-      w.inFlight.push([i, m.sender, m.receiver, m.channel]);
+      w.inFlight.push([i, messageOf(w, i, l.message)]);
       return;
     }
     case "at": {
@@ -507,28 +688,18 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       return;
     }
     case "restart":
-      return act(w, origin, own, restart);
+      return act(w, origin, own, restart, true);
   }
 }
 
-/** The answer `a` to the request `to` that `sender` sends to `receiver`, in flight, as line `origin` carries it. */
-function answerMessage(
-  sender: string,
-  receiver: string,
-  to: string,
-  a: Answer,
-  origin: { readonly type: "line"; readonly index: number },
-): Message {
-  const id = `answer:${to}`;
-  return {
-    sender,
-    receiver,
-    id,
-    body: { time: "", dir: "out", type: "answer", id, to, answer: a },
-    origin,
-    channel: to,
-    status: "inFlight",
-  };
+/** Lean's World.line. */
+function line(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[], i: number, l: Line) {
+  const allowed =
+    (l.type === "request" && l.peer !== undefined && w.roles.get(l.peer) === "run") ||
+    ((l.type === "answer" || l.type === "emit") && w.roles.get(l.peer) === "run");
+  const r = checkWritten(w, i, lineWritten(l), linePicks(l), allowed);
+  if (r !== undefined) return reportTo(w, r);
+  return take(w, own, lines, expectations, i, l);
 }
 
 /** Lean's FromValue Answer: the answer that `v` writes, or undefined when it is none. */
@@ -556,21 +727,23 @@ function answerOfValue(v: unknown): Answer | undefined {
   }
 }
 
-type InFlight = World["inFlight"][number];
-
-/** Lean's covers. */
-const covers = ([, a, b, c]: InFlight, m: Message): boolean =>
-  c === m.channel && ((a === m.sender && b === m.receiver) || (a === m.receiver && b === m.sender));
-
 /** Lean's World.checkEnd. */
 function checkEnd(w: World): void {
-  const left = w.messages.filter((m) => m.status === "inFlight");
-  for (const m of left)
-    if (!w.inFlight.some((entry) => covers(entry, m)))
+  w.messages.forEach((m, k) => {
+    if (m.status === "inFlight" && !w.inFlight.some(([, j]) => j === k))
       reportTo(w, { kind: "Report.leftInFlight", definition: null, data: { message: describe(m) } });
-  for (const entry of w.inFlight)
-    if (!left.some((m) => covers(entry, m)))
-      reportTo(w, { kind: "Report.unusedInFlight", definition: null, data: { scenarioLine: entry[0] } });
+  });
+  for (const [i, k] of w.inFlight)
+    if (w.messages[k]?.status !== "inFlight")
+      reportTo(w, { kind: "Report.unusedInFlight", definition: null, data: { scenarioLine: i } });
+  for (const m of w.messages)
+    if (
+      m.status === "delivered" &&
+      w.roles.get(m.receiver) === "external" &&
+      isRequest(m.body) &&
+      !answered(w, m.receiver, receivedId(m.sender, m.id))
+    )
+      reportTo(w, { kind: "Report.awaitingAnswer", definition: null, data: { message: describe(m) } });
 }
 
 /** Lean's bag. */
@@ -654,6 +827,11 @@ function compared(
 /** Lean's World.expect. */
 function expect(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[]): void {
   expectations.forEach((e, k) => {
+    const r = checkWritten(w, expectationLine(e), expectationWritten(e), expectationPicks(e), false);
+    if (r !== undefined) {
+      noteTo(w, r);
+      return;
+    }
     try {
       const both = compared(w, own, lines, k, e);
       if (both === undefined) return;

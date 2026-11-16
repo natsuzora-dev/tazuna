@@ -8,8 +8,9 @@ export const grant = scenario(
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { device: external(device) } },
     when: (w) => {
       const request = w.begin.request(device.requestPermission);
-      w.peer.device.answer(request, { result: "accepted" });
-      w.peer.device.emit(device.granted, {}, { resultOf: request });
+      w.net.deliver(request);
+      w.net.deliver(w.peer.device.answer(request, { result: "accepted" }));
+      w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: request }));
     },
     then: () => [],
   },

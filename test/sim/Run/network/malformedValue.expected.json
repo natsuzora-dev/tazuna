@@ -81,7 +81,7 @@
     "kind": "Report.malformedValue",
     "definition": null,
     "data": {
-      "scenarioLine": 1,
+      "scenarioLine": 2,
       "value": {
         "result": "bogus"
       }

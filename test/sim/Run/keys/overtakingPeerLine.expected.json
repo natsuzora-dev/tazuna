@@ -81,16 +81,24 @@
     "kind": "Report.overtaking",
     "definition": null,
     "data": {
-      "scenarioLine": 1,
+      "scenarioLine": 2,
       "message": {
         "sender": "tags",
         "receiver": "notes",
-        "id": "registered#1"
+        "id": "registered#1",
+        "origin": {
+          "type": "line",
+          "index": 0
+        }
       },
       "earlier": {
         "sender": "tags",
         "receiver": "notes",
-        "id": "answer#1"
+        "id": "answer#1",
+        "origin": {
+          "type": "line",
+          "index": 0
+        }
       }
     }
   }

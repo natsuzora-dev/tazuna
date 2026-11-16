@@ -70,7 +70,7 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     sent: [],
     carried: [],
     inFlight: [],
-    emitted: new Map(),
+    counts: new Map(),
     looked: [],
     reports: [],
     halted: undefined,

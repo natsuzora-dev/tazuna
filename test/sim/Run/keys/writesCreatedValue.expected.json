@@ -62,24 +62,6 @@
             "result": "accepted"
           },
           "id": "answer#2"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "answer",
-          "to": "tags.labels#1",
-          "answer": {
-            "result": "fulfilled",
-            "output": {
-              "labels": [
-                {
-                  "labelId": "tags/Label-1",
-                  "noteId": "notes/Note-1"
-                }
-              ]
-            }
-          },
-          "id": "answer#3"
         }
       ],
       "violations": []
@@ -180,36 +162,17 @@
       "violations": []
     }
   ],
-  "reports": [
-    {
-      "kind": "Report.differentPeerAnswer",
-      "definition": null,
-      "data": {
-        "scenarioLine": 6,
-        "expected": {
-          "result": "fulfilled",
-          "output": {
-            "labels": [
-              {
-                "labelId": "tags/Label-1",
-                "noteId": "notes/Note-1"
-              }
-            ]
-          }
-        },
-        "actual": {
-          "result": "fulfilled",
-          "output": {
-            "labels": [
-              {
-                "labelId": "<created>",
-                "noteId": "notes/Note-1"
-              }
-            ]
-          }
-        }
+  "reports": [],
+  "halted": {
+    "kind": "Report.writtenKey",
+    "definition": null,
+    "data": {
+      "scenarioLine": 9,
+      "key": "tags/Label-1",
+      "entity": {
+        "service": "tags",
+        "name": "Label"
       }
     }
-  ],
-  "halted": null
+  }
 }

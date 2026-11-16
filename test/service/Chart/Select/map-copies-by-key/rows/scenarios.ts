@@ -9,15 +9,21 @@ export const offersPerCopy = scenario(
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } },
     when: (w) => {
       const rows = w.begin.screen(rowScreen);
-      w.peer.todo.answer(w.begin.request(todo.openTasks), {
-        result: "fulfilled",
-        output: { taskIds: ["task-1", "task-2"] },
-      });
-      const first = w.user.operate(rows, "complete", { taskId: "task-1" });
+      const openTasks = w.begin.subscription(todo.openTasks);
+      w.net.deliver(openTasks);
+      w.net.deliver(
+        w.peer.todo.answer(openTasks, {
+          result: "fulfilled",
+          output: { taskIds: ["task-1", "task-2"] },
+        }),
+      );
+      const first = w.user.operate(rows, "complete", { taskId: "task-1" }).request(todo.completeTask);
       const look = w.user.look(rows);
-      const second = w.user.operate(rows, "complete", { taskId: "task-2" });
-      w.peer.todo.leaveUnanswered(first.request(todo.completeTask));
-      w.peer.todo.leaveUnanswered(second.request(todo.completeTask));
+      const second = w.user.operate(rows, "complete", { taskId: "task-2" }).request(todo.completeTask);
+      w.net.deliver(first);
+      w.peer.todo.leaveUnanswered(first);
+      w.net.deliver(second);
+      w.peer.todo.leaveUnanswered(second);
       return { look };
     },
     then: ({ look }) => [notOffered(look, "complete", { taskId: "task-1" })],

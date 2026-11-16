@@ -19,6 +19,7 @@
         "origin": {
           "type": "begin"
         },
+        "kind": "command",
         "target": {
           "service": "tags",
           "name": "register"
@@ -47,6 +48,7 @@
                   "origin": {
                     "type": "begin"
                   },
+                  "kind": "command",
                   "target": {
                     "service": "tags",
                     "name": "register"
@@ -64,10 +66,18 @@
         "origin": {
           "type": "begin"
         },
+        "kind": "command",
         "target": {
           "service": "tags",
           "name": "register"
         }
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "line",
+        "index": 1
       }
     }
   ],
