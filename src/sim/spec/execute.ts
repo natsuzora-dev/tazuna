@@ -374,7 +374,7 @@ const now = "@now";
  * and the coverage hits, request pairs and unchosen tie that explore reads. It turns each note into the values that
  * both Collect and the evaluation cache hear.
  */
-class Listener implements Note, Evaluations {
+export class Listener implements Note, Evaluations {
   readonly spec: Spec;
   private readonly service: string;
   readonly collected: Collect;

@@ -1,4 +1,4 @@
-import Tazuna.Sim.Network
+import Tazuna.Sim.PeerNetwork
 import Tazuna.Thm.Sim.PeerCheck
 
 /-!
@@ -8,7 +8,7 @@ directly: a request or an answer reaches the peer at the time the scenario sends
 reaches the scenario at the time the scenario takes it.
 -/
 
-namespace Tazuna.Thm.Sim.Network
+namespace Tazuna.Thm.Sim.PeerNetwork
 
 open Tazuna.Data Tazuna.Semantics Tazuna.Semantics.Network Tazuna.Thm.Data.Trace Tazuna.Thm.Data.Unify
   Tazuna.Thm.Sim.Peer Tazuna.Thm.Sim.PeerCheck Tazuna.Thm.Verify.Matching
@@ -775,4 +775,4 @@ theorem network_realizes {canon : Schema → Value → Value} {halted : Option (
       exact Nat.lt_of_lt_of_le (beforeOf j' _ _ hs') (before_le hlen hl (arrivals_of_line hk) (by omega))
     · exact absurd (hs.symm.trans (hsrc2 r i)) (by simp)
 
-end Tazuna.Thm.Sim.Network
+end Tazuna.Thm.Sim.PeerNetwork

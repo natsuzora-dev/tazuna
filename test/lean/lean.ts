@@ -6,6 +6,7 @@ import { StringDecoder } from "node:string_decoder";
 import type { ChoiceDependent } from "../../src/data/choiceDependent.generated.ts";
 import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
+import type { Scenario } from "../../src/data/scenario.generated.ts";
 import type { Step } from "../../src/data/step.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
 import { type FileLine, isMalformed } from "../../src/data/trace.ts";
@@ -281,6 +282,16 @@ export class Lean {
     const { type, ...result } = this.receive();
     if (type !== "peer") throw new Error(`tazuna-lean answered peer with ${JSON.stringify({ type, ...result })}`);
     return result as { readonly inputs: unknown; readonly findings: unknown; readonly runFindings: unknown };
+  }
+
+  /** Returns Lean's simulation of the scenario: each running service's trace and violations, and the reports. */
+  simulate(spec: Spec, scenario: Scenario, functions: Answering): Message {
+    const { type, ...result } = this.exchange(
+      { type: "simulate", structure: spec.structure, scenario },
+      "simulated",
+      functions,
+    );
+    return result;
   }
 
   check(structure: Structure): readonly Illegal[] {

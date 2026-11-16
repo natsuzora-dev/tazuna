@@ -616,3 +616,23 @@ export class RunFunctions implements Answering {
     }
   }
 }
+
+/** Carries each question of a simulation to the RunFunctions of the service that the question names. */
+export class SimFunctions implements Answering {
+  private readonly services = new Map<string, RunFunctions>();
+  private readonly spec: Spec;
+  private readonly read: ReadRecord;
+
+  constructor(spec: Spec, read: ReadRecord) {
+    this.spec = spec;
+    this.read = read;
+  }
+
+  answer(message: Message): Message {
+    const service = message["service"] as string;
+    const { service: _, ...question } = message;
+    const known = this.services.get(service) ?? new RunFunctions(this.spec, service, this.read);
+    this.services.set(service, known);
+    return known.answer(question);
+  }
+}

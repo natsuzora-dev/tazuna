@@ -1,0 +1,20 @@
+{
+  "service": "todo",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [],
+    "peers": [
+      {
+        "service": "calendar",
+        "role": "external"
+      },
+      {
+        "service": "notifier",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [],
+  "expectations": []
+}

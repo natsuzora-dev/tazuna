@@ -29,13 +29,20 @@ export function earliestDeadline(
 
 /**
  * Returns the deadline that fires among `due`, the deadlines due at the earliest time in entry order, whose first is
- * `first`, in a tie: the one that the next entry of `deadlineOrder` names, or `first` when no entry is left.
+ * `first`, in a tie: the one that the next entry of `deadlineOrder` names, or, when no entry is left, `first` unless
+ * the state requires the tie order.
  */
 export function chooseDeadline<T extends Deadline>(r: Processing, first: T, due: readonly T[]): T {
   const s = r.state;
   const deadlines = due.map(deadlineId);
   const [named, ...rest] = s.deadlineOrder;
   if (named === undefined) {
+    if (s.tieOrderRequired)
+      return report(r.state, {
+        kind: "InvalidInput.unorderedDeadlines",
+        definition: null,
+        data: { candidates: deadlines },
+      });
     r.note.unchosenTie(deadlines);
     return first;
   }

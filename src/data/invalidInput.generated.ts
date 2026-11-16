@@ -264,6 +264,14 @@ export type InvalidInput =
         readonly candidates: readonly DeadlineId[];
       };
     }
+  /** No entry of the clock line's order names which of the deadlines `candidates`, due at the same time, fires first. */
+  | {
+      readonly kind: "InvalidInput.unorderedDeadlines";
+      readonly definition: null;
+      readonly data: {
+        readonly candidates: readonly DeadlineId[];
+      };
+    }
   /** No tie during the input used the deadlineOrder `entries`. */
   | {
       readonly kind: "InvalidInput.unusedDeadlineOrder";
@@ -412,6 +420,7 @@ export const invalidInputKinds = [
   "InvalidInput.unofferedPayload",
   "InvalidInput.unexpectedlyAccepted",
   "InvalidInput.unreadyDeadline",
+  "InvalidInput.unorderedDeadlines",
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
@@ -441,6 +450,7 @@ export const haltingInvalidInputKinds = [
   "InvalidInput.unofferedPayload",
   "InvalidInput.unexpectedlyAccepted",
   "InvalidInput.unreadyDeadline",
+  "InvalidInput.unorderedDeadlines",
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",

@@ -287,6 +287,10 @@ export interface State {
   readonly created: (readonly [string, string])[];
   /** The names of the current input's `keys` that createKey has not returned yet, by entity. */
   keyNames: Map<string, readonly string[]>;
+  /** Lean's State.keysBefore. */
+  keysBefore: readonly (readonly [string, number])[];
+  /** Lean's State.tieOrderRequired. */
+  tieOrderRequired: boolean;
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
@@ -323,6 +327,8 @@ export function newState(st: Service): State {
     messageCount: 0,
     created: [],
     keyNames: new Map(),
+    keysBefore: [],
+    tieOrderRequired: false,
     subscriptions: new Subscriptions(),
     results: new Map(),
     mocks: new Map(),
@@ -369,7 +375,7 @@ export function awaitAnswer(
 }
 
 function keyCount(s: State, entity: string): number {
-  return s.created.filter(([e]) => e === entity).length;
+  return (s.keysBefore.find(([e]) => e === entity)?.[1] ?? 0) + s.created.filter(([e]) => e === entity).length;
 }
 
 /** Returns the number of createKey values of each entity, in first-creation order. */
@@ -382,10 +388,9 @@ export function keyCounts(s: State): [string, number][] {
  * order, and after them `<entity>-<n>` for the entity's `n`-th createKey value.
  */
 export function nextKeys(s: State): [string, NextKeys][] {
-  return [...new Set([...s.created.map(([e]) => e), ...s.keyNames.keys()])].map((e) => [
-    e,
-    { count: keyCount(s, e), names: s.keyNames.get(e) ?? [] },
-  ]);
+  return [...new Set([...s.created.map(([e]) => e), ...s.keyNames.keys(), ...s.keysBefore.map(([e]) => e)])].map(
+    (e) => [e, { count: keyCount(s, e), names: s.keyNames.get(e) ?? [] }],
+  );
 }
 
 export function createKeys(s: State, entities: readonly string[]): void {

@@ -1,0 +1,210 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "name": "addTask",
+          "input": {
+            "taskId": "task-1",
+            "title": "Buy milk"
+          },
+          "id": "addTask#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "addTask#1",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-1",
+            "title": "Buy milk",
+            "seen": false
+          },
+          "resultOf": "addTask#1",
+          "id": "taskAddedRecorded#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-1"
+          },
+          "resultOf": "addTask#1",
+          "id": "taskAdded#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "noted",
+          "payload": {},
+          "id": "noted#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "calendar.book",
+          "input": {
+            "bookingId": "Booking-1",
+            "taskId": "task-1"
+          },
+          "id": "calendar.book#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "name": "addTask",
+          "input": {
+            "taskId": "task-2",
+            "title": "Buy bread"
+          },
+          "id": "addTask#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "addTask#2",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-2",
+            "title": "Buy bread",
+            "seen": false
+          },
+          "resultOf": "addTask#2",
+          "id": "taskAddedRecorded#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-2"
+          },
+          "resultOf": "addTask#2",
+          "id": "taskAdded#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "noted",
+          "payload": {},
+          "id": "noted#2"
+        }
+      ],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "todo/taskAdded#1",
+          "name": "todo.taskAdded",
+          "payload": {
+            "taskId": "task-1"
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "todo.markSeen",
+          "input": {
+            "taskId": "task-1"
+          },
+          "id": "todo.markSeen#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "todo.ping",
+          "input": {},
+          "id": "todo.ping#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "todo/taskAdded#2",
+          "name": "todo.taskAdded",
+          "payload": {
+            "taskId": "task-2"
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "todo.markSeen",
+          "input": {
+            "taskId": "task-2"
+          },
+          "id": "todo.markSeen#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "todo.ping",
+          "input": {},
+          "id": "todo.ping#2"
+        }
+      ],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.ambiguousPeerLine",
+    "definition": null,
+    "data": {
+      "scenarioLine": 5,
+      "peer": "notifier",
+      "candidates": [
+        {
+          "sender": "notifier",
+          "receiver": "todo",
+          "id": "todo.ping#1"
+        },
+        {
+          "sender": "notifier",
+          "receiver": "todo",
+          "id": "todo.ping#2"
+        }
+      ]
+    }
+  }
+}

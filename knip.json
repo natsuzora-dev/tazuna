@@ -19,5 +19,10 @@
     }
   },
   "ignoreBinaries": ["lake", "mkfifo"],
-  "ignoreExportsUsedInFile": { "type": true }
+  "ignoreExportsUsedInFile": {
+    "type": true
+  },
+  "ignoreIssues": {
+    "src/data/scenario.generated.ts": ["types"]
+  }
 }

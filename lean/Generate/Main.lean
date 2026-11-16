@@ -7,6 +7,8 @@ import Tazuna.Observe.OrderDependent
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
 import Tazuna.Syntax.Structure
+import Tazuna.Scenario.Given
+import Tazuna.Sim.Report
 import Tazuna.Validation.Illegal
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
@@ -302,6 +304,14 @@ def files : List (String × String) :=
    ("data/uncomparable.generated.ts", typescript% Tazuna.Verify.Uncomparable),
    ("data/invalidInput.generated.ts", typescript% Tazuna.Semantics.InvalidInput ++
       halting "InvalidInput" (((samples% Tazuna.Semantics.InvalidInput).filter (·.halts)).map (·.kind))),
+   ("data/report.generated.ts", typescript% Tazuna.Sim.Report ++
+      halting "Report" (((samples% Tazuna.Sim.Report).filter (·.halts)).map (·.kind))),
+   ("data/scenario.generated.ts",
+    zod% Tazuna.Scenario Tazuna.Syntax.Ref Tazuna.Data.DeadlineId Tazuna.Scenario.Origin Tazuna.Scenario.Fact
+      Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
+      Tazuna.Scenario.OrderEntry Tazuna.Scenario.Line Tazuna.Scenario.SentRequest Tazuna.Scenario.EmittedEvent
+      Tazuna.Scenario.Expectation Tazuna.Scenario.GivenRecord Tazuna.Scenario.Peer Tazuna.Scenario.PeerEntry
+      Tazuna.Scenario.Given),
    ("data/fault.generated.ts", typescript% Tazuna.Semantics.Fault ++
       halting "Fault" (((samples% Tazuna.Semantics.Fault).filter (·.halts)).map (·.kind))),
    ("data/orderDependent.generated.ts", typescript% Tazuna.Observe.OrderDependent),

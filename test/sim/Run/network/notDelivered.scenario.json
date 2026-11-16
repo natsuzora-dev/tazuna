@@ -1,0 +1,81 @@
+{
+  "service": "todo",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [
+      {
+        "entity": "Settings",
+        "value": {
+          "remind": true
+        }
+      }
+    ],
+    "peers": [
+      {
+        "service": "calendar",
+        "role": "external"
+      },
+      {
+        "service": "notifier",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "request",
+      "kind": "command",
+      "target": {
+        "service": "todo",
+        "name": "addTask"
+      },
+      "input": {
+        "value": {
+          "taskId": "task-1",
+          "title": "Buy milk"
+        },
+        "holes": []
+      }
+    },
+    {
+      "type": "answer",
+      "peer": "calendar",
+      "request": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "target": {
+          "service": "calendar",
+          "name": "book"
+        }
+      },
+      "answer": {
+        "value": {
+          "result": "accepted",
+          "output": {
+            "slot": "10:00"
+          }
+        },
+        "holes": []
+      }
+    },
+    {
+      "type": "redeliver",
+      "message": {
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "event": {
+          "service": "todo",
+          "name": "taskAdded"
+        }
+      }
+    }
+  ],
+  "expectations": []
+}

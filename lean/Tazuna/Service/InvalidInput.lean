@@ -63,6 +63,8 @@ inductive InvalidInput where
   | unexpectedlyAccepted (screen : Syntax.Ref) (control : String)
   /-- The deadlineOrder entry `named` is not among the deadlines due in the tie, `candidates`. -/
   | unreadyDeadline (named : DeadlineId) (candidates : List DeadlineId)
+  /-- No entry of the clock line's order names which of the deadlines `candidates`, due at the same time, fires first. -/
+  | unorderedDeadlines (candidates : List DeadlineId)
   /-- No tie during the input used the deadlineOrder `entries`. -/
   | unusedDeadlineOrder (entries : List DeadlineId)
   /-- The stepOrder entry `named` is not among the steps that can begin next, `candidates`. -/
@@ -120,6 +122,7 @@ def InvalidInput.halts : InvalidInput → Bool
   | .earlierAt .. | .unownedTarget .. | .unlistedEvent .. | .eventPayloadSchema .. | .controlPayloadSchema ..
   | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
   | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unexpectedlyAccepted .. | .unreadyDeadline ..
+  | .unorderedDeadlines ..
   | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .unusedKeys .. | .uncreatedKey .. => true
   | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..

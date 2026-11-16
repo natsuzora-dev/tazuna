@@ -1,0 +1,23 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.missingRecord",
+    "definition": null,
+    "data": {
+      "service": "todo",
+      "entity": "Settings"
+    }
+  }
+}

@@ -27,7 +27,7 @@ export interface Operation {
 }
 
 /** Returns the open screen instance that takes an operation on `screen`, or the reason that none does. */
-function topOf(
+export function topOf(
   s: State,
   screen: string,
 ):

@@ -6,6 +6,7 @@ import { loadSpec, type Spec } from "../src/load/load.ts";
 
 export const serviceRoot = join(import.meta.dirname, "service");
 export const runRoot = join(import.meta.dirname, "run");
+export const simRoot = join(import.meta.dirname, "sim");
 export const leanRoot = join(import.meta.dirname, "../lean/Tazuna");
 
 export const folders = (dir: string): string[] =>
@@ -77,3 +78,17 @@ export function maskedStack<T extends { readonly error?: ProblemError }>(value: 
   const { error } = value;
   return error !== undefined && "stack" in error ? { ...value, error: { ...error, stack: "<stack>" } } : value;
 }
+
+/** The suffix of a scenario file of a simulation example, and of the outcome that it expects. */
+export const scenarioSuffix = ".scenario.json";
+export const outcomeSuffix = ".expected.json";
+
+/** Returns the examples test/sim/<Lean Sim module path>/<example>/, each with the names of its scenario files. */
+export const simExamples = (): { readonly root: string; readonly scenarios: readonly string[] }[] =>
+  atPaths(simRoot, leanModulePaths("Sim")).map((root) => ({
+    root,
+    scenarios: readdirSync(root)
+      .filter((name) => name.endsWith(scenarioSuffix))
+      .map((name) => name.slice(0, -scenarioSuffix.length))
+      .sort(),
+  }));

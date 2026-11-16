@@ -63,7 +63,7 @@ def fireDue [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (to : Time
     | some e =>
     let due := s.deadlines.filter (·.time == e.time)
     let tied := 1 < due.length || tie == e.time
-    match chooseDeadline e due tied s.deadlineOrder with
+    match chooseDeadline e due tied s.tieOrderRequired s.deadlineOrder with
     | .error invalid => pure (s.report (.invalidInput invalid))
     | .ok (t, deadlineOrder) => do
       let time := t.time.getD s.now

@@ -817,6 +817,13 @@ export class SpecFunctions implements Functions {
     return { value: bagged(objectOf(shape), value) as Fields, encoded: encode(shape, value) as Fields };
   }
 
+  /** Returns the row of a Given record of `entity`, which must match the entity's schema. */
+  givenRow(entity: string, value: unknown): Row {
+    const object = objectOf(this.entity(entity).fields as Shape);
+    const parsed = object.parse(value);
+    return { value: bagged(object, parsed) as Fields, encoded: z.encode(object, parsed as never) as Fields };
+  }
+
   copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed {
     const shape = this.node(machine, map)?.key ?? {};
     const fields = Object.keys(shape);

@@ -181,6 +181,13 @@ structure State where
   created : List (String × String) := []
   /-- The names of the current input's `keys` that createKey has not returned yet, by entity. -/
   keyNames : List (String × List String) := []
+  /--
+  The number of createKey values of each entity that other services of a simulation gave, which this service's count
+  starts after, so that every key of the simulation is unique.
+  -/
+  keysBefore : List (String × Nat) := []
+  /-- Whether a tie of deadlines that no `deadlineOrder` entry decides is reported, as a simulation's clock line does. -/
+  tieOrderRequired : Bool := false
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []
   results : List Accepted := []
@@ -211,14 +218,15 @@ def State.await (s : State) (body : LineBody) (requester : Requester) (activity 
   let (s, id) := s.write .out none body
   { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }] }
 
-def State.keyCount (s : State) (entity : String) : Nat := (s.created.filter (·.1 == entity)).length
+def State.keyCount (s : State) (entity : String) : Nat :=
+  (s.keysBefore.lookup entity).getD 0 + (s.created.filter (·.1 == entity)).length
 
 /--
 What createKey returns next for each entity that has a createKey value or a name left: the names left, in order, and
 after them `<entity>-<n>` for the entity's `n`-th createKey value.
 -/
 def State.nextKeys (s : State) : List (String × NextKeys) :=
-  (s.created.map (·.1) ++ s.keyNames.map (·.1)).eraseDups.map fun e =>
+  (s.created.map (·.1) ++ s.keyNames.map (·.1) ++ s.keysBefore.map (·.1)).eraseDups.map fun e =>
     (e, { count := s.keyCount e, names := (s.keyNames.lookup e).getD [] })
 
 def State.createKeys (s : State) (entities : List String) : State :=

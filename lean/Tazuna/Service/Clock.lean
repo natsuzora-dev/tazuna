@@ -33,16 +33,18 @@ def earliestDeadline (deadlines : List Deadline) (to : Time) : Option Deadline :
 
 /--
 The deadline that fires among `due`, the deadlines due at the earliest time in entry order, whose first is `first`, with
-the entries of `order` left: in a tie, the one that the next entry names, or `first` when no entry is left; otherwise
-`first`, the only one. Test's search sets `order` to try the other orders of a tie (ChoiceDependent.deadlineOrder).
+the entries of `order` left: in a tie, the one that the next entry names, or, when no entry is left, `first` unless
+`required`; otherwise `first`, the only one. Test's search sets `order` to try the other orders of a tie
+(ChoiceDependent.deadlineOrder).
 -/
-def chooseDeadline (first : Deadline) (due : List Deadline) (tied : Bool) (order : List DeadlineId) :
+def chooseDeadline (first : Deadline) (due : List Deadline) (tied required : Bool) (order : List DeadlineId) :
     Except InvalidInput (Deadline × List DeadlineId) :=
   match tied, order with
   | true, c :: rest =>
     match due.find? (·.id == c) with
     | some t => .ok (t, rest)
     | none => .error (.unreadyDeadline c (due.map Deadline.id))
-  | _, _ => .ok (first, order)
+  | true, [] => if required then .error (.unorderedDeadlines (due.map Deadline.id)) else .ok (first, [])
+  | false, _ => .ok (first, order)
 
 end Tazuna.Semantics

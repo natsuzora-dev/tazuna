@@ -428,7 +428,7 @@ export function answerById(r: Processing, value: Extract<Step, { readonly type: 
 }
 
 /** Lean's answerRequest. */
-function answerRequest(r: Processing, p: Pending, answer: Answer): Pending | undefined {
+export function answerRequest(r: Processing, p: Pending, answer: Answer): Pending | undefined {
   const s = r.state;
   const checked = checkAnswer(r, p, answer);
   if (checked.assumption !== undefined) report(s, checked.assumption);

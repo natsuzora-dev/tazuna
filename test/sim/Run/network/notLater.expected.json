@@ -1,0 +1,24 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.notLater",
+    "definition": null,
+    "data": {
+      "scenarioLine": 0,
+      "at": "2026-10-25T01:00:00Z",
+      "now": "2026-10-25T01:00:00Z"
+    }
+  }
+}

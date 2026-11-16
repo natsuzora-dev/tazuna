@@ -48,6 +48,8 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
       "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
     "InvalidInput.unusedStepOrder":
       "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
+    "InvalidInput.unorderedDeadlines":
+      "Only the clock line of a simulation requires a tie order; test/sim/Run/network/unorderedDeadlines exemplifies it",
     "InvalidInput.uncreatedKey":
       "check reports such a value on a scenario or state line (Illegal.countedKey), so only a peer's run reaches it, which test reports as haltedPeer",
   },

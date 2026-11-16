@@ -3,6 +3,7 @@ import DiffTest.Json
 import DiffTest.Names
 import Tazuna.Observe.ChoiceDependent
 import Tazuna.Sim.PeerCheck
+import Tazuna.Sim.Run
 
 /-!
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).
@@ -75,9 +76,12 @@ partial def exchange (stdin stdout : IO.FS.Stream) (reads : Reads) (records befo
 The reply to `request`, with the parts read in `reads`: the one in `memo` when Lean serves every read recorded with it
 the same value now, otherwise the one TS gives, which `memo` then records.
 -/
-def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool) (records : Records)
-    (request : Value) (before : Records := []) : IO Value := do
+def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool) (service : Option String)
+    (records : Records) (request : Value) (before : Records := []) : IO Value := do
   let request := if reversed then request.merge (.obj [("reversed", .bool true)]) else request
+  let request := match service with
+    | some s => request.merge (.obj [("service", .str s)])
+    | none => request
   let line := render request
   if let some answered := (← memo.get)[line]? then
     let served ← answered.reads.mapM fun (read, value) => do
@@ -104,101 +108,105 @@ def issueOr {α : Type} (reply : Value) (read : Value → Except String α) : Ex
   | some v => return .error (← Issue.decode v)
   | none => return .ok (← read reply)
 
-/-- The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set. -/
-def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool) : Functions IO where
+/--
+The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set, about the service
+`service` when given, or else the request's service.
+-/
+def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool)
+    (service : Option String := none) : Functions IO where
   parse schema value := do
-    let reply ← ask stdin stdout reads memo reversed [] (schemaRequest "parse" schema value)
+    let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "parse" schema value)
     IO.ofExcept (issueOr reply fun r => pure (optional r "value"))
   canonical schema value := do
-    let reply ← ask stdin stdout reads memo reversed [] (schemaRequest "canonical" schema value)
+    let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "canonical" schema value)
     IO.ofExcept (issueOr reply (field · "value"))
   normalize schema value := do
-    let reply ← ask stdin stdout reads memo reversed [] (schemaRequest "normalize" schema value)
+    let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "normalize" schema value)
     IO.ofExcept (issueOr reply fun r => pure (optional r "value"))
   binding name binding input records now := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "binding"), ("command", .str name), ("binding", .str binding), ("input", input),
              ("now", .str (renderTime now))])
     IO.ofExcept (issueOr reply fun r => do FromValue.fromValue (← field r "bound"))
   requirement name condition input records now := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "requirement"), ("command", .str name), ("condition", .str condition), ("input", input),
              ("now", .str (renderTime now))])
     IO.ofExcept (issueOr reply fun r => do FromValue.fromValue (← field r "holds"))
   inputRequirement name condition input := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "inputRequirement"), ("target", .str name), ("condition", .str condition), ("input", input)])
     IO.ofExcept (issueOr reply fun r => do FromValue.fromValue (← field r "holds"))
   ensures name input before after now := do
-    let reply ← ask stdin stdout reads memo reversed after
+    let reply ← ask stdin stdout reads memo reversed service after
       (.obj [("type", .str "ensures"), ("command", .str name), ("input", input), ("now", .str (renderTime now))])
       before
     IO.ofExcept (issueOr reply fun r => (optional r "failed").mapM FromValue.fromValue)
   queryEnsures name input output records := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "queryEnsures"), ("query", .str name), ("input", input), ("output", output)])
     IO.ofExcept (issueOr reply fun r => (optional r "failed").mapM FromValue.fromValue)
   resultEnsures target input output events := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "resultEnsures"), ("target", .str target), ("input", input), ("output", output.getD .null),
              ("events", .arr (events.map fun e => .obj [("event", .str e.event), ("payload", e.payload)]))])
     IO.ofExcept (issueOr reply fun r => (optional r "failed").mapM FromValue.fromValue)
   invariant entity row := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "invariant"), ("entity", .str entity), ("record", row)])
     IO.ofExcept (issueOr reply fun r => (optional r "failed").mapM FromValue.fromValue)
   serviceInvariant records := do
-    let reply ← ask stdin stdout reads memo reversed records (.obj [("type", .str "serviceInvariant")])
+    let reply ← ask stdin stdout reads memo reversed service records (.obj [("type", .str "serviceInvariant")])
     match ← IO.ofExcept (issueOr reply fun r => (optional r "failed").mapM FromValue.fromValue) with
     | .ok failed => pure (.ok failed)
     | .error (.thrown schema) => pure (.error schema)
     | .error issue => throw (IO.userError s!"serviceInvariant answered {repr issue}, which is no throw")
   chartInvariant scope records := do
-    let reply ← ask stdin stdout reads memo reversed records (.obj [("type", .str "chartInvariant"), ("scope", Scope.toValue scope)])
+    let reply ← ask stdin stdout reads memo reversed service records (.obj [("type", .str "chartInvariant"), ("scope", Scope.toValue scope)])
     IO.ofExcept (issueOr reply fun r => (optional r "failed").mapM FromValue.fromValue)
   decide name input records now := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "decide"), ("command", .str name), ("input", input), ("now", .str (renderTime now))])
     IO.ofExcept (issueOr reply fun r => do
       (← asList (← field r "groups")).mapM fun g => do (← asList g).mapM Emit.decode)
   resolve name input records now := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "resolve"), ("query", .str name), ("input", input), ("now", .str (renderTime now))])
     IO.ofExcept (issueOr reply (field · "output"))
   react name payload records now keys := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "react"), ("automation", .str name), ("payload", payload), ("now", .str (renderTime now)),
              ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (optional r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   comparable name answer := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "comparable"), ("query", .str name), ("answer", ToValue.toValue answer)])
     IO.ofExcept (issueOr reply (field · "value"))
   initialContext name input := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "initialContext"), ("machine", .str name), ("input", input)])
     IO.ofExcept (issueOr reply (field · "context"))
   guard scope records t extra := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "guard"), ("scope", Scope.toValue scope), ("transition", Transition.toValue t), ("extra", Extra.toValue extra)])
     IO.ofExcept (issueOr reply fun r => do FromValue.fromValue (← field r "passes"))
   assign scope records a extra keys := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "assign"), ("scope", Scope.toValue scope), ("at", Assignment.toValue a), ("extra", Extra.toValue extra),
              ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "context", optional r "copy", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   input scope records a keys := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "input"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a), ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   holds scope records := do
-    let reply ← ask stdin stdout reads memo reversed records (.obj [("type", .str "holds"), ("scope", Scope.toValue scope)])
+    let reply ← ask stdin stdout reads memo reversed service records (.obj [("type", .str "holds"), ("scope", Scope.toValue scope)])
     IO.ofExcept (issueOr reply fun _ => pure ())
   deadlines machine state := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "deadlines"), ("machine", .str machine), ("state", .str state)])
     IO.ofExcept do
       (← asList (← field reply "deadlines")).mapM fun d => do
@@ -208,30 +216,30 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
           | some other => throw s!"expected a whole number of milliseconds, got {render other}"
         pure (← stringField d "name", deadline)
   deadlineAt scope records name := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "deadlineAt"), ("scope", Scope.toValue scope), ("name", .str name)])
     IO.ofExcept (issueOr reply fun r => do parseTime (← stringField r "time"))
   offers scope records control := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "offers"), ("scope", Scope.toValue scope), ("control", .str control)])
     IO.ofExcept (issueOr reply fun r => do asList (← field r "payloads"))
   showInput scope records a := do
-    let reply ← ask stdin stdout reads memo reversed records
+    let reply ← ask stdin stdout reads memo reversed service records
       (.obj [("type", .str "showInput"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a)])
     IO.ofExcept (issueOr reply (field · "input"))
   items scope records := do
-    let reply ← ask stdin stdout reads memo reversed records (.obj [("type", .str "items"), ("scope", Scope.toValue scope)])
+    let reply ← ask stdin stdout reads memo reversed service records (.obj [("type", .str "items"), ("scope", Scope.toValue scope)])
     IO.ofExcept (issueOr reply fun r => do
       (← asList (← field r "keys")).mapM fun k => do pure (← field k "key", ← stringField k "encodedKey"))
   copyContext chart map := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "copyContext"), ("machine", .str chart), ("map", .str map)])
     IO.ofExcept (field reply "context")
   singleRecord entity := do
-    let reply ← ask stdin stdout reads memo reversed [] (.obj [("type", .str "singleRecord"), ("entity", .str entity)])
+    let reply ← ask stdin stdout reads memo reversed service [] (.obj [("type", .str "singleRecord"), ("entity", .str entity)])
     IO.ofExcept (field reply "record")
   copyKey chart map payload := do
-    let reply ← ask stdin stdout reads memo reversed []
+    let reply ← ask stdin stdout reads memo reversed service []
       (.obj [("type", .str "copyKey"), ("machine", .str chart), ("map", .str map), ("payload", payload)])
     IO.ofExcept (issueOr reply fun r => do
       match r.field? "key" with
@@ -239,7 +247,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       | some .null => pure (some none)
       | some k => pure (some (some (← FromValue.fromValue k))))
   close scope records := do
-    let reply ← ask stdin stdout reads memo reversed records (.obj [("type", .str "close"), ("scope", Scope.toValue scope)])
+    let reply ← ask stdin stdout reads memo reversed service records (.obj [("type", .str "close"), ("scope", Scope.toValue scope)])
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "output", ← (optional r "failed").mapM FromValue.fromValue))
 
@@ -501,6 +509,27 @@ def peer (request : Value) : Except String Value := do
     ("runFindings", .arr ((peerRunFindings reported).map fun (o, v) =>
       .obj [("origin", ToValue.toValue o), ("violation", ToValue.toValue v)]))])
 
+instance : MonadNote IO where
+  note _ := pure ()
+
+/--
+The reply to request `simulate`, which takes a structure and a scenario, and returns each running service's trace lines
+and violations, and the simulation's reports and halting report. Each question to TS names its service.
+-/
+def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
+  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
+  let sc : Scenario ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "scenario")))
+  let start ← IO.ofExcept (Sim.World.start spec sc)
+  let reads ← IO.mkRef {}
+  let memo ← IO.mkRef {}
+  let w ← Sim.simulate (fun s => functions stdin stdout reads memo false (some s)) start sc
+  pure (.obj [("type", .str "simulated"),
+    ("participants", .arr (w.states.map fun (service, s) => .obj [("service", .str service),
+      ("lines", .arr (s.lines.toList.map fun l => lineValue l [] [])),
+      ("violations", .arr ((s.violations ++ s.halted.toList).map ToValue.toValue))])),
+    ("reports", .arr (w.reports.map (·.toValue))),
+    ("halted", (w.halted.map (·.toValue)).getD .null)])
+
 partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do
   let line ← stdin.getLine
   if line.isEmpty then return
@@ -519,6 +548,7 @@ partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : I
       | some (.str "afters") => IO.ofExcept (afters request)
       | some (.str "decodeLines") => IO.ofExcept (decodeLines request)
       | some (.str "peer") => IO.ofExcept (peer request)
+      | some (.str "simulate") => simulateRequest stdin stdout request
       | some (.str "names") =>
         pure (.obj [("type", .str "names"),
           ("byCaller", .obj (rejectionKinds.filterMap fun k =>
