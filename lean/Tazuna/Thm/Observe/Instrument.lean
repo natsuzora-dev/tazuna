@@ -516,9 +516,8 @@ theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload
   · exact Agrees.bind (Agrees.pure _) (fun _ => message_agrees h _ _)
   · exact Agrees.bind (addResult_agrees h _ _ _) (fun _ => message_agrees h _ _)
 
-theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String)
-    (first : Delivery) :
-    Agrees (redeliver st fsI s name id raw resultOf first) (redeliver st fs s name id raw resultOf first) := by
+theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :
+    Agrees (redeliver st fsI s name id raw resultOf) (redeliver st fs s name id raw resultOf) := by
   unfold redeliver; agree [h.canonical, message_agrees h]
 
 theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :

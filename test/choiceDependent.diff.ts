@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
-import { type DecidedOrder, stepOrderChanges } from "../src/explore/stepOrders.ts";
+import { type Searched, stepOrderChanges } from "../src/explore/stepOrders.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { stepOrderLimit } from "../src/observe/choiceDependent.ts";
 import { simulateSpec } from "../src/sim/spec/simulate.ts";
@@ -22,29 +22,32 @@ const simRoots = [join(tests, "../samples/todo/spec"), ...runExamples()];
 const simCases = await Promise.all(
   simRoots.map(async (root) => {
     const spec = await loadSpec(root);
-    const decided: DecidedOrder[] = [];
-    for (const { definition } of spec.scenarios)
-      stepOrderChanges(spec, definition.scenario, simulateSpec(spec, definition.scenario), 0, (d) => decided.push(d));
-    return { root, spec, decided };
+    const scenarios = spec.scenarios.map(({ service, name, definition }) => {
+      const searched: Searched[] = [];
+      stepOrderChanges(spec, definition.scenario, simulateSpec(spec, definition.scenario), 0, (s) => searched.push(s));
+      return { label: `${service}/${name}`, scenario: definition.scenario, searched };
+    });
+    return { root, spec, scenarios };
   }),
 );
 
-for (const { root, spec, decided } of simCases) {
-  if (spec.scenarios.length === 0 || (decided.length === 0 && !relationExamples.has(root))) continue;
-  test(`${relative(tests, root)}: TS and Lean find the same ChoiceDependent violation for each step order that the search runs`, (t) => {
-    assert.ok(decided.length > 0, "the search runs step orders in each example of a ChoiceDependent violation");
-    let found = 0;
-    for (const { scenario, origin, service, order, found: ts } of decided) {
+for (const { root, spec, scenarios } of simCases) {
+  const searches = scenarios.flatMap((s) => s.searched);
+  if (searches.length === 0 && !relationExamples.has(root)) continue;
+  test(`${relative(tests, root)}: TS and Lean run the same step-order searches, with the same orders, verdicts, and violations`, (t) => {
+    assert.ok(searches.length > 0, "each example of a ChoiceDependent violation searches some processing");
+    for (const { label, scenario, searched } of scenarios) {
       const functions = new SimFunctions(spec, (part) => lean.read(part));
       const verify = new VerifyFunctions(spec);
-      const fromLean = lean.stepOrder(spec, scenario, origin, service, order, {
+      const fromLean = lean.stepOrderChanges(spec, scenario, {
         answer: (message) => (message["type"] === "comparableValue" ? verify : functions).answer(message),
       });
-      const expected = ts === undefined ? null : JSON.parse(JSON.stringify(ts));
-      assert.deepEqual(fromLean, expected, `${service} at ${JSON.stringify(origin)} with ${JSON.stringify(order)}`);
-      if (ts !== undefined) found += 1;
+      assert.deepEqual(fromLean, JSON.parse(JSON.stringify(searched)), label);
     }
-    t.diagnostic(`${decided.length} orders, ${found} findings`);
+    const tried = searches.flatMap((s) => s.tried);
+    t.diagnostic(
+      `${searches.length} searches, ${tried.length} orders (${tried.filter((o) => "refused" in o).length} refused), ${searches.flatMap((s) => s.found).length} findings`,
+    );
   });
 }
 

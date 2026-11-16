@@ -397,29 +397,30 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
     ("reports", .arr (w.reports.map Sim.Report.toValue)),
     ("halted", (w.halted.map Sim.Report.toValue).getD .null)])
 
+/-- The JSON of a search, as TS writes it. -/
+def searchValue (r : Searched) : Value :=
+  .obj [("origin", ToValue.toValue r.origin), ("service", .str r.service),
+    ("tried", .arr (r.search.tried.map fun t => .obj (("order", ToValue.toValue t.order) :: match t.verdict with
+      | .refused => [("refused", .bool true)]
+      | .decided found => [("found", (found.map (·.toValue)).getD .null)]))),
+    ("found", .arr (r.search.found.map (·.toValue)))]
+
 /--
-The reply to request `stepOrder`, which takes a structure, a scenario whose last line (or begin, when it has none) is
-the processing `origin` of `service`, and the step order `order` of that processing, and returns the ChoiceDependent
-violation or null: the scenario walked with the order against walked without it, compared as the outcome of `service`.
-The last two entries of the order take the second step of the pair and then the first.
+The reply to request `stepOrderChanges`, which takes a structure and a scenario and returns stepOrderChanges of the
+scenario walked, from its begin: every search, with each step order it ran and its verdict, and what it found.
 -/
-def stepOrderRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
-  let (spec, sc, start) ← worldOf request
-  let service ← IO.ofExcept (stringField request "service")
-  let origin : Scenario.Origin ← IO.ofExcept do FromValue.fromValue (← field request "origin")
-  let order : List StepName ← IO.ofExcept do FromValue.fromValue (← field request "order")
-  let [y, x] := order.drop (order.length - 2) | throw (IO.userError "the order has no two entries")
-  let outcome (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Observe.Outcome := do
+def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
+  let (spec, sc, _) ← worldOf request
+  let walkWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Walk := do
+    let start ← IO.ofExcept (Sim.World.start spec sc)
     let start := { start with stepOrders }
     let ran : ActingIO Sim.World := Sim.walk spec (← instrumentedOf stdin stdout start) start sc
     let (w, acting) ← ran.run {}
-    let some st := w.services.lookup service | throw (IO.userError s!"{service} does not run")
-    let s := w.state service
-    let lines := (trace s (acting.collect service).causes).map fun (line, after, created) => traceLineOf line after created
-    pure (Outcome.of st s.halted lines s.records)
-  let compare := compareOf spec service (askComparable stdin stdout (← IO.mkRef {}))
-  let found ← stepOrder compare x y (← outcome []) (← outcome [(origin, service, order)])
-  pure (.obj [("type", .str "decided"), ("found", (found.map (·.toValue)).getD .null)])
+    pure { world := w, collect := acting.collect }
+  let reads ← IO.mkRef {}
+  let searched ← stepOrderChanges (fun service => compareOf spec service (askComparable stdin stdout reads))
+    walkWith sc (← walkWith sc []) 0
+  pure (.obj [("type", .str "stepOrderChanges"), ("searched", .arr (searched.map searchValue))])
 
 partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
   let line ← stdin.getLine
@@ -436,7 +437,7 @@ partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
       | some (.str "afters") => IO.ofExcept (afters request)
       | some (.str "decodeLines") => IO.ofExcept (decodeLines request)
       | some (.str "simulate") => simulateRequest stdin stdout request
-      | some (.str "stepOrder") => stepOrderRequest stdin stdout request
+      | some (.str "stepOrderChanges") => stepOrderChangesRequest stdin stdout request
       | some (.str "names") =>
         pure (.obj [("type", .str "names"),
           ("byCaller", .obj (rejectionKinds.filterMap fun k =>

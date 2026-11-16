@@ -1,5 +1,4 @@
 import type { ChoiceDependent, StepName } from "../data/choiceDependent.generated.ts";
-import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Origin, Scenario } from "../data/scenario.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
@@ -9,23 +8,23 @@ import { type Compare, type Outcome, outcomeOf, stepOrder, stepOrderLimit } from
 import { leadsTo } from "../observe/trace.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import type { Span, StepOrder } from "../sim/network.ts";
-import { type Made, participantViolations, snapshotsOf, walkSpec } from "../sim/spec/simulate.ts";
+import { type Made, snapshotsOf, walkSpec } from "../sim/spec/simulate.ts";
 import { compareTrace } from "../verify/compare.ts";
 
-/**
- * A step order that the search decided: the scenario walked up to the processing, the processing (`origin` of
- * `service`), the order, and the violation found against the walk without the order, if any. The diff test asks Lean
- * the same.
- */
-export interface DecidedOrder {
-  readonly scenario: Scenario;
+/** Lean's Tried: a step order that the search ran, refused (Walk.refused) or with the violation found, if any. */
+export type Tried =
+  | { readonly order: readonly StepName[]; readonly refused: true }
+  | { readonly order: readonly StepName[]; readonly found: ChoiceDependent | null };
+
+/** Lean's Searched: what the search of the processing `origin` of `service` ran and found. The diff test asks Lean. */
+export interface Searched {
   readonly origin: Origin;
   readonly service: string;
-  readonly order: readonly StepName[];
-  readonly found: ChoiceDependent | undefined;
+  readonly tried: readonly Tried[];
+  readonly found: readonly ChoiceDependent[];
 }
 
-export type DecidedOrders = ((decided: DecidedOrder) => void) | undefined;
+export type OnSearched = ((searched: Searched) => void) | undefined;
 
 const violationValue = ({ kind, definition, data }: ViolationValue): ViolationValue => ({ kind, definition, data });
 
@@ -37,7 +36,7 @@ const compareOf =
     return mismatch === undefined ? { bindings } : { mismatch: violationValue(mismatch) };
   };
 
-/** What the relation compares of the walk `m` for `service`: its halt, or its trace and records. */
+/** Lean's Walk.outcome. */
 function outcomeFor(m: Made, service: string): Outcome {
   const p = m.world.participants.get(service);
   if (p === undefined) throw new Error(`${service} does not run`);
@@ -45,25 +44,17 @@ function outcomeFor(m: Made, service: string): Outcome {
   return outcomeOf(p.halted === undefined ? null : violationValue(p.halted), lines, p.processing.state.records);
 }
 
-const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
+/** Lean's Walk.refused. */
+function refused(m: Made, service: string): boolean {
+  const kind = m.world.participants.get(service)?.halted?.kind;
+  return kind === "InvalidInput.unreadyStep" || kind === "InvalidInput.unusedStepOrder";
+}
 
-/** The reports and InvalidInput violations of a walk, which an order that no one could take adds. */
-const refusals = (m: Made): number =>
-  m.world.reports.length +
-  (m.world.halted === undefined ? 0 : 1) +
-  [...m.world.participants.keys()].reduce(
-    (n, service) => n + participantViolations(m, service).filter((v) => invalidInput.has(v.kind)).length,
-    0,
-  );
-
-/** The span of the walk's processing `origin` of `service`. */
+/** Lean's Walk.span?. */
 const spanOf = (m: Made, origin: Origin, service: string): Span | undefined =>
   m.world.spans.find((s) => s.service === service && canonicalJson(s.origin as Json) === canonicalJson(origin as Json));
 
-/**
- * The steps that a processing's internal queue took, by step number and name, in the order they began: those that
- * began while no step was open, except the steps of deadlines and barriers, which no order takes.
- */
+/** Lean's Walk.taken. */
 function taken(m: Made, span: Span): (readonly [number, StepName])[] {
   const steps = m.world.participants.get(span.service)?.processing.state.steps ?? [];
   const collected = m.listeners.get(span.service)?.collected;
@@ -72,45 +63,52 @@ function taken(m: Made, span: Span): (readonly [number, StepName])[] {
   );
 }
 
-/** Lean's candidates of the processing of `span`. */
+/** Lean's Walk.haltedIn. */
+function haltedIn(m: Made, span: Span): boolean {
+  if (m.world.participants.get(span.service)?.halted === undefined) return false;
+  const last = m.world.spans.findLast((s) => s.service === span.service);
+  return last !== undefined && canonicalJson(last.origin as Json) === canonicalJson(span.origin as Json);
+}
+
+/** Lean's Walk.candidatesOf. */
 function candidatesOf(m: Made, span: Span): (readonly [number, number])[] {
   const p = m.world.participants.get(span.service);
-  if (p === undefined || p.halted !== undefined) return [];
+  if (p === undefined || haltedIn(m, span)) return [];
   const collected = m.listeners.get(span.service)?.collected;
   return (collected?.candidates(p.processing.state.steps, span.stepsFrom) ?? []).filter(([i]) => i < span.stepsTo);
 }
 
-/**
- * Returns the step orders of the processing `origin` of `service`, the last of the walk `prefix`, that change its
- * result. Starting from the walk without an order, each pair of a walk's candidates is run in the other order: the steps
- * before the pair as that walk took them, then the steps between the pair that lead to the second, the second, and the
- * first. Each walk that reaches a new order of taken steps is searched in turn, so the search reaches every order of
- * dependent steps (dynamic partial-order reduction, Flanagan and Godefroid, POPL 2005), up to stepOrderLimit orders.
- * Each order is compared with the walk without one.
- */
-function searchProcessing(
+/** Lean's findingKey. */
+const findingKey = (v: ChoiceDependent): string =>
+  v.kind === "ChoiceDependent.stepOrder"
+    ? canonicalJson([v.data.firstStep, v.data.secondStep, v.data.difference] as unknown as Json)
+    : "";
+
+/** Lean's stepOrderSearch of the processing `origin` of `service` of the scenario `prefix`, which ends with it. */
+function stepOrderSearch(
   spec: Spec,
   prefix: Scenario,
   origin: Origin,
   service: string,
-  decided: DecidedOrders,
-): ChoiceDependent[] {
+): Pick<Searched, "tried" | "found"> {
   const base = walkSpec(spec, prefix);
-  const span = spanOf(base, origin, service);
-  if (span === undefined || candidatesOf(base, span).length === 0) return [];
+  const baseSpan = spanOf(base, origin, service);
+  if (baseSpan === undefined || candidatesOf(base, baseSpan).length === 0) return { tried: [], found: [] };
   const compare = compareOf(spec, service);
-  const original = outcomeFor(base, service);
-  const found = new Map<string, ChoiceDependent>();
-  const tried = new Set<string>();
-  const reached = new Set([canonicalJson(taken(base, span).map(([, name]) => name) as Json)]);
-  const queue: Made[] = [base];
+  const tried: Tried[] = [];
+  const found: ChoiceDependent[] = [];
+  const reached = new Set([canonicalJson(taken(base, baseSpan).map(([, name]) => name) as Json)]);
+  const queue: { readonly walked: Made; readonly order: readonly StepName[] }[] = [{ walked: base, order: [] }];
   let first: StepName | undefined;
-  for (let walked = queue.shift(); walked !== undefined; walked = queue.shift()) {
-    const at = spanOf(walked, origin, service) as Span;
-    const names = taken(walked, at);
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    const { walked, order: parentOrder } = next;
+    const span = spanOf(walked, origin, service);
+    if (span === undefined) continue;
+    const names = taken(walked, span);
     const nameOf = new Map(names);
     const steps = walked.world.participants.get(service)?.processing.state.steps ?? [];
-    for (const [i, j] of candidatesOf(walked, at)) {
+    const parentOutcome = outcomeFor(walked, service);
+    for (const [i, j] of candidatesOf(walked, span)) {
       const [a, b] = [nameOf.get(i), nameOf.get(j)];
       if (a === undefined || b === undefined) continue;
       const order = [
@@ -120,44 +118,47 @@ function searchProcessing(
         a,
       ];
       const key = canonicalJson(order as Json);
-      if (tried.has(key)) continue;
+      if (tried.some((t) => canonicalJson(t.order as Json) === key)) continue;
       first ??= a;
-      if (tried.size === stepOrderLimit) {
+      if (tried.length === stepOrderLimit) {
         const limit: ChoiceDependent = {
           kind: "ChoiceDependent.searchLimit",
           definition: stepNameDefinition(first),
           data: { limit: stepOrderLimit },
         };
-        return [...found.values(), limit];
+        return { tried, found: [...found, limit] };
       }
-      tried.add(key);
       const stepOrders: StepOrder[] = [{ origin, service, order }];
       const alternative = walkSpec(spec, prefix, stepOrders);
-      if (refusals(alternative) > refusals(base)) continue;
-      const result = stepOrder(compare, a, b, original, outcomeFor(alternative, service));
-      decided?.({ scenario: prefix, origin, service, order, found: result });
-      if (result !== undefined) found.set(canonicalJson(result as unknown as Json), result);
+      if (refused(alternative, service)) {
+        tried.push({ order, refused: true });
+        continue;
+      }
+      const result = stepOrder(compare, a, b, parentOrder, order, parentOutcome, outcomeFor(alternative, service));
+      tried.push({ order, found: result ?? null });
+      if (result !== undefined && !found.some((v) => findingKey(v) === findingKey(result))) found.push(result);
       const altSpan = spanOf(alternative, origin, service);
       if (altSpan === undefined) continue;
       const sequence = canonicalJson(taken(alternative, altSpan).map(([, name]) => name) as Json);
       if (reached.has(sequence)) continue;
       reached.add(sequence);
-      queue.push(alternative);
+      queue.push({ walked: alternative, order });
     }
   }
-  return [...found.values()];
+  return { tried, found };
 }
 
 /**
- * Returns the step orders that change the result of each processing of the walk `walked` of the scenario `sc` whose
- * origin is the begin (when `from` is 0) or a line from `from` on, each at the definition it names.
+ * Lean's stepOrderChanges, as violations at the definitions they name: the step orders that change the result of each
+ * processing of the walk `walked` of the scenario `sc` whose origin is the begin (when `from` is 0) or a line from
+ * `from` on. `onSearched` receives each search.
  */
 export function stepOrderChanges(
   spec: Spec,
   sc: Scenario,
   walked: Made,
   from: number,
-  decided?: DecidedOrders,
+  onSearched?: OnSearched,
 ): Violation[] {
   const searched = new Set<string>();
   return walked.world.spans.flatMap((span) => {
@@ -167,8 +168,9 @@ export function stepOrderChanges(
     searched.add(key);
     if (candidatesOf(walked, span).length === 0) return [];
     const prefix: Scenario = { ...sc, lines: sc.lines.slice(0, index + 1), expectations: [] };
-    return searchProcessing(spec, prefix, span.origin, span.service, decided).map((v) =>
-      withExtra(v, { location: placeOf(spec, v.definition) }),
-    );
+    const search = stepOrderSearch(spec, prefix, span.origin, span.service);
+    if (search.tried.length === 0 && search.found.length === 0) return [];
+    onSearched?.({ origin: span.origin, service: span.service, ...search });
+    return search.found.map((v) => withExtra(v, { location: placeOf(spec, v.definition) }));
   });
 }

@@ -158,8 +158,6 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
         return required(adapter.receive, line.type)({ ...line, input: undefined });
       case "operation":
         return required(adapter.operate, line.type)({ ...line, input: undefined, payload: line.payload });
-      case "unacceptedOperation":
-        throw new Error("the simulation writes no unacceptedOperation line");
     }
   }
 

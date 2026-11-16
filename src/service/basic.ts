@@ -55,12 +55,10 @@ export interface Service {
   readonly queries: readonly string[];
   /** The own events and how each changes records. */
   readonly events: ReadonlyMap<string, Change>;
-  /** The trace names of the events in other services' contracts that this service may receive. */
-  readonly received: readonly string[];
   /**
-   * The trace names of `received` that the service's definitions receive: an automation's or a chart's event, or a
-   * result event of a command that an automation or a chart sends. A simulation delivers an event only to the services
-   * that receive it.
+   * The trace names of the events of other services' contracts that the service's definitions receive: an automation's
+   * or a chart's event, or a result event of a command that an automation or a chart sends. A simulation delivers an
+   * event only to the services that receive it.
    */
   readonly receives: readonly string[];
   /** The automations in definition order. */
@@ -181,7 +179,7 @@ export function serviceOf(structure: Structure, service: string): Service {
         break;
     }
   }
-  const received = structure.contracts
+  const listed = structure.contracts
     .filter((c) => c.service !== service)
     .flatMap((c) =>
       Object.values(c.members).flatMap((r) =>
@@ -213,7 +211,7 @@ export function serviceOf(structure: Structure, service: string): Service {
   const results = structure.definitions.flatMap((d) =>
     d.kind === "command" && sent.some((c) => sameRef(c, d)) ? d.emits.flatMap((e) => (e === null ? [] : [e])) : [],
   );
-  const receives = received.filter((n) => [...heard, ...results].some((r) => traceNameOfRef(r, service) === n));
+  const receives = listed.filter((n) => [...heard, ...results].some((r) => traceNameOfRef(r, service) === n));
   const entities = structure.services.find((s) => s.name === service)?.entities ?? [];
   const ownEntity = (e: string) => entity({ service, name: e });
   const references = entities.flatMap((e) =>
@@ -234,7 +232,6 @@ export function serviceOf(structure: Structure, service: string): Service {
     commands,
     queries,
     events,
-    received,
     receives,
     automations,
     charts,

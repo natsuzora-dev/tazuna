@@ -24,16 +24,14 @@ inductive LineBody where
   | unsubscribe (to : String)
   | time
   | restart
-  /--
-  An operation from a scenario's `operate` (`accepted`) or `cannotOperate`. `name` is `screen.control`, and `payload`
-  is written only when the control's payload schema has fields.
-  -/
-  | operation (name : String) (payload : Option Value) (accepted : Bool)
+  /-- An operation of a screen's control. `name` is `screen.control`, and `payload` is written only when the control's
+  payload schema has fields. -/
+  | operation (name : String) (payload : Option Value)
 deriving DecidableEq, Repr, Inhabited
 
 /-- The name that LineIds counts. -/
 def LineBody.idName : LineBody → String
-  | .command name _ | .query name _ | .subscribe name _ | .event name _ _ | .operation name _ _ => name
+  | .command name _ | .query name _ | .subscribe name _ | .event name _ _ | .operation name _ => name
   | .answer _ _ => "answer"
   | .unsubscribe _ => "unsubscribe"
   | .time => "time"

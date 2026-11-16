@@ -63,8 +63,8 @@ export type StepName =
     };
 
 /**
- * A difference between the results of two runs. `original` is the result of the order that the violation names first
- * (the first step of the pair before the second), and `alternative` is the result of the other.
+ * A difference between the results of two walks. `original` is the result of the walk that takes the step that the
+ * violation names first before the second, and `alternative` is the result of the walk that takes the second first.
  * `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
  * snapshot.
  */
@@ -85,18 +85,24 @@ export type Difference =
     };
 
 /**
- * A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders,
- * between two walks of a scenario that differ only in it. Every other order of a simulation is a written line. stepOrder
- * writes the pair in canonical order.
+ * A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders.
+ * Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
  */
 export type ChoiceDependent =
-  /** `definition` is the definition of the first step. */
+  /**
+   * The walk with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the walk with
+   * `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the walk without one.
+   * One order comes from the other (stepOrderSearch), so the pair is the steps whose order they swap. `definition` is the
+   * definition of the first step.
+   */
   | {
       readonly kind: "ChoiceDependent.stepOrder";
       readonly definition: DefinitionRef;
       readonly data: {
         readonly firstStep: StepName;
         readonly secondStep: StepName;
+        readonly originalOrder: readonly StepName[];
+        readonly alternativeOrder: readonly StepName[];
         readonly difference: Difference;
       };
     }

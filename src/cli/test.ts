@@ -143,8 +143,8 @@ function simulateScenarios(spec: Spec): { readonly problems: Problem[]; readonly
       problems.push(toProblem(report, at(line) ?? named.place, { scenario: ref }));
     }
     const halted = world.halted !== undefined || [...world.participants.values()].some((p) => p.halted !== undefined);
-    const orderChanges = halted ? [] : stepOrderChanges(spec, scenario, simulated, 0);
-    for (const v of orderChanges) problems.push(toProblem(v, v.location ?? named.place, { scenario: ref }));
+    for (const v of stepOrderChanges(spec, scenario, simulated, 0))
+      problems.push(toProblem(v, v.location ?? named.place, { scenario: ref }));
     for (const service of world.participants.keys()) {
       for (const v of participantViolations(simulated, service))
         problems.push(

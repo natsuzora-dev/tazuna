@@ -1,7 +1,6 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import { plain } from "../data/values.ts";
 import { type ProblemError, withExtra } from "../data/violation.ts";
 import {
   type AssumptionMismatch,
@@ -22,7 +21,7 @@ import { initialContextOf, newInstance } from "./chart/request.ts";
 import { processCommand } from "./command.ts";
 import { firstFalse } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
-import { answerAgain, type Delivery, keep, malformedRedelivery, type Request, sameDelivery } from "./idempotency.ts";
+import { answerAgain, keep, type Request } from "./idempotency.ts";
 import type { Emit } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
@@ -133,12 +132,12 @@ function addResult(r: Processing, request: Pending, e: Emit): void {
     });
 }
 
+/** Lean's redeliver. */
 function redeliver(
   r: Processing,
   name: string,
   payload: unknown,
   given: { readonly id?: string },
-  first: Delivery,
   resultOf?: string,
 ): void {
   const s = r.state;
@@ -146,7 +145,7 @@ function redeliver(
   const written = r.functions.canonical({ kind: "payload", event }, payload);
   if (written instanceof Failed) halt(issueViolation(event, written));
   const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
-  const id = writeInput(s, {
+  writeInput(s, {
     dir: "in",
     type: "event",
     ...given,
@@ -154,8 +153,6 @@ function redeliver(
     payload: written,
     ...(request === undefined ? {} : { resultOf: request.id }),
   });
-  const delivered: Delivery = { event, payload: plain(written) };
-  if (!sameDelivery(first, delivered)) report(r.state, malformedRedelivery(id, first, delivered));
   newMessage(s);
   message(r);
 }
@@ -168,11 +165,8 @@ export function receive(
   resultOf?: string,
 ): void {
   const s = r.state;
-  if (!r.st.received.includes(name))
-    report(r.state, { kind: "InvalidInput.unlistedEvent", definition: null, data: { event: refOf(r.st, name) } });
-  const first = s.eventDeliveries.get(lineId(s, given.id, name));
-  if (first !== undefined) {
-    redeliver(r, name, payload, given, first, resultOf);
+  if (s.eventDeliveries.has(lineId(s, given.id, name))) {
+    redeliver(r, name, payload, given, resultOf);
     return;
   }
   const event = refOf(r.st, name);
@@ -196,7 +190,7 @@ export function receive(
     payload: encoded,
     ...(request === undefined ? {} : { resultOf: request.id }),
   });
-  s.eventDeliveries.set(id, { event, payload: plain(encoded) });
+  s.eventDeliveries.add(id);
   const e: Emit = { event: name, payload: decoded };
   if (request !== undefined) addResult(r, request, e);
   newMessage(s);
@@ -372,18 +366,16 @@ export function begin(r: Processing): void {
   message(r);
 }
 
-/** Ends the input: reports the entries of its `deadlineOrder` that no tie used, then those of its `stepOrder` left unused. */
-export function checkOrderUsed(r: Processing): void {
+/** Lean's State.checkDeadlineOrder. */
+export function checkDeadlineOrder(r: Processing): void {
   const s = r.state;
   s.inputDeadlineOrder = [];
   if (s.deadlineOrder.length > 0)
     report(r.state, { kind: "InvalidInput.unusedDeadlineOrder", definition: null, data: { entries: s.deadlineOrder } });
-  if (s.stepOrder.length > 0)
-    report(r.state, { kind: "InvalidInput.unusedStepOrder", definition: null, data: { entries: s.stepOrder } });
 }
 
 export function operate(r: Processing, screen: string, key: string, payload: unknown): void {
-  const { decoded, found } = writeOperation(r, "operation", screen, key, payload);
+  const { decoded, found } = writeOperation(r, screen, key, payload);
   const data = { screen: ref(r.st, screen), control: key };
   const top =
     "top" in found
@@ -411,13 +403,7 @@ export function operate(r: Processing, screen: string, key: string, payload: unk
 /**
  * Writes the operation line and reads its payload; returns undefined for a name that is not a control of the screen.
  */
-function writeOperation(
-  r: Processing,
-  type: "operation" | "unacceptedOperation",
-  screen: string,
-  key: string,
-  payload: unknown,
-) {
+function writeOperation(r: Processing, screen: string, key: string, payload: unknown) {
   const chart = r.st.charts.get(screen);
   if (chart === undefined) return unownedTarget(r, screen);
   const definition = ref(r.st, screen);
@@ -429,7 +415,7 @@ function writeOperation(
       data: { screen: definition, control: key },
     });
   const name = `${screen}.${key}`;
-  writeInput(r.state, { dir: "in", type, name, ...(control.hasPayload ? { payload } : {}) });
+  writeInput(r.state, { dir: "in", type: "operation", name, ...(control.hasPayload ? { payload } : {}) });
   const parsed = r.functions.parse({ kind: "control", screen: definition, control: key }, payload);
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
   if ("error" in parsed)

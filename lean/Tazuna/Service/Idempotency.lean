@@ -33,19 +33,4 @@ def CommandAnswers.keep (table : CommandAnswers) (id : String) (request : Reques
     CommandAnswers :=
   if keepsAnswer answer then table ++ [(id, request, answer)] else table
 
-structure Delivery where
-  event : Syntax.Ref
-  payload : Value
-deriving DecidableEq, Repr, Inhabited
-
-/-- The first delivered event for each id. -/
-abbrev EventDeliveries := List (String × Delivery)
-
-def EventDeliveries.find? (table : EventDeliveries) (id : String) : Option Delivery :=
-  (List.find? (·.1 == id) table).map (·.2)
-
-def malformedRedelivery (id : String) (first delivered : Delivery) : InvalidInput :=
-  if first.event == delivered.event then .changedRedeliveryPayload id delivered.event first.payload delivered.payload
-  else .reusedEventId id first.event delivered.event
-
 end Tazuna.Semantics

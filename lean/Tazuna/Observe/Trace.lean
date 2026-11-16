@@ -1,5 +1,6 @@
 import Tazuna.Service.Note
 import Tazuna.Service.State
+import Tazuna.Data.Trace
 
 /-!
 This module computes a snapshot line's `after`: every order that must hold among the lines of one window (between two
@@ -112,7 +113,7 @@ def bodyStrings : LineBody → List String
     | .fulfilled o => "fulfilled" :: o.strings
     | .rejected r => "rejected" :: r.reason.toList
   | .unsubscribe _ | .time | .restart => []
-  | .operation _ payload _ => (payload.map Value.strings).getD []
+  | .operation _ payload => (payload.map Value.strings).getD []
 
 /-- The first `out` line where createKey value `v` appears. -/
 def firstOut (s : State) (v : String) : Option Nat :=
@@ -126,5 +127,24 @@ def trace (s : State) (c : Causes) : List (Line × List String × List String) :
   let lineSteps := lineSteps s c
   let messages := messages s c
   s.lines.toList.zipIdx.map fun (line, i) => (line, after s lineSteps messages i, createdAt s i)
+
+/-- The trace line of `line` as a snapshot holds it, with its `after` and `created`. -/
+def traceLineOf (line : Line) (after created : List String) : TraceLine :=
+  let (dir, id) := (line.dir, line.id)
+  let body : TraceLine.Body := match line.body with
+    | .command name input => .command dir id name input
+    | .query name input => .query dir id name input
+    | .subscribe name input => .subscribe dir id name input
+    | .event name payload resultOf => .event dir id name payload resultOf
+    | .answer to answer => .answer dir id to answer
+    | .unsubscribe to => .unsubscribe dir id to
+    | .time => .time .in id
+    | .restart => .restart .in id
+    | .operation name payload => .operation dir id name payload
+  { time := { text := renderTime line.time, time := line.time }
+    body
+    deadlineOrder := if line.deadlineOrder.isEmpty then none else some line.deadlineOrder
+    after := if after.isEmpty then none else some after
+    created := if created.isEmpty then none else some created }
 
 end Tazuna.Observe

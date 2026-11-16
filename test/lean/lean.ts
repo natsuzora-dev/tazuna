@@ -3,15 +3,16 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { ChoiceDependent, StepName } from "../../src/data/choiceDependent.generated.ts";
 import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
-import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
+import type { Scenario } from "../../src/data/scenario.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
 import { type FileLine, isMalformed } from "../../src/data/trace.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
 import type { Json } from "../../src/data/values.ts";
+import type { Searched } from "../../src/explore/stepOrders.ts";
 import type { Spec } from "../../src/load/load.ts";
+import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/syntax/structure.generated.ts";
 import type { Folder, PairingScenario } from "../../src/verify/pairing.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
@@ -206,21 +207,14 @@ export class Lean {
     return message["mismatch"] as VerifyViolation | null;
   }
 
-  /** Lean's verdict on the step order `order` of the processing `origin` of `service`, the last of `scenario`. */
-  stepOrder(
-    spec: Spec,
-    scenario: Scenario,
-    origin: Origin,
-    service: string,
-    order: readonly StepName[],
-    functions: Answering,
-  ): ChoiceDependent | null {
+  /** Lean's stepOrderChanges of the scenario walked from its begin: each search, what it ran, and what it found. */
+  stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): readonly Searched[] {
     const result = this.exchange(
-      { type: "stepOrder", structure: spec.structure, scenario, origin, service, order },
-      "decided",
+      { type: "stepOrderChanges", structure: spec.structure, scenario },
+      "stepOrderChanges",
       functions,
     );
-    return result["found"] as ChoiceDependent | null;
+    return result["searched"] as readonly Searched[];
   }
 
   names(): LeanNames {
@@ -236,9 +230,21 @@ export class Lean {
 
   /** Returns Lean's simulation of the scenario: each running service's trace and violations, and the reports. */
   /** Simulates the scenario, or with `walk` runs its lines as explore does and returns what each service enables. */
-  simulate(spec: Spec, scenario: Scenario, functions: Answering, walk = false): Message {
+  simulate(
+    spec: Spec,
+    scenario: Scenario,
+    functions: Answering,
+    walk = false,
+    stepOrders: readonly StepOrder[] = [],
+  ): Message {
     const { type, ...result } = this.exchange(
-      { type: "simulate", structure: spec.structure, scenario, ...(walk ? { walk } : {}) },
+      {
+        type: "simulate",
+        structure: spec.structure,
+        scenario,
+        ...(walk ? { walk } : {}),
+        ...(stepOrders.length > 0 ? { stepOrders } : {}),
+      },
       "simulated",
       functions,
     );

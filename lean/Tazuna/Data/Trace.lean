@@ -40,7 +40,6 @@ inductive TraceLine.Body where
   | unsubscribe (dir : Dir) (id : String) (to : String)
   | event (dir : Dir) (id : String) (name : String) (payload : Value) (resultOf : Option String)
   | operation (dir : Dir) (id : String) (name : String) (payload : Option Value)
-  | unacceptedOperation (dir : Dir) (id : String) (name : String) (payload : Option Value)
   | time (dir : InDir) (id : String)
   | restart (dir : InDir) (id : String)
 deriving DecidableEq, Repr, Inhabited
@@ -49,16 +48,15 @@ derive_wire TraceLine.Body tag "type" after dir skip_serializing_none
 
 def TraceLine.Body.dir : TraceLine.Body → Dir
   | .command dir .. | .query dir .. | .subscribe dir .. | .answer dir .. | .unsubscribe dir .. | .event dir ..
-  | .operation dir .. | .unacceptedOperation dir .. => dir
+  | .operation dir .. => dir
   | .time .in _ | .restart .in _ => .in
 
 def TraceLine.Body.id : TraceLine.Body → String
   | .command _ id .. | .query _ id .. | .subscribe _ id .. | .answer _ id .. | .unsubscribe _ id .. | .event _ id ..
-  | .operation _ id .. | .unacceptedOperation _ id .. | .time _ id | .restart _ id => id
+  | .operation _ id .. | .time _ id | .restart _ id => id
 
 def TraceLine.Body.name? : TraceLine.Body → Option String
-  | .command _ _ name _ | .query _ _ name _ | .subscribe _ _ name _ | .event _ _ name _ _ | .operation _ _ name _
-  | .unacceptedOperation _ _ name _ => some name
+  | .command _ _ name _ | .query _ _ name _ | .subscribe _ _ name _ | .event _ _ name _ _ | .operation _ _ name _ => some name
   | .answer .. | .unsubscribe .. | .time .. | .restart .. => none
 
 def TraceLine.Body.to? : TraceLine.Body → Option String

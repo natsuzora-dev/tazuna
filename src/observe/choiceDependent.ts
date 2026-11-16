@@ -88,24 +88,29 @@ function difference(compare: Compare, original: Outcome, alternative: Outcome): 
 }
 
 /**
- * Returns the violation when the two step orders differ. `aFirst` takes step `a` first, and `bFirst` takes `b` first.
- * The pair is in the order of their canonical texts.
+ * Lean's stepOrder: the violation when the two walks differ. `aFirst` takes step `a` first and is the walk with the step
+ * order `aOrder`, and `bFirst` takes `b` first and is the walk with `bOrder`. The pair is in the order of their canonical
+ * texts.
  */
 export function stepOrder(
   compare: Compare,
   a: StepName,
   b: StepName,
+  aOrder: readonly StepName[],
+  bOrder: readonly StepName[],
   aFirst: Outcome,
   bFirst: Outcome,
 ): Of<"ChoiceDependent.stepOrder"> | undefined {
-  const [first, second, original, alternative] =
-    byCodePoint(canonicalJson(a), canonicalJson(b)) <= 0 ? [a, b, aFirst, bFirst] : [b, a, bFirst, aFirst];
+  const [first, second, originalOrder, alternativeOrder, original, alternative] =
+    byCodePoint(canonicalJson(a), canonicalJson(b)) <= 0
+      ? [a, b, aOrder, bOrder, aFirst, bFirst]
+      : [b, a, bOrder, aOrder, bFirst, aFirst];
   const found = difference(compare, original, alternative);
   return found === undefined
     ? undefined
     : {
         kind: "ChoiceDependent.stepOrder",
         definition: stepNameDefinition(first),
-        data: { firstStep: first, secondStep: second, difference: found },
+        data: { firstStep: first, secondStep: second, originalOrder, alternativeOrder, difference: found },
       };
 }

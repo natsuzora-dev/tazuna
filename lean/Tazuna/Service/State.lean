@@ -153,7 +153,8 @@ structure State where
   started : Bool := false
   records : Records := []
   commandAnswers : CommandAnswers := []
-  eventDeliveries : EventDeliveries := []
+  /-- The ids of the events delivered so far. -/
+  eventDeliveries : List String := []
   /-- The machine and screen instances in creation order. -/
   machines : List Instance := []
   copies : List Instance := []

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { test } from "node:test";
 import { mismatchKinds } from "../src/data/mismatch.generated.ts";
 import { uncomparableKinds } from "../src/data/uncomparable.generated.ts";
 import { depth, folders, groupExamples } from "./examples.ts";
-import { testEveryKind, testExamples } from "./expected.ts";
+import { kindOfLine, recordsOf, testEveryKind, testExamples } from "./expected.ts";
 
 const groups = { mismatch: "Mismatch", uncomparable: "Uncomparable" } as const;
 
@@ -31,3 +31,21 @@ for (const [folder, group] of Object.entries(groups))
     testExamples(folders(join(verifyRoot, folder, target)), group, args);
 
 testEveryKind(groupExamples("verify"), [...mismatchKinds, ...uncomparableKinds]);
+
+const snapshotChecks = Object.values(groups).map((group) => `${group}.`);
+
+test("tazuna test, exploration included, finds no problem in the spec of each verify example besides its snapshot comparisons", async () => {
+  const verified = Object.keys(groups).flatMap((folder) =>
+    Object.entries(commands)
+      .filter(([, args]) => args === verify)
+      .flatMap(([target]) => folders(join(verifyRoot, folder, target))),
+  );
+  for (const example of verified) {
+    const kinds = (await recordsOf(example, [commands["snapshot"] ?? []])).map(kindOfLine);
+    assert.deepEqual(
+      kinds.filter((kind) => !snapshotChecks.some((group) => kind.startsWith(group))),
+      [],
+      relative(import.meta.dirname, example),
+    );
+  }
+});

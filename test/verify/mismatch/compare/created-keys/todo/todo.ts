@@ -41,7 +41,10 @@ export const seenIds = query({
 }).resolve(({ records }) => {
   const ids = records.Seen.map((s) => s.id);
   const seenOf = (taskId: string) => records.Seen.filter((s) => s.taskId === taskId).map((s) => s.id);
-  const listed = ["task-1", "task-2"].flatMap((taskId) => seenOf(taskId).only() ?? []);
+  const listed = ["task-1", "task-2"].flatMap((taskId) => {
+    const one = seenOf(taskId);
+    return one.size === 1 ? (one.only() ?? []) : [];
+  });
   return { repeated: ids.concat(seenOf("task-1")), none: [], ids, listed };
 });
 

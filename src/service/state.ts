@@ -19,7 +19,7 @@ import {
   type Keys,
   type Scope,
 } from "./functions.ts";
-import type { CommandAnswers, EventDeliveries } from "./idempotency.ts";
+import type { CommandAnswers } from "./idempotency.ts";
 import { limits } from "./limits.ts";
 import { type Emit, type Halting, halts } from "./message.ts";
 import type { Note } from "./note.ts";
@@ -258,7 +258,8 @@ export interface State {
   started: boolean;
   readonly records: Records;
   readonly commandAnswers: CommandAnswers;
-  readonly eventDeliveries: EventDeliveries;
+  /** The ids of the events delivered so far. */
+  readonly eventDeliveries: Set<string>;
   /** The machine and screen instances, in creation order. */
   readonly machines: Map<string, Instance>;
   readonly copies: Map<string, Instance>;
@@ -305,7 +306,7 @@ export function newState(st: Service): State {
     started: false,
     records: { keyed, singles: new Map() },
     commandAnswers: new Map(),
-    eventDeliveries: new Map(),
+    eventDeliveries: new Set(),
     machines: new Map(),
     copies: new Map(),
     stack: [],

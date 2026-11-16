@@ -1,0 +1,29 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": [
+        {
+          "kind": "InvalidInput.unownedTarget",
+          "definition": null,
+          "data": {
+            "target": {
+              "service": "todo",
+              "name": "tasks"
+            }
+          }
+        }
+      ],
+      "candidates": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "reports": [],
+  "halted": null
+}

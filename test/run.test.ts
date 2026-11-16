@@ -38,21 +38,11 @@ const groups: Readonly<Record<string, readonly string[]>> = {
 const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   InvalidInput: {
     "InvalidInput.unownedTarget":
-      "The DSL's types let the client send only the own service's or a running peer's definitions, and the simulation sends each message to the service that owns its definition",
-    "InvalidInput.unlistedEvent":
-      "The simulation delivers an event only to the services whose definitions receive it (Service.receives), all listed by a contract",
-    "InvalidInput.reusedEventId":
-      "The simulation gives each event its sender's id, and redelivers a message with its own name and payload",
-    "InvalidInput.changedRedeliveryPayload":
-      "The simulation gives each event its sender's id, and redelivers a message with its own name and payload",
+      "Only a data scenario names a target that its receiver does not own (the DSL's types let the client send only the definitions of the service it names); test/sim/Run/network/unownedTarget exemplifies it",
     "InvalidInput.resultOfNonCommand":
       "The type of resultOf in an emit line accepts only a request handle of a command",
     "InvalidInput.unknownControl":
       "The type of operate accepts only the controls of the screen, and the exploration of test operates only those",
-    "InvalidInput.unreadyDeadline":
-      "An order of the clock line names the deadline of a tie only through a deadline handle, and the exploration names only the deadlines of the ties that a walk reaches",
-    "InvalidInput.unusedDeadlineOrder":
-      "No example writes an order for a clock line without a tie; the exploration orders only the ties that a walk reaches",
     "InvalidInput.unreadyStep":
       "Only test's step-order search writes a step order, naming only the steps that a walk took",
     "InvalidInput.unusedStepOrder":
@@ -64,6 +54,17 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
     "Fault.exceededMessageWork":
       "An example that reaches the limit 100000 writes about 8300 event lines in one message and makes run.diff several times slower",
     "Fault.exceededExitDepth": "Reaching the exit nesting limit 100 takes about 50 nested screen definitions",
+  },
+};
+
+/**
+ * The kinds of another group that an example reports besides those of its own, each example with the reason: a halt
+ * that the example shows not to hide its own group's violations.
+ */
+const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string[]; readonly because: string }>> = {
+  "choiceDependent/Observe/ChoiceDependent/halted-later": {
+    kinds: ["Fault.outputSchema"],
+    because: "the fault halts the scenario at its last line, and the stepOrder of its first line is still reported",
   },
 };
 
@@ -119,7 +120,11 @@ for (const [group, kinds] of Object.entries(groups)) {
       assert.deepEqual(
         expectedOf(example)
           .map(kindOfLine)
-          .filter((kind) => !kind.startsWith(`${group}.`)),
+          .filter(
+            (kind) =>
+              !kind.startsWith(`${group}.`) &&
+              !(otherGroupKinds[relative(runRoot, example)]?.kinds.includes(kind) ?? false),
+          ),
         [],
         relative(tests, example),
       );

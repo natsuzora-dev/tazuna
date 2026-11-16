@@ -6,7 +6,7 @@ import { byCodePoint, canonicalJson, stringsOf } from "../data/values.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
-import { begin, call, checkOrderUsed, endSubscription, operate, send, subscribe } from "../service/input.ts";
+import { begin, call, checkDeadlineOrder, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
@@ -376,7 +376,7 @@ function fireTo(time: Temporal.Instant, order: readonly DeadlineId[]): (r: Proce
     s.deadlineOrder = order;
     s.tieOrderRequired = true;
     fireDue(r, time);
-    checkOrderUsed(r);
+    checkDeadlineOrder(r);
     if (Temporal.Instant.compare(time, s.now) > 0) {
       s.now = time;
       r.note.wroteNow();

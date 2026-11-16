@@ -6,7 +6,7 @@ open Tazuna.Data Tazuna.Semantics Tazuna.Observe
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] (compare : Compare m)
 
-theorem difference_same (o : Outcome) (bindings : Bindings) (h : compare o.lines o.lines = pure (.ok bindings))
+theorem difference_same (o : Observe.Outcome) (bindings : Bindings) (h : compare o.lines o.lines = pure (.ok bindings))
     (hr : recordsText bindings o.records = recordsText [] o.records) :
     difference compare o o = pure none := by
   unfold difference
@@ -14,9 +14,9 @@ theorem difference_same (o : Outcome) (bindings : Bindings) (h : compare o.lines
   · simp
   · simp [h, hr]
 
-theorem stepOrder_swap (a b : StepName) (aFirst bFirst : Outcome)
+theorem stepOrder_swap (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Observe.Outcome)
     (h : (ToValue.toValue a).canonical ≠ (ToValue.toValue b).canonical) :
-    stepOrder compare a b aFirst bFirst = stepOrder compare b a bFirst aFirst := by
+    stepOrder compare a b aOrder bOrder aFirst bFirst = stepOrder compare b a bOrder aOrder bFirst aFirst := by
   unfold stepOrder
   by_cases hab : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical
   · have hba : ¬ (ToValue.toValue b).canonical ≤ (ToValue.toValue a).canonical :=
@@ -26,11 +26,11 @@ theorem stepOrder_swap (a b : StepName) (aFirst bFirst : Outcome)
       (String.le_total _ _).resolve_left hab
     simp [hab, hba]
 
-theorem stepOrder_of_no_difference (a b : StepName) (aFirst bFirst : Outcome)
+theorem stepOrder_of_no_difference (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Observe.Outcome)
     (ha : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical → difference compare aFirst bFirst = pure none)
     (hb : ¬ (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical →
       difference compare bFirst aFirst = pure none) :
-    stepOrder compare a b aFirst bFirst = pure none := by
+    stepOrder compare a b aOrder bOrder aFirst bFirst = pure none := by
   unfold stepOrder
   by_cases h : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical
   · simp [h, ha h]

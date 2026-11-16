@@ -96,7 +96,7 @@ def addResult [Monad m] (st : Service) (fs : Functions m) (s : State) (id : Stri
 def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (payload : Value) (request : Option Pending) : m State := do
   let (s, id) := s.writeInput givenId (.event name payload (request.map (·.id)))
-  let s := { s with eventDeliveries := s.eventDeliveries ++ [(id, { event := st.refOf name, payload })] }
+  let s := { s with eventDeliveries := s.eventDeliveries ++ [id] }
   let s ← match request with
     | some p => addResult st fs s p.id { event := name, payload }
     | none => pure s
@@ -108,36 +108,31 @@ def withResultOf (st : Service) (s : State) (name : String) : Option String → 
   | none => (s, none)
 
 /--
-The state after an event with an already processed id. As in the EIP Idempotent Receiver, the id is checked before the
-payload and the event is not processed; a different name or payload is reported as a reused id. The message itself is
-processed, so due deadlines and changed subscription answers are still sent.
+The state after an event with an already processed id. As in the EIP Idempotent Receiver, the event is not processed
+again. The message itself is processed, so due deadlines and changed subscription answers are still sent. A
+simulation redelivers a message as it was, so the name and payload are those of the first delivery.
 -/
 def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (raw : Value) (resultOf : Option String) (first : Delivery) : m State := do
+    (raw : Value) (resultOf : Option String) : m State := do
   match ← fs.canonical (.payload name) raw with
   | .error e =>
     pure (s.report (.fault (issueViolation st (st.refOf name) e)))
   | .ok payload =>
   let (s, request) := withResultOf st s name resultOf
-  let (s, id) := s.writeInput givenId (.event name payload (request.map (·.id)))
-  let delivered : Delivery := { event := st.refOf name, payload }
-  let s := if first = delivered then s else s.report (.invalidInput (malformedRedelivery id first delivered))
+  let (s, _) := s.writeInput givenId (.event name payload (request.map (·.id)))
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) (resultOf : Option String) : m State := do
-  if name ∈ st.received then
-    match s.eventDeliveries.find? (s.lineId givenId name) with
-    | some first => redeliver st fs s name givenId raw resultOf first
-    | none =>
-      match ← fs.parse (.payload name) raw with
-      | .error e =>
-        pure (s.report (.fault (issueViolation st (st.refOf name) e)))
-      | .ok none => pure (s.report (.invalidInput (.eventPayloadSchema (st.refOf name))))
-      | .ok (some payload) =>
-        let (s, request) := withResultOf st s name resultOf
-        deliver st fs s name givenId payload request
-  else pure (s.report (.invalidInput (.unlistedEvent (st.refOf name))))
+  if s.eventDeliveries.contains (s.lineId givenId name) then redeliver st fs s name givenId raw resultOf
+  else
+    match ← fs.parse (.payload name) raw with
+    | .error e =>
+      pure (s.report (.fault (issueViolation st (st.refOf name) e)))
+    | .ok none => pure (s.report (.invalidInput (.eventPayloadSchema (st.refOf name))))
+    | .ok (some payload) =>
+      let (s, request) := withResultOf st s name resultOf
+      deliver st fs s name givenId payload request
 
 def assumptionFinding (requestId : String) (target : Syntax.Ref) : Syntax.AssumptionMismatch → Finding
   | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)
@@ -258,15 +253,13 @@ def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) 
   message st fs s { tasks := st.starting.map (.start ·.name none) }
 
 /--
-The state at the end of an input, with the entries of its `deadlineOrder` that no tie used reported, or else the
-entries of its `stepOrder` left unused.
+The state at the end of a clock input, with the entries of its `deadlineOrder` that no tie used reported. The entries of
+a `stepOrder` left unused are the processing's to report (Sim.checkStepOrder), as for any other input.
 -/
-def State.checkOrderUsed (s : State) : State :=
+def State.checkDeadlineOrder (s : State) : State :=
   let t := { s with inputDeadlineOrder := [] }
-  match s.halted, s.deadlineOrder, s.stepOrder with
-  | none, _ :: _, _ => t.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
-  | none, [], _ :: _ => t.report (.invalidInput (.unusedStepOrder s.stepOrder))
-  | _, _, _ => t
+  if s.halted.isNone && !s.deadlineOrder.isEmpty then t.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
+  else t
 
 /--
 The state after an operate input. As Playwright's click fails on a covered or missing element, operate reports an
@@ -281,7 +274,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   match c.controls.find? (·.name == control) with
   | none => pure (s.report (.invalidInput (.unknownControl (st.ref screen) control)))
   | some ctl =>
-    let s := (s.writeInput none (.operation name (if ctl.hasPayload then some payload else none) true)).1
+    let s := (s.writeInput none (.operation name (if ctl.hasPayload then some payload else none))).1
     match ← fs.parse (.control screen control) payload with
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref screen) e)))

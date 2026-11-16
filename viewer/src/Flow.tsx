@@ -37,7 +37,6 @@ function messageText(entry: MessageEntry, l: Exclude<TraceLine, { type: "time" }
   if (l.type === "unsubscribe") return `unsubscribe ${l.to}`;
   if (l.type === "restart") return "restart";
   if (l.type === "operation") return l.name;
-  if (l.type === "unacceptedOperation") return `${l.type} ${l.name}`;
   const name = entry.to !== null && l.name.startsWith(`${entry.to}.`) ? l.name.slice(entry.to.length + 1) : l.name;
   return [l.type === "subscribe" ? "subscribe" : undefined, name, l.id].filter((p) => p !== undefined).join(" ");
 }

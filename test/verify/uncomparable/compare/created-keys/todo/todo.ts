@@ -41,6 +41,9 @@ export const forget = command({
 export const seenOf = query({
   input: { taskId: Task.fields.id },
   output: { id: ref(Seen) },
-}).resolve(({ input, records }) => ({ id: records.Seen.filter((s) => s.taskId === input.taskId).only()?.id ?? "" }));
+}).resolve(({ input, records }) => {
+  const one = records.Seen.filter((s) => s.taskId === input.taskId);
+  return { id: one.size === 1 ? (one.only()?.id ?? "") : "" };
+});
 
 export const todo = contract({ addTask, seen, forget, seenOf });

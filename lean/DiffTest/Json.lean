@@ -94,25 +94,6 @@ def optionalString (v : Value) (key : String) : Except String (Option String) :=
 def obj (fields : List (String × Option Value)) : Value :=
   .obj (fields.filterMap fun (k, v) => v.map (k, ·))
 
-def traceLineOf (line : Line) (after created : List String) : TraceLine :=
-  let (dir, id) := (line.dir, line.id)
-  let body : TraceLine.Body := match line.body with
-    | .command name input => .command dir id name input
-    | .query name input => .query dir id name input
-    | .subscribe name input => .subscribe dir id name input
-    | .event name payload resultOf => .event dir id name payload resultOf
-    | .answer to answer => .answer dir id to answer
-    | .unsubscribe to => .unsubscribe dir id to
-    | .time => .time .in id
-    | .restart => .restart .in id
-    | .operation name payload accepted =>
-      if accepted then .operation dir id name payload else .unacceptedOperation dir id name payload
-  { time := { text := renderTime line.time, time := line.time }
-    body
-    deadlineOrder := if line.deadlineOrder.isEmpty then none else some line.deadlineOrder
-    after := if after.isEmpty then none else some after
-    created := if created.isEmpty then none else some created }
-
 def lineValue (line : Line) (after created : List String) : Value := ToValue.toValue (traceLineOf line after created)
 
 def Enabled.toValue (e : Enabled) : Value :=

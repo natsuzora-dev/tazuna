@@ -11,7 +11,7 @@ export const expected = "expected.jsonl";
 
 const summaryOnly = /^(Checked|Tested|Verified) [^\n]*\. (No problems found|\d+ problems?)\.$/;
 
-async function recordsOf(example: string, runs: readonly (readonly string[])[]): Promise<readonly string[]> {
+export async function recordsOf(example: string, runs: readonly (readonly string[])[]): Promise<readonly string[]> {
   const logged: string[] = [];
   for (const args of runs)
     await main(args, {

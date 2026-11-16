@@ -185,7 +185,7 @@ def fireTo (time : Time) (order : List DeadlineId) : Service → Functions m →
   fun st fs s => do
     let s ← fireDue st fs time Limit.dueDeadlines.max none
       { s with deadlineOrder := order, tieOrderRequired := true }
-    let s := { s.checkOrderUsed with now := max s.now time, tieOrderRequired := false }
+    let s := { s.checkDeadlineOrder with now := max s.now time, tieOrderRequired := false }
     pure (if s.halted.isSome then s else (s.writeInput none .time).1)
 
 /-- Whether an answer to the request `to` from `sender` is among the messages. -/

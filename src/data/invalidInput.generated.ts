@@ -14,14 +14,6 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
-  /** No contract of another service lists the event, so the service does not receive it. */
-  | {
-      readonly kind: "InvalidInput.unlistedEvent";
-      readonly definition: null;
-      readonly data: {
-        readonly event: DefinitionRef;
-      };
-    }
   | {
       readonly kind: "InvalidInput.eventPayloadSchema";
       readonly definition: null;
@@ -35,27 +27,6 @@ export type InvalidInput =
       readonly data: {
         readonly screen: DefinitionRef;
         readonly control: string;
-      };
-    }
-  /** The event input has the id of an earlier event input of another event. */
-  | {
-      readonly kind: "InvalidInput.reusedEventId";
-      readonly definition: null;
-      readonly data: {
-        readonly eventId: string;
-        readonly firstEvent: DefinitionRef;
-        readonly deliveredEvent: DefinitionRef;
-      };
-    }
-  /** The event input delivers the event of an earlier event input with the same id again, with another payload. */
-  | {
-      readonly kind: "InvalidInput.changedRedeliveryPayload";
-      readonly definition: null;
-      readonly data: {
-        readonly eventId: string;
-        readonly event: DefinitionRef;
-        readonly firstPayload: Json;
-        readonly deliveredPayload: Json;
       };
     }
   /** The subscribe input has the id of a subscription that is open. */
@@ -242,11 +213,8 @@ export type InvalidInput =
 
 export const invalidInputKinds = [
   "InvalidInput.unownedTarget",
-  "InvalidInput.unlistedEvent",
   "InvalidInput.eventPayloadSchema",
   "InvalidInput.controlPayloadSchema",
-  "InvalidInput.reusedEventId",
-  "InvalidInput.changedRedeliveryPayload",
   "InvalidInput.reusedSubscriptionId",
   "InvalidInput.unopenedSubscription",
   "InvalidInput.unlistedRejectionKind",
@@ -272,7 +240,6 @@ export const invalidInputKinds = [
 /** The kinds whose violations halt the run. */
 export const haltingInvalidInputKinds = [
   "InvalidInput.unownedTarget",
-  "InvalidInput.unlistedEvent",
   "InvalidInput.eventPayloadSchema",
   "InvalidInput.controlPayloadSchema",
   "InvalidInput.unlistedRejectionKind",

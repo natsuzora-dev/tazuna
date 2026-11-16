@@ -11,14 +11,8 @@ open Tazuna.Data
 inductive InvalidInput where
   /-- The input names a command, query, or screen that the service does not own. -/
   | unownedTarget (target : Syntax.Ref)
-  /-- No contract of another service lists the event, so the service does not receive it. -/
-  | unlistedEvent (event : Syntax.Ref)
   | eventPayloadSchema (event : Syntax.Ref)
   | controlPayloadSchema (screen : Syntax.Ref) (control : String)
-  /-- The event input has the id of an earlier event input of another event. -/
-  | reusedEventId (eventId : String) (firstEvent deliveredEvent : Syntax.Ref)
-  /-- The event input delivers the event of an earlier event input with the same id again, with another payload. -/
-  | changedRedeliveryPayload (eventId : String) (event : Syntax.Ref) (firstPayload deliveredPayload : Value)
   /-- The subscribe input has the id of a subscription that is open. -/
   | reusedSubscriptionId (subscriptionId : String)
   /-- The unsubscribe input names a subscription that is not open. -/
@@ -65,12 +59,12 @@ derive_group InvalidInput
 Whether the violation halts the run, which it does when the input cannot be written as a trace line.
 -/
 def InvalidInput.halts : InvalidInput → Bool
-  | .unownedTarget .. | .unlistedEvent .. | .eventPayloadSchema .. | .controlPayloadSchema ..
+  | .unownedTarget .. | .eventPayloadSchema .. | .controlPayloadSchema ..
   | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
   | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyDeadline ..
   | .unorderedDeadlines ..
   | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. => true
-  | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
+  | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
   | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. => false
 

@@ -14,7 +14,6 @@ export function contentOf(line: TraceLine): unknown {
       return line.input;
     case "event":
     case "operation":
-    case "unacceptedOperation":
       return line.payload;
     case "answer":
       return line.answer;

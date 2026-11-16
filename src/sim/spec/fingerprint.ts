@@ -102,9 +102,7 @@ export function fingerprint(r: Processing): string {
     commandAnswers: [...s.commandAnswers]
       .toSorted(byKey)
       .map(([id, { request, answer }]) => [id, request.name, JSON.stringify(request.input), answer]),
-    eventDeliveries: [...s.eventDeliveries]
-      .toSorted(byKey)
-      .map(([id, { event, payload }]) => [id, event, JSON.stringify(payload)]),
+    eventDeliveries: [...s.eventDeliveries].toSorted(),
     mocks: [...s.mocks.values()].map(({ request, answer }) => canonicalJson([request.id, answer])).toSorted(),
     started: s.started,
   });

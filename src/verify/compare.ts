@@ -27,8 +27,7 @@ function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
   const outputByRequestId = new Map<string, Shape>();
   return (l) => {
     switch (l.type) {
-      case "operation":
-      case "unacceptedOperation": {
+      case "operation": {
         const [screen, control = ""] = l.name.split(".");
         const def = definitionOfTraceName(spec, service, screen, "screen");
         return { ...l, payload: comparable(def?.controls?.[control]?.payload, l.payload) };
@@ -305,8 +304,7 @@ function difference(s: TraceLine, t: Numbered): Mismatch {
     };
   }
   const data = { subject, snapshot: json(contentOf(s)), trace: json(contentOf(tl)) };
-  if (s.type === "operation" || s.type === "unacceptedOperation")
-    return { kind: "Mismatch.operation", definition: null, line, data };
+  if (s.type === "operation") return { kind: "Mismatch.operation", definition: null, line, data };
   return { kind: "Mismatch.request", definition: null, line, data };
 }
 

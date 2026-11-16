@@ -92,10 +92,6 @@ def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (a
     let (d, part) := control name
     let value ← payload.mapM (read d part)
     pure (line (.operation dir id name (value.map (·.flatten))) value, outputByRequestId)
-  | .unacceptedOperation dir id name payload =>
-    let (d, part) := control name
-    let value ← payload.mapM (read d part)
-    pure (line (.unacceptedOperation dir id name (value.map (·.flatten))) value, outputByRequestId)
   | .answer dir id to answer =>
     let (answer, value) ← comparableAnswer ask (outputByRequestId.lookup to) answer
     pure (line (.answer dir id to answer) value, outputByRequestId)
@@ -366,7 +362,7 @@ def difference (s : Line) (t : Numbered) : Mismatch :=
   | .event _ _ _ _ sr, .event _ _ _ _ tr =>
     if (s.content.map (·.key)) == (t.line.content.map (·.key)) then .resultOf t.index subject sr tr
     else .event t.index subject (json s.content) (json t.line.content)
-  | .operation .., _ | .unacceptedOperation .., _ => .operation t.index subject (json s.content) (json t.line.content)
+  | .operation .., _ => .operation t.index subject (json s.content) (json t.line.content)
   | _, _ => .request t.index subject (json s.content) (json t.line.content)
 
 /-- The report of snapshot line `s` that the trace lacks, at trace line `place`. -/
