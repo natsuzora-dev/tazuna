@@ -1,6 +1,6 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 
-export const { command, machine, event } = service({ description: "Keep tasks" });
+export const { command, machine, event, contract } = service({ description: "Keep tasks" });
 
 export const taskAdded = event({});
 

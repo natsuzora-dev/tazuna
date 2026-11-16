@@ -1,3 +1,3 @@
-import { contract } from "@natsuzora-dev/tazuna";
+import { contract } from "./board.ts";
 
 export const board = contract({});

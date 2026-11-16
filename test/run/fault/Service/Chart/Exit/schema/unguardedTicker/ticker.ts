@@ -1,7 +1,9 @@
-import { contract, emit, service } from "@natsuzora-dev/tazuna";
+import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event } = service({ description: "Count ticks without a guard on the countdown" });
+export const { command, machine, event, contract } = service({
+  description: "Count ticks without a guard on the countdown",
+});
 
 export const ticked = event({});
 

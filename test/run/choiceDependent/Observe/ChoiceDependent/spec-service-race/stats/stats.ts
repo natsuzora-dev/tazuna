@@ -6,7 +6,7 @@ export const Stats = singleEntity({
   fields: { completed: z.number().default(0), isCounting: z.boolean().default(true) },
 });
 
-export const { command, updateEvent } = service({ description: "Keep the statistics", entities: { Stats } });
+export const { command, updateEvent, contract } = service({ description: "Keep the statistics", entities: { Stats } });
 
 export const completedCounted = updateEvent({
   entity: Stats,

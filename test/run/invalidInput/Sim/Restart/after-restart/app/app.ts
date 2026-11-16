@@ -2,7 +2,7 @@ import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { device } from "../device/contract.ts";
 
-export const { command, query, machine, event } = service({ description: "Use the device" });
+export const { command, query, machine, event, contract } = service({ description: "Use the device" });
 
 export const askPressed = event({});
 

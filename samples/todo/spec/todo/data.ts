@@ -31,7 +31,7 @@ export const todoConstants = constants(z.object({ timeZone, dueAheadLimit: durat
   dueAheadLimit: "P1Y",
 });
 
-export const { command, query, automation, machine, event, createEvent, deleteEvent, updateEvent } = service({
+export const { command, query, automation, machine, event, createEvent, deleteEvent, updateEvent, contract } = service({
   description: "Keep the user's tasks and remind the user of them",
   entities: { Task, Settings },
 });

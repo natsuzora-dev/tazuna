@@ -1,4 +1,3 @@
-import { contract } from "@natsuzora-dev/tazuna";
-import { addTasks } from "./todo.ts";
+import { addTasks, contract } from "./todo.ts";
 
 export const todo = contract({ addTasks });

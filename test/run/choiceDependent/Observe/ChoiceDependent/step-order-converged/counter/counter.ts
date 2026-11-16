@@ -1,10 +1,10 @@
-import { contract, emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Mark = entity({ description: "A mark", fields: { id: z.string() }, key: "id" });
 export const Flag = singleEntity({ description: "A flag", fields: { isOn: z.boolean().default(false) } });
 
-export const { automation, command, machine, event, createEvent, updateEvent } = service({
+export const { automation, command, machine, event, createEvent, updateEvent, contract } = service({
   description: "Mark each added task, raise a flag, and notice when there is a mark",
   entities: { Mark, Flag },
 });

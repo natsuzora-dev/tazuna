@@ -1,4 +1,4 @@
-import { contract, emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string() }, key: "id" });
@@ -8,7 +8,7 @@ export const Winner = singleEntity({
   fields: { taskId: z.string().default("") },
 });
 
-export const { command, machine, createEvent, updateEvent } = service({
+export const { command, machine, createEvent, updateEvent, contract } = service({
   description: "Let each added task claim the winner",
   entities: { Task, Winner },
 });

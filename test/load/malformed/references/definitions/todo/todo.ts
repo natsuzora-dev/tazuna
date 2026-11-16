@@ -1,4 +1,4 @@
-import { constants, contract, emit, entity, ref, service, set } from "@natsuzora-dev/tazuna";
+import { constants, emit, entity, ref, service, set } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 const Task = entity({ description: "A task", fields: { id: z.string() }, key: "id" });
@@ -9,7 +9,7 @@ export const Mark = entity({
   key: "id",
 });
 
-export const { automation, command, createEvent, event, machine, query } = service({
+export const { automation, command, createEvent, event, machine, query, contract } = service({
   description: "Keep the tasks, whose entity and two definitions are not exported",
   entities: { Task, Mark },
 });

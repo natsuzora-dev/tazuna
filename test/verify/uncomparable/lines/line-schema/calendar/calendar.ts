@@ -1,7 +1,9 @@
 import { datetime, externalService } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, query, event } = externalService({ description: "Answer questions about days and book them" });
+export const { command, query, event, contract } = externalService({
+  description: "Answer questions about days and book them",
+});
 
 export const nextDay = query({
   input: { from: datetime },

@@ -1,6 +1,6 @@
-import { contract } from "@natsuzora-dev/tazuna";
 import {
   checkPlan,
+  contract,
   Entry,
   listTasks,
   listVisits,

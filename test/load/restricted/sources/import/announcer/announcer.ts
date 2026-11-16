@@ -1,7 +1,7 @@
-import { contract, emit, service } from "@natsuzora-dev/tazuna";
+import { emit, service } from "@natsuzora-dev/tazuna";
 import { Task } from "../todo/todo.ts";
 
-export const { command, event } = service({
+export const { command, event, contract } = service({
   description: "Announce tasks, importing the todo entity from a file of todo",
 });
 

@@ -1,5 +1,5 @@
-{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"flow"},"data":{"statePath":["a","b","a"]},"location":{"file":"todo/todo.ts","line":43}}
-{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"mixed"},"data":{"statePath":["d","c","d"]},"location":{"file":"todo/todo.ts","line":50}}
-{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"nested"},"data":{"statePath":["p1","q","p1"]},"location":{"file":"todo/todo.ts","line":63}}
-{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"inward"},"data":{"statePath":["r","r"]},"location":{"file":"todo/todo.ts","line":71}}
-{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"counting"},"data":{"statePath":["t","t"]},"location":{"file":"todo/todo.ts","line":84}}
+{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"flow"},"data":{"statePath":["a","b","a"]},"location":{"file":"todo/todo.ts","line":46}}
+{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"mixed"},"data":{"statePath":["d","c","d"]},"location":{"file":"todo/todo.ts","line":53}}
+{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"nested"},"data":{"statePath":["p1","q","p1"]},"location":{"file":"todo/todo.ts","line":66}}
+{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"inward"},"data":{"statePath":["r","r"]},"location":{"file":"todo/todo.ts","line":74}}
+{"kind":"Illegal.alwaysCycle","definition":{"service":"todo","name":"counting"},"data":{"statePath":["t","t"]},"location":{"file":"todo/todo.ts","line":87}}

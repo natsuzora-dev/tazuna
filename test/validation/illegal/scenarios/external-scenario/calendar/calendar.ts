@@ -1,7 +1,7 @@
 import { datetime, externalService } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, query, event } = externalService({
+export const { command, query, event, contract } = externalService({
   description: "Answer questions about days and keep reminders",
 });
 

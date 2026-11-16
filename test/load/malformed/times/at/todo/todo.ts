@@ -1,7 +1,7 @@
-import { at, call, contract, scenario, service } from "@natsuzora-dev/tazuna";
+import { at, call, scenario, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { query } = service({ description: "Answer the task count" });
+export const { query, contract } = service({ description: "Answer the task count" });
 
 export const taskCount = query({ output: { count: z.int() } }).resolve(() => ({ count: 0 }));
 

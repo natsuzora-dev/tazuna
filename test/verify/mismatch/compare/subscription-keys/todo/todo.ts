@@ -1,7 +1,7 @@
 import { bag, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { query } = service({ description: "Answer questions about notes" });
+export const { query, contract } = service({ description: "Answer questions about notes" });
 
 export const notesIn = query({
   input: { ids: bag(z.string()) },

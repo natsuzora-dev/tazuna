@@ -1,6 +1,6 @@
 import { externalService } from "@natsuzora-dev/tazuna";
 
-export const { command } = externalService({ description: "Ask the user for permissions" });
+export const { command, contract } = externalService({ description: "Ask the user for permissions" });
 
 export const requestPermission = command({
   emits: [],

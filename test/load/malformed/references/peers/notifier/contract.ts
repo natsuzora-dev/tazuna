@@ -1,6 +1,6 @@
-import { at, contract, mock, receive } from "@natsuzora-dev/tazuna";
+import { at, mock, receive } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
-import { announce, announceAdded } from "./notifier.ts";
+import { announce, announceAdded, contract } from "./notifier.ts";
 
 export const notifier = contract({
   announce,

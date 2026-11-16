@@ -1,9 +1,9 @@
-import { contract, entity, service } from "@natsuzora-dev/tazuna";
+import { entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
-export const { query } = service({ description: "Count the tasks", entities: { Task } });
+export const { query, contract } = service({ description: "Count the tasks", entities: { Task } });
 
 export const taskCount = query({
   output: {

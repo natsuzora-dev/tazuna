@@ -1,7 +1,7 @@
 import { externalService } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command } = externalService({ description: "Show notifications and play sounds" });
+export const { command, contract } = externalService({ description: "Show notifications and play sounds" });
 
 export const showNotification = command({
   input: { text: z.string() },

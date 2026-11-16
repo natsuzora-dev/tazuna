@@ -1,7 +1,7 @@
-import { contract, emit, service } from "@natsuzora-dev/tazuna";
+import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event } = service({ description: "Ping when a task is added" });
+export const { command, machine, event, contract } = service({ description: "Ping when a task is added" });
 
 export const taskAdded = event({ payload: { id: z.string() } });
 export const pinged = event({});

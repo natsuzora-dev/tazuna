@@ -1,4 +1,3 @@
-import { contract } from "@natsuzora-dev/tazuna";
-import { addReminder } from "./reminders.ts";
+import { addReminder, contract } from "./reminders.ts";
 
 export const reminders = contract({ addReminder });

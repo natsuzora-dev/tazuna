@@ -1,4 +1,4 @@
-import { contract, emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
@@ -14,7 +14,7 @@ export const Tally = singleEntity({
   invariants: { belowTwo: ({ record }) => record.added < 2 },
 });
 
-export const { command, createEvent, updateEvent } = service({
+export const { command, createEvent, updateEvent, contract } = service({
   description: "Keep the tasks while breaking the invariants of Task, Tally, and the service",
   entities: { Task, Tally },
   invariants: {

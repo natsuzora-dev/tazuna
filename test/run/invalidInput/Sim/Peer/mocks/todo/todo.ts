@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
-export const { automation, command, createEvent, event, query } = service({
+export const { automation, command, createEvent, event, query, contract } = service({
   description: "Keep the tasks",
   entities: { Task },
 });

@@ -5,7 +5,7 @@ import { device } from "../device/contract.ts";
 
 export const Reminder = entity({ description: "A reminder", fields: { id: z.string() }, key: "id" });
 
-export const { command, machine, createEvent } = service({
+export const { command, machine, createEvent, contract } = service({
   description: "Keep the reminders",
   entities: { Reminder },
 });

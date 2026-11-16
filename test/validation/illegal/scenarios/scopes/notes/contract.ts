@@ -1,5 +1,5 @@
-import { at, contract, send } from "@natsuzora-dev/tazuna";
-import { addNote, addTask, noteList } from "./notes.ts";
+import { at, send } from "@natsuzora-dev/tazuna";
+import { addNote, addTask, contract, noteList } from "./notes.ts";
 
 export const notes = contract({
   addTask,

@@ -1,9 +1,9 @@
-import { contract, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Mark = entity({ description: "A mark", fields: { id: z.string(), count: z.number() }, key: "id" });
 
-export const { automation, command, event, createEvent } = service({
+export const { automation, command, event, createEvent, contract } = service({
   description: "Mark each added task twice",
   entities: { Mark },
 });

@@ -19,7 +19,7 @@ import type {
   Query,
   ServiceDefinition,
 } from "./definition.ts";
-import type { Entities, MadeRow, Records, Row } from "./entity.ts";
+import type { AnyKeyedEntity, Entities, MadeRow, Records, Row, RowOf, SingleEntity } from "./entity.ts";
 import {
   type CreateEventDefiner,
   type DeleteEventDefiner,
@@ -102,6 +102,8 @@ interface Definers<Es extends Entities> {
   deleteEvent: DeleteEventDefiner<Es>;
   /** Defines an event that changes no record, with the fields of `payload`. */
   event: EventDefiner;
+  /** Defines the contract of the service, whose spec tazuna runs. */
+  contract: ContractDefiner<RecordsData<Es>, "spec">;
 }
 
 interface CommandSetup<I extends Shape, Ev extends AnyEvent, B, Rq extends string, Es extends Entities> {
@@ -205,6 +207,8 @@ interface ExternalDefiners {
   }): Query<I, O, Rq, Rj>;
   /** Defines an event that the external implementation emits, with the fields of `payload`. */
   event: EventDefiner;
+  /** Defines the contract of the service, which tazuna takes as contract only. */
+  contract: ContractDefiner<Record<never, never>, "external">;
 }
 
 /**
@@ -216,8 +220,9 @@ export function externalService(definition: { description: string }): ExternalDe
   const command = (d: CommandOptions) => commandOf(owner, d, undefined);
   const query = (d: QueryOptions) => queryOf(owner, d, undefined);
   const { event } = eventDefiners(owner);
-  register(owner, [command, query, event]);
-  return { command, query, event } as unknown as ExternalDefiners;
+  const contract = contractDefiner(owner);
+  register(owner, [command, query, event, contract]);
+  return { command, query, event, contract } as unknown as ExternalDefiners;
 }
 
 /** Defines a service that owns `entities` and returns its definers. */
@@ -329,13 +334,14 @@ function definers(owner: ServiceDefinition): Definers<Entities> {
   const machine = machineDefiner(owner);
   const screen = screenDefiner(owner);
   const events = eventDefiners(owner);
-  register(owner, [command, query, automation, machine, screen, ...Object.values(events)]);
-  return { command, query, automation, machine, screen, ...events } as unknown as Definers<Entities>;
+  const contract = contractDefiner(owner);
+  register(owner, [command, query, automation, machine, screen, contract, ...Object.values(events)]);
+  return { command, query, automation, machine, screen, contract, ...events } as unknown as Definers<Entities>;
 }
 
 type Member = FieldsEvent | AnyCommand | AnyQuery | z.ZodType | ConstantsGroup;
 
-const contracts = new WeakSet<object>();
+const contractOwners = new WeakMap<object, ServiceDefinition>();
 const definerOwners = new WeakMap<object, ServiceDefinition>();
 
 export function definerService(value: unknown): ServiceDefinition | undefined {
@@ -344,15 +350,44 @@ export function definerService(value: unknown): ServiceDefinition | undefined {
 
 type Members<M> = { readonly [K in keyof M]: K extends "states" ? Readonly<Record<string, StateInputs>> : Member };
 
+/** The records of a service as data: every record of a keyed entity, and the record of a single entity. */
+type RecordsData<Es extends Entities> = {
+  readonly [N in keyof Es]: Es[N] extends AnyKeyedEntity
+    ? readonly RowOf<Es[N]>[]
+    : Es[N] extends SingleEntity<infer S>
+      ? Row<S>
+      : never;
+};
+
+declare const contractFacts: unique symbol;
+
 /**
- * Marks the members that other services may refer to (Restricted.crossServiceImport). `states` names the start states
- * that scenarios of other services may give the service (`given`).
+ * A contract: its members, and, as types only, the records of its service and whether tazuna runs the service's spec
+ * (`spec`) or takes the service as contract only (`external`).
  */
-export function contract<const M extends Members<M>>(members: M): M {
-  contracts.add(members);
-  return members;
-}
+export type Contract<M, R, K extends "spec" | "external"> = M & {
+  readonly [contractFacts]: { readonly records: R; readonly kind: K };
+};
+
+/** The records of the service of contract `C`. */
+export type RecordsOf<C> = C extends Contract<unknown, infer R, "spec" | "external"> ? R : never;
+
+/** Whether tazuna runs the spec of the service of contract `C` (`spec`) or takes it as contract only (`external`). */
+export type KindOf<C> = C extends Contract<unknown, unknown, infer K> ? K : never;
+
+/**
+ * Marks the members that other services may refer to (Restricted.crossServiceImport), possibly none. `states` names the
+ * start states that scenarios of other services may give the service (`given`).
+ */
+type ContractDefiner<R, K extends "spec" | "external"> = <const M extends Members<M>>(members: M) => Contract<M, R, K>;
+
+const contractDefiner =
+  (owner: ServiceDefinition) =>
+  <M extends object>(members: M): M => {
+    contractOwners.set(members, owner);
+    return members;
+  };
 
 export function isContract(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && contracts.has(value);
+  return typeof value === "object" && value !== null && contractOwners.has(value);
 }

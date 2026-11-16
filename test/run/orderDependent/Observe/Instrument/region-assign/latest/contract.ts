@@ -1,4 +1,3 @@
-import { contract } from "@natsuzora-dev/tazuna";
-import { addTask, clearTasks } from "./latest.ts";
+import { addTask, clearTasks, contract } from "./latest.ts";
 
 export const latest = contract({ addTask, clearTasks });

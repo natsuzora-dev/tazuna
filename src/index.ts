@@ -28,5 +28,6 @@ export {
   unchecked,
   unsubscribe,
 } from "./dsl/scenario.ts";
-export { contract, externalService, service } from "./dsl/service.ts";
+export type { Contract, KindOf, RecordsOf } from "./dsl/service.ts";
+export { externalService, service } from "./dsl/service.ts";
 export type { Unit } from "./dsl/unit.ts";

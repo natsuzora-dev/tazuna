@@ -1,5 +1,5 @@
-import { at, contract, subscribe, unsubscribe } from "@natsuzora-dev/tazuna";
-import { shown } from "./board.ts";
+import { at, subscribe, unsubscribe } from "@natsuzora-dev/tazuna";
+import { contract, shown } from "./board.ts";
 
 export const watchingBoard = subscribe(shown, {});
 

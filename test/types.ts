@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { query as externalQuery } from "../samples/todo/spec/calendar/data.ts";
+import { contract as externalContract, query as externalQuery } from "../samples/todo/spec/calendar/data.ts";
 import { command as externalCommand } from "../samples/todo/spec/device/data.ts";
 import { taskDetailScreen } from "../samples/todo/spec/screens/taskDetailScreen.ts";
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
@@ -19,12 +19,13 @@ import {
   type Bag,
   bag,
   constants,
-  contract,
   datetime,
   emit,
   entity,
+  type KindOf,
   mock,
   operate,
+  type RecordsOf,
   type RowOf,
   receive,
   ref,
@@ -36,7 +37,7 @@ import {
   sortedBy,
 } from "../src/index.ts";
 
-const { machine, screen, createEvent, updateEvent, deleteEvent, event } = service({
+const { machine, screen, createEvent, updateEvent, deleteEvent, event, contract } = service({
   description: "",
   entities: { Task, Settings },
 });
@@ -398,7 +399,18 @@ contract({ Task });
 // @ts-expect-error a contract holds no events that write records
 contract({ taskAddedRecorded });
 
-contract({ taskAdded, TaskId: ref(Task), TaskTitle: Task.fields.title });
+const todoContract = contract({ taskAdded, TaskId: ref(Task), TaskTitle: Task.fields.title });
+
+// A contract carries the records of its service, as data, and whether tazuna runs the service's spec.
+const taskRows: RecordsOf<typeof todoContract>["Task"][number]["title"] = "";
+const settingsRow: RecordsOf<typeof todoContract>["Settings"]["shouldRemind"] = true;
+const specKind: KindOf<typeof todoContract> = "spec";
+void [taskRows, settingsRow, specKind];
+const calendarContract = externalContract({});
+// @ts-expect-error an external contract carries no records
+void ({} as RecordsOf<typeof calendarContract>)["Task"];
+const externalKind: KindOf<typeof calendarContract> = "external";
+void externalKind;
 
 const notify = externalCommand({ input: { text: z.string() }, emits: [], rejects: ["unavailable"] });
 const beep = externalCommand({ emits: [], rejects: [] });
