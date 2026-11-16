@@ -56,6 +56,8 @@ inductive Mismatch where
   /-- The line comes before the line `before`, which its snapshot line must follow. -/
   | lineOrder (line : Nat) (subject before : Subject)
   | time (line : Nat) (subject : Subject) (snapshot trace : String)
+  /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/
+  | resultOf (line : Nat) (subject : Subject) (snapshot trace : Option String)
   /--
   The uses of one connected group of values in which a value stands for two values, reported when no line differs
   otherwise.

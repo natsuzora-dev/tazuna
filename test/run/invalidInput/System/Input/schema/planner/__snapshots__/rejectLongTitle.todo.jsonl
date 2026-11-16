@@ -1,4 +1,4 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"todo.addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"todo.addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1","title":"Buy milk"},"after":["taskAddedRecorded#1"]}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"todo.addTask#1"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1","title":"Buy milk"},"resultOf":"todo.addTask#1","after":["taskAddedRecorded#1"]}

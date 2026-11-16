@@ -1,11 +1,11 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"startTrack#1","name":"startTrack","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"startTrack#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackStarted#1","name":"trackStarted","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackStarted#1","name":"trackStarted","payload":{},"resultOf":"startTrack#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackPlayed#1","name":"trackPlayed","payload":{"track":"t1"},"after":["trackStarted#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"skipTrack#1","name":"skipTrack","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"skipTrack#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackSkipped#1","name":"trackSkipped","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackSkipped#1","name":"trackSkipped","payload":{},"resultOf":"skipTrack#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"startTrack#2","name":"startTrack","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"startTrack#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackStarted#2","name":"trackStarted","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackStarted#2","name":"trackStarted","payload":{},"resultOf":"startTrack#2"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"trackPlayed#2","name":"trackPlayed","payload":{"track":"t1"},"after":["trackStarted#2"]}

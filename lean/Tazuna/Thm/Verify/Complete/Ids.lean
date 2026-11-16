@@ -206,4 +206,26 @@ theorem join_spec {ids ids' : Ids} {w : Nat} {l : Line} {u : Use} (h : ids.join 
       simp only [held, List.flatMap_append, List.flatMap_cons, List.flatMap_nil, List.append_nil]
       exact List.perm_append_singleton _ _
 
+/-- The implementation names `b` where the snapshot names `a`, through the bound ids. -/
+def IdPlaced (ids : Ids) : Option String → Option String → Prop
+  | some x, some y => ids.bound.traceOf? x = some y
+  | none, none => True
+  | _, _ => False
+
+theorem IdPlaced.mono {ids ids' : Ids} (hg : Grows ids ids') :
+    ∀ {a b : Option String}, IdPlaced ids a b → IdPlaced ids' a b
+  | some _, some _, h => traceOf?_prefix hg h
+  | none, none, h => h
+  | some _, none, h => h.elim
+  | none, some _, h => h.elim
+
+theorem useIds_placed {ids ids' : Ids} {l sl : Nat} {a b : Option String} (h : ids.useIds l sl a b = some ids') :
+    IdPlaced ids' a b := by
+  obtain ⟨_, hs, hn, _⟩ := useIds_spec h
+  cases a with
+  | none => rw [hn rfl]; trivial
+  | some x =>
+    obtain ⟨y, rfl, hy⟩ := hs x rfl
+    exact hy
+
 end Tazuna.Thm.Verify.Complete.Ids

@@ -1,6 +1,6 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"completeTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"resultOf":"completeTask#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"stats.countCompleted#1","name":"stats.countCompleted","input":{}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"stats.resumeCounting#1","name":"stats.resumeCounting","input":{}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"stats.countCompleted#1","answer":{"result":"accepted"}}

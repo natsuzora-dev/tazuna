@@ -1,5 +1,5 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"openRows#1","name":"openRows","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"openRows#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"rowsOpened#1","name":"rowsOpened","payload":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"rowsOpened#1","name":"rowsOpened","payload":{},"resultOf":"openRows#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"rowMarked#1","name":"rowMarked","payload":{"name":"a"},"after":["rowsOpened#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"rowMarked#2","name":"rowMarked","payload":{"name":"b"},"after":["rowsOpened#1","rowMarked#1"]}

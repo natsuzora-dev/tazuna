@@ -1,5 +1,5 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"pin-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"pin-1"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"pin-1"},"resultOf":"addTask#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#1","name":"noteAdded","payload":{"id":"Note-1","taskId":"pin-1"},"after":["taskAdded#1"],"created":["Note-1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"tagAdded#1","name":"tagAdded","payload":{"id":"Tag-2","taskId":"pin-1"},"after":["taskAdded#1","noteAdded#1"],"created":["Tag-2"]}

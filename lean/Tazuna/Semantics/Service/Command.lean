@@ -103,7 +103,7 @@ def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
   | .accepted records groups violations =>
     let s := ({ s with records }.reportAll violations).answer id (.accepted none)
     MonadNote.note (.events step s.lines.size (groups.map (·.length)))
-    pure (s.emitAll groups.flatten, .accepted none, groups.flatten)
+    pure (s.emitAll id groups.flatten, .accepted none, groups.flatten)
   | .halted violations => pure (s.reportAll violations, outcome.answer, [])
 
 end Tazuna.Semantics

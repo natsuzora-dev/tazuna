@@ -528,7 +528,7 @@ noncomputable def sourceA (normal : String → Value → CValue) (service peer :
       match peerName? peer name with
       | some n =>
         if h : ∃ j b, bLines[j]? = some b ∧ j < peerBefore arrivals bLines i ∧ PeerEmits normal service aLines bLines
-            (peerFinal normal service peer arrivals aLines bLines) n payload resultOf l.time j b then
+            (peerFinal normal service peer arrivals aLines bLines) n payload resultOf l.time b then
           some (1, h.choose)
         else none
       | none => none
@@ -551,7 +551,7 @@ theorem sourceA_cases {normal : String → Value → CValue} {service peer : Str
           unreached aLines to = false ∧ AnswerAt bLines .out to (answersTo (aLines.take i) .in to).length j) ∨
         (∃ id name payload resultOf n bl, al.body = .event .in id name payload resultOf ∧
           peerName? peer name = some n ∧ bLines[j]? = some bl ∧
-          PeerEmits normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) n payload resultOf al.time j
+          PeerEmits normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) n payload resultOf al.time
             bl)) := by
   unfold sourceA at h
   split at h

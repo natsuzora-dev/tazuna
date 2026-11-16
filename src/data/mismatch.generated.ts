@@ -162,6 +162,17 @@ export type Mismatch =
         readonly trace: string;
       };
     }
+  /** The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. */
+  | {
+      readonly kind: "Mismatch.resultOf";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly subject: Subject;
+        readonly snapshot: string | null;
+        readonly trace: string | null;
+      };
+    }
   /**
    * The uses of one connected group of values in which a value stands for two values, reported when no line differs
    * otherwise.
@@ -283,6 +294,7 @@ export const mismatchKinds = [
   "Mismatch.unexpectedLine",
   "Mismatch.lineOrder",
   "Mismatch.time",
+  "Mismatch.resultOf",
   "Mismatch.renaming",
   "Mismatch.line",
   "Mismatch.unlistedEvent",

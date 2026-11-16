@@ -10,11 +10,15 @@ export type TodoEvent = {
     readonly id: string;
     readonly name: K;
     readonly payload: z.output<z.ZodObject<Todo[K]["payload"]>>;
+    /** The Idempotency-Key of the command whose processing published the event. */
+    readonly resultOf?: string;
   };
 }[EventName];
 
 export const events = new EventPublisher<{ todo: TodoEvent }>();
 
-export function publish(event: Omit<TodoEvent, "id">): void {
-  events.publish("todo", { id: crypto.randomUUID(), ...event });
+/** Publishes the event that the processing of the command with the Idempotency-Key in `headers`, if any, emits. */
+export function publish(event: Omit<TodoEvent, "id" | "resultOf">, headers: Headers): void {
+  const resultOf = headers.get("Idempotency-Key");
+  events.publish("todo", { id: crypto.randomUUID(), ...event, ...(resultOf === null ? {} : { resultOf }) });
 }

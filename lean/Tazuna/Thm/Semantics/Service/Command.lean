@@ -16,7 +16,7 @@ theorem processCommand_clock (name : String) (raw : Value) (id : Option String) 
   simp only [processCommand, id_bind]
   split
   · cases id <;> rfl
-  · exact (emitAll_clock _ _).trans (by simp [State.clock])
+  · exact (emitAll_clock _ _ _).trans (by simp [State.clock])
   · simp [State.clock]
 
 theorem processCommand_commandAnswers (name : String) (raw : Value) (id : Option String) (n : Nat) :
@@ -30,7 +30,7 @@ theorem processCommand_grows (name : String) (raw : Value) (id : Option String) 
   · exact answer_grows s _ _
   · rename_i records emits vs _
     exact ((Grows.of_lines (reportAll_lines (s := { s with records }) vs)).trans (reportAll_now (s := { s with records }) vs)
-      (answer_grows _ id (.accepted none))).trans (by simp) (emitAll_grows _ _)
+      (answer_grows _ id (.accepted none))).trans (by simp) (emitAll_grows _ _ _)
   · exact Grows.of_lines (reportAll_lines ..)
 
 theorem evaluate_accepted_applies (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
@@ -71,9 +71,9 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option S
   · cases id <;> exact h
   · rename_i written groups vs he
     have hr := congrArg Fixed.records
-      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) groups.flatten)
-    show KeysDistinct (State.emitAll _ groups.flatten).records
-    rw [show (State.emitAll _ groups.flatten).records = _ from hr]
+      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) id groups.flatten)
+    show KeysDistinct (State.emitAll _ id groups.flatten).records
+    rw [show (State.emitAll _ id groups.flatten).records = _ from hr]
     show KeysDistinct ((State.answer _ id _).records)
     rw [answer_records, reportAll_records]
     exact keysDistinct_of_not_duplicated (evaluate_accepted_applies _ _ _ _ _ _ _ he).2.1
@@ -104,7 +104,7 @@ theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Val
   refine ⟨(evaluate_accepted_applies _ _ _ _ _ _ _ h).1, ?_, ?_⟩
   · simp only [processCommand, id_bind, h]
     exact (congrArg Fixed.records (emitAll_fixed
-      (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) _)).trans
+      (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) _ _)).trans
       (by show (State.answer _ id _).records = _; rw [answer_records, reportAll_records])
   · simp [processCommand, h]
 
@@ -212,16 +212,17 @@ theorem processCommand_mocks (name : String) (raw : Value) (id : Option String) 
   simp only [processCommand, id_bind]
   split
   · cases id <;> rfl
-  · exact (congrArg Fixed.mocks (emitAll_fixed _)).trans (by cases id <;> exact congrArg Fixed.mocks (reportAll_fixed _))
+  · exact (congrArg Fixed.mocks (emitAll_fixed _ _)).trans (by cases id <;> exact congrArg Fixed.mocks (reportAll_fixed _))
   · exact congrArg Fixed.mocks (reportAll_fixed ..)
 
-theorem emitAll_violations (t : State) (emits : List Emit) : (t.emitAll emits).violations = t.violations := by
+theorem emitAll_violations (t : State) (r : Option String) (emits : List Emit) :
+    (t.emitAll r emits).violations = t.violations := by
   unfold State.emitAll
   induction emits generalizing t with
   | nil => rfl
   | cons e es ih => simp only [List.foldl_cons]; exact ih _
 
-theorem emitAll_halted (t : State) (emits : List Emit) : (t.emitAll emits).halted = t.halted := by
+theorem emitAll_halted (t : State) (r : Option String) (emits : List Emit) : (t.emitAll r emits).halted = t.halted := by
   unfold State.emitAll
   induction emits generalizing t with
   | nil => rfl
@@ -235,10 +236,10 @@ theorem accepted_command_reports_violations (name : String) (raw : Value) (id : 
       (processCommand st fs s name raw id n).2.1 = .accepted none := by
   simp only [processCommand, id_bind, h]
   refine ⟨?_, ?_, rfl⟩
-  · show (State.emitAll _ groups.flatten).violations = _
+  · show (State.emitAll _ id groups.flatten).violations = _
     rw [emitAll_violations]
     cases id <;> rfl
-  · show (State.emitAll _ groups.flatten).halted = _
+  · show (State.emitAll _ id groups.flatten).halted = _
     rw [emitAll_halted]
     cases id <;> rfl
 

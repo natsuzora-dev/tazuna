@@ -89,13 +89,6 @@ def Step.Body.forPeer (keys : Bindings) : Step.Body → Step.Body
       | c => c) handle
   | b => b
 
-/--
-The id of the `in` line at or before the run's line `j`, from 0: an event that the run emits as the result of a request
-follows the request's `in` line before the next input.
--/
-def requestOfLine? (lines : List TraceLine) (j : Nat) : Option String :=
-  ((lines.take (j + 1)).reverse.find? (·.body.dir == .in)).map (·.body.id)
-
 /-- Where an input of the peer comes from. -/
 inductive Origin where
   /-- The given state of the peer. -/
@@ -282,10 +275,10 @@ def peerBefore (arrivals : List Nat) (bLines : List TraceLine) (i : Nat) : Nat :
 The check of the run's line `l`, the line `i` of the run, with the bindings `bs` of the peer's createKey values to the
 strings that the scenario has in their place: its violation, or `bs` extended. A mocked answer to a request to the peer
 that reached it must be the peer's answer at the same place, by its time; a received event of the peer must be one that
-the peer emits by its time, after the `in` line of the request that it names as its result (requestOfLine?). Either
-must come from the peer's lines before its inputs that arrive after `l` (peerBefore). The peer's values have its peer
-keys turned back into the run's createKey values, and `normal` gives the form of an output or payload of the peer's
-definition, by the peer's own name, that verify compares.
+the peer emits by its time, with the `resultOf` that the event names, if any. Either must come from the peer's lines
+before its inputs that arrive after `l` (peerBefore). The peer's values have its peer keys turned back into the run's
+createKey values, and `normal` gives the form of an output or payload of the peer's definition, by the peer's own name,
+that verify compares.
 -/
 def peerLine (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
     (aLines bLines : List TraceLine) (bs : Bindings) (i : Nat) (l : TraceLine) : Except InvalidInput Bindings :=
@@ -311,10 +304,10 @@ def peerLine (normal : String → Value → CValue) (service peer : String) (arr
     match peerName? peer name with
     | none => .ok bs
     | some n =>
-      let found := before.zipIdx.findSome? fun (b, j) =>
+      let found := before.zipIdx.findSome? fun (b, _) =>
         match b.body with
-        | .event .out _ m p _ =>
-          if m == n && b.time.time ≤ l.time.time && resultOf.all (requestOfLine? bLines j == some ·) then
+        | .event .out _ m p r =>
+          if m == n && b.time.time ≤ l.time.time && resultOf.all (r == some ·) then
             unify created (seen n p) (normal n payload) bs
           else none
         | _ => none

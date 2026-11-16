@@ -46,7 +46,7 @@ A request that a mock answers as `unavailable` never reaches the peer.
 A mock may name each key that the peer creates with any string, one to one.
 The peer receives the keys that the scenario's service creates renamed, and each string by which an earlier mock names one of its keys as that key, and values compare in the form that `verify` compares, up to these renamings.
 `test` pairs the elements of two bags by a search, and counts bags whose search takes more than 100000 tries as unequal, so it may then report an answer or event that the peer's run gives.
-`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit while it takes that request (`unproducibleEvent`), and a run that halts (`haltedPeer`).
+`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit as the result of that request (`unproducibleEvent`), and a run that halts (`haltedPeer`).
 The answer or event must come from the run before the peer takes an input that arrives after the scenario takes it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
 
 When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
@@ -133,6 +133,7 @@ tazuna detects breaks of each assumption only partly or not at all.
   `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, the keys that one call creates up to a renaming.
 - **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
   Every line has an ID: the implementation's ID of the message, or, for a message without one, such as an answer, an ID that the recorder gives it.
+  An event that the implementation emits while it processes a request names that request's ID as its `resultOf`, and any other event names none.
   An input line therefore carries the implementation's IDs and keys, not the snapshot's.
   `verify` reports a message that the recorder leaves out.
 - **External services.** Each external service keeps the contract that the spec assumes of it.

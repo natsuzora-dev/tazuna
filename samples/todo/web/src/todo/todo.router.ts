@@ -28,32 +28,32 @@ export const todoRouter = {
   addTask: command
     .input(z.object(todo.addTask.input))
     .errors({ TASK_ALREADY_EXISTS })
-    .handler(({ input: { taskId, title }, errors }) => {
+    .handler(({ input: { taskId, title }, errors, context }) => {
       if (findTask(taskId) !== undefined) throw errors.TASK_ALREADY_EXISTS();
       db.insert(taskTable)
         .values({ id: taskId, title, createdAt: Temporal.Now.instant(), reminderDecision: "pending" })
         .run();
       notifyChange();
-      publish({ name: "taskAdded", payload: { taskId } });
+      publish({ name: "taskAdded", payload: { taskId } }, context.headers);
       void decideReminderTime(taskId);
     }),
 
   completeTask: command
     .input(z.object(todo.completeTask.input))
     .errors({ TASK_NOT_FOUND, ALREADY_COMPLETED })
-    .handler(({ input: { taskId }, errors }) => {
+    .handler(({ input: { taskId }, errors, context }) => {
       const task = findTask(taskId);
       if (task === undefined) throw errors.TASK_NOT_FOUND();
       if (task.completedAt !== null) throw errors.ALREADY_COMPLETED();
       db.update(taskTable).set({ completedAt: Temporal.Now.instant() }).where(eq(taskTable.id, taskId)).run();
       notifyChange();
-      publish({ name: "taskCompleted", payload: { taskId } });
+      publish({ name: "taskCompleted", payload: { taskId } }, context.headers);
     }),
 
   reopenTask: command
     .input(z.object(todo.reopenTask.input))
     .errors({ TASK_NOT_FOUND, NOT_COMPLETED })
-    .handler(({ input: { taskId }, errors }) => {
+    .handler(({ input: { taskId }, errors, context }) => {
       const task = findTask(taskId);
       if (task === undefined) throw errors.TASK_NOT_FOUND();
       if (task.completedAt === null) throw errors.NOT_COMPLETED();
@@ -62,7 +62,7 @@ export const todoRouter = {
         .where(eq(taskTable.id, taskId))
         .run();
       notifyChange();
-      publish({ name: "taskReopened", payload: { taskId } });
+      publish({ name: "taskReopened", payload: { taskId } }, context.headers);
     }),
 
   renameTask: command
@@ -77,12 +77,12 @@ export const todoRouter = {
   deleteTask: command
     .input(z.object(todo.deleteTask.input))
     .errors({ TASK_NOT_FOUND })
-    .handler(({ input: { taskId }, errors }) => {
+    .handler(({ input: { taskId }, errors, context }) => {
       if (findTask(taskId) === undefined) throw errors.TASK_NOT_FOUND();
       stopDecidingReminderTime(taskId);
       db.delete(taskTable).where(eq(taskTable.id, taskId)).run();
       notifyChange();
-      publish({ name: "taskDeleted", payload: { taskId } });
+      publish({ name: "taskDeleted", payload: { taskId } }, context.headers);
     }),
 
   changeDue: command

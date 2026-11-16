@@ -1,13 +1,13 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTask#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seenRecorded#1","name":"seenRecorded","payload":{"id":"Seen-1","taskId":"task-1"},"after":["taskAdded#1"],"created":["Seen-1"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#1","name":"seen","payload":{"id":"Seen-1","taskId":"task-1"},"after":["taskAdded#1","seenRecorded#1"]}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2"},"resultOf":"addTask#2"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seenRecorded#2","name":"seenRecorded","payload":{"id":"Seen-2","taskId":"task-2"},"after":["taskAdded#2"],"created":["Seen-2"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#2","name":"seen","payload":{"id":"Seen-2","taskId":"task-2"},"after":["taskAdded#2","seenRecorded#2"]}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"forget#1","name":"forget","input":{"id":"Seen-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"forget#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"forgotten#1","name":"forgotten","payload":{"id":"Seen-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"forgotten#1","name":"forgotten","payload":{"id":"Seen-1"},"resultOf":"forget#1"}

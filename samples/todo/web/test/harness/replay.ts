@@ -68,7 +68,8 @@ export interface OutputSlot {
   /** Returns the id that replay gave the subscription. */
   readonly subscribe: (request: ForeignRequest) => string;
   readonly unsubscribe: (subscription: string) => void;
-  readonly event: (event: { readonly name: string; readonly payload: unknown }) => void;
+  /** `resultOf` is the id of the request whose processing emitted the event. */
+  readonly event: (event: { readonly name: string; readonly payload: unknown; readonly resultOf?: string }) => void;
 }
 
 /** The end of the trace, where the app's outputs are written. */
@@ -143,7 +144,18 @@ export async function replay(
         waiting.delete(subscription);
         write({ dir: "out", type: "unsubscribe", id: lineId("unsubscribe"), to: subscription }, at);
       },
-      event: ({ name, payload }) => write({ dir: "out", type: "event", id: lineId(name), name, payload }, at),
+      event: ({ name, payload, resultOf }) =>
+        write(
+          {
+            dir: "out",
+            type: "event",
+            id: lineId(name),
+            name,
+            payload,
+            ...(resultOf === undefined ? {} : { resultOf }),
+          },
+          at,
+        ),
     };
   };
   const outputs: Outputs = {

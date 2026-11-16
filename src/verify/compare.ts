@@ -432,9 +432,13 @@ export function compare(
         (follows.get(p.spec.at)?.has(s.at) !== true || t.at < p.trace.at),
     );
 
-  /** Returns the ids of the pairing with `s` paired with `t`: the answered request's ids, or a request's own ids. */
+  /**
+   * Returns the ids of the pairing with `s` paired with `t`: the answered request's ids, a request's own ids, or the
+   * ids of the request that an event results from.
+   */
   const pairIds = (sc: Scope, current: Ids, s: NumberedLine, t: NumberedLine): Ids | undefined => {
     if (s.line.type === "answer") return useIds(current, t.at, s.at, s.line.to, toOf(t.line));
+    if (s.line.type === "event") return useIds(current, t.at, s.at, s.line.resultOf, resultOf(t.line));
     if (s.line.type !== "command" && s.line.type !== "query") return current;
     return join(current, sc.window, s.line, idUse(s, t));
   };
@@ -685,6 +689,13 @@ export function compare(
         });
       const paired = pairIds(sc, ids, s, t);
       if (paired !== undefined) ids = paired;
+      else if (s.line.type === "event")
+        problems.push({
+          kind: "Mismatch.resultOf",
+          definition: null,
+          line: t.at,
+          data: { subject: subjectOf(t.line), snapshot: s.line.resultOf ?? null, trace: resultOf(t.line) ?? null },
+        });
       else idUses.push(idUse(s, t));
       const found = keysOf(t);
       const uses = usesOf(t);

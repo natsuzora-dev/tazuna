@@ -1,63 +1,63 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Task 1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Task 1","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"after":["taskAddedRecorded#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Task 1","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Task 2"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#2","name":"taskAddedRecorded","payload":{"id":"task-2","title":"Task 2","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"},"after":["taskAddedRecorded#2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#2","name":"taskAddedRecorded","payload":{"id":"task-2","title":"Task 2","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#2"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"},"resultOf":"addTask#2","after":["taskAddedRecorded#2"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#2","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#3","name":"addTask","input":{"taskId":"task-3","title":"Task 3"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"addTask#3","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#3","name":"taskAddedRecorded","payload":{"id":"task-3","title":"Task 3","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"taskId":"task-3"},"after":["taskAddedRecorded#3"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#3","name":"taskAddedRecorded","payload":{"id":"task-3","title":"Task 3","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#3"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"taskId":"task-3"},"resultOf":"addTask#3","after":["taskAddedRecorded#3"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#3","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#4","name":"addTask","input":{"taskId":"task-4","title":"Task 4"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"addTask#4","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#4","name":"taskAddedRecorded","payload":{"id":"task-4","title":"Task 4","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"taskId":"task-4"},"after":["taskAddedRecorded#4"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#4","name":"taskAddedRecorded","payload":{"id":"task-4","title":"Task 4","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#4"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"taskId":"task-4"},"resultOf":"addTask#4","after":["taskAddedRecorded#4"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#4","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#5","name":"addTask","input":{"taskId":"task-5","title":"Task 5"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#5","to":"addTask#5","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#5","name":"taskAddedRecorded","payload":{"id":"task-5","title":"Task 5","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#5","name":"taskAdded","payload":{"taskId":"task-5"},"after":["taskAddedRecorded#5"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#5","name":"taskAddedRecorded","payload":{"id":"task-5","title":"Task 5","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#5"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#5","name":"taskAdded","payload":{"taskId":"task-5"},"resultOf":"addTask#5","after":["taskAddedRecorded#5"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#5","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#6","name":"addTask","input":{"taskId":"task-6","title":"Task 6"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#6","to":"addTask#6","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#6","name":"taskAddedRecorded","payload":{"id":"task-6","title":"Task 6","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#6","name":"taskAdded","payload":{"taskId":"task-6"},"after":["taskAddedRecorded#6"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#6","name":"taskAddedRecorded","payload":{"id":"task-6","title":"Task 6","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#6"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#6","name":"taskAdded","payload":{"taskId":"task-6"},"resultOf":"addTask#6","after":["taskAddedRecorded#6"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#6","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#7","name":"addTask","input":{"taskId":"task-7","title":"Task 7"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#7","to":"addTask#7","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#7","name":"taskAddedRecorded","payload":{"id":"task-7","title":"Task 7","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#7","name":"taskAdded","payload":{"taskId":"task-7"},"after":["taskAddedRecorded#7"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#7","name":"taskAddedRecorded","payload":{"id":"task-7","title":"Task 7","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#7"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#7","name":"taskAdded","payload":{"taskId":"task-7"},"resultOf":"addTask#7","after":["taskAddedRecorded#7"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#7","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#8","name":"addTask","input":{"taskId":"task-8","title":"Task 8"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#8","to":"addTask#8","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#8","name":"taskAddedRecorded","payload":{"id":"task-8","title":"Task 8","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#8","name":"taskAdded","payload":{"taskId":"task-8"},"after":["taskAddedRecorded#8"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#8","name":"taskAddedRecorded","payload":{"id":"task-8","title":"Task 8","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#8"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#8","name":"taskAdded","payload":{"taskId":"task-8"},"resultOf":"addTask#8","after":["taskAddedRecorded#8"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#8","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#9","name":"addTask","input":{"taskId":"task-9","title":"Task 9"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#9","to":"addTask#9","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#9","name":"taskAddedRecorded","payload":{"id":"task-9","title":"Task 9","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#9","name":"taskAdded","payload":{"taskId":"task-9"},"after":["taskAddedRecorded#9"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#9","name":"taskAddedRecorded","payload":{"id":"task-9","title":"Task 9","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#9"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#9","name":"taskAdded","payload":{"taskId":"task-9"},"resultOf":"addTask#9","after":["taskAddedRecorded#9"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#9","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#10","name":"addTask","input":{"taskId":"task-10","title":"Task 10"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#10","to":"addTask#10","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#10","name":"taskAddedRecorded","payload":{"id":"task-10","title":"Task 10","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#10","name":"taskAdded","payload":{"taskId":"task-10"},"after":["taskAddedRecorded#10"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#10","name":"taskAddedRecorded","payload":{"id":"task-10","title":"Task 10","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#10"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#10","name":"taskAdded","payload":{"taskId":"task-10"},"resultOf":"addTask#10","after":["taskAddedRecorded#10"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#10","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:01:00Z","dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:01:00Z","dir":"out","type":"answer","id":"answer#11","to":"completeTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"task-1","completedAt":"2026-10-25T01:01:00Z"}}
-{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"after":["taskCompletedRecorded#1"]}
+{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"task-1","completedAt":"2026-10-25T01:01:00Z"},"resultOf":"completeTask#1"}
+{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"resultOf":"completeTask#1","after":["taskCompletedRecorded#1"]}
 {"time":"2026-10-25T01:01:00Z","dir":"in","type":"command","id":"addTask#11","name":"addTask","input":{"taskId":"task-11","title":"Task 11"}}
 {"time":"2026-10-25T01:01:00Z","dir":"out","type":"answer","id":"answer#12","to":"addTask#11","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskAddedRecorded#11","name":"taskAddedRecorded","payload":{"id":"task-11","title":"Task 11","createdAt":"2026-10-25T01:01:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"}}
-{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskAdded#11","name":"taskAdded","payload":{"taskId":"task-11"},"after":["taskAddedRecorded#11"]}
+{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskAddedRecorded#11","name":"taskAddedRecorded","payload":{"id":"task-11","title":"Task 11","createdAt":"2026-10-25T01:01:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#11"}
+{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskAdded#11","name":"taskAdded","payload":{"taskId":"task-11"},"resultOf":"addTask#11","after":["taskAddedRecorded#11"]}
 {"time":"2026-10-25T01:01:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#11","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:01:00Z","dir":"in","type":"command","id":"reopenTask#1","name":"reopenTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:01:00Z","dir":"out","type":"answer","id":"answer#13","to":"reopenTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskReopenedRecorded#1","name":"taskReopenedRecorded","payload":{"id":"task-1","completedAt":null,"remindAt":null}}
-{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskReopened#1","name":"taskReopened","payload":{"taskId":"task-1"},"after":["taskReopenedRecorded#1"]}
+{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskReopenedRecorded#1","name":"taskReopenedRecorded","payload":{"id":"task-1","completedAt":null,"remindAt":null},"resultOf":"reopenTask#1"}
+{"time":"2026-10-25T01:01:00Z","dir":"out","type":"event","id":"taskReopened#1","name":"taskReopened","payload":{"taskId":"task-1"},"resultOf":"reopenTask#1","after":["taskReopenedRecorded#1"]}

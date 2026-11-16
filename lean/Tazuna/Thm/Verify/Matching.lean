@@ -84,6 +84,7 @@ structure OutMatches (keys ids : String → Option String) (subscribed : String 
   time : t.time.time = s.time.time
   place : match s.body with
     | .answer _ _ to _ => Placed ids subscribed (some to) t.body.to?
+    | .event _ _ _ _ r => t.body.name? = s.body.name? ∧ Placed ids subscribed r t.body.resultOf?
     | _ => t.body.name? = s.body.name?
   content : ContentMatches keys (c.compared s t).1 (c.compared s t).2
 

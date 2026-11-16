@@ -1,5 +1,5 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"c1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"ec1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"ec1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"c1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"qc1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"q9","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}

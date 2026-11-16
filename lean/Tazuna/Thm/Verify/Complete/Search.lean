@@ -44,21 +44,21 @@ structure PairOK (sc : Scope) (ids : Ids) (q : Out × Out) : Prop where
   time : sameTime q.1.line q.2.line = true
   place : match q.1.line.body with
     | .answer _ _ to _ => ∃ t, q.2.line.body.to? = some t ∧ ids.bound.traceOf? to = some t
+    | .event _ _ _ _ r => q.2.line.body.name? = q.1.line.body.name? ∧ IdPlaced ids r q.2.line.body.resultOf?
     | _ => q.2.line.body.name? = q.1.line.body.name?
 
 theorem PairOK.mono {sc : Scope} {ids ids' : Ids} {q : Out × Out} (h : PairOK sc ids q) (hg : Grows ids ids') :
     PairOK sc ids' q := by
   refine ⟨h.trace, h.type, h.time, ?_⟩
   have hp := h.place
-  split
-  · rename_i to _ hb
-    rw [hb] at hp
+  revert hp
+  cases q.1.line.body with
+  | answer d i to x =>
+    intro hp
     obtain ⟨t, ht, hl⟩ := hp
     exact ⟨t, ht, traceOf?_prefix hg hl⟩
-  · rename_i hn
-    split at hp
-    · rename_i hb; exact absurd hb (hn _ _ _ _)
-    · exact hp
+  | event d i n x r => exact fun hp => ⟨hp.1, hp.2.mono hg⟩
+  | _ => exact id
 
 /-- What a search checks of a pair of open subscriptions besides the values. -/
 def SubOK (sc : Scope) (q : String × String) : Prop :=
@@ -161,24 +161,32 @@ theorem ordered_good {c : Ctx} {pairs : List (Out × Out)} {s t : Out} (h : orde
 
 
 theorem pairIds_spec {sc : Scope} {ids ids' : Ids} {s t : Out} (h : pairIds sc ids s t = some ids') :
-    Grows ids ids' ∧ (IdsWf ids → IdsWf ids') ∧ ∀ d i to x, s.line.body = .answer d i to x →
-      ∃ t', t.line.body.to? = some t' ∧ ids'.bound.traceOf? to = some t' := by
+    Grows ids ids' ∧ (IdsWf ids → IdsWf ids') ∧
+      (∀ d i to x, s.line.body = .answer d i to x →
+        ∃ t', t.line.body.to? = some t' ∧ ids'.bound.traceOf? to = some t') ∧
+      ∀ d i n x r, s.line.body = .event d i n x r → IdPlaced ids' r t.line.body.resultOf? := by
   have refl : ∀ ids : Ids, Grows ids ids ∧ (IdsWf ids → IdsWf ids) := fun ids => ⟨List.prefix_refl _, id⟩
   unfold pairIds at h
   cases hb : s.line.body with
   | answer d i to x =>
     rw [hb] at h
     obtain ⟨g, hs, _, w⟩ := useIds_spec h
-    refine ⟨g, w, fun d' i' to' x' hb' => ?_⟩
+    refine ⟨g, w, fun d' i' to' x' hb' => ?_, fun _ _ _ _ _ h => nomatch h⟩
     cases hb'
     exact hs to rfl
+  | event d i n x r =>
+    rw [hb] at h
+    obtain ⟨g, _, _, w⟩ := useIds_spec h
+    refine ⟨g, w, fun _ _ _ _ h => (nomatch h), fun d' i' n' x' r' hb' => ?_⟩
+    cases hb'
+    exact useIds_placed h
   | command | query =>
     rw [hb] at h
-    exact ⟨(join_spec h).1, (join_spec h).2, fun _ _ _ _ h => nomatch h⟩
+    exact ⟨(join_spec h).1, (join_spec h).2, fun _ _ _ _ h => (nomatch h), fun _ _ _ _ _ h => nomatch h⟩
   | _ =>
     rw [hb] at h
     cases h
-    exact ⟨(refl ids).1, (refl ids).2, fun _ _ _ _ h => nomatch h⟩
+    exact ⟨(refl ids).1, (refl ids).2, fun _ _ _ _ h => (nomatch h), fun _ _ _ _ _ h => nomatch h⟩
 
 
 set_option linter.unusedSimpArgs false in
@@ -285,10 +293,12 @@ theorem expand_out {sc : Scope} {G₀ : List Goal} {p₀ : Pairing} {s : Out} {r
     · refine ⟨htr, hty, hti, ?_⟩
       show match s.line.body with
         | .answer _ _ to _ => ∃ t', t.line.body.to? = some t' ∧ ids.bound.traceOf? to = some t'
+        | .event _ _ _ _ r => t.line.body.name? = s.line.body.name? ∧ IdPlaced ids r t.line.body.resultOf?
         | _ => t.line.body.name? = s.line.body.name?
       revert hnm hpl
       cases s.line.body with
-      | answer d i to x => intro _ hpl; exact hpl d i to x rfl
+      | answer d i to x => intro _ hpl; exact hpl.1 d i to x rfl
+      | event d i n x r => intro hnm hpl; exact ⟨hnm, hpl.2 d i n x r rfl⟩
       | _ => intro hnm _; exact hnm
   · simp only [List.map_append, List.map_singleton]
     refine List.nodup_append.mpr ⟨h.pairsNodup, List.nodup_cons.mpr ⟨by simp, List.nodup_nil⟩,

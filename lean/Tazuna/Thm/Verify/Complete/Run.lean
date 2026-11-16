@@ -122,28 +122,6 @@ theorem window_ok {sc : Scope} {specOut : List Out} {ids : Ids} {keys : Renaming
       omega
 
 
-/-- The implementation names `b` where the snapshot names `a`, through the bound ids. -/
-def IdPlaced (ids : Ids) : Option String → Option String → Prop
-  | some x, some y => ids.bound.traceOf? x = some y
-  | none, none => True
-  | _, _ => False
-
-theorem IdPlaced.mono {ids ids' : Ids} (hg : Grows ids ids') :
-    ∀ {a b : Option String}, IdPlaced ids a b → IdPlaced ids' a b
-  | some _, some _, h => traceOf?_prefix hg h
-  | none, none, h => h
-  | some _, none, h => h.elim
-  | none, some _, h => h.elim
-
-theorem useIds_placed {ids ids' : Ids} {l sl : Nat} {a b : Option String} (h : ids.useIds l sl a b = some ids') :
-    IdPlaced ids' a b := by
-  obtain ⟨_, hs, hn, _⟩ := useIds_spec h
-  cases a with
-  | none => rw [hn rfl]; trivial
-  | some x =>
-    obtain ⟨y, rfl, hy⟩ := hs x rfl
-    exact hy
-
 /-- What a search of an `in` line's bags that finds `p` gives. -/
 theorem input_search {c : Ctx} {st : St} {ids : Ids} {l sl : Nat} {x y : Option CValue} {keys : Renaming}
     {goals : List Goal} {p : Pairing} (hw : walkContent st.declared l sl x y st.keys = some (keys, goals))

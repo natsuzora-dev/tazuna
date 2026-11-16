@@ -52,7 +52,14 @@ export function processCommand(
     const events = groups.flat();
     const lengths = groups.map((g) => g.length);
     if (events.length > 0) r.note.events(step, s.lines.length, lengths);
-    for (const e of events) write(s, { dir: "out", type: "event", name: e.emit.event, payload: e.encoded });
+    for (const e of events)
+      write(s, {
+        dir: "out",
+        type: "event",
+        name: e.emit.event,
+        payload: e.encoded,
+        ...(id === undefined ? {} : { resultOf: id }),
+      });
     if (reached !== undefined) r.note.reached(reached);
     return { answer, emits: events.map((e) => e.emit) };
   };

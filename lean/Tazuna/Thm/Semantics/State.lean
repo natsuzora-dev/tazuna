@@ -225,10 +225,10 @@ theorem documentOrder_at_map (i : Instance) (cs : ChartState) (hcs : cs ∈ i.ch
   rw [hAB, List.flatMap_append, List.flatMap_cons]
   simp [f]
 
-theorem emitAll_fixed (es : List Emit) : (s.emitAll es).fixed = s.fixed := by
+theorem emitAll_fixed (r : Option String) (es : List Emit) : (s.emitAll r es).fixed = s.fixed := by
   induction es generalizing s with
   | nil => rfl
-  | cons e es ih => exact ih (s := (s.write .out none (.event e.event e.payload none)).1)
+  | cons e es ih => exact ih (s := (s.write .out none (.event e.event e.payload r)).1)
 
 theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).fixed = t.fixed) (xs : List α)
     (t : State) : (xs.foldl f t).fixed = t.fixed := by
@@ -239,8 +239,8 @@ theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t 
 /-- The parts of a state that a message never changes. -/
 def _root_.Tazuna.Semantics.State.clock (s : State) : CommandAnswers × Time := (s.commandAnswers, s.now)
 
-theorem emitAll_clock (t : State) (es : List Emit) : (t.emitAll es).clock = t.clock := by
-  have h := emitAll_fixed (s := t) es
+theorem emitAll_clock (t : State) (r : Option String) (es : List Emit) : (t.emitAll r es).clock = t.clock := by
+  have h := emitAll_fixed (s := t) r es
   exact Prod.ext (congrArg Fixed.commandAnswers h) (congrArg Fixed.now h)
 
 theorem holdsFold_fixed (i : Instance) (es : List (String × Time)) :
@@ -309,7 +309,7 @@ theorem foldl_grows {α : Type} (f : State → α → State) (h : ∀ t x, Grows
   | nil => exact Grows.refl _
   | cons x xs ih => simp only [List.foldl_cons]; exact (h t x).trans (hn t x) (ih _)
 
-theorem emitAll_grows (t : State) (es : List Emit) : Grows t (t.emitAll es) := by
+theorem emitAll_grows (t : State) (r : Option String) (es : List Emit) : Grows t (t.emitAll r es) := by
   unfold State.emitAll
   induction es generalizing t with
   | nil => exact Grows.refl _

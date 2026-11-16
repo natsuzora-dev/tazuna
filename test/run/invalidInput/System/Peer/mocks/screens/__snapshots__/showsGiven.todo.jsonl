@@ -1,11 +1,11 @@
 {"time":"2026-10-24T23:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
 {"time":"2026-10-24T23:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk"}}
-{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"after":["taskAddedRecorded#1"]}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}
+{"time":"2026-10-24T23:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"todo.taskTitles#1","name":"taskTitles","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"todo.taskTitles#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk"]}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Buy bread"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#2","name":"taskAddedRecorded","payload":{"id":"task-2","title":"Buy bread"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"},"after":["taskAddedRecorded#2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#2","name":"taskAddedRecorded","payload":{"id":"task-2","title":"Buy bread"},"resultOf":"addTask#2"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"},"resultOf":"addTask#2","after":["taskAddedRecorded#2"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"todo.taskTitles#1","answer":{"result":"fulfilled","output":{"titles":["Buy bread","Buy milk"]}}}

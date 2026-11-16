@@ -306,12 +306,12 @@ def PeerSees (normal : String → Value → CValue) (service : String) (aLines b
   ValueMatches (standsFor (createdOf bLines) bs) (seenOf normal service aLines n x) (normal n y)
 
 /--
-Whether the peer's line `b`, its line `j`, emits the event `n`, at or before `time`, with a payload that `payload`
-stands for, after the `in` line of the request `resultOf` when it is given (requestOfLine?).
+Whether the peer's line `b` emits the event `n`, at or before `time`, with a payload that `payload` stands for, as the
+result of the request `resultOf` when it is given.
 -/
 def PeerEmits (normal : String → Value → CValue) (service : String) (aLines bLines : List TraceLine) (bs : Bindings)
-    (n : String) (payload : Value) (resultOf : Option String) (time : DateTime) (j : Nat) (b : TraceLine) : Prop :=
-  ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → requestOfLine? bLines j = some q) ∧
+    (n : String) (payload : Value) (resultOf : Option String) (time : DateTime) (b : TraceLine) : Prop :=
+  ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → r = some q) ∧
     b.time.time ≤ time.time ∧ PeerSees normal service aLines bLines bs n p payload
 
 theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : String} {to target : String}
@@ -346,7 +346,7 @@ theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Strin
     {payload : Value} {resultOf : Option String} (hl : l.body = .event .in id name payload resultOf)
     (hn : peerName? peer name = some n) (h : peerLine normal service peer arrivals aLines bLines bs i l = .ok bs') :
     ∃ j b, bLines[j]? = some b ∧ j < peerBefore arrivals bLines i ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
-      (∀ q, resultOf = some q → requestOfLine? bLines j = some q) ∧ b.time.time ≤ l.time.time ∧
+      (∀ q, resultOf = some q → r = some q) ∧ b.time.time ≤ l.time.time ∧
       Unified (createdOf bLines) bs bs' (fun f => ValueMatches f (seenOf normal service aLines n p) (normal n payload)) := by
   simp only [peerLine, hl, hn] at h
   split at h
@@ -546,8 +546,8 @@ theorem mocked_answers_prefix {halted : Option (Origin × String)} {to target : 
 
 /--
 Stage 1 for events: with no violation, the peer emits each event of the peer that the scenario receives, at or before
-the time the scenario receives it, with a payload that the scenario's stands for under the final bindings, after the
-`in` line of the request that the scenario names as its result (PeerEmits), and before it takes an input that arrives
+the time the scenario receives it, with a payload that the scenario's stands for under the final bindings, as the
+result of the request that the scenario names as its result (PeerEmits), and before it takes an input that arrives
 after the scenario's line (peerBefore).
 Two deliveries of one event may name the same line of the peer.
 -/
@@ -556,7 +556,7 @@ theorem received_event_emitted {halted : Option (Origin × String)} {i : Nat} {l
     (h : peerFindings normal service peer arrivals aLines bLines halted = []) (hi : aLines[i]? = some l)
     (hl : l.body = .event .in id name payload resultOf) (hn : peerName? peer name = some n) :
     ∃ j b, bLines[j]? = some b ∧ j < peerBefore arrivals bLines i ∧
-      PeerEmits normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) n payload resultOf l.time j b := by
+      PeerEmits normal service aLines bLines (peerFinal normal service peer arrivals aLines bLines) n payload resultOf l.time b := by
   obtain ⟨j, b, hb, hj, id', p, r, hbody, hr, htime, hU⟩ := peerLine_event hl hn (peerLine_ok h hi)
   exact ⟨j, b, hb, hj, id', p, r, hbody, hr, htime, hU.sound _ (final_of hi)⟩
 

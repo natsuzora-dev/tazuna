@@ -379,10 +379,14 @@ def ordered (c : Ctx) (pairs : List (Out × Out)) (s t : Out) : Bool :=
     (!(c.follows (s.index - 1)).contains (ps.index - 1) || pt.index < t.index) &&
       (!(c.follows (ps.index - 1)).contains (s.index - 1) || t.index < pt.index)
 
-/-- The ids of the pairing with `s` paired with `t`: the answered request's ids, or a request's own ids. -/
+/--
+The ids of the pairing with `s` paired with `t`: the answered request's ids, a request's own ids, or the ids of the
+request that an event results from.
+-/
 def pairIds (sc : Scope) (ids : Ids) (s t : Out) : Option Ids :=
   match s.line.body with
   | .answer _ _ to _ => ids.useIds t.index s.index (some to) t.line.body.to?
+  | .event _ _ _ _ resultOf => ids.useIds t.index s.index resultOf t.line.body.resultOf?
   | .command .. | .query .. =>
     ids.join sc.window s.line (s.idUse t)
   | _ => some ids
@@ -574,10 +578,11 @@ def explain (sc : Scope) (specOut : List Out) (missingAt : Nat) : CompareM Unit 
       pairs := pairs ++ [(s, t)]
       if !sameTime s.line t.line then
         report (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text)
-      match pairIds sc st.ids s t with
-      | some ids => modify fun st => { st with ids }
-      | none =>
-        idUses := idUses ++ [s.idUse t]
+      match pairIds sc st.ids s t, s.line.body with
+      | some ids, _ => modify fun st => { st with ids }
+      | none, .event _ _ _ _ resultOf =>
+        report (.resultOf t.index (Subject.of t.line.toTraceLine) resultOf t.line.body.resultOf?)
+      | none, _ => idUses := idUses ++ [s.idUse t]
       let (ev, av) := c.compared s.line t.line
       match keysOf t, freeContent st.declared t.index s.index ev av with
       | some keys, _ => modify fun st => { st with keys }

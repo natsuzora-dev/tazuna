@@ -1,6 +1,6 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#1","name":"pinged","payload":{},"after":["taskAdded#1"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#2","name":"pinged","payload":{},"after":["taskAdded#1","pinged#1"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#3","name":"pinged","payload":{},"after":["taskAdded#1","pinged#1","pinged#2"]}
@@ -103,7 +103,7 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#100","name":"pinged","payload":{},"after":["taskAdded#1","pinged#1","pinged#2","pinged#3","pinged#4","pinged#5","pinged#6","pinged#7","pinged#8","pinged#9","pinged#10","pinged#11","pinged#12","pinged#13","pinged#14","pinged#15","pinged#16","pinged#17","pinged#18","pinged#19","pinged#20","pinged#21","pinged#22","pinged#23","pinged#24","pinged#25","pinged#26","pinged#27","pinged#28","pinged#29","pinged#30","pinged#31","pinged#32","pinged#33","pinged#34","pinged#35","pinged#36","pinged#37","pinged#38","pinged#39","pinged#40","pinged#41","pinged#42","pinged#43","pinged#44","pinged#45","pinged#46","pinged#47","pinged#48","pinged#49","pinged#50","pinged#51","pinged#52","pinged#53","pinged#54","pinged#55","pinged#56","pinged#57","pinged#58","pinged#59","pinged#60","pinged#61","pinged#62","pinged#63","pinged#64","pinged#65","pinged#66","pinged#67","pinged#68","pinged#69","pinged#70","pinged#71","pinged#72","pinged#73","pinged#74","pinged#75","pinged#76","pinged#77","pinged#78","pinged#79","pinged#80","pinged#81","pinged#82","pinged#83","pinged#84","pinged#85","pinged#86","pinged#87","pinged#88","pinged#89","pinged#90","pinged#91","pinged#92","pinged#93","pinged#94","pinged#95","pinged#96","pinged#97","pinged#98","pinged#99"]}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"},"resultOf":"addTask#2"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#101","name":"pinged","payload":{},"after":["taskAdded#2"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#102","name":"pinged","payload":{},"after":["taskAdded#2","pinged#101"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"pinged#103","name":"pinged","payload":{},"after":["taskAdded#2","pinged#101","pinged#102"]}

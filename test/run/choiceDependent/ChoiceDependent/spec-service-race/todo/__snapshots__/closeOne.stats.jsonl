@@ -1,6 +1,6 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"stats.countCompleted#1","name":"countCompleted","input":{}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"stats.countCompleted#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"completedCounted#1","name":"completedCounted","payload":{"completed":1}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"completedCounted#1","name":"completedCounted","payload":{"completed":1},"resultOf":"stats.countCompleted#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"stats.resetCount#1","name":"resetCount","input":{}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"stats.resetCount#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"countReset#1","name":"countReset","payload":{"completed":0}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"countReset#1","name":"countReset","payload":{"completed":0},"resultOf":"stats.resetCount#1"}

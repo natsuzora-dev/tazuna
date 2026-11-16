@@ -173,6 +173,7 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
         show Placed _ _ (some to) q.2.line.body.to?
         rw [ht']
         exact .inl (traceOf?_prefix hI hl)
+      | event d i n x r => exact fun hp => ⟨hp.1, placed_of hI hp.2⟩
       | _ => exact id
     · have := cont.2.1 q hq
       dsimp only [scopeOf] at this

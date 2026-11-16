@@ -280,8 +280,9 @@ def State.answer (s : State) (to : Option String) (answer : Answer) : State :=
   | some to => (s.write .out none (.answer to answer)).1
   | none => s
 
-def State.emitAll (s : State) (emits : List Emit) : State :=
-  emits.foldl (fun s e => (s.write .out none (.event e.event e.payload none)).1) s
+/-- The state with the event lines of `emits` written, each the result of the request `resultOf`. -/
+def State.emitAll (s : State) (resultOf : Option String) (emits : List Emit) : State :=
+  emits.foldl (fun s e => (s.write .out none (.event e.event e.payload resultOf)).1) s
 
 def State.machine? (s : State) (name : String) : Option Instance :=
   (s.machines ++ s.copies).find? (·.resource == name)

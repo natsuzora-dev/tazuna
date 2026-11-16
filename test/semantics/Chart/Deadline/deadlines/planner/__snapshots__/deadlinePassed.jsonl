@@ -1,5 +1,5 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-25T02:30:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"now"}}
 {"time":"2026-10-25T02:30:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T02:30:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"now"}}
+{"time":"2026-10-25T02:30:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"now"},"resultOf":"addTask#1"}
 {"time":"2026-10-25T02:30:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{},"after":["taskAdded#1"]}

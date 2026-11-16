@@ -1,12 +1,12 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Buy eggs"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs"},"resultOf":"addTask#2"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"renameTask#1","name":"renameTask","input":{"taskId":"task-1","title":"Buy bread"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"renameTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskRenamed#1","name":"taskRenamed","payload":{"id":"task-1","title":""}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskRenamed#2","name":"taskRenamed","payload":{"id":"task-1","title":"Buy bread"},"after":["taskRenamed#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskRenamed#1","name":"taskRenamed","payload":{"id":"task-1","title":""},"resultOf":"renameTask#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskRenamed#2","name":"taskRenamed","payload":{"id":"task-1","title":"Buy bread"},"resultOf":"renameTask#1","after":["taskRenamed#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"taskTitles#1","name":"taskTitles","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"taskTitles#1","answer":{"result":"fulfilled","output":{"titles":["Buy bread","Buy eggs"]}}}

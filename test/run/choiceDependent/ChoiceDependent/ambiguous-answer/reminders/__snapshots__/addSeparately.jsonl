@@ -1,10 +1,10 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addReminder#1","name":"addReminder","input":{"reminderId":"reminder-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addReminder#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"reminderAdded#1","name":"reminderAdded","payload":{"id":"reminder-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"reminderAdded#1","name":"reminderAdded","payload":{"id":"reminder-1"},"resultOf":"addReminder#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addReminder#2","name":"addReminder","input":{"reminderId":"reminder-2"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addReminder#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"reminderAdded#2","name":"reminderAdded","payload":{"id":"reminder-2"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"reminderAdded#2","name":"reminderAdded","payload":{"id":"reminder-2"},"resultOf":"addReminder#2"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#3","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":"2026-10-25T15:00:00Z"}}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"reminder-1"}}
