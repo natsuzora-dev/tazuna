@@ -18,6 +18,11 @@ inductive Illegal where
   | missingParent (definition : Syntax.Ref) (keys : List String)
   /-- The chart reads under `key` a query of its own service. -/
   | ownQuery (definition : Syntax.Ref) (key : String)
+  /--
+  The chart's own offers have no entry for `control`. They list every control, `any` for every payload, so that what a
+  state does not offer is written, not left out.
+  -/
+  | unlistedControl (definition : Syntax.Ref) (control : String)
   /-- `statePath` leads from the state of an unguarded always transition back to that state. -/
   | alwaysCycle (definition : Syntax.Ref) (statePath : List String)
   | foreignEvent (definition : Syntax.Ref) (event : Syntax.Ref)

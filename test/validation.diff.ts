@@ -231,6 +231,14 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     const name = pick([...s.definitions.filter((d) => d.kind === "entity").map((d) => d.name), "Other"], b) ?? "Other";
     (input.strings as string[]).push(pick([`${name}-${c + 1}`, `${name}-0`, `${name}-0${c + 1}`, name], c) ?? name);
   },
+  offers(s, [a, b]) {
+    const chart = pick(
+      charts(s).filter((c) => Object.keys(c.offers).length > 0),
+      a,
+    );
+    const control = chart === undefined ? undefined : pick(Object.keys(chart.offers), b);
+    if (chart && control !== undefined) delete (chart.offers as Record<string, unknown>)[control];
+  },
   external(s, [a]) {
     const service = pick(s.services, a);
     if (service) (service as { external: boolean }).external = !service.external;

@@ -25,7 +25,8 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  *   read it as an instant in milliseconds.
  * - `unknownPeer`: the scenario's `given` names `service`, or its `elsewhere` or `from` input names the contract of
  *   `service`, or an object that is no exported contract (null), and `service` is the scenario's own service, an
- *   external service, or no service of the spec.
+ *   external service, or no service of the spec. A Given peer is unknown when it is the own service's contract or no
+ *   contract (null).
  * - `unlistedState`: the scenario's `given` gives `service` a start state that is not one of the states of its
  *   contract.
  * - `ownMessageToPeer`: the start state that the scenario's `given` gives `service`, or its `elsewhere` input to
@@ -36,7 +37,7 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `unlistedPeer`: the scenario's own service exchanges messages with `service` (its definitions name the other's), and
  *   Given does not list it as run, external, or skip.
  * - `invalidRecord`: the scenario's Given writes a record of `entity` of `service` that is no entity of that service,
- *   that has no string `key`, or that does not match the entity's schema.
+ *   that has no string `key`, whose `key` an earlier record has, or that does not match the entity's schema.
  * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.

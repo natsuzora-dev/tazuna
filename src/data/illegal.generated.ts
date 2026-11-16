@@ -30,6 +30,17 @@ export type Illegal =
         readonly key: string;
       };
     }
+  /**
+   * The chart's own offers have no entry for `control`. They list every control, `any` for every payload, so that what a
+   * state does not offer is written, not left out.
+   */
+  | {
+      readonly kind: "Illegal.unlistedControl";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly control: string;
+      };
+    }
   /** `statePath` leads from the state of an unguarded always transition back to that state. */
   | {
       readonly kind: "Illegal.alwaysCycle";
@@ -148,6 +159,7 @@ export const illegalKinds = [
   "Illegal.automationCycle",
   "Illegal.missingParent",
   "Illegal.ownQuery",
+  "Illegal.unlistedControl",
   "Illegal.alwaysCycle",
   "Illegal.foreignEvent",
   "Illegal.indexReason",

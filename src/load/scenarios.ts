@@ -108,11 +108,14 @@ function givenRecords(
       else found.push({ entity, value });
       continue;
     }
+    const keys = new Set<string>();
     for (const row of Array.isArray(written) ? written : []) {
       const key = (row as Record<string, unknown>)[e.key];
       const value = encoded(e, row);
-      if (typeof key !== "string" || value === undefined) invalid(entity, typeof key === "string" ? key : undefined);
+      if (typeof key !== "string" || value === undefined || keys.has(key))
+        invalid(entity, typeof key === "string" ? key : undefined);
       else found.push({ entity, key, value });
+      if (typeof key === "string") keys.add(key);
     }
   }
   return { records: found, problems };

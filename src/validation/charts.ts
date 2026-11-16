@@ -17,6 +17,24 @@ function missingParents(structure: Structure): Illegal[] {
   });
 }
 
+function unlistedControls(structure: Structure): Illegal[] {
+  return structure.definitions.flatMap((d) =>
+    d.kind !== "machine" && d.kind !== "screen"
+      ? []
+      : Object.keys(d.controls).flatMap((control): Illegal[] =>
+          Object.hasOwn(d.offers, control)
+            ? []
+            : [
+                {
+                  kind: "Illegal.unlistedControl",
+                  definition: { service: d.service, name: d.name },
+                  data: { control },
+                },
+              ],
+        ),
+  );
+}
+
 function ownQueries(structure: Structure): Illegal[] {
   return structure.definitions.flatMap((d) =>
     d.kind !== "machine" && d.kind !== "screen"
@@ -138,5 +156,10 @@ function alwaysCycles(structure: Structure): Illegal[] {
 }
 
 export function check(structure: Structure): Illegal[] {
-  return [...missingParents(structure), ...ownQueries(structure), ...alwaysCycles(structure)];
+  return [
+    ...missingParents(structure),
+    ...ownQueries(structure),
+    ...unlistedControls(structure),
+    ...alwaysCycles(structure),
+  ];
 }
