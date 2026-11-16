@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
-import { canonical as canonicalOf, comparableAnswer, orderFree } from "../../data/canonical.ts";
+import {
+  canonical as canonicalOf,
+  comparableAnswer,
+  comparable as comparableOf,
+  orderFree,
+} from "../../data/canonical.ts";
 import { bag, bagged, defaultRow, sorted } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Answer } from "../../data/trace.generated.ts";
@@ -36,7 +41,7 @@ import {
   type Functions,
   givenKeys,
   type Holder,
-  type NextKeys,
+  type Keys,
   type Scope,
 } from "../../service/functions.ts";
 import type { Emit } from "../../service/message.ts";
@@ -265,6 +270,8 @@ export class SpecFunctions implements Functions {
           this.chartOf(traceNameOfRef(schema.screen, this.service)).named.definition.controls?.[schema.control]
             ?.payload ?? {}
         );
+      case "record":
+        return this.entity(traceNameOfRef(schema.entity, this.service)).fields as Shape;
       default:
         throw new Error(`no question checks a value of the ${schema.kind} schema`);
     }
@@ -334,7 +341,7 @@ export class SpecFunctions implements Functions {
   }
 
   /** Returns createKey over `keys`, what it returns next, and the entities that it was called for, in call order. */
-  private keysFrom(keys: readonly (readonly [string, NextKeys])[]): {
+  private keysFrom(keys: Keys): {
     readonly createKey: (key: Ref<AnyKeyedEntity>) => string;
     readonly created: readonly string[];
   } {
@@ -411,7 +418,8 @@ export class SpecFunctions implements Functions {
   }
 
   parse(schema: Schema, value: unknown): Checked | Failed {
-    const object = objectOf(this.shape(schema));
+    // Given writes every field of a record, so a record also fails on a field that its entity does not have.
+    const object = schema.kind === "record" ? strictObjectOf(this.shape(schema)) : objectOf(this.shape(schema));
     const parsed = attempt(() => object.safeParse(value), schema);
     if (parsed instanceof Failed) return parsed;
     if (!parsed.success) return { error: zodError(parsed.error.issues) };
@@ -423,6 +431,11 @@ export class SpecFunctions implements Functions {
   canonical(schema: Schema, value: unknown): unknown {
     const shape = this.shape(schema);
     return attempt(() => canonicalOf(shape, value), schema);
+  }
+
+  unordered(schema: Schema, value: unknown): unknown {
+    const shape = this.shape(schema);
+    return attempt(() => orderFree(comparableOf(shape, value)), schema);
   }
 
   normalize(schema: Schema, value: unknown): Checked | Failed {
@@ -554,7 +567,7 @@ export class SpecFunctions implements Functions {
     payload: Fields,
     records: RecordSource,
     now: Temporal.Instant,
-    keys: readonly (readonly [string, NextKeys])[],
+    keys: Keys,
   ): { readonly input?: unknown; readonly created: readonly string[] } | Failed {
     const found = this.definition<Automation>(["automation"], name);
     const a = found.definition;
@@ -638,7 +651,7 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     assignment: Assignment,
     extra: Fields,
-    keys: readonly (readonly [string, NextKeys])[],
+    keys: Keys,
     access: Access,
   ):
     | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
@@ -681,7 +694,7 @@ export class SpecFunctions implements Functions {
     scope: Scope,
     records: RecordSource,
     { keyword, key }: { readonly keyword: string; readonly key: string },
-    keys: readonly (readonly [string, NextKeys])[],
+    keys: Keys,
     access: Access,
   ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed {
     const chart = this.chartOf(scope.machine).named.definition;
@@ -815,13 +828,6 @@ export class SpecFunctions implements Functions {
     const shape = this.entity(entity).fields as Shape;
     const value = defaultRow(shape);
     return { value: bagged(objectOf(shape), value) as Fields, encoded: encode(shape, value) as Fields };
-  }
-
-  /** Returns the row of a Given record of `entity`, which must match the entity's schema. */
-  givenRow(entity: string, value: unknown): Row {
-    const object = objectOf(this.entity(entity).fields as Shape);
-    const parsed = object.parse(value);
-    return { value: bagged(object, parsed) as Fields, encoded: z.encode(object, parsed as never) as Fields };
   }
 
   copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed {

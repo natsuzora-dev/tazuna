@@ -6,6 +6,7 @@ export const Task = entity({
   description: "A task",
   fields: { id: z.string(), title: z.string(), seen: z.boolean() },
   key: "id",
+  invariants: { titled: ({ record }) => record.title !== "" },
 });
 
 export const Booking = entity({ description: "A booking of a slot", fields: { id: z.string() }, key: "id" });

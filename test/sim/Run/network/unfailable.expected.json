@@ -1,0 +1,105 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "name": "addTask",
+          "input": {
+            "taskId": "task-1",
+            "title": "Buy milk"
+          },
+          "id": "addTask#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "addTask#1",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-1",
+            "title": "Buy milk",
+            "seen": false
+          },
+          "resultOf": "addTask#1",
+          "id": "taskAddedRecorded#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-1"
+          },
+          "resultOf": "addTask#1",
+          "id": "taskAdded#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "noted",
+          "payload": {},
+          "id": "noted#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "calendar.book",
+          "input": {
+            "bookingId": "todo/Booking-1",
+            "taskId": "task-1"
+          },
+          "id": "calendar.book#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "answer",
+          "to": "calendar.book#1",
+          "answer": {
+            "result": "accepted",
+            "output": {
+              "slot": "10:00"
+            }
+          },
+          "id": "answer#2"
+        }
+      ],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.unfailable",
+    "definition": null,
+    "data": {
+      "scenarioLine": 2,
+      "message": {
+        "sender": "todo",
+        "receiver": "notifier",
+        "id": "taskAdded#1"
+      }
+    }
+  }
+}

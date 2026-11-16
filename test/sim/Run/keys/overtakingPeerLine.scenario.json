@@ -1,0 +1,75 @@
+{
+  "service": "notes",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [],
+    "peers": [
+      {
+        "service": "tags",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "begin"
+        },
+        "target": {
+          "service": "tags",
+          "name": "register"
+        }
+      }
+    },
+    {
+      "type": "emit",
+      "peer": "tags",
+      "event": {
+        "service": "tags",
+        "name": "registered"
+      },
+      "payload": {
+        "value": {
+          "noteId": null
+        },
+        "holes": [
+          {
+            "path": ["noteId"],
+            "fill": {
+              "type": "ref",
+              "value": {
+                "fact": {
+                  "type": "request",
+                  "origin": {
+                    "type": "begin"
+                  },
+                  "target": {
+                    "service": "tags",
+                    "name": "register"
+                  }
+                },
+                "part": "input",
+                "path": ["noteId"]
+              }
+            }
+          }
+        ]
+      },
+      "resultOf": {
+        "type": "request",
+        "origin": {
+          "type": "begin"
+        },
+        "target": {
+          "service": "tags",
+          "name": "register"
+        }
+      }
+    }
+  ],
+  "expectations": []
+}

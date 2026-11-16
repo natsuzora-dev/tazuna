@@ -1,8 +1,8 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Report } from "../data/report.generated.ts";
-import type { Fact, Template, ValueRef } from "../data/scenario.generated.ts";
+import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
-import { canonicalJson, type Json, overlay } from "../data/values.ts";
+import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
 import { refOfTraceName } from "../syntax/structure.ts";
 import { describe, type Message, type Opened, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
 
@@ -184,16 +184,23 @@ export function screenOf(w: World, i: number, fact: Fact): Opened {
   });
 }
 
-/** Lean's lineValue?. */
-const lineValue = (lines: readonly TraceLine[], id: string): unknown => {
-  for (const l of lines) if (l.dir === "in" && l.id === id) return valueOfLine(l);
-  return undefined;
-};
+/** Lean's World.spanLines. */
+export function spanLines(w: World, origin: Origin, service: string): TraceLine[] {
+  const lines = stateOf(w, service)?.lines ?? [];
+  return w.spans.flatMap((sp) =>
+    sameOrigin(sp.origin, origin) && sp.service === service ? lines.slice(sp.from, sp.to) : [],
+  );
+}
 
-/** Lean's firstAnswer?. */
-function firstAnswer(lines: readonly TraceLine[], dir: "in" | "out", to: string): Answer | undefined {
-  for (const l of lines) if (l.type === "answer" && l.dir === dir && l.to === to) return l.answer;
-  return undefined;
+/** Lean's World.answersOf. */
+export function answersOf(w: World, s: Sent): Answer[] {
+  const lines = stateOf(w, s.receiver)?.lines ?? [];
+  const next = lines.findIndex((l, n) => n > s.position && l.dir === "in" && l.id === s.id);
+  return lines.flatMap((l, n) =>
+    n > s.position && (next < 0 || n < next) && l.type === "answer" && l.dir === "out" && l.to === s.id
+      ? [l.answer]
+      : [],
+  );
 }
 
 /** Lean's Answer.output?. */
@@ -205,16 +212,39 @@ function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
   const missing = (): never =>
     reported({ kind: "Report.missingOutput", definition: null, data: { scenarioLine: i, fact: json(fact) } });
   const present = (v: unknown) => (v === undefined ? missing() : v);
-  const s = fact.type === "line" ? sentBy(w, fact.index) : undefined;
-  if (s !== undefined) {
-    const lines = stateOf(w, s.receiver)?.lines ?? [];
-    return present(part === "input" ? lineValue(lines, s.id) : outputOf(firstAnswer(lines, "out", s.id)));
+  const viaMessage = () => {
+    const m = w.messages[messageOf(w, i, fact)];
+    if (m === undefined) return missing();
+    if (part === "input") return present(valueOfLine(m.body));
+    const received = (stateOf(w, m.sender)?.lines ?? []).find(
+      (l) => l.dir === "in" && l.type === "answer" && l.to === m.id,
+    );
+    return present(received?.type === "answer" ? outputOf(received.answer) : undefined);
+  };
+  if (fact.type === "line") {
+    const s = sentBy(w, fact.index);
+    if (s === undefined) return viaMessage();
+    if (part === "input") {
+      const l = stateOf(w, s.receiver)?.lines[s.position];
+      return present(l === undefined ? undefined : valueOfLine(l));
+    }
+    return present(outputOf(answersOf(w, s)[0]));
   }
-  const m = w.messages[messageOf(w, i, fact)];
-  if (m === undefined) return missing();
-  return present(
-    part === "input" ? valueOfLine(m.body) : outputOf(firstAnswer(stateOf(w, m.sender)?.lines ?? [], "in", m.id)),
-  );
+  if (fact.type === "answer" && part === "output") {
+    const s = sentBy(w, fact.to);
+    if (s === undefined) return unresolved(i, fact);
+    const given = spanLines(w, fact.origin, s.receiver).flatMap((l) =>
+      l.dir === "out" && l.type === "answer" && l.to === s.id ? [l.answer] : [],
+    );
+    if (given.length === 1) return present(outputOf(given[0]));
+    if (given.length === 0) return unresolved(i, fact);
+    return reported({
+      kind: "Report.ambiguousReference",
+      definition: null,
+      data: { scenarioLine: i, fact: json(fact), candidates: given.map(json) },
+    });
+  }
+  return viaMessage();
 }
 
 /** Lean's World.observed. */
@@ -237,16 +267,19 @@ export function fill(w: World, i: number, t: Template): unknown {
   return v;
 }
 
-/** Lean's createdPaths. */
-export const createdPaths = (t: Template): (readonly string[])[] =>
-  t.holes.flatMap((h) => (h.fill.type === "created" ? [h.path] : []));
+/** Lean's createdMark. */
+const createdMark = "<created>";
 
-/** Lean's withCreated. */
-export function withCreated(paths: readonly (readonly string[])[], expected: unknown, actual: unknown): unknown {
-  let v = expected;
-  for (const p of paths) {
-    const x = valueAt(actual, p);
-    if (x !== undefined) v = setValueAt(v, x, p);
-  }
-  return v;
+/** Lean's markCreated. */
+export function markCreated(t: Template, v: unknown): unknown {
+  let marked = v;
+  for (const h of t.holes) if (h.fill.type === "created") marked = setValueAt(marked, createdMark, h.path);
+  return marked;
+}
+
+/** Lean's World.maskCreated. */
+export function maskCreated(w: World, peer: string, t: Template, filled: unknown, actual: unknown): unknown {
+  const named = new Set(t.holes.flatMap((h) => (h.fill.type === "ref" ? stringsOf(valueAt(filled, h.path)) : [])));
+  const created = new Set(stateOf(w, peer)?.created.map(([, key]) => key) ?? []);
+  return mapStrings(actual, (x) => (created.has(x) && !named.has(x) ? createdMark : x));
 }

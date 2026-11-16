@@ -1,0 +1,39 @@
+{
+  "service": "todo",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [
+      {
+        "entity": "Settings",
+        "value": {
+          "remind": "yes"
+        }
+      },
+      {
+        "entity": "Task",
+        "value": {
+          "id": "task-1",
+          "title": "Buy milk",
+          "seen": false
+        }
+      },
+      {
+        "entity": "Note",
+        "value": {}
+      }
+    ],
+    "peers": [
+      {
+        "service": "calendar",
+        "role": "external"
+      },
+      {
+        "service": "notifier",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [],
+  "expectations": []
+}

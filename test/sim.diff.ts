@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
-import { type GivenRecord, type Scenario, scenario } from "../src/data/scenario.generated.ts";
+import { scenario } from "../src/data/scenario.generated.ts";
 import { canonicalJson, type Json } from "../src/data/values.ts";
 import type { Violation } from "../src/data/violation.ts";
 import { timed } from "../src/dsl/scenario.ts";
-import { loadSpec, type Spec } from "../src/load/load.ts";
+import { loadSpec } from "../src/load/load.ts";
 import { type NamedForm, peerArrivals } from "../src/sim/peer.ts";
 import { peerFindings, peerRunFindings } from "../src/sim/peerCheck.ts";
 import { execute } from "../src/sim/spec/execute.ts";
-import { SpecFunctions } from "../src/sim/spec/functions.ts";
 import { peerDerivations, runPeer } from "../src/sim/spec/peers.ts";
 import { outcomeOf, simulateSpec } from "../src/sim/spec/simulate.ts";
 import { outcomeSuffix, runExamples, scenarioSuffix, simExamples } from "./examples.ts";
@@ -90,30 +89,11 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
   assert.ok(checked > 0);
 });
 
-/** The scenario with each Given record's value as the spec encodes it, which is the form that Lean holds records in. */
-function encodedRecords(spec: Spec, sc: Scenario): Scenario {
-  const encoded = (service: string, records: readonly GivenRecord[]) => {
-    const functions = new SpecFunctions(spec, service);
-    return records.map((g) => ({ ...g, value: functions.givenRow(g.entity, g.value).encoded }));
-  };
-  return {
-    ...sc,
-    given: {
-      ...sc.given,
-      records: encoded(sc.service, sc.given.records),
-      peers: sc.given.peers.map((p) => (p.role === "run" ? { ...p, records: encoded(p.service, p.records) } : p)),
-    },
-  };
-}
-
 for (const { root, scenarios } of simExamples()) {
   const spec = await loadSpec(root);
   for (const name of scenarios)
     test(`${relative(join(import.meta.dirname, ".."), root)}/${name}: Lean and TS simulate the scenario alike, and the outcome is ${name}${outcomeSuffix}`, () => {
-      const sc = encodedRecords(
-        spec,
-        scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8"))),
-      );
+      const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));
       const ts = outcomeOf(simulateSpec(spec, sc));
       const fromLean = lean.simulate(spec, sc, new SimFunctions(spec, (part) => lean.read(part)));
       assert.equal(canonicalJson(fromLean as Json), canonicalJson(ts as unknown as Json));

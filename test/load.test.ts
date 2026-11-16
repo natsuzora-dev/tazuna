@@ -27,8 +27,6 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.ownMessageToPeer": true,
   "Malformed.inexactDelay": true,
   "Malformed.misnamedPeer": true,
-  "Malformed.unlistedPeer": true,
-  "Malformed.invalidRecord": true,
   "Malformed.lineAfterWhen": true,
   "NonCanonical.emptyGuard": true,
   "NonCanonical.emptyAfter": true,

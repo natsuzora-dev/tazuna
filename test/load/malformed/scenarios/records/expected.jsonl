@@ -1,3 +1,0 @@
-{"kind":"Malformed.invalidRecord","definition":null,"data":{"service":"todo","entity":"Task","key":"task-1"},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"writesInvalidRecords"}}
-{"kind":"Malformed.invalidRecord","definition":null,"data":{"service":"todo","entity":"Task","key":"task-2"},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"writesInvalidRecords"}}
-{"kind":"Malformed.invalidRecord","definition":null,"data":{"service":"todo","entity":"Note"},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"writesInvalidRecords"}}

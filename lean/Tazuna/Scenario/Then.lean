@@ -21,9 +21,12 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire EmittedEvent
 
-/-- An expectation of Then: an externally observable fact of the own service, about a line. -/
+/-- An expectation of Then: an externally observable fact about a line. -/
 inductive Expectation where
-  /-- Every answer that the own service gave to the request of line `line`, in order. -/
+  /--
+  Every answer that the receiver of the request of line `line` gave to it, in order: the own service's, or a running
+  peer's when the client or an external peer sent the request to it.
+  -/
   | answered (line : Nat) (answers : List Template)
   /-- The events, listed by a contract, that the own service emitted while line `line` was processed, as a bag. -/
   | emitted (line : Nat) (events : List EmittedEvent)

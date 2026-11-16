@@ -58,8 +58,4 @@ def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender id : String
     receive st fs s (name n) given payload (resultOf.bind (sentId? st.service))
   | _ => pure s
 
-/-- The single-entity records of the service that `records` lacks. -/
-def missingSingles (st : Service) (records : Records) : List String :=
-  st.singles.filter fun e => !records.any (·.entity == e)
-
 end Tazuna.Sim

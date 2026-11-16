@@ -94,8 +94,9 @@ def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : 
   memo.modify (·.insert line answered)
   pure answered.reply
 
-def nextKeys (keys : List (String × NextKeys)) : Value :=
-  .obj (keys.map fun (e, k) => (e, .obj [("count", .num k.count), ("names", .arr (k.names.map .str))]))
+def nextKeys (keys : Keys) : Value :=
+  .obj ((keys.owner.map fun o => ("owner", .str o)).toList ++
+    [("next", .obj (keys.next.map fun (e, k) => (e, .obj [("count", .num k.count), ("names", .arr (k.names.map .str))])))])
 
 def schemaRequest (type : String) (schema : Schema) (value : Value) : Value :=
   .obj [("type", .str type), ("schema", Schema.toValue schema), ("value", value)]
@@ -119,6 +120,9 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     IO.ofExcept (issueOr reply fun r => pure (optional r "value"))
   canonical schema value := do
     let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "canonical" schema value)
+    IO.ofExcept (issueOr reply (field · "value"))
+  unordered schema value := do
+    let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "unordered" schema value)
     IO.ofExcept (issueOr reply (field · "value"))
   normalize schema value := do
     let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "normalize" schema value)
@@ -522,7 +526,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
   let start ← IO.ofExcept (Sim.World.start spec sc)
   let reads ← IO.mkRef {}
   let memo ← IO.mkRef {}
-  let w ← Sim.simulate (fun s => functions stdin stdout reads memo false (some s)) start sc
+  let w ← Sim.simulate spec (fun s => functions stdin stdout reads memo false (some s)) start sc
   pure (.obj [("type", .str "simulated"),
     ("participants", .arr (w.states.map fun (service, s) => .obj [("service", .str service),
       ("lines", .arr (s.lines.toList.map fun l => lineValue l [] [])),

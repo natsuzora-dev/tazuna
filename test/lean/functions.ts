@@ -23,6 +23,7 @@ import {
   Failed,
   type Holder,
   type Issue,
+  type Keys,
   type NextKeys,
   type Scope,
 } from "../../src/service/functions.ts";
@@ -34,6 +35,12 @@ import type { Message } from "./lean.ts";
 
 /** Encodes a value as spec code receives it, whose bags, sets and sortedBy arrays are Bags and Runs. */
 const encode = (shape: Shape, value: unknown): unknown => encodeArrays(shape, sorted(objectOf(shape), value));
+
+/** The Keys that Lean's nextKeys writes: the owner, if any, and what createKey returns next by entity. */
+const keysOf = (value: unknown): Keys => {
+  const { owner, next } = value as { readonly owner?: string; readonly next: Record<string, NextKeys> };
+  return { ...(owner === undefined ? {} : { owner }), next: Object.entries(next) };
+};
 
 const json = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
@@ -155,7 +162,8 @@ type LeanSchema =
   | { readonly kind: "control"; readonly screen: string; readonly control: string }
   | { readonly kind: "held"; readonly chart: string; readonly state: string; readonly name: string }
   | { readonly kind: "context"; readonly chart: string }
-  | { readonly kind: "mapContext" | "mapKey"; readonly chart: string; readonly map: string };
+  | { readonly kind: "mapContext" | "mapKey"; readonly chart: string; readonly map: string }
+  | { readonly kind: "record"; readonly entity: string };
 
 /**
  * Carries Lean's questions to the spec functions of src/sim/spec: decodes Lean's values, answers with the same SpecFunctions
@@ -204,6 +212,8 @@ export class RunFunctions implements Answering {
       case "mapContext":
       case "mapKey":
         return { kind: schema.kind, chart: schema.chart.name, map: schema.map };
+      case "record":
+        return { kind: "record", entity: schema.entity.name };
     }
   }
 
@@ -224,6 +234,8 @@ export class RunFunctions implements Answering {
           screen: ref(this.functions.definition(["screen"], lean.screen)),
           control: lean.control,
         };
+      case "record":
+        return { kind: "record", entity: { service: this.service, name: lean.entity } };
       default:
         throw new Error(`tazuna-lean sent a value of the ${lean.kind} schema`);
     }
@@ -369,6 +381,10 @@ export class RunFunctions implements Answering {
         const schema = this.schemaOf(message["schema"] as LeanSchema);
         return this.replied(this.functions.canonical(schema, value), (written) => ({ value: written }));
       }
+      case "unordered": {
+        const schema = this.schemaOf(message["schema"] as LeanSchema);
+        return this.replied(this.functions.unordered(schema, value), (compared) => ({ value: compared }));
+      }
       case "normalize": {
         const schema = this.schemaOf(message["schema"] as LeanSchema);
         // The value arrives as JSON, so it is decoded first.
@@ -473,7 +489,7 @@ export class RunFunctions implements Answering {
         const a = this.functions.definition<Automation>(["automation"], name).definition;
         const event = this.spec.names.get(Object.values(a.receives)[0]) as Named<AnyEvent>;
         const schema: Schema = { kind: "payload", event: { service: event.service, name: event.name } };
-        const keys = Object.entries(message["keys"] as Record<string, NextKeys>);
+        const keys = keysOf(message["keys"]);
         return this.replied(decode(schema, event.definition.payload, message["payload"]), (payload) =>
           this.replied(
             this.functions.react(name, payload, this.records, this.now(message), keys),
@@ -514,7 +530,7 @@ export class RunFunctions implements Answering {
         const assignment: Assignment =
           at.kind === "transition" ? { kind: "transition", transition: transitionRef(at.transition) } : at;
         const transitionKeys = at.kind === "transition" ? at.transition.keys : [];
-        const keys = Object.entries(message["keys"] as Record<string, NextKeys>);
+        const keys = keysOf(message["keys"]);
         return this.scoped(message, (scope, access) =>
           this.replied(this.extraOf(scope.machine, transitionKeys, message["extra"] as Fields), (extra) =>
             this.replied(
@@ -535,7 +551,7 @@ export class RunFunctions implements Answering {
       }
       case "input": {
         const activity = message["activity"] as { keyword: string; key: string };
-        const keys = Object.entries(message["keys"] as Record<string, NextKeys>);
+        const keys = keysOf(message["keys"]);
         return this.scoped(message, (scope, access) =>
           this.replied(this.functions.input(scope, this.records, activity, keys, access), ({ encoded, created }) => ({
             input: encoded,

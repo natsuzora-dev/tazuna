@@ -1,5 +1,5 @@
 import { join, relative } from "node:path";
-import type { z } from "zod";
+import { z } from "zod";
 import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Problem } from "../data/problem.ts";
@@ -7,7 +7,7 @@ import type { GivenRecord } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { parseFileLines } from "../data/trace.ts";
 import { parseSnapshotFile, readTrace, snapshotPath } from "../data/traceFile.ts";
-import { objectOf, type Shape } from "../data/values.ts";
+import { objectOf, type Shape, strictObjectOf } from "../data/values.ts";
 import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
 import { verifyExternal } from "./external.ts";
@@ -109,7 +109,14 @@ export function givenRecords(spec: Spec, run: DefinitionRef & { readonly runner?
   const name = runner === run.service ? run.name : run.name.slice(0, -`.${runner}`.length);
   const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === name)?.definition.scenario;
   if (scenario === undefined) return [];
-  if (runner === scenario.service) return scenario.given.records;
   const peer = scenario.given.peers.find((p) => p.service === runner);
-  return peer?.role === "run" ? peer.records : [];
+  const written = runner === scenario.service ? scenario.given.records : peer?.role === "run" ? peer.records : [];
+  const entities = spec.services.get(runner)?.definition.entities ?? {};
+  return written.flatMap((g) => {
+    const fields = entities[g.entity]?.fields as Shape | undefined;
+    if (fields === undefined) return [];
+    const object = strictObjectOf(fields);
+    const parsed = object.safeParse(g.value);
+    return parsed.success ? [{ ...g, value: z.encode(object, parsed.data as never) }] : [];
+  });
 }

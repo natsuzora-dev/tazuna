@@ -1,0 +1,97 @@
+{
+  "participants": [
+    {
+      "service": "notes",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "tags.register",
+          "input": {
+            "noteId": "notes/Note-1"
+          },
+          "id": "tags.register#1"
+        }
+      ],
+      "violations": []
+    },
+    {
+      "service": "tags",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "id": "notes/tags.register#1",
+          "name": "register",
+          "input": {
+            "noteId": "notes/Note-1"
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "notes/tags.register#1",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "registered",
+          "payload": {
+            "noteId": "notes/Note-1"
+          },
+          "resultOf": "notes/tags.register#1",
+          "id": "registered#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "notes.attach",
+          "input": {
+            "labelId": "tags/Label-2",
+            "noteId": "notes/Note-1"
+          },
+          "id": "notes.attach#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "labelAddedRecorded",
+          "payload": {
+            "id": "tags/Label-1",
+            "noteId": "notes/Note-1"
+          },
+          "id": "labelAddedRecorded#1"
+        }
+      ],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.overtaking",
+    "definition": null,
+    "data": {
+      "scenarioLine": 1,
+      "message": {
+        "sender": "tags",
+        "receiver": "notes",
+        "id": "registered#1"
+      },
+      "earlier": {
+        "sender": "tags",
+        "receiver": "notes",
+        "id": "answer#1"
+      }
+    }
+  }
+}

@@ -27,12 +27,16 @@ the request answered.
 -/
 inductive Line where
   /--
-  A request to `target`'s service from the client, or from the running peer `peer`, whose run must have sent it. With
-  `sameIdAs`, the request has the id of the request of that line.
+  A request to `target`'s service from the client or from the peer `peer`: a running peer's run must have sent it, and
+  an external peer sends it as the client does, straight to its receiver. With `sameIdAs`, the request has the id of
+  the request of that line.
   -/
   | request (peer : Option String) (kind : RequestType) (target : Syntax.Ref) (input : Template)
       (sameIdAs : Option Nat)
-  /-- The end of the subscription that line `subscription` opened, from the client or the running peer `peer`. -/
+  /--
+  The end of the subscription that line `subscription` opened, from the client or the peer `peer`: a running peer's run
+  must have sent it.
+  -/
   | unsubscribe (peer : Option String) (subscription : Nat)
   /-- The client sends the request of line `line` again with the same id. -/
   | resend (line : Nat)
@@ -42,8 +46,7 @@ inductive Line where
   | look (screen : Fact)
   /--
   The peer `peer` answers the request `request`: an external peer gives the answer, and a running peer's answer, which
-  its run gave, is delivered and must be `answer`. A request in flight to a running peer never reaches its run, and the
-  answer must be unavailable.
+  its run gave, is delivered and must be `answer`.
   -/
   | answer (peer : String) (request : Fact) (answer : Template)
   /--
@@ -57,11 +60,17 @@ inductive Line where
   | deliver (message : Fact)
   /-- The network delivers the delivered message `message` again, with the same id. -/
   | redeliver (message : Fact)
-  /-- The network loses the message `message`. -/
+  /-- The network loses the message `message`: its receiver never gets it, and nothing tells its sender. -/
   | lose (message : Fact)
   /--
+  The network fails to deliver the request `message`: its receiver never gets it, and its sender gets the transport's
+  answer, rejected as unavailable.
+  -/
+  | fail (message : Fact)
+  /--
   The messages on the channel of `message`, either way between its sender and its receiver, that are undelivered at the
-  end are in flight.
+  end are in flight. A channel is a request's: the request, its answers and its end, and the events that name it as
+  resultOf; an event without resultOf travels on the channel of its sender and receiver alone.
   -/
   | inFlight (message : Fact)
   /--

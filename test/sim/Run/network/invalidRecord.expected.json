@@ -1,0 +1,44 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [
+    {
+      "kind": "Report.invalidRecord",
+      "definition": null,
+      "data": {
+        "service": "todo",
+        "entity": "Settings",
+        "key": null
+      }
+    },
+    {
+      "kind": "Report.invalidRecord",
+      "definition": null,
+      "data": {
+        "service": "todo",
+        "entity": "Task",
+        "key": null
+      }
+    },
+    {
+      "kind": "Report.invalidRecord",
+      "definition": null,
+      "data": {
+        "service": "todo",
+        "entity": "Note",
+        "key": null
+      }
+    }
+  ],
+  "halted": null
+}

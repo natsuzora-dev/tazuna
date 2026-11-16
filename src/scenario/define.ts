@@ -84,8 +84,17 @@ export interface Caused {
   request<T extends Request>(target: T, pick?: { readonly input?: SomeFields<InputOf<T>> }): OutRequest<T>;
   event<Ev extends AnyEvent>(event: Ev, pick?: { readonly payload?: SomeFields<EncodedPayload<Ev>> }): EventMessage<Ev>;
   screen<Sc extends AnyScreen>(screen: Sc): ScreenRef<Sc>;
-  /** The own service's answer to the request of the running peer's request line `request`. */
-  answer(request: RequestLine): MessageRef;
+  /**
+   * The one answer to the request of `request` that its receiver gave while this line or the begin was processed: the
+   * own service's answer to a running peer's request, or one answer of a subscription, named by the line that caused
+   * it.
+   */
+  answer<T>(request: RequestLine<T>): AnswerRef<T>;
+}
+
+/** An answer that a handle names. `output` is its output, observed when the scenario runs. */
+export interface AnswerRef<T = Request> extends MessageRef {
+  readonly output: OutputOf<T>;
 }
 
 /** A line whose processing caused facts that later lines and Then name. */
@@ -206,18 +215,22 @@ interface AnsweringPeer<C> {
   ): CausedLine;
 }
 
-interface ExternalPeer<C> extends AnsweringPeer<C> {
-  /** The peer never answers `request`. */
-  leaveUnanswered(request: OutRequest<RequestOf<C>>): Line;
-}
-
-/** A running peer: its lines deliver what its run sent, which must equal what the line writes. */
-interface RunningPeer<C> extends AnsweringPeer<C> {
+/** A peer's requests: a running peer's run must have sent each, and an external peer sends it as the client does. */
+interface RequestingPeer<C> extends AnsweringPeer<C> {
   send<D extends AnyCommand>(command: D, input: InputOf<D>): SingleRequestLine<D>;
   call<Q extends AnyQuery>(query: Q, input: InputOf<Q>): SingleRequestLine<Q>;
   subscribe<Q extends AnyQuery>(query: Q, input: InputOf<Q>): SubscribeLine<Q>;
   unsubscribe(subscription: SubscribeLine): Line;
 }
+
+/** An external peer: the scenario writes what it sends, which its contract checks. */
+interface ExternalPeer<C> extends RequestingPeer<C> {
+  /** The peer never answers `request`. */
+  leaveUnanswered(request: OutRequest<RequestOf<C>>): Line;
+}
+
+/** A running peer: its lines deliver what its run sent, which must equal what the line writes. */
+type RunningPeer<C> = RequestingPeer<C>;
 
 type Message = Line | MessageRef;
 
@@ -238,7 +251,13 @@ export interface When<P extends Peers> {
     deliver(message: Message): CausedLine;
     /** The network delivers the delivered message again, with the same id. */
     redeliver(message: Message): CausedLine;
+    /** The network loses the message: its receiver never gets it, and nothing tells its sender. */
     lose(message: Message): Line;
+    /**
+     * The network fails to deliver the request: its receiver never gets it, and its sender gets the transport's answer,
+     * rejected as unavailable.
+     */
+    fail(message: Message): CausedLine;
     /** The messages on the channel of `message`, either way, that are undelivered at the end are in flight. */
     inFlight(message: Message): Line;
   };
@@ -252,7 +271,7 @@ export interface When<P extends Peers> {
   };
 }
 
-/** An expectation of Then: an externally observable fact of the own service, about a line. */
+/** An expectation of Then: an externally observable fact about a line. */
 export type Expectation =
   | { readonly kind: "answered"; readonly line: Line; readonly answers: readonly unknown[] }
   | { readonly kind: "emitted"; readonly line: Line; readonly events: readonly Emitted[] }
@@ -278,7 +297,10 @@ export type Sent =
 
 export function answered<T>(line: SingleRequestLine<T>, answer: AnswerOf<T>): Expectation;
 export function answered<T>(line: SubscribeLine<T>, answers: readonly AnswerOf<T>[]): Expectation;
-/** Every answer that the own service gave to the request of `line`: the one answer, or a subscription's answers in order. */
+/**
+ * Every answer that the receiver of the request of `line` gave to it: the one answer, or a subscription's answers in
+ * order.
+ */
 export function answered(line: RequestLine, answers: unknown): Expectation {
   return { kind: "answered", line, answers: line.subscription ? (answers as unknown[]) : [answers] };
 }

@@ -1,0 +1,115 @@
+import Tazuna.Service.Integrity
+import Tazuna.Sim.Network
+
+/-!
+Given arranges the world before the begin: the roles that it lists, and each running service at the start with its
+records. What Given gets wrong is reported before anything begins.
+-/
+
+namespace Tazuna.Sim
+
+open Tazuna.Data Tazuna.Semantics
+open Tazuna.Scenario (GivenRecord Peer)
+
+/--
+The services that the own service `own` exchanges messages with: those whose definitions its definitions name, and the
+spec services whose definitions name its definitions, in code-point order.
+-/
+def staticPeers (j : Syntax.Structure) (own : String) : List String :=
+  let named (d : Syntax.Definition) : List Syntax.Ref :=
+    match d.body with
+    | .automation receives command _ _ => receives.toList ++ command.toList
+    | .machine c | .screen c => (c.receives ++ c.commands ++ c.queries ++ c.screens).filterMap (·.2)
+    | _ => []
+  let external (s : String) := j.services.any fun i => i.name == s && i.external
+  let found := j.definitions.flatMap fun d =>
+    (named d).filterMap fun r =>
+      if r.service == d.service then none
+      else if d.service == own then some r.service
+      else if r.service == own && !external d.service then some d.service
+      else none
+  found.eraseDups.mergeSort fun a b => decide (a ≤ b)
+
+/-- The peers of Given by service, each from its first entry; an entry of the own service is none. -/
+def peersOf (sc : Scenario) : List (String × Peer) :=
+  sc.given.peers.foldl (init := []) fun ps p =>
+    if p.service == sc.service || ps.any (·.1 == p.service) then ps else ps ++ [(p.service, p.peer)]
+
+/--
+The world before the begin: the roles that Given lists, and each running service at the start, whose name qualifies its
+createKey values, or why the Lean model does not cover a service.
+-/
+def World.start (j : Syntax.Structure) (sc : Scenario) : Except String World := do
+  let peers := peersOf sc
+  let roles := (sc.service, Role.own) :: peers.map fun (s, p) => (s, match p with
+    | .run _ => Role.run
+    | .external => .external
+    | .skip _ => .skip)
+  let running := sc.service :: peers.filterMap fun (s, p) => match p with
+    | .run _ => some s
+    | _ => none
+  let services ← running.mapM fun s => do pure (s, ← j.service s)
+  let now := sc.given.start.time
+  pure { now, roles, services, states := running.map fun s => (s, { now, keyOwner := some s }) }
+
+/-- The records that Given writes for the running service `service`. -/
+def givenRecords (sc : Scenario) (service : String) : List GivenRecord :=
+  if service == sc.service then sc.given.records
+  else match (peersOf sc).lookup service with
+    | some (.run records) => records
+    | _ => []
+
+variable {m : Type → Type} [Monad m]
+
+/--
+Given's records of `service` as rows, each parsed by its entity's schema, with the reports of those that are invalid or
+clash with an earlier one, which no row holds.
+-/
+def givenRows (st : Service) (fs : Functions m) (service : String) (records : List GivenRecord) :
+    m (Records × List Report) :=
+  records.foldlM (init := ([], [])) fun (rows, reports) g => do
+    let invalid := (rows, reports ++ [Report.invalidRecord service g.entity g.key])
+    if !st.entities.contains g.entity || st.singles.contains g.entity != g.key.isNone then return invalid
+    match ← fs.parse (.record g.entity) g.value with
+    | .ok (some value) =>
+      let row : Row := { entity := g.entity, key := g.key, value }
+      if rows.any (clash st · row) then return (rows, reports ++ [.duplicateRecord service g.entity g.key])
+      pure (rows ++ [row], reports)
+    | _ => pure invalid
+
+/-- The reports of the entity invariants of each row and of the service invariants that fail on `rows`. -/
+def givenInvariants (fs : Functions m) (service : String) (rows : Records) : m (List Report) := do
+  let each ← rows.mapM fun r => do
+    pure (match ← fs.invariant r.entity r.value with
+      | .ok none => []
+      | .ok (some c) => [Report.brokenGivenInvariant service (some r.entity) r.key (some c)]
+      | .error _ => [.brokenGivenInvariant service (some r.entity) r.key none])
+  let whole := match ← fs.serviceInvariant rows with
+    | .ok none => []
+    | .ok (some c) => [Report.brokenGivenInvariant service none none (some c)]
+    | .error _ => [.brokenGivenInvariant service none none none]
+  pure (each.flatten ++ whole)
+
+/--
+The world with each running service's Given records, or with what Given gets wrong: a peer listed twice or the own
+service listed as one, a peer of the static peer list left out, and for each running service, invalid or clashing
+records, a single entity without a record, and else failing invariants.
+-/
+def World.given (w : World) (j : Syntax.Structure) (fsOf : String → Functions m) (sc : Scenario) : m World := do
+  let repeated := (sc.given.peers.zipIdx.filter fun (p, k) =>
+    p.service == sc.service || (sc.given.peers.take k).any (·.service == p.service)).map fun (p, _) =>
+      Report.repeatedPeer p.service
+  let unlisted := ((staticPeers j sc.service).filter fun s => !sc.given.peers.any (·.service == s)).map
+    Report.unlistedPeer
+  let w := (repeated ++ unlisted).foldl World.note w
+  w.services.foldlM (init := w) fun w (service, st) => do
+    let fs := fsOf service
+    let records := givenRecords sc service
+    let (rows, reports) ← givenRows st fs service records
+    let missing := (st.singles.filter fun e => !records.any (·.entity == e)).map (Report.missingRecord service ·)
+    let broken ← if reports.isEmpty && missing.isEmpty then givenInvariants fs service rows else pure []
+    let w := (reports ++ missing ++ broken).foldl World.note w
+    pure { w with states := w.states.map fun (q, s) =>
+      if q == service then (q, { s with records := rows }) else (q, s) }
+
+end Tazuna.Sim

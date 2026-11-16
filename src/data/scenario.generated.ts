@@ -128,8 +128,9 @@ export type OrderEntry = z.infer<typeof orderEntry>;
 
 const line = z.discriminatedUnion("type", [
   /**
-   * A request to `target`'s service from the client, or from the running peer `peer`, whose run must have sent it. With
-   * `sameIdAs`, the request has the id of the request of that line.
+   * A request to `target`'s service from the client or from the peer `peer`: a running peer's run must have sent it, and
+   * an external peer sends it as the client does, straight to its receiver. With `sameIdAs`, the request has the id of
+   * the request of that line.
    */
   z.object({
     type: z.literal("request"),
@@ -139,7 +140,10 @@ const line = z.discriminatedUnion("type", [
     input: template,
     sameIdAs: z.int().nonnegative().exactOptional(),
   }),
-  /** The end of the subscription that line `subscription` opened, from the client or the running peer `peer`. */
+  /**
+   * The end of the subscription that line `subscription` opened, from the client or the peer `peer`: a running peer's run
+   * must have sent it.
+   */
   z.object({
     type: z.literal("unsubscribe"),
     peer: z.string().exactOptional(),
@@ -164,8 +168,7 @@ const line = z.discriminatedUnion("type", [
   }),
   /**
    * The peer `peer` answers the request `request`: an external peer gives the answer, and a running peer's answer, which
-   * its run gave, is delivered and must be `answer`. A request in flight to a running peer never reaches its run, and the
-   * answer must be unavailable.
+   * its run gave, is delivered and must be `answer`.
    */
   z.object({
     type: z.literal("answer"),
@@ -200,14 +203,23 @@ const line = z.discriminatedUnion("type", [
     type: z.literal("redeliver"),
     message: fact,
   }),
-  /** The network loses the message `message`. */
+  /** The network loses the message `message`: its receiver never gets it, and nothing tells its sender. */
   z.object({
     type: z.literal("lose"),
     message: fact,
   }),
   /**
+   * The network fails to deliver the request `message`: its receiver never gets it, and its sender gets the transport's
+   * answer, rejected as unavailable.
+   */
+  z.object({
+    type: z.literal("fail"),
+    message: fact,
+  }),
+  /**
    * The messages on the channel of `message`, either way between its sender and its receiver, that are undelivered at the
-   * end are in flight.
+   * end are in flight. A channel is a request's: the request, its answers and its end, and the events that name it as
+   * resultOf; an event without resultOf travels on the channel of its sender and receiver alone.
    */
   z.object({
     type: z.literal("inFlight"),
@@ -253,7 +265,10 @@ const emittedEvent = z.object({
 export type EmittedEvent = z.infer<typeof emittedEvent>;
 
 const expectation = z.discriminatedUnion("type", [
-  /** Every answer that the own service gave to the request of line `line`, in order. */
+  /**
+   * Every answer that the receiver of the request of line `line` gave to it, in order: the own service's, or a running
+   * peer's when the client or an external peer sent the request to it.
+   */
   z.object({
     type: z.literal("answered"),
     line: z.int().nonnegative(),
@@ -288,7 +303,7 @@ const expectation = z.discriminatedUnion("type", [
   }),
 ]);
 
-/** An expectation of Then: an externally observable fact of the own service, about a line. */
+/** An expectation of Then: an externally observable fact about a line. */
 export type Expectation = z.infer<typeof expectation>;
 
 const givenRecord = z.object({

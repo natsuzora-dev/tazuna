@@ -186,6 +186,7 @@
     {
       "type": "requested",
       "line": 2,
+      "ends": [],
       "requests": [
         {
           "kind": "command",
@@ -211,8 +212,7 @@
             "holes": []
           }
         }
-      ],
-      "ends": []
+      ]
     }
   ]
 }

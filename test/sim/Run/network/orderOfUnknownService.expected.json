@@ -1,0 +1,23 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.wrongRole",
+    "definition": null,
+    "data": {
+      "scenarioLine": 0,
+      "service": "calendar"
+    }
+  }
+}

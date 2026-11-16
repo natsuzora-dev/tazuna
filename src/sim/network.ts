@@ -71,7 +71,8 @@ export interface World {
   readonly opened: Opened[];
   readonly sent: Sent[];
   readonly carried: (readonly [number, number])[];
-  readonly inFlight: (readonly [string, string, string | undefined])[];
+  /** The channels that inFlight lines cover: the line, sender, receiver, channel. */
+  readonly inFlight: (readonly [number, string, string, string | undefined])[];
   readonly emitted: Map<string, number>;
   readonly looked: (readonly [number, boolean])[];
   readonly reports: Report[];
@@ -92,12 +93,9 @@ export function reportTo(w: World, r: Report): void {
   else w.reports.push(r);
 }
 
-/** Lean's World.keysFor. */
-function keysFor(w: World, service: string): [string, number][] {
-  const others = [...w.participants]
-    .filter(([q]) => q !== service)
-    .flatMap(([, p]) => p.processing.state.created.map(([e]) => e));
-  return [...new Set(others)].map((e) => [e, others.filter((o) => o === e).length]);
+/** Lean's World.note: a report of Given or of an expectation of Then, which stops nothing. */
+export function noteTo(w: World, r: Report): void {
+  w.reports.push(r);
 }
 
 /** Lean's screensOf. */
@@ -174,7 +172,6 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
   if (p === undefined) return;
   const r = p.processing;
   const s = r.state;
-  s.keysBefore = keysFor(w, service);
   const before = s.lines.length;
   const screens = screensOf(s);
   try {

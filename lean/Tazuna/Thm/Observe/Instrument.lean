@@ -75,6 +75,7 @@ theorem Agrees.modifyThen {α : Type} {g : C → C} {x : StateT C Id α} {a : α
 structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : Prop where
   parse : ∀ a b, Agrees (fsI.parse a b) (fs.parse a b)
   canonical : ∀ a b, Agrees (fsI.canonical a b) (fs.canonical a b)
+  unordered : ∀ a b, Agrees (fsI.unordered a b) (fs.unordered a b)
   normalize : ∀ a b, Agrees (fsI.normalize a b) (fs.normalize a b)
   binding : ∀ a b c d e, Agrees (fsI.binding a b c d e) (fs.binding a b c d e)
   requirement : ∀ a b c d e, Agrees (fsI.requirement a b c d e) (fs.requirement a b c d e)

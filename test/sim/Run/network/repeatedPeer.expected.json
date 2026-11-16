@@ -1,0 +1,31 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [
+    {
+      "kind": "Report.repeatedPeer",
+      "definition": null,
+      "data": {
+        "service": "notifier"
+      }
+    },
+    {
+      "kind": "Report.repeatedPeer",
+      "definition": null,
+      "data": {
+        "service": "todo"
+      }
+    }
+  ],
+  "halted": null
+}

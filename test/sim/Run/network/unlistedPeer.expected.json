@@ -1,0 +1,24 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [
+    {
+      "kind": "Report.unlistedPeer",
+      "definition": null,
+      "data": {
+        "service": "calendar"
+      }
+    }
+  ],
+  "halted": null
+}

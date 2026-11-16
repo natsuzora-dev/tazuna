@@ -1,0 +1,222 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "name": "addTask",
+          "input": {
+            "taskId": "task-1",
+            "title": "Buy milk"
+          },
+          "id": "addTask#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "addTask#1",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-1",
+            "title": "Buy milk",
+            "seen": false
+          },
+          "resultOf": "addTask#1",
+          "id": "taskAddedRecorded#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-1"
+          },
+          "resultOf": "addTask#1",
+          "id": "taskAdded#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "noted",
+          "payload": {},
+          "id": "noted#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "calendar.book",
+          "input": {
+            "bookingId": "todo/Booking-1",
+            "taskId": "task-1"
+          },
+          "id": "calendar.book#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "query",
+          "name": "tasks",
+          "input": {},
+          "id": "tasks#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "tasks#1",
+          "answer": {
+            "result": "fulfilled",
+            "output": {
+              "tasks": [
+                {
+                  "taskId": "task-1",
+                  "seen": false
+                }
+              ]
+            }
+          },
+          "id": "answer#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "name": "addTask",
+          "input": {
+            "taskId": "task-2",
+            "title": "Buy bread"
+          },
+          "id": "addTask#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "addTask#2",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#3"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-2",
+            "title": "Buy bread",
+            "seen": false
+          },
+          "resultOf": "addTask#2",
+          "id": "taskAddedRecorded#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-2"
+          },
+          "resultOf": "addTask#2",
+          "id": "taskAdded#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "noted",
+          "payload": {},
+          "id": "noted#2"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "query",
+          "id": "tasks#1",
+          "name": "tasks",
+          "input": {}
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "tasks#1",
+          "answer": {
+            "result": "fulfilled",
+            "output": {
+              "tasks": [
+                {
+                  "taskId": "task-1",
+                  "seen": false
+                },
+                {
+                  "taskId": "task-2",
+                  "seen": false
+                }
+              ]
+            }
+          },
+          "id": "answer#4"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "name": "markSeen",
+          "input": {
+            "taskId": "task-2"
+          },
+          "id": "markSeen#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "markSeen#1",
+          "answer": {
+            "result": "accepted"
+          },
+          "id": "answer#5"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "name": "taskSeenRecorded",
+          "payload": {
+            "id": "task-2",
+            "seen": true
+          },
+          "resultOf": "markSeen#1",
+          "id": "taskSeenRecorded#1"
+        }
+      ],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": null
+}

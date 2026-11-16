@@ -15,7 +15,7 @@ import {
   givenKeys,
   type Holder,
   holderResource,
-  type NextKeys,
+  type Keys,
   type Scope,
 } from "../service/functions.ts";
 import type { Emit } from "../service/message.ts";
@@ -317,8 +317,6 @@ function unorderedJson(value: unknown, rename: (s: string) => string): string {
     .map((k) => `${JSON.stringify(k)}:${unorderedJson(fields[k], rename)}`)}}`;
 }
 
-type Keys = readonly (readonly [string, NextKeys])[];
-
 /** Lean's madeText and sameMade: the text that compares a value that one call made and the keys that it created. */
 function madeJson(keys: Keys, created: readonly string[], value: unknown): string {
   const entities = canonicalJson(created.toSorted(byCodePoint));
@@ -421,6 +419,9 @@ export class InstrumentedFunctions implements Functions {
   }
   canonical(schema: Schema, value: unknown): unknown {
     return this.fs.canonical(schema, value);
+  }
+  unordered(schema: Schema, value: unknown): unknown {
+    return this.fs.unordered(schema, value);
   }
   normalize(schema: Schema, value: unknown) {
     return this.fs.normalize(schema, value);

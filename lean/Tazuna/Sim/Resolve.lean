@@ -91,43 +91,62 @@ def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except Report Opened :=
     | found => .error (.ambiguousReference i (ToValue.toValue fact) (found.map fun s => .str s.resource))
   | _ => unresolved
 
-/-- The value of the `in` or `out` line `id` of `lines`, or of the first answer in direction `dir` to request `id`. -/
-def lineValue? (lines : Array Line) (id : String) : Option Value :=
-  lines.toList.findSome? fun l => if l.dir == .in && l.id == id then l.body.value? else none
+/-- The lines that `service` wrote while `origin` was processed. -/
+def World.spanLines (w : World) (o : Origin) (service : String) : List Semantics.Line :=
+  let lines := (w.state service).lines
+  w.spans.flatMap fun sp => if sp.origin == o && sp.service == service then (lines.extract sp.from sp.to).toList else []
 
-def firstAnswer? (lines : Array Line) (dir : Dir) (to : String) : Option Answer :=
-  lines.toList.findSome? fun l =>
+/--
+The answers that the receiver of the request `s` gave to it, from its `in` line up to the receiver's next `in` line with
+its id: a resent request has its own answers.
+-/
+def World.answersOf (w : World) (s : Sent) : List Answer :=
+  let after := (w.state s.receiver).lines.toList.zipIdx.drop (s.position + 1)
+  let next := (after.find? fun (l, _) => l.dir == .in && l.id == s.id).map (·.2)
+  after.filterMap fun (l, n) =>
     match l.body with
-    | .answer t a => if l.dir == dir && t == to then some a else none
+    | .answer t a => if l.dir == .out && t == s.id && next.all (n < ·) then some a else none
     | _ => none
 
-/-- The value of the part `part` of the request that the handle `fact` of line `i` names. -/
+/--
+The value of the part `part` of the request that the handle `fact` of line `i` names: of a line's request or of a
+request that a running service sent, its input and the output of the first answer to it; of an answer, the output of
+the one answer that the receiver of the line's request gave to it while the answer's origin was processed, which names
+each answer of a subscription by the line that caused it.
+-/
 def World.partOf (w : World) (i : Nat) (fact : Fact) (part : Part) : Except Report Value := do
   let missing : Except Report Value := .error (.missingOutput i (ToValue.toValue fact))
+  let present : Option Value → Except Report Value
+    | some v => pure v
+    | none => missing
   let viaMessage : Except Report Value := do
     let k ← w.messageOf i fact
     let some m := w.messages[k]? | missing
     match part with
-    | .input => match m.body.value? with
-      | some v => pure v
-      | none => missing
-    | .output => match (firstAnswer? (w.state m.sender).lines .in m.id).bind (·.output?) with
-      | some v => pure v
-      | none => missing
-  match fact with
-  | .line j =>
+    | .input => present m.body.value?
+    | .output => present (((w.state m.sender).lines.toList.findSome? fun l =>
+        match l.dir, l.body with
+        | .in, .answer t a => if t == m.id then some a else none
+        | _, _ => none).bind (·.output?))
+  match fact, part with
+  | .line j, _ =>
     match w.sentBy j with
     | some s =>
-      let lines := (w.state s.receiver).lines
       match part with
-      | .input => match lineValue? lines s.id with
-        | some v => pure v
-        | none => missing
-      | .output => match (firstAnswer? lines .out s.id).bind (·.output?) with
-        | some v => pure v
-        | none => missing
+      | .input => present (((w.state s.receiver).lines[s.position]?).bind (·.body.value?))
+      | .output => present ((w.answersOf s).head?.bind (·.output?))
     | none => viaMessage
-  | _ => viaMessage
+  | .answer o to, .output =>
+    match w.sentBy to with
+    | none => .error (.unresolvedReference i (ToValue.toValue fact))
+    | some s =>
+      match (w.spanLines o s.receiver).filterMap fun l => match l.dir, l.body with
+          | .out, .answer t a => if t == s.id then some a else none
+          | _, _ => none with
+      | [a] => present a.output?
+      | [] => .error (.unresolvedReference i (ToValue.toValue fact))
+      | several => .error (.ambiguousReference i (ToValue.toValue fact) (several.map ToValue.toValue))
+  | _, _ => viaMessage
 
 def World.observed (w : World) (i : Nat) (r : ValueRef) : Except Report Value := do
   let v ← w.partOf i r.fact r.part
@@ -142,15 +161,22 @@ def World.fill (w : World) (i : Nat) (t : Template) : Except Report Value :=
     | .ref r => do pure (setValueAt v (← w.observed i r) h.path)
     | .created => pure v
 
-/-- The paths of the template's created holes. -/
-def createdPaths (t : Template) : List (List String) :=
-  t.holes.filterMap fun h => if h.fill == .created then some h.path else none
+/-- What a created hole holds when the simulation compares: a key that the peer created and that no handle names. -/
+def createdMark : String := "<created>"
 
-/-- `expected` with the value of `actual` at each of `paths`, which the scenario does not write. -/
-def withCreated (paths : List (List String)) (expected actual : Value) : Value :=
-  paths.foldl (init := expected) fun v p =>
-    match valueAt? actual p with
-    | some x => setValueAt v x p
-    | none => v
+/-- `v` with createdMark at the place of each created hole of `t`. -/
+def markCreated (t : Template) (v : Value) : Value :=
+  t.holes.foldl (init := v) fun v h => if h.fill == .created then setValueAt v (.str createdMark) h.path else v
+
+/--
+`actual` with createdMark in place of each key that `peer` created and that no handle of `t` names in `filled`, its
+value: a written literal never stands for a created key.
+-/
+def World.maskCreated (w : World) (peer : String) (t : Template) (filled actual : Value) : Value :=
+  let named := t.holes.flatMap fun h => match h.fill with
+    | .ref _ => ((valueAt? filled h.path).map (·.strings)).getD []
+    | .created => []
+  let created := (w.state peer).created.map (·.2)
+  actual.mapStrings fun x => if created.contains x && !named.contains x then createdMark else x
 
 end Tazuna.Sim

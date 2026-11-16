@@ -2,12 +2,12 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":"2026-10-26T09:00:00Z","completedAt":null}]}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"screens/todo.reminderSettings#1","name":"reminderSettings","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"screens/todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"screens/todo.addTask#1","name":"addTask","input":{"taskId":"Task-1","title":"Buy eggs"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"screens/todo.addTask#1","name":"addTask","input":{"taskId":"screens/Task-1","title":"Buy eggs"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"screens/todo.addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"Task-1","title":"Buy eggs","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"screens/todo.addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"Task-1"},"resultOf":"screens/todo.addTask#1","after":["taskAddedRecorded#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"screens/Task-1","title":"Buy eggs","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"screens/todo.addTask#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"screens/Task-1"},"resultOf":"screens/todo.addTask#1","after":["taskAddedRecorded#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":"2026-10-26T09:00:00Z","completedAt":null},{"taskId":"Task-1","title":"Buy eggs","dueAt":null,"completedAt":null}]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":"2026-10-26T09:00:00Z","completedAt":null},{"taskId":"screens/Task-1","title":"Buy eggs","dueAt":null,"completedAt":null}]}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"screens/todo.changeReminders#1","name":"changeReminders","input":{"shouldRemind":false}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#5","to":"screens/todo.changeReminders#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"remindersChanged#1","name":"remindersChanged","payload":{"shouldRemind":false},"resultOf":"screens/todo.changeReminders#1"}

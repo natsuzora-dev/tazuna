@@ -33,7 +33,10 @@ structure Automation where
   sends : Activity
 deriving DecidableEq, Repr, Inhabited
 
-/-- A schema that a definition declares. `mapContext` is the copy context of the map state `map`. -/
+/--
+A schema that a definition declares. `mapContext` is the copy context of the map state `map`, and `record` the fields
+of the entity `entity`.
+-/
 inductive Schema where
   | input (definition : String)
   | payload (event : String)
@@ -43,6 +46,7 @@ inductive Schema where
   | context (chart : String)
   | mapContext (chart map : String)
   | mapKey (chart map : String)
+  | record (entity : String)
 deriving DecidableEq, Repr, Inhabited
 
 /-- The values of a service read from the structure JSON; Functions evaluates the function bodies. -/
@@ -85,6 +89,7 @@ def Service.schemaOwner (st : Service) : Schema → Syntax.Ref
   | .payload e => st.refOf e
   | .control screen _ => st.ref screen
   | .held chart .. | .context chart | .mapContext chart _ | .mapKey chart _ => st.ref chart
+  | .record entity => st.ref entity
 
 def Service.uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
 

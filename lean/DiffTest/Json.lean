@@ -132,6 +132,7 @@ def Schema.toValue : Schema → Value
   | .context chart => .obj [("kind", .str "context"), ("chart", .str chart)]
   | .mapContext chart map => .obj [("kind", .str "mapContext"), ("chart", .str chart), ("map", .str map)]
   | .mapKey chart map => .obj [("kind", .str "mapKey"), ("chart", .str chart), ("map", .str map)]
+  | .record entity => .obj [("kind", .str "record"), ("entity", .str entity)]
 
 def Schema.decode (v : Value) : Except String Schema := do
   match ← stringField v "kind" with
@@ -143,6 +144,7 @@ def Schema.decode (v : Value) : Except String Schema := do
   | "context" => pure (.context (← stringField v "chart"))
   | "mapContext" => pure (.mapContext (← stringField v "chart") (← stringField v "map"))
   | "mapKey" => pure (.mapKey (← stringField v "chart") (← stringField v "map"))
+  | "record" => pure (.record (← stringField v "entity"))
   | other => throw s!"unknown schema kind {other}"
 
 def Issue.decode (v : Value) : Except String Issue := do

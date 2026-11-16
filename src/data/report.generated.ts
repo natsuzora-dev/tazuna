@@ -5,8 +5,68 @@ import type { Json } from "./values.ts";
 /**
  * What the simulation of a scenario reports about the scenario. `scenarioLine` is the line of When, from 0. A message is
  * named by its sender, its receiver, and the sender's id of it.
+ *
+ * Given is checked first, and each of its reports is given; after any of them, nothing begins. A report of a line of When
+ * stops the simulation, unless `halts` says otherwise, since later lines may depend on what the line did. An expectation
+ * of Then never stops the others: each is evaluated, and what it reports belongs to it alone.
  */
 export type Report =
+  /** Given lists `service` as a peer more than once, or lists the own service as a peer. */
+  | {
+      readonly kind: "Report.repeatedPeer";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+      };
+    }
+  /**
+   * The own service exchanges messages with `service` (its definitions name the other's, or `service` is a spec service
+   * whose definitions name the own service's), and Given does not list it as run, external or skip.
+   */
+  | {
+      readonly kind: "Report.unlistedPeer";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+      };
+    }
+  /**
+   * Given writes a record of `entity` of the running service `service` that is no entity of it, that has a key for a
+   * single entity or none for a keyed one, or that does not match the entity's schema.
+   */
+  | {
+      readonly kind: "Report.invalidRecord";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly entity: string;
+        readonly key: string | null;
+      };
+    }
+  /** The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values. */
+  | {
+      readonly kind: "Report.duplicateRecord";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly entity: string;
+        readonly key: string | null;
+      };
+    }
+  /**
+   * The invariant `invariant` of the record of `entity` with `key`, or of the service when `entity` is none, fails on
+   * Given's records of `service`; `invariant` is none when the invariant throws.
+   */
+  | {
+      readonly kind: "Report.brokenGivenInvariant";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly entity: string | null;
+        readonly key: string | null;
+        readonly invariant: string | null;
+      };
+    }
   /** No fact matches the handle `fact` that the line names. */
   | {
       readonly kind: "Report.unresolvedReference";
@@ -70,6 +130,15 @@ export type Report =
       readonly data: {
         readonly service: string;
         readonly entity: string;
+      };
+    }
+  /** The line fails `message`, which is no request: only a request has an answer that can tell its sender. */
+  | {
+      readonly kind: "Report.unfailable";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
+        readonly message: Json;
       };
     }
   /** The line needs `service` to take part in another way than Given says: running, external, or the own service. */
@@ -175,6 +244,23 @@ export type Report =
         readonly message: Json;
       };
     }
+  /** No message is undelivered at the end on the channel that the inFlight line covers. */
+  | {
+      readonly kind: "Report.unusedInFlight";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
+      };
+    }
+  /** The offered expectation `expectation` names the line `scenarioLine`, which is no look line. */
+  | {
+      readonly kind: "Report.notLook";
+      readonly definition: null;
+      readonly data: {
+        readonly expectation: number;
+        readonly scenarioLine: number;
+      };
+    }
   /** The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`. */
   | {
       readonly kind: "Report.unmetExpectation";
@@ -187,6 +273,11 @@ export type Report =
     };
 
 export const reportKinds = [
+  "Report.repeatedPeer",
+  "Report.unlistedPeer",
+  "Report.invalidRecord",
+  "Report.duplicateRecord",
+  "Report.brokenGivenInvariant",
   "Report.unresolvedReference",
   "Report.ambiguousReference",
   "Report.missingOutput",
@@ -194,6 +285,7 @@ export const reportKinds = [
   "Report.malformedValue",
   "Report.unlistedService",
   "Report.missingRecord",
+  "Report.unfailable",
   "Report.wrongRole",
   "Report.notInFlight",
   "Report.notDelivered",
@@ -205,6 +297,8 @@ export const reportKinds = [
   "Report.unoperableScreen",
   "Report.differentPeerAnswer",
   "Report.leftInFlight",
+  "Report.unusedInFlight",
+  "Report.notLook",
   "Report.unmetExpectation",
 ] as const;
 
@@ -216,7 +310,7 @@ export const haltingReportKinds = [
   "Report.missingField",
   "Report.malformedValue",
   "Report.unlistedService",
-  "Report.missingRecord",
+  "Report.unfailable",
   "Report.wrongRole",
   "Report.notInFlight",
   "Report.notDelivered",

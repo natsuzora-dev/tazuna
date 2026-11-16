@@ -17,7 +17,7 @@
     "definition": null,
     "data": {
       "scenarioLine": 0,
-      "key": "Task-7",
+      "key": "todo/Task-7",
       "entity": {
         "service": "todo",
         "name": "Task"

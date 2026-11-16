@@ -1,9 +1,7 @@
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
-import type { Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { answerRequest, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
 import { message } from "../service/queue.ts";
-import type { Records } from "../service/records.ts";
 import { newMessage, writeInput } from "../service/state.ts";
 import { refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
 
@@ -73,7 +71,3 @@ export function arriveFrom(r: Processing, sender: string, id: string, line: Trac
       return;
   }
 }
-
-/** Lean's missingSingles. */
-export const missingSingles = (st: Service, records: Records): string[] =>
-  st.singles.filter((e) => !records.singles.has(e));

@@ -1,17 +1,14 @@
 import { relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
-import { sorted } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Malformed } from "../data/malformed.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
-import { strictObjectOf } from "../data/values.ts";
+import { plain } from "../data/values.ts";
 import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
 import { instant, type LoweringProblem, lower } from "../scenario/lower.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
 import type { Found } from "./found.ts";
 
 /** A scenario as data, with the place in the scenario file of each of its lines. */
@@ -39,86 +36,21 @@ function placeInStack(root: string, stack: string | undefined): Place | undefine
   return undefined;
 }
 
-/**
- * The services that the own service exchanges messages with: those whose definitions its definitions name, and the
- * spec services whose definitions name its definitions.
- */
-function peersOf(structure: Structure, own: string): string[] {
-  const named = (d: Structure["definitions"][number]): (DefinitionRef | null)[] => {
-    switch (d.kind) {
-      case "automation":
-        return [d.receives, d.command];
-      case "machine":
-      case "screen":
-        return [
-          ...Object.values(d.receives),
-          ...Object.values(d.commands),
-          ...Object.values(d.queries),
-          ...Object.values(d.screens),
-        ];
-      default:
-        return [];
-    }
-  };
-  const external = new Set(structure.services.filter((s) => s.external).map((s) => s.name));
-  const found = new Set<string>();
-  for (const d of structure.definitions)
-    for (const r of named(d)) {
-      if (r === null || r.service === d.service) continue;
-      if (d.service === own) found.add(r.service);
-      else if (r.service === own && !external.has(d.service)) found.add(d.service);
-    }
-  return [...found].sort();
-}
-
 type Problem = Malformed & { readonly scenario: DefinitionRef };
 
-/** The Given records of `service` as data, each parsed by its entity's schema and encoded, or the problems. */
-function givenRecords(
-  scenario: DefinitionRef,
-  service: string,
-  entities: Readonly<Record<string, AnyEntity>>,
-  records: unknown,
-): { readonly records: GivenRecord[]; readonly problems: Problem[] } {
-  const found: GivenRecord[] = [];
-  const problems: Problem[] = [];
-  const invalid = (entity: string, key?: string) =>
-    problems.push({
-      kind: "Malformed.invalidRecord",
-      definition: null,
-      scenario,
-      data: { service, entity, ...(key === undefined ? {} : { key }) },
-    });
-  const encoded = (e: AnyEntity, value: unknown): unknown => {
-    const object = strictObjectOf(e.fields);
-    const parsed = object.safeParse(value);
-    if (!parsed.success) return undefined;
-    const r = z.safeEncode(object, sorted(object, parsed.data) as never);
-    return r.success ? r.data : undefined;
-  };
-  for (const [entity, written] of Object.entries((records ?? {}) as Record<string, unknown>)) {
+/**
+ * The Given records of a service as data, each as written, with its key when its entity is keyed; the simulation checks
+ * them (Report.invalidRecord).
+ */
+function givenRecords(entities: Readonly<Record<string, AnyEntity>>, records: unknown): GivenRecord[] {
+  return Object.entries((records ?? {}) as Record<string, unknown>).flatMap(([entity, written]): GivenRecord[] => {
     const e = entities[entity];
-    if (e === undefined) {
-      invalid(entity);
-      continue;
-    }
-    if (e.single) {
-      const value = encoded(e, written);
-      if (value === undefined) invalid(entity);
-      else found.push({ entity, value });
-      continue;
-    }
-    const keys = new Set<string>();
-    for (const row of Array.isArray(written) ? written : []) {
-      const key = (row as Record<string, unknown>)[e.key];
-      const value = encoded(e, row);
-      if (typeof key !== "string" || value === undefined || keys.has(key))
-        invalid(entity, typeof key === "string" ? key : undefined);
-      else found.push({ entity, key, value });
-      if (typeof key === "string") keys.add(key);
-    }
-  }
-  return { records: found, problems };
+    if (e === undefined || e.single || !Array.isArray(written)) return [{ entity, value: plain(written) }];
+    return written.map((row) => {
+      const key = (row as Record<string, unknown> | null)?.[e.key];
+      return { entity, ...(typeof key === "string" ? { key } : {}), value: plain(row) };
+    });
+  });
 }
 
 function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Problem {
@@ -137,15 +69,11 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Problem
   }
 }
 
-/**
- * Reads each scenario as data: Given's records parsed and encoded, its peers by service, and When and Then lowered.
- * Reports what it cannot read, and each service that the own service exchanges messages with and Given does not list.
- */
+/** Reads each scenario as data: Given's records, its peers by service, and When and Then lowered. */
 export function loadScenarios(
   root: string,
   written: readonly Named<ScenarioDefinition>[],
   services: Services,
-  structure: Structure,
   refOf: (definition: unknown) => DefinitionRef | undefined,
 ): { readonly scenarios: Named<LoadedScenario>[]; readonly malformed: Found<Malformed>[] } {
   const serviceNames = new Map([...services].map(([name, s]) => [s.definition, name]));
@@ -155,8 +83,6 @@ export function loadScenarios(
     const ref = { service: own, name: named.name };
     const report = (problem: Problem) => malformed.push({ violation: problem, place });
     const entitiesOf = (service: string) => services.get(service)?.definition.entities ?? {};
-    const ownRecords = givenRecords(ref, own, entitiesOf(own), definition.given.records);
-    ownRecords.problems.forEach(report);
     const peers: PeerEntry[] = Object.entries(definition.given.peers).flatMap(([key, entry]): PeerEntry[] => {
       const owner = contractService(entry.contract);
       const service = owner === undefined ? undefined : serviceNames.get(owner);
@@ -170,14 +96,8 @@ export function loadScenarios(
       }
       if (entry.role === "external") return [{ service, role: "external" }];
       if (entry.role === "skip") return [{ service, role: "skip", because: entry.because }];
-      const peerRecords = givenRecords(ref, service, entitiesOf(service), entry.records);
-      peerRecords.problems.forEach(report);
-      return [{ service, role: "run", records: peerRecords.records }];
+      return [{ service, role: "run", records: givenRecords(entitiesOf(service), entry.records) }];
     });
-    const listed = new Set(peers.map((p) => p.service));
-    for (const service of peersOf(structure, own))
-      if (!listed.has(service))
-        report({ kind: "Malformed.unlistedPeer", definition: null, scenario: ref, data: { service } });
     const start = instant(definition.given.start);
     if (start === undefined)
       report({ kind: "Malformed.unparsableTime", definition: null, scenario: ref, input: 0, data: {} } as Problem);
@@ -189,7 +109,11 @@ export function loadScenarios(
         description: definition.description,
         scenario: {
           service: own,
-          given: { start: start ?? definition.given.start, records: ownRecords.records, peers },
+          given: {
+            start: start ?? definition.given.start,
+            records: givenRecords(entitiesOf(own), definition.given.records),
+            peers,
+          },
           lines: [...lowered.lines],
           expectations: [...lowered.expectations],
         },

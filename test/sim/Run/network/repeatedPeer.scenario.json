@@ -1,0 +1,36 @@
+{
+  "service": "todo",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [
+      {
+        "entity": "Settings",
+        "value": {
+          "remind": true
+        }
+      }
+    ],
+    "peers": [
+      {
+        "service": "calendar",
+        "role": "external"
+      },
+      {
+        "service": "notifier",
+        "role": "run",
+        "records": []
+      },
+      {
+        "service": "notifier",
+        "role": "skip",
+        "because": "listed twice"
+      },
+      {
+        "service": "todo",
+        "role": "external"
+      }
+    ]
+  },
+  "lines": [],
+  "expectations": []
+}

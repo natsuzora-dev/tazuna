@@ -162,7 +162,7 @@ export async function loadSpec(root: string): Promise<Spec> {
   const { structure, thrownDefaults } = structureOf(definitions, names, services, contracts, scenarios);
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
-  const loaded = loadScenarios(root, defined, services, structure, (d) => {
+  const loaded = loadScenarios(root, defined, services, (d) => {
     const n = names.get(d);
     return n === undefined ? undefined : { service: n.service, name: n.name };
   });

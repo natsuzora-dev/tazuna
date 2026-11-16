@@ -1,0 +1,213 @@
+{
+  "service": "notes",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [],
+    "peers": [
+      {
+        "service": "tags",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "begin"
+        },
+        "target": {
+          "service": "tags",
+          "name": "register"
+        }
+      }
+    },
+    {
+      "type": "answer",
+      "peer": "tags",
+      "request": {
+        "type": "request",
+        "origin": {
+          "type": "begin"
+        },
+        "target": {
+          "service": "tags",
+          "name": "register"
+        }
+      },
+      "answer": {
+        "value": {
+          "result": "accepted"
+        },
+        "holes": []
+      }
+    },
+    {
+      "type": "emit",
+      "peer": "tags",
+      "event": {
+        "service": "tags",
+        "name": "registered"
+      },
+      "payload": {
+        "value": {
+          "noteId": null
+        },
+        "holes": [
+          {
+            "path": ["noteId"],
+            "fill": {
+              "type": "ref",
+              "value": {
+                "fact": {
+                  "type": "request",
+                  "origin": {
+                    "type": "begin"
+                  },
+                  "target": {
+                    "service": "tags",
+                    "name": "register"
+                  }
+                },
+                "part": "input",
+                "path": ["noteId"]
+              }
+            }
+          }
+        ]
+      },
+      "resultOf": {
+        "type": "request",
+        "origin": {
+          "type": "begin"
+        },
+        "target": {
+          "service": "tags",
+          "name": "register"
+        }
+      }
+    },
+    {
+      "type": "request",
+      "peer": "tags",
+      "kind": "command",
+      "target": {
+        "service": "notes",
+        "name": "attach"
+      },
+      "input": {
+        "value": {
+          "labelId": null,
+          "noteId": null
+        },
+        "holes": [
+          {
+            "path": ["labelId"],
+            "fill": {
+              "type": "created"
+            }
+          },
+          {
+            "path": ["noteId"],
+            "fill": {
+              "type": "ref",
+              "value": {
+                "fact": {
+                  "type": "request",
+                  "origin": {
+                    "type": "begin"
+                  },
+                  "target": {
+                    "service": "tags",
+                    "name": "register"
+                  }
+                },
+                "part": "input",
+                "path": ["noteId"]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "answer",
+        "origin": {
+          "type": "line",
+          "index": 3
+        },
+        "to": 3
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 1
+        },
+        "target": {
+          "service": "tags",
+          "name": "labels"
+        }
+      }
+    },
+    {
+      "type": "answer",
+      "peer": "tags",
+      "request": {
+        "type": "request",
+        "origin": {
+          "type": "line",
+          "index": 1
+        },
+        "target": {
+          "service": "tags",
+          "name": "labels"
+        }
+      },
+      "answer": {
+        "value": {
+          "result": "fulfilled",
+          "output": {
+            "labels": [
+              {
+                "labelId": "tags/Label-1",
+                "noteId": null
+              }
+            ]
+          }
+        },
+        "holes": [
+          {
+            "path": ["output", "labels", "0", "noteId"],
+            "fill": {
+              "type": "ref",
+              "value": {
+                "fact": {
+                  "type": "request",
+                  "origin": {
+                    "type": "begin"
+                  },
+                  "target": {
+                    "service": "tags",
+                    "name": "register"
+                  }
+                },
+                "part": "input",
+                "path": ["noteId"]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "expectations": []
+}

@@ -1,6 +1,11 @@
 {
   "participants": [
     {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    },
+    {
       "service": "todo",
       "lines": [
         {
@@ -62,17 +67,12 @@
           "type": "command",
           "name": "calendar.book",
           "input": {
-            "bookingId": "Booking-1",
+            "bookingId": "todo/Booking-1",
             "taskId": "task-1"
           },
           "id": "calendar.book#1"
         }
       ],
-      "violations": []
-    },
-    {
-      "service": "notifier",
-      "lines": [],
       "violations": []
     }
   ],

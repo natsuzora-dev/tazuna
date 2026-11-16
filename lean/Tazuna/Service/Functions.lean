@@ -20,14 +20,27 @@ structure NextKeys where
 deriving DecidableEq, Repr, Inhabited
 
 /--
+What createKey returns next: `next` per entity (an entity that `next` lacks has none so far), each `<entity>-<n>`
+qualified as `<owner>/<entity>-<n>` by the participant `owner` of a simulation that creates it, as a received id is,
+so that the participants' keys differ whatever order they are created in.
+-/
+structure Keys where
+  owner : Option String := none
+  next : List (String × NextKeys) := []
+deriving DecidableEq, Repr, Inhabited
+
+/--
 The createKey values, each with its entity, that createKey gives to calls for the entities `created`, in call order,
 when `keys` holds what it returns next.
 -/
-def givenKeys (keys : List (String × NextKeys)) (created : List String) : List (String × String) :=
+def givenKeys (keys : Keys) (created : List String) : List (String × String) :=
   created.zipIdx.map fun (e, i) =>
-    let k := (keys.lookup e).getD ⟨0, []⟩
+    let k := (keys.next.lookup e).getD ⟨0, []⟩
     let before := ((created.take i).filter (· == e)).length
-    (e, k.names[before]?.getD s!"{e}-{k.count + before + 1}")
+    let counted := s!"{e}-{k.count + before + 1}"
+    (e, k.names[before]?.getD (match keys.owner with
+      | some owner => s!"{owner}/{counted}"
+      | none => counted))
 
 /-- The scope of a copy whose map state is `map`. -/
 structure CopyScope where
@@ -115,6 +128,9 @@ at load) always answer.
 - parse: a value from outside (a scenario input or another service's event payload), decoded and re-encoded if it
   matches the schema (the canonical value), or none otherwise.
 - canonical: an outside value as written to a trace line; fields that do not match the schema stay as they are.
+- unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
+  every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
+  writes an order that the spec does not define.
 - normalize: a value that a spec function made (a decide payload, a resolve output, or a react input), canonical if it
   matches the schema, or none otherwise. Extra fields do not match.
 - binding: whether one binds value of a command is non-null.
@@ -160,6 +176,7 @@ at load) always answer.
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
   canonical : Schema → Value → m (Except Issue Value)
+  unordered : Schema → Value → m (Except Issue Value)
   normalize : Schema → Value → m (Except Issue (Option Value))
   binding : String → String → Value → Records → Time → m (Except Issue Bool)
   requirement : String → String → Value → Records → Time → m (Except Issue Bool)
@@ -172,14 +189,14 @@ structure Functions (m : Type → Type) where
   serviceInvariant : Records → m (Except (Option Schema) (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))
   resolve : String → Value → Records → Time → m (Except Issue Value)
-  react : String → Value → Records → Time → List (String × NextKeys) →
+  react : String → Value → Records → Time → Keys →
     m (Except Issue (Option Value × List String))
   comparable : String → Answer → m (Except Issue Value)
   initialContext : String → Value → m (Except Issue Value)
   guard : Scope → Records → Transition → Extra → m (Except Issue Bool)
-  assign : Scope → Records → Assignment → Extra → List (String × NextKeys) →
+  assign : Scope → Records → Assignment → Extra → Keys →
     m (Except Issue (Value × Option Value × List String))
-  input : Scope → Records → Activity → List (String × NextKeys) → m (Except Issue (Value × List String))
+  input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
   holds : Scope → Records → m (Except Issue Unit)
   deadlines : String → String → m (List (String × DeadlineTime))
   deadlineAt : Scope → Records → String → m (Except Issue Time)

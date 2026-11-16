@@ -11,13 +11,15 @@
       "violations": []
     }
   ],
-  "reports": [],
-  "halted": {
-    "kind": "Report.missingRecord",
-    "definition": null,
-    "data": {
-      "service": "todo",
-      "entity": "Settings"
+  "reports": [
+    {
+      "kind": "Report.missingRecord",
+      "definition": null,
+      "data": {
+        "service": "todo",
+        "entity": "Settings"
+      }
     }
-  }
+  ],
+  "halted": null
 }

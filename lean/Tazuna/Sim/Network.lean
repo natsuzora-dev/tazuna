@@ -36,7 +36,9 @@ deriving DecidableEq, Repr, Inhabited
 
 /--
 A message: the line `body` that `sender` wrote with id `id` while `origin` was processed. `channel` is the request whose
-channel carries it, by its receiver's id: a request's own, an answer's or an end's request, an event's resultOf.
+channel carries it, by its receiver's id: a request's own, an answer's or an end's request, an event's resultOf, or none
+for an event without resultOf. Messages between the same sender and receiver on the same channel arrive in sending
+order (FIFO), as a connection delivers them.
 -/
 structure Message where
   sender : String
@@ -93,8 +95,8 @@ structure World where
   sent : List Sent := []
   /-- The message that each line carried, by line. -/
   carried : List (Nat × Nat) := []
-  /-- The channels whose undelivered messages are in flight at the end: sender, receiver, channel. -/
-  inFlight : List (String × String × Option String) := []
+  /-- The channels whose undelivered messages are in flight at the end: the inFlight line, sender, receiver, channel. -/
+  inFlight : List (Nat × String × String × Option String) := []
   /-- The number of events of each name that each external peer emitted, by `<peer>.<event>`. -/
   emitted : List (String × Nat) := []
   /-- What each look line found for the offered expectations of Then, by expectation. -/
@@ -113,16 +115,11 @@ def World.stopped (w : World) : Bool := w.halted.isSome || w.states.any (·.2.ha
 def World.report (w : World) (r : Report) : World :=
   if r.halts then { w with halted := some r } else { w with reports := w.reports ++ [r] }
 
+/-- The world with `r`, which stops nothing: a report of Given or of an expectation of Then. -/
+def World.note (w : World) (r : Report) : World := { w with reports := w.reports ++ [r] }
+
 def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
   { w with messages := w.messages.modify k fun m => { m with status } }
-
-/--
-The number of createKey values of each entity that the running services other than `service` gave: `service`'s count
-starts after them (State.keysBefore).
--/
-def World.keysFor (w : World) (service : String) : List (String × Nat) :=
-  let others := (w.states.filter (·.1 != service)).flatMap fun (_, s) => s.created.map (·.1)
-  others.eraseDups.map fun e => (e, others.count e)
 
 /-- The screen instances of the state, by chart and resource. -/
 def screensOf (s : State) : List (String × String) :=
@@ -182,7 +179,7 @@ def World.act {m : Type → Type} [Monad m] (w : World) (fsOf : String → Funct
   match w.services.lookup service with
   | none => pure w
   | some st =>
-    let s := { w.state service with keysBefore := w.keysFor service }
+    let s := w.state service
     let before := s.lines.size
     let screens := screensOf s
     let t ← f st (fsOf service) s

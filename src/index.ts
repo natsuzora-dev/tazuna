@@ -34,6 +34,7 @@ export type { Unit } from "./dsl/unit.ts";
 export type {
   AnswerLine,
   AnswerOf,
+  AnswerRef,
   Caused,
   CausedLine,
   EventMessage,

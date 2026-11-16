@@ -123,19 +123,23 @@ export interface NextKeys {
   readonly names: readonly string[];
 }
 
+/** Lean's Keys: what createKey returns next per entity, qualified by the participant `owner` of a simulation. */
+export interface Keys {
+  readonly owner?: string;
+  readonly next: readonly (readonly [string, NextKeys])[];
+}
+
 /**
  * Lean's givenKeys: the createKey values, each with its entity, that createKey gives to calls for the entities
  * `created`, in call order, when `keys` holds what it returns next.
  */
-export function givenKeys(
-  keys: readonly (readonly [string, NextKeys])[],
-  created: readonly string[],
-): [string, string][] {
-  const next = new Map(keys);
+export function givenKeys(keys: Keys, created: readonly string[]): [string, string][] {
+  const next = new Map(keys.next);
   return created.map((e, i) => {
     const k = next.get(e) ?? { count: 0, names: [] };
     const before = created.slice(0, i).filter((c) => c === e).length;
-    return [e, k.names[before] ?? `${e}-${k.count + before + 1}`];
+    const counted = `${e}-${k.count + before + 1}`;
+    return [e, k.names[before] ?? (keys.owner === undefined ? counted : `${keys.owner}/${counted}`)];
   });
 }
 
@@ -151,6 +155,11 @@ export type Checked = { readonly value: Fields; readonly encoded: unknown } | { 
 export interface Functions {
   parse(schema: Schema, value: unknown): Checked | Failed;
   canonical(schema: Schema, value: unknown): unknown;
+  /**
+   * Returns a value from outside or of a trace line as a simulation compares it: canonical, with every bag and the
+   * sortedBy elements with equal keys in canonical order.
+   */
+  unordered(schema: Schema, value: unknown): unknown;
   normalize(schema: Schema, value: unknown): Checked | Failed;
   binding(
     command: string,
@@ -200,7 +209,7 @@ export interface Functions {
     payload: Fields,
     records: RecordSource,
     now: Temporal.Instant,
-    keys: readonly (readonly [string, NextKeys])[],
+    keys: Keys,
   ): { readonly input?: unknown; readonly created: readonly string[] } | Failed;
   /**
    * Returns a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements with
@@ -225,7 +234,7 @@ export interface Functions {
     records: RecordSource,
     assignment: Assignment,
     extra: Fields,
-    keys: readonly (readonly [string, NextKeys])[],
+    keys: Keys,
     access: Access,
   ):
     | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
@@ -238,7 +247,7 @@ export interface Functions {
     scope: Scope,
     records: RecordSource,
     activity: { readonly keyword: string; readonly key: string },
-    keys: readonly (readonly [string, NextKeys])[],
+    keys: Keys,
     access: Access,
   ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed;
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;

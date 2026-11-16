@@ -54,7 +54,6 @@ const milkAndCompletedEggs = givenTasks([milkRecord, completedEggsRecord]);
 type W = When<typeof milk.peers>;
 
 const accepted = { result: "accepted" } as const;
-const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
 const fulfilled = <O>(output: O) => ({ result: "fulfilled", output }) as const;
 
 const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: "2026-10-26T18:00:00+09:00", completedAt: null } as const;
@@ -108,21 +107,25 @@ const openDetail = (w: W) => {
 };
 
 /**
- * The request of `target` that `line` caused reaches todo, and todo's answer reaches the screens; todo's events that
- * result from the request are still in flight at the end. Returns the request and the line that delivered it, whose
- * processing in todo caused todo's own requests.
+ * The request of `target` that `line` caused reaches todo, and todo's answer reaches the screens. Returns the request
+ * and the line that delivered it, whose processing in todo caused todo's own requests.
  */
 const reply = <T extends RequestOf<typeof todo>>(w: W, line: Caused, target: T, answer: AnswerOf<T>) => {
   const req = line.request(target);
   const reached = w.net.deliver(req);
   w.peer.todo.answer(req, answer);
-  w.net.inFlight(req);
   return { req, reached };
 };
 
-/** The request of `target` that `line` caused does not reach todo, which answers it unavailable. */
-const unreachable = (w: W, line: Caused, target: RequestOf<typeof todo>) =>
-  w.peer.todo.answer(line.request(target), unavailable);
+/** reply, and todo's events that result from the request are still in flight at the end. */
+const replyEmitting = <T extends RequestOf<typeof todo>>(w: W, line: Caused, target: T, answer: AnswerOf<T>) => {
+  const replied = reply(w, line, target, answer);
+  w.net.inFlight(replied.req);
+  return replied;
+};
+
+/** The network fails to deliver the request of `target` that `line` caused, and the screens get unavailable. */
+const unreachable = (w: W, line: Caused, target: RequestOf<typeof todo>) => w.net.fail(line.request(target));
 
 /** todo's later messages on these requests are still in flight when the scenario ends. */
 const inFlight = (w: W, ...requests: readonly OutRequest[]) => {
@@ -136,7 +139,7 @@ export const addTask = scenario(
     when: (w) => {
       const { list, tasksSub } = openList(w);
       const adding = w.user.operate(list, "add", { title: "Buy eggs" });
-      const { req: sent, reached: addingReached } = reply(w, adding, todo.addTask, accepted);
+      const { req: sent, reached: addingReached } = replyEmitting(w, adding, todo.addTask, accepted);
       w.peer.calendar.leaveUnanswered(addingReached.request(calendar.nextBusinessDay));
       inFlight(w, tasksSub);
       return { adding, sent };
@@ -155,12 +158,12 @@ export const completeAddedTask = scenario(
     when: (w) => {
       const { list, tasksSub } = openList(w);
       const adding = w.user.operate(list, "add", { title: "Buy eggs" });
-      const { req: sent, reached: addingReached } = reply(w, adding, todo.addTask, accepted);
+      const { req: sent, reached: addingReached } = replyEmitting(w, adding, todo.addTask, accepted);
       w.peer.calendar.leaveUnanswered(addingReached.request(calendar.nextBusinessDay));
       const eggs = { taskId: sent.input.taskId, title: "Buy eggs", dueAt: null, completedAt: null };
       w.peer.todo.answer(tasksSub, fulfilled({ tasks: [milkRow, eggs] }));
       const completing = w.user.operate(list, "complete", { taskId: sent.input.taskId });
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       inFlight(w, tasksSub);
       return { completing, sent };
     },
@@ -177,7 +180,7 @@ export const completeFromList = scenario(
     when: (w) => {
       const { list, tasksSub } = openList(w);
       const completing = w.user.operate(list, "complete", { taskId: "task-1" });
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       inFlight(w, tasksSub);
       return { completing };
     },
@@ -195,9 +198,9 @@ export const ignoresListOperationsWhileCompleting = scenario(
       const { req: allSub } = reply(w, filtering, todo.tasks, fulfilled({ tasks: [completedEggsRow, milkRow] }));
       const completing = w.user.operate(list, "complete", { taskId: "task-1" });
       const busy = w.user.look(list);
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       const reopening = w.user.operate(list, "reopen", { taskId: "task-2" });
-      reply(w, reopening, todo.reopenTask, accepted);
+      replyEmitting(w, reopening, todo.reopenTask, accepted);
       inFlight(w, tasksSub, allSub);
       return { busy, reopening };
     },
@@ -224,7 +227,7 @@ export const reopenFromList = scenario(
       const filtering = w.user.operate(list, "filter", { filter: "completed" });
       const { req: completedSub } = reply(w, filtering, todo.tasks, fulfilled({ tasks: [completedMilkRow] }));
       const reopening = w.user.operate(list, "reopen", { taskId: "task-1" });
-      reply(w, reopening, todo.reopenTask, accepted);
+      replyEmitting(w, reopening, todo.reopenTask, accepted);
       inFlight(w, tasksSub, completedSub);
       return { reopening };
     },
@@ -278,10 +281,10 @@ export const completeAndReopenFromDetail = scenario(
     when: (w) => {
       const { detail, detailSub, tasksSub } = openDetail(w);
       const completing = w.user.operate(detail, "complete");
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       w.peer.todo.answer(detailSub, fulfilled({ task: { ...milkDetail, isCompleted: true } }));
       const reopening = w.user.operate(detail, "reopen");
-      reply(w, reopening, todo.reopenTask, accepted);
+      replyEmitting(w, reopening, todo.reopenTask, accepted);
       inFlight(w, tasksSub, detailSub);
       return { completing, reopening };
     },
@@ -445,7 +448,7 @@ export const completeWhileDueExpanded = scenario(
       const { detail, detailSub, tasksSub } = openDetail(w);
       w.user.operate(detail, "dueToggle");
       const completing = w.user.operate(detail, "complete");
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       const clearing = w.user.operate(detail, "dueClear");
       const { reached: clearingReached } = reply(w, clearing, todo.changeDue, accepted);
       w.peer.calendar.leaveUnanswered(clearingReached.request(calendar.nextBusinessDay));
@@ -519,7 +522,7 @@ export const ignoresListOperationsWhileSending = scenario(
       const { list, tasksSub, settingsSub } = openList(w);
       const adding = w.user.operate(list, "add", { title: "Buy eggs" });
       const whileAdding = w.user.look(list);
-      const { reached: addingReached } = reply(w, adding, todo.addTask, accepted);
+      const { reached: addingReached } = replyEmitting(w, adding, todo.addTask, accepted);
       w.peer.calendar.leaveUnanswered(addingReached.request(calendar.nextBusinessDay));
       const toggling = w.user.operate(list, "remindersToggle", { shouldRemind: false });
       const whileToggling = w.user.look(list);
@@ -545,7 +548,7 @@ export const retriesAfterListRejections = scenario(
       const add1 = w.user.operate(list, "add", { title: "Buy eggs" });
       unreachable(w, add1, todo.addTask);
       const add2 = w.user.operate(list, "add", { title: "Buy eggs" });
-      const { reached: add2Reached } = reply(w, add2, todo.addTask, accepted);
+      const { reached: add2Reached } = replyEmitting(w, add2, todo.addTask, accepted);
       w.peer.calendar.leaveUnanswered(add2Reached.request(calendar.nextBusinessDay));
       const toggle1 = w.user.operate(list, "remindersToggle", { shouldRemind: false });
       unreachable(w, toggle1, todo.changeReminders);
@@ -572,11 +575,11 @@ export const retriesAfterRowRejections = scenario(
       const complete1 = w.user.operate(list, "complete", { taskId: "task-1" });
       unreachable(w, complete1, todo.completeTask);
       const complete2 = w.user.operate(list, "complete", { taskId: "task-1" });
-      reply(w, complete2, todo.completeTask, accepted);
+      replyEmitting(w, complete2, todo.completeTask, accepted);
       const reopen1 = w.user.operate(list, "reopen", { taskId: "task-2" });
       unreachable(w, reopen1, todo.reopenTask);
       const reopen2 = w.user.operate(list, "reopen", { taskId: "task-2" });
-      reply(w, reopen2, todo.reopenTask, accepted);
+      replyEmitting(w, reopen2, todo.reopenTask, accepted);
       inFlight(w, tasksSub, allSub);
       return { complete2, reopen2 };
     },
@@ -623,12 +626,12 @@ export const retriesAfterCompletionRejections = scenario(
       const busy = w.user.look(detail);
       unreachable(w, complete1, todo.completeTask);
       const complete2 = w.user.operate(detail, "complete");
-      reply(w, complete2, todo.completeTask, accepted);
+      replyEmitting(w, complete2, todo.completeTask, accepted);
       w.peer.todo.answer(detailSub, fulfilled({ task: { ...milkDetail, isCompleted: true } }));
       const reopen1 = w.user.operate(detail, "reopen");
       unreachable(w, reopen1, todo.reopenTask);
       const reopen2 = w.user.operate(detail, "reopen");
-      reply(w, reopen2, todo.reopenTask, accepted);
+      replyEmitting(w, reopen2, todo.reopenTask, accepted);
       inFlight(w, tasksSub, detailSub);
       return { busy, complete2, reopen2 };
     },
@@ -653,7 +656,7 @@ export const keepsEditingAfterDeleteRejected = scenario(
       const resubscribed = rejected.request(todo.taskDetail);
       delivered(w, resubscribed, fulfilled({ task: milkDetail }));
       const completing = w.user.operate(detail, "complete");
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       inFlight(w, tasksSub, detailSub, resubscribed);
       return { completing };
     },
@@ -670,7 +673,7 @@ export const keepsDetailWhenOtherTaskDeleted = scenario(
       const del = w.client.send(todo.deleteTask, { taskId: "task-2" });
       const deleted = w.peer.todo.emit(todo.taskDeleted, { taskId: "task-2" }, { resultOf: del });
       const completing = w.user.operate(detail, "complete");
-      reply(w, completing, todo.completeTask, accepted);
+      replyEmitting(w, completing, todo.completeTask, accepted);
       inFlight(w, tasksSub, detailSub);
       return { deleted, completing };
     },

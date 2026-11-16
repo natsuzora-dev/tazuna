@@ -29,7 +29,10 @@ export interface Automation {
   readonly sends: Activity;
 }
 
-/** A schema that values are checked against. `mapContext` is the copy context of the map state `map`. */
+/**
+ * A schema that values are checked against. `mapContext` is the copy context of the map state `map`, and `record` the
+ * fields of the entity `entity`.
+ */
 export type Schema =
   | { readonly kind: "input"; readonly definition: DefinitionRef }
   | { readonly kind: "payload"; readonly event: DefinitionRef }
@@ -38,7 +41,8 @@ export type Schema =
   | { readonly kind: "held"; readonly chart: DefinitionRef; readonly state: string; readonly name: string }
   | { readonly kind: "context"; readonly chart: DefinitionRef }
   | { readonly kind: "mapContext"; readonly chart: DefinitionRef; readonly map: string }
-  | { readonly kind: "mapKey"; readonly chart: DefinitionRef; readonly map: string };
+  | { readonly kind: "mapKey"; readonly chart: DefinitionRef; readonly map: string }
+  | { readonly kind: "record"; readonly entity: DefinitionRef };
 
 /**
  * The values of one service read from the structure. Lean's `schemas` has no field: the TS Functions check and sort
@@ -85,6 +89,8 @@ export function schemaOwner(schema: Schema): DefinitionRef {
     case "mapContext":
     case "mapKey":
       return schema.chart;
+    case "record":
+      return schema.entity;
   }
 }
 

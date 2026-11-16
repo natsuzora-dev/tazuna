@@ -62,7 +62,7 @@
           "type": "command",
           "name": "calendar.book",
           "input": {
-            "bookingId": "Booking-1",
+            "bookingId": "todo/Booking-1",
             "taskId": "task-1"
           },
           "id": "calendar.book#1"
@@ -146,7 +146,7 @@
           "id": "calendar/bookingConfirmed#1",
           "name": "calendar.bookingConfirmed",
           "payload": {
-            "bookingId": "Booking-1"
+            "bookingId": "todo/Booking-1"
           },
           "resultOf": "calendar.book#1"
         }
@@ -219,7 +219,7 @@
           "id": "calendar/bookingConfirmed#1",
           "name": "calendar.bookingConfirmed",
           "payload": {
-            "bookingId": "Booking-1"
+            "bookingId": "todo/Booking-1"
           }
         }
       ],

@@ -235,6 +235,7 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
 def liftFunctions {m n : Type → Type} [MonadLiftT m n] (fs : Functions m) : Functions n where
   parse a b := liftM (fs.parse a b)
   canonical a b := liftM (fs.canonical a b)
+  unordered a b := liftM (fs.unordered a b)
   normalize a b := liftM (fs.normalize a b)
   binding a b c d e := liftM (fs.binding a b c d e)
   requirement a b c d e := liftM (fs.requirement a b c d e)
@@ -338,7 +339,7 @@ def decideCollect (name : String) (records : Records) (decided : Except Issue (L
 The text that compares a value that one call made, as TS madeJson gives it. When the call created keys, each created
 key becomes its entity and arrays lose their order, so that values equal up to a renaming of these keys compare equal.
 -/
-def madeText (keys : List (String × NextKeys)) (created : List String) (v : Value) : String :=
+def madeText (keys : Keys) (created : List String) (v : Value) : String :=
   if created.isEmpty then v.canonical else
   let given := givenKeys keys created
   (v.mapStrings fun s => match given.find? (·.2 == s) with
@@ -349,7 +350,7 @@ def madeText (keys : List (String × NextKeys)) (created : List String) (v : Val
 def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
 
 /-- Whether two answers that made a value and created keys are equal up to a renaming of the created keys. -/
-def sameMade (keys : List (String × NextKeys)) (a b : Value × List String) : Bool :=
+def sameMade (keys : Keys) (a b : Value × List String) : Bool :=
   sortedTexts a.2 == sortedTexts b.2 && madeText keys a.2 a.1 == madeText keys b.2 b.1
 
 /-- The texts without order or repetition, which compare two lists as sets. -/

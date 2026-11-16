@@ -135,7 +135,10 @@ export function lower(
       [factOf]: { type: "screen", origin, screen: named(screen, at()) } satisfies Fact,
       screen,
     }),
-    answer: (request: unknown) => ({ [factOf]: { type: "answer", origin, to: indexOf(request) } satisfies Fact }),
+    answer: (request: unknown) => {
+      const fact: Fact = { type: "answer", origin, to: indexOf(request) };
+      return { [factOf]: fact, output: observed({ fact, part: "output", path: [] }) };
+    },
   });
 
   /** Places `line` and returns its handle, which `extra` extends. */
@@ -212,6 +215,7 @@ export function lower(
       deliver: (message: unknown) => place({ type: "deliver", message: factOfHandle(message) }),
       redeliver: (message: unknown) => place({ type: "redeliver", message: factOfHandle(message) }),
       lose: (message: unknown) => place({ type: "lose", message: factOfHandle(message) }),
+      fail: (message: unknown) => place({ type: "fail", message: factOfHandle(message) }),
       inFlight: (message: unknown) => place({ type: "inFlight", message: factOfHandle(message) }),
     },
     clock: {

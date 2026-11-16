@@ -1,35 +1,22 @@
 import type { Report } from "../../data/report.generated.ts";
-import type { GivenRecord, Scenario } from "../../data/scenario.generated.ts";
+import type { Scenario } from "../../data/scenario.generated.ts";
 import type { TraceLine } from "../../data/trace.generated.ts";
 import type { Violation } from "../../data/violation.ts";
 import type { Spec } from "../../load/load.ts";
 import { Collect } from "../../observe/instrument.ts";
 import { snapshotLines } from "../../observe/trace.ts";
 import type { Processing } from "../../service/chart/queue.ts";
+import { start } from "../given.ts";
 import type { World } from "../network.ts";
-import { simulate, start } from "../run.ts";
+import { simulate } from "../run.ts";
 import { Listener } from "./execute.ts";
 import { SpecFunctions } from "./functions.ts";
 import { newProcessing } from "./processing.ts";
 
-/** Returns the Given records of the running service `service`. */
-function givenRecords(sc: Scenario, service: string): readonly GivenRecord[] {
-  if (service === sc.service) return sc.given.records;
-  const peer = sc.given.peers.find((p) => p.service === service);
-  return peer?.role === "run" ? peer.records : [];
-}
-
-/** Returns the processing of the running service `service` of the spec, with its Given records. */
-function processingFor(spec: Spec, sc: Scenario, service: string, listener: Listener): Processing {
+/** Returns the processing of the running service `service` of the spec, whose records Given places. */
+function processingFor(spec: Spec, service: string, listener: Listener): Processing {
   const functions = new SpecFunctions(spec, service, listener);
-  const r = newProcessing(functions.st, functions, listener, undefined);
-  const { records } = r.state;
-  for (const g of givenRecords(sc, service)) {
-    const row = functions.givenRow(g.entity, g.value);
-    if (g.key === undefined) records.singles.set(g.entity, row);
-    else records.keyed.get(g.entity)?.set(g.key, row);
-  }
-  return r;
+  return newProcessing(functions.st, functions, listener, undefined);
 }
 
 /** Runs the scenario on the spec's services. */
@@ -42,10 +29,11 @@ export function simulateWithSnapshots(
 ): { readonly world: World; readonly snapshots: ReadonlyMap<string, readonly TraceLine[]> } {
   const listeners = new Map<string, Listener>();
   const world = simulate(
+    spec.structure,
     start(sc, (service) => {
       const listener = new Listener(spec, service, new Collect());
       listeners.set(service, listener);
-      return processingFor(spec, sc, service, listener);
+      return processingFor(spec, service, listener);
     }),
     sc,
   );
