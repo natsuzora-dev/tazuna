@@ -25,6 +25,6 @@ export const see = command({
 export const seeAdded = automation({
   receives: { taskAdded },
   commands: { see },
-}).send({ input: ({ createKey, payload }) => ({ id: createKey(ref(Seen), `seen:${payload.taskId}`) }) });
+}).send({ input: ({ createKey }) => ({ id: createKey(ref(Seen)) }) });
 
 export const todo = contract({ addTasks, seen });

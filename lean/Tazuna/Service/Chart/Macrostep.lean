@@ -181,9 +181,6 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     | .error issue =>
       pure ⟨s.report (.fault (issueViolation st definition issue)), q⟩
     | .ok (reacted, keys) =>
-    match s.repeatedKeyCall? keys with
-    | some c => pure ⟨s.report (.fault (.repeatedKeyLabel definition c.entity c.label)), q⟩
-    | none =>
     let s := s.createKeys keys
     match reacted with
     | none => pure ⟨s, q⟩

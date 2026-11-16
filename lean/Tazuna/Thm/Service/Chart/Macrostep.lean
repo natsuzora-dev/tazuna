@@ -544,7 +544,7 @@ theorem queued_work_keeps_records (q : Queue) (step : Nat) (w : Work) :
   congrArg Fixed.records (runWork_fixed q step w)
 
 theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation) (e : Emit) (cause : Nat) :
-    ∃ k : Except Issue (Option Value × List KeyCall) → Processing,
+    ∃ k : Except Issue (Option Value × List String) → Processing,
       runWork st fs s q step (.reaction a e cause) = k (fs.react a.name e.payload s.records s.now s.nextKeys) :=
   ⟨fun x => runWork st { fs with react := fun _ _ _ _ _ => x } s q step (.reaction a e cause), by
     simp only [runWork, Work.settledMachine?, settled, workBody, id_bind]⟩

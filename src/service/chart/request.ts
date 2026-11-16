@@ -18,7 +18,6 @@ import {
   nextKeys,
   ownerOf,
   type Requester,
-  repeatedKeyCall,
   report,
   scopeOf,
   senderOf,
@@ -73,13 +72,6 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
     halt(
       issueViolation(definition, checked, () => ({ kind: "Fault.requestInputSchema", definition, data: { target } })),
     );
-  const repeated = repeatedKeyCall(r.state, checked.created);
-  if (repeated !== undefined)
-    halt({
-      kind: "Fault.repeatedKeyLabel",
-      definition: definition,
-      data: { entity: repeated.entity, label: repeated.label },
-    });
   createKeys(r.state, checked.created);
   const { value, encoded } = checked;
   const requester: Requester = { kind: "state", machine: instance.resource, state };

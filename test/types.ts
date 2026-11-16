@@ -188,7 +188,7 @@ machine({
 automation({ receives: { taskAdded }, commands: { addTask } }).send({
   input: ({ createKey }) => ({
     // @ts-expect-error createKey takes only a ref schema
-    taskId: createKey(z.string(), "task"),
+    taskId: createKey(z.string()),
     title: "",
   }),
 });
@@ -979,12 +979,12 @@ machine({
         taskAddedRecorded: [
           {
             guard: { fresh: ({ payload }) => payload.title !== "" },
-            assign: { last: ({ createKey }) => createKey(ref(Task), "last") },
+            assign: { last: ({ createKey }) => createKey(ref(Task)) },
           },
           // @ts-expect-error createKey takes a ref schema, not an entity
-          { assign: { last: ({ createKey }) => createKey(Task, "last") } },
+          { assign: { last: ({ createKey }) => createKey(Task) } },
           // @ts-expect-error guard does not read createKey
-          { guard: { fresh: ({ createKey }) => createKey(ref(Task), "fresh") !== "" } },
+          { guard: { fresh: ({ createKey }) => createKey(ref(Task)) !== "" } },
           // @ts-expect-error a transition without target has no reenter
           { reenter: true },
           { target: "a", reenter: true },

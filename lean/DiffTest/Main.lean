@@ -90,9 +90,6 @@ def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : 
   memo.modify (·.insert line answered)
   pure answered.reply
 
-def keyCalls (reply : Value) : Except String (List KeyCall) := do
-  (← asList (← field reply "created")).mapM fun c => do pure { entity := ← stringField c "entity", label := ← stringField c "label" }
-
 def nextKeys (keys : List (String × NextKeys)) : Value :=
   .obj (keys.map fun (e, k) => (e, .obj [("count", .num k.count), ("names", .arr (k.names.map .str))]))
 
@@ -173,7 +170,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       (.obj [("type", .str "react"), ("automation", .str name), ("payload", payload), ("now", .str (renderTime now)),
              ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
-      pure (optional r "input", ← keyCalls r))
+      pure (optional r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   comparable name answer := do
     let reply ← ask stdin stdout reads memo reversed []
       (.obj [("type", .str "comparable"), ("query", .str name), ("answer", ToValue.toValue answer)])
@@ -191,12 +188,12 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       (.obj [("type", .str "assign"), ("scope", Scope.toValue scope), ("at", Assignment.toValue a), ("extra", Extra.toValue extra),
              ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
-      pure (← field r "context", optional r "copy", ← keyCalls r))
+      pure (← field r "context", optional r "copy", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   input scope records a keys := do
     let reply ← ask stdin stdout reads memo reversed records
       (.obj [("type", .str "input"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a), ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
-      pure (← field r "input", ← keyCalls r))
+      pure (← field r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   holds scope records := do
     let reply ← ask stdin stdout reads memo reversed records (.obj [("type", .str "holds"), ("scope", Scope.toValue scope)])
     IO.ofExcept (issueOr reply fun _ => pure ())

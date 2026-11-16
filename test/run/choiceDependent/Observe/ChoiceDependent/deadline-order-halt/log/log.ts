@@ -35,7 +35,7 @@ export const ringer = machine({
     ringing: {
       sends: {
         addEntry: {
-          input: ({ createKey }) => ({ entryId: createKey(ref(Entry), "ring"), text: "ring" }),
+          input: ({ createKey }) => ({ entryId: createKey(ref(Entry)), text: "ring" }),
           onAccepted: [{ target: "done" }],
           onRejected: [],
         },
@@ -61,7 +61,7 @@ export const chimer = machine({
     chiming: {
       sends: {
         addEntry: {
-          input: ({ createKey }) => ({ entryId: createKey(ref(Entry), "chime"), text: "chime" }),
+          input: ({ createKey }) => ({ entryId: createKey(ref(Entry)), text: "chime" }),
           onAccepted: [{ target: "done" }],
           onRejected: [],
         },

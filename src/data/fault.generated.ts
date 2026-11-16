@@ -263,18 +263,6 @@ export type Fault =
         readonly limit: number;
       };
     }
-  /**
-   * The definition calls createKey for `entity` with `label`, which an earlier call of the same message used for the
-   * entity, so the label no longer names one key.
-   */
-  | {
-      readonly kind: "Fault.repeatedKeyLabel";
-      readonly definition: DefinitionRef;
-      readonly data: {
-        readonly entity: string;
-        readonly label: string;
-      };
-    }
   | {
       readonly kind: "Fault.rejectedAutomationCommand";
       readonly definition: DefinitionRef;
@@ -326,7 +314,6 @@ export const faultKinds = [
   "Fault.exceededMessageWork",
   "Fault.exceededDueDeadlines",
   "Fault.exceededExitDepth",
-  "Fault.repeatedKeyLabel",
   "Fault.rejectedAutomationCommand",
   "Fault.rejectedShows",
 ] as const;
@@ -360,5 +347,4 @@ export const haltingFaultKinds = [
   "Fault.exceededMessageWork",
   "Fault.exceededDueDeadlines",
   "Fault.exceededExitDepth",
-  "Fault.repeatedKeyLabel",
 ] as const;

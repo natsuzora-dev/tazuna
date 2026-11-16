@@ -16,7 +16,6 @@ import {
   givenKeys,
   type Holder,
   holderResource,
-  type KeyCall,
   type NextKeys,
   type Scope,
 } from "./functions.ts";
@@ -288,8 +287,6 @@ export interface State {
   readonly created: (readonly [string, string])[];
   /** The names of the current input's `keys` that createKey has not returned yet, by entity. */
   keyNames: Map<string, readonly string[]>;
-  /** The createKey calls of the current message, in call order. */
-  keyCalls: KeyCall[];
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
@@ -326,7 +323,6 @@ export function newState(st: Service): State {
     messageCount: 0,
     created: [],
     keyNames: new Map(),
-    keyCalls: [],
     subscriptions: new Subscriptions(),
     results: new Map(),
     mocks: new Map(),
@@ -392,23 +388,13 @@ export function nextKeys(s: State): [string, NextKeys][] {
   ]);
 }
 
-const sameCall = (a: KeyCall) => (b: KeyCall) => a.entity === b.entity && a.label === b.label;
-
-/** Lean's State.repeatedKeyCall?: the first of `calls` whose entity and label an earlier call of the message has. */
-export function repeatedKeyCall(s: State, calls: readonly KeyCall[]): KeyCall | undefined {
-  return calls.find((c, i) => s.keyCalls.some(sameCall(c)) || calls.slice(0, i).some(sameCall(c)));
-}
-
-export function createKeys(s: State, calls: readonly KeyCall[]): void {
-  const entities = calls.map((c) => c.entity);
+export function createKeys(s: State, entities: readonly string[]): void {
   s.created.push(...givenKeys(nextKeys(s), entities));
   for (const [e, names] of s.keyNames) s.keyNames.set(e, names.slice(entities.filter((c) => c === e).length));
-  s.keyCalls.push(...calls);
 }
 
 export function newMessage(s: State): void {
   s.messageCount += 1;
-  s.keyCalls = [];
 }
 
 export function newStep(s: State, cause: number | undefined, { barrier = false, nested = false } = {}): number {

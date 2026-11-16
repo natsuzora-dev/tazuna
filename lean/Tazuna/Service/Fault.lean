@@ -62,11 +62,6 @@ inductive Fault where
   | exceededDueDeadlines (limit : Nat)
   /-- The nested exits run through the copies and screens of several definitions, so the fault names no definition. -/
   | exceededExitDepth (limit : Nat)
-  /--
-  The definition calls createKey for `entity` with `label`, which an earlier call of the same message used for the
-  entity, so the label no longer names one key.
-  -/
-  | repeatedKeyLabel (definition : Syntax.Ref) (entity label : String)
   | rejectedAutomationCommand (definition : Syntax.Ref) (rejection : Rejection)
   | rejectedShows (definition : Syntax.Ref) (slot : String) (rejection : Rejection)
 deriving Repr
@@ -81,7 +76,7 @@ def Fault.halts : Fault → Bool
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
   | .itemsSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
-  | .exceededDueDeadlines .. | .exceededExitDepth .. | .repeatedKeyLabel .. => true
+  | .exceededDueDeadlines .. | .exceededExitDepth .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..
   | .failedServiceInvariant .. | .failedChartInvariant .. | .rejectedAutomationCommand .. | .rejectedShows .. => false
 

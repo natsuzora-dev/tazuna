@@ -21,8 +21,8 @@ export const noteScreen = screen({
         draft: [
           {
             assign: {
-              first: ({ createKey }) => createKey(ref(Draft), "first"),
-              second: ({ createKey }) => createKey(ref(Draft), "second"),
+              first: ({ createKey }) => createKey(ref(Draft)),
+              second: ({ createKey }) => createKey(ref(Draft)),
             },
           },
         ],

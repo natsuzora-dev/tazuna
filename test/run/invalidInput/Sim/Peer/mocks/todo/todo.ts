@@ -29,7 +29,7 @@ export const addTitle = command({ input: { title: Task.fields.title }, emits: [t
 ]);
 
 export const taskForTitle = automation({ receives: { titleAdded }, commands: { addTask } }).send({
-  input: ({ createKey, payload }) => ({ taskId: createKey(ref(Task), `title:${payload.title}`), title: payload.title }),
+  input: ({ createKey, payload }) => ({ taskId: createKey(ref(Task)), title: payload.title }),
 });
 
 export const completeTask = command({ input: { taskId: ref(Task) }, emits: [taskCompleted] }).decide(({ input }) => [

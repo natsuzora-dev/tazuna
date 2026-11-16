@@ -66,7 +66,7 @@ transitions of screens whose `shown` changed, and handles due deadlines. -/
 theorem resent_command_ignores_decide (name id : String) (raw input : Value)
     (known : Request × Answer)
     (decide : String → Value → Records → Time → Id (Except Issue (List (List Emit))))
-    (react : String → Value → Records → Time → List (String × NextKeys) → Id (Except Issue (Option Value × List KeyCall)))
+    (react : String → Value → Records → Time → List (String × NextKeys) → Id (Except Issue (Option Value × List String)))
     (hc : name ∈ st.commands) (hi : fs.canonical (.input name) raw = .ok input)
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 = { name, input }) :
     ∃ s', arrive st fs s ⟨time, .command (some id) name raw, order, stepOrder, keys, advanceKeys⟩ = message st fs s' {} ∧
@@ -159,7 +159,7 @@ theorem redelivered_event_keeps_records (name id : String) (raw payload : Value)
     (hc : fs.canonical (.payload name) raw = .ok payload)
     (parse : Schema → Value → Id (Except Issue (Option Value)))
     (decide : String → Value → Records → Time → Id (Except Issue (List (List Emit))))
-    (react : String → Value → Records → Time → List (String × NextKeys) → Id (Except Issue (Option Value × List KeyCall))) :
+    (react : String → Value → Records → Time → List (String × NextKeys) → Id (Except Issue (Option Value × List String))) :
     ∃ s', s'.records = s.records ∧
       arrive st fs s ⟨time, .event (some id) name raw none, order, stepOrder, keys, advanceKeys⟩ = message st fs s' {} ∧
       arrive st { fs with parse, decide, react } s ⟨time, .event (some id) name raw none, order, stepOrder, keys, advanceKeys⟩ =
