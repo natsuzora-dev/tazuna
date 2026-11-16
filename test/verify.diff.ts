@@ -338,6 +338,15 @@ describe("Content comparison", () => {
     t.diagnostic(`findings ${JSON.stringify(Object.fromEntries([...findings].sort()))}`);
   });
 
+  test("TS and Lean find the same renaming when one key of a trace with thirty equal tasks changes, without trying every order of the tasks' bag", () => {
+    const base = bases.find((b) => b.label.endsWith("Peer/mocks/board/showsOneWrongTitleOfThirty.todo"));
+    assert.ok(base !== undefined);
+    const trace = structuredClone(base.snapshot) as unknown as Line[];
+    const changed = trace.findIndex((l) => l?.["type"] === "event" && l["name"] === "taskAdded");
+    trace[changed] = { ...trace[changed], payload: { taskId: "event" } } as Line;
+    assert.ok(violationCountOfBoth(base, trace, base.label) > 0);
+  });
+
   test("TS and Lean find the same comparison violations for traces with a mutated resultOf on an in event line", () => {
     fc.assert(
       fc.property(

@@ -226,13 +226,14 @@ def freeBagFrom (declared : List String) (line snapshotLine : Nat) (first : CVal
   match cands with
   | [] => none
   | t :: more =>
-    let next := freeBagFrom declared line snapshotLine first rest more (t :: passed)
+    -- Each fallback calls the search again rather than through a `let`, which Lean evaluates first, so that the search
+    -- stops at the first pairing as TS's does instead of trying every order of the bag.
     match free declared line snapshotLine first t with
     | some u =>
       match freeBag declared line snapshotLine rest (passed.reverse ++ more) with
       | some u' => some (u ++ u')
-      | none => next
-    | none => next
+      | none => freeBagFrom declared line snapshotLine first rest more (t :: passed)
+    | none => freeBagFrom declared line snapshotLine first rest more (t :: passed)
 termination_by (sizeOf first + sizeOf rest + 1, cands.length)
 decreasing_by all_goals lex_decreasing
 
