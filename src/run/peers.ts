@@ -17,8 +17,8 @@ import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
 import { serviceOf } from "../semantics/service/basic.ts";
 import {
-  type Origin,
-  type PeerNormal,
+  type NamedForm,
+  type PeerOrigin,
   peerArrivals,
   peerEvent,
   peerFindings,
@@ -104,7 +104,7 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
  * Returns the peer's form of an output or payload that verify compares (comparable), with its bags and runs. A value
  * that does not match its schema stays as it is.
  */
-export function peerNormal(spec: Spec, peer: string): PeerNormal {
+export function peerForm(spec: Spec, peer: string): NamedForm {
   return (name, value) => {
     const d = definitionOfTraceName(spec, peer, name, "query", "command", "event");
     const shape = d?.kind === "event" ? d.payload : d?.output;
@@ -117,7 +117,7 @@ export function peerNormal(spec: Spec, peer: string): PeerNormal {
 }
 
 /** Returns the form of an input of a request to the service `service`, by its own name, that verify compares. */
-export function ownInputForm(spec: Spec, service: string): PeerNormal {
+export function ownInputForm(spec: Spec, service: string): NamedForm {
   return (name, value) => {
     const d = definitionOfTraceName(spec, service, name, "query", "command");
     try {
@@ -132,19 +132,30 @@ export function ownInputForm(spec: Spec, service: string): PeerNormal {
  * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
  * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
  * halting violation's kind. The derivation starts from an empty run of the peer and repeats until the inputs stop
- * changing: an input depends only on the peer's run of the inputs before it. `normal` is the peer's peerNormal, and
- * `inputForm` the service's ownInputForm.
+ * changing: an input depends only on the peer's run of the inputs before it. `peerForm` is the peer's peerForm, and
+ * `ownInputForm` the service's ownInputForm.
  */
 export function runPeer(
   spec: Spec,
-  normal: PeerNormal,
-  inputForm: PeerNormal,
+  peerForm: NamedForm,
+  ownInputForm: NamedForm,
   service: string,
   lines: readonly TraceLine[],
   d: PeerDerivation,
 ) {
   const derive = (peerLines: readonly TraceLine[]) =>
-    peerInputs(normal, inputForm, service, d.peer, d.received, d.fromLines, d.state, d.elsewhere, lines, peerLines);
+    peerInputs(
+      peerForm,
+      ownInputForm,
+      service,
+      d.peer,
+      d.received,
+      d.fromLines,
+      d.state,
+      d.elsewhere,
+      lines,
+      peerLines,
+    );
   let derived = derive([]);
   for (let round = 0; ; round += 1) {
     const run = execute(
@@ -189,17 +200,17 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
     ...(input === undefined ? {} : { input }),
   });
   const lines = run.outcome.lines;
-  const inputForm = ownInputForm(spec, scenario.service);
+  const own = ownInputForm(spec, scenario.service);
   return peerDerivations(spec, scenario, run).map((d) => {
-    const normal = peerNormal(spec, d.peer);
-    const peerRun = runPeer(spec, normal, inputForm, scenario.service, lines, d);
-    const locationOf = (o: Origin): Location =>
+    const forms = peerForm(spec, d.peer);
+    const peerRun = runPeer(spec, forms, own, scenario.service, lines, d);
+    const locationOf = (o: PeerOrigin): Location =>
       o.type === "line"
         ? at(positions[run.inputLines.findLastIndex((l) => l <= o.line)])
         : at(o.type === "elsewhere" ? d.written[o.index]?.position : undefined);
     const findings = peerFindings(
-      normal,
-      inputForm,
+      forms,
+      own,
       scenario.service,
       d.peer,
       d.fromLines,

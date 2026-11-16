@@ -86,8 +86,8 @@ function moveKey(spec: Spec, input: Input): string {
       return JSON.stringify(["event", input.time, name(input.event), input.payload, order]);
     case "unsubscribe":
       return JSON.stringify(["unsubscribe", input.time, "to" in input ? input.to : input.subscription, order]);
-    case "answerTo":
-      return JSON.stringify(["answerTo", input.time, input.to, name(input.target), input.answer, order]);
+    case "answerById":
+      return JSON.stringify(["answerById", input.time, input.to, name(input.target), input.answer, order]);
   }
 }
 

@@ -126,7 +126,7 @@ def Writes (canon : Schema → Value → Value) (lines : List TraceLine) (s : St
     ∃ id' r, l.body = .event .in id' name (canon (.payload name) x) r ∧ (∀ i, id = some i → id' = i) ∧
       (resultOf = none → r = none)
   | .answer _ target _ _ _ => ∃ id' to a, l.body = .answer .in id' to a ∧ requestName? lines to = some target
-  | .answerTo to target a =>
+  | .answerById to target a =>
     ∃ id', l.body = .answer .in id' to (a.mapOutput (canon (.output target))) ∧ requestName? lines to = some target
   | _ => isEventLine l = false ∧ l.body.to? = none
 

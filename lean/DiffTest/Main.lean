@@ -332,7 +332,7 @@ def firstDifference (xs ys : List Step) : Option Nat :=
 /-- The request id that an answer step chooses, with the trace name of the answer's sender. -/
 def chosen (step : Step) : Except String (String × String) :=
   match step.body with
-  | .answer sender _ _ (some (.search to)) _ => pure (to, sender)
+  | .answer sender _ _ (some (.id to)) _ => pure (to, sender)
   | _ => throw "expected an answer step that chooses a request"
 
 /-- The trace name of the command or query that a step requests. -/
@@ -464,7 +464,7 @@ def afters (request : Value) : Except String Value := do
 The reply to request `peer`, which takes the scenario's service, the peer, the trace names of the events that the peer
 receives, the scenario's from lines of the peer, the steps of the given state, the elsewhere inputs with the line counts
 before them, the lines of the scenario's run and of the peer's run, the halt of the peer's run, and the forms of
-`normal` and `inputForm` that TS computed as `[name, value, form]`, and returns peerInputs and peerFindings. A value
+`peerForm` and `ownInputForm` that TS computed as `[name, value, form]`, and returns peerInputs and peerFindings. A value
 without a form takes the form that no schema reads.
 -/
 def peer (request : Value) : Except String Value := do
@@ -480,7 +480,7 @@ def peer (request : Value) : Except String Value := do
   let peerLines : List TraceLine ← FromValue.fromValue (← field request "peerLines")
   let halted ← match ← field request "halted" with
     | .null => pure none
-    | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : Origin), kind))
+    | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : PeerOrigin), kind))
     | _ => throw "expected null or [origin, kind]"
   let forms (key : String) := do
     let recorded ← (← asList (← field request key)).mapM fun
@@ -488,12 +488,12 @@ def peer (request : Value) : Except String Value := do
       | _ => throw "expected [name, value, form]"
     pure fun (name : String) (v : Value) =>
       ((recorded.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD (.ofValue v)
-  let normal ← forms "normals"
-  let inputForm ← forms "inputForms"
+  let peerForm ← forms "peerForms"
+  let ownInputForm ← forms "ownInputForms"
   pure (.obj [("type", .str "peer"),
-    ("inputs", .arr ((peerInputs normal inputForm service peer received fromLines state elsewhere lines peerLines).map
+    ("inputs", .arr ((peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines).map
       fun (s, o) => .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
-    ("findings", .arr ((peerFindings normal inputForm service peer fromLines
+    ("findings", .arr ((peerFindings peerForm ownInputForm service peer fromLines
         (peerArrivals service peer received fromLines state elsewhere lines) lines peerLines halted).map fun (o, f) =>
       .obj [("origin", ToValue.toValue o), ("violation", f.toValue)]))])
 

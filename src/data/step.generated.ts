@@ -264,7 +264,7 @@ const step = z.discriminatedUnion("type", [
    */
   z.object({
     time: z.iso.datetime({ offset: true }),
-    type: z.literal("answerTo"),
+    type: z.literal("answerById"),
     to: z.string(),
     target: z.string(),
     answer: answer,

@@ -183,7 +183,7 @@ def choosesStale : Option Choice → Bool
 /-- The requests from `sender` to `name` that the answer input may answer by its choice. -/
 def State.answerable [Monad m] (st : Service) (fs : Functions m) (s : State) (sender name : String) :
     Option Choice → m (Except Fault (List Pending))
-  | some (.search to) =>
+  | some (.id to) =>
     pure (.ok (s.pending.filter fun p => p.id == to && p.activity.target == name && s.senderOf p.requester == sender))
   | some (.mock (some input) stale) => chosen st fs name input (s.waiting sender name (stale == some true))
   | some (.mock none stale) => pure (.ok (s.waiting sender name (stale == some true)))

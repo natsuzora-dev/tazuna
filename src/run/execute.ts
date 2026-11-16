@@ -248,8 +248,8 @@ function stepOf(spec: Spec, service: string, input: Input): Step {
           throw new Error("unsubscribe names a subscribe input that the scenario does not place");
         return { time, type: "unsubscribe", subscription: { handle } };
       }
-      case "answerTo":
-        return { time, type: "answerTo", to: input.to, target: name(input.target), answer: input.answer };
+      case "answerById":
+        return { time, type: "answerById", to: input.to, target: name(input.target), answer: input.answer };
       case "answer":
         return {
           time,
@@ -327,8 +327,8 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
         case "operation":
         case "unacceptedOperation":
           return { time, type: s.type, screen: named(s.screen, "screen"), control: s.control, payload: s.payload };
-        case "answerTo":
-          return { time, type: "answerTo", to: s.to, target: named(s.target, "command", "query"), answer: s.answer };
+        case "answerById":
+          return { time, type: "answerById", to: s.to, target: named(s.target, "command", "query"), answer: s.answer };
         case "answer":
           return {
             time,

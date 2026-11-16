@@ -273,8 +273,8 @@ export class Lean {
     readonly lines: readonly TraceLine[];
     readonly peerLines: readonly TraceLine[];
     readonly halted: readonly [unknown, string] | null;
-    readonly normals: readonly (readonly [string, unknown, unknown])[];
-    readonly inputForms: readonly (readonly [string, unknown, unknown])[];
+    readonly peerForms: readonly (readonly [string, unknown, unknown])[];
+    readonly ownInputForms: readonly (readonly [string, unknown, unknown])[];
   }): { readonly inputs: unknown; readonly findings: unknown } {
     this.send({ type: "peer", ...request });
     const { type, ...result } = this.receive();

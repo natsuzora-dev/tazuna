@@ -423,7 +423,7 @@ export function mock(r: Processing, value: Mock): Pending | undefined {
 }
 
 /** Lean's answerById. */
-export function answerById(r: Processing, value: Extract<Step, { readonly type: "answerTo" }>): Pending | undefined {
+export function answerById(r: Processing, value: Extract<Step, { readonly type: "answerById" }>): Pending | undefined {
   const s = r.state;
   const p = s.pending.find((q) => q.id === value.to && q.activity.target === value.target);
   if (p !== undefined) return answerRequest(r, p, value.answer);
@@ -516,7 +516,7 @@ function valuesOf(input: Step): unknown[] {
     case "unacceptedOperation":
       return [input.payload];
     case "answer":
-    case "answerTo":
+    case "answerById":
       return input.answer.result === "rejected" || input.answer.output === undefined ? [] : [input.answer.output];
     default:
       return [];

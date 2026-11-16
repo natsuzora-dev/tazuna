@@ -45,7 +45,7 @@ function arrive(r: Processing, input: Step): Pending | undefined {
       return;
     case "answer":
       return mock(r, input);
-    case "answerTo":
+    case "answerById":
       return answerById(r, input);
     case "subscribe":
       subscribe(r, input.name, input.input, given(input), input.handle);

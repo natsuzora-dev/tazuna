@@ -87,7 +87,7 @@ const requestOf = (dir: "in" | "out", l: TraceLine) =>
 /** Lean's peerAnswer?. */
 function peerAnswer(
   service: string,
-  aLines: readonly TraceLine[],
+  lines: readonly TraceLine[],
   fromLines: readonly number[],
   keys: Bindings,
   l: TraceLine,
@@ -95,11 +95,11 @@ function peerAnswer(
   if (l.dir !== "out" || l.type !== "answer") return undefined;
   if ("rejection" in l.answer && l.answer.rejection.kind === "unavailable") return undefined;
   for (const k of fromLines) {
-    const r = aLines[k];
+    const r = lines[k];
     const request = r === undefined ? undefined : requestOf("in", r);
     if (request?.id === l.to)
       return {
-        type: "answerTo",
+        type: "answerById",
         to: keys.get(l.to) ?? l.to,
         target: `${service}.${request.name}`,
         answer: mapOutput(l.answer, (v) => rename(keys, v)),
@@ -135,8 +135,8 @@ function forPeer(keys: Bindings, step: Step): Step {
   }
 }
 
-/** Lean's Origin. */
-export type Origin =
+/** Lean's PeerOrigin. */
+export type PeerOrigin =
   | { readonly type: "given" }
   | { readonly type: "line"; readonly line: number }
   | { readonly type: "elsewhere"; readonly index: number };
@@ -281,24 +281,24 @@ function unifyAnswer(
 }
 
 /** The form of an output or payload of the peer's definition, by the peer's own name, that verify compares. */
-export type PeerNormal = (name: string, value: unknown) => unknown;
+export type NamedForm = (name: string, value: unknown) => unknown;
 
 type Checked = { readonly bindings: Bindings } | { readonly violation: InvalidInput };
 
 /** Lean's inLines, as the places of the in lines. */
 const inLines = (lines: readonly TraceLine[]): number[] => lines.flatMap((l, j) => (l.dir === "in" ? [j] : []));
 
-/** Lean's peerBefore, with the inLines of `bLines` as an argument. */
-function peerBefore(arrivals: readonly number[], bIns: readonly number[], bLength: number, i: number): number {
+/** Lean's peerBefore, with the inLines of `peerLines` as an argument. */
+function peerBefore(arrivals: readonly number[], peerIns: readonly number[], peerLength: number, i: number): number {
   const k = arrivals.findIndex((a) => i < a);
-  return k < 0 ? bLength : (bIns[k] ?? bLength);
+  return k < 0 ? peerLength : (peerIns[k] ?? peerLength);
 }
 
 /** Lean's sentAs?. */
 function sentAs(
   created: ReadonlySet<string>,
-  seen: PeerNormal,
-  form: PeerNormal,
+  seen: NamedForm,
+  form: NamedForm,
   service: string,
   bs: Bindings,
   l: TraceLine,
@@ -316,8 +316,8 @@ function sentAs(
 /** Lean's peerSent, without the place of the line. */
 function peerSent(
   created: ReadonlySet<string>,
-  seen: PeerNormal,
-  form: PeerNormal,
+  seen: NamedForm,
+  form: NamedForm,
   service: string,
   bs: Bindings,
   before: readonly TraceLine[],
@@ -339,28 +339,28 @@ const searchLimitAt = (l: TraceLine, peer: string): Checked => ({
 
 /** Lean's peerLine, with its lets as arguments. */
 function peerLine(
-  normal: PeerNormal,
-  inputForm: PeerNormal,
+  peerForm: NamedForm,
+  ownInputForm: NamedForm,
   service: string,
   peer: string,
   fromLines: readonly number[],
   created: ReadonlySet<string>,
   back: Bindings,
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
+  lines: readonly TraceLine[],
+  peerLines: readonly TraceLine[],
   before: readonly TraceLine[],
   bs: Bindings,
   i: number,
   l: TraceLine,
 ): Checked {
-  const seen = (n: string) => (v: unknown) => normal(n, rename(back, v));
+  const seen = (n: string) => (v: unknown) => peerForm(n, rename(back, v));
   if (l.dir !== "in") return { bindings: bs };
   if (
     (l.type === "command" || l.type === "query" || l.type === "subscribe" || l.type === "unsubscribe") &&
     fromLines.includes(i)
   ) {
-    const seenInput = (n: string, v: unknown) => inputForm(n, rename(back, v));
-    const sent = peerSent(created, seenInput, inputForm, service, bs, before, l);
+    const seenInput = (n: string, v: unknown) => ownInputForm(n, rename(back, v));
+    const sent = peerSent(created, seenInput, ownInputForm, service, bs, before, l);
     if (sent === "searchLimit") return searchLimitAt(l, peer);
     if (sent === "differ")
       return {
@@ -373,16 +373,16 @@ function peerLine(
     return { bindings: sent };
   }
   if (l.type === "answer") {
-    const target = peerTarget(peer, aLines, l.to);
-    if (target === undefined || unreached(aLines, l.to)) return { bindings: bs };
+    const target = peerTarget(peer, lines, l.to);
+    if (target === undefined || unreached(lines, l.to)) return { bindings: bs };
     const data = { requestId: l.to, target: { service: peer, name: target } };
-    const k = answersTo(aLines.slice(0, i), "in", l.to).length;
-    if (answersTo(bLines, "out", l.to)[k] === undefined)
+    const k = answersTo(lines.slice(0, i), "in", l.to).length;
+    if (answersTo(peerLines, "out", l.to)[k] === undefined)
       return { violation: { kind: "InvalidInput.unansweredRequest", definition: null, data } };
     const b = answersTo(before, "out", l.to)[k];
     const bindings =
       b !== undefined && atOrBefore(b.time, l.time)
-        ? unifyAnswer(created, seen(target), (v) => normal(target, v), bs, b.answer, l.answer)
+        ? unifyAnswer(created, seen(target), (v) => peerForm(target, v), bs, b.answer, l.answer)
         : "differ";
     if (bindings === "searchLimit") return searchLimitAt(l, peer);
     return bindings === "differ"
@@ -401,7 +401,7 @@ function peerLine(
         atOrBefore(b.time, l.time) &&
         (l.resultOf === undefined || b.resultOf === l.resultOf)
       ) {
-        const bindings = unify(created, seen(n)(b.payload), normal(n, l.payload), bs);
+        const bindings = unify(created, seen(n)(b.payload), peerForm(n, l.payload), bs);
         if (typeof bindings !== "string") return { bindings };
         limited ||= bindings === "searchLimit";
       }
@@ -422,33 +422,33 @@ function peerLine(
  * did not halt, in one pass over the run.
  */
 function peerChecks(
-  normal: PeerNormal,
-  inputForm: PeerNormal,
+  peerForm: NamedForm,
+  ownInputForm: NamedForm,
   service: string,
   peer: string,
   fromLines: readonly number[],
   arrivals: readonly number[],
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
+  lines: readonly TraceLine[],
+  peerLines: readonly TraceLine[],
 ) {
-  const created = new Set(bLines.flatMap((l) => l.created ?? []));
-  const back = new Map([...peerKeys(service, aLines)].map(([k, v]) => [v, k]));
-  const bIns = inLines(bLines);
+  const created = new Set(peerLines.flatMap((l) => l.created ?? []));
+  const back = new Map([...peerKeys(service, lines)].map(([k, v]) => [v, k]));
+  const peerIns = inLines(peerLines);
   let bs: Bindings = new Map();
   const bindings = [bs];
-  const findings: { readonly origin: Origin; readonly violation: InvalidInput }[] = [];
-  aLines.forEach((l, i) => {
-    const before = bLines.slice(0, peerBefore(arrivals, bIns, bLines.length, i));
+  const findings: { readonly origin: PeerOrigin; readonly violation: InvalidInput }[] = [];
+  lines.forEach((l, i) => {
+    const before = peerLines.slice(0, peerBefore(arrivals, peerIns, peerLines.length, i));
     const checked = peerLine(
-      normal,
-      inputForm,
+      peerForm,
+      ownInputForm,
       service,
       peer,
       fromLines,
       created,
       back,
-      aLines,
-      bLines,
+      lines,
+      peerLines,
       before,
       bs,
       i,
@@ -461,7 +461,7 @@ function peerChecks(
   return { bindings, findings };
 }
 
-type Placed = { readonly step: Step; readonly origin: Origin };
+type Placed = { readonly step: Step; readonly origin: PeerOrigin };
 
 /** Lean's peerPlaced. */
 function peerPlaced(
@@ -470,28 +470,28 @@ function peerPlaced(
   received: readonly string[],
   fromLines: readonly number[],
   elsewhere: readonly (readonly [number, Step])[],
-  aLines: readonly TraceLine[],
+  lines: readonly TraceLine[],
   keys: (n: number) => Bindings,
 ): Placed[] {
-  return Array.from({ length: aLines.length + 1 }, (_, n) => {
+  return Array.from({ length: lines.length + 1 }, (_, n) => {
     const others = elsewhere.flatMap(([p, step], index): Placed[] =>
-      p === n || (n === aLines.length && n < p) ? [{ step, origin: { type: "elsewhere", index } }] : [],
+      p === n || (n === lines.length && n < p) ? [{ step, origin: { type: "elsewhere", index } }] : [],
     );
-    const l = aLines[n];
+    const l = lines[n];
     const body =
       l === undefined
         ? undefined
-        : (peerBody(peer, aLines, keys(n), l) ??
+        : (peerBody(peer, lines, keys(n), l) ??
           peerEvent(service, received, keys(n), l) ??
-          peerAnswer(service, aLines, fromLines, keys(n), l));
+          peerAnswer(service, lines, fromLines, keys(n), l));
     return l === undefined || body === undefined
       ? others
-      : [...others, { step: { time: l.time, ...body } as Step, origin: { type: "line", line: n } as Origin }];
+      : [...others, { step: { time: l.time, ...body } as Step, origin: { type: "line", line: n } as PeerOrigin }];
   }).flat();
 }
 
-/** Lean's Origin.arrival. */
-function arrival(elsewhere: readonly (readonly [number, Step])[], o: Origin): number {
+/** Lean's PeerOrigin.arrival. */
+function arrival(elsewhere: readonly (readonly [number, Step])[], o: PeerOrigin): number {
   if (o.type === "line") return o.line;
   return o.type === "elsewhere" ? (elsewhere[o.index]?.[0] ?? 0) : 0;
 }
@@ -504,11 +504,11 @@ export function peerArrivals(
   fromLines: readonly number[],
   state: readonly Step[],
   elsewhere: readonly (readonly [number, Step])[],
-  aLines: readonly TraceLine[],
+  lines: readonly TraceLine[],
 ): number[] {
   return [
     ...state.map(() => 0),
-    ...peerPlaced(service, peer, received, fromLines, elsewhere, aLines, () => new Map()).map((p) =>
+    ...peerPlaced(service, peer, received, fromLines, elsewhere, lines, () => new Map()).map((p) =>
       arrival(elsewhere, p.origin),
     ),
   ];
@@ -516,25 +516,25 @@ export function peerArrivals(
 
 /** Lean's peerInputs. */
 export function peerInputs(
-  normal: PeerNormal,
-  inputForm: PeerNormal,
+  peerForm: NamedForm,
+  ownInputForm: NamedForm,
   service: string,
   peer: string,
   received: readonly string[],
   fromLines: readonly number[],
   state: readonly Step[],
   elsewhere: readonly (readonly [number, Step])[],
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
+  lines: readonly TraceLine[],
+  peerLines: readonly TraceLine[],
 ): Placed[] {
-  const keys = peerKeys(service, aLines);
-  const arrivals = peerArrivals(service, peer, received, fromLines, state, elsewhere, aLines);
-  const { bindings } = peerChecks(normal, inputForm, service, peer, fromLines, arrivals, aLines, bLines);
+  const keys = peerKeys(service, lines);
+  const arrivals = peerArrivals(service, peer, received, fromLines, state, elsewhere, lines);
+  const { bindings } = peerChecks(peerForm, ownInputForm, service, peer, fromLines, arrivals, lines, peerLines);
   const forward = (n: number): Bindings =>
-    new Map([...[...(bindings[Math.min(n, aLines.length)] as Bindings)].map(([k, v]) => [v, k] as const), ...keys]);
-  const placed = peerPlaced(service, peer, received, fromLines, elsewhere, aLines, forward);
+    new Map([...[...(bindings[Math.min(n, lines.length)] as Bindings)].map(([k, v]) => [v, k] as const), ...keys]);
+  const placed = peerPlaced(service, peer, received, fromLines, elsewhere, lines, forward);
   return [
-    ...state.map((step) => ({ step, origin: { type: "given" } as Origin })),
+    ...state.map((step) => ({ step, origin: { type: "given" } as PeerOrigin })),
     ...placed.map(({ step, origin }) =>
       origin.type === "elsewhere"
         ? { step: forPeer(forward(arrival(elsewhere, origin)), step), origin }
@@ -545,16 +545,16 @@ export function peerInputs(
 
 /** Lean's peerFindings. */
 export function peerFindings(
-  normal: PeerNormal,
-  inputForm: PeerNormal,
+  peerForm: NamedForm,
+  ownInputForm: NamedForm,
   service: string,
   peer: string,
   fromLines: readonly number[],
   arrivals: readonly number[],
-  aLines: readonly TraceLine[],
-  bLines: readonly TraceLine[],
-  halted: readonly [Origin, string] | undefined,
-): { readonly origin: Origin; readonly violation: InvalidInput }[] {
+  lines: readonly TraceLine[],
+  peerLines: readonly TraceLine[],
+  halted: readonly [PeerOrigin, string] | undefined,
+): { readonly origin: PeerOrigin; readonly violation: InvalidInput }[] {
   if (halted !== undefined)
     return [
       {
@@ -562,5 +562,5 @@ export function peerFindings(
         violation: { kind: "InvalidInput.haltedPeer", definition: null, data: { service: peer, halting: halted[1] } },
       },
     ];
-  return peerChecks(normal, inputForm, service, peer, fromLines, arrivals, aLines, bLines).findings;
+  return peerChecks(peerForm, ownInputForm, service, peer, fromLines, arrivals, lines, peerLines).findings;
 }

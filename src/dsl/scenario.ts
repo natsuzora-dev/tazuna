@@ -102,16 +102,16 @@ interface Scheduled {
 }
 
 /** An input to the run: it arrives at `time`, after the deadlines due by then. */
-export type Input = (LineFields<AnswerInput, UnsubscribeInput> | AnswerToInput | { readonly type: "time" }) &
+export type Input = (LineFields<AnswerInput, UnsubscribeInput> | AnswerByIdInput | { readonly type: "time" }) &
   Timed &
   Scheduled;
 
 /**
  * An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs give (Lean's
- * Step.Body.answerTo).
+ * Step.Body.answerById).
  */
-type AnswerToInput = {
-  readonly type: "answerTo";
+type AnswerByIdInput = {
+  readonly type: "answerById";
   readonly to: string;
   readonly target: AnyCommand | AnyQuery;
   readonly answer: Answer;
@@ -126,13 +126,13 @@ type UnsubscribeInput =
   | { readonly type: "unsubscribe"; readonly to: string };
 
 /** `handle` is the name by which a later event's `resultOf` names the answer (Lean's Step.Body.answer). */
-type AnswerInput = AnswerFields<MockChoice | SearchChoice> & Timed & { readonly handle?: string };
+type AnswerInput = AnswerFields<MockChoice | IdChoice> & Timed & { readonly handle?: string };
 
 /**
  * An answer choice whose `to` names the request by the id of its trace line. Only test's search sets it; a scenario
  * does not write it.
  */
-type SearchChoice = { readonly to: string; readonly input?: never; readonly stale?: never };
+type IdChoice = { readonly to: string; readonly input?: never; readonly stale?: never };
 
 /** An input as a scenario writes it, before timed() gives it the time of the `at` before it. */
 type UntimedInput = LineFields<UntimedAnswer, UntimedUnsubscribe>;

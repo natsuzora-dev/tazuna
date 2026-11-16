@@ -10,7 +10,7 @@ open Tazuna.Data
 /-- The waiting request that an answer input answers. -/
 inductive Choice where
   /-- The request whose trace line has id `to`, which only test's search writes. -/
-  | search (to : String)
+  | id (to : String)
   /--
   A waiting request that is stale exactly when `stale` is true and, when `input` is given, whose input has each field of
   `input` equal (chosen).
@@ -53,7 +53,7 @@ inductive Step.Body where
   An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs write: the
   peer's run of them does not know which of its definitions sent the request.
   -/
-  | answerTo (to : String) (target : String) (answer : Answer)
+  | answerById (to : String) (target : String) (answer : Answer)
 deriving Repr, Inhabited
 
 derive_wire Step.Body tag "type" skip_serializing_none
@@ -62,7 +62,7 @@ derive_wire Step.Body tag "type" skip_serializing_none
 def Step.Body.values : Step.Body → List Value
   | .command _ _ input | .query _ _ input | .subscribe _ _ input _ => [input]
   | .event _ _ payload _ | .operation _ _ payload | .unacceptedOperation _ _ payload => [payload]
-  | .answer _ _ a _ _ | .answerTo _ _ a => a.output?.toList
+  | .answer _ _ a _ _ | .answerById _ _ a => a.output?.toList
   | .time | .restart | .unsubscribe _ => []
 
 /--

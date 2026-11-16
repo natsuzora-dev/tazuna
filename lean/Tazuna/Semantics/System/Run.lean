@@ -19,7 +19,7 @@ def arrive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State)
   | .operation screen control payload => operate st fs s screen control payload true
   | .unacceptedOperation screen control payload => operate st fs s screen control payload false
   | .answer sender target answer choice handle => mock st fs s sender target answer choice handle
-  | .answerTo to target answer => answerById st fs s to target answer
+  | .answerById to target answer => answerById st fs s to target answer
 
 /-- The state after `input`, which arrives unless the advance halts or a value of it is an uncreated key. -/
 def step [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (input : Step) : m State :=
