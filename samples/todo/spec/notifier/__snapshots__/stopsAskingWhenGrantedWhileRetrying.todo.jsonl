@@ -3,3 +3,5 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Task 1","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"device/notificationPermissionGranted#1","name":"device.notificationPermissionGranted","payload":{}}
+{"time":"2026-10-25T01:01:00Z","dir":"in","type":"time","id":"time#1"}

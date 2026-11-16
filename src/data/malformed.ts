@@ -31,6 +31,13 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `ownMessageToPeer`: the start state that the scenario's `given` gives `service`, or its `elsewhere` input to
  *   `service`, receives an event of the scenario's own service or answers a request to it, which reach `service` only
  *   from the scenario's run.
+ * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`; a peer is keyed by its
+ *   service name.
+ * - `unlistedPeer`: the scenario's own service exchanges messages with `service` (its definitions name the other's), and
+ *   Given does not list it as run, external, or skip.
+ * - `invalidRecord`: the scenario's Given writes a record of `entity` of `service` that is no entity of that service,
+ *   that has no string `key`, or that does not match the entity's schema.
+ * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.
  */
@@ -69,4 +76,12 @@ export type Malformed =
       readonly scenario: DefinitionRef;
       readonly input?: number;
     })
+  | (Of<"misnamedPeer", null, { readonly name: string; readonly service: string }> & {
+      readonly scenario: DefinitionRef;
+    })
+  | (Of<"unlistedPeer", null, { readonly service: string }> & { readonly scenario: DefinitionRef })
+  | (Of<"invalidRecord", null, { readonly service: string; readonly entity: string; readonly key?: string }> & {
+      readonly scenario: DefinitionRef;
+    })
+  | (Of<"lineAfterWhen", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
   | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly deadline: string }>;

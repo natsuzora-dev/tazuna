@@ -35,7 +35,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.keyNamedTwice":
     case "Illegal.keyUsedBeforeNamed": {
       const { service, name } = illegal.scenario;
-      const scenario = spec.scenarios.find((s) => sameRef(s, illegal.scenario));
+      const scenario = spec.legacyScenarios.find((s) => sameRef(s, illegal.scenario));
       if (scenario !== undefined) return scenario.place;
       const contract = spec.contracts.find(
         (c) => c.service === service && Object.keys(c.states).some((state) => stateScenarioName(state) === name),

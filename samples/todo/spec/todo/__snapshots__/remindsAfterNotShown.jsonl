@@ -15,8 +15,10 @@
 {"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null},"after":["reminderScheduled#2"]}
 {"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderScheduled#2","reminderTimeReachedRecorded#1"]}
 {"time":"2026-10-25T15:00:00Z","dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"Buy milk"},"after":["reminderScheduled#2"]}
+{"time":"2026-10-25T15:00:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-25T15:00:00Z","dir":"in","type":"answer","id":"answer#5","to":"device.showNotification#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":"2026-10-26T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#2","name":"reminderTimeReachedRecorded","payload":{"id":"task-2","remindAt":null}}
 {"time":"2026-10-26T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#2","name":"reminderTimeReached","payload":{"title":"Buy eggs"},"after":["reminderTimeReachedRecorded#2"]}
 {"time":"2026-10-26T15:00:00Z","dir":"out","type":"command","id":"device.showNotification#2","name":"device.showNotification","input":{"text":"Buy eggs"}}
+{"time":"2026-10-26T15:00:00Z","dir":"in","type":"time","id":"time#2"}
 {"time":"2026-10-26T15:00:00Z","dir":"in","type":"answer","id":"answer#6","to":"device.showNotification#2","answer":{"result":"accepted"}}

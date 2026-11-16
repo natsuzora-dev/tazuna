@@ -20,7 +20,7 @@ for (const root of runExamples()) {
   const spec = await loadRoot(root);
   test(`${relative(import.meta.dirname, root)}: on each path that appends up to ${depth} inputs to a scenario, continuing from the parent's run gives the same result as running from the start, also for inputs that choose the order of deadlines due at one time and for inputs appended to a halted path`, () => {
     const seen = seenValues(spec);
-    for (const scenario of spec.scenarios) {
+    for (const scenario of spec.legacyScenarios) {
       const service = scenario.service;
       const next = enabledMoves(spec, service, seen, valuesPerPayload);
       const same = (parent: Run, path: readonly Input[]) =>

@@ -1,8 +1,10 @@
 import type { z } from "zod";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
+import { type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
 import type { Conditions, Named, Present, SomeKey } from "./conditions.ts";
 import type { ConstantsGroup } from "./constants.ts";
+import type { Contract, RecordsData } from "./contract.ts";
 import type {
   AnyCommand,
   AnyEvent,
@@ -19,7 +21,7 @@ import type {
   Query,
   ServiceDefinition,
 } from "./definition.ts";
-import type { AnyKeyedEntity, Entities, MadeRow, Records, Row, RowOf, SingleEntity } from "./entity.ts";
+import type { Entities, MadeRow, Records, Row } from "./entity.ts";
 import {
   type CreateEventDefiner,
   type DeleteEventDefiner,
@@ -104,6 +106,8 @@ interface Definers<Es extends Entities> {
   event: EventDefiner;
   /** Defines the contract of the service, whose spec tazuna runs. */
   contract: ContractDefiner<RecordsData<Es>, "spec">;
+  /** Defines a scenario of the service (ScenarioDefiner). */
+  scenario: ScenarioDefiner<RecordsData<Es>>;
 }
 
 interface CommandSetup<I extends Shape, Ev extends AnyEvent, B, Rq extends string, Es extends Entities> {
@@ -335,8 +339,18 @@ function definers(owner: ServiceDefinition): Definers<Entities> {
   const screen = screenDefiner(owner);
   const events = eventDefiners(owner);
   const contract = contractDefiner(owner);
-  register(owner, [command, query, automation, machine, screen, contract, ...Object.values(events)]);
-  return { command, query, automation, machine, screen, contract, ...events } as unknown as Definers<Entities>;
+  const scenario = scenarioDefiner();
+  register(owner, [command, query, automation, machine, screen, contract, scenario, ...Object.values(events)]);
+  return {
+    command,
+    query,
+    automation,
+    machine,
+    screen,
+    contract,
+    scenario,
+    ...events,
+  } as unknown as Definers<Entities>;
 }
 
 type Member = FieldsEvent | AnyCommand | AnyQuery | z.ZodType | ConstantsGroup;
@@ -350,31 +364,6 @@ export function definerService(value: unknown): ServiceDefinition | undefined {
 
 type Members<M> = { readonly [K in keyof M]: K extends "states" ? Readonly<Record<string, StateInputs>> : Member };
 
-/** The records of a service as data: every record of a keyed entity, and the record of a single entity. */
-type RecordsData<Es extends Entities> = {
-  readonly [N in keyof Es]: Es[N] extends AnyKeyedEntity
-    ? readonly RowOf<Es[N]>[]
-    : Es[N] extends SingleEntity<infer S>
-      ? Row<S>
-      : never;
-};
-
-declare const contractFacts: unique symbol;
-
-/**
- * A contract: its members, and, as types only, the records of its service and whether tazuna runs the service's spec
- * (`spec`) or takes the service as contract only (`external`).
- */
-export type Contract<M, R, K extends "spec" | "external"> = M & {
-  readonly [contractFacts]: { readonly records: R; readonly kind: K };
-};
-
-/** The records of the service of contract `C`. */
-export type RecordsOf<C> = C extends Contract<unknown, infer R, "spec" | "external"> ? R : never;
-
-/** Whether tazuna runs the spec of the service of contract `C` (`spec`) or takes it as contract only (`external`). */
-export type KindOf<C> = C extends Contract<unknown, unknown, infer K> ? K : never;
-
 /**
  * Marks the members that other services may refer to (Restricted.crossServiceImport), possibly none. `states` names the
  * start states that scenarios of other services may give the service (`given`).
@@ -387,6 +376,10 @@ const contractDefiner =
     contractOwners.set(members, owner);
     return members;
   };
+
+/** The service whose definer defined the contract `value`. */
+export const contractService = (value: unknown): ServiceDefinition | undefined =>
+  typeof value === "object" && value !== null ? contractOwners.get(value) : undefined;
 
 export function isContract(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && contractOwners.has(value);

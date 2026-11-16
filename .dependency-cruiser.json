@@ -24,14 +24,14 @@
     },
     {
       "name": "dsl",
-      "comment": "src/dsl imports only data, dsl, and syntax",
+      "comment": "src/dsl imports only data, dsl, syntax, and scenario (the scenario definer that service() returns)",
       "severity": "error",
       "from": {
         "path": "^src/dsl/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax)/"
+        "pathNot": "^src/(data|dsl|syntax|scenario)/"
       }
     },
     {
@@ -44,6 +44,18 @@
       "to": {
         "path": "^src/",
         "pathNot": "^src/(data|syntax)/"
+      }
+    },
+    {
+      "name": "scenario",
+      "comment": "src/scenario imports only data, dsl, and scenario",
+      "severity": "error",
+      "from": {
+        "path": "^src/scenario/"
+      },
+      "to": {
+        "path": "^src/",
+        "pathNot": "^src/(data|dsl|scenario)/"
       }
     },
     {
@@ -60,14 +72,14 @@
     },
     {
       "name": "load",
-      "comment": "src/load imports only data, dsl, syntax, and load",
+      "comment": "src/load imports only data, dsl, syntax, scenario, and load",
       "severity": "error",
       "from": {
         "path": "^src/load/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load)/"
+        "pathNot": "^src/(data|dsl|syntax|scenario|load)/"
       }
     },
     {

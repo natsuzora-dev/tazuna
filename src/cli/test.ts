@@ -17,9 +17,11 @@ import * as charts from "../explore/uncovered/charts.ts";
 import * as requests from "../explore/uncovered/requests.ts";
 import { comparePlaces, type Found, placeOf, problemOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
+import type { LoadedScenario } from "../load/scenarios.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { execute, type Run, stepsOf } from "../sim/spec/execute.ts";
 import { checkPeers } from "../sim/spec/peers.ts";
+import { simulateWithSnapshots } from "../sim/spec/simulate.ts";
 import { pairingProblem } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotProblems } from "../verify/snapshot.ts";
 
@@ -61,7 +63,7 @@ function writeSnapshot(spec: Spec, scenario: DefinitionRef, lines: readonly Trac
  * `lines` is undefined for a run that halted.
  */
 interface Snapshotted {
-  readonly scenario: Named<Scenario>;
+  readonly scenario: Pick<Named<unknown>, "service" | "place">;
   readonly name: string;
   readonly lines: readonly TraceLine[] | undefined;
 }
@@ -115,9 +117,9 @@ export function testSpec(
 ): TestResult {
   const seen = seenValues(spec);
   const bounds = { depth: options.depth, valuesPerPayload };
-  const inputs = new Map<Named<Scenario>, Input[]>(spec.scenarios.map((s) => [s, timed(s.definition)]));
+  const inputs = new Map<Named<Scenario>, Input[]>(spec.legacyScenarios.map((s) => [s, timed(s.definition)]));
   const runs = new Map<Named<Scenario>, Run>(
-    spec.scenarios.map((s) => [s, execute(spec, s.service, inputs.get(s) as Input[])]),
+    spec.legacyScenarios.map((s) => [s, execute(spec, s.service, inputs.get(s) as Input[])]),
   );
   const reached = new Coverage();
   const exploreOf = (s: Named<Scenario>, concurrent: Concurrent) => {
@@ -130,13 +132,13 @@ export function testSpec(
     reached.addAll(explored.reached);
     return explored;
   };
-  const explored = new Map<Named<Scenario>, Explored>(spec.scenarios.map((s) => [s, exploreOf(s, new Map())]));
+  const explored = new Map<Named<Scenario>, Explored>(spec.legacyScenarios.map((s) => [s, exploreOf(s, new Map())]));
   const concurrent = merged(explored.values());
   const paired = new Set([...concurrent.keys()].map((t) => spec.names.get(t)?.service));
-  for (const s of spec.scenarios.filter((s) => paired.has(s.service))) explored.set(s, exploreOf(s, concurrent));
+  for (const s of spec.legacyScenarios.filter((s) => paired.has(s.service))) explored.set(s, exploreOf(s, concurrent));
   const problems: Problem[] = [];
   const reported = new Set<string>();
-  for (const scenario of spec.scenarios) {
+  for (const scenario of spec.legacyScenarios) {
     const { found } = explored.get(scenario) as Explored;
     const ref = { service: scenario.service, name: scenario.name };
     for (const { violation, appendedInputs } of found) {
@@ -153,7 +155,7 @@ export function testSpec(
     }
   }
   const snapshotted: Snapshotted[] = [];
-  for (const scenario of spec.scenarios) {
+  for (const scenario of spec.legacyScenarios) {
     const run = runs.get(scenario) as Run;
     if (run.halted !== undefined) {
       snapshotted.push({ scenario, name: scenario.name, lines: undefined });
@@ -167,8 +169,52 @@ export function testSpec(
         snapshotted.push({ scenario, name: peerSnapshotName(scenario.name, check.peer), lines: check.lines });
     }
   }
+  const simulated = simulateScenarios(spec);
+  problems.push(...simulated.problems);
+  snapshotted.push(...simulated.snapshotted);
   const snapshots = testSnapshots(spec, snapshotted, options.update);
   return { ...snapshots, problems: [...problems, ...snapshots.problems], reached };
+}
+
+/**
+ * Simulates each scenario and returns the problems that it reports, each at the line it names, and the trace of each
+ * running service when the simulation did not halt: the own service's under the scenario's name, and each running
+ * peer's that has lines under peerSnapshotName.
+ */
+function simulateScenarios(spec: Spec): { readonly problems: Problem[]; readonly snapshotted: Snapshotted[] } {
+  const problems: Problem[] = [];
+  const snapshotted: Snapshotted[] = [];
+  for (const named of spec.scenarios) {
+    const { scenario, linePlaces } = named.definition as LoadedScenario;
+    const ref = { service: named.service, name: named.name };
+    const { world, snapshots } = simulateWithSnapshots(spec, scenario);
+    const at = (line: number | null | undefined) =>
+      line === null || line === undefined ? undefined : linePlaces[line];
+    for (const report of [...world.reports, ...(world.halted === undefined ? [] : [world.halted])]) {
+      const line = "scenarioLine" in report.data ? report.data.scenarioLine : undefined;
+      problems.push(toProblem(report, at(line) ?? named.place, { scenario: ref }));
+    }
+    const halted = world.halted !== undefined || [...world.participants.values()].some((p) => p.halted !== undefined);
+    for (const [service, p] of world.participants) {
+      const violations = [...p.processing.state.violations, ...(p.halted === undefined ? [] : [p.halted])];
+      for (const v of violations)
+        problems.push(
+          toProblem(v, v.location ?? (v.definition === null ? named.place : placeOf(spec, v.definition)), {
+            scenario: ref,
+          }),
+        );
+      const lines = snapshots.get(service) ?? [];
+      if (service === named.service)
+        snapshotted.push({ scenario: named, name: named.name, lines: halted ? undefined : lines });
+      else if (lines.length > 0)
+        snapshotted.push({
+          scenario: named,
+          name: peerSnapshotName(named.name, service),
+          lines: halted ? undefined : lines,
+        });
+    }
+  }
+  return { problems, snapshotted };
 }
 
 export const uncoveredOf = (spec: Spec, reached: Coverage): Problem[] =>

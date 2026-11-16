@@ -27,7 +27,7 @@ export function seenValues(spec: Spec): SeenValues {
   const messages = new Map<unknown, unknown[]>();
   const payloads = new Map<string, unknown[]>();
   const add = <K, V>(map: Map<K, V[]>, key: K, value: V) => map.set(key, [...(map.get(key) ?? []), value]);
-  for (const s of spec.scenarios)
+  for (const s of spec.legacyScenarios)
     for (const input of s.definition.inputs) {
       switch (input.type) {
         case "answer":

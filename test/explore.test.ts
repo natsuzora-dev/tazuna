@@ -16,7 +16,7 @@ const separateRegions = await loadSpec(join(examples, "answer-order"));
 const deadlines = await loadSpec(join(examples, "deadline-order"));
 
 function explored(spec: Spec, name: string, bounds: Bounds) {
-  const s = spec.scenarios.find((scenario) => scenario.name === name);
+  const s = spec.legacyScenarios.find((scenario) => scenario.name === name);
   assert.ok(s !== undefined);
   const inputs = timed(s.definition);
   const { found, paths } = explore(spec, s, inputs, execute(spec, s.service, inputs), {

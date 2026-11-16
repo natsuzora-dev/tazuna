@@ -19,14 +19,14 @@ test("test writes no snapshot, and test --update rewrites snapshots without comp
   const entries = readdirSync(snapshots, { withFileTypes: true });
   const isSnapshot = (e: Dirent) => e.isFile() && e.name.endsWith(".jsonl");
   const obsolete = entries
-    .filter((e) => isSnapshot(e) && !spec.scenarios.some((s) => `${s.name}.jsonl` === e.name))
+    .filter((e) => isSnapshot(e) && !spec.legacyScenarios.some((s) => `${s.name}.jsonl` === e.name))
     .map((e) => e.name);
   const unknown = entries.filter((e) => !isSnapshot(e)).map((e) => `todo/__snapshots__/${e.name}`);
   assert.notDeepEqual(obsolete, []);
   assert.notDeepEqual(unknown, []);
   const unknownEntries = (problems: readonly Problem[]) => problems.map((p) => [p.kind, p.location.file]);
   const reported = unknown.map((path) => ["Uncomparable.unknownSnapshotEntry", path]);
-  const [scenario] = spec.scenarios;
+  const [scenario] = spec.legacyScenarios;
   assert.ok(scenario !== undefined);
   rmSync(snapshotPath(spec, scenario));
   const compared = testSpec(spec, { update: false, depth: 0 });

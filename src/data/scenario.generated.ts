@@ -164,7 +164,8 @@ const line = z.discriminatedUnion("type", [
   }),
   /**
    * The peer `peer` answers the request `request`: an external peer gives the answer, and a running peer's answer, which
-   * its run gave, is delivered and must be `answer`.
+   * its run gave, is delivered and must be `answer`. A request in flight to a running peer never reaches its run, and the
+   * answer must be unavailable.
    */
   z.object({
     type: z.literal("answer"),
@@ -204,7 +205,10 @@ const line = z.discriminatedUnion("type", [
     type: z.literal("lose"),
     message: fact,
   }),
-  /** The messages on the channel of `message` that are undelivered at the end are in flight. */
+  /**
+   * The messages on the channel of `message`, either way between its sender and its receiver, that are undelivered at the
+   * end are in flight.
+   */
   z.object({
     type: z.literal("inFlight"),
     message: fact,
@@ -261,11 +265,15 @@ const expectation = z.discriminatedUnion("type", [
     line: z.int().nonnegative(),
     events: z.array(emittedEvent),
   }),
-  /** The requests that the own service sent while line `line` was processed, as a bag. */
+  /**
+   * The requests that the own service sent while line `line` was processed, and the subscriptions, each named by the
+   * request that opened it, that the own service ended then, each as a bag.
+   */
   z.object({
     type: z.literal("requested"),
     line: z.int().nonnegative(),
     requests: z.array(sentRequest),
+    ends: z.array(fact),
   }),
   /**
    * Whether the screen that the look line `look` looked at offers `control` with `payload` at that point: `offered` is

@@ -9,6 +9,7 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"completeTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"task-1","completedAt":"2026-10-25T01:00:00Z"},"resultOf":"completeTask#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"resultOf":"completeTask#1","after":["taskCompletedRecorded#1"]}
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-26T00:00:00Z","dir":"in","type":"command","id":"reopenTask#1","name":"reopenTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"reopenTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-26T00:00:00Z","dir":"out","type":"event","id":"taskReopenedRecorded#1","name":"taskReopenedRecorded","payload":{"id":"task-1","completedAt":null,"remindAt":null},"resultOf":"reopenTask#1"}

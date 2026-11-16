@@ -27,8 +27,11 @@ inductive Expectation where
   | answered (line : Nat) (answers : List Template)
   /-- The events, listed by a contract, that the own service emitted while line `line` was processed, as a bag. -/
   | emitted (line : Nat) (events : List EmittedEvent)
-  /-- The requests that the own service sent while line `line` was processed, as a bag. -/
-  | requested (line : Nat) (requests : List SentRequest)
+  /--
+  The requests that the own service sent while line `line` was processed, and the subscriptions, each named by the
+  request that opened it, that the own service ended then, each as a bag.
+  -/
+  | requested (line : Nat) (requests : List SentRequest) (ends : List Fact)
   /--
   Whether the screen that the look line `look` looked at offers `control` with `payload` at that point: `offered` is
   true for offered and false for not offered.

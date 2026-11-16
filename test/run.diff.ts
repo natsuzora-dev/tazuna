@@ -103,7 +103,7 @@ test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values mat
 
 for (const { name, spec } of specs) {
   const seen = seenValues(spec);
-  for (const scenario of spec.scenarios)
+  for (const scenario of spec.legacyScenarios)
     test(`${name}: ${scenario.service}/${scenario.name} and every path that appends up to ${depth} inputs to it give the same result in TS and Lean`, (t) => {
       const service = scenario.service;
       const start = timed(scenario.definition);

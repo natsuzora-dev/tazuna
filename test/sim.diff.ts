@@ -31,7 +31,7 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
   let checked = 0;
   for (const root of roots) {
     const spec = await loadSpec(root);
-    for (const scenario of spec.scenarios) {
+    for (const scenario of spec.legacyScenarios) {
       const run = execute(spec, scenario.service, timed(scenario.definition));
       if (run.halted !== undefined) continue;
       for (const d of peerDerivations(spec, scenario, run)) {
@@ -121,5 +121,15 @@ for (const { root, scenarios } of simExamples()) {
         canonicalJson(ts as unknown as Json),
         canonicalJson(JSON.parse(readFileSync(join(root, `${name}${outcomeSuffix}`), "utf8")) as Json),
       );
+    });
+}
+
+for (const root of roots) {
+  const spec = await loadSpec(root);
+  for (const { service, name, definition } of spec.scenarios)
+    test(`${relative(join(import.meta.dirname, ".."), root)}: Lean and TS simulate ${service}/${name} alike`, () => {
+      const ts = outcomeOf(simulateSpec(spec, definition.scenario));
+      const fromLean = lean.simulate(spec, definition.scenario, new SimFunctions(spec, (part) => lean.read(part)));
+      assert.equal(canonicalJson(fromLean as Json), canonicalJson(ts as unknown as Json));
     });
 }

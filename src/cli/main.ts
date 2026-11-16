@@ -195,7 +195,12 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     for (const removed of result.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
     const problems = [...(options.has("--coverage") ? uncoveredOf(spec, result.reached) : []), ...result.problems];
     const paths = `the paths that append up to ${count(depth, "input")}`;
-    return report(io, spec.root, problems, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
+    return report(
+      io,
+      spec.root,
+      problems,
+      `Tested ${count(spec.scenarios.length + spec.legacyScenarios.length, "scenario")} and ${paths}`,
+    );
   }
   const traces = resolve(io.cwd, traceFolder ?? "");
   if (!isFolder(traces)) return misused(`no such folder ${traceFolder}`);

@@ -15,7 +15,8 @@ import {
   type ServiceDefinition,
 } from "../dsl/definition.ts";
 import type { Scenario } from "../dsl/scenario.ts";
-import { definerService, isContract } from "../dsl/service.ts";
+import { contractService, definerService, isContract } from "../dsl/service.ts";
+import { isScenarioDefinition, type ScenarioDefinition } from "../scenario/define.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
 import type { DefinitionStructure } from "../syntax/structure.ts";
 import { opaqueCollections } from "./collections.ts";
@@ -25,6 +26,7 @@ import { duplicateNames, type NamedExport } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
 import { peerReferences } from "./peers.ts";
 import { unexportedDefinitions } from "./references.ts";
+import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
 import { structureOf } from "./structureOf.ts";
 import { inexactDelays, unparsableTimes } from "./times.ts";
 
@@ -50,7 +52,9 @@ export interface Spec {
   readonly malformed: readonly Found<Malformed>[];
   readonly contracts: readonly Contract[];
   readonly constants: readonly Named<Constants>[];
-  readonly scenarios: readonly Named<Scenario>[];
+  readonly scenarios: readonly Named<LoadedScenario>[];
+  /** The scenarios written as input lists, which the simulation of scenarios replaces. */
+  readonly legacyScenarios: readonly Named<Scenario>[];
   readonly sources: readonly SourceFile[];
   readonly names: ReadonlyMap<unknown, Named<Definition>>;
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
@@ -102,9 +106,10 @@ export function crossServiceImports(spec: Pick<Spec, "sources">) {
 
 export async function loadSpec(root: string): Promise<Spec> {
   const found: Omit<Named<Definition>, "service">[] = [];
-  const contracts: Contract[] = [];
+  const foundContracts: Contract[] = [];
   const constants: Named<Constants>[] = [];
   const scenarios: Named<Scenario>[] = [];
+  const defined: Named<ScenarioDefinition>[] = [];
   const sources: SourceFile[] = [];
   const definerExports: DefinerExport[] = [];
   const namedExports: NamedExport[] = [];
@@ -123,7 +128,10 @@ export async function loadSpec(root: string): Promise<Spec> {
       const place = placeIn(source, exports.get(name) ?? 0);
       const definer = definerService(value);
       const schema = constantsSchema(value);
-      if (isDefinition(value)) {
+      if (isScenarioDefinition(value)) {
+        namedExports.push({ name, service, place, value });
+        if (!defined.some((s) => s.definition === value)) defined.push({ name, service, place, definition: value });
+      } else if (isDefinition(value)) {
         namedExports.push({ name, service, place, value });
         if (!found.some((d) => d.definition === value)) found.push({ name, place, definition: value });
       } else if (typeof value === "object" && value !== null && (value as { kind?: string }).kind === "scenario") {
@@ -134,7 +142,7 @@ export async function loadSpec(root: string): Promise<Spec> {
         definerExports.push({ folder: service, definition: definer, place });
       } else if (isContract(value)) {
         const { states, ...members } = value;
-        contracts.push({ service, place, members, states: (states ?? {}) as Contract["states"], value });
+        foundContracts.push({ service, place, members, states: (states ?? {}) as Contract["states"], value });
       } else if (schema !== undefined) {
         namedExports.push({ name, service, place, value });
         if (!constants.some((c) => c.definition.values === value))
@@ -142,27 +150,40 @@ export async function loadSpec(root: string): Promise<Spec> {
       }
     }
   }
-  const { services, definitions, malformed } = owners(found, definerExports);
+  const owned = owners(found, definerExports);
+  const { services, definitions } = owned;
+  const serviceNames = new Map([...services].map(([name, s]) => [s.definition, name]));
+  // A contract belongs to the service of its definer, as a definition does, wherever its file is.
+  const contracts = foundContracts.map((c) => {
+    const owner = contractService(c.value);
+    return { ...c, service: (owner === undefined ? undefined : serviceNames.get(owner)) ?? c.service };
+  });
   const names = new Map<unknown, Named<Definition>>(definitions.map((d) => [d.definition, d]));
   const { structure, thrownDefaults } = structureOf(definitions, names, services, contracts, scenarios);
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
+  const loaded = loadScenarios(root, defined, services, structure, (d) => {
+    const n = names.get(d);
+    return n === undefined ? undefined : { service: n.service, name: n.name };
+  });
   return {
     root,
     definitions,
     malformed: [
       ...duplicateNames(namedExports),
-      ...malformed,
+      ...owned.malformed,
       ...unexportedDefinitions(definitions, scenarios, services, contracts, constants, exported),
       ...unparsableTimes(scenarios, contracts),
       ...peerReferences(scenarios, services, contracts),
       ...inexactDelays(charts({ definitions, structure })),
       ...opaque,
       ...defaultSchemas(definitions, structure, opaque, thrownDefaults),
+      ...loaded.malformed,
     ],
     contracts,
     constants,
-    scenarios,
+    scenarios: loaded.scenarios,
+    legacyScenarios: scenarios,
     sources,
     names,
     services,

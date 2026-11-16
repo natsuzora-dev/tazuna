@@ -42,7 +42,8 @@ inductive Line where
   | look (screen : Fact)
   /--
   The peer `peer` answers the request `request`: an external peer gives the answer, and a running peer's answer, which
-  its run gave, is delivered and must be `answer`.
+  its run gave, is delivered and must be `answer`. A request in flight to a running peer never reaches its run, and the
+  answer must be unavailable.
   -/
   | answer (peer : String) (request : Fact) (answer : Template)
   /--
@@ -58,7 +59,10 @@ inductive Line where
   | redeliver (message : Fact)
   /-- The network loses the message `message`. -/
   | lose (message : Fact)
-  /-- The messages on the channel of `message` that are undelivered at the end are in flight. -/
+  /--
+  The messages on the channel of `message`, either way between its sender and its receiver, that are undelivered at the
+  end are in flight.
+  -/
   | inFlight (message : Fact)
   /--
   The clock advances to `time`, and every running service fires its deadlines due by then; in a tie of a service, the

@@ -3,6 +3,7 @@ import type { z } from "zod";
 import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Problem } from "../data/problem.ts";
+import type { GivenRecord } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { parseFileLines } from "../data/trace.ts";
 import { parseSnapshotFile, readTrace, snapshotPath } from "../data/traceFile.ts";
@@ -15,6 +16,7 @@ import { pairingProblem, pairTraces, traceFolderOf } from "./pairing.ts";
 import { compareTrace } from "./prepare.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
+export type { GivenRecord } from "../data/scenario.generated.ts";
 export { traceName } from "../load/traceName.ts";
 export { matchRequest, rename } from "./replay.ts";
 
@@ -95,4 +97,19 @@ export function readSnapshot(spec: Spec, snapshot: DefinitionRef): TraceLine[] {
       { cause: malformed },
     );
   return lines;
+}
+
+/**
+ * Returns the Given records of the run that a snapshot records, as the trace writes values: the scenario's records of
+ * its own service, or, for a snapshot that peerSnapshots returns, those of its running peer `runner`. An implementation
+ * starts the run from them.
+ */
+export function givenRecords(spec: Spec, run: DefinitionRef & { readonly runner?: string }): readonly GivenRecord[] {
+  const runner = run.runner ?? run.service;
+  const name = runner === run.service ? run.name : run.name.slice(0, -`.${runner}`.length);
+  const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === name)?.definition.scenario;
+  if (scenario === undefined) return [];
+  if (runner === scenario.service) return scenario.given.records;
+  const peer = scenario.given.peers.find((p) => p.service === runner);
+  return peer?.role === "run" ? peer.records : [];
 }

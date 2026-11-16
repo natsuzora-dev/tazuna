@@ -1,0 +1,2 @@
+{"kind":"Malformed.misnamedPeer","definition":null,"data":{"name":"cal","service":"calendar"},"location":{"file":"todo/scenarios.ts","line":5},"scenario":{"service":"todo","name":"listsPeerUnderOtherName"}}
+{"kind":"Malformed.unlistedPeer","definition":null,"data":{"service":"notifier"},"location":{"file":"todo/scenarios.ts","line":5},"scenario":{"service":"todo","name":"listsPeerUnderOtherName"}}

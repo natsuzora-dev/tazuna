@@ -4,13 +4,7 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.add#1","name":"taskListScreen.add","payload":{"title":"Buy eggs"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.addTask#1","name":"todo.addTask","input":{"taskId":"Task-1","title":"Buy eggs"},"created":["Task-1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.add#2","name":"taskListScreen.add","payload":{"title":"Buy bread"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.remindersToggle#1","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":false}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.openTask#1","name":"taskListScreen.openTask","payload":{"taskId":"task-1","title":"Buy milk"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#3","to":"todo.addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.remindersToggle#2","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":false}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.remindersToggle#1","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":false}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.changeReminders#1","name":"todo.changeReminders","input":{"shouldRemind":false}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.add#3","name":"taskListScreen.add","payload":{"title":"Buy bread"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.remindersToggle#3","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":false}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.openTask#2","name":"taskListScreen.openTask","payload":{"taskId":"task-1","title":"Buy milk"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#4","to":"todo.changeReminders#1","answer":{"result":"accepted"}}

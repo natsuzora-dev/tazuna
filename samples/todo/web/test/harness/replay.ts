@@ -7,7 +7,15 @@ import type {
   UntimedTraceLine,
 } from "@natsuzora-dev/tazuna";
 import type { Spec } from "@natsuzora-dev/tazuna/spec";
-import { decodeAnswer, matchRequest, readSnapshot, rename, traceName } from "@natsuzora-dev/tazuna/verify";
+import {
+  decodeAnswer,
+  type GivenRecord,
+  givenRecords,
+  matchRequest,
+  readSnapshot,
+  rename,
+  traceName,
+} from "@natsuzora-dev/tazuna/verify";
 import type { z } from "zod";
 import { lineIds } from "./traces.ts";
 
@@ -22,7 +30,8 @@ export interface InputMessage {
 }
 
 export interface ReplayAdapter {
-  readonly start: (outputs: Outputs, time: Temporal.Instant) => Promise<void>;
+  /** Starts the app at `time` with the Given records of the run. */
+  readonly start: (outputs: Outputs, time: Temporal.Instant, records: readonly GivenRecord[]) => Promise<void>;
   readonly now: () => Temporal.Instant;
   readonly advanceTo: (time: Temporal.Instant) => Promise<void>;
   /** Resolves when the app has stopped writing outputs. `outputs` counts the trace's output lines. */
@@ -94,7 +103,7 @@ interface Waiting extends ForeignRequest {
  */
 export async function replay(
   spec: Spec,
-  scenario: { readonly service: string; readonly name: string },
+  scenario: { readonly service: string; readonly name: string; readonly runner?: string },
   adapter: ReplayAdapter,
 ): Promise<TraceLine[]> {
   const snapshot = readSnapshot(spec, scenario);
@@ -233,7 +242,7 @@ export async function replay(
 
   const [first] = snapshot;
   if (first === undefined) throw new Error(`the snapshot of ${scenario.service}/${scenario.name} has no lines`);
-  await adapter.start(outputs, Temporal.Instant.from(first.time));
+  await adapter.start(outputs, Temporal.Instant.from(first.time), givenRecords(spec, scenario));
   for (const line of snapshot) {
     if (line.dir === "out") continue;
     const time = Temporal.Instant.from(line.time);

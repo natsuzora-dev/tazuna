@@ -670,9 +670,9 @@ function entriesOf(names: readonly string[], entries: readonly (readonly [number
 }
 
 const randomScenarios = (spec: Spec, compared: readonly boolean[]): PairingScenario[] =>
-  spec.scenarios.map((s, i) => ({ service: s.service, name: s.name, compared: compared[i] ?? true }));
+  spec.legacyScenarios.map((s, i) => ({ service: s.service, name: s.name, compared: compared[i] ?? true }));
 
-const namesOf = (spec: Spec) => [...spec.scenarios.map((s) => s.name), "removed"];
+const namesOf = (spec: Spec) => [...spec.legacyScenarios.map((s) => s.name), "removed"];
 
 describe("Pairing traces with snapshots", () => {
   for (const root of examples)
@@ -731,7 +731,7 @@ describe("Pairing scenarios with snapshot files", () => {
     let found = 0;
     for (const [root, spec] of specs) {
       const { services, folders } = snapshotFolders(spec);
-      const scenarios = spec.scenarios.map(({ service, name }) => ({ service, name, compared: true }));
+      const scenarios = spec.legacyScenarios.map(({ service, name }) => ({ service, name, compared: true }));
       found += pairSnapshotsBoth(services, scenarios, folders, root);
     }
     assert.ok(found > 0);

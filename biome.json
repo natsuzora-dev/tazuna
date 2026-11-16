@@ -72,6 +72,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/scenarios.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noThenProperty": "off"
+          }
+        }
+      }
     }
   ]
 }

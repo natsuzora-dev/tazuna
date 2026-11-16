@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { QueryAnswer } from "@natsuzora-dev/tazuna";
+import type { GivenRecord } from "@natsuzora-dev/tazuna/verify";
 import type { ClientOptions } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { SimpleCsrfProtectionLinkPlugin } from "@orpc/client/plugins";
@@ -9,6 +10,7 @@ import { migrate } from "drizzle-orm/node-sqlite/migrator";
 import { onTestFinished, vi } from "vitest";
 import type * as Calendar from "../../src/calendar/calendar.server.ts";
 import type * as Db from "../../src/db/index.server.ts";
+import * as schema from "../../src/db/schema.ts";
 import type * as Device from "../../src/device/device.server.ts";
 import type { DeviceResult } from "../../src/device/pages.server.ts";
 import type * as Notifier from "../../src/notifier/notifier.server.ts";
@@ -34,8 +36,56 @@ function todoLink(server: typeof Server) {
   });
 }
 
-/** `db` is the database of the app before a restart, which the restarted app reads again. */
-async function loadApp(service: "todo" | "notifier", outputs: Outputs, db?: typeof Db.db) {
+const instant = (value: unknown) => (typeof value === "string" ? Temporal.Instant.from(value) : null);
+
+/** Writes the Given records into the app's database, as the app stores them. */
+function seed(db: typeof Db.db, records: readonly GivenRecord[]): void {
+  for (const { entity, value } of records) {
+    const row = value as Record<string, unknown>;
+    switch (entity) {
+      case "Task":
+        db.insert(schema.tasks)
+          .values({
+            id: String(row["id"]),
+            title: String(row["title"]),
+            createdAt: Temporal.Instant.from(String(row["createdAt"])),
+            completedAt: instant(row["completedAt"]),
+            dueAt: instant(row["dueAt"]),
+            remindAt: instant(row["remindAt"]),
+            reminderDecision: row["reminderDecision"] as "pending" | "decided" | "failed",
+          })
+          .run();
+        break;
+      case "Settings":
+        db.insert(schema.settings)
+          .values({ id: 1, shouldRemind: row["shouldRemind"] === true })
+          .run();
+        break;
+      case "OpenTask":
+        db.insert(schema.notifierOpenTasks)
+          .values({ taskId: String(row["taskId"]) })
+          .run();
+        break;
+      case "NotificationPermission":
+        if (row["status"] === "granted" || row["status"] === "denied")
+          db.insert(schema.notifierNotificationPermission).values({ id: 1, status: row["status"] }).run();
+        break;
+      default:
+        throw new Error(`the app stores no ${entity} records`);
+    }
+  }
+}
+
+/**
+ * `db` is the database of the app before a restart, which the restarted app reads again; a new database holds the
+ * Given `records` before the app starts.
+ */
+async function loadApp(
+  service: "todo" | "notifier",
+  outputs: Outputs,
+  db: typeof Db.db | undefined,
+  records: readonly GivenRecord[],
+) {
   const calendarDouble: typeof Calendar = {
     nextBusinessDay: (input) =>
       new Promise((resolve) =>
@@ -62,7 +112,10 @@ async function loadApp(service: "todo" | "notifier", outputs: Outputs, db?: type
   if (db === undefined) vi.doUnmock(import("../../src/db/index.server.ts"));
   else vi.doMock(import("../../src/db/index.server.ts"), () => ({ db }));
   const loaded = await import("../../src/db/index.server.ts");
-  if (db === undefined) migrate(loaded.db, { migrationsFolder: join(import.meta.dirname, "../../drizzle") });
+  if (db === undefined) {
+    migrate(loaded.db, { migrationsFolder: join(import.meta.dirname, "../../drizzle") });
+    seed(loaded.db, records);
+  }
   return {
     db: loaded.db,
     link: todoLink((await import("../../src/server.ts")).default),
@@ -75,8 +128,8 @@ async function loadApp(service: "todo" | "notifier", outputs: Outputs, db?: type
 export function serverAdapter(service: "todo" | "notifier"): ReplayAdapter {
   let app: Awaited<ReturnType<typeof loadApp>>;
   let outputs: Outputs;
-  const load = async (db?: typeof Db.db) => {
-    app = await loadApp(service, outputs, db);
+  const load = async (db?: typeof Db.db, records: readonly GivenRecord[] = []) => {
+    app = await loadApp(service, outputs, db, records);
     app.events.subscribe("todo", outputs.event);
   };
   // A restarted server keeps no timers or requests of the previous process but reads the same database.
@@ -92,11 +145,11 @@ export function serverAdapter(service: "todo" | "notifier"): ReplayAdapter {
     return (input, options) => app.link.call(["todo", name], input, options);
   };
   return {
-    async start(appOutputs, time) {
+    async start(appOutputs, time, records) {
       vi.useFakeTimers({ now: time.epochMilliseconds });
       onTestFinished(() => void vi.useRealTimers());
       outputs = appOutputs;
-      await load();
+      await load(undefined, records);
     },
     now: () => Temporal.Now.instant(),
     async advanceTo(time) {

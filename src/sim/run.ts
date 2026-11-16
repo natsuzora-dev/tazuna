@@ -9,7 +9,7 @@ import { begin, call, checkOrderUsed, endSubscription, operate, send, subscribe 
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
-import { Halt } from "../service/state.ts";
+import { Halt, writeInput } from "../service/state.ts";
 import { contractsListing, isKeyOf, refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
 import {
   act,
@@ -194,6 +194,7 @@ function fireTo(time: Temporal.Instant, order: readonly DeadlineId[]): (r: Proce
     checkOrderUsed(r);
     if (Temporal.Instant.compare(time, s.now) > 0) s.now = time;
     s.tieOrderRequired = false;
+    writeInput(s, { dir: "in", type: "time" });
   };
 }
 
@@ -288,7 +289,6 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
           data: { scenarioLine: i, fact: json(l.request) },
         });
       const t = targetOf(m);
-      const target = t === undefined ? "" : traceNameOfRef(t, m.sender);
       const role = w.roles.get(l.peer);
       if (role === "external") {
         if (m.status !== "inFlight") return notInFlight(i, m);
@@ -315,6 +315,29 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
       }
       if (role === "run") {
         const to = receivedId(m.sender, m.id);
+        // A request that has not reached the peer's run gets no answer from it; the peer answers it unavailable.
+        if (m.status === "inFlight") {
+          const v = fill(w, i, l.answer);
+          const unavailable: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
+          const a = answerOfValue(v);
+          if (a === undefined || canonicalJson(a) !== canonicalJson(unavailable))
+            return reportedHere({
+              kind: "Report.unpairedPeerLine",
+              definition: null,
+              data: { scenarioLine: i, peer: l.peer },
+            });
+          m.status = "lost";
+          w.messages.push({
+            sender: l.peer,
+            receiver: m.sender,
+            id: `answer:${to}`,
+            body: { time: "", dir: "out", type: "answer", id: `answer:${to}`, to, answer: unavailable },
+            origin,
+            channel: to,
+            status: "inFlight",
+          });
+          return deliverCarried(w, i, w.messages.length - 1);
+        }
         const j = w.messages.findIndex(
           (n) =>
             n.status === "inFlight" &&
@@ -332,10 +355,11 @@ function line(w: World, own: string, lines: readonly Line[], expectations: reado
         const v = fill(w, i, l.answer);
         const reply = w.messages[j] as Message;
         const actual: Answer = reply.body.type === "answer" ? reply.body.answer : { result: "accepted" };
-        const r = processingOf(w, m.sender) as Processing;
-        const shown = canonicalAnswer(r, target, actual);
+        const r = processingOf(w, l.peer) as Processing;
+        const peerTarget = t === undefined ? "" : traceNameOfRef(t, l.peer);
+        const shown = canonicalAnswer(r, peerTarget, actual);
         const written = answerOfValue(withCreated(createdPaths(l.answer), v, shown));
-        const expected = written === undefined ? v : canonicalAnswer(r, target, written);
+        const expected = written === undefined ? v : canonicalAnswer(r, peerTarget, written);
         if (canonicalJson(expected) !== canonicalJson(shown))
           reportTo(w, {
             kind: "Report.differentPeerAnswer",
@@ -486,7 +510,10 @@ function checkEnd(w: World): void {
   for (const m of w.messages)
     if (
       m.status === "inFlight" &&
-      !w.inFlight.some(([s, r, c]) => s === m.sender && r === m.receiver && c === m.channel)
+      !w.inFlight.some(
+        ([a, b, c]) =>
+          c === m.channel && ((a === m.sender && b === m.receiver) || (a === m.receiver && b === m.sender)),
+      )
     )
       reportTo(w, { kind: "Report.leftInFlight", definition: null, data: { message: describe(m) } });
 }
@@ -549,18 +576,24 @@ function compared(w: World, own: string, k: number, e: Expectation): readonly [u
       return [bag(expected), bag(actual)];
     }
     case "requested": {
-      const actual = lineSpan(w, own, e.line).flatMap((l) =>
+      const span = lineSpan(w, own, e.line);
+      const actualEnds = span.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [l.to] : []));
+      const actual = span.flatMap((l) =>
         l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe")
           ? [{ kind: l.type, target: refOf(st, l.name), input: l.input }]
           : [],
       );
       const filled = e.requests.map((q) => [q, fill(w, e.line, q.input)] as const);
+      const expectedEnds = e.ends.map((f) => w.messages[messageOf(w, e.line, f)]?.id ?? "");
       const expected = filled.map(([q, v]) => ({
         kind: q.kind,
         target: q.target,
         input: canonicalOr(r, inputSchema(st, traceNameOfRef(q.target, own)), v),
       }));
-      return [bag(expected), bag(actual)];
+      return [
+        { requests: bag(expected), ends: bag(expectedEnds) },
+        { requests: bag(actual), ends: bag(actualEnds) },
+      ];
     }
     case "offered": {
       const found = w.looked.find(([j]) => j === k);

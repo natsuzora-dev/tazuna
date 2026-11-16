@@ -53,7 +53,8 @@ export type Group =
   | "ChoiceDependent"
   | "Mismatch"
   | "Uncomparable"
-  | "Uncovered";
+  | "Uncovered"
+  | "Report";
 
 export type Kind = `${Group}.${string}`;
 

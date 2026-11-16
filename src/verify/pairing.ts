@@ -145,7 +145,7 @@ export function pairTraces(
  */
 export function pairingProblem(spec: Spec, { at, violation }: PairingProblem, traces?: string): Problem {
   if ("scenario" in at) {
-    const scenario = spec.scenarios.find((s) => sameRef(s, at.scenario));
+    const scenario = [...spec.scenarios, ...spec.legacyScenarios].find((s) => sameRef(s, at.scenario));
     if (scenario === undefined) throw new Error(`no scenario ${at.scenario.service}.${at.scenario.name}`);
     return toProblem(violation, scenario.place);
   }

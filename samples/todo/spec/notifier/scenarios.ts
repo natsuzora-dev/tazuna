@@ -1,171 +1,289 @@
-import { at, elsewhere, mock, receive, restart, scenario, send } from "@natsuzora-dev/tazuna";
+import { type Caused, external, type OutRequest, request, requested, run, type When } from "@natsuzora-dev/tazuna";
+import { calendar } from "../calendar/contract.ts";
 import { device } from "../device/contract.ts";
 import { todo } from "../todo/contract.ts";
-import { notification } from "./machines.ts";
+import { scenario } from "./data.ts";
 
-// Another caller adds, completes, or reopens the task in todo, and notifier receives the event.
-const added = (n: number) =>
-  [
-    elsewhere(todo, send(todo.addTask, { taskId: `task-${n}`, title: `Task ${n}` })),
-    receive(todo.taskAdded, { taskId: `task-${n}` }),
-  ] as const;
-const completed = (n: number) =>
-  [
-    elsewhere(todo, send(todo.completeTask, { taskId: `task-${n}` })),
-    receive(todo.taskCompleted, { taskId: `task-${n}` }),
-  ] as const;
+const peers = {
+  todo: run(todo, { Task: [], Settings: { shouldRemind: true } }),
+  calendar: external(calendar),
+  device: external(device),
+} as const;
+type W = When<typeof peers>;
 
-const elevenTasks = Array.from({ length: 11 }, (_, i) => added(i + 1)).flat();
+const fresh = {
+  start: "2026-10-25T10:00:00+09:00",
+  records: { OpenTask: [], NotificationPermission: { status: "undetermined" } },
+  peers,
+} as const;
 
-const unavailable = mock(notification, [
-  device.requestNotificationPermission,
-  { result: "rejected", rejection: { kind: "unavailable" } },
-]);
-const accepted = mock(notification, [device.requestNotificationPermission, { result: "accepted" }]);
+const accepted = { result: "accepted" } as const;
+const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
+const show = (n: number) => request(device.showNotification, { text: `You have ${n} open tasks` });
+const askPermission = request(device.requestNotificationPermission, {});
 
-const grants = [accepted, receive(device.notificationPermissionGranted, {}, { resultOf: accepted })];
+/**
+ * Another caller adds task-n in todo; todo's run asks calendar, which never answers here, and todo's taskAdded, the
+ * result of that addTask, reaches notifier. Returns the delivering line.
+ */
+const added = (w: W, n: number) => {
+  const add = w.client.send(todo.addTask, { taskId: `task-${n}`, title: `Task ${n}` });
+  w.peer.calendar.leaveUnanswered(add.request(calendar.nextBusinessDay));
+  return w.peer.todo.emit(todo.taskAdded, { taskId: `task-${n}` }, { resultOf: add });
+};
+const addedRange = (w: W, from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => added(w, from + i));
+const completed = (w: W, n: number) => {
+  const complete = w.client.send(todo.completeTask, { taskId: `task-${n}` });
+  return w.peer.todo.emit(todo.taskCompleted, { taskId: `task-${n}` }, { resultOf: complete });
+};
+
+/** The permission request that `line` caused. */
+const asked = (line: Caused) => line.request(device.requestNotificationPermission);
+
+/** device accepts the permission request, and the user's grant arrives as its result. */
+const grants = (w: W, request: OutRequest<typeof device.requestNotificationPermission>) => {
+  w.peer.device.answer(request, accepted);
+  return w.peer.device.emit(device.notificationPermissionGranted, {}, { resultOf: request });
+};
+
+/** task-0 is open and permission is granted. */
+const grantedWithTask0 = (w: W) => {
+  const first = added(w, 0);
+  grants(w, asked(first));
+};
+
+/** Tasks 1..11 are added after task-0; returns the line that delivers task-10's taskAdded, the 11th open task. */
+const tooManyTasks = (w: W) => {
+  addedRange(w, 1, 9);
+  const eleventh = added(w, 10);
+  added(w, 11);
+  return eleventh;
+};
 
 export const warnsWhenTooMany = scenario(
   "Add too many open tasks and let 1 hour pass while they stay too many; notifier warns, and warns again",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(0),
-    ...grants,
-    ...elevenTasks,
-    at("2026-10-25T11:30:00+09:00"),
-    ...completed(0),
-  ],
+  {
+    given: fresh,
+    when: (w) => {
+      grantedWithTask0(w);
+      const tooMany = tooManyTasks(w);
+      w.peer.device.leaveUnanswered(tooMany.request(device.showNotification));
+      const later = w.clock.at("2026-10-25T11:30:00+09:00");
+      w.peer.device.leaveUnanswered(later.request(device.showNotification));
+      completed(w, 0);
+      return { tooMany, later };
+    },
+    then: ({ tooMany, later }) => [requested(tooMany, [show(11)]), requested(later, [show(12)])],
+  },
 );
 
 export const warnsAgainAfterNotificationAnswered = scenario(
   "Add too many open tasks, let device fail to show the warning, and let 1 hour pass; notifier shows the warning again",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(0),
-    ...grants,
-    ...elevenTasks,
-    mock(notification, [device.showNotification, { result: "rejected", rejection: { kind: "unavailable" } }]),
-    at("2026-10-25T11:00:00+09:00"),
-    mock(notification, [device.showNotification, { result: "accepted" }]),
-  ],
+  {
+    given: fresh,
+    when: (w) => {
+      grantedWithTask0(w);
+      const tooMany = tooManyTasks(w);
+      w.peer.device.answer(tooMany.request(device.showNotification), unavailable);
+      const hour = w.clock.at("2026-10-25T11:00:00+09:00");
+      w.peer.device.answer(hour.request(device.showNotification), accepted);
+      return { hour };
+    },
+    then: ({ hour }) => [requested(hour, [show(12)])],
+  },
 );
 
 export const warnsWithoutNotificationWhileAsking = scenario(
-  "While requestNotificationPermission waits for its answer, let the user grant permission in the device settings and add too many open tasks; notifier warns but shows no notification",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(0),
-    receive(device.notificationPermissionGranted, {}),
-    ...elevenTasks,
-    accepted,
-  ],
+  "While requestNotificationPermission waits for its answer, let the user grant permission in the device settings and add too many open tasks; notifier shows no notification",
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 0);
+      // Granted in the device settings, not as the result of a request.
+      w.peer.device.emit(device.notificationPermissionGranted, {}, { resultOf: null });
+      const tooMany = tooManyTasks(w);
+      w.peer.device.answer(asked(first), accepted);
+      return { tooMany };
+    },
+    then: ({ tooMany }) => [requested(tooMany, [])],
+  },
 );
 
-export const countsReopenedTask = scenario("Complete a task and reopen it; notifier counts the task again", [
-  at("2026-10-25T10:00:00+09:00"),
-  ...added(1),
-  ...grants,
-  ...Array.from({ length: 9 }, (_, i) => added(i + 2)).flat(),
-  at("2026-10-25T10:01:00+09:00"),
-  ...completed(1),
-  ...added(11),
-  elsewhere(todo, send(todo.reopenTask, { taskId: "task-1" })),
-  receive(todo.taskReopened, { taskId: "task-1" }),
-]);
+export const countsReopenedTask = scenario("Complete a task and reopen it; notifier counts the task again", {
+  given: fresh,
+  when: (w) => {
+    const first = added(w, 1);
+    grants(w, asked(first));
+    addedRange(w, 2, 10);
+    w.clock.at("2026-10-25T10:01:00+09:00");
+    completed(w, 1);
+    const eleventh = added(w, 11);
+    const reopen = w.client.send(todo.reopenTask, { taskId: "task-1" });
+    const reopened = w.peer.todo.emit(todo.taskReopened, { taskId: "task-1" }, { resultOf: reopen });
+    w.peer.device.leaveUnanswered(reopened.request(device.showNotification));
+    return { eleventh, reopened };
+  },
+  then: ({ eleventh, reopened }) => [requested(eleventh, []), requested(reopened, [show(11)])],
+});
 
 export const warnsWithoutNotificationWhenDenied = scenario(
-  "Let the user deny permission and add too many open tasks; notifier warns but shows no notification",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(0),
-    accepted,
-    receive(device.notificationPermissionDenied, {}, { resultOf: accepted }),
-    ...elevenTasks,
-  ],
+  "Let the user deny permission and add too many open tasks; notifier shows no notification",
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 0);
+      const request = asked(first);
+      w.peer.device.answer(request, accepted);
+      w.peer.device.emit(device.notificationPermissionDenied, {}, { resultOf: request });
+      const tooMany = tooManyTasks(w);
+      return { tooMany };
+    },
+    then: ({ tooMany }) => [requested(tooMany, [])],
+  },
 );
 
-export const ignoresRedelivery = scenario("Deliver an event with the same event id twice; notifier counts it once", [
-  at("2026-10-25T10:00:00+09:00"),
-  elsewhere(todo, send(todo.addTask, { taskId: "task-1", title: "Task 1" })),
-  receive(todo.taskAdded, { taskId: "task-1" }, { id: "e9" }),
-  receive(todo.taskAdded, { taskId: "task-1" }, { id: "e9" }),
-]);
+export const ignoresRedelivery = scenario("Deliver an event twice through the network; notifier counts it once", {
+  given: fresh,
+  when: (w) => {
+    const first = added(w, 1);
+    w.peer.device.leaveUnanswered(asked(first));
+    const again = w.net.redeliver(first);
+    return { first, again };
+  },
+  then: ({ first, again }) => [requested(first, [askPermission]), requested(again, [])],
+});
 
 export const asksPermissionAgain = scenario(
   "Let device fail to request permission, then let the user grant it; notifier requests at most 3 times 1 minute apart, and requests no more after the grant",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(1),
-    unavailable,
-    at("2026-10-25T10:01:00+09:00"),
-    unavailable,
-    at("2026-10-25T10:02:00+09:00"),
-    unavailable,
-    at("2026-10-25T10:03:00+09:00"),
-    ...added(2),
-    accepted,
-    receive(device.notificationPermissionGranted, {}, { resultOf: accepted }),
-    ...added(3),
-  ],
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 1);
+      w.peer.device.answer(asked(first), unavailable);
+      const retry1 = w.clock.at("2026-10-25T10:01:00+09:00");
+      w.peer.device.answer(asked(retry1), unavailable);
+      const retry2 = w.clock.at("2026-10-25T10:02:00+09:00");
+      w.peer.device.answer(asked(retry2), unavailable);
+      const noRetry = w.clock.at("2026-10-25T10:03:00+09:00");
+      const second = added(w, 2);
+      grants(w, asked(second));
+      const third = added(w, 3);
+      return { noRetry, second, third };
+    },
+    then: ({ noRetry, second, third }) => [
+      requested(noRetry, []),
+      requested(second, [askPermission]),
+      requested(third, []),
+    ],
+  },
 );
 
 export const warnsWithoutNotificationAfterRevoked = scenario(
-  "Let the user grant permission and revoke it in the device settings, and add too many open tasks; notifier warns but shows no notification",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(0),
-    ...grants,
-    receive(device.notificationPermissionDenied, {}),
-    ...elevenTasks,
-  ],
+  "Let the user grant permission and revoke it in the device settings, and add too many open tasks; notifier shows no notification",
+  {
+    given: fresh,
+    when: (w) => {
+      grantedWithTask0(w);
+      w.peer.device.emit(device.notificationPermissionDenied, {}, { resultOf: null });
+      const tooMany = tooManyTasks(w);
+      return { tooMany };
+    },
+    then: ({ tooMany }) => [requested(tooMany, [])],
+  },
 );
 
 export const stopsAskingWhenGrantedWhileRetrying = scenario(
   "While notifier waits to request permission again, let the user grant it in the device settings; notifier requests no more",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(1),
-    unavailable,
-    receive(device.notificationPermissionGranted, {}),
-    at("2026-10-25T10:01:00+09:00"),
-  ],
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 1);
+      w.peer.device.answer(asked(first), unavailable);
+      w.peer.device.emit(device.notificationPermissionGranted, {}, { resultOf: null });
+      const minute = w.clock.at("2026-10-25T10:01:00+09:00");
+      return { minute };
+    },
+    then: ({ minute }) => [requested(minute, [])],
+  },
 );
 
 export const warnsAgainOnStart = scenario(
   "Add too many open tasks and restart the server within 1 hour of the warning; notifier warns again",
-  [at("2026-10-25T10:00:00+09:00"), ...added(0), ...grants, ...elevenTasks, at("2026-10-25T10:10:00+09:00"), restart()],
+  {
+    given: fresh,
+    when: (w) => {
+      grantedWithTask0(w);
+      const tooMany = tooManyTasks(w);
+      w.peer.device.leaveUnanswered(tooMany.request(device.showNotification));
+      w.clock.at("2026-10-25T10:10:00+09:00");
+      const restart = w.host.restart();
+      w.peer.device.leaveUnanswered(restart.request(device.showNotification));
+      return { restart };
+    },
+    then: ({ restart }) => [requested(restart, [show(12)])],
+  },
 );
 
 export const asksPermissionAgainOnStart = scenario(
   "Restart the server while a task is open and before the user chooses permission; notifier requests permission again",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(1),
-    mock(notification, [device.requestNotificationPermission, { result: "accepted" }]),
-    at("2026-10-25T10:05:00+09:00"),
-    restart(),
-    ...grants,
-  ],
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 1);
+      w.peer.device.answer(asked(first), accepted);
+      w.clock.at("2026-10-25T10:05:00+09:00");
+      const restart = w.host.restart();
+      grants(w, asked(restart));
+      return { restart };
+    },
+    then: ({ restart }) => [requested(restart, [askPermission])],
+  },
 );
 
 export const asksPermissionAgainOnStartWhileAsking = scenario(
   "Restart the server while notifier waits for the answer to its permission request; the restart discards the request, notifier requests permission again, and the user's choice answers the new request",
-  [at("2026-10-25T10:00:00+09:00"), ...added(1), at("2026-10-25T10:05:00+09:00"), restart(), ...grants],
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 1);
+      w.peer.device.leaveUnanswered(asked(first));
+      w.clock.at("2026-10-25T10:05:00+09:00");
+      const restart = w.host.restart();
+      grants(w, asked(restart));
+      return { restart };
+    },
+    then: ({ restart }) => [requested(restart, [askPermission])],
+  },
 );
 
 export const asksNoPermissionAfterStartWhenDecided = scenario(
   "Restart the server after permission is decided, and add a task; notifier does not request permission",
-  [at("2026-10-25T10:00:00+09:00"), ...added(1), ...grants, restart(), ...added(2)],
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 1);
+      grants(w, asked(first));
+      const restart = w.host.restart();
+      const second = added(w, 2);
+      return { restart, second };
+    },
+    then: ({ restart, second }) => [requested(restart, []), requested(second, [])],
+  },
 );
 
 export const asksNoPermissionOnStartWithoutOpenTasks = scenario(
   "Complete the only open task before the user chooses permission, and restart the server; notifier does not request permission again",
-  [
-    at("2026-10-25T10:00:00+09:00"),
-    ...added(1),
-    mock(notification, [device.requestNotificationPermission, { result: "accepted" }]),
-    ...completed(1),
-    at("2026-10-25T10:05:00+09:00"),
-    restart(),
-  ],
+  {
+    given: fresh,
+    when: (w) => {
+      const first = added(w, 1);
+      w.peer.device.answer(asked(first), accepted);
+      completed(w, 1);
+      w.clock.at("2026-10-25T10:05:00+09:00");
+      const restart = w.host.restart();
+      return { restart };
+    },
+    then: ({ restart }) => [requested(restart, [])],
+  },
 );

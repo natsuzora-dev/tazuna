@@ -1,5 +1,0 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"openTaskRecorded#1","name":"openTaskRecorded","payload":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"device.requestNotificationPermission#1","name":"device.requestNotificationPermission","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"taskAdded#2","name":"todo.taskAdded","payload":{"taskId":"task-2"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"openTaskRecorded#2","name":"openTaskRecorded","payload":{"taskId":"task-2"}}

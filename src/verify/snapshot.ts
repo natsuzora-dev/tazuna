@@ -124,7 +124,7 @@ export type SnapshotRun = DefinitionRef & { readonly runner: string };
 /** Returns each scenario's run, followed by the runs of each other service that is not external on its derived inputs. */
 export function snapshotRuns(spec: Spec): SnapshotRun[] {
   const peers = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
-  return spec.scenarios.flatMap(({ service, name }) => [
+  return [...spec.scenarios, ...spec.legacyScenarios].flatMap(({ service, name }) => [
     { service, name, runner: service },
     ...peers
       .filter((peer) => peer !== service)
