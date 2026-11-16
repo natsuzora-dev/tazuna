@@ -5,14 +5,7 @@ import type { TraceLine } from "../data/trace.generated.ts";
 import { canonicalJson } from "../data/values.ts";
 import type { Location } from "../data/violation.ts";
 import type { Contract, Named } from "../dsl/definition.ts";
-import {
-  type ElsewhereInput,
-  elsewhereInputs,
-  fromInputs,
-  type Scenario,
-  timed,
-  writtenPositions,
-} from "../dsl/scenario.ts";
+import { type ElsewhereInput, fromInputs, peerRunInputs, type Scenario, writtenPositions } from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
 import { serviceOf } from "../semantics/service/basic.ts";
@@ -59,13 +52,16 @@ function linesBefore(run: Run, { input, before }: ElsewhereInput): number {
  * is the `in` line of the scenario's input.
  */
 export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): ScenarioPeer[] {
-  const { given } = scenario.definition;
-  const written = elsewhereInputs(scenario.definition).map((e) => ({ ...e, peer: contractService(spec, e.service) }));
+  const { given, inputs } = scenario.definition;
   const sent = fromInputs(scenario.definition).map((f) => ({
     peer: contractService(spec, f.service),
     line: run.inputLines[f.index] as number,
   }));
-  const named = new Set([...Object.keys(given), ...written.map((e) => e.peer), ...sent.map((f) => f.peer)]);
+  const named = new Set([
+    ...Object.keys(given),
+    ...inputs.flatMap((w) => (w.type === "elsewhere" ? [contractService(spec, w.service)] : [])),
+    ...sent.map((f) => f.peer),
+  ]);
   const others = [...spec.services]
     .filter(([name, s]) => name !== scenario.service && !s.definition.external)
     .map(([name]) => name);
@@ -80,9 +76,11 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
       ),
   );
   return peers.map((peer) => {
-    const state = given[peer];
-    const stateInputs = state === undefined ? [] : timed({ inputs: state });
-    const mine = written.filter((e) => e.peer === peer);
+    const { state: stateInputs, elsewhere: mine } = peerRunInputs(
+      scenario.definition,
+      (service) => contractService(spec, service) === peer,
+      given[peer],
+    );
     const steps = stepsOf(spec, peer, [...stateInputs, ...mine.map((e) => e.input)]);
     return {
       peer,

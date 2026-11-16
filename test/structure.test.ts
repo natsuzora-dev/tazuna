@@ -131,26 +131,53 @@ test("Commands and events have the JSON Schema of their input and payload and re
   );
 });
 
-test("A scenario has the kinds of its inputs in written order, the sender and target of each answer, every position of the answer that the resultOf of an event points to, and the strings of the values that each input gives", async () => {
+test("A scenario line has its kind, an answer's sender and target, its run and sender, the handle that names it and the handle that it names, the strings of its values and its keys; a contract's state is a scenario named states.<state>", async () => {
   const spec = await loadSpec(join(import.meta.dirname, "validation/illegal/scenarios/placed-twice"));
-  const requestPermission = { service: "device", name: "requestPermission" };
   const answer = {
     type: "answer",
     sender: { service: "app", name: "permission" },
-    target: requestPermission,
+    target: { service: "device", name: "requestPermission" },
+    run: null,
+    sentBy: null,
+    handle: 0,
+    names: null,
     strings: [],
+    keys: {},
   };
+  const line = { run: null, sentBy: null, handle: null, names: null, strings: [], keys: {} };
   assert.deepEqual(spec.structure.scenarios, [
     {
       service: "app",
       name: "grantAfterRetries",
-      inputs: [{ type: "at" }, answer, answer, answer, { type: "event", resultOf: [1, 2], strings: [] }],
+      given: [],
+      peers: ["device"],
+      inputs: [
+        { type: "at", ...line },
+        answer,
+        answer,
+        { ...answer, handle: null },
+        { type: "event", ...line, names: 0 },
+      ],
     },
   ]);
-  const counted = await loadSpec(join(import.meta.dirname, "validation/illegal/scenarios/counted-key"));
-  assert.deepEqual(counted.structure.scenarios.find((sc) => sc.name === "addCountedNote")?.inputs, [
-    { type: "at" },
-    { type: "command", strings: ["task-1"] },
-    { type: "command", strings: ["Note-1", "again"] },
-  ]);
+  const scopes = await loadSpec(join(import.meta.dirname, "validation/illegal/scenarios/scopes"));
+  const byName = (name: string) => scopes.structure.scenarios.find((sc) => sc.name === name);
+  assert.deepEqual(
+    byName("states.watched")?.inputs.map((l) => [l.type, l.handle]),
+    [
+      ["at", null],
+      ["subscribe", 2],
+    ],
+  );
+  assert.deepEqual(byName("endsGivenBoardSubscription")?.given, [{ service: "board", name: "states.watched" }]);
+  assert.deepEqual(byName("endsGivenBoardSubscription")?.inputs[1], {
+    type: "unsubscribe",
+    run: "board",
+    sentBy: null,
+    handle: null,
+    names: 2,
+    strings: [],
+    keys: {},
+  });
+  assert.deepEqual(byName("namesNoteTwice")?.inputs[1]?.keys, { Note: ["N-milk", "N-milk"] });
 });

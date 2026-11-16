@@ -26,9 +26,3 @@ export const showsSameTitlesAgain = scenario(
   [at("2026-10-25T10:00:00+09:00"), milkShown, milkShown],
   fromMilk,
 );
-
-export const startsFromCountedKey = scenario(
-  "Start todo from a state that adds a task whose key has the form of a createKey value of todo; todo halts on the state's input with uncreatedKey, so test reports haltedPeer",
-  [at("2026-10-25T10:00:00+09:00"), milkShown],
-  { given: { todo: todo.states.countedMilk } },
-);

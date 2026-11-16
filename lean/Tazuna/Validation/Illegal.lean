@@ -23,22 +23,34 @@ inductive Illegal where
   | foreignEvent (definition : Syntax.Ref) (event : Syntax.Ref)
   /-- The contract of service `contract` lists under `key` a definition of another service. -/
   | foreignMember (contract key : String)
-  /-- The sender of the answer input does not request its target. -/
+  /--
+  The sender of the answer input does not request its target. The `scenario` of this and the following kinds is a
+  scenario, or a contract's start state named `states.<state>`.
+  -/
   | unrequestedAnswer (scenario : Syntax.Ref) (input : Nat)
   /--
-  The input names an input that the scenario places more than once: the mock of an event's resultOf, or the subscribe
-  input of an unsubscribe.
+  The input names an input that its run takes more than once: the mock of an event's resultOf, or the subscribe input of
+  an unsubscribe. A run takes the scenario's inputs to its service, or a state with the scenario's elsewhere inputs to
+  the state's service.
   -/
   | namedInputPlacedTwice (scenario : Syntax.Ref) (input : Nat)
-  /-- The scenario places the input that the input names (ScenarioInput.named) only after it, or not at all. -/
+  /--
+  The run of the input takes the input that it names (ScenarioLine.names) only after it, from another sender, or not at
+  all: a subscription that a from line opens is ended by a from line of the same peer, and any other by a plain line.
+  -/
   | namedInputUnplaced (scenario : Syntax.Ref) (input : Nat)
   | scenarioOfExternalService (scenario : Syntax.Ref)
   /--
-  The input has `value`, of the form of a createKey value of the keyed entity `entity` that counts the entity's keys. A
-  scenario names a createKey value on the line that creates it (Step.keys), as no caller knows how many keys an
-  implementation has made.
+  The input has `value`, among its values or `keys` names, of the form of a createKey value of the keyed entity
+  `entity` of the scenario's service or of a peer that counts the entity's keys. A scenario names a createKey value on
+  the line that creates it (Step.keys), as no caller knows how many keys an implementation has made. Any string field
+  counts, such as a title.
   -/
   | countedKey (scenario : Syntax.Ref) (input : Nat) (value : String) (entity : Syntax.Ref)
+  /-- The input's `keys` gives `name` to a createKey value of `entity` that an earlier line of its run, or the input, named. -/
+  | keyNamedTwice (scenario : Syntax.Ref) (input : Nat) (entity : String) (name : String)
+  /-- The input has the value `name`, which a later line's `keys` gives a createKey value. -/
+  | keyUsedBeforeNamed (scenario : Syntax.Ref) (input : Nat) (name : String)
 
 derive_group Illegal
 

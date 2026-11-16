@@ -12,7 +12,6 @@ export const todo = contract({
   tasks,
   states: {
     milk: [at("2026-10-25T08:00:00+09:00"), send(addTask, { taskId: "task-1", title: "Buy milk" })],
-    countedMilk: [at("2026-10-25T08:00:00+09:00"), send(addTask, { taskId: "Task-1", title: "Buy milk" })],
     milkAndBread: [
       at("2026-10-25T08:00:00+09:00"),
       send(addTitle, { title: "Buy milk" }),

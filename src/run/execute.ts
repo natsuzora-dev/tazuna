@@ -210,6 +210,12 @@ function alikeTo(s: State, request: Pending): Pending[] {
 const copiedKeys = (keys: Readonly<Record<string, readonly string[]>>) =>
   Object.fromEntries(Object.entries(keys).map(([e, names]) => [e, [...names]]));
 
+/** Returns the handle of a named input, which check makes sure that the run places (Illegal.namedInputUnplaced). */
+function handleOf(named: { readonly handle?: string }): string {
+  if (named.handle === undefined) throw new Error("a line names an input that its run does not place");
+  return named.handle;
+}
+
 /** Returns the step of `input`. */
 function stepOf(spec: Spec, service: string, input: Input): Step {
   const name = (d: unknown) => traceName(spec, d, service);
@@ -239,18 +245,17 @@ function stepOf(spec: Spec, service: string, input: Input): Step {
           ...given(input),
           name: name(input.event),
           payload: input.payload,
-          ...(input.resultOf?.handle === undefined ? {} : { resultOf: input.resultOf.handle }),
+          ...(input.resultOf === undefined ? {} : { resultOf: handleOf(input.resultOf) }),
         };
       case "operation":
       case "unacceptedOperation":
         return { time, type: input.type, screen: name(input.screen), control: input.control, payload: input.payload };
-      case "unsubscribe": {
-        if ("to" in input) return { time, type: "unsubscribe", subscription: { to: input.to } };
-        const { handle } = input.subscription;
-        if (handle === undefined)
-          throw new Error("unsubscribe names a subscribe input that the scenario does not place");
-        return { time, type: "unsubscribe", subscription: { handle } };
-      }
+      case "unsubscribe":
+        return {
+          time,
+          type: "unsubscribe",
+          subscription: "to" in input ? { to: input.to } : { handle: handleOf(input.subscription) },
+        };
       case "answerById":
         return { time, type: "answerById", to: input.to, target: name(input.target), answer: input.answer };
       case "answer":

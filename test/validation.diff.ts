@@ -164,37 +164,70 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     if (b % 2 === 0) (input as { sender: unknown }).sender = pick([null, ...refsOf(s, senderKinds)], c) ?? null;
     else (input as { target: unknown }).target = pick([null, ...refsOf(s, ["command", "query"])], c) ?? null;
   },
-  resultOf(s, [a, b, c]) {
-    const input = pick(
-      s.scenarios.flatMap((sc) => sc.inputs).filter((i) => i.type === "event"),
+  named(s, [a, b, c]) {
+    const line = pick(
+      s.scenarios.flatMap((sc) => sc.inputs),
       a,
     );
-    if (input?.type === "event")
-      (input as { resultOf: number[] | null }).resultOf =
-        c % 3 === 0 ? null : Array.from({ length: c % 3 }, (_, k) => (b + k) % 5);
+    if (line === undefined) return;
+    const value = c % 3 === 0 ? null : b % 4;
+    if (c % 2 === 0) (line as { names: number | null }).names = value;
+    else (line as { handle: number | null }).handle = value;
+  },
+  scope(s, [a, b, c]) {
+    const line = pick(
+      s.scenarios.flatMap((sc) => sc.inputs),
+      a,
+    );
+    if (line === undefined) return;
+    const peer = pick([null, ...s.services.map((sv) => sv.name)], c) ?? null;
+    if (b % 2 === 0) (line as { run: string | null }).run = peer;
+    else (line as { sentBy: string | null }).sentBy = peer;
+  },
+  given(s, [a, b]) {
+    const scenario = pick(s.scenarios, a);
+    const state = pick(s.scenarios, b);
+    if (scenario && state) (scenario.given as unknown[]).push({ service: state.service, name: state.name });
+  },
+  keys(s, [a, b, c]) {
+    const line = pick(
+      s.scenarios.flatMap((sc) => sc.inputs),
+      a,
+    );
+    if (line === undefined) return;
+    const entity =
+      pick([...s.definitions.filter((d) => d.kind === "entity").map((d) => d.name), "Other"], b) ?? "Other";
+    const name = pick([`K-${c % 3}`, `${entity}-${c + 1}`, ...line.strings], c) ?? "K-0";
+    (line.keys as Record<string, string[]>)[entity] = [...(line.keys[entity] ?? []), name];
   },
   scenarioInput(s, [a, b, c]) {
     const scenario = pick(s.scenarios, a);
     if (!scenario) return;
+    const fields = {
+      run: b % 3 === 0 ? (pick(s.services, c)?.name ?? null) : null,
+      sentBy: b % 5 === 1 ? (pick(s.services, b)?.name ?? null) : null,
+      handle: c % 3 === 0 ? b % 4 : null,
+      names: c % 3 === 1 ? b % 4 : null,
+      strings: [],
+      keys: {},
+    };
     (scenario.inputs as unknown[]).push(
       b % 2 === 0
         ? {
             type: "answer",
             sender: pick([null, ...refsOf(s, senderKinds)], c) ?? null,
             target: pick([null, ...refsOf(s, ["command", "query"])], b) ?? null,
-            strings: [],
+            ...fields,
           }
-        : b % 4 === 1
-          ? { type: "event", resultOf: c % 2 === 0 ? null : [b % 5, c % 5], strings: [] }
-          : { type: "unsubscribe", subscription: Array.from({ length: c % 3 }, (_, k) => (b + k) % 5) },
+        : { type: b % 4 === 1 ? "event" : "subscribe", ...fields },
     );
   },
   strings(s, [a, b, c]) {
     const input = pick(
-      s.scenarios.flatMap((sc) => sc.inputs).filter((i) => "strings" in i),
+      s.scenarios.flatMap((sc) => sc.inputs),
       a,
     );
-    if (input === undefined || !("strings" in input)) return;
+    if (input === undefined) return;
     const name = pick([...s.definitions.filter((d) => d.kind === "entity").map((d) => d.name), "Other"], b) ?? "Other";
     (input.strings as string[]).push(pick([`${name}-${c + 1}`, `${name}-0`, `${name}-0${c + 1}`, name], c) ?? name);
   },

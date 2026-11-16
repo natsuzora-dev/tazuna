@@ -4,8 +4,30 @@ import { type Shape, stringsOf } from "../data/values.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
 import type { ChartSpec, Contract, Definition, Named, Services, StateSpec } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
-import type { Scenario } from "../dsl/scenario.ts";
+import {
+  type At,
+  namedBy,
+  namedDefinitions,
+  type Scenario,
+  type ScenarioInputs,
+  type StateInputs,
+  type UntimedInput,
+  unwrapped,
+} from "../dsl/scenario.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
+
+type ScenarioLine = Structure["scenarios"][number]["inputs"][number];
+type ScenarioInputStructure =
+  | { readonly type: Exclude<ScenarioLine["type"], "answer"> }
+  | {
+      readonly type: "answer";
+      readonly sender: DefinitionRef | null;
+      readonly target: DefinitionRef | null;
+    };
+
+/** The name of the start state `state` of a contract among the structure's scenarios (Lean's Scenario). */
+export const stateScenarioName = (state: string): string => `states.${state}`;
+
 import type {
   ActivityStructure,
   ChartStructure,
@@ -16,8 +38,8 @@ import type {
 
 type RefOf = (value: unknown) => DefinitionRef | null;
 
-/** The strings of the values that a written input gives (Lean's ScenarioInput.strings). */
-function stringsOfInput(input: Scenario["inputs"][number]): string[] {
+/** The strings of the values that a written input gives (Lean's ScenarioLine.strings). */
+function stringsOfInput(input: UntimedInput | At): string[] {
   switch (input.type) {
     case "command":
     case "query":
@@ -29,8 +51,6 @@ function stringsOfInput(input: Scenario["inputs"][number]): string[] {
       return stringsOf(input.payload);
     case "answer":
       return [...stringsOf("output" in input.answer ? input.answer.output : null), ...stringsOf(input.choice?.input)];
-    case "elsewhere":
-      return stringsOfInput(input.input);
     default:
       return [];
   }
@@ -43,7 +63,7 @@ export interface ThrownDefault {
 }
 
 /**
- * Computes state trees and definition refs, which every other part reads from this JSON, and named input positions. A
+ * Computes state trees and definition refs, which every other part reads from this JSON, and the handles of named inputs. A
  * schema whose conversion throws is {} in the structure; check stops at the Malformed.defaultSchema that the throw
  * becomes, before anything reads it.
  */
@@ -72,6 +92,45 @@ export function structureOf(
       const target = refTarget(schema);
       return target === undefined ? [] : [{ field, entity: ref(target) }];
     });
+  const contractService = (value: object) => contracts.find((c) => c.value === value)?.service ?? null;
+  const written = [
+    ...scenarios.flatMap((s) => s.definition.inputs),
+    ...contracts.flatMap((c) => Object.values(c.states).flat() as ScenarioInputs[number][]),
+  ];
+  const handles = new Map<object, number>();
+  for (const w of written) {
+    const named = namedBy(unwrapped(w));
+    if (named !== undefined && !handles.has(named)) handles.set(named, handles.size);
+  }
+  /** The lines of the inputs and the other services that they name, as Lean's Scenario holds them. */
+  const linesOf = (service: string, inputs: ScenarioInputs | StateInputs, given: readonly string[]) => {
+    const peers = new Set(given);
+    const lines = inputs.map((w): ScenarioLine => {
+      const input = unwrapped(w);
+      const run = w.type === "elsewhere" ? contractService(w.service) : null;
+      const sender = w.type === "from" ? contractService(w.service) : null;
+      for (const p of [run, sender, ...namedDefinitions(input).map((d) => ref(d)?.service ?? null)])
+        if (p !== null && p !== service) peers.add(p);
+      const named = namedBy(input);
+      return {
+        ...scenarioInputOf(input),
+        run,
+        sentBy: sender,
+        handle: handles.get(input) ?? null,
+        names: named === undefined ? null : (handles.get(named) ?? null),
+        strings: stringsOfInput(input),
+        keys:
+          "keys" in input && input.keys !== undefined
+            ? Object.fromEntries(Object.entries(input.keys).map(([e, names]) => [e, [...names]]))
+            : {},
+      };
+    });
+    return { peers: [...peers], inputs: lines };
+  };
+  const scenarioInputOf = (input: ReturnType<typeof unwrapped>): ScenarioInputStructure =>
+    input.type === "answer"
+      ? { type: "answer", sender: ref(input.sender), target: ref(input.target) }
+      : { type: input.type };
   const structure: Structure = {
     services: [...services].map(([name, s]) => ({
       name,
@@ -139,39 +198,28 @@ export function structureOf(
       const chart = chartOf(d) as ChartSpec;
       return { kind: chart.kind, service, name, ...structureOfChart(chart, ref, (shape) => schemaOf(d, shape)) };
     }),
-    scenarios: scenarios.map(({ service, name, definition }) => {
-      // The scenario's service takes a from input as it takes the request that it wraps.
-      const inputs = definition.inputs.map((input) => (input.type === "from" ? input.input : input));
-      return {
+    scenarios: [
+      ...scenarios.map(({ service, name, definition }) => ({
         service,
         name,
-        inputs: inputs.map((input) => {
-          if (input.type === "answer")
-            return {
-              type: "answer",
-              sender: ref(input.sender),
-              target: ref(input.target),
-              strings: stringsOfInput(input),
-            };
-          if (input.type === "event")
-            return {
-              type: "event",
-              resultOf:
-                input.resultOf === undefined
-                  ? null
-                  : inputs.flatMap((other, i) => (other === input.resultOf ? [i] : [])),
-              strings: stringsOfInput(input),
-            };
-          if (input.type === "unsubscribe")
-            return {
-              type: "unsubscribe",
-              subscription: inputs.flatMap((other, i) => (other === input.subscription ? [i] : [])),
-            };
-          if (input.type === "at" || input.type === "restart") return { type: input.type };
-          return { type: input.type, strings: stringsOfInput(input) };
+        given: Object.entries(definition.given).flatMap(([peer, state]) => {
+          const found = contracts
+            .filter((c) => c.service === peer)
+            .flatMap((c) => Object.entries(c.states))
+            .find(([, inputs]) => inputs === state);
+          return found === undefined ? [] : [{ service: peer, name: stateScenarioName(found[0]) }];
         }),
-      };
-    }),
+        ...linesOf(service, definition.inputs, Object.keys(definition.given)),
+      })),
+      ...contracts.flatMap((c) =>
+        Object.entries(c.states).map(([state, inputs]) => ({
+          service: c.service,
+          name: stateScenarioName(state),
+          given: [],
+          ...linesOf(c.service, inputs as ScenarioInputs, []),
+        })),
+      ),
+    ],
   };
   return { structure, thrownDefaults };
 }

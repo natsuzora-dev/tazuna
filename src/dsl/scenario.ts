@@ -144,7 +144,7 @@ type AnswerInput = AnswerFields<MockChoice | IdChoice> & Timed & { readonly hand
 type IdChoice = { readonly to: string; readonly input?: never; readonly stale?: never };
 
 /** An input as a scenario writes it, before timed() gives it the time of the `at` before it. */
-type UntimedInput = LineFields<UntimedAnswer, UntimedUnsubscribe>;
+export type UntimedInput = LineFields<UntimedAnswer, UntimedUnsubscribe>;
 
 type UntimedUnsubscribe = { readonly type: "unsubscribe"; readonly subscription: SubscribeLine };
 
@@ -153,7 +153,7 @@ type RequestLine = CommandLine | QueryLine | SubscribeLine | UntimedUnsubscribe;
 
 type UntimedAnswer = AnswerFields<MockChoice>;
 
-interface At extends Timed, CreatesKeys {
+export interface At extends Timed, CreatesKeys {
   readonly type: "at";
 }
 
@@ -177,7 +177,7 @@ interface From {
   readonly input: RequestLine;
 }
 
-type ScenarioInputs = readonly [At, ...(UntimedInput | At | Elsewhere | From)[]];
+export type ScenarioInputs = readonly [At, ...(UntimedInput | At | Elsewhere | From)[]];
 
 /**
  * The options of a scenario. `given` names, by service, the start state of each spec service whose messages the
@@ -210,9 +210,36 @@ export function scenario(description: string, inputs: ScenarioInputs, options: S
 type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string } & Advanced;
 
 /** The input that `input` names: the mock of an event's `resultOf`, or the subscribe input that an unsubscribe ends. */
-function namedBy(input: Entry["input"]): UntimedInput | undefined {
+export function namedBy(input: Entry["input"] | At): UntimedInput | undefined {
   if (input.type === "event") return input.resultOf;
   return input.type === "unsubscribe" ? input.subscription : undefined;
+}
+
+/** Returns the input that a written line gives its run: the input that an elsewhere or from line wraps, or the line. */
+export function unwrapped(w: ScenarioInputs[number]): UntimedInput | At {
+  return w.type === "elsewhere" || w.type === "from" ? w.input : w;
+}
+
+/** Returns the definitions that the input names: its target, event or screen, and an answer's sender. */
+export function namedDefinitions(input: UntimedInput | At): unknown[] {
+  switch (input.type) {
+    case "command":
+      return [input.command];
+    case "query":
+    case "subscribe":
+      return [input.query];
+    case "unsubscribe":
+      return [input.subscription.query];
+    case "event":
+      return [input.event];
+    case "operation":
+    case "unacceptedOperation":
+      return [input.screen];
+    case "answer":
+      return [input.sender, input.target];
+    default:
+      return [];
+  }
 }
 
 /**
@@ -316,11 +343,27 @@ export interface ElsewhereInput {
   readonly before: number;
 }
 
-/** Returns the elsewhere inputs of the scenario in written order. */
-export function elsewhereInputs(scenario: Scenario): ElsewhereInput[] {
-  const { others } = written(scenario.inputs);
-  const inputs = timedEntries(others.map((o) => o.entry));
-  return others.map(({ service, position, before }, i) => ({ service, input: inputs[i] as Input, position, before }));
+/**
+ * Returns the inputs of one run of a peer: those of its start state `state`, then the scenario's elsewhere inputs to the
+ * contract that `toPeer` accepts in written order. Handles are numbered across both, as one run takes them.
+ */
+export function peerRunInputs(
+  scenario: Scenario,
+  toPeer: (service: object) => boolean,
+  state: StateInputs | undefined,
+): { readonly state: Input[]; readonly elsewhere: ElsewhereInput[] } {
+  const stateEntries = state === undefined ? [] : written(state).own.map((o) => o.entry);
+  const others = written(scenario.inputs).others.filter((o) => toPeer(o.service));
+  const inputs = timedEntries([...stateEntries, ...others.map((o) => o.entry)]);
+  return {
+    state: inputs.slice(0, stateEntries.length),
+    elsewhere: others.map(({ service, position, before }, i) => ({
+      service,
+      input: inputs[stateEntries.length + i] as Input,
+      position,
+      before,
+    })),
+  };
 }
 
 /**

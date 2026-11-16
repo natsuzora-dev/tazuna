@@ -1,0 +1,9 @@
+{"kind":"Illegal.namedInputUnplaced","definition":null,"data":{},"location":{"file":"board/contract.ts","line":6,"input":2},"scenario":{"service":"board","name":"states.endsUnopened"}}
+{"kind":"Illegal.countedKey","definition":null,"data":{"value":"Note-1","entity":{"service":"notes","name":"Note"}},"location":{"file":"notes/contract.ts","line":4,"input":2},"scenario":{"service":"notes","name":"states.countedNote"}}
+{"kind":"Illegal.namedInputUnplaced","definition":null,"data":{},"location":{"file":"notes/scenarios.ts","line":9,"input":3},"scenario":{"service":"notes","name":"endsBoardSubscriptionPlainly"}}
+{"kind":"Illegal.namedInputUnplaced","definition":null,"data":{},"location":{"file":"notes/scenarios.ts","line":16,"input":3},"scenario":{"service":"notes","name":"endsSubscriptionFromBoard"}}
+{"kind":"Illegal.namedInputUnplaced","definition":null,"data":{},"location":{"file":"notes/scenarios.ts","line":21,"input":2},"scenario":{"service":"notes","name":"endsUnopenedBoardSubscription"}}
+{"kind":"Illegal.keyNamedTwice","definition":null,"data":{"entity":"Note","name":"N-milk"},"location":{"file":"notes/scenarios.ts","line":32,"input":2},"scenario":{"service":"notes","name":"namesNoteTwice"}}
+{"kind":"Illegal.keyNamedTwice","definition":null,"data":{"entity":"Note","name":"N-milk"},"location":{"file":"notes/scenarios.ts","line":37,"input":3},"scenario":{"service":"notes","name":"namesNoteAgain"}}
+{"kind":"Illegal.keyUsedBeforeNamed","definition":null,"data":{"name":"N-milk"},"location":{"file":"notes/scenarios.ts","line":46,"input":2},"scenario":{"service":"notes","name":"usesNameBeforeNaming"}}
+{"kind":"Illegal.countedKey","definition":null,"data":{"value":"Note-1","entity":{"service":"notes","name":"Note"}},"location":{"file":"notes/scenarios.ts","line":55,"input":2},"scenario":{"service":"notes","name":"namesCountedNote"}}

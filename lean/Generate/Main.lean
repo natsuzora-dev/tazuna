@@ -314,7 +314,7 @@ def files : List (String × String) :=
    ("syntax/structure.generated.ts",
     zodType% Tazuna.Syntax.Structure Tazuna.Data.RejectionKind Tazuna.Syntax.Ref Tazuna.Syntax.Activity
       Tazuna.Syntax.Transition Tazuna.Syntax.State Tazuna.Syntax.ChartFields Tazuna.Syntax.Reference
-      Tazuna.Syntax.Definition Tazuna.Syntax.Contract Tazuna.Syntax.ServiceInfo Tazuna.Syntax.ScenarioInput Tazuna.Syntax.Scenario),
+      Tazuna.Syntax.Definition Tazuna.Syntax.Contract Tazuna.Syntax.ServiceInfo Tazuna.Syntax.ScenarioLine Tazuna.Syntax.Scenario),
    ("data/step.generated.ts",
     zodType% Tazuna.Semantics.Step Tazuna.Data.Rejection Tazuna.Data.Answer Tazuna.Data.DeadlineId
       Tazuna.Semantics.Choice Tazuna.Semantics.Ended)]

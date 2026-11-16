@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   at,
   elsewhere,
-  elsewhereInputs,
+  peerRunInputs,
   restart,
   scenario,
   subscribe,
@@ -34,7 +34,7 @@ test("The service of a scenario skips its elsewhere inputs, which keep their tim
   );
   assert.deepEqual(writtenPositions(s), [2, 3, 5]);
   assert.deepEqual(
-    elsewhereInputs(s).map(({ service, input, position, before }) => [
+    peerRunInputs(s, (service) => service === peer, undefined).elsewhere.map(({ service, input, position, before }) => [
       service,
       input.type,
       input.time,

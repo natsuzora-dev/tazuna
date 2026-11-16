@@ -177,64 +177,205 @@ const serviceInfo = z.object({
 });
 
 /**
- * A written scenario input, reduced to an answer's definitions, the input that an event's `resultOf` or an unsubscribe
- * names, and the strings of the values that the input gives: an input, a payload, an answer's output, and a mock's
- * `input`. `resultOf` and `subscription` hold every position of the named input, counting the written inputs from 0 with
- * `at` included; `resultOf` is null without `resultOf`.
+ * A written line of a scenario or of a contract's state, as check needs it: the input as the run takes it, an elsewhere or
+ * from line by the input that it wraps.
  */
-const scenarioInput = z.discriminatedUnion("type", [
+const scenarioLine = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("at"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
+    strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("command"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("query"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("subscribe"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("unsubscribe"),
-    subscription: z.array(z.int().nonnegative()),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
+    strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("restart"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
+    strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("event"),
-    resultOf: z.array(z.int().nonnegative()).nullable(),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("operation"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("unacceptedOperation"),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
   z.object({
     type: z.literal("answer"),
     sender: ref.nullable(),
     target: ref.nullable(),
+    /** The peer whose run takes an elsewhere input; null for an input to the run of the scenario's or state's service. */
+    run: z.string().nullable(),
+    /** The peer that sends a from input; null for any other input. */
+    sentBy: z.string().nullable(),
+    /**
+     * The number by which lines name the input when one does: the mock of an event's resultOf, or the subscribe input of an
+     * unsubscribe. It is the same wherever the input is placed.
+     */
+    handle: z.int().nonnegative().nullable(),
+    /** The handle of the input that the input names: the mock of its resultOf, or its subscribe input. */
+    names: z.int().nonnegative().nullable(),
+    /** The strings of the values that the input gives: an input, a payload, an answer's output, and a mock's `input`. */
     strings: z.array(z.string()),
-  }),
-  /** An input to another spec service, which the scenario's service skips. */
-  z.object({
-    type: z.literal("elsewhere"),
-    strings: z.array(z.string()),
+    /** The names that the line's `keys` gives the createKey values, by entity name. */
+    keys: z.record(z.string(), z.array(z.string())),
   }),
 ]);
 
+/**
+ * The written lines of a scenario, or of a start state of a contract's `states`, whose name is `states.<state>`. `given`
+ * names the states that the scenario gives its peers, and `peers` the other services whose definitions or contracts its
+ * lines name.
+ */
 const scenario = z.object({
   service: z.string(),
   name: z.string(),
-  inputs: z.array(scenarioInput),
+  given: z.array(ref),
+  peers: z.array(z.string()),
+  inputs: z.array(scenarioLine),
 });
 
 const structure = z.object({
@@ -242,6 +383,7 @@ const structure = z.object({
   contracts: z.array(contract),
   /** The definitions, in the order of the spec. */
   definitions: z.array(definition),
+  /** The scenarios, then the start states of the contracts. */
   scenarios: z.array(scenario),
 });
 
