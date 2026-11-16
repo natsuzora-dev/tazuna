@@ -43,12 +43,12 @@ tazuna guarantees nothing about inputs that no scenario contains.
 A scenario's *peer* is another service of the spec, not an external one, that the scenario sends a request to, emits an event to, receives an event from, or names in `given`, `elsewhere`, or `from`.
 `test` runs the peer's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the peer, the scenario's events that the peer receives, and the scenario's answers to the requests that it takes `from` the peer, at their send times, with the scenario's `elsewhere` inputs at their places.
 A request that a mock answers as `unavailable` never reaches the peer, and an answer to a subscription that the peer has ended reaches it as a late answer to that subscription, as it would from the network.
-A mock may name each key that the peer creates with any string, one to one, and a request `from` the peer has the scenario's id, which stands for the id that the peer's run gives it.
-The peer receives the keys that the scenario's service creates renamed, and each string or id by which an earlier line names one of its keys or requests as that key or request, and values compare in the form that `verify` compares, up to these renamings.
-`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit as the result of that request (`unproducibleEvent`), a request `from` the peer that the run does not send by its time (`unproducibleRequest`), an answer, event, or request whose comparison does not finish because pairing the elements of two bags uses up its 100000 tries (`peerSearchLimit`), and a run that halts (`haltedPeer`).
+A request of the peer to the scenario's service that the scenario does not take `from` the peer gets no answer.
+Values compare in the form that `verify` compares, up to renamings: the peer receives the keys that the scenario's service creates renamed, a line may name a key that the peer creates by any string, one to one, a request `from` the peer has the scenario's id in place of the id that the peer's run gives it, and the peer receives each such string or id of a later line as the key or request that it names.
+
+Each answer, event, or request that the scenario takes from the peer must come from the peer's run by the time the scenario takes it and before the peer takes an input that arrives after it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
+`test` reports under `InvalidInput` an answer that the run does not give the request at the same place (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit, or does not emit as the result of the request that the event names as its `resultOf` (`unproducibleEvent`), a request `from` the peer that the run does not send (`unproducibleRequest`), a comparison that uses up its 100000 tries pairing the elements of two bags (`peerSearchLimit`), and a run that halts (`haltedPeer`).
 Of a run that does not halt, `test` also reports each `InvalidInput` violation, such as an `ambiguousMock` of a given state or an `unwaitedRequest` for an answer to a request that the peer never sent, at the line that caused it: the scenario for its given state, the `elsewhere` line, or the scenario's input whose processing wrote what the peer took.
-Each must come from the run before the peer takes an input that arrives after the scenario takes it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
-A request of the peer's run to the scenario's service that the scenario does not take `from` the peer gets no answer, and `test` does not report it.
 
 When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values and ids compared as above:
 
@@ -60,8 +60,7 @@ When `test` reports none of these violations, the scenario's run and the peer's 
 - the peer sends each line that the scenario takes before it receives any line that the scenario sends at or after taking it.
 
 Lean proves this as `network_realizes` for spec runs, given that the peer's run writes one input line for each derived input, in order, which it does not prove.
-`network_realizes` covers only a peer's run whose every request to the scenario's service is one that the scenario takes `from` the peer.
-That the given state and the `elsewhere` inputs give the peer no event of the scenario's service and no answer to a request to it is checked when the spec loads.
+The theorem covers only a peer's run whose every request to the scenario's service is one that the scenario takes `from` the peer, which `test` does not check, and only given states and `elsewhere` inputs that give the peer no event of the scenario's service and no answer to a request to it, which `check` reports as `Malformed.ownMessageToPeer`.
 So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
 Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
 
@@ -88,7 +87,7 @@ The following table names the side at fault for each group.
 | `NonCanonical` | `check` | The spec. |
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
-| `InvalidInput` | `test` | The scenario: an input that the environment could not give, including an answer of an external service that breaks the contract that the spec assumes of it, and an answer or event of another service of the spec that the other service's run does not give. |
+| `InvalidInput` | `test` | The scenario: an input that the environment could not give, including an answer of an external service that breaks the contract that the spec assumes of it, and an answer, event, or request of another service of the spec that the other service's run does not give. |
 | `Fault` | `test` | The spec. |
 | `OrderDependent` | `test` | The spec. |
 | `ChoiceDependent` | `test` | The spec. |
@@ -131,8 +130,7 @@ tazuna detects breaks of each assumption only partly or not at all.
   A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
   `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, the keys that one call creates up to a renaming.
 - **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
-  Every line has an ID: the implementation's ID of the message, or, for a message without one, such as an answer, an ID that the recorder gives it.
-  An event that the implementation emits while it processes a request names that request's ID as its `resultOf`, and any other event names none.
+  It gives a message that has no ID of the implementation, such as an answer, an ID of its own, and it writes as an event's `resultOf` the request that the implementation was processing when it emitted the event, and no request otherwise.
   An input line therefore carries the implementation's IDs and keys, not the snapshot's.
   `verify` reports a message that the recorder leaves out.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
