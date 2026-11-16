@@ -1,4 +1,4 @@
-import type { Rejection } from "./trace.generated.ts";
+import type { Answer, Rejection } from "./trace.generated.ts";
 
 /**
  * What a command's caller receives. Only an external service's command that declares `output` has `output` when
@@ -12,3 +12,11 @@ export type CommandAnswer<O = undefined> =
 export type QueryAnswer<O = unknown> =
   | { readonly result: "fulfilled"; readonly output: O }
   | { readonly result: "rejected"; readonly rejection: Rejection };
+
+/** Lean's Answer.unavailable. */
+export const unavailable = (answer: Answer): boolean =>
+  "rejection" in answer && answer.rejection.kind === "unavailable";
+
+/** Lean's Answer.mapOutput. */
+export const mapOutput = (answer: Answer, f: (v: unknown) => unknown): Answer =>
+  "output" in answer ? ({ ...answer, output: f(answer.output) } as Answer) : answer;

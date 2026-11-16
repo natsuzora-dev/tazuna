@@ -76,6 +76,17 @@ export const renamed = (bindings: Bindings, value: Json): Json => {
   return value;
 };
 
+/** Lean's Bindings.bind. */
+export function bind(bs: Bindings, v: string, w: string): Bindings | undefined {
+  const x = bs.get(v);
+  if (x !== undefined) return x === w ? bs : undefined;
+  return [...bs.values()].includes(w) ? undefined : new Map([...bs, [v, w]]);
+}
+
+/** Lean's Bindings.bindNew. */
+export const bindNew = (bs: Bindings, v: string, w: string): Bindings | undefined =>
+  bs.has(v) || [...bs.values()].includes(w) ? undefined : new Map([...bs, [v, w]]);
+
 /** Returns the line as JSON whose keys start with time, dir, type, and id, in that order. */
 export const jsonLine = ({ time, dir, type, id, ...rest }: TraceLine): Json => plain({ time, dir, type, id, ...rest });
 

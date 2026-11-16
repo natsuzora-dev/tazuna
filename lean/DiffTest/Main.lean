@@ -2,7 +2,7 @@ import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Names
 import Tazuna.Observe.ChoiceDependent
-import Tazuna.Semantics.System.Peer
+import Tazuna.Semantics.System.PeerCheck
 
 /-!
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).

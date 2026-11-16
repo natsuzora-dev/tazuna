@@ -1,5 +1,5 @@
-import Tazuna.Network
-import Tazuna.Thm.Semantics.System.Peer
+import Tazuna.Semantics.Network
+import Tazuna.Thm.Semantics.System.PeerCheck
 
 /-!
 Stage 2 of the check of a scenario's mocks of a peer (network_realizes): when the check finds no violation, the
@@ -8,9 +8,9 @@ directly: a request or an answer reaches the peer at the time the scenario sends
 reaches the scenario at the time the scenario takes it.
 -/
 
-namespace Tazuna.Thm.Network
+namespace Tazuna.Thm.Semantics.Network
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Network Tazuna.Thm.Semantics.System.Peer Tazuna.Thm.Verify.Matching
+open Tazuna.Data Tazuna.Thm.Data.Trace Tazuna.Thm.Data.Unify Tazuna.Semantics Tazuna.Semantics.Network Tazuna.Thm.Semantics.System.PeerCheck Tazuna.Thm.Verify.Matching
 
 theorem answersTo_append (xs ys : List TraceLine) (d : Dir) (to : String) :
     answersTo (xs ++ ys) d to = answersTo xs d to ++ answersTo ys d to := by
@@ -602,7 +602,7 @@ theorem requestOf_some {d : Dir} {b : TraceLine.Body} {t id name : String} {x : 
     | cases h
 
 /-- A line that a from line pairs (SentAs) is an `in` request or end of a subscription. -/
-theorem _root_.Tazuna.Thm.Semantics.System.Peer.SentAs.request {c : List String} {seen form : String → Value → CValue} {service : String}
+theorem _root_.Tazuna.Thm.Semantics.System.PeerCheck.SentAs.request {c : List String} {seen form : String → Value → CValue} {service : String}
     {bs bs' : Bindings} {l b : TraceLine} (h : SentAs c seen form service bs bs' l b) :
     l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       (∀ id name p r, l.body ≠ .event .in id name p r) ∧ b.body.dir = .out ∧ isEventLine b = false ∧
@@ -1282,4 +1282,4 @@ theorem network_realizes {canon : Schema → Value → Value} {received : List S
       exact Nat.lt_of_lt_of_le (beforeOf j' _ _ hs') (before_le hlen hl (arrivals_of_line hk) (by omega))
     · exact absurd (hs.symm.trans (hsrc2 r i)) (by simp)
 
-end Tazuna.Thm.Network
+end Tazuna.Thm.Semantics.Network

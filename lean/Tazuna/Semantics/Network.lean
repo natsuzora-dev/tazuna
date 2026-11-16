@@ -6,9 +6,9 @@ This module models services that run together on a network: an execution gives e
 each line that a member receives from another member the line that the other member sent.
 -/
 
-namespace Tazuna.Network
+namespace Tazuna.Semantics.Network
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data
 
 /-- A line of an execution: the member, from 0, and the line of its trace, from 0. -/
 abbrev Place := Nat × Nat
@@ -39,14 +39,6 @@ equality, an idempotency key; between spec runs, a run may give a request its ow
 -/
 abbrev Ids := (sent : Place) → (r : Nat) → (i j : String) → Prop
 
-/-- Whether the received answer `a` carries the sent answer `b`, values compared by `agree`, rejections by kind. -/
-def AnswerCarries (agree : Value → Value → Prop) : Answer → Answer → Prop
-  | .accepted (some x), .accepted (some y) => agree x y
-  | .accepted none, .accepted none => True
-  | .fulfilled x, .fulfilled y => agree x y
-  | .rejected r, .rejected q => r.kind = q.kind
-  | _, _ => False
-
 /--
 Whether the line `recv` that member `r` received carries the line `sent` at the place `p` of another member: a request
 to `r` with the same id, an end of a subscription, an answer to a request of `r` to the sender, or an event of the
@@ -64,11 +56,6 @@ def Carries (agree : Agree) (ids : Ids) (e : Execution) (p : Place) (r : Nat) (s
       AnswerCarries (agree p r (.output m)) b a
   | .event .out _ n x _, .event .in _ name y _ => peerName? (e.name p.1) name = some n ∧ agree p r (.payload name) x y
   | _, _ => False
-
-def isEventLine (l : TraceLine) : Bool :=
-  match l.body with
-  | .event .. => true
-  | _ => false
 
 /--
 Whether line `l` of the trace `lines` is a message that the network must deliver to the service named `to`: a request
@@ -135,4 +122,4 @@ def RunOf (canon : Schema → Value → Value) (inputs : List Step) (lines : Lis
   inputs.length = (inLines lines).length ∧
     ∀ (k : Nat) s (p : TraceLine × Nat), inputs[k]? = some s → (inLines lines)[k]? = some p → Writes canon lines s p.1
 
-end Tazuna.Network
+end Tazuna.Semantics.Network

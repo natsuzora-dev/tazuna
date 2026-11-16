@@ -16,15 +16,8 @@ import {
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
 import { serviceOf } from "../semantics/service/basic.ts";
-import {
-  type NamedForm,
-  type PeerOrigin,
-  peerArrivals,
-  peerEvent,
-  peerFindings,
-  peerInputs,
-  peerName,
-} from "../semantics/system/peer.ts";
+import { type NamedForm, type PeerOrigin, peerArrivals, peerEvent, peerName } from "../semantics/system/peer.ts";
+import { peerFindings, peerInputs } from "../semantics/system/peerCheck.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
 /** The arguments of peerInputs for one peer of a scenario's run, with the scenario's elsewhere inputs to the peer. */
