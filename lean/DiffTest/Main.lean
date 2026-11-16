@@ -518,19 +518,31 @@ instance : MonadNote IO where
 
 /--
 The reply to request `simulate`, which takes a structure and a scenario, and returns each running service's trace lines
-and violations, and the simulation's reports and halting report. Each question to TS names its service.
+and violations, and the simulation's reports and halting report. Each question to TS names its service. With `walk`
+true, the lines take place as explore runs them (Sim.walk), and each running service that did not halt also returns
+what it enables next.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
   let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
   let sc : Scenario ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "scenario")))
+  let walking := request.field? "walk" == some (.bool true)
   let start ← IO.ofExcept (Sim.World.start spec sc)
   let reads ← IO.mkRef {}
   let memo ← IO.mkRef {}
-  let w ← Sim.simulate spec (fun s => functions stdin stdout reads memo false (some s)) start sc
-  pure (.obj [("type", .str "simulated"),
-    ("participants", .arr (w.states.map fun (service, s) => .obj [("service", .str service),
+  let fsOf := fun s => functions stdin stdout reads memo false (some s)
+  let w ← (if walking then Sim.walk else Sim.simulate) spec fsOf start sc
+  let participants ← w.states.mapM fun (service, s) => do
+    let enabled ← match walking, s.halted, w.services.lookup service with
+      | true, none, some st => do
+        match ← Observe.enabled st (fsOf service) s with
+        | .ok e => pure [("enabled", Tazuna.Json.Enabled.toValue e)]
+        | .error f => pure [("enabled", .obj [("fault", ToValue.toValue (Finding.fault f).toViolation)])]
+      | _, _, _ => pure []
+    pure (.obj ([("service", .str service),
       ("lines", .arr (s.lines.toList.map fun l => lineValue l [] [])),
-      ("violations", .arr ((s.violations ++ s.halted.toList).map ToValue.toValue))])),
+      ("violations", .arr ((s.violations ++ s.halted.toList).map ToValue.toValue))] ++ enabled))
+  pure (.obj [("type", .str "simulated"),
+    ("participants", .arr participants),
     ("reports", .arr (w.reports.map (·.toValue))),
     ("halted", (w.halted.map (·.toValue)).getD .null)])
 

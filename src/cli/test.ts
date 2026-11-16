@@ -12,6 +12,7 @@ import { type Input, type Scenario, timed } from "../dsl/scenario.ts";
 import { type Explored, explore } from "../explore/index.ts";
 import { seenValues, valuesPerPayload } from "../explore/moves.ts";
 import type { Concurrent, Decided, Target } from "../explore/orders.ts";
+import { exploreLines, seenLines } from "../explore/paths.ts";
 import * as automations from "../explore/uncovered/automations.ts";
 import * as charts from "../explore/uncovered/charts.ts";
 import * as requests from "../explore/uncovered/requests.ts";
@@ -171,6 +172,24 @@ export function testSpec(
   }
   const simulated = simulateScenarios(spec);
   problems.push(...simulated.problems);
+  const seenInLines = seenLines(spec);
+  for (const p of simulated.problems) reported.add(canonicalJson([p.kind, p.definition, p.data, p.location]));
+  for (const named of spec.scenarios) {
+    const explored = exploreLines(spec, named as Named<LoadedScenario>, seenInLines, bounds);
+    reached.addAll(explored.reached);
+    const ref = { service: named.service, name: named.name };
+    for (const { violation, appended } of explored.found) {
+      const problem = toProblem(
+        violation,
+        violation.location ?? (violation.definition === null ? named.place : placeOf(spec, violation.definition)),
+        { scenario: ref, appendedLines: appended },
+      );
+      const key = canonicalJson([problem.kind, problem.definition, problem.data, problem.location]);
+      if (reported.has(key)) continue;
+      reported.add(key);
+      problems.push(problem);
+    }
+  }
   snapshotted.push(...simulated.snapshotted);
   const snapshots = testSnapshots(spec, snapshotted, options.update);
   return { ...snapshots, problems: [...problems, ...snapshots.problems], reached };

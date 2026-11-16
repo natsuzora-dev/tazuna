@@ -429,6 +429,22 @@ def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lin
     | .ok (some (expected, actual)) =>
       pure (if expected.canonical == actual.canonical then w else w.note (.unmetExpectation k expected actual))
 
+/-- The world after every running service begins and the lines take place, until one stops it. -/
+def World.walk (w : World) (fsOf : String → Functions m) (sc : Scenario) : m World := do
+  let w ← w.services.foldlM (init := w) fun w (s, _) =>
+    if w.stopped then pure w else w.act fsOf .begin s begin
+  sc.lines.zipIdx.foldlM (init := w) fun w (l, i) =>
+    if w.stopped then pure w else w.line fsOf sc.service sc.lines sc.expectations i l
+
+/--
+The world after the lines of the scenario take place from `start`, as `simulate` runs them, without checking the end
+and Then: explore appends lines to a scenario this way, so what the appended lines leave in flight is no mistake.
+-/
+def walk (j : Syntax.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
+  let w ← start.given j fsOf sc
+  if !w.reports.isEmpty then return w
+  w.walk fsOf sc
+
 /--
 The world after the scenario runs from `start`, each running service asking `fsOf` its spec's functions: Given is
 checked and the records placed, every running service begins, the lines take place, and the end and Then are checked.
@@ -436,10 +452,7 @@ checked and the records placed, every running service begins, the lines take pla
 def simulate (j : Syntax.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
   if !w.reports.isEmpty then return w
-  let w ← w.services.foldlM (init := w) fun w (s, _) =>
-    if w.stopped then pure w else w.act fsOf .begin s begin
-  let w ← sc.lines.zipIdx.foldlM (init := w) fun w (l, i) =>
-    if w.stopped then pure w else w.line fsOf sc.service sc.lines sc.expectations i l
+  let w ← w.walk fsOf sc
   if w.stopped then return w
   w.checkEnd.expect fsOf sc.service sc.lines sc.expectations
 

@@ -668,10 +668,8 @@ function expect(w: World, own: string, lines: readonly Line[], expectations: rea
   });
 }
 
-/** Lean's simulate. */
-export function simulate(structure: Structure, w: World, sc: Scenario): World {
-  given(w, structure, sc);
-  if (w.reports.length > 0) return w;
+/** Lean's World.walk. */
+function walkLines(w: World, sc: Scenario): void {
   for (const service of w.participants.keys()) if (!stopped(w)) act(w, { type: "begin" }, service, begin);
   sc.lines.forEach((l, i) => {
     if (stopped(w)) return;
@@ -682,6 +680,21 @@ export function simulate(structure: Structure, w: World, sc: Scenario): World {
       reportTo(w, error.report);
     }
   });
+}
+
+/** Lean's walk. */
+export function walk(structure: Structure, w: World, sc: Scenario): World {
+  given(w, structure, sc);
+  if (w.reports.length > 0) return w;
+  walkLines(w, sc);
+  return w;
+}
+
+/** Lean's simulate. */
+export function simulate(structure: Structure, w: World, sc: Scenario): World {
+  given(w, structure, sc);
+  if (w.reports.length > 0) return w;
+  walkLines(w, sc);
   if (stopped(w)) return w;
   checkEnd(w);
   expect(w, sc.service, sc.lines, sc.expectations);

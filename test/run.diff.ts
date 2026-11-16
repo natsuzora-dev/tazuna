@@ -2,21 +2,28 @@ import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { haltingFaultKinds } from "../src/data/fault.generated.ts";
+import type { Line, Scenario } from "../src/data/scenario.generated.ts";
 import type { Step } from "../src/data/step.generated.ts";
 import type { RejectionKind } from "../src/data/trace.generated.ts";
 import { toJsonl } from "../src/data/trace.ts";
-import type { Data } from "../src/data/violation.ts";
+import { canonicalJson, type Json } from "../src/data/values.ts";
+import type { Data, Violation } from "../src/data/violation.ts";
 import { type Input, timed } from "../src/dsl/scenario.ts";
 import { enabledMoves, orderedInputs, seenValues, valuesPerPayload } from "../src/explore/moves.ts";
+import { enabledLines, orderedLines, seenLines, type Walked, walkAppended } from "../src/explore/paths.ts";
 import { search } from "../src/explore/search.ts";
 import type { Spec } from "../src/load/load.ts";
+import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { definitionOfTraceName } from "../src/load/traceName.ts";
-import type { Enabled } from "../src/observe/enabled.ts";
+import { type Enabled, enabled } from "../src/observe/enabled.ts";
 import { limits as tsLimits } from "../src/service/limits.ts";
 import { byCallerKinds } from "../src/service/message.ts";
+import { Halt } from "../src/service/state.ts";
+import type { Participant } from "../src/sim/network.ts";
 import { execute, extend, type Run, stepsOf } from "../src/sim/spec/execute.ts";
+import { outcomeOf } from "../src/sim/spec/simulate.ts";
 import { depth, loadRoot, runExamples } from "./examples.ts";
-import { RunFunctions } from "./lean/functions.ts";
+import { RunFunctions, SimFunctions } from "./lean/functions.ts";
 import { invalidAfter, rejectedAnywhere } from "./lean/invalidMoves.ts";
 import { Lean, type LeanRun } from "./lean/lean.ts";
 
@@ -148,6 +155,123 @@ for (const { name, spec } of specs) {
           children.delete(input);
           if (children.size === 0) made.delete(parent);
           return both;
+        },
+        next,
+        merge: "none",
+      }))
+        paths += 1;
+      t.diagnostic(`${paths} paths`);
+    });
+}
+
+/** What a walk shows, as Lean's reply to `simulate` with `walk` gives it. */
+function walkedOutcome(walked: Walked) {
+  const { world } = walked;
+  return {
+    ...outcomeOf(world),
+    participants: outcomeOf(world).participants.map((p) => {
+      const { processing, halted } = world.participants.get(p.service) as Participant;
+      if (halted !== undefined) return p;
+      try {
+        return { ...p, enabled: enabled(processing) };
+      } catch (error) {
+        if (!(error instanceof Halt)) throw error;
+        return { ...p, enabled: { fault: violationValue(error.violation) } };
+      }
+    }),
+  };
+}
+
+const violationValue = ({ kind, definition, data }: Violation) => ({ kind, definition, data });
+
+/**
+ * Returns lines that no one could write after a walk, each placed only at the end of a path: a clock line before now, a
+ * request and an operation whose value its schema rejects, an answer to the first awaited request with a rejection
+ * reason its target never gives, and a subscription's end of a line that opened none.
+ */
+function invalidLines(spec: Spec, sc: Scenario, walked: Walked, enabledLines: readonly Line[]): Line[] {
+  const malformed = { value: "not an object", holes: [] };
+  const command = spec.structure.definitions.find((d) => d.kind === "command" && d.service === sc.service);
+  const answer = enabledLines.find((l) => l.type === "answer");
+  const operate = enabledLines.find((l) => l.type === "operate");
+  return [
+    { type: "at", time: walked.world.now.subtract({ milliseconds: 1 }).toString(), order: [] },
+    { type: "unsubscribe", subscription: 0 },
+    ...(command === undefined
+      ? []
+      : [
+          {
+            type: "request",
+            kind: "command",
+            target: { service: command.service, name: command.name },
+            input: malformed,
+          } as const,
+        ]),
+    ...(answer?.type === "answer"
+      ? [
+          {
+            ...answer,
+            answer: { value: { result: "rejected", rejection: { kind: "requires", reason: "unlisted" } }, holes: [] },
+          },
+        ]
+      : []),
+    ...(operate?.type === "operate" ? [{ ...operate, payload: malformed }] : []),
+  ];
+}
+
+for (const { name, spec } of specs) {
+  const seen = seenLines(spec);
+  for (const named of spec.scenarios)
+    test(`${name}: ${named.service}/${named.name} and every path that appends up to ${depth} lines to it walk alike in TS and Lean`, (t) => {
+      const sc = (named.definition as LoadedScenario).scenario;
+      const functions = () => new SimFunctions(spec, (part) => lean.read(part));
+      const appendedOf = new Map<Walked, readonly Line[]>();
+      const both = (appended: readonly Line[]): Walked => {
+        const walked = walkAppended(spec, sc, appended);
+        appendedOf.set(walked, appended);
+        const fromLean = lean.simulate(spec, { ...sc, lines: [...sc.lines, ...appended] }, functions(), true);
+        assert.equal(
+          canonicalJson(fromLean as Json),
+          canonicalJson(walkedOutcome(walked) as unknown as Json),
+          `the walks differ after appending ${JSON.stringify(appended)}`,
+        );
+        return walked;
+      };
+      const enabledAfter = enabledLines(spec, sc, seen, valuesPerPayload);
+      const invalid = new WeakSet<Line>();
+      const made = new Map<Walked, Map<Line, Walked>>();
+      const next = (path: readonly Line[], walked: Walked): Line[] => {
+        const last = path.at(-1);
+        const stopped =
+          walked.world.halted !== undefined || [...walked.world.participants.values()].some((p) => p.halted);
+        if (stopped || (last !== undefined && invalid.has(last))) return [];
+        const appended = appendedOf.get(walked) ?? [];
+        let lines: Line[];
+        try {
+          lines = enabledAfter(path, walked);
+        } catch (error) {
+          if (error instanceof Halt) return [];
+          throw error;
+        }
+        const children = new Map(
+          lines.flatMap((line) => orderedLines(line, (l) => both([...appended, l])).map((c) => [c.line, c.walked])),
+        );
+        made.set(walked, children);
+        const others = invalidLines(spec, sc, walked, lines);
+        for (const line of others) invalid.add(line);
+        return [...children.keys(), ...others];
+      };
+      let paths = 0;
+      for (const _ of search<Line, Walked>({
+        start: { path: sc.lines, result: both([]) },
+        bound: depth,
+        step: (parent, line) => {
+          const children = made.get(parent);
+          const walked = children?.get(line);
+          if (children === undefined || walked === undefined) return both([...(appendedOf.get(parent) ?? []), line]);
+          children.delete(line);
+          if (children.size === 0) made.delete(parent);
+          return walked;
         },
         next,
         merge: "none",

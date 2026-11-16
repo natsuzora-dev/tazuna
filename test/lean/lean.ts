@@ -285,9 +285,10 @@ export class Lean {
   }
 
   /** Returns Lean's simulation of the scenario: each running service's trace and violations, and the reports. */
-  simulate(spec: Spec, scenario: Scenario, functions: Answering): Message {
+  /** Simulates the scenario, or with `walk` runs its lines as explore does and returns what each service enables. */
+  simulate(spec: Spec, scenario: Scenario, functions: Answering, walk = false): Message {
     const { type, ...result } = this.exchange(
-      { type: "simulate", structure: spec.structure, scenario },
+      { type: "simulate", structure: spec.structure, scenario, ...(walk ? { walk } : {}) },
       "simulated",
       functions,
     );

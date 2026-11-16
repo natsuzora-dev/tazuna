@@ -6,9 +6,10 @@ import type { Spec } from "../../load/load.ts";
 import { Collect } from "../../observe/instrument.ts";
 import { snapshotLines } from "../../observe/trace.ts";
 import type { Processing } from "../../service/chart/queue.ts";
+import type { Structure } from "../../syntax/structure.generated.ts";
 import { start } from "../given.ts";
 import type { World } from "../network.ts";
-import { simulate } from "../run.ts";
+import { simulate, walk } from "../run.ts";
 import { Listener } from "./execute.ts";
 import { SpecFunctions } from "./functions.ts";
 import { newProcessing } from "./processing.ts";
@@ -22,13 +23,15 @@ function processingFor(spec: Spec, service: string, listener: Listener): Process
 /** Runs the scenario on the spec's services. */
 export const simulateSpec = (spec: Spec, sc: Scenario): World => simulateWithSnapshots(spec, sc).world;
 
-/** Runs the scenario on the spec's services, and returns each running service's trace as its snapshot holds it. */
-export function simulateWithSnapshots(
-  spec: Spec,
-  sc: Scenario,
-): { readonly world: World; readonly snapshots: ReadonlyMap<string, readonly TraceLine[]> } {
+/** A world that `run` made from the scenario's start, with the listener of each running service. */
+interface Made {
+  readonly world: World;
+  readonly listeners: ReadonlyMap<string, Listener>;
+}
+
+function made(spec: Spec, sc: Scenario, run: (structure: Structure, w: World, sc: Scenario) => World): Made {
   const listeners = new Map<string, Listener>();
-  const world = simulate(
+  const world = run(
     spec.structure,
     start(sc, (service) => {
       const listener = new Listener(spec, service, new Collect());
@@ -37,6 +40,18 @@ export function simulateWithSnapshots(
     }),
     sc,
   );
+  return { world, listeners };
+}
+
+/** Runs the lines of the scenario on the spec's services as explore does (walk). */
+export const walkSpec = (spec: Spec, sc: Scenario): Made => made(spec, sc, walk);
+
+/** Runs the scenario on the spec's services, and returns each running service's trace as its snapshot holds it. */
+export function simulateWithSnapshots(
+  spec: Spec,
+  sc: Scenario,
+): { readonly world: World; readonly snapshots: ReadonlyMap<string, readonly TraceLine[]> } {
+  const { world, listeners } = made(spec, sc, simulate);
   const snapshots = new Map(
     [...world.participants].map(([service, p]) => {
       const s = p.processing.state;
