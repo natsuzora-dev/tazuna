@@ -45,6 +45,11 @@ inductive InvalidInput where
   | missingWaitingRequest (sender target : Syntax.Ref)
   /-- No stale request from `sender` to `target` waits for the answer input that chooses a stale request. -/
   | missingStaleRequest (sender target : Syntax.Ref)
+  /--
+  The requests from `sender` to `target` that the answer input may answer have the different inputs `inputs`, so it
+  answers none: a mock's `input` chooses among them by content, and no order decides.
+  -/
+  | ambiguousMock (sender target : Syntax.Ref) (inputs : List Value)
   | unknownControl (screen : Syntax.Ref) (control : String)
   /-- The operation input operates a screen that is not open. -/
   | unopenedScreen (screen : Syntax.Ref) (control : String)
@@ -102,7 +107,7 @@ def InvalidInput.halts : InvalidInput → Bool
   | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .unusedKeys .. | .uncreatedKey .. => true
   | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
-  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest ..
+  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest .. | .ambiguousMock ..
   | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .haltedPeer .. => false
 
 end Tazuna.Semantics

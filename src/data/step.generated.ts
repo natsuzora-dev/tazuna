@@ -41,7 +41,10 @@ const choice = z.union([
   z.object({
     to: z.string(),
   }),
-  /** The longest-waiting request whose input is `input`, when given, and that is stale exactly when `stale` is true. */
+  /**
+   * A waiting request that is stale exactly when `stale` is true and, when `input` is given, whose input has each field of
+   * `input` equal (chosen).
+   */
   z.object({
     input: z.unknown().exactOptional(),
     stale: z.boolean().exactOptional(),
@@ -217,8 +220,8 @@ const step = z.discriminatedUnion("type", [
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /**
-   * An answer to the request from `sender` to `target` that `choice` chooses, or without `choice`, to the longest-waiting
-   * request that is not stale. `handle` is the name by which a later event's `resultOf` names the answer.
+   * An answer to a request from `sender` to `target` that `choice` chooses, or without `choice`, to a request that is not
+   * stale (mock). `handle` is the name by which a later event's `resultOf` names the answer.
    */
   z.object({
     time: z.iso.datetime({ offset: true }),

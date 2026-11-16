@@ -36,10 +36,12 @@ Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 
 ## Refer to an earlier line by a name, not by a count
 
-A scenario line refers to a fact of an earlier line only by a name that a line binds, never by a position or a count, because a count changes whenever a line is added before it.
+A scenario line refers to a fact of an earlier line only by a name that a line binds or by its content, never by a position or a count, because a count changes whenever a line is added before it.
 createKey stands for a key that the implementation or its UI makes, such as a UUID, which no caller knows in advance.
 When a later line uses a key that an input's processing creates, name the key on that input with `keys`, by entity and in creation order: after `send(addTitle, { title: "Buy bread" }, { keys: { Task: ["T-bread"] } })`, createKey returns `T-bread` for the first `Task` key of that input.
 `check` reports a value in the form of a counted key, such as `Task-2` (`Illegal.countedKey`), and `test` reports a name that createKey does not return during its input (`InvalidInput.unusedKeys`).
+A mock chooses the request that it answers by content: `mock(planner, [calendar.nextDay, answer, { input: { from: "2026-10-25T11:00:00+09:00" } }])` answers the waiting request whose input has that `from`, whatever its other fields.
+When the requests that a mock may answer have different inputs, `test` reports `InvalidInput.ambiguousMock` instead of choosing by the order of sending; of requests with equal inputs, which a trace cannot tell apart, the mock answers the longest-waiting.
 
 Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.
 

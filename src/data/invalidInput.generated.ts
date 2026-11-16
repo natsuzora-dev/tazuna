@@ -187,6 +187,19 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /**
+   * The requests from `sender` to `target` that the answer input may answer have the different inputs `inputs`, so it
+   * answers none: a mock's `input` chooses among them by content, and no order decides.
+   */
+  | {
+      readonly kind: "InvalidInput.ambiguousMock";
+      readonly definition: null;
+      readonly data: {
+        readonly sender: DefinitionRef;
+        readonly target: DefinitionRef;
+        readonly inputs: readonly Json[];
+      };
+    }
   | {
       readonly kind: "InvalidInput.unknownControl";
       readonly definition: null;
@@ -354,6 +367,7 @@ export const invalidInputKinds = [
   "InvalidInput.resultOfUnlistedEvent",
   "InvalidInput.missingWaitingRequest",
   "InvalidInput.missingStaleRequest",
+  "InvalidInput.ambiguousMock",
   "InvalidInput.unknownControl",
   "InvalidInput.unopenedScreen",
   "InvalidInput.coveredByModal",

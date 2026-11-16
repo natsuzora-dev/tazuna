@@ -11,7 +11,10 @@ open Tazuna.Data
 inductive Choice where
   /-- The request whose trace line has id `to`, which only test's search writes. -/
   | search (to : String)
-  /-- The longest-waiting request whose input is `input`, when given, and that is stale exactly when `stale` is true. -/
+  /--
+  A waiting request that is stale exactly when `stale` is true and, when `input` is given, whose input has each field of
+  `input` equal (chosen).
+  -/
   | mock (input : Option Value) (stale : Option Bool)
 deriving Repr, Inhabited
 
@@ -31,8 +34,8 @@ inductive Step.Body where
   | operation (screen : String) (control : String) (payload : Value)
   | unacceptedOperation (screen : String) (control : String) (payload : Value)
   /--
-  An answer to the request from `sender` to `target` that `choice` chooses, or without `choice`, to the longest-waiting
-  request that is not stale. `handle` is the name by which a later event's `resultOf` names the answer.
+  An answer to a request from `sender` to `target` that `choice` chooses, or without `choice`, to a request that is not
+  stale (mock). `handle` is the name by which a later event's `resultOf` names the answer.
   -/
   | answer (sender : String) (target : String) (answer : Answer) (choice : Option Choice) (handle : Option String)
 deriving Repr, Inhabited

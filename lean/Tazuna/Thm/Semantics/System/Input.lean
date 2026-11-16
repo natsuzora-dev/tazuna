@@ -186,14 +186,12 @@ theorem mock_keysDistinct (sender name : String) (answer : Answer) (choice : Opt
   · split
     · simpa using h
     · split
-      · simpa using h
-      · split
-        · split <;> simpa using h
-        · apply message_keysDistinct
-          rw [(keeps_settled _ _ (keeps_deliverAnswer _ _ _)).records]
-          simp only [State.newStep, State.newMessage, State.writeInput]
-          repeat' split
-          all_goals simpa using h
+      · split <;> simpa using h
+      · apply message_keysDistinct
+        rw [(keeps_settled _ _ (keeps_deliverAnswer _ _ _)).records]
+        simp only [State.newStep, State.newMessage, State.writeInput]
+        repeat' split
+        all_goals simpa using h
 
 theorem operate_keysDistinct (screen control : String) (payload : Value) (accepted : Bool)
     (h : KeysDistinct s.records) : KeysDistinct (operate st fs s screen control payload accepted).records := by
@@ -236,9 +234,9 @@ theorem result_is_event_of_emits (name k : String) (s' : State) (p : Pending)
   · simp at h
 
 theorem subscription_answer_is_own_message (sender name : String) (answer : Answer) (choice : Option Choice)
-    (handle : Option String) (p : Pending) (canonical : Option Choice) (checked : AnswerCheck) (written : Answer)
-    (hc : canonicalChoice st fs name choice = .ok canonical) (hf : s.answering sender name canonical = some p)
-    (ha : checkAnswer st fs p answer = .ok checked) (hw : checked.written = .ok written) :
+    (handle : Option String) (p : Pending) (checked : AnswerCheck) (written : Answer)
+    (hf : s.answering st fs sender name choice = .ok p) (ha : checkAnswer st fs p answer = .ok checked)
+    (hw : checked.written = .ok written) :
     ∃ t : State, t.lines = (s.writeInput none (.answer p.id written)).1.lines ∧
       mock st fs s sender name answer choice handle =
         let started := t.newMessage.newStep none
@@ -246,8 +244,6 @@ theorem subscription_answer_is_own_message (sender name : String) (answer : Answ
         message st fs r.state r.queue := by
   unfold mock
   simp only [id_bind, id_pure]
-  rw [hc]
-  simp only
   rw [hf]
   simp only [ha, hw]
   refine ⟨_, ?_, rfl⟩
@@ -308,25 +304,9 @@ theorem earliestTurn_spec (ps : List Pending) (p : Pending) (h : earliestTurn ps
   · cases hm
   · exact ⟨hm, hq⟩
 
-theorem mock_answers_longest_waiting (sender name : String) (input : Option Value) (stale : Bool) (p : Pending)
-    (hf : s.longestWaiting sender name input stale = some p) :
-    p ∈ s.pending ∧ p.stale = stale ∧ p.activity.target = name ∧ s.senderOf p.requester = sender ∧
-      (∀ v ∈ input, v = p.input) ∧
-      ∀ q ∈ s.pending, q.stale = stale → q.activity.target = name → s.senderOf q.requester = sender →
-        (∀ v ∈ input, v = q.input) → p.turn ≤ q.turn := by
-  obtain ⟨hm, hmin⟩ := earliestTurn_spec _ p hf
-  have hp := (List.mem_filter.mp hm).2
-  simp only [Bool.and_eq_true, beq_iff_eq] at hp
-  refine ⟨(List.mem_filter.mp hm).1, hp.1.1.1, hp.1.1.2, hp.1.2, ?_, fun q hq h1 h2 h3 h4 => hmin q ?_⟩
-  · intro v hv
-    cases input with
-    | none => cases hv
-    | some w => cases hv; simpa using hp.2
-  · refine List.mem_filter.mpr ⟨hq, ?_⟩
-    simp only [Bool.and_eq_true, beq_iff_eq, h1, h2, h3, and_self, true_and]
-    cases input with
-    | none => rfl
-    | some w => simpa using (h4 w rfl)
+theorem mock_answers_longest_waiting (ps : List Pending) (p : Pending) (h : earliestTurn ps = some p) :
+    p ∈ ps ∧ ∀ q ∈ ps, p.turn ≤ q.turn :=
+  earliestTurn_spec ps p h
 
 theorem resultRequest_lines (name k : String) : (resultRequest st s name k).1.lines = s.lines := by
   unfold resultRequest
@@ -445,22 +425,22 @@ theorem earliestTurn_eq_none (ps : List Pending) : earliestTurn ps = none ↔ ps
     | nil => intro b; simp
     | cons q qs ih => intro b; simp only [List.foldl_cons]; split <;> exact ih _
 
-theorem no_waiting_request_iff (sender name : String) (input : Option Value) (stale : Bool) :
-    s.longestWaiting sender name input stale = none ↔
-      ∀ p ∈ s.pending, ¬ (p.stale = stale ∧ p.activity.target = name ∧ s.senderOf p.requester = sender ∧
-        ∀ v ∈ input, v = p.input) := by
-  rw [State.longestWaiting, earliestTurn_eq_none, List.filter_eq_nil_iff]
-  refine forall_congr' fun p => imp_congr_right fun _ => not_congr ?_
-  cases input <;> simp [and_assoc]
+theorem mock_without_waiting_request_reported (sender name : String) (choice : Option Choice)
+    (hc : s.answerable st fs sender name choice = .ok []) :
+    s.answering st fs sender name choice =
+      .error (.invalidInput ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest)
+        (st.refOf sender) (st.refOf name))) := by
+  simp [State.answering, hc, earliestTurn]
 
-theorem mock_without_waiting_request_reported (sender name : String) (answer : Answer) (choice : Option Choice)
-    (handle : Option String) (canonical : Option Choice) (hc : canonicalChoice st fs name choice = .ok canonical)
-    (hn : s.answering sender name canonical = none) :
-    mock st fs s sender name answer choice handle =
-      s.violate
-        (Finding.invalidInput ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest)
-          (st.refOf sender) (st.refOf name))).toViolation := by
-  simp only [mock, id_bind, hc, hn]
-  cases choosesStale choice <;> simp [State.report, Finding.halts, InvalidInput.halts]
+theorem ambiguous_mock_reported (sender name : String) (choice : Option Choice) (ps : List Pending)
+    (hc : s.answerable st fs sender name choice = .ok ps) (ha : 1 < (ps.map (·.input)).eraseDups.length) :
+    s.answering st fs sender name choice =
+      .error (.invalidInput (.ambiguousMock (st.refOf sender) (st.refOf name) (ps.map (·.input)).eraseDups)) := by
+  simp [State.answering, hc, ha]
+
+theorem mock_reports_unanswered (sender name : String) (answer : Answer) (choice : Option Choice)
+    (handle : Option String) (f : Finding) (hf : s.answering st fs sender name choice = .error f) :
+    mock st fs s sender name answer choice handle = s.report f := by
+  simp [mock, hf]
 
 end Tazuna.Thm.Semantics.System.Input

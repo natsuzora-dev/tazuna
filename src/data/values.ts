@@ -62,3 +62,14 @@ export function stringsOf(value: unknown): string[] {
   if (value !== null && typeof value === "object") return Object.values(value).flatMap(stringsOf);
   return [];
 }
+
+/** Lean's Value.overlay: `value` with the fields of `over` in place, at any depth; any value but an object replaces. */
+export function overlay(value: unknown, over: unknown): unknown {
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!isObject(value) || !isObject(over)) return over;
+  return Object.fromEntries([
+    ...Object.entries(value).map(([k, v]) => [k, k in over ? overlay(v, over[k]) : v]),
+    ...Object.entries(over).filter(([k]) => !(k in value)),
+  ]);
+}

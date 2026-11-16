@@ -145,27 +145,38 @@ def earliestTurn (ps : List Pending) : Option Pending :=
     | some b => if p.turn < b.turn then some p else some b
     | none => some p) none
 
-def State.longestWaiting (s : State) (sender name : String) (input : Option Value) (stale : Bool) : Option Pending :=
-  earliestTurn (s.pending.filter fun p =>
-    p.stale == stale && p.activity.target == name && s.senderOf p.requester == sender && input.all (· == p.input))
+/-- The requests from `sender` to `name` that wait, stale exactly when `stale` is true, in sending order. -/
+def State.waiting (s : State) (sender name : String) (stale : Bool) : List Pending :=
+  s.pending.filter fun p => p.stale == stale && p.activity.target == name && s.senderOf p.requester == sender
+
+/--
+The requests of `ps` that the mock input `input` chooses: those whose input has each field of `input`, at any depth,
+equal, an array or any other value as a whole. Exactly then the canonical form of the request's input overlaid with
+`input` is the request's input.
+-/
+def chosen [Monad m] (st : Service) (fs : Functions m) (name : String) (input : Value) :
+    List Pending → m (Except Fault (List Pending))
+  | [] => pure (.ok [])
+  | p :: ps => do
+    match ← fs.canonical (.input name) (p.input.overlay input) with
+    | .error e => pure (.error (issueViolation st (st.refOf name) e))
+    | .ok v =>
+      match ← chosen st fs name input ps with
+      | .error f => pure (.error f)
+      | .ok rest => pure (.ok (if v == p.input then p :: rest else rest))
 
 def choosesStale : Option Choice → Bool
   | some (.mock _ stale) => stale == some true
   | _ => false
 
-def State.answering (s : State) (sender name : String) : Option Choice → Option Pending
+/-- The requests from `sender` to `name` that the answer input may answer by its choice. -/
+def State.answerable [Monad m] (st : Service) (fs : Functions m) (s : State) (sender name : String) :
+    Option Choice → m (Except Fault (List Pending))
   | some (.search to) =>
-    s.pending.find? fun p => p.id == to && p.activity.target == name && s.senderOf p.requester == sender
-  | some (.mock input stale) => s.longestWaiting sender name input (stale == some true)
-  | none => s.longestWaiting sender name none false
-
-def canonicalChoice [Monad m] (st : Service) (fs : Functions m) (name : String) :
-    Option Choice → m (Except Fault (Option Choice))
-  | some (.mock (some input) stale) => do
-    match ← fs.canonical (.input name) input with
-    | .error e => pure (.error (issueViolation st (st.refOf name) e))
-    | .ok input => pure (.ok (some (.mock (some input) stale)))
-  | choice => pure (.ok choice)
+    pure (.ok (s.pending.filter fun p => p.id == to && p.activity.target == name && s.senderOf p.requester == sender))
+  | some (.mock (some input) stale) => chosen st fs name input (s.waiting sender name (stale == some true))
+  | some (.mock none stale) => pure (.ok (s.waiting sender name (stale == some true)))
+  | none => pure (.ok (s.waiting sender name false))
 
 def assumptionFinding (requestId : String) (target : Syntax.Ref) : Syntax.AssumptionMismatch → Finding
   | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)
@@ -238,16 +249,29 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
         return .ok { assumption := broken failedEnsures, written := .ok written,
                      recorded := p.activity.keyword == "sends" }
 
-def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sender name : String) (answer : Answer)
-    (choice : Option Choice) (handle : Option String) : m State := do
-  match ← canonicalChoice st fs name choice with
-  | .error fault => pure (s.report (.fault fault))
-  | .ok canonical =>
-  match s.answering sender name canonical with
-  | none => pure (s.report (.invalidInput
+/--
+The request that the answer input answers: the longest-waiting of those that it may answer, unless their inputs differ,
+which no order that the scenario wrote decides (ambiguousMock).
+-/
+def State.answering [Monad m] (st : Service) (fs : Functions m) (s : State) (sender name : String)
+    (choice : Option Choice) : m (Except Finding Pending) := do
+  match ← s.answerable st fs sender name choice with
+  | .error fault => pure (.error (.fault fault))
+  | .ok ps =>
+  let inputs := (ps.map (·.input)).eraseDups
+  if 1 < inputs.length then pure (.error (.invalidInput (.ambiguousMock (st.refOf sender) (st.refOf name) inputs)))
+  else
+  match earliestTurn ps with
+  | none => pure (.error (.invalidInput
       ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest) (st.refOf sender)
         (st.refOf name))))
-  | some p => do
+  | some p => pure (.ok p)
+
+def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sender name : String) (answer : Answer)
+    (choice : Option Choice) (handle : Option String) : m State := do
+  match ← s.answering st fs sender name choice with
+  | .error f => pure (s.report f)
+  | .ok p => do
     let s := { s with mocks := (handle.map (·, p, answer)).toList ++ s.mocks }
     match ← checkAnswer st fs p answer with
     | .error e =>

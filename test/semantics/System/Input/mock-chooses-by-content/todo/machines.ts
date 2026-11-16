@@ -27,12 +27,18 @@ export const planner = machine({
   states: {
     idle: { on: { taskAdded: [{ target: "asking" }] } },
     asking: { onDone: [{ target: "idle" }] },
-    firstAsking: { calls: { nextDay: { input: ({ now }) => ({ from: now }), ...done("firstDone") } } },
+    firstAsking: {
+      calls: { nextDay: { input: ({ now }) => ({ from: now, zone: "Asia/Tokyo" }), ...done("firstDone") } },
+    },
     secondAsking: {
-      calls: { nextDay: { input: ({ now }) => ({ from: now.add({ hours: 2 }) }), ...done("secondDone") } },
+      calls: {
+        nextDay: { input: ({ now }) => ({ from: now.add({ hours: 2 }), zone: "Asia/Tokyo" }), ...done("secondDone") },
+      },
     },
     laterAsking: {
-      calls: { nextDay: { input: ({ now }) => ({ from: now.add({ hours: 1 }) }), ...done("laterDone") } },
+      calls: {
+        nextDay: { input: ({ now }) => ({ from: now.add({ hours: 1 }), zone: "Asia/Tokyo" }), ...done("laterDone") },
+      },
     },
   },
 });

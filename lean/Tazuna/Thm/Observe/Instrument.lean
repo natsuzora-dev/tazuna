@@ -525,9 +525,16 @@ theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : V
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem canonicalChoice_agrees (name : String) (choice : Option Choice) :
-    Agrees (canonicalChoice st fsI name choice) (canonicalChoice st fs name choice) := by
-  unfold canonicalChoice; agree [h.canonical]
+theorem chosen_agrees (name : String) (input : Value) (ps : List Pending) :
+    Agrees (chosen st fsI name input ps) (chosen st fs name input ps) := by
+  induction ps with
+  | nil => exact Agrees.pure _
+  | cons p ps ih => simp only [chosen]; agree [h.canonical, ih]
+
+omit [MonadNote (StateT C Id)] in
+theorem answerable_agrees (s : State) (sender name : String) (choice : Option Choice) :
+    Agrees (s.answerable st fsI sender name choice) (s.answerable st fs sender name choice) := by
+  unfold State.answerable; agree [chosen_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem writtenAnswer_agrees (a : Activity) (answer : Answer) :
@@ -541,11 +548,16 @@ theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
   dsimp only
   agree [firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
 
+omit [MonadNote (StateT C Id)] in
+theorem answering_agrees (s : State) (sender name : String) (choice : Option Choice) :
+    Agrees (s.answering st fsI sender name choice) (s.answering st fs sender name choice) := by
+  unfold State.answering; agree [answerable_agrees h]
+
 theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice : Option Choice)
     (handle : Option String) :
     Agrees (mock st fsI s sender name answer choice handle) (mock st fs s sender name answer choice handle) := by
   unfold mock
-  agree [canonicalChoice_agrees h, checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
+  agree [answering_agrees h, checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by

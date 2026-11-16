@@ -2,7 +2,7 @@ import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { InvalidInput } from "../../data/invalidInput.generated.ts";
 import type { Step } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import { plain, stringsOf } from "../../data/values.ts";
+import { type Json, overlay, plain, stringsOf } from "../../data/values.ts";
 import { type ProblemError, withExtra } from "../../data/violation.ts";
 import {
   type AssumptionMismatch,
@@ -227,26 +227,54 @@ type Choice = NonNullable<Mock["choice"]>;
 const choosesStale = (choice: Choice | undefined): boolean =>
   choice !== undefined && !("to" in choice) && choice.stale === true;
 
-/** Returns the choice with its input canonical, as answering compares it with request lines. */
-function canonicalChoice(r: Processing, name: string, choice: Choice | undefined): Choice | undefined {
-  if (choice === undefined || "to" in choice || choice.input === undefined) return choice;
-  const definition = refOf(r.st, name);
-  const input = r.functions.canonical({ kind: "input", definition }, choice.input);
-  if (input instanceof Failed) return halt(issueViolation(definition, input));
-  return { ...choice, input };
+/** Lean's State.waiting: the requests from `sender` to `name` that wait, stale exactly when `stale` is, in sending order. */
+function waiting(s: State, sender: string, name: string, stale: boolean): Pending[] {
+  return s.pending.filter(
+    (p) => p.stale === stale && p.activity.target === name && senderOf(s, p.requester) === sender,
+  );
 }
 
 /**
- * Returns the request that the mock answers: the one `to` names, or the one waiting longest of those the choice allows.
+ * Lean's chosen: the requests of `ps` whose input has each field of the mock input `input` equal, at any depth, an
+ * array or any other value as a whole.
  */
-function answering(s: State, sender: string, name: string, choice: Choice | undefined): Pending | undefined {
-  const requested = (p: Pending) => p.activity.target === name && senderOf(s, p.requester) === sender;
-  if (choice !== undefined && "to" in choice) return s.pending.find((p) => p.id === choice.to && requested(p));
-  const input = choice?.input === undefined ? undefined : JSON.stringify(choice.input);
+function chosen(r: Processing, name: string, input: unknown, ps: readonly Pending[]): Pending[] {
+  const definition = refOf(r.st, name);
+  return ps.filter((p) => {
+    const v = r.functions.canonical({ kind: "input", definition }, overlay(JSON.parse(p.input), input));
+    if (v instanceof Failed) return halt(issueViolation(definition, v));
+    return JSON.stringify(v) === p.input;
+  });
+}
+
+/**
+ * Lean's State.answering: the request that the mock answers, the longest-waiting of those that its choice allows, or why
+ * it answers none.
+ */
+function answering(r: Processing, sender: string, name: string, choice: Choice | undefined): Pending | InvalidInput {
+  const s = r.state;
   const stale = choosesStale(choice);
-  return s.pending
-    .filter((p) => requested(p) && p.stale === stale && (input === undefined || p.input === input))
-    .toSorted((a, b) => a.turn - b.turn)[0];
+  const ps =
+    choice !== undefined && "to" in choice
+      ? s.pending.filter((p) => p.id === choice.to && p.activity.target === name && senderOf(s, p.requester) === sender)
+      : choice?.input === undefined
+        ? waiting(s, sender, name, stale)
+        : chosen(r, name, choice.input, waiting(s, sender, name, stale));
+  const refs = { sender: refOf(r.st, sender), target: refOf(r.st, name) };
+  const inputs = [...new Set(ps.map((p) => p.input))];
+  if (inputs.length > 1)
+    return {
+      kind: "InvalidInput.ambiguousMock",
+      definition: null,
+      data: { ...refs, inputs: inputs.map((i) => JSON.parse(i) as Json) },
+    };
+  const p = ps.toSorted((a, b) => a.turn - b.turn)[0];
+  if (p !== undefined) return p;
+  return {
+    kind: stale ? "InvalidInput.missingStaleRequest" : "InvalidInput.missingWaitingRequest",
+    definition: null,
+    data: refs,
+  };
 }
 
 type Assumption = Extract<
@@ -370,14 +398,9 @@ function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
 export function mock(r: Processing, value: Mock): Pending | undefined {
   const s = r.state;
   const { sender, target: name } = value;
-  const p = answering(s, sender, name, canonicalChoice(r, name, value.choice));
-  if (p !== undefined && value.handle !== undefined) s.mocks.set(value.handle, { request: p, answer: value.answer });
-  if (p === undefined)
-    return report(s, {
-      kind: choosesStale(value.choice) ? "InvalidInput.missingStaleRequest" : "InvalidInput.missingWaitingRequest",
-      definition: null,
-      data: { sender: refOf(r.st, sender), target: refOf(r.st, name) },
-    });
+  const p = answering(r, sender, name, value.choice);
+  if ("kind" in p) return report(s, p);
+  if (value.handle !== undefined) s.mocks.set(value.handle, { request: p, answer: value.answer });
   const checked = checkAnswer(r, p, value.answer);
   if (checked.assumption !== undefined) report(s, checked.assumption);
   if ("malformed" in checked.written) {

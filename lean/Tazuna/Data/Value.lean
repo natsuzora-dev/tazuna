@@ -116,6 +116,19 @@ def Value.mapStringsFields (f : String → String) : List (String × Value) → 
 
 end
 
+mutual
+
+/-- `v` with the fields of `w` in place, at any depth: an object merges its fields, and any other value of `w` replaces. -/
+def Value.overlay : Value → Value → Value
+  | .obj fs, .obj gs => .obj (Value.overlayFields fs gs ++ gs.filter fun (k, _) => (fs.lookup k).isNone)
+  | _, w => w
+
+def Value.overlayFields : List (String × Value) → List (String × Value) → List (String × Value)
+  | [], _ => []
+  | (k, v) :: fs, gs => (k, match gs.lookup k with | some w => v.overlay w | none => v) :: Value.overlayFields fs gs
+
+end
+
 /-- The value of JS `{...a, ...b}`. -/
 def Value.merge : Value → Value → Value
   | .obj a, .obj b => .obj (a.map (fun (k, v) => (k, (b.lookup k).getD v)) ++ b.filter fun (k, _) => (a.lookup k).isNone)

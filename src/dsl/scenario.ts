@@ -289,11 +289,16 @@ export function cannotOperate<Cs extends Readonly<Record<string, Control>>, cons
 }
 
 /**
- * The choice of a mock, which answers the longest-waiting request. `input` chooses the requests that have this input,
- * and `stale` marks a late answer to a request whose state the sender left, or to an ended subscription.
+ * The choice of a mock. `input` chooses the requests whose input has each of its fields equal, at any depth, an array as
+ * a whole, and `stale` marks a late answer to a request whose state the sender left, or to an ended subscription.
  */
 type MockChoice<I = unknown> = { readonly input?: I; readonly stale?: true; readonly to?: never };
-type InputOfTarget<T> = T extends { readonly input: infer I extends Shape } ? Encoded<I> : never;
+type InputOfTarget<T> = T extends { readonly input: infer I extends Shape } ? SomeFields<Encoded<I>> : never;
+type SomeFields<T> = T extends readonly unknown[]
+  ? T
+  : T extends object
+    ? { readonly [K in keyof T]?: SomeFields<T[K]> }
+    : T;
 
 type Sender = { readonly kind: "screen" | "machine" | "automation" };
 
@@ -331,9 +336,10 @@ type AcceptedAnswer<O> = [O] extends [undefined]
     : never;
 
 /**
- * Answers, from another service, the longest-waiting request among those that a definition of kind `sender.kind` has
- * sent and the choice chooses. The target in `pair` is a query or command that the sender uses
- * (Illegal.unrequestedAnswer).
+ * Answers, from another service, a request that a definition of kind `sender.kind` has sent and that the choice chooses
+ * by its content. When the requests that the mock may answer have different inputs, test reports
+ * InvalidInput.ambiguousMock and answers none; of requests with equal inputs, it answers the longest-waiting. The target
+ * in `pair` is a query or command that the sender uses (Illegal.unrequestedAnswer).
  */
 export function mock<const T extends AnyCommand | AnyQuery>(
   sender: Sender,
