@@ -1,33 +1,27 @@
-import { at, call, scenario, send } from "@natsuzora-dev/tazuna";
-import { addTask, seenIds } from "./todo.ts";
+import { addTask, scenario, seenIds } from "./todo.ts";
 
-export const seenTwice = scenario("Add two tasks and ask twice for the seen ids; no violation", [
-  at("2026-10-25T00:00:00Z"),
-  send(addTask, { taskId: "task-1" }),
-  send(addTask, { taskId: "task-2" }),
-  call(seenIds, {}),
-  call(seenIds, {}),
-]);
-
-export const seenOnce = scenario("Add a task and ask twice for the seen ids; no violation", [
-  at("2026-10-25T00:00:00Z"),
-  send(addTask, { taskId: "task-1" }),
-  call(seenIds, {}),
-  call(seenIds, {}),
-]);
-
-export const seenTwiceWrongIds = scenario(
-  "Same inputs as seenTwice; the implementation trace of this scenario answers the second seenIds with other created keys, so verify reports Mismatch.renaming",
-  [
-    at("2026-10-25T00:00:00Z"),
-    send(addTask, { taskId: "task-1" }),
-    send(addTask, { taskId: "task-2" }),
-    call(seenIds, {}),
-    call(seenIds, {}),
-  ],
+export const seenOnce = scenario(
+  "Add a task and ask twice for the seen ids; the key that taskAdded's internal seen event creates binds where the first seenIds answer holds it; no violation",
+  {
+    given: { start: "2026-10-25T00:00:00Z", records: { Task: [], Seen: [] }, peers: {} },
+    when: (w) => {
+      w.client.send(addTask, { taskId: "task-1" });
+      w.client.call(seenIds, {});
+      w.client.call(seenIds, {});
+    },
+    then: () => [],
+  },
 );
 
 export const seenOnceWrongListed = scenario(
-  "Same inputs as seenOnce; the implementation trace of this scenario answers the second seenIds with another key in listed, so verify reports Mismatch.renaming",
-  [at("2026-10-25T00:00:00Z"), send(addTask, { taskId: "task-1" }), call(seenIds, {}), call(seenIds, {})],
+  "Same inputs as seenOnce; the implementation trace of this scenario answers the second seenIds with another key in listed, which does not stand for the bound key, so verify reports Mismatch.output",
+  {
+    given: { start: "2026-10-25T00:00:00Z", records: { Task: [], Seen: [] }, peers: {} },
+    when: (w) => {
+      w.client.send(addTask, { taskId: "task-1" });
+      w.client.call(seenIds, {});
+      w.client.call(seenIds, {});
+    },
+    then: () => [],
+  },
 );

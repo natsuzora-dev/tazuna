@@ -22,16 +22,6 @@ def Subject.of (l : TraceLine) : Subject :=
   | .answer _ _ to _ | .unsubscribe _ _ to => .reply l.body.type to
   | _ => .named l.body.type l.body.name? l.body.id
 
-/-- A snapshot value and the trace value that a pair of lines uses for it. -/
-structure Use where
-  snapshot : String
-  trace : String
-  line : Nat
-  snapshotLine : Nat
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Use
-
 /--
 A difference between compared lines. `line` is 1-based in the trace; a line missing from the trace is at the trace's
 `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
@@ -58,11 +48,6 @@ inductive Mismatch where
   | time (line : Nat) (subject : Subject) (snapshot trace : String)
   /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/
   | resultOf (line : Nat) (subject : Subject) (snapshot trace : Option String)
-  /--
-  The uses of one connected group of values in which a value stands for two values, reported when no line differs
-  otherwise.
-  -/
-  | renaming (uses : List Use)
   /-- The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. -/
   | line (line : Nat) (snapshot trace : Option Value)
   /-- No contract of another service lists the event that the external service emits. -/

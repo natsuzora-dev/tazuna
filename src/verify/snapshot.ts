@@ -5,7 +5,7 @@ import { entriesOf, pair } from "../data/pairing.ts";
 import type { Problem } from "../data/problem.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { jsonLine } from "../data/trace.ts";
-import { peerSnapshotName, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
+import { parseSnapshotFile, peerSnapshotName, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { problemsAt, readSnapshotProblems } from "./lines.ts";
@@ -124,7 +124,7 @@ export type SnapshotRun = DefinitionRef & { readonly runner: string };
 /** Returns each scenario's run, followed by the runs of each other service that is not external on its derived inputs. */
 export function snapshotRuns(spec: Spec): SnapshotRun[] {
   const peers = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
-  return [...spec.scenarios, ...spec.legacyScenarios].flatMap(({ service, name }) => [
+  return spec.scenarios.flatMap(({ service, name }) => [
     { service, name, runner: service },
     ...peers
       .filter((peer) => peer !== service)
@@ -149,4 +149,19 @@ export function snapshotProblems(spec: Spec, scenario: DefinitionRef, lines: rea
   if (snapshot.problems.length > 0) return problemsAt(file, snapshot.problems, scenario);
   const mismatch = compareSnapshot(snapshot.values, lines.map(jsonLine));
   return mismatch === undefined ? [] : problemsAt(file, [mismatch], scenario);
+}
+
+/**
+ * Reads the lines of a scenario's snapshot, or of a snapshot that peerSnapshots returns. Throws when the snapshot is
+ * missing or has a line that is not a trace line.
+ */
+export function readSnapshot(spec: Spec, snapshot: DefinitionRef): TraceLine[] {
+  const path = snapshotPath(spec, snapshot);
+  const { lines, malformed } = parseSnapshotFile(path);
+  if (malformed.length > 0)
+    throw new Error(
+      malformed.map((m) => `${path}:${m.lineNumber}: the line does not match the trace line schema`).join("\n"),
+      { cause: malformed },
+    );
+  return lines;
 }

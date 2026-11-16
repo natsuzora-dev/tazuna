@@ -14,7 +14,6 @@ import {
   type Place,
   type ServiceDefinition,
 } from "../dsl/definition.ts";
-import type { Scenario } from "../dsl/scenario.ts";
 import { contractService, definerService, isContract } from "../dsl/service.ts";
 import { isScenarioDefinition, type ScenarioDefinition } from "../scenario/define.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
@@ -52,8 +51,6 @@ export interface Spec {
   readonly contracts: readonly Contract[];
   readonly constants: readonly Named<Constants>[];
   readonly scenarios: readonly Named<LoadedScenario>[];
-  /** The scenarios written as input lists, which the simulation of scenarios replaces. */
-  readonly legacyScenarios: readonly Named<Scenario>[];
   readonly sources: readonly SourceFile[];
   readonly names: ReadonlyMap<unknown, Named<Definition>>;
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
@@ -107,7 +104,6 @@ export async function loadSpec(root: string): Promise<Spec> {
   const found: Omit<Named<Definition>, "service">[] = [];
   const foundContracts: Contract[] = [];
   const constants: Named<Constants>[] = [];
-  const scenarios: Named<Scenario>[] = [];
   const defined: Named<ScenarioDefinition>[] = [];
   const sources: SourceFile[] = [];
   const definerExports: DefinerExport[] = [];
@@ -133,10 +129,6 @@ export async function loadSpec(root: string): Promise<Spec> {
       } else if (isDefinition(value)) {
         namedExports.push({ name, service, place, value });
         if (!found.some((d) => d.definition === value)) found.push({ name, place, definition: value });
-      } else if (typeof value === "object" && value !== null && (value as { kind?: string }).kind === "scenario") {
-        namedExports.push({ name, service, place, value });
-        if (!scenarios.some((s) => s.definition === value))
-          scenarios.push({ name, service, place, definition: value as Scenario });
       } else if (definer !== undefined) {
         definerExports.push({ folder: service, definition: definer, place });
       } else if (isContract(value)) {
@@ -179,7 +171,6 @@ export async function loadSpec(root: string): Promise<Spec> {
     contracts,
     constants,
     scenarios: loaded.scenarios,
-    legacyScenarios: scenarios,
     sources,
     names,
     services,

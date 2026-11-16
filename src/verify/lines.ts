@@ -27,41 +27,27 @@ export function readSnapshotProblems(path: string): {
 } {
   const values = readTrace(path);
   const { lines, malformed } = parseLines(values);
-  return { values, lines, problems: malformed.length > 0 ? malformed.map(lineSchema) : resolveAfters(lines).unknown };
+  return { values, lines, problems: malformed.length > 0 ? malformed.map(lineSchema) : unknownAfters(lines) };
 }
 
-/**
- * Returns, for each snapshot line (1-based), the lines that its after names. An after id names the latest earlier out
- * line of the same window with the id; an id that names no such line is unknown.
- */
-export function resolveAfters(snapshot: readonly (TraceLine | undefined)[]): {
-  readonly follows: ReadonlyMap<number, ReadonlySet<number>>;
-  readonly unknown: readonly Uncomparable[];
-} {
-  const follows = new Map<number, ReadonlySet<number>>();
-  const unknown: Uncomparable[] = [];
-  for (const { before } of steps(snapshot))
-    for (const [k, { line, at }] of before.entries()) {
-      const named = new Set<number>();
-      for (const id of line.after ?? []) {
-        const earlier = before.slice(0, k).findLast((o) => o.line.id === id);
-        if (earlier === undefined)
-          unknown.push({ kind: "Uncomparable.unknownAfter", definition: null, line: at, data: { lineId: id } });
-        else named.add(earlier.at);
-      }
-      follows.set(at, named);
-    }
-  return { follows, unknown };
+/** Lean's unknownAfters: each after id of an out line that names no earlier out line of its group. */
+export function unknownAfters(snapshot: readonly (TraceLine | undefined)[]): Uncomparable[] {
+  return steps(snapshot).flatMap(({ before }) =>
+    before.flatMap(({ line, at }, k) =>
+      (line.after ?? []).flatMap((id): Uncomparable[] =>
+        before.slice(0, k).some((o) => o.line.id === id)
+          ? []
+          : [{ kind: "Uncomparable.unknownAfter", definition: null, line: at, data: { lineId: id } }],
+      ),
+    ),
+  );
 }
 
 /** Returns each violation as a Problem in `file`, at the line that it names, or at the whole file. */
 export const problemsAt = (file: string, found: readonly Found[], scenario?: DefinitionRef): Problem[] =>
   found.map((v) => toProblem(v, { file }, scenario === undefined ? {} : { scenario }));
 
-/** Returns the line that orders a violation in a report: its line, or for Mismatch.renaming the last line of its uses. */
 const lineOf = (v: Found): number => {
-  if (v.kind === "Mismatch.renaming")
-    return (v.data["uses"] as { line: number }[]).reduce((n, u) => Math.max(n, u.line), 0);
   if (v.line === undefined) throw new Error(`the ${v.kind} violation has no trace line`);
   return v.line;
 };

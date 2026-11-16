@@ -1,5 +1,5 @@
 import type { Report } from "../../data/report.generated.ts";
-import type { Scenario } from "../../data/scenario.generated.ts";
+import type { GivenRecord, Scenario } from "../../data/scenario.generated.ts";
 import type { TraceLine } from "../../data/trace.generated.ts";
 import type { Violation } from "../../data/violation.ts";
 import type { Spec } from "../../load/load.ts";
@@ -7,7 +7,7 @@ import { Collect } from "../../observe/instrument.ts";
 import { snapshotLines } from "../../observe/trace.ts";
 import type { Processing } from "../../service/chart/queue.ts";
 import type { Structure } from "../../syntax/structure.generated.ts";
-import { start } from "../given.ts";
+import { encodedGivenRecords, start } from "../given.ts";
 import type { StepOrder, World } from "../network.ts";
 import { simulate, walk } from "../run.ts";
 import { instrumented, Listener } from "./listener.ts";
@@ -21,6 +21,10 @@ function processingFor(spec: Spec, service: string, listener: Listener): Process
   const functions = instrumented(spec, service, listener);
   return newProcessing(functions.st, functions, listener, undefined);
 }
+
+/** The Given records of the running service `service`, encoded as its records hold them, from which it begins. */
+export const givenRecordsOf = (spec: Spec, sc: Scenario, service: string): GivenRecord[] =>
+  encodedGivenRecords(processingFor(spec, service, new Listener(spec, new Collect())), sc, service);
 
 /** A world that a run made from the scenario's start, with the listener of each running service. */
 export interface Made {

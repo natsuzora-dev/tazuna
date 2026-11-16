@@ -4,7 +4,7 @@ import { calendar } from "../calendar/contract.ts";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
-export const { command, machine, createEvent, contract } = service({
+export const { command, machine, createEvent, contract, scenario } = service({
   description: "Keep the tasks",
   entities: { Task },
 });

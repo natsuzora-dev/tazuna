@@ -1,0 +1,99 @@
+import type { z } from "zod";
+import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
+import type { GivenRecord } from "../data/scenario.generated.ts";
+import type { Answer } from "../data/trace.generated.ts";
+import { objectOf, type Shape } from "../data/values.ts";
+import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
+
+/** A message that the harness gives the implementation. `name` is the name in the spec. */
+export interface InputMessage {
+  readonly id: string;
+  readonly name: string;
+  readonly input: unknown;
+  readonly payload: unknown;
+}
+
+/**
+ * What the harness controls of the implementation's world: the start from the Given records, the clock, the inputs, the
+ * deliveries to the implementation and the restart. The implementation's outputs reach the harness through `Outputs`.
+ */
+export interface Adapter {
+  /** Starts the implementation at `time` with the Given records, each value as the trace writes values. */
+  readonly start: (outputs: Outputs, time: Temporal.Instant, records: readonly GivenRecord[]) => Promise<void>;
+  readonly now: () => Temporal.Instant;
+  /** Moves the implementation's clock to `time`, firing its timers due by then in its own order. */
+  readonly advanceTo: (time: Temporal.Instant) => Promise<void>;
+  /** Resolves when the implementation has stopped writing outputs. `outputs` counts the trace's output lines. */
+  readonly untilQuiet: (outputs: () => number) => Promise<void>;
+  readonly command?: (command: InputMessage) => Promise<CommandAnswer>;
+  readonly query?: (query: InputMessage) => Promise<QueryAnswer>;
+  /** `signal` aborts when the subscription ends. */
+  readonly subscribe?: (
+    subscription: InputMessage,
+    signal: AbortSignal,
+  ) => Promise<AsyncIterable<QueryAnswer> | Iterable<QueryAnswer>>;
+  readonly receive?: (event: InputMessage) => Promise<void> | void;
+  readonly operate?: (operation: InputMessage) => Promise<void>;
+  /** Starts a new process of the implementation on the same storage, without the timers and requests of the old one. */
+  readonly restart?: () => Promise<void>;
+}
+
+/** A request that the implementation sent to another service, which the harness answers by the scenario. */
+export interface ForeignRequest {
+  readonly definition: AnyCommand | AnyQuery;
+  readonly input: unknown;
+  readonly answer: (answer: Answer) => void;
+}
+
+/**
+ * Decodes the output of a fulfilled answer, or of an accepted answer of a command with output, with the definition's
+ * output schema, and returns other answers as they are. Throws when the request has no answer with that result.
+ */
+export function decodeAnswer<Q extends AnyQuery>(
+  query: Q,
+  answer: Answer,
+): QueryAnswer<z.output<z.ZodObject<Q["output"]>>>;
+
+export function decodeAnswer<C extends AnyCommand>(
+  command: C,
+  answer: Answer,
+): CommandAnswer<C["output"] extends Shape ? z.output<z.ZodObject<C["output"]>> : undefined>;
+
+export function decodeAnswer(request: AnyCommand | AnyQuery, answer: Answer): Answer {
+  if (answer.result === "rejected") return answer;
+  if (answer.result !== (request.kind === "query" ? "fulfilled" : "accepted"))
+    throw new Error(`a ${request.kind} has no ${answer.result} answer`);
+  return request.output === undefined ? answer : { ...answer, output: objectOf(request.output).parse(answer.output) };
+}
+
+export const commandRequest = (
+  command: AnyCommand,
+  input: unknown,
+  answer: (answer: CommandAnswer) => void,
+): ForeignRequest => ({ definition: command, input, answer: (a) => answer(decodeAnswer(command, a)) });
+
+export const queryRequest = <Q extends AnyQuery>(
+  query: Q,
+  input: unknown,
+  answer: (answer: QueryAnswer<z.output<z.ZodObject<Q["output"]>>>) => void,
+): ForeignRequest => ({ definition: query, input, answer: (a) => answer(decodeAnswer(query, a)) });
+
+/** A place in the trace where the implementation's outputs are written. */
+export interface OutputSlot {
+  /** `id` is the implementation's id; the harness gives one when the implementation has none. */
+  readonly request: (request: ForeignRequest & { readonly id?: string }) => void;
+  /** Returns the id that the harness gave the subscription. */
+  readonly subscribe: (request: ForeignRequest) => string;
+  readonly unsubscribe: (subscription: string) => void;
+  /** `resultOf` is the id of the request whose processing emitted the event. */
+  readonly event: (event: { readonly name: string; readonly payload: unknown; readonly resultOf?: string }) => void;
+}
+
+/** The end of the trace, where the implementation's outputs are written. */
+export interface Outputs extends OutputSlot {
+  /**
+   * Reserves a slot at the current place and time, for an implementation that knows the order of its outputs before
+   * their content.
+   */
+  readonly later: () => OutputSlot;
+}

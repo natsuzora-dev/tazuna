@@ -42,7 +42,6 @@ def tsTypes : List TsType :=
   [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
    ⟨``Tazuna.Syntax.Ref, "DefinitionRef", some "./definitionRef.ts"⟩,
    ⟨``Tazuna.Verify.Subject, "Subject", some "./mismatch.generated.ts"⟩,
-   ⟨``Tazuna.Verify.Use, "Use", none⟩,
    ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Rejection, "Rejection", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.DeadlineId, "DeadlineId", some "./trace.generated.ts"⟩, ⟨``Tazuna.Data.Time, "string", none⟩,
@@ -327,7 +326,7 @@ def halting (type : String) (kinds : List String) : String :=
 
 def files : List (String × String) :=
   [("data/illegal.generated.ts", typescript% Tazuna.Validation.Illegal),
-   ("data/mismatch.generated.ts", typescript% Tazuna.Verify.Mismatch Tazuna.Verify.Subject Tazuna.Verify.Use),
+   ("data/mismatch.generated.ts", typescript% Tazuna.Verify.Mismatch Tazuna.Verify.Subject),
    ("data/uncomparable.generated.ts", typescript% Tazuna.Verify.Uncomparable),
    ("data/invalidInput.generated.ts", typescript% Tazuna.Semantics.InvalidInput ++
       halting "InvalidInput" (((samples% Tazuna.Semantics.InvalidInput).filter (·.halts)).map (·.kind))),

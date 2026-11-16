@@ -1,0 +1,1 @@
+{"kind":"Uncomparable.ambiguous","definition":null,"data":{"subject":{"type":"subscribe","name":"todo.notesIn","id":"todo.notesIn#2"},"snapshotLine":5,"candidates":[5]},"location":{"file":"traces/screens/draftAndOpen.jsonl","line":5},"scenario":{"service":"screens","name":"draftAndOpen"}}

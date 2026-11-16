@@ -1,4 +1,5 @@
 import type { AnyCommand, AnyQuery, CommandAnswer } from "@natsuzora-dev/tazuna";
+import { type Adapter, commandRequest, type OutputSlot, queryRequest } from "@natsuzora-dev/tazuna/verify";
 import { expect, type Locator, type Page, type Request } from "@playwright/test";
 import { todo } from "@todo/spec/todo";
 import { z } from "zod";
@@ -7,7 +8,6 @@ import { taskListScreen } from "../../../spec/screens/taskListScreen.ts";
 import type { TodoEvent } from "../../src/todo/events.server.ts";
 import type * as Held from "../doubles/held.ts";
 import { pushedStream } from "../doubles/pushedStream.ts";
-import { commandRequest, type OutputSlot, queryRequest, type ReplayAdapter } from "../harness/replay.ts";
 import { toApp } from "./answers.ts";
 import { TaskDetailPage } from "./pages/TaskDetailPage.ts";
 import { TaskListPage } from "./pages/TaskListPage.ts";
@@ -103,7 +103,7 @@ const isSentAs = (call: Call) => (sent: Sent) =>
  * Requests on separate connections may reach the server out of order, so output lines follow the order of Playwright's
  * request and requestfailed events.
  */
-export function screenAdapter(page: Page, held: typeof Held): ReplayAdapter & { readonly unboundCalls: () => Call[] } {
+export function screenAdapter(page: Page, held: typeof Held): Adapter & { readonly unboundCalls: () => Call[] } {
   const list = new TaskListPage(page);
   const detail = new TaskDetailPage(page);
   const busy = page.locator('[aria-busy="true"]');
@@ -262,12 +262,6 @@ export function screenAdapter(page: Page, held: typeof Held): ReplayAdapter & { 
       await expect(operation.control).toBeVisible();
       await expect(operation.control).toBeEnabled();
       await operation.perform();
-    },
-    async cannotOperate({ name, payload }) {
-      const operation = operationOf(name, payload);
-      if (operation === undefined) return;
-      const enabled = page.locator(':not(:disabled):not([aria-disabled="true"])');
-      await expect(operation.control.filter({ visible: true }).and(enabled)).toHaveCount(0);
     },
     receive(event) {
       for (const push of eventStreams) push(toApp.todoEvent(event));

@@ -156,6 +156,18 @@ function givenInvariants(r: Processing, service: string, rows: readonly GivenRow
   });
 }
 
+/**
+ * The Given records of the running service `service`, each with its value encoded as the service's records hold it;
+ * records that World.given reports are left out.
+ */
+export function encodedGivenRecords(r: Processing, sc: Scenario, service: string): GivenRecord[] {
+  return givenRows(r, service, givenRecords(sc, service)).rows.map(({ entity, key, row }) => ({
+    entity,
+    ...(key === undefined ? {} : { key }),
+    value: row.encoded,
+  }));
+}
+
 /** Lean's World.given. */
 export function given(w: World, structure: Structure, sc: Scenario): void {
   const peers = sc.given.peers;

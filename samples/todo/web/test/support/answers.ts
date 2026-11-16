@@ -1,4 +1,5 @@
 import type { CommandAnswer, QueryAnswer, Rejection } from "@natsuzora-dev/tazuna";
+import type { InputMessage } from "@natsuzora-dev/tazuna/verify";
 import { ORPCError } from "@orpc/client";
 import type { calendar } from "@todo/spec/calendar";
 import type { device } from "@todo/spec/device";
@@ -8,7 +9,6 @@ import type { CalendarResult } from "../../src/calendar/calendar.server.ts";
 import type { DeviceResult } from "../../src/device/pages.server.ts";
 import { commandErrors } from "../../src/todo/errors.ts";
 import type { TodoEvent } from "../../src/todo/events.server.ts";
-import type { InputMessage } from "../harness/replay.ts";
 
 function errorTable<T extends Readonly<Record<string, Rejection>>>(rejections: T) {
   const byError = new Map<string, Rejection>(Object.entries(rejections));

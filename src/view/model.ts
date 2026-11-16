@@ -235,6 +235,6 @@ export function viewModel(spec: Spec, path: string): ViewModel {
   return {
     spec: path,
     services,
-    scenarios: [...spec.scenarios, ...spec.legacyScenarios].map((s) => scenarioView(spec, s)),
+    scenarios: spec.scenarios.map((s) => scenarioView(spec, s)),
   };
 }

@@ -117,8 +117,7 @@ export function testSpec(spec: Spec, options: { readonly update: boolean; readon
         ),
       );
   }
-  const kept = spec.legacyScenarios.map((scenario) => ({ scenario, name: scenario.name, lines: undefined }));
-  const snapshots = testSnapshots(spec, [...simulated.snapshotted, ...kept], options.update);
+  const snapshots = testSnapshots(spec, simulated.snapshotted, options.update);
   return { ...snapshots, problems: [...problems, ...snapshots.problems], reached };
 }
 

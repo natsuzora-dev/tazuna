@@ -1,6 +1,12 @@
 import { join } from "node:path";
 import type { QueryAnswer } from "@natsuzora-dev/tazuna";
-import type { GivenRecord } from "@natsuzora-dev/tazuna/verify";
+import {
+  type Adapter,
+  commandRequest,
+  type GivenRecord,
+  type Outputs,
+  queryRequest,
+} from "@natsuzora-dev/tazuna/verify";
 import type { ClientOptions } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { SimpleCsrfProtectionLinkPlugin } from "@orpc/client/plugins";
@@ -16,7 +22,6 @@ import type { DeviceResult } from "../../src/device/pages.server.ts";
 import type * as Notifier from "../../src/notifier/notifier.server.ts";
 import { customJsonSerializers } from "../../src/orpc/serializers.ts";
 import type Server from "../../src/server.ts";
-import { commandRequest, type Outputs, queryRequest, type ReplayAdapter } from "../harness/replay.ts";
 import { toApp, toSpec } from "./answers.ts";
 
 interface ClientContext {
@@ -125,7 +130,7 @@ async function loadApp(
   };
 }
 
-export function serverAdapter(service: "todo" | "notifier"): ReplayAdapter {
+export function serverAdapter(service: "todo" | "notifier"): Adapter {
   let app: Awaited<ReturnType<typeof loadApp>>;
   let outputs: Outputs;
   const load = async (db?: typeof Db.db, records: readonly GivenRecord[] = []) => {

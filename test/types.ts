@@ -30,16 +30,12 @@ import {
   entity,
   external,
   type KindOf,
-  mock,
-  operate,
   type RecordsOf,
   type RowOf,
   raw,
-  receive,
   ref,
   requested,
   run,
-  send,
   service,
   set,
   singleEntity,
@@ -82,15 +78,6 @@ emit(dueChanged, { id: "task-1", dueAt: tomorrow, remindAt: tomorrow, reminderDe
 
 // @ts-expect-error a payload emitted by decide holds times as Temporal.Instant
 emit(dueChanged, { id: "task-1", dueAt: "2026-10-25T10:00:00+09:00", remindAt: null, reminderDecision: "pending" });
-
-// @ts-expect-error a scenario receive payload holds times as strings
-receive(dueChanged, { id: "task-1", dueAt: now, remindAt: null, reminderDecision: "pending" });
-receive(dueChanged, {
-  id: "task-1",
-  dueAt: "2026-10-25T10:00:00+09:00",
-  remindAt: "2026-10-25T10:00:00+09:00",
-  reminderDecision: "decided",
-});
 
 command({ emits: [taskCompletedRecorded] }).decide(() => [
   // @ts-expect-error decide returns only events in emits
@@ -220,13 +207,6 @@ externalCommand({ output: {}, emits: [], rejects: [] });
 
 // @ts-expect-error a spec service's command has no output (CQRS)
 command({ output: { id: z.string() }, emits: [] });
-
-// A mock of a command with output answers acceptance with output.
-mock(taskListScreen, [charge, { result: "accepted", output: { chargeId: "ch_1" } }]);
-// @ts-expect-error acceptance of a command with output has output
-mock(taskListScreen, [charge, { result: "accepted" }]);
-// @ts-expect-error acceptance of a command without output has no output
-mock(taskListScreen, [addTask, { result: "accepted", output: {} }]);
 
 machine({
   description: "",
@@ -615,15 +595,6 @@ screen({
   ensures: { belowCount: ({ input, output }) => output.picked < input.count },
 }).chart({ resolve: ({ input }) => ({ picked: input.count - 1 }) });
 
-// @ts-expect-error operate's control names one of the screen's controls
-operate(taskListScreen, "remove");
-// @ts-expect-error a control with payload is operated with a payload
-operate(taskListScreen, "openTask");
-// Options follow the payload: `keys` names the keys that the operation's createKey calls create.
-operate(taskListScreen, "add", { title: "Buy bread" }, { keys: { Task: ["T-bread"] } });
-// @ts-expect-error a keys entry lists names
-operate(taskListScreen, "add", { title: "Buy bread" }, { keys: { Task: "T-bread" } });
-
 machine({
   description: "",
   queries: { tasks },
@@ -658,43 +629,6 @@ automation({ receives: { taskAddedRecorded }, commands: { setReminder } }).send(
     remindAt: records.Task.get(payload.id)?.createdAt ?? now,
   }),
 });
-
-const visited = event({ payload: { stop: z.object({ at: datetime }) } });
-// Receive payloads write nested datetimes as the same strings as the trace.
-receive(visited, { stop: { at: "2026-10-25T10:00:00+09:00" } });
-// @ts-expect-error receive payload datetimes are strings, not Temporal.Instant
-receive(visited, { stop: { at: now } });
-
-// A mock pairs one sender with one target and answer; the target decides the answer's shape.
-mock(taskListScreen, [tasks, { result: "fulfilled", output: { tasks: [] } }]);
-mock(taskListScreen, [addTask, { result: "accepted" }]);
-const twoPairs = [
-  [tasks, { result: "fulfilled", output: { tasks: [] } }],
-  [addTask, { result: "accepted" }],
-] as const;
-// @ts-expect-error one mock has exactly one pair
-mock(taskListScreen, twoPairs);
-// @ts-expect-error a mock's first argument is the sending automation, machine or screen
-mock(tasks, [tasks, { result: "fulfilled", output: { tasks: [] } }]);
-// @ts-expect-error a query answer has output
-mock(taskListScreen, [tasks, { result: "accepted" }]);
-// @ts-expect-error a command answer has no output
-mock(taskListScreen, [addTask, { result: "fulfilled", output: {} }]);
-
-// resultOf is a mock that answered one command, and the event is in that command's emits.
-const completed = mock(taskDetailScreen, [completeTask, { result: "accepted" }]);
-receive(taskCompletedRecorded, { id: "task-1", completedAt: "2026-10-25T10:00:00+09:00" }, { resultOf: completed });
-// @ts-expect-error an event outside the answered command's emits is not its result event
-receive(taskDeletedRecorded, { id: "task-1" }, { resultOf: completed });
-const listed = mock(taskListScreen, [tasks, { result: "fulfilled", output: { tasks: [] } }]);
-// @ts-expect-error a mock that answered a query is not a resultOf
-receive(taskDeletedRecorded, { id: "task-1" }, { resultOf: listed });
-// Scenario ids have no #; ids with # (<name>#<n>) are assigned by test.
-receive(taskDeletedRecorded, { id: "task-1" }, { id: "e1" });
-// @ts-expect-error scenario ids have no #
-receive(taskDeletedRecorded, { id: "task-1" }, { id: "taskDeleted#1" });
-// @ts-expect-error scenario ids have no #
-send(addTask, { taskId: "task-1", title: "t" }, { id: "addTask#1" });
 
 // initialContext sets a screen's context fields without defaults from input.
 screen({

@@ -1,6 +1,6 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q1","name":"taskCard","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"q1","answer":{"result":"fulfilled","output":{"due":{"at":"2026-10-25T01:00:00Z","parts":[{"extra":true}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q2","name":"taskCard","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"q2","answer":{"result":"fulfilled","output":{"due":{"at":"2026-10-25T01:00:00Z","parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Home","extra":true}}}}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q3","name":"taskCard","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"q3","answer":{"result":"fulfilled","output":{"due":{"at":"2026-10-25T10:00:01+09:00","parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"taskCard#1","name":"taskCard","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"taskCard#1","answer":{"result":"fulfilled","output":{"due":{"at":"2026-10-25T01:00:00Z","parts":[{"extra":true}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"taskCard#2","name":"taskCard","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"taskCard#2","answer":{"result":"fulfilled","output":{"due":{"at":"2026-10-25T01:00:00Z","parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Home","extra":true}}}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"taskCard#3","name":"taskCard","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"taskCard#3","answer":{"result":"fulfilled","output":{"due":{"at":"2026-10-25T10:00:01+09:00","parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}

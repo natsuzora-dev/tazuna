@@ -10,7 +10,7 @@ import { leadsTo } from "../observe/trace.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import type { Span, StepOrder } from "../sim/network.ts";
 import { type Made, participantViolations, snapshotsOf, walkSpec } from "../sim/spec/simulate.ts";
-import { compareTrace } from "../verify/prepare.ts";
+import { compareTrace } from "../verify/compare.ts";
 
 /**
  * A step order that the search decided: the scenario walked up to the processing, the processing (`origin` of

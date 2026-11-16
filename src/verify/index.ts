@@ -1,51 +1,33 @@
 import { join, relative } from "node:path";
-import { z } from "zod";
-import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Problem } from "../data/problem.ts";
-import type { GivenRecord } from "../data/scenario.generated.ts";
-import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { parseFileLines } from "../data/trace.ts";
-import { parseSnapshotFile, readTrace, snapshotPath } from "../data/traceFile.ts";
-import { objectOf, type Shape, strictObjectOf } from "../data/values.ts";
-import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
+import { readTrace, snapshotPath } from "../data/traceFile.ts";
 import type { Spec } from "../load/load.ts";
+import { compareTrace } from "./compare.ts";
 import { verifyExternal } from "./external.ts";
 import { type Found, problemsAt, readSnapshotProblems } from "./lines.ts";
 import { pairingProblem, pairTraces, traceFolderOf } from "./pairing.ts";
-import { compareTrace } from "./prepare.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
 export type { GivenRecord } from "../data/scenario.generated.ts";
-export { traceName } from "../load/traceName.ts";
-export { matchRequest, rename } from "./replay.ts";
+export { drive, type Run } from "./harness.ts";
+export {
+  type Adapter,
+  commandRequest,
+  decodeAnswer,
+  type ForeignRequest,
+  type InputMessage,
+  type OutputSlot,
+  type Outputs,
+  queryRequest,
+} from "./ports.ts";
 
 /**
- * Decodes the output of a fulfilled answer, or of an accepted answer of a command with output, with the definition's
- * output schema, and returns other answers as they are. Throws when the request has no answer with that result.
- */
-export function decodeAnswer<Q extends AnyQuery>(
-  query: Q,
-  answer: Answer,
-): QueryAnswer<z.output<z.ZodObject<Q["output"]>>>;
-
-export function decodeAnswer<C extends AnyCommand>(
-  command: C,
-  answer: Answer,
-): CommandAnswer<C["output"] extends Shape ? z.output<z.ZodObject<C["output"]>> : undefined>;
-
-export function decodeAnswer(request: AnyCommand | AnyQuery, answer: Answer): Answer {
-  if (answer.result === "rejected") return answer;
-  if (answer.result !== (request.kind === "query" ? "fulfilled" : "accepted"))
-    throw new Error(`a ${request.kind} has no ${answer.result} answer`);
-  return request.output === undefined ? answer : { ...answer, output: objectOf(request.output).parse(answer.output) };
-}
-
-/**
- * Compares the traces in `folder` with the snapshots without running the spec, and checks each trace of an external
- * service, <service>/<name>.jsonl with any name, against the service's contract. A scenario's trace is
- * <service>/<scenario>.jsonl. The trace of another spec service's run on the inputs that test derives from a scenario,
- * <service>/<scenario>.<peer>.jsonl after its snapshot, records the peer's implementation and compares as the peer's.
+ * Compares the traces in `folder`, which `drive` wrote, with the snapshots without running the spec, and checks each
+ * trace of an external service, <service>/<name>.jsonl with any name, against the service's contract. A scenario's
+ * trace is <service>/<scenario>.jsonl. The trace of a running peer's run in a scenario, <service>/<scenario>.<peer>.jsonl
+ * after its snapshot, records the peer's implementation and compares as the peer's.
  * Skips the traces of runs that have no snapshot, and reports each other entry of the folder and the snapshots that
  * have no trace. A trace line's violation is at its line. A violation of the snapshot, a line that the trace line
  * schema cannot read or an unknown after, is at the snapshot line, and then the trace is not compared.
@@ -75,48 +57,10 @@ export function verifyTraces(spec: Spec, folder: string): { traces: number; prob
 }
 
 /**
- * Returns the snapshots of other spec services' runs on the inputs that test derives from scenarios. An implementation
- * of a snapshot's `runner` replays it as it replays a scenario's snapshot, and verify compares the trace
- * <service>/<name>.jsonl with it.
+ * Returns the snapshots of running peers' runs in scenarios. `drive` drives an implementation of a snapshot's `runner`
+ * through it as through a scenario's snapshot, and verify compares the trace <service>/<name>.jsonl with it.
  */
 export function peerSnapshots(spec: Spec): SnapshotRun[] {
   const runs = snapshotRuns(spec).filter((r) => r.runner !== r.service);
   return runs.filter(hasSnapshot(spec, runs));
-}
-
-/**
- * Reads the lines of a scenario's snapshot, or of a snapshot that peerSnapshots returns. Throws when the snapshot is
- * missing or has a line that is not a trace line.
- */
-export function readSnapshot(spec: Spec, snapshot: DefinitionRef): TraceLine[] {
-  const path = snapshotPath(spec, snapshot);
-  const { lines, malformed } = parseSnapshotFile(path);
-  if (malformed.length > 0)
-    throw new Error(
-      malformed.map((m) => `${path}:${m.lineNumber}: the line does not match the trace line schema`).join("\n"),
-      { cause: malformed },
-    );
-  return lines;
-}
-
-/**
- * Returns the Given records of the run that a snapshot records, as the trace writes values: the scenario's records of
- * its own service, or, for a snapshot that peerSnapshots returns, those of its running peer `runner`. An implementation
- * starts the run from them.
- */
-export function givenRecords(spec: Spec, run: DefinitionRef & { readonly runner?: string }): readonly GivenRecord[] {
-  const runner = run.runner ?? run.service;
-  const name = runner === run.service ? run.name : run.name.slice(0, -`.${runner}`.length);
-  const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === name)?.definition.scenario;
-  if (scenario === undefined) return [];
-  const peer = scenario.given.peers.find((p) => p.service === runner);
-  const written = runner === scenario.service ? scenario.given.records : peer?.role === "run" ? peer.records : [];
-  const entities = spec.services.get(runner)?.definition.entities ?? {};
-  return written.flatMap((g) => {
-    const fields = entities[g.entity]?.fields as Shape | undefined;
-    if (fields === undefined) return [];
-    const object = strictObjectOf(fields);
-    const parsed = object.safeParse(g.value);
-    return parsed.success ? [{ ...g, value: z.encode(object, parsed.data as never) }] : [];
-  });
 }

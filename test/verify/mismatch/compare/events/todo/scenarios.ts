@@ -1,19 +1,24 @@
-import { at, scenario, send } from "@natsuzora-dev/tazuna";
-import { addTask } from "./todo.ts";
+import { addTask, scenario } from "./todo.ts";
 
-export const addThree = scenario("Add two tasks and a task with the first id; no violation", [
-  at("2026-10-25T00:00:00Z"),
-  send(addTask, { taskId: "task-1", title: "Buy milk" }),
-  send(addTask, { taskId: "task-2", title: "Buy eggs" }),
-  send(addTask, { taskId: "task-1", title: "Buy tea" }),
-]);
+export const addThree = scenario("Add two tasks and a task with the first id; no violation", {
+  given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: {} },
+  when: (w) => {
+    w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
+    w.client.send(addTask, { taskId: "task-1", title: "Buy tea" });
+  },
+  then: () => [],
+});
 
 export const addThreeWrongEvents = scenario(
-  "Same inputs as addThree; the implementation trace of this scenario emits taskAdded with another title, misses the second taskAdded, and emits an extra one, so verify reports Mismatch.event, missingLine, and unexpectedLine",
-  [
-    at("2026-10-25T00:00:00Z"),
-    send(addTask, { taskId: "task-1", title: "Buy milk" }),
-    send(addTask, { taskId: "task-2", title: "Buy eggs" }),
-    send(addTask, { taskId: "task-1", title: "Buy tea" }),
-  ],
+  "Same inputs as addThree; the implementation trace of this scenario emits taskAdded with another title, emits the second taskAdded with a resultOf that the snapshot does not have, and emits an extra one, so verify reports Mismatch.event, Mismatch.resultOf, and unexpectedLine",
+  {
+    given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: {} },
+    when: (w) => {
+      w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+      w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
+      w.client.send(addTask, { taskId: "task-1", title: "Buy tea" });
+    },
+    then: () => [],
+  },
 );

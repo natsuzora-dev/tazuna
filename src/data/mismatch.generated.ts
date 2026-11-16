@@ -18,14 +18,6 @@ export type Subject =
       readonly id: string;
     };
 
-/** A snapshot value and the trace value that a pair of lines uses for it. */
-export type Use = {
-  readonly snapshot: string;
-  readonly trace: string;
-  readonly line: number;
-  readonly snapshotLine: number;
-};
-
 /**
  * A difference between compared lines. `line` is 1-based in the trace; a line missing from the trace is at the trace's
  * `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
@@ -173,17 +165,6 @@ export type Mismatch =
         readonly trace: string | null;
       };
     }
-  /**
-   * The uses of one connected group of values in which a value stands for two values, reported when no line differs
-   * otherwise.
-   */
-  | {
-      readonly kind: "Mismatch.renaming";
-      readonly definition: null;
-      readonly data: {
-        readonly uses: readonly Use[];
-      };
-    }
   /** The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. */
   | {
       readonly kind: "Mismatch.line";
@@ -295,7 +276,6 @@ export const mismatchKinds = [
   "Mismatch.lineOrder",
   "Mismatch.time",
   "Mismatch.resultOf",
-  "Mismatch.renaming",
   "Mismatch.line",
   "Mismatch.unlistedEvent",
   "Mismatch.resultOfUnacceptedRequest",

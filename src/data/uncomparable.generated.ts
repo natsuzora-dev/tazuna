@@ -58,7 +58,7 @@ export type Uncomparable =
         readonly target: DefinitionRef;
       };
     }
-  /** An id of the line's `after` names no earlier `out` line of its window. */
+  /** An id of the line's `after` names no earlier `out` line of its group. */
   | {
       readonly kind: "Uncomparable.unknownAfter";
       readonly definition: null;
@@ -86,16 +86,6 @@ export type Uncomparable =
         readonly snapshotLine: number;
       };
     }
-  /** The answer input answers another request than the snapshot's answer input does. */
-  | {
-      readonly kind: "Uncomparable.differentRequest";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly subject: Subject;
-        readonly snapshotLine: number;
-      };
-    }
   | {
       readonly kind: "Uncomparable.differentInput";
       readonly definition: null;
@@ -107,15 +97,17 @@ export type Uncomparable =
       };
     }
   /**
-   * The comparison takes more steps than verify searches, over all its tries: of the window after the `in` lines `line`
-   * and `snapshotLine` (1 for the first window), or of those `in` lines.
+   * The snapshot line, which holds a value that its group introduces, equals two or more lines of the trace's group,
+   * `candidates`, which differ in the strings that would stand for it. `line` is the first candidate.
    */
   | {
-      readonly kind: "Uncomparable.searchLimit";
+      readonly kind: "Uncomparable.ambiguous";
       readonly definition: null;
       readonly line: number;
       readonly data: {
+        readonly subject: Subject;
         readonly snapshotLine: number;
+        readonly candidates: readonly number[];
       };
     }
   | {
@@ -171,9 +163,8 @@ export const uncomparableKinds = [
   "Uncomparable.unknownAfter",
   "Uncomparable.unexpectedInput",
   "Uncomparable.missingInput",
-  "Uncomparable.differentRequest",
   "Uncomparable.differentInput",
-  "Uncomparable.searchLimit",
+  "Uncomparable.ambiguous",
   "Uncomparable.unknownService",
   "Uncomparable.unknownScenario",
   "Uncomparable.missingTrace",

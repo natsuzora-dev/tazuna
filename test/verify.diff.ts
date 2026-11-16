@@ -12,8 +12,9 @@ import type { Json } from "../src/data/values.ts";
 import type { Placed, ViolationValue } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 import { simulateSpec, snapshotsOf } from "../src/sim/spec/simulate.ts";
+import { verifyLines } from "../src/verify/compare.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
-import { readSnapshotProblems, resolveAfters } from "../src/verify/lines.ts";
+import { readSnapshotProblems, unknownAfters } from "../src/verify/lines.ts";
 import {
   type Folder,
   type PairingScenario,
@@ -21,7 +22,6 @@ import {
   type TraceFolder,
   traceFolderOf,
 } from "../src/verify/pairing.ts";
-import { verifyLines } from "../src/verify/prepare.ts";
 import { compareSnapshot, hasSnapshot, pairSnapshots, snapshotFolders, snapshotRuns } from "../src/verify/snapshot.ts";
 import { folders, groupExamples, runExamples } from "./examples.ts";
 import { VerifyFunctions } from "./lean/functions.ts";
@@ -86,7 +86,7 @@ const bases = snapshots.filter((s) => s.read.problems.length === 0).map((s) => (
 const readable = snapshots.filter((s) => !s.read.problems.some((p) => p.kind === "Uncomparable.lineSchema"));
 
 function aftersOfBoth(snapshot: readonly (TraceLine | undefined)[], at: string): number {
-  const ts = resolveAfters(snapshot).unknown.map(value);
+  const ts = unknownAfters(snapshot).map(value);
   assert.deepEqual(lean.afters(snapshot), ts, at);
   return ts.length;
 }
@@ -341,7 +341,7 @@ describe("Content comparison", () => {
     t.diagnostic(`findings ${JSON.stringify(Object.fromEntries([...findings].sort()))}`);
   });
 
-  test("TS and Lean find the same renaming when one key of a trace with thirty equal tasks changes, without trying every order of the tasks' bag", () => {
+  test("TS and Lean find the same violations when one key of a trace with thirty equal tasks changes", () => {
     const own = samples.scenarios.find((s) => s.service === "todo");
     assert.ok(own !== undefined);
     const lines = Array.from({ length: 30 }, (_, i) => ({
@@ -394,34 +394,18 @@ describe("Content comparison", () => {
     input: { from: at },
   });
 
-  test("TS and Lean find no violation when equal out lines pair one way only, by the snapshot's after or their resultOf", () => {
-    const after = caseOf("compare/order", "todo", [
-      addTask("addTask#1", 1),
-      nextDay("calendar.nextDay#1"),
-      countChanged("taskCountChanged#1", { after: ["calendar.nextDay#1"] }),
-      countChanged("taskCountChanged#2"),
-    ]);
-    assert.equal(
-      violationCountOfBoth(after, [addTask("a", 1), countChanged("e1"), nextDay("r1"), countChanged("e2")], "after"),
-      0,
-    );
-    const named = caseOf("compare/order", "todo", [
+  test("TS and Lean pair equal out lines in file order, and by their resultOf", () => {
+    const inOrder = caseOf("compare/order", "todo", [
       addTask("addTask#1", 1),
       countChanged("taskCountChanged#1"),
-      countChanged("taskCountChanged#2"),
       nextDay("calendar.nextDay#1"),
+      countChanged("taskCountChanged#2"),
     ]);
-    const nameAfter = {
-      ...named,
-      snapshot: named.snapshot.map((l) =>
-        l?.id === "calendar.nextDay#1" ? ({ ...l, after: ["taskCountChanged#2"] } as TraceLine) : l,
-      ),
-    };
     assert.equal(
       violationCountOfBoth(
-        nameAfter,
-        [addTask("a", 1), countChanged("e1"), nextDay("r1"), countChanged("e2")],
-        "named by an after",
+        inOrder,
+        [addTask("addTask#1", 1), nextDay("r1"), countChanged("e1"), countChanged("e2")],
+        "file order",
       ),
       0,
     );
@@ -435,10 +419,10 @@ describe("Content comparison", () => {
       violationCountOfBoth(
         resultOf,
         [
-          addTask("a", 1),
-          addTask("b", 2),
-          countChanged("e1", { resultOf: "a" }),
-          countChanged("e2", { resultOf: "b" }),
+          addTask("addTask#1", 1),
+          addTask("addTask#2", 2),
+          countChanged("e1", { resultOf: "addTask#1" }),
+          countChanged("e2", { resultOf: "addTask#2" }),
         ],
         "resultOf",
       ),
@@ -446,7 +430,7 @@ describe("Content comparison", () => {
     );
   });
 
-  test("TS and Lean find no violation when a later window names one key of a bag of keys that an earlier window creates", () => {
+  test("TS and Lean report a bag of keys that one group creates as ambiguous, even when a later group names one key", () => {
     const seenIds = (id: string): Line => ({ time: at, dir: "in", type: "query", id, name: "seenIds", input: {} });
     const answer = (id: string, to: string, ids: string[], listed: string[], more: Line = {}): Line => ({
       time: at,
@@ -464,12 +448,16 @@ describe("Content comparison", () => {
       answer("answer#2", "seenIds#2", ["Seen-1", "Seen-2"], ["Seen-1"]),
     ]);
     const trace = [
-      seenIds("q1"),
-      answer("a1", "q1", ["x", "y"], []),
-      seenIds("q2"),
-      answer("a2", "q2", ["x", "y"], ["y"]),
+      seenIds("seenIds#1"),
+      answer("a1", "seenIds#1", ["x", "y"], []),
+      seenIds("seenIds#2"),
+      answer("a2", "seenIds#2", ["x", "y"], ["y"]),
     ];
-    assert.equal(violationCountOfBoth(created, trace, "named later"), 0);
+    violationCountOfBoth(created, trace, "named later");
+    assert.deepEqual(
+      verifyLines(created.spec, "todo", created.snapshot, parseFileLines(trace)).found.map((f) => f.kind),
+      ["Uncomparable.ambiguous"],
+    );
   });
 
   test("TS and Lean find the same comparison violations for traces with a mutated resultOf on an in event line", () => {
@@ -685,9 +673,9 @@ function entriesOf(names: readonly string[], entries: readonly (readonly [number
 }
 
 const randomScenarios = (spec: Spec, compared: readonly boolean[]): PairingScenario[] =>
-  spec.legacyScenarios.map((s, i) => ({ service: s.service, name: s.name, compared: compared[i] ?? true }));
+  spec.scenarios.map((s, i) => ({ service: s.service, name: s.name, compared: compared[i] ?? true }));
 
-const namesOf = (spec: Spec) => [...spec.legacyScenarios.map((s) => s.name), "removed"];
+const namesOf = (spec: Spec) => [...spec.scenarios.map((s) => s.name), "removed"];
 
 describe("Pairing traces with snapshots", () => {
   for (const root of examples)
@@ -746,7 +734,7 @@ describe("Pairing scenarios with snapshot files", () => {
     let found = 0;
     for (const [root, spec] of specs) {
       const { services, folders } = snapshotFolders(spec);
-      const scenarios = spec.legacyScenarios.map(({ service, name }) => ({ service, name, compared: true }));
+      const scenarios = spec.scenarios.map(({ service, name }) => ({ service, name, compared: true }));
       found += pairSnapshotsBoth(services, scenarios, folders, root);
     }
     assert.ok(found > 0);

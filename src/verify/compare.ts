@@ -1,452 +1,498 @@
-import { alike, Bag, Runs, searchLimit } from "../data/canonical.ts";
-import type { Mismatch, Use } from "../data/mismatch.generated.ts";
+import { Bag, comparable, comparableAnswer, orderFree, Runs } from "../data/canonical.ts";
+import type { Mismatch } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import {
   type Bindings,
   contentOf,
-  type MalformedLine,
-  type NumberedLine,
+  type FileLine,
   nameOf,
+  parseFileLines,
+  renamed,
   resultOf,
-  type Steps,
   sameTime,
-  steps,
   subjectOf,
   toOf,
+  untilMalformed,
 } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
-import { plain } from "../data/values.ts";
-import { type Found, lineSchema, resolveAfters } from "./lines.ts";
+import { canonicalJson, type Json, plain, type Shape } from "../data/values.ts";
+import type { Spec } from "../load/load.ts";
+import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
+import { contractsListing } from "../syntax/structure.ts";
+import { byLine, type Found, lineSchema } from "./lines.ts";
 
-const json = (value: unknown) => JSON.stringify(value);
-
-/** A one-to-one renaming of snapshot values to implementation values, with the lines that bound each value. */
-type Renaming = readonly Use[];
-
-const traceOf = (r: Renaming, s: string): string | undefined => r.find((u) => u.snapshot === s)?.trace;
-
-const takes = (r: Renaming, t: string): boolean => r.some((u) => u.trace === t);
-
-/** Returns the renaming with `u`, unless one of its values already stands for another value. */
-function bind(r: Renaming, u: Use): Renaming | undefined {
-  const t = traceOf(r, u.snapshot);
-  if (t !== undefined) return t === u.trace ? r : undefined;
-  return takes(r, u.trace) ? undefined : [...r, u];
+/** Lean's readLine: the line with its input, payload or answer output read by its definition's schema. */
+function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
+  const outputByRequestId = new Map<string, Shape>();
+  return (l) => {
+    switch (l.type) {
+      case "operation":
+      case "unacceptedOperation": {
+        const [screen, control = ""] = l.name.split(".");
+        const def = definitionOfTraceName(spec, service, screen, "screen");
+        return { ...l, payload: comparable(def?.controls?.[control]?.payload, l.payload) };
+      }
+      case "answer":
+        return { ...l, answer: comparableAnswer(l.answer, outputByRequestId.get(l.to)) };
+      case "event": {
+        const def = definitionOfTraceName(spec, service, l.name, "event");
+        return def === undefined ? l : { ...l, payload: comparable(def.payload, l.payload) };
+      }
+      case "command":
+      case "query":
+      case "subscribe": {
+        const def = definitionOfTraceName(spec, service, l.name, l.type === "command" ? "command" : "query");
+        if (def === undefined) return l;
+        if (def.output !== undefined) outputByRequestId.set(l.id, def.output);
+        return { ...l, input: comparable(def.input, l.input) };
+      }
+      case "unsubscribe":
+      case "time":
+      case "restart":
+        return l;
+    }
+  };
 }
 
-/** Returns `value` with its renamed createKey values replaced by their implementation values, for reports. */
-function substitute(r: Renaming, value: unknown): unknown {
-  if (typeof value === "string") return traceOf(r, value) ?? value;
-  if (value instanceof Bag) return new Bag(value.items.map((v) => substitute(r, v)));
-  if (value instanceof Runs) return new Runs(value.runs.map((v) => substitute(r, v) as Bag));
-  if (Array.isArray(value)) return value.map((v) => substitute(r, v));
-  if (value && typeof value === "object")
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substitute(r, v)]));
-  return value;
+/** Lean's withoutRepeatedAnswers. */
+function withoutRepeatedAnswers(lines: readonly (TraceLine | undefined)[]): (TraceLine | undefined)[] {
+  const open = new Subscriptions<undefined>();
+  return lines.map((l) => {
+    if (l?.dir === "in" && l.type === "subscribe") open.subscribe(l.id, undefined);
+    else if (l?.dir === "in" && l.type === "unsubscribe") open.unsubscribe(l.to);
+    else if (l?.dir === "out" && l.type === "answer" && open.repeats(l.to, l.answer)) return undefined;
+    return l;
+  });
 }
 
-/** What a search still has to pair. Bag elements pair at trace line `line` and snapshot line `snapshotLine`. */
-type Goal =
-  | { readonly kind: "out"; readonly s: NumberedLine }
-  | { readonly kind: "subscription"; readonly id: string }
-  | {
-      readonly kind: "bag";
-      readonly line: number;
-      readonly snapshotLine: number;
-      readonly xs: readonly unknown[];
-      readonly ys: readonly unknown[];
-    };
+/** Lean's internalEvent. */
+function internalEvent(spec: Spec, service: string): (l: TraceLine) => boolean {
+  return (l) => {
+    if (l.dir !== "out" || l.type !== "event") return false;
+    const def = definitionOfTraceName(spec, service, l.name, "event");
+    return def !== undefined && contractsListing(spec.structure, refOfDefinition(spec, def)).length === 0;
+  };
+}
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
+interface Numbered {
+  readonly line: TraceLine;
+  /** The 1-based line number. */
+  readonly index: number;
+}
+
+interface Group {
+  readonly input: Numbered | undefined;
+  readonly outs: readonly Numbered[];
+}
+
+/** Lean's groups. */
+function groups(lines: readonly (TraceLine | undefined)[]): Group[] {
+  const result: { input: Numbered | undefined; outs: Numbered[] }[] = [{ input: undefined, outs: [] }];
+  lines.forEach((line, i) => {
+    if (line === undefined) return;
+    if (line.dir === "out") result.at(-1)?.outs.push({ line, index: i + 1 });
+    else result.push({ input: { line, index: i + 1 }, outs: [] });
+  });
+  return result;
+}
+
+/** Lean's Match: `undefined` is `differ`. */
+type Match = Bindings | "ambiguous" | undefined;
+
+/** Lean's bindString. */
+function bindString(fresh: ReadonlySet<string>, b: Bindings, s: string, t: string): Bindings | undefined {
+  const bound = b.get(s);
+  if (bound !== undefined) return bound === t ? b : undefined;
+  if (fresh.has(s)) return [...b.values()].includes(t) ? undefined : new Map([...b, [s, t]]);
+  return s === t ? b : undefined;
+}
+
+interface Paired {
+  readonly pairs: readonly (readonly [number, number])[];
+  readonly bindings: Bindings;
+  readonly ambiguous: readonly number[];
+  readonly unmatched: readonly number[];
+  readonly extra: readonly number[];
+}
+
+const sameBindings = (a: Bindings, b: Bindings): boolean =>
+  a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+
+/** Lean's pairUp. */
+function pairUp<A, B>(
+  test: (b: Bindings, s: A, t: B) => Match,
+  start: Bindings,
+  left: readonly (readonly [number, A])[],
+  right: readonly (readonly [number, B])[],
+): Paired {
+  const candidates = (b: Bindings, rs: readonly (readonly [number, B])[], s: A) => {
+    const cs: [number, Bindings][] = [];
+    let ambiguous = false;
+    for (const [j, t] of rs) {
+      const m = test(b, s, t);
+      if (m === "ambiguous") ambiguous = true;
+      else if (m !== undefined) cs.push([j, m]);
+    }
+    return { cs, ambiguous };
+  };
+  let b = start;
+  let ls = left;
+  let rs = right;
+  const pairs: (readonly [number, number])[] = [];
+  for (let fuel = left.length; fuel > 0; fuel -= 1) {
+    let step: readonly [number, number, Bindings] | undefined;
+    for (const [i, s] of ls) {
+      const { cs, ambiguous } = candidates(b, rs, s);
+      const [first] = cs;
+      if (ambiguous || first === undefined) continue;
+      if (cs.every(([, c]) => sameBindings(c, first[1]))) {
+        step = [i, first[0], first[1]];
+        break;
+      }
+    }
+    if (step === undefined) break;
+    const [i, j, next] = step;
+    b = next;
+    ls = ls.filter(([k]) => k !== i);
+    rs = rs.filter(([k]) => k !== j);
+    pairs.push([i, j]);
+  }
+  const rest = ls.map(([i, s]) => {
+    const { cs, ambiguous } = candidates(b, rs, s);
+    return { i, isAmbiguous: ambiguous || cs.length >= 2 };
+  });
+  return {
+    pairs,
+    bindings: b,
+    ambiguous: rest.filter((r) => r.isAmbiguous).map((r) => r.i),
+    unmatched: rest.filter((r) => !r.isAmbiguous).map((r) => r.i),
+    extra: rs.map(([j]) => j),
+  };
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Bag) && !(v instanceof Runs);
 
-const sameKeys = (s: Record<string, unknown>, t: Record<string, unknown>): boolean =>
-  json(Object.keys(s).toSorted()) === json(Object.keys(t).toSorted());
-
-type Walked = readonly [Renaming, readonly Goal[]] | undefined;
-
-/**
- * Returns the renaming under which `s` equals `t` apart from the elements of bags, and the bags left to pair. A
- * declared createKey value equals the implementation string that it is renamed to, and other strings equal themselves.
- */
-function walk(
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  s: unknown,
-  t: unknown,
-  r: Renaming,
-): Walked {
-  if (typeof s === "string") {
-    if (typeof t !== "string") return undefined;
-    if (!declared.has(s)) return t === s ? [r, []] : undefined;
-    const bound = bind(r, { snapshot: s, trace: t, line, snapshotLine });
-    return bound === undefined ? undefined : [bound, []];
+/** Lean's matchValue. */
+function matchValue(fresh: ReadonlySet<string>, b: Bindings, s: unknown, t: unknown): Match {
+  if (typeof s === "string" && typeof t === "string") return bindString(fresh, b, s, t);
+  if (s instanceof Bag && t instanceof Bag)
+    return s.items.length === t.items.length ? matchBag(fresh, b, s.items, t.items) : undefined;
+  if (s instanceof Runs && t instanceof Runs) return matchList(fresh, b, s.runs, t.runs);
+  if (Array.isArray(s) && Array.isArray(t)) return matchList(fresh, b, s, t);
+  if (isPlainObject(s) && isPlainObject(t)) {
+    const ks = Object.keys(s);
+    const kt = Object.keys(t);
+    if (ks.length !== kt.length || !ks.every((k) => kt.includes(k))) return undefined;
+    let m: Match = b;
+    for (const k of ks) {
+      if (m === undefined || m === "ambiguous") return m;
+      m = matchValue(fresh, m, s[k], t[k]);
+    }
+    return m;
   }
-  if (Array.isArray(s))
-    return Array.isArray(t) && s.length === t.length ? walkList(declared, line, snapshotLine, s, t, r) : undefined;
-  if (s instanceof Runs)
-    return t instanceof Runs && s.runs.length === t.runs.length
-      ? walkList(declared, line, snapshotLine, s.runs, t.runs, r)
-      : undefined;
-  if (s instanceof Bag)
-    return t instanceof Bag && s.items.length === t.items.length
-      ? [r, [{ kind: "bag", line, snapshotLine, xs: s.items, ys: t.items }]]
-      : undefined;
-  if (isObject(s)) {
-    if (!isObject(t) || !sameKeys(s, t)) return undefined;
-    return walkList(
-      declared,
-      line,
-      snapshotLine,
-      Object.values(s),
-      Object.keys(s).map((k) => t[k]),
-      r,
-    );
-  }
-  return s === t ? [r, []] : undefined;
+  const leaf = (v: unknown) => v === null || typeof v !== "object";
+  return leaf(s) && leaf(t) && typeof s !== "string" && typeof t !== "string" && s === t ? b : undefined;
 }
 
-function walkList(
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  xs: readonly unknown[],
-  ys: readonly unknown[],
-  r: Renaming,
-): Walked {
-  let renaming = r;
-  const goals: Goal[] = [];
+function matchList(fresh: ReadonlySet<string>, b: Bindings, xs: readonly unknown[], ys: readonly unknown[]): Match {
+  if (xs.length !== ys.length) return undefined;
+  let m: Match = b;
   for (const [i, x] of xs.entries()) {
-    const walked = walk(declared, line, snapshotLine, x, ys[i], renaming);
-    if (walked === undefined) return undefined;
-    renaming = walked[0];
-    goals.push(...walked[1]);
+    if (m === undefined || m === "ambiguous") return m;
+    m = matchValue(fresh, m, x, ys[i]);
   }
-  return [renaming, goals];
+  return m;
 }
 
-/** Two missing values (undefined) are equal, and one missing value is not. */
-const walkContent = (
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  s: unknown,
-  t: unknown,
-  r: Renaming,
-): Walked =>
-  s === undefined || t === undefined ? (s === t ? [r, []] : undefined) : walk(declared, line, snapshotLine, s, t, r);
-
-/**
- * Returns the uses under which `s` equals `t` when each declared createKey value may stand for any string, for
- * reports. Bags pair their elements by backtracking.
- */
-function free(
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  s: unknown,
-  t: unknown,
-): readonly Use[] | undefined {
-  if (typeof s === "string") {
-    if (typeof t !== "string") return undefined;
-    if (!declared.has(s)) return t === s ? [] : undefined;
-    return [{ snapshot: s, trace: t, line, snapshotLine }];
-  }
-  if (Array.isArray(s))
-    return Array.isArray(t) && s.length === t.length ? freeList(declared, line, snapshotLine, s, t) : undefined;
-  if (s instanceof Runs)
-    return t instanceof Runs && s.runs.length === t.runs.length
-      ? freeList(declared, line, snapshotLine, s.runs, t.runs)
-      : undefined;
-  if (s instanceof Bag) return t instanceof Bag ? freeBag(declared, line, snapshotLine, s.items, t.items) : undefined;
-  if (isObject(s)) {
-    if (!isObject(t) || !sameKeys(s, t)) return undefined;
-    return freeList(
-      declared,
-      line,
-      snapshotLine,
-      Object.values(s),
-      Object.keys(s).map((k) => t[k]),
-    );
-  }
-  return s === t ? [] : undefined;
+function matchBag(fresh: ReadonlySet<string>, b: Bindings, xs: readonly unknown[], ys: readonly unknown[]): Match {
+  const p = pairUp(
+    (b, x: unknown, y: unknown) => matchValue(fresh, b, x, y),
+    b,
+    xs.map((x, i) => [i, x] as const),
+    ys.map((y, i) => [i, y] as const),
+  );
+  if (p.ambiguous.length > 0) return "ambiguous";
+  return p.unmatched.length === 0 ? p.bindings : undefined;
 }
 
-function freeList(
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  xs: readonly unknown[],
-  ys: readonly unknown[],
-): readonly Use[] | undefined {
-  const uses: Use[] = [];
-  for (const [i, x] of xs.entries()) {
-    const found = free(declared, line, snapshotLine, x, ys[i]);
-    if (found === undefined) return undefined;
-    uses.push(...found);
-  }
-  return uses;
-}
+const and = (m: Match, f: (b: Bindings) => Match): Match => (m === undefined || m === "ambiguous" ? m : f(m));
 
-function freeBag(
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  ss: readonly unknown[],
-  ts: readonly unknown[],
-): readonly Use[] | undefined {
-  if (ss.length !== ts.length) return undefined;
-  const [first, ...rest] = ss;
-  if (ss.length === 0) return [];
-  for (const [i, t] of ts.entries()) {
-    const found = free(declared, line, snapshotLine, first, t);
-    if (found === undefined) continue;
-    const others = freeBag(declared, line, snapshotLine, rest, ts.toSpliced(i, 1));
-    if (others !== undefined) return [...found, ...others];
-  }
-  return undefined;
-}
+const isOutRequest = (l: TraceLine): boolean =>
+  l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe");
 
-const freeContent = (
-  declared: ReadonlySet<string>,
-  line: number,
-  snapshotLine: number,
-  s: unknown,
-  t: unknown,
-): readonly Use[] | undefined =>
-  s === undefined || t === undefined ? (s === t ? [] : undefined) : free(declared, line, snapshotLine, s, t);
-
-/**
- * Alike `out` requests of window `window`, paired by `uses`. Each snapshot id in `snapshot` stands for one of the
- * implementation ids in `trace`, and binds to it when a line names it.
- */
-interface Block {
-  readonly line: TraceLine;
-  readonly window: number;
-  readonly snapshot: readonly string[];
-  readonly trace: readonly string[];
-  readonly uses: readonly Use[];
-}
-
-/** The renaming of request, subscription and input ids, and the blocks of alike requests. */
-interface Ids {
-  readonly bound: Renaming;
-  readonly blocks: readonly Block[];
-}
-
-const known = (ids: Ids, s: string): boolean =>
-  traceOf(ids.bound, s) !== undefined || ids.blocks.some((b) => b.snapshot.includes(s));
-
-const reserved = (ids: Ids, t: string): boolean => takes(ids.bound, t) || ids.blocks.some((b) => b.trace.includes(t));
-
-const erase = (xs: readonly string[], x: string): readonly string[] => {
-  const i = xs.indexOf(x);
-  return i === -1 ? xs : xs.toSpliced(i, 1);
-};
-
-/** Returns the ids with `u` bound. A snapshot id of a block binds only to an implementation id of the same block. */
-function use(ids: Ids, u: Use): Ids | undefined {
-  const t = traceOf(ids.bound, u.snapshot);
-  if (t !== undefined) return t === u.trace ? ids : undefined;
-  const block = ids.blocks.find((b) => b.snapshot.includes(u.snapshot));
-  if (block === undefined) return reserved(ids, u.trace) ? undefined : { ...ids, bound: [...ids.bound, u] };
-  if (!block.trace.includes(u.trace)) return undefined;
-  return {
-    bound: [...ids.bound, u],
-    blocks: ids.blocks.map((b) =>
-      b.snapshot.includes(u.snapshot)
-        ? { ...b, snapshot: erase(b.snapshot, u.snapshot), trace: erase(b.trace, u.trace) }
-        : b,
-    ),
-  };
-}
-
-/** Two missing ids are the same, and one missing id is not. */
-const useIds = (
-  ids: Ids,
-  line: number,
-  snapshotLine: number,
-  s: string | undefined,
-  t: string | undefined,
-): Ids | undefined =>
-  s === undefined || t === undefined
-    ? s === t
-      ? ids
-      : undefined
-    : use(ids, { snapshot: s, trace: t, line, snapshotLine });
-
-/** Lean's Out.idUse: the use of the id of the snapshot line `s` for the id of the implementation line `t`. */
-const idUse = (s: NumberedLine, t: NumberedLine): Use => ({
-  snapshot: s.line.id,
-  trace: t.line.id,
-  line: t.at,
-  snapshotLine: s.at,
-});
-
-/**
- * Returns the ids with the ids `u` of a paired `out` request `l` in the block of its alike requests of window
- * `window`. An id that is already bound or in a block binds instead.
- */
-function join(ids: Ids, window: number, l: TraceLine, u: Use): Ids | undefined {
-  if (known(ids, u.snapshot) || reserved(ids, u.trace)) return use(ids, u);
-  const i = ids.blocks.findIndex((b) => b.window === window && alike(b.line, l));
-  if (i === -1)
-    return {
-      ...ids,
-      blocks: [...ids.blocks, { line: l, window, snapshot: [u.snapshot], trace: [u.trace], uses: [u] }],
-    };
-  return {
-    ...ids,
-    blocks: ids.blocks.map((b, k) =>
-      k === i ? { ...b, snapshot: [...b.snapshot, u.snapshot], trace: [...b.trace, u.trace], uses: [...b.uses, u] } : b,
-    ),
-  };
-}
-
-/** Returns the uses that bind an id: the bound ids, and the request of each block that has one request. */
-const idUsesOf = (ids: Ids): readonly Use[] => [
-  ...ids.bound,
-  ...ids.blocks.flatMap((b) => (b.uses.length === 1 ? b.uses : [])),
+/** Lean's Line.fresh. */
+const freshOf = (l: TraceLine): string[] => [
+  ...(isOutRequest(l) ? [l.id] : []),
+  ...("created" in l ? (l.created ?? []) : []),
 ];
 
-const sameUse = (a: Use, b: Use): boolean =>
-  a.snapshot === b.snapshot && a.trace === b.trace && a.line === b.line && a.snapshotLine === b.snapshotLine;
+const sameFields = (s: TraceLine, t: TraceLine): boolean =>
+  s.type === t.type && s.dir === t.dir && nameOf(s) === nameOf(t);
 
-/**
- * Returns the groups of connected uses in which a value stands for two values, each in the order of the uses. A
- * snapshot value and an implementation value connect when a use pairs them.
- */
-function conflicts(uses: readonly Use[]): (readonly Use[])[] {
-  let groups: (readonly Use[])[] = [];
-  for (const [k, u] of uses.entries()) {
-    if (uses.slice(0, k).some((v) => sameUse(u, v))) continue;
-    const touches = (g: readonly Use[]) => g.some((v) => v.snapshot === u.snapshot || v.trace === u.trace);
-    const i = groups.findIndex(touches);
-    if (i === -1) groups.push([u]);
-    else {
-      const rest = groups.filter((g) => !touches(g));
-      groups = [...rest.slice(0, i), [...groups.filter(touches).flat(), u], ...rest.slice(i)];
-    }
-  }
-  return groups.filter((g) =>
-    g.some((u) =>
-      g.some(
-        (v) => (u.snapshot === v.snapshot && u.trace !== v.trace) || (u.trace === v.trace && u.snapshot !== v.snapshot),
-      ),
+/** Lean's matchLine. */
+function matchLine(fresh: ReadonlySet<string>, b: Bindings, s: TraceLine, t: TraceLine): Match {
+  if (!sameFields(s, t)) return undefined;
+  const ids = s.dir === "in" || isOutRequest(s) ? bindString(fresh, b, s.id, t.id) : b;
+  const opt = (x: string | undefined, y: string | undefined) => (b: Bindings) =>
+    x === undefined && y === undefined
+      ? b
+      : x !== undefined && y !== undefined
+        ? bindString(fresh, b, x, y)
+        : undefined;
+  return and(ids, (b) =>
+    and(opt(toOf(s), toOf(t))(b), (b) =>
+      and(opt(resultOf(s), resultOf(t))(b), (b) => {
+        const [x, y] = [contentOf(s), contentOf(t)];
+        if (x === undefined && y === undefined) return b;
+        return x === undefined || y === undefined ? undefined : matchValue(fresh, b, x, y);
+      }),
     ),
   );
 }
 
-type Open = Subscriptions<{ readonly line: Extract<TraceLine, { type: "subscribe" }>; readonly at: number }>;
+const json = (value: unknown): Json => plain(value);
 
-/** What a window's search compares in, besides the pairing. */
-interface Scope {
-  readonly declared: ReadonlySet<string>;
-  readonly window: number;
-  readonly traceOut: readonly NumberedLine[];
-  readonly openSnapshot: Open;
-  readonly openTrace: Open;
-}
-
-/** A pairing that a search builds, with the renamings under which the paired lines are equal. */
-interface Pairing {
-  readonly ids: Ids;
-  readonly keys: Renaming;
-  readonly pairs: readonly { readonly spec: NumberedLine; readonly trace: NumberedLine }[];
-  readonly subscriptions: readonly (readonly [string, string])[];
-}
-
-type Outcome =
-  | { readonly kind: "paired"; readonly pairing: Pairing }
-  | { readonly kind: "unpaired" }
-  | { readonly kind: "limited" };
-
-type Frame = readonly [readonly Goal[], Pairing];
-
-/**
- * The renamings of a pairing of every window that the search across windows found (guideFor). A search that keeps to
- * them pairs no value that they pair with another value.
- */
-interface Guide {
-  readonly ids: Renaming;
-  readonly keys: Renaming;
-}
-
-/** Returns whether `u` pairs no value that `r` pairs with another value. */
-const allows = (r: Renaming, u: Use): boolean => {
-  const t = traceOf(r, u.snapshot);
-  return t !== undefined ? t === u.trace : !takes(r, u.trace);
+/** Lean's samePlace. */
+const samePlace = (b: Bindings, s: TraceLine, t: TraceLine): boolean => {
+  const to = toOf(s);
+  return sameFields(s, t) && (to === undefined ? undefined : (b.get(to) ?? to)) === toOf(t);
 };
 
-/** Returns whether the uses that pairing `q` adds to pairing `p` keep to the guide. */
-const keepsTo = (g: Guide, p: Pairing, q: Pairing): boolean =>
-  q.ids.bound.slice(p.ids.bound.length).every((u) => allows(g.ids, u)) &&
-  q.keys.slice(p.keys.length).every((u) => allows(g.keys, u));
+const key = (value: unknown) => canonicalJson(orderFree(value));
 
-/** The renamings and subscriptions that a comparison carries from one window to the next. */
-interface State {
-  readonly ids: Ids;
-  readonly keys: Renaming;
-  /** Each paired snapshot subscription with the implementation subscriptions paired with alike subscriptions. */
-  readonly subscriptionIds: ReadonlyMap<string, ReadonlySet<string>>;
-}
-
-/** A part of the comparison that one search pairs: the `out` lines of a window, or two `in` lines. */
-type Stage =
-  | {
-      readonly kind: "outs";
-      readonly specOut: readonly NumberedLine[];
-      readonly traceOut: readonly NumberedLine[];
-      readonly missingAt: number;
-      readonly snapshotAt: number;
-    }
-  | { readonly kind: "input"; readonly s: NumberedLine; readonly t: NumberedLine };
-
-/** A frame of the search across stages: the goals left of stage number `stage`, and the pairing so far. */
-interface StageFrame {
-  readonly goals: readonly Goal[];
-  readonly pairing: Pairing;
-  readonly scope: Scope;
-  /** The state before the stage, and the scope of the window that the stage is part of. */
-  readonly st: State;
-  readonly window: Scope;
-  readonly stage: number;
-}
-
-/** Returns the elements of `xs` whose key no earlier element has. */
-function distinct<T>(key: (x: T) => string, xs: readonly T[]): T[] {
-  const seen = new Set<string>();
-  return xs.filter((x) => {
-    const k = key(x);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}
-
-/** The order in which the search pairs lines: requests and lines that create keys, then answers, then the rest. */
-const rank = (l: TraceLine): number =>
-  l.type === "command" || l.type === "query" || (l.created ?? []).length > 0 ? 0 : l.type === "answer" ? 1 : 2;
-
-const byRank = (ss: readonly NumberedLine[]): NumberedLine[] =>
-  [0, 1, 2].flatMap((r) => ss.filter((s) => rank(s.line) === r));
-
-/**
- * Returns the snapshot lines, by number, whose pairing can depend on where the implementation line stands: those of a
- * window that share their type and name with a line that an after of the window names or orders.
- */
-function placedLines(windows: Steps, follows: ReadonlyMap<number, ReadonlySet<number>>): ReadonlySet<number> {
-  const placed = new Set<number>();
-  for (const { before } of windows) {
-    const ordered = before.filter(
-      (o) => (follows.get(o.at)?.size ?? 0) > 0 || before.some((e) => follows.get(e.at)?.has(o.at) === true),
-    );
-    for (const o of before)
-      if (ordered.some((m) => m.line.type === o.line.type && nameOf(m.line) === nameOf(o.line))) placed.add(o.at);
+/** Lean's difference. */
+function difference(s: TraceLine, t: Numbered): Mismatch {
+  const subject = subjectOf(t.line);
+  const line = t.index;
+  const tl = t.line;
+  if (s.type === "answer" && tl.type === "answer") {
+    if (s.answer.result === "rejected" && tl.answer.result === "rejected")
+      return {
+        kind: "Mismatch.rejection",
+        definition: null,
+        line,
+        data: { subject, snapshot: s.answer.rejection.kind, trace: tl.answer.rejection.kind },
+      };
+    if (s.answer.result !== tl.answer.result)
+      return {
+        kind: "Mismatch.result",
+        definition: null,
+        line,
+        data: { subject, snapshot: s.answer.result, trace: tl.answer.result },
+      };
+    return {
+      kind: "Mismatch.output",
+      definition: null,
+      line,
+      data: { subject, snapshot: json(s.answer), trace: json(tl.answer) },
+    };
   }
-  return placed;
+  if (s.type === "event" && tl.type === "event") {
+    if (key(s.payload) === key(tl.payload))
+      return {
+        kind: "Mismatch.resultOf",
+        definition: null,
+        line,
+        data: { subject, snapshot: s.resultOf ?? null, trace: tl.resultOf ?? null },
+      };
+    return {
+      kind: "Mismatch.event",
+      definition: null,
+      line,
+      data: { subject, snapshot: json(s.payload), trace: json(tl.payload) },
+    };
+  }
+  const data = { subject, snapshot: json(contentOf(s)), trace: json(contentOf(tl)) };
+  if (s.type === "operation" || s.type === "unacceptedOperation")
+    return { kind: "Mismatch.operation", definition: null, line, data };
+  return { kind: "Mismatch.request", definition: null, line, data };
+}
+
+/** Lean's missing. */
+function missing(s: Numbered, place: number): Mismatch {
+  const subject = subjectOf(s.line);
+  if (s.line.type === "answer")
+    return { kind: "Mismatch.missingAnswer", definition: null, line: place, data: { subject, snapshotLine: s.index } };
+  const data = { subject, content: json(contentOf(s.line)), snapshotLine: s.index };
+  return s.line.type === "subscribe" && s.line.dir === "out"
+    ? { kind: "Mismatch.unopenedSubscription", definition: null, line: place, data }
+    : { kind: "Mismatch.missingLine", definition: null, line: place, data };
+}
+
+/** Lean's unexpected. */
+function unexpected(t: Numbered): Mismatch {
+  const subject = subjectOf(t.line);
+  return t.line.type === "subscribe" && t.line.dir === "out"
+    ? {
+        kind: "Mismatch.unexpectedSubscription",
+        definition: null,
+        line: t.index,
+        data: { subject, content: json(contentOf(t.line)) },
+      }
+    : { kind: "Mismatch.unexpectedLine", definition: null, line: t.index, data: { subject } };
+}
+
+const earlierWithId = (earlier: readonly Numbered[], id: string): Numbered | undefined =>
+  earlier.findLast((o) => o.line.id === id);
+
+/** Lean's mustFollow. */
+const mustFollow = (outs: readonly Numbered[], o: Numbered, k: number): number[] =>
+  (o.line.after ?? []).flatMap((id) => {
+    const earlier = earlierWithId(outs.slice(0, k), id);
+    return earlier === undefined ? [] : [earlier.index];
+  });
+
+type Finding = Mismatch | Uncomparable;
+
+/** Lean's compareGroup. */
+function compareGroup(
+  start: Bindings,
+  fresh: ReadonlySet<string>,
+  snapshot: readonly Numbered[],
+  trace: readonly Numbered[],
+  place: number,
+): readonly [Finding[], Bindings, boolean] {
+  const p = pairUp(
+    (b, s: Numbered, t: Numbered) => matchLine(fresh, b, s.line, t.line),
+    start,
+    snapshot.map((s) => [s.index, s] as const),
+    trace.map((t) => [t.index, t] as const),
+  );
+  const at = (xs: readonly Numbered[], i: number) => xs.find((x) => x.index === i);
+  const ambiguous = p.ambiguous.flatMap((i): Finding[] => {
+    const s = at(snapshot, i);
+    if (s === undefined) return [];
+    const candidates = trace
+      .filter((t) => !p.pairs.some(([, j]) => j === t.index))
+      .filter((t) => matchLine(fresh, p.bindings, s.line, t.line) !== undefined)
+      .map((t) => t.index);
+    return [
+      {
+        kind: "Uncomparable.ambiguous",
+        definition: null,
+        line: candidates[0] ?? place,
+        data: { subject: subjectOf(s.line), snapshotLine: s.index, candidates },
+      },
+    ];
+  });
+  if (ambiguous.length > 0) return [ambiguous, p.bindings, true];
+  let b = p.bindings;
+  let extra = [...p.extra];
+  const placed: (readonly [Numbered, Numbered | undefined])[] = [];
+  for (const i of p.unmatched) {
+    const s = at(snapshot, i);
+    if (s === undefined) continue;
+    const t = trace.filter((t) => extra.includes(t.index)).find((t) => samePlace(b, s.line, t.line));
+    if (t === undefined) placed.push([s, undefined]);
+    else {
+      if (isOutRequest(s.line)) b = bindString(fresh, b, s.line.id, t.line.id) ?? b;
+      placed.push([s, t]);
+      extra = extra.filter((j) => j !== t.index);
+    }
+  }
+  const differences = placed.map(([s, t]) => (t === undefined ? missing(s, place) : difference(s.line, t)));
+  const unexpectedLines = trace.filter((t) => extra.includes(t.index)).map(unexpected);
+  const pairs: (readonly [Numbered, Numbered])[] = [
+    ...p.pairs.flatMap(([i, j]) => {
+      const [s, t] = [at(snapshot, i), at(trace, j)];
+      return s === undefined || t === undefined ? [] : [[s, t] as const];
+    }),
+    ...placed.flatMap(([s, t]) => (t === undefined ? [] : [[s, t] as const])),
+  ];
+  const times = pairs.flatMap(([s, t]): Finding[] =>
+    sameTime(s.line, t.line)
+      ? []
+      : [
+          {
+            kind: "Mismatch.time",
+            definition: null,
+            line: t.index,
+            data: { subject: subjectOf(t.line), snapshot: s.line.time, trace: t.line.time },
+          },
+        ],
+  );
+  const orders = snapshot.flatMap((s, k): Finding[] => {
+    const t = pairs.find(([x]) => x.index === s.index)?.[1];
+    if (t === undefined) return [];
+    return mustFollow(snapshot, s, k).flatMap((n): Finding[] => {
+      const before = pairs.find(([x]) => x.index === n)?.[1];
+      if (before === undefined || before.index < t.index) return [];
+      return [
+        {
+          kind: "Mismatch.lineOrder",
+          definition: null,
+          line: t.index,
+          data: { subject: subjectOf(t.line), before: subjectOf(before.line) },
+        },
+      ];
+    });
+  });
+  return [[...differences, ...unexpectedLines, ...times, ...orders], b, false];
+}
+
+const lineValue = (l: TraceLine): Json => plain(l);
+
+/** Lean's differentInput. */
+const differentInput = (b: Bindings, s: Numbered, t: Numbered): Finding => ({
+  kind: "Uncomparable.differentInput",
+  definition: null,
+  line: t.index,
+  data: { snapshotLine: s.index, snapshot: renamed(b, lineValue(s.line)), trace: lineValue(t.line) },
+});
+
+/** Lean's compareGroups. */
+function compareGroups(
+  lineCount: number,
+  internal: (l: TraceLine) => boolean,
+  expected: readonly Group[],
+  actual: readonly Group[],
+  cut: boolean,
+): readonly [Finding[], Bindings] {
+  const found: Finding[] = [];
+  let b: Bindings = new Map();
+  const fresh = new Set<string>();
+  for (let k = 0; k < Math.max(expected.length, actual.length); k += 1) {
+    const [e, a] = [expected[k], actual[k]];
+    const s = e?.input;
+    const t = a?.input;
+    if (s !== undefined && t === undefined) {
+      found.push({
+        kind: "Uncomparable.missingInput",
+        definition: null,
+        line: lineCount,
+        data: { snapshot: lineValue(s.line), snapshotLine: s.index },
+      });
+      break;
+    }
+    if (s === undefined && t !== undefined) {
+      found.push({
+        kind: "Uncomparable.unexpectedInput",
+        definition: null,
+        line: t.index,
+        data: { trace: lineValue(t.line) },
+      });
+      break;
+    }
+    if (e === undefined || a === undefined) break;
+    if (s !== undefined && t !== undefined) {
+      const m = matchLine(new Set(), b, s.line, t.line);
+      if (m === undefined || m === "ambiguous" || !sameTime(s.line, t.line)) {
+        found.push(differentInput(b, s, t));
+        break;
+      }
+      b = m;
+    }
+    if (cut && k === actual.length - 1) break;
+    const compared = (outs: readonly Numbered[]) => outs.filter((o) => !internal(o.line));
+    for (const o of e.outs) for (const v of freshOf(o.line)) fresh.add(v);
+    const [groupFound, next, stop] = compareGroup(b, fresh, compared(e.outs), compared(a.outs), t?.index ?? 1);
+    found.push(...groupFound);
+    b = next;
+    if (stop) break;
+  }
+  return [found, b];
 }
 
 /** The violations of a comparison, and the bindings that it ends with. */
@@ -455,677 +501,48 @@ export interface Compared {
   readonly bindings: Bindings;
 }
 
-/**
- * Compares the snapshot's lines with the trace's lines, and returns the violations and the bindings. `lines` are the
- * trace lines before its first malformed line `malformed`, and the window of that line is not compared. An unknown
- * after of the snapshot orders no line; readSnapshotProblems reports it before the comparison.
- */
-export function compare(
+/** Lean's compare. */
+function compare(
   snapshot: readonly (TraceLine | undefined)[],
   lines: readonly (TraceLine | undefined)[],
-  malformed: MalformedLine | undefined,
+  malformed: number | undefined,
   internal: (l: TraceLine) => boolean,
+): readonly [Finding[], Bindings] {
+  const [found, bindings] = compareGroups(
+    lines.length,
+    internal,
+    groups(snapshot),
+    groups(lines),
+    malformed !== undefined,
+  );
+  return [found, bindings];
+}
+
+/**
+ * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
+ * A trace line's violation has its 1-based line number in `line`.
+ */
+export function verifyLines(
+  spec: Spec,
+  service: string,
+  snapshot: readonly (TraceLine | undefined)[],
+  trace: readonly FileLine[],
 ): Compared {
-  const problems: (Mismatch | Uncomparable)[] = [];
-  const expected = steps(snapshot);
-  const actual = steps(lines);
-  const requestsById = new Map(snapshot.flatMap((l) => (l === undefined ? [] : [[l.id, l] as const])));
-  let ids: Ids = { bound: [], blocks: [] };
-  let keys: Renaming = [];
-  let subscriptionIds: State["subscriptionIds"] = new Map();
-  const outside: Scope = {
-    declared: new Set(),
-    window: 0,
-    traceOut: [],
-    openSnapshot: new Subscriptions(),
-    openTrace: new Subscriptions(),
-  };
-  let guide: Guide = { ids: [], keys: [] };
-  const reportedMissing = new Set<string>();
-  const reportedUnexpected = new Set<string>();
-  const bindings = () => new Map(keys.map((u) => [u.snapshot, u.trace]));
-  const { follows } = resolveAfters(snapshot);
-  const placed = placedLines(expected, follows);
+  const { lines, malformed } = untilMalformed(trace);
+  const read = readLine(spec, service);
+  const expected = snapshot.map((l) => l && read(l));
+  const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
+  const [found, bindings] = compare(expected, actual, malformed?.lineNumber, internalEvent(spec, service));
+  return { found: [...found, ...(malformed === undefined ? [] : [lineSchema(malformed)])], bindings };
+}
 
-  const answersQuery = (to: string) => {
-    const request = requestsById.get(to);
-    return request?.type === "query" || request?.type === "subscribe";
-  };
-  const queryAnswer = (l: TraceLine) =>
-    l.type !== "answer" ? undefined : l.answer.result === "fulfilled" ? l.answer.output : l.answer;
-  const compared = (s: TraceLine, t: TraceLine): readonly [unknown, unknown] =>
-    s.type === "answer" && answersQuery(s.to) ? [queryAnswer(s), queryAnswer(t)] : [contentOf(s), contentOf(t)];
-
-  /** Returns whether pairing `s` with `t` keeps the snapshot's `after` order among the pairs. */
-  const ordered = (pairs: Pairing["pairs"], s: NumberedLine, t: NumberedLine): boolean =>
-    pairs.every(
-      (p) =>
-        (follows.get(s.at)?.has(p.spec.at) !== true || p.trace.at < t.at) &&
-        (follows.get(p.spec.at)?.has(s.at) !== true || t.at < p.trace.at),
-    );
-
-  /**
-   * Returns the ids of the pairing with `s` paired with `t`: the answered request's ids, a request's own ids, or the
-   * ids of the request that an event results from.
-   */
-  const pairIds = (sc: Scope, current: Ids, s: NumberedLine, t: NumberedLine): Ids | undefined => {
-    if (s.line.type === "answer") return useIds(current, t.at, s.at, s.line.to, toOf(t.line));
-    if (s.line.type === "event") return useIds(current, t.at, s.at, s.line.resultOf, resultOf(t.line));
-    if (s.line.type !== "command" && s.line.type !== "query") return current;
-    return join(current, sc.window, s.line, idUse(s, t));
-  };
-
-  /** Returns the pairing with `s` paired with `t`, and the bags left to pair, if `t` can stand for `s`. */
-  const pairOut = (
-    sc: Scope,
-    p: Pairing,
-    s: NumberedLine,
-    t: NumberedLine,
-  ): readonly [Pairing, readonly Goal[]] | undefined => {
-    if (!ordered(p.pairs, s, t)) return undefined;
-    const paired = pairIds(sc, p.ids, s, t);
-    if (paired === undefined) return undefined;
-    const [expectedValue, actualValue] = compared(s.line, t.line);
-    const walked = walkContent(sc.declared, t.at, s.at, expectedValue, actualValue, p.keys);
-    if (walked === undefined) return undefined;
-    return [{ ...p, ids: paired, keys: walked[0], pairs: [...p.pairs, { spec: s, trace: t }] }, walked[1]];
-  };
-
-  /** Returns the pairing with open snapshot subscription `id` paired with open implementation subscription `tid`. */
-  const pairSubscription = (
-    sc: Scope,
-    p: Pairing,
-    id: string,
-    tid: string,
-  ): readonly [Pairing, readonly Goal[]] | undefined => {
-    const s = sc.openSnapshot.get(id);
-    const t = sc.openTrace.get(tid);
-    if (s === undefined || t === undefined || s.line.name !== t.line.name) return undefined;
-    const walked = walkContent(sc.declared, t.at, s.at, contentOf(s.line), contentOf(t.line), p.keys);
-    if (walked === undefined) return undefined;
-    return [{ ...p, keys: walked[0], subscriptions: [...p.subscriptions, [id, tid]] }, walked[1]];
-  };
-
-  /** Returns the implementation `out` lines that are not paired yet and have the type, time and name of `s`. */
-  const candidates = (sc: Scope, p: Pairing, s: NumberedLine): NumberedLine[] =>
-    sc.traceOut.filter(
-      (t) =>
-        !p.pairs.some((q) => q.trace.at === t.at) &&
-        t.line.type === s.line.type &&
-        sameTime(s.line, t.line) &&
-        (s.line.type === "answer" || nameOf(t.line) === nameOf(s.line)),
-    );
-
-  /**
-   * Returns what pairing an implementation line with snapshot line `s` depends on: the request that it answers or
-   * results from, its compared value, and its number when `s` is placed.
-   */
-  const pairingKey = (s: NumberedLine, t: NumberedLine): string =>
-    json([
-      toOf(t.line) ?? null,
-      resultOf(t.line) ?? null,
-      compared(s.line, t.line)[1] ?? null,
-      placed.has(s.at) ? String(t.at) : null,
-    ]);
-
-  /**
-   * Returns the ways to meet goal `g`, each with the goals left. Candidates with the same pairingKey give the same
-   * result in the same pairing, so only the first of them is tried.
-   */
-  const expand = (sc: Scope, g: Goal, rest: readonly Goal[], p: Pairing): Frame[] => {
-    const frames: Frame[] = [];
-    const add = (found: readonly [Pairing, readonly Goal[]] | undefined, after: readonly Goal[] = []) => {
-      if (found !== undefined && keepsTo(guide, p, found[0])) frames.push([[...found[1], ...after, ...rest], found[0]]);
-    };
-    if (g.kind === "out")
-      for (const t of distinct((t) => pairingKey(g.s, t), candidates(sc, p, g.s))) add(pairOut(sc, p, g.s, t));
-    else if (g.kind === "subscription") {
-      const name = sc.openSnapshot.get(g.id)?.line.name;
-      const open = sc.openTrace
-        .entries()
-        .filter(([tid, t]) => !p.subscriptions.some(([, u]) => u === tid) && t.line.name === name);
-      for (const [tid] of distinct(([, t]) => json(contentOf(t.line) ?? null), open))
-        add(pairSubscription(sc, p, g.id, tid));
-    } else {
-      if (g.xs.length === 0) return [[rest, p]];
-      const [x, ...more] = g.xs;
-      for (const [i, y] of distinct(([, y]) => json(y), [...g.ys.entries()])) {
-        const walked = walk(sc.declared, g.line, g.snapshotLine, x, y, p.keys);
-        if (walked !== undefined)
-          add([{ ...p, keys: walked[0] }, walked[1]], [{ ...g, xs: more, ys: g.ys.toSpliced(i, 1) }]);
-      }
-    }
-    return frames;
-  };
-
-  /** Searches depth first over the frames of `stack`, each the goals left and the pairing so far. */
-  const search = (sc: Scope, stack: Frame[]): Outcome => {
-    let left = searchLimit;
-    for (;;) {
-      const frame = stack.pop();
-      if (frame === undefined) return { kind: "unpaired" };
-      const [[g, ...rest], p] = frame;
-      if (g === undefined) return { kind: "paired", pairing: p };
-      if (left === 0) return { kind: "limited" };
-      left -= 1;
-      stack.push(...expand(sc, g, rest, p).toReversed());
-    }
-  };
-
-  /** Returns whether a search may pair all `goals`: the counts agree, and each goal has a way at the start. */
-  const pairable = (sc: Scope, goals: readonly Goal[], start: Pairing): boolean =>
-    goals.filter((g) => g.kind === "out").length === sc.traceOut.length &&
-    sc.openSnapshot.entries().length === sc.openTrace.entries().length &&
-    goals.every((g) => expand(sc, g, [], start).length > 0);
-
-  /** Returns the pairing of all `goals`, unpaired at once unless they are pairable. */
-  const pairAll = (sc: Scope, goals: readonly Goal[], start: Pairing): Outcome =>
-    pairable(sc, goals, start) ? search(sc, [[goals, start]]) : { kind: "unpaired" };
-
-  const valueMismatch = (s: TraceLine, t: NumberedLine): Mismatch | undefined => {
-    const at = t.at;
-    const actualLine = t.line;
-    const got = plain(contentOf(actualLine));
-    const subject = subjectOf(actualLine);
-    const sub = (v: unknown) => plain(substitute(keys, v));
-    if (s.type === "command" || s.type === "query")
-      return {
-        kind: "Mismatch.request",
-        definition: null,
-        line: at,
-        data: { subject, snapshot: sub(s.input), trace: got },
-      };
-    if (s.type === "event")
-      return {
-        kind: "Mismatch.event",
-        definition: null,
-        line: at,
-        data: { subject, snapshot: sub(s.payload), trace: got },
-      };
-    if (s.type === "operation" || s.type === "unacceptedOperation")
-      return {
-        kind: "Mismatch.operation",
-        definition: null,
-        line: at,
-        data: { subject, snapshot: sub(s.payload), trace: got },
-      };
-    if (s.type !== "answer" || actualLine.type !== "answer") return undefined;
-    const e = s.answer;
-    const a = actualLine.answer;
-    const output = (snapshot: unknown, trace: unknown): Mismatch => ({
-      kind: "Mismatch.output",
-      definition: null,
-      line: at,
-      data: { subject, snapshot: sub(snapshot), trace: plain(trace) },
-    });
-    if (answersQuery(s.to)) return output(queryAnswer(s), queryAnswer(actualLine));
-    if (e.result !== a.result)
-      return {
-        kind: "Mismatch.result",
-        definition: null,
-        line: at,
-        data: { subject, snapshot: e.result, trace: a.result },
-      };
-    if (e.result === "rejected" && a.result === "rejected")
-      return {
-        kind: "Mismatch.rejection",
-        definition: null,
-        line: at,
-        data: { subject, snapshot: e.rejection.kind, trace: a.rejection.kind },
-      };
-    if ((e.result === "accepted" && a.result === "accepted") || (e.result === "fulfilled" && a.result === "fulfilled"))
-      return output(e.output, a.output);
-    return undefined;
-  };
-
-  const missing = (s: NumberedLine, line: number): Mismatch =>
-    s.line.type === "answer" || s.line.type === "unsubscribe"
-      ? {
-          kind: "Mismatch.missingAnswer",
-          definition: null,
-          line,
-          data: { subject: { type: s.line.type, to: traceOf(ids.bound, s.line.to) ?? s.line.to }, snapshotLine: s.at },
-        }
-      : {
-          kind: "Mismatch.missingLine",
-          definition: null,
-          line,
-          data: {
-            subject: subjectOf(s.line),
-            content: plain(substitute(keys, contentOf(s.line))),
-            snapshotLine: s.at,
-          },
-        };
-
-  /** Returns the renaming under which the values are equal, bags included, or undefined. */
-  const contentKeys = (
-    sc: Scope,
-    line: number,
-    snapshotLine: number,
-    s: unknown,
-    t: unknown,
-    p: Pairing,
-  ): Renaming | undefined => {
-    const walked = walkContent(sc.declared, line, snapshotLine, s, t, p.keys);
-    if (walked === undefined) return undefined;
-    const found = search(sc, [[walked[1], { ...p, keys: walked[0] }]]);
-    return found.kind === "paired" ? found.pairing.keys : undefined;
-  };
-
-  /**
-   * Returns `known` with each paired snapshot subscription given the implementation subscriptions paired with alike
-   * subscriptions.
-   */
-  const subscribed = (
-    sc: Scope,
-    known: State["subscriptionIds"],
-    pairs: readonly (readonly [string, string])[],
-  ): State["subscriptionIds"] => {
-    const lineOf = (s: string) => sc.openSnapshot.get(s)?.line as TraceLine;
-    const all = new Map(known);
-    for (const [s] of pairs) {
-      const found = new Set(all.get(s));
-      for (const [other, t] of pairs) if (alike(lineOf(s), lineOf(other))) found.add(t);
-      all.set(s, found);
-    }
-    return all;
-  };
-
-  /**
-   * Pairs the lines one by one, preferring equal lines, and reports the differences. When no line differs, including
-   * the subscriptions reported in an earlier window, it reports the uses of each value that stands for two values.
-   */
-  const explain = (sc: Scope, specOut: readonly NumberedLine[], missingAt: number) => {
-    const reported = problems.length;
-    const keysBefore = keys.length;
-    const pairs: { spec: NumberedLine; trace: NumberedLine }[] = [];
-    const idUses: Use[] = [];
-    const keyUses: Use[] = [];
-    let repeated = false;
-    for (const s of byRank(specOut)) {
-      const p: Pairing = { ids, keys, pairs: [], subscriptions: [] };
-      const cands = sc.traceOut.filter(
-        (t) =>
-          !pairs.some((q) => q.trace.at === t.at) &&
-          t.line.type === s.line.type &&
-          (s.line.type === "answer"
-            ? useIds(ids, t.at, s.at, s.line.to, toOf(t.line)) !== undefined
-            : nameOf(t.line) === nameOf(s.line)),
-      );
-      const keysOf = (t: NumberedLine) => {
-        const [expectedValue, actualValue] = compared(s.line, t.line);
-        return contentKeys(sc, t.at, s.at, expectedValue, actualValue, p);
-      };
-      const usesOf = (t: NumberedLine) => {
-        const [expectedValue, actualValue] = compared(s.line, t.line);
-        return freeContent(sc.declared, t.at, s.at, expectedValue, actualValue);
-      };
-      const equal = (t: NumberedLine) => pairIds(sc, ids, s, t) !== undefined && keysOf(t) !== undefined;
-      const t =
-        cands.find((c) => equal(c) && sameTime(s.line, c.line)) ??
-        cands.find(equal) ??
-        cands.find((c) => usesOf(c) !== undefined) ??
-        cands[0];
-      if (t === undefined) {
-        problems.push(missing(s, missingAt));
-        continue;
-      }
-      pairs.push({ spec: s, trace: t });
-      if (!sameTime(s.line, t.line))
-        problems.push({
-          kind: "Mismatch.time",
-          definition: null,
-          line: t.at,
-          data: { subject: subjectOf(t.line), snapshot: s.line.time, trace: t.line.time },
-        });
-      const paired = pairIds(sc, ids, s, t);
-      if (paired !== undefined) ids = paired;
-      else if (s.line.type === "event")
-        problems.push({
-          kind: "Mismatch.resultOf",
-          definition: null,
-          line: t.at,
-          data: { subject: subjectOf(t.line), snapshot: s.line.resultOf ?? null, trace: resultOf(t.line) ?? null },
-        });
-      else idUses.push(idUse(s, t));
-      const found = keysOf(t);
-      const uses = usesOf(t);
-      if (found !== undefined) keys = found;
-      else if (uses !== undefined) keyUses.push(...uses);
-      else {
-        const m = valueMismatch(s.line, t);
-        if (m !== undefined) problems.push(m);
-      }
-    }
-    const subscriptions: (readonly [string, string])[] = [];
-    for (const [id, s] of sc.openSnapshot.entries()) {
-      const p: Pairing = { ids, keys, pairs: [], subscriptions: [] };
-      const cands = sc.openTrace
-        .entries()
-        .filter(([tid, t]) => !subscriptions.some(([, u]) => u === tid) && t.line.name === s.line.name);
-      const keysOf = (t: typeof s) => contentKeys(sc, t.at, s.at, contentOf(s.line), contentOf(t.line), p);
-      const usesOf = (t: typeof s) => freeContent(sc.declared, t.at, s.at, contentOf(s.line), contentOf(t.line));
-      const chosen = cands.find(([, t]) => keysOf(t) !== undefined) ?? cands.find(([, t]) => usesOf(t) !== undefined);
-      if (chosen !== undefined) {
-        const [tid, t] = chosen;
-        subscriptions.push([id, tid]);
-        const found = keysOf(t);
-        if (found !== undefined) keys = found;
-        else keyUses.push(...(usesOf(t) ?? []));
-      } else if (reportedMissing.has(id)) repeated = true;
-      else {
-        reportedMissing.add(id);
-        problems.push({
-          kind: "Mismatch.unopenedSubscription",
-          definition: null,
-          line: missingAt,
-          data: {
-            subject: subjectOf(s.line),
-            content: plain(substitute(keys, contentOf(s.line))),
-            snapshotLine: s.at,
-          },
-        });
-      }
-    }
-    for (const [tid, t] of sc.openTrace.entries())
-      if (subscriptions.some(([, u]) => u === tid)) continue;
-      else if (reportedUnexpected.has(tid)) repeated = true;
-      else {
-        reportedUnexpected.add(tid);
-        problems.push({
-          kind: "Mismatch.unexpectedSubscription",
-          definition: null,
-          line: t.at,
-          data: { subject: subjectOf(t.line), content: plain(contentOf(t.line)) },
-        });
-      }
-    subscriptionIds = subscribed(sc, subscriptionIds, subscriptions);
-    for (const { spec: s, trace: t } of pairs) {
-      const before = pairs.find((p) => p.trace.at > t.at && follows.get(s.at)?.has(p.spec.at) === true);
-      if (before !== undefined)
-        problems.push({
-          kind: "Mismatch.lineOrder",
-          definition: null,
-          line: t.at,
-          data: { subject: subjectOf(t.line), before: subjectOf(before.trace.line) },
-        });
-    }
-    for (const t of sc.traceOut)
-      if (!pairs.some((p) => p.trace === t))
-        problems.push({
-          kind: "Mismatch.unexpectedLine",
-          definition: null,
-          line: t.at,
-          data: { subject: subjectOf(t.line) },
-        });
-    if (repeated || problems.length > reported) return;
-    const found = [...conflicts([...idUsesOf(ids), ...idUses]), ...conflicts([...keys, ...keyUses])];
-    if (found.length === 0)
-      problems.push({
-        kind: "Mismatch.renaming",
-        definition: null,
-        data: { uses: [...keyUses, ...idUses, ...keys.slice(keysBefore)] },
-      });
-    else for (const uses of found) problems.push({ kind: "Mismatch.renaming", definition: null, data: { uses } });
-  };
-
-  const follow = (before: Open, lines: readonly NumberedLine[]): Open => {
-    const open = before.clone((v) => v);
-    for (const o of lines)
-      if (o.line.type === "subscribe") open.subscribe(o.line.id, { line: o.line, at: o.at });
-      else if (o.line.type === "unsubscribe") open.unsubscribe(o.line.to);
-    return open;
-  };
-  const isSubscribing = (l: TraceLine) => l.type === "subscribe" || l.type === "unsubscribe";
-
-  /** Returns the scope of the search of a window with `out` lines `allSpecOut` and `allTraceOut`, after `before`. */
-  const enter = (before: Scope, allSpecOut: readonly NumberedLine[], allTraceOut: readonly NumberedLine[]): Scope => ({
-    declared: new Set([...before.declared, ...allSpecOut.flatMap((s) => s.line.created ?? [])]),
-    window: before.window + 1,
-    traceOut: allTraceOut.filter((t) => !isSubscribing(t.line) && !internal(t.line)),
-    openSnapshot: follow(
-      before.openSnapshot,
-      allSpecOut.filter((s) => isSubscribing(s.line)),
-    ),
-    openTrace: follow(
-      before.openTrace,
-      allTraceOut.filter((t) => isSubscribing(t.line)),
-    ),
-  });
-
-  /** Returns the snapshot `out` lines that a window's search pairs. */
-  const comparedOut = (allSpecOut: readonly NumberedLine[]) =>
-    allSpecOut.filter((s) => !isSubscribing(s.line) && !internal(s.line));
-
-  const goalsOf = (sc: Scope, allSpecOut: readonly NumberedLine[]): Goal[] => [
-    ...byRank(comparedOut(allSpecOut)).map((s): Goal => ({ kind: "out", s })),
-    ...sc.openSnapshot.entries().map(([id]): Goal => ({ kind: "subscription", id })),
-  ];
-
-  /** Returns the scope of the search of an `in` line's bags, in the window of scope `sc`. */
-  const inputScope = (sc: Scope): Scope => ({
-    ...sc,
-    traceOut: [],
-    openSnapshot: new Subscriptions(),
-    openTrace: new Subscriptions(),
-  });
-
-  /**
-   * Compares the `out` lines between two `in` lines, which follow the `in` lines `missingAt` and `snapshotAt`, in the
-   * window's scope `sc`. Returns the violation when the search stops at searchLimit.
-   */
-  const compareWindow = (
-    sc: Scope,
-    allSpecOut: readonly NumberedLine[],
-    missingAt: number,
-    snapshotAt: number,
-  ): Uncomparable | undefined => {
-    const found = pairAll(sc, goalsOf(sc, allSpecOut), { ids, keys, pairs: [], subscriptions: [] });
-    if (found.kind === "limited")
-      return {
-        kind: "Uncomparable.searchLimit",
-        definition: null,
-        line: missingAt,
-        data: { snapshotLine: snapshotAt },
-      };
-    if (found.kind === "unpaired") explain(sc, comparedOut(allSpecOut), missingAt);
-    else {
-      ids = found.pairing.ids;
-      keys = found.pairing.keys;
-      subscriptionIds = subscribed(sc, subscriptionIds, found.pairing.subscriptions);
-    }
-    return undefined;
-  };
-
-  /** Returns whether answer `t` answers the request that answer `s` answers, through a like subscription or the ids. */
-  const answersPlaced = (st: State, s: NumberedLine, t: NumberedLine): Ids | undefined => {
-    if (s.line.type !== "answer" || t.line.type !== "answer") return undefined;
-    const subscribedTo = st.subscriptionIds.get(s.line.to);
-    if (subscribedTo !== undefined) return subscribedTo.has(t.line.to) ? st.ids : undefined;
-    return useIds(st.ids, t.at, s.at, s.line.to, t.line.to);
-  };
-
-  /**
-   * Returns the pairing of two `in` lines apart from the elements of bags, and the bags left to pair, in state `st` and
-   * the window's scope `sc`.
-   */
-  const inputStart = (
-    sc: Scope,
-    st: State,
-    s: NumberedLine,
-    t: NumberedLine,
-  ): readonly [readonly Goal[], Pairing] | undefined => {
-    const [sl, tl] = [s.line, t.line];
-    if (sl.type !== tl.type || nameOf(sl) !== nameOf(tl) || !sameTime(sl, tl)) return undefined;
-    const withId = use(st.ids, idUse(s, t));
-    if (withId === undefined) return undefined;
-    const placed =
-      sl.type === "time" || sl.type === "restart"
-        ? withId
-        : sl.type === "unsubscribe"
-          ? useIds(withId, t.at, s.at, sl.to, toOf(tl))
-          : sl.type === "answer"
-            ? answersPlaced({ ...st, ids: withId }, s, t)
-            : useIds(withId, t.at, s.at, resultOf(sl), resultOf(tl));
-    if (placed === undefined) return undefined;
-    if (sl.type === "time" || sl.type === "restart" || sl.type === "unsubscribe")
-      return [[], { ids: placed, keys: st.keys, pairs: [], subscriptions: [] }];
-    const walked = walkContent(sc.declared, t.at, s.at, contentOf(sl), contentOf(tl), st.keys);
-    if (walked === undefined) return undefined;
-    return [walked[1], { ids: placed, keys: walked[0], pairs: [], subscriptions: [] }];
-  };
-
-  /** Returns the comparison of two `in` lines: the renamings under which they are the same. */
-  const sameInput = (sc: Scope, s: NumberedLine, t: NumberedLine): Outcome => {
-    const started = inputStart(sc, { ids, keys, subscriptionIds }, s, t);
-    return started === undefined ? { kind: "unpaired" } : search(inputScope(sc), [[started[0], started[1]]]);
-  };
-
-  const count = malformed === undefined ? Math.max(expected.length, actual.length) : actual.length - 1;
-  const at = (input: NumberedLine | undefined) => (input === undefined ? 1 : input.at);
-
-  /** The stages of the windows, up to an `in` line that only one side has. */
-  const stages: Stage[] = [];
-  for (let k = 0; k < count; k += 1) {
-    stages.push({
-      kind: "outs",
-      specOut: expected[k]?.before ?? [],
-      traceOut: actual[k]?.before ?? [],
-      missingAt: at(actual[k - 1]?.input),
-      snapshotAt: at(expected[k - 1]?.input),
-    });
-    const s = expected[k]?.input;
-    const t = actual[k]?.input;
-    if (s === undefined || t === undefined) break;
-    stages.push({ kind: "input", s, t });
-  }
-
-  const limitedAt = (stage: Stage): Uncomparable =>
-    stage.kind === "outs"
-      ? {
-          kind: "Uncomparable.searchLimit",
-          definition: null,
-          line: stage.missingAt,
-          data: { snapshotLine: stage.snapshotAt },
-        }
-      : { kind: "Uncomparable.searchLimit", definition: null, line: stage.t.at, data: { snapshotLine: stage.s.at } };
-
-  /** Returns the frame that starts stage number `k` in state `st`, unless the stage has no pairing at once. */
-  const start = (stage: Stage, k: number, st: State, window: Scope): StageFrame[] => {
-    if (stage.kind === "input") {
-      const started = inputStart(window, st, stage.s, stage.t);
-      return started === undefined
-        ? []
-        : [{ goals: started[0], pairing: started[1], scope: inputScope(window), st, window, stage: k }];
-    }
-    const sc = enter(window, stage.specOut, stage.traceOut);
-    const goals = goalsOf(sc, stage.specOut);
-    const pairing: Pairing = { ids: st.ids, keys: st.keys, pairs: [], subscriptions: [] };
-    return pairable(sc, goals, pairing) ? [{ goals, pairing, scope: sc, st, window: sc, stage: k }] : [];
-  };
-
-  /**
-   * Returns the guide of the comparison: the renamings of a pairing of every window and `in` line, found by trying the
-   * other pairings of earlier stages when a later stage has none, or no guide when there is no such pairing. Each stage
-   * has searchLimit steps, its start included, over all the times that the search returns to it; the violation names
-   * the stage that runs out.
-   */
-  const guideFor = (): Guide | Uncomparable => {
-    const none: Guide = { ids: [], keys: [] };
-    const first = stages[0];
-    if (first === undefined) return none;
-    const left = stages.map((_, k) => (k === 0 ? searchLimit : searchLimit + 1));
-    const stack = start(first, 0, { ids, keys, subscriptionIds }, outside);
-    for (;;) {
-      const f = stack.pop();
-      if (f === undefined) return none;
-      const stage = stages[f.stage] as Stage;
-      const [g, ...rest] = f.goals;
-      if (g !== undefined) {
-        if (left[f.stage] === 0) return limitedAt(stage);
-        left[f.stage] = (left[f.stage] as number) - 1;
-        stack.push(
-          ...expand(f.scope, g, rest, f.pairing)
-            .map(([goals, pairing]): StageFrame => ({ ...f, goals, pairing }))
-            .toReversed(),
-        );
-        continue;
-      }
-      const st: State =
-        stage.kind === "outs"
-          ? {
-              ids: f.pairing.ids,
-              keys: f.pairing.keys,
-              subscriptionIds: subscribed(f.scope, f.st.subscriptionIds, f.pairing.subscriptions),
-            }
-          : { ...f.st, ids: f.pairing.ids, keys: f.pairing.keys };
-      const k = f.stage + 1;
-      const next = stages[k];
-      if (next === undefined) return { ids: st.ids.bound, keys: st.keys };
-      if (left[k] === 0) return limitedAt(next);
-      left[k] = (left[k] as number) - 1;
-      stack.push(...start(next, k, st, f.window).toReversed());
-    }
-  };
-
-  const found = guideFor();
-  if ("kind" in found) return { found: [found], bindings: new Map() };
-  guide = found;
-
-  let window = outside;
-  for (let k = 0; k < count; k += 1) {
-    const previous = actual[k - 1]?.input;
-    const previousSnapshot = expected[k - 1]?.input;
-    window = enter(window, expected[k]?.before ?? [], actual[k]?.before ?? []);
-    const limited = compareWindow(window, expected[k]?.before ?? [], at(previous), at(previousSnapshot));
-    if (limited !== undefined) {
-      problems.push(limited);
-      return { found: problems, bindings: bindings() };
-    }
-    const s = expected[k]?.input;
-    const t = actual[k]?.input;
-    if (s === undefined && t === undefined) return { found: problems, bindings: bindings() };
-    if (s === undefined) {
-      const { at, line } = t as NumberedLine;
-      problems.push({ kind: "Uncomparable.unexpectedInput", definition: null, line: at, data: { trace: plain(line) } });
-      return { found: problems, bindings: bindings() };
-    }
-    if (t === undefined) {
-      problems.push({
-        kind: "Uncomparable.missingInput",
-        definition: null,
-        line: lines.length,
-        data: { snapshot: plain(s.line), snapshotLine: s.at },
-      });
-      return { found: problems, bindings: bindings() };
-    }
-    const same = sameInput(window, s, t);
-    if (same.kind === "limited") {
-      problems.push({ kind: "Uncomparable.searchLimit", definition: null, line: t.at, data: { snapshotLine: s.at } });
-      return { found: problems, bindings: bindings() };
-    }
-    if (same.kind === "unpaired") {
-      problems.push(
-        s.line.type === "answer" &&
-          t.line.type === "answer" &&
-          answersPlaced({ ids, keys, subscriptionIds }, s, t) === undefined
-          ? {
-              kind: "Uncomparable.differentRequest",
-              definition: null,
-              line: t.at,
-              data: { subject: subjectOf(t.line), snapshotLine: s.at },
-            }
-          : {
-              kind: "Uncomparable.differentInput",
-              definition: null,
-              line: t.at,
-              data: { snapshotLine: s.at, snapshot: plain(substitute(keys, s.line)), trace: plain(t.line) },
-            },
-      );
-      return { found: problems, bindings: bindings() };
-    }
-    ids = same.pairing.ids;
-    keys = same.pairing.keys;
-  }
-  return { found: malformed === undefined ? problems : [...problems, lineSchema(malformed)], bindings: bindings() };
+/** Compares the trace with the snapshot's lines. A trace line's violation has its 1-based line number in `line`. */
+export function compareTrace(
+  spec: Spec,
+  service: string,
+  snapshot: readonly (TraceLine | undefined)[],
+  trace: readonly unknown[],
+): Compared {
+  const { found, bindings } = verifyLines(spec, service, snapshot, parseFileLines(trace));
+  return { found: found.sort(byLine), bindings };
 }

@@ -13,23 +13,8 @@ export { any } from "./dsl/definition.ts";
 export type { Immutable, RowOf } from "./dsl/entity.ts";
 export { entity, ref, singleEntity } from "./dsl/entity.ts";
 export { emit } from "./dsl/event.ts";
-export {
-  at,
-  call,
-  cannotOperate,
-  elsewhere,
-  from,
-  mock,
-  operate,
-  receive,
-  restart,
-  scenario,
-  send,
-  subscribe,
-  unchecked,
-  unsubscribe,
-} from "./dsl/scenario.ts";
 export { externalService, service } from "./dsl/service.ts";
+export { unchecked } from "./dsl/unchecked.ts";
 export type { Unit } from "./dsl/unit.ts";
 export type {
   AnswerOf,

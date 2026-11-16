@@ -1,4 +1,4 @@
-import Tazuna.Verify.Prepare
+import Tazuna.Verify.Compare
 
 /-!
 This module checks an external service's trace against the service's contract, as far as the spec's structure

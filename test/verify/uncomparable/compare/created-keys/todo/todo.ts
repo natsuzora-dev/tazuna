@@ -8,7 +8,7 @@ export const Seen = entity({
   key: "id",
 });
 
-export const { automation, command, createEvent, deleteEvent, event, contract } = service({
+export const { automation, command, query, createEvent, deleteEvent, event, contract, scenario } = service({
   description: "Keep the tasks and the tasks seen",
   entities: { Task, Seen },
 });
@@ -38,4 +38,9 @@ export const forget = command({
   emits: [forgotten],
 }).decide(({ input }) => [emit(forgotten, { id: input.id })]);
 
-export const todo = contract({ addTask, seen, forget });
+export const seenOf = query({
+  input: { taskId: Task.fields.id },
+  output: { id: ref(Seen) },
+}).resolve(({ input, records }) => ({ id: records.Seen.filter((s) => s.taskId === input.taskId).only()?.id ?? "" }));
+
+export const todo = contract({ addTask, seen, forget, seenOf });

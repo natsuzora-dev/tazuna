@@ -1,34 +1,34 @@
 import Tazuna.Data.Trace
 import Tazuna.Data.Canonical
+import Tazuna.Syntax.Structure
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
 
 /-!
-This module compares an implementation trace with a snapshot.
+This module compares an implementation trace with a snapshot. The harness gave the implementation the snapshot's `in`
+lines one by one under one deterministic simulation, so nothing is searched.
 
-- `in` lines split `out` lines into windows. In each window, one search pairs each compared snapshot `out` line with an
-  implementation `out` line, and each subscription open after the window with an open implementation subscription.
-- Paired lines have equal type, place (the answered request for answer lines, and the name otherwise), time and value.
-  Values compare as CValue. Subscriptions pair by name and input.
-- Ids and createKey values (snapshot `created`) compare up to two one-to-one renamings that every line shares. A
-  snapshot id or createKey value stands for one implementation value, and an implementation value for one snapshot
-  value.
-- Alike requests of one window bind their ids when a later line names one of them.
-- The order of paired lines must follow the snapshot's `after` (mustFollow). Verify reports an `after` id that names no
-  earlier `out` line of the same window, and compares nothing.
-- Each `in` line is compared with the `in` line at the same position. After a difference, nothing later is compared.
-- A window's search may pair a value in more than one way, and a later line decides which. So a search across windows
-  first looks for a pairing of every window and `in` line, trying the other pairings of earlier ones when a later one
-  has none (guideFor). The windows are then compared one by one, keeping to its renamings when it found one.
-- When a window has no pairing, verify pairs the lines one by one to report the differences, and reports the uses of a
-  value that stands for two values when no line differs. A search that takes more than `searchLimit` steps in one
-  window or pair of `in` lines, over all its tries, is reported, and nothing later is compared.
-- Verify reports the first malformed line of the trace, and compares neither its window nor any later line.
+- Values are read by their definition's schema (the `ask` parameter) and compare as CValue.
+- `in` lines align by position and compare exactly under the binding. After the first `in` line that differs or is
+  missing, nothing later is compared.
+- The `out` lines after an `in` line, or before the first, are that input's group. A group's lines pair by content in
+  any order.
+- The binding maps snapshot values to implementation values one-to-one. A value that a snapshot line introduces (the id
+  of an `out` request, a `created` key) is fresh until bound: it binds to the implementation string at the same place
+  of the first compared line that holds it, maybe in a later group. Every other string compares under the binding, or as itself.
+- Pairing a group: again and again, the first unpaired snapshot line whose candidates (the unpaired implementation
+  lines equal to it under the binding) are one line, or several lines that bind it the same way, pairs with its first
+  candidate. A snapshot line left with two or more candidates is ambiguous: verify reports
+  only the ambiguous lines of the group and compares nothing later. A bag pairs its elements by the same rule.
+- Lines left unpaired pair by place (type and name, or the answered request) to report how they differ; the others are
+  missing or unexpected. Paired lines compare their time and the snapshot's `after` order.
+- Verify reports the trace's first malformed line, and compares neither the group of that line nor anything later.
 -/
 
 namespace Tazuna.Verify
 
 open Tazuna.Data
+open Tazuna.Syntax
 
 /--
 A trace line with its value read by its definition's schema, if any. `value` is the input, payload or answer output,
@@ -37,6 +37,95 @@ and `body` holds it as JSON.
 structure Line extends TraceLine where
   value : Option CValue
 deriving Inhabited
+
+/-- Where the schema comes from: a definition's input, output or payload, or a screen control's payload. -/
+inductive Part where
+  | input
+  | output
+  | payload
+  | control (name : String)
+
+/-- The value read by the definition's schema when the definition is known, and as a plain CValue otherwise. -/
+def readValue {m : Type → Type} [Monad m] (ask : Definition → Part → Value → m CValue) (d : Option Definition)
+    (part : Part) (v : Value) : m CValue :=
+  match d with
+  | some d => ask d part v
+  | none => pure (CValue.ofValue v)
+
+def comparableAnswer {m : Type → Type} [Monad m] (ask : Definition → Part → Value → m CValue)
+    (shape : Option Definition) : Answer → m (Answer × Option CValue)
+  | .rejected r => pure (.rejected { kind := r.kind }, none)
+  | .accepted none => pure (.accepted none, none)
+  | .accepted (some output) => do
+    let compared ← readValue ask shape .output output
+    pure (.accepted (some compared.flatten), some compared)
+  | .fulfilled output => do
+    let compared ← readValue ask shape .output output
+    pure (.fulfilled compared.flatten, some compared)
+
+/-- The list with `v` at key `k`, replaced in place if `k` exists and appended otherwise (JS `Map.set`). -/
+def setAt {β : Type} : List (String × β) → String → β → List (String × β)
+  | [], k, v => [(k, v)]
+  | (k', v') :: rest, k, v => if k' == k then (k, v) :: rest else (k', v') :: setAt rest k v
+
+/--
+The comparable form of a trace line. An answer's output is read with the output schema of the definition that its
+request line named. `outputByRequestId` carries over from the snapshot lines to the implementation lines.
+-/
+def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
+    (outputByRequestId : List (String × Definition)) (l : TraceLine) : m (Line × List (String × Definition)) := do
+  let read := readValue ask
+  let line (body : TraceLine.Body) (value : Option CValue) : Line := { l with body, value }
+  let request (d : Option Definition) (id : String) : List (String × Definition) :=
+    match d with
+    | some d => if d.hasOutput then setAt outputByRequestId id d else outputByRequestId
+    | none => outputByRequestId
+  let control (name : String) : Option Definition × Part :=
+    let (screen, control) := match name.splitOn "." with
+      | first :: second :: _ => (first, second)
+      | parts => (parts.headD "", "")
+    let d := s.named service (some screen) ["screen"]
+    let hasPayload := (d.bind fun d => d.chart?.bind fun c => c.controls.lookup control).any (·.isSome)
+    (if hasPayload then d else none, .control control)
+  match l.body with
+  | .operation dir id name payload =>
+    let (d, part) := control name
+    let value ← payload.mapM (read d part)
+    pure (line (.operation dir id name (value.map (·.flatten))) value, outputByRequestId)
+  | .unacceptedOperation dir id name payload =>
+    let (d, part) := control name
+    let value ← payload.mapM (read d part)
+    pure (line (.unacceptedOperation dir id name (value.map (·.flatten))) value, outputByRequestId)
+  | .answer dir id to answer =>
+    let (answer, value) ← comparableAnswer ask (outputByRequestId.lookup to) answer
+    pure (line (.answer dir id to answer) value, outputByRequestId)
+  | .event dir id name payload resultOf =>
+    let value ← read (s.named service (some name) ["event"]) .payload payload
+    pure (line (.event dir id name value.flatten resultOf) (some value), outputByRequestId)
+  | .command dir id name input =>
+    let d := s.named service (some name) ["command"]
+    let value ← read d .input input
+    pure (line (.command dir id name value.flatten) (some value), request d id)
+  | .query dir id name input =>
+    let d := s.named service (some name) ["query"]
+    let value ← read d .input input
+    pure (line (.query dir id name value.flatten) (some value), request d id)
+  | .subscribe dir id name input =>
+    let d := s.named service (some name) ["query"]
+    let value ← read d .input input
+    pure (line (.subscribe dir id name value.flatten) (some value), request d id)
+  | .unsubscribe .. | .time .. | .restart .. => pure (line l.body none, outputByRequestId)
+
+def readLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue) :
+    List (Option TraceLine) → List (String × Definition) → m (List (Option Line) × List (String × Definition))
+  | [], outputByRequestId => pure ([], outputByRequestId)
+  | none :: ls, outputByRequestId => do
+    let (rest, outputByRequestId) ← readLines s service ask ls outputByRequestId
+    pure (none :: rest, outputByRequestId)
+  | some l :: ls, outputByRequestId => do
+    let (line, outputByRequestId) ← readLine s service ask outputByRequestId l
+    let (rest, outputByRequestId) ← readLines s service ask ls outputByRequestId
+    pure (some line :: rest, outputByRequestId)
 
 /-- The JSON form of `answer`, with the given output as its output. -/
 def answerContent (answer : Answer) : Option CValue → CValue
@@ -48,908 +137,321 @@ def Line.content (l : Line) : Option CValue :=
   | .answer _ _ _ answer => some (answerContent answer l.value)
   | _ => l.value
 
-/-- An `out` line with its line number, counted from 1. -/
-structure Out where
+/--
+The lines with each `out` answer to a subscription that equals the previous answer to it set to `none`. A
+subscription is open from the `in` subscribe to the `in` unsubscribe. Values compare ignoring bag order and object
+field order.
+-/
+def withoutRepeatedAnswers (lines : List (Option Line)) : List (Option Line) :=
+  go lines []
+where
+  go : List (Option Line) → List (String × Option String) → List (Option Line)
+    | [], _ => []
+    | none :: ls, o => none :: go ls o
+    | some l :: ls, o =>
+      match l.body with
+      | .subscribe .in id _ _ => some l :: go ls (if (o.lookup id).isSome then o else o ++ [(id, none)])
+      | .unsubscribe .in _ to => some l :: go ls (o.filter (·.1 != to))
+      | .answer .out _ to answer =>
+        match o.lookup to with
+        | some last =>
+          let k := (answerContent answer l.value).key
+          if last == some k then none :: go ls o else some l :: go ls (setAt o to (some k))
+        | none => some l :: go ls o
+      | _ => some l :: go ls o
+
+/-- Whether `l` is an `out` event line whose definition exists and no contract lists. -/
+def internalEvent (s : Structure) (service : String) (l : Line) : Bool :=
+  match l.body with
+  | .event .out _ name _ _ =>
+    match s.named service (some name) ["event"] with
+    | some d => (s.contractsListing d.ref).isEmpty
+    | none => false
+  | _ => false
+
+/-- A line with its line number, counted from 1. -/
+structure Numbered where
   line : Line
   index : Nat
 deriving Inhabited
 
-/-- The use of the id of the snapshot line `s` for the id of the implementation line `t`. -/
-def Out.idUse (s t : Out) : Use :=
-  { snapshot := s.line.body.id, trace := t.line.body.id, line := t.index, snapshotLine := s.index }
+/-- An `in` line and the `out` lines after it up to the next `in` line. The first group may have no `in` line. -/
+structure Group where
+  input : Option Numbered
+  outs : List Numbered
 
-/-- The `out` lines before an `in` line, and that line. The last window has no `in` line. -/
-structure Window where
-  before : List Out
-  input : Option Out
-
-/-- The windows of `lines`. A `none` line is a blank line or a repeated subscription answer, and only takes a number. -/
-def steps (lines : List (Option Line)) : List Window :=
-  go lines 0 []
+/-- The groups of `lines`. A `none` line is a blank line or a line that verify does not compare, and only takes a
+number. -/
+def groups (lines : List (Option Line)) : List Group :=
+  go lines 1 none []
 where
-  go : List (Option Line) → Nat → List Out → List Window
-    | [], _, acc => [{ before := acc.reverse, input := none }]
-    | none :: ls, i, acc => go ls (i + 1) acc
-    | some l :: ls, i, acc =>
-      if l.body.dir == .out then go ls (i + 1) ({ line := l, index := i + 1 } :: acc)
-      else { before := acc.reverse, input := some { line := l, index := i + 1 } } :: go ls (i + 1) []
+  go : List (Option Line) → Nat → Option Numbered → List Numbered → List Group
+    | [], _, input, acc => [{ input, outs := acc.reverse }]
+    | none :: ls, i, input, acc => go ls (i + 1) input acc
+    | some l :: ls, i, input, acc =>
+      if l.body.dir == .out then go ls (i + 1) input ({ line := l, index := i } :: acc)
+      else { input, outs := acc.reverse } :: go ls (i + 1) (some { line := l, index := i }) []
 
 inductive Finding where
   | mismatch (m : Mismatch)
   | uncomparable (u : Uncomparable)
-
-/-- The list with `v` at key `k`, replaced in place if `k` exists and appended otherwise (JS `Map.set`). -/
-def setAt {β : Type} : List (String × β) → String → β → List (String × β)
-  | [], k, v => [(k, v)]
-  | (k', v') :: rest, k, v => if k' == k then (k, v) :: rest else (k', v') :: setAt rest k v
 
 /-- The violations of a comparison, and the bindings that it ends with. -/
 structure Compared where
   findings : List Finding
   bindings : Bindings
 
-/-- A one-to-one renaming of snapshot values to implementation values, with the lines that bound each value. -/
-abbrev Renaming := List Use
-
-def Renaming.traceOf? (r : Renaming) (s : String) : Option String := (r.find? (·.snapshot == s)).map (·.trace)
-
-def Renaming.takes (r : Renaming) (t : String) : Bool := r.any (·.trace == t)
-
-/-- The renaming with `u`, unless one of its values already stands for another value. -/
-def Renaming.bind (r : Renaming) (u : Use) : Option Renaming :=
-  match r.traceOf? u.snapshot with
-  | some t => if t == u.trace then some r else none
-  | none => if r.takes u.trace then none else some (r ++ [u])
-
-/-- `v` with its renamed createKey values replaced by their implementation values, for reports. -/
-def substitute (r : Renaming) (v : CValue) : CValue :=
-  v.mapStrings fun s => (r.traceOf? s).getD s
-
-/-- What a search still has to pair. Bag elements pair at trace line `line` and snapshot line `snapshotLine`. -/
-inductive Goal where
-  | out (s : Out)
-  | subscription (id : String)
-  | bag (line snapshotLine : Nat) (xs ys : List CValue)
-
-mutual
+/-- How a snapshot value or line compares with an implementation one under a binding. -/
+inductive Match where
+  | equal (bindings : Bindings)
+  | differ
+  | ambiguous
+deriving Inhabited
 
 /--
-The renaming under which `s` equals `t` apart from the elements of bags, and the bags left to pair. A declared
-createKey value equals the implementation string that it is renamed to, and other strings equal themselves.
+The binding with snapshot string `s` standing for implementation string `t`: a bound `s` must stand for its value, a
+fresh `s` binds unless `t` stands for another value, and any other `s` stands for itself.
 -/
-def walk (declared : List String) (line snapshotLine : Nat) (s t : CValue) (r : Renaming) :
-    Option (Renaming × List Goal) :=
-  match s, t with
-  | .leaf (.str v), t =>
-    match t with
-    | .leaf (.str w) =>
-      if declared.contains v then (r.bind { snapshot := v, trace := w, line, snapshotLine }).map (·, [])
-      else if w == v then some (r, []) else none
-    | _ => none
-  | .leaf v, .leaf w => if w == v then some (r, []) else none
-  | .arr xs, .arr ys => if xs.length == ys.length then walkList declared line snapshotLine xs ys r else none
-  | .runs xs, .runs ys => if xs.length == ys.length then walkList declared line snapshotLine xs ys r else none
-  | .bag xs, .bag ys => if xs.length == ys.length then some (r, [.bag line snapshotLine xs ys]) else none
-  | .obj fs, .obj gs => if sameKeys fs gs then walkFields declared line snapshotLine fs gs r else none
-  | _, _ => none
-termination_by (sizeOf s, 0)
-decreasing_by all_goals lex_decreasing
-
-def walkList (declared : List String) (line snapshotLine : Nat) (xs ys : List CValue) (r : Renaming) :
-    Option (Renaming × List Goal) :=
-  match xs, ys with
-  | x :: xs, y :: ys => do
-    let (r, g) ← walk declared line snapshotLine x y r
-    let (r, g') ← walkList declared line snapshotLine xs ys r
-    pure (r, g ++ g')
-  | _, _ => some (r, [])
-termination_by (sizeOf xs, 0)
-decreasing_by all_goals lex_decreasing
-
-/-- The fields in the field order of `fs`. -/
-def walkFields (declared : List String) (line snapshotLine : Nat) (fs gs : List (String × CValue)) (r : Renaming) :
-    Option (Renaming × List Goal) :=
-  match fs with
-  | [] => some (r, [])
-  | (k, v) :: fs => do
-    let w ← gs.lookup k
-    let (r, g) ← walk declared line snapshotLine v w r
-    let (r, g') ← walkFields declared line snapshotLine fs gs r
-    pure (r, g ++ g')
-termination_by (sizeOf fs, 0)
-decreasing_by all_goals lex_decreasing
-
-end
-
-/-- Two missing values (undefined) are equal, and one missing value is not. -/
-def walkContent (declared : List String) (line snapshotLine : Nat) (s t : Option CValue) (r : Renaming) :
-    Option (Renaming × List Goal) :=
-  match s, t with
-  | some s, some t => walk declared line snapshotLine s t r
-  | none, none => some (r, [])
-  | _, _ => none
-
-mutual
-
-/--
-The uses under which `s` equals `t` when each declared createKey value may stand for any string, for reports. Bags pair
-their elements by backtracking.
--/
-def free (declared : List String) (line snapshotLine : Nat) (s t : CValue) : Option (List Use) :=
-  match s, t with
-  | .leaf (.str v), t =>
-    match t with
-    | .leaf (.str w) =>
-      if declared.contains v then some [{ snapshot := v, trace := w, line, snapshotLine }]
-      else if w == v then some [] else none
-    | _ => none
-  | .leaf v, .leaf w => if w == v then some [] else none
-  | .arr xs, .arr ys => if xs.length == ys.length then freeList declared line snapshotLine xs ys else none
-  | .runs xs, .runs ys => if xs.length == ys.length then freeList declared line snapshotLine xs ys else none
-  | .bag xs, .bag ys => freeBag declared line snapshotLine xs ys
-  | .obj fs, .obj gs => if sameKeys fs gs then freeFields declared line snapshotLine fs gs else none
-  | _, _ => none
-termination_by (sizeOf s, 0)
-decreasing_by all_goals lex_decreasing
-
-def freeList (declared : List String) (line snapshotLine : Nat) (xs ys : List CValue) : Option (List Use) :=
-  match xs, ys with
-  | x :: xs, y :: ys => do
-    let u ← free declared line snapshotLine x y
-    let u' ← freeList declared line snapshotLine xs ys
-    pure (u ++ u')
-  | _, _ => some []
-termination_by (sizeOf xs, 0)
-decreasing_by all_goals lex_decreasing
-
-def freeFields (declared : List String) (line snapshotLine : Nat) (fs gs : List (String × CValue)) :
-    Option (List Use) :=
-  match fs with
-  | [] => some []
-  | (k, v) :: fs => do
-    let w ← gs.lookup k
-    let u ← free declared line snapshotLine v w
-    let u' ← freeFields declared line snapshotLine fs gs
-    pure (u ++ u')
-termination_by (sizeOf fs, 0)
-decreasing_by all_goals lex_decreasing
-
-def freeBag (declared : List String) (line snapshotLine : Nat) (ss ts : List CValue) : Option (List Use) :=
-  if ss.length != ts.length then none
-  else
-    match ss with
-    | [] => some []
-    | first :: rest => freeBagFrom declared line snapshotLine first rest ts []
-termination_by (sizeOf ss, ts.length + 1)
-decreasing_by all_goals lex_decreasing
-
-/-- The search of freeBag for `first`. `passed` holds the candidates tried. -/
-def freeBagFrom (declared : List String) (line snapshotLine : Nat) (first : CValue) (rest cands passed : List CValue) :
-    Option (List Use) :=
-  match cands with
-  | [] => none
-  | t :: more =>
-    -- Each fallback calls the search again rather than through a `let`, which Lean evaluates first, so that the search
-    -- stops at the first pairing as TS's does instead of trying every order of the bag.
-    match free declared line snapshotLine first t with
-    | some u =>
-      match freeBag declared line snapshotLine rest (passed.reverse ++ more) with
-      | some u' => some (u ++ u')
-      | none => freeBagFrom declared line snapshotLine first rest more (t :: passed)
-    | none => freeBagFrom declared line snapshotLine first rest more (t :: passed)
-termination_by (sizeOf first + sizeOf rest + 1, cands.length)
-decreasing_by all_goals lex_decreasing
-
-end
-
-def freeContent (declared : List String) (line snapshotLine : Nat) : Option CValue → Option CValue → Option (List Use)
-  | some s, some t => free declared line snapshotLine s t
-  | none, none => some []
-  | _, _ => none
-
-/-- Whether two lines have the same type, name and value, ignoring `created`. -/
-def alike (a b : Line) : Bool :=
-  a.body.type == b.body.type && a.body.name? == b.body.name? && plainEqual a.content b.content
-
-/--
-Alike `out` requests of window `window`, paired by `uses`. Each snapshot id in `snapshot` stands for one of the
-implementation ids in `trace`, and binds to it when a line names it.
--/
-structure Block where
-  line : Line
-  window : Nat
-  snapshot : List String
-  trace : List String
-  uses : List Use
-
-/-- The renaming of request, subscription and input ids, and the blocks of alike requests. -/
-structure Ids where
-  bound : Renaming := []
-  blocks : List Block := []
-
-def Ids.known (ids : Ids) (s : String) : Bool :=
-  (ids.bound.traceOf? s).isSome || ids.blocks.any (·.snapshot.contains s)
-
-def Ids.reserved (ids : Ids) (t : String) : Bool := ids.bound.takes t || ids.blocks.any (·.trace.contains t)
-
-/-- The ids with `u` bound. A snapshot id of a block binds only to an implementation id of the same block. -/
-def Ids.use (ids : Ids) (u : Use) : Option Ids :=
-  match ids.bound.traceOf? u.snapshot with
-  | some t => if t == u.trace then some ids else none
+def bindString (fresh : List String) (b : Bindings) (s t : String) : Option Bindings :=
+  match b.lookup s with
+  | some bound => if bound == t then some b else none
   | none =>
-    match ids.blocks.find? (·.snapshot.contains u.snapshot) with
-    | some b =>
-      if b.trace.contains u.trace then
-        some { bound := ids.bound ++ [u]
-               blocks := ids.blocks.map fun b =>
-                 if b.snapshot.contains u.snapshot then
-                   { b with snapshot := b.snapshot.erase u.snapshot, trace := b.trace.erase u.trace }
-                 else b }
-      else none
-    | none => if ids.reserved u.trace then none else some { ids with bound := ids.bound ++ [u] }
+    if fresh.contains s then (if b.any (·.2 == t) then none else some (b ++ [(s, t)]))
+    else if s == t then some b else none
 
-/-- Two missing ids are the same, and one missing id is not. -/
-def Ids.useIds (ids : Ids) (line snapshotLine : Nat) : Option String → Option String → Option Ids
-  | some s, some t => ids.use { snapshot := s, trace := t, line, snapshotLine }
-  | none, none => some ids
-  | _, _ => none
+def Match.ofOption : Option Bindings → Match
+  | some b => .equal b
+  | none => .differ
 
-/--
-The ids with the ids `u` of a paired `out` request `l` in the block of its alike requests of window `window`. An id
-that is already bound or in a block binds instead.
--/
-def Ids.join (ids : Ids) (window : Nat) (l : Line) (u : Use) : Option Ids :=
-  if ids.known u.snapshot || ids.reserved u.trace then ids.use u
-  else
-    match ids.blocks.findIdx? fun b => b.window == window && alike b.line l with
-    | some i =>
-      some { ids with blocks := ids.blocks.modify i fun b =>
-        { b with snapshot := b.snapshot ++ [u.snapshot], trace := b.trace ++ [u.trace], uses := b.uses ++ [u] } }
-    | none =>
-      some { ids with blocks := ids.blocks ++ [{ line := l, window, snapshot := [u.snapshot], trace := [u.trace],
-                                                  uses := [u] }] }
-
-/-- The uses that bind an id: the bound ids, and the request of each block that has one request. -/
-def Ids.uses (ids : Ids) : List Use :=
-  ids.bound ++ ids.blocks.flatMap fun b => if b.uses.length == 1 then b.uses else []
+/-- What pairing two lists leaves: the pairs by index, the binding, and the left items left over. -/
+structure Paired where
+  pairs : List (Nat × Nat)
+  bindings : Bindings
+  /-- Left items with two or more candidates, or with a candidate that is ambiguous itself. -/
+  ambiguous : List Nat
+  /-- Left items with no candidate. -/
+  unmatched : List Nat
+  /-- Right items that pair with no left item. -/
+  extra : List Nat
 
 /--
-The renamings of a pairing of every window that the search across windows found (guideFor). A search that keeps to them
-pairs no value that they pair with another value.
+Pairs the items of `left` with those of `right` (each with its index) by the rule of the module documentation: `test`
+compares two items under a binding.
 -/
-structure Guide where
-  ids : Renaming := []
-  keys : Renaming := []
-
-/-- Whether `u` pairs no value that `r` pairs with another value. -/
-def Renaming.allows (r : Renaming) (u : Use) : Bool :=
-  match r.traceOf? u.snapshot with
-  | some t => t == u.trace
-  | none => !r.takes u.trace
-
-structure Ctx where
-  /-- The line of each snapshot id. The later line wins (JS `new Map`). -/
-  requests : List (String × Line)
-  /-- The lines that must precede snapshot line `n`, counted from 0. -/
-  follows : Nat → List Nat
-  /-- The snapshot lines, by number, whose pairing can depend on where the implementation line stands (placedLines). -/
-  placed : List Nat
-  /-- Whether a line is an event that no contract lists, which verify does not compare. -/
-  internal : Line → Bool
-  /-- The renamings that each search keeps to. -/
-  guide : Guide := {}
-
-/-- An open subscription: its subscribe line and the subscribed query's name. -/
-structure Subscription where
-  out : Out
-  name : String
-
-def Line.isRequest (l : Line) : Bool :=
-  match l.body with
-  | .command .. | .query .. => true
-  | _ => false
-
-def Line.isSubscribing (l : Line) : Bool :=
-  match l.body with
-  | .subscribe .. | .unsubscribe .. => true
-  | _ => false
-
-def sameTime (a b : Line) : Bool := a.time.time == b.time.time
-
-def Ctx.answersQuery (c : Ctx) (to : String) : Bool :=
-  match c.requests.lookup to with
-  | some r =>
-    match r.body with
-    | .query .. | .subscribe .. => true
-    | _ => false
-  | none => false
-
-def Line.queryAnswer (l : Line) : Option CValue :=
-  match l.body with
-  | .answer _ _ _ (.fulfilled _) => l.value
-  | .answer .. => l.content
-  | _ => none
-
-def Ctx.compared (c : Ctx) (s t : Line) : Option CValue × Option CValue :=
-  match s.body with
-  | .answer _ _ to _ => if c.answersQuery to then (s.queryAnswer, t.queryAnswer) else (s.content, t.content)
-  | _ => (s.content, t.content)
-
-def json (v : Option CValue) : Option Value := v.map (·.flatten)
-
-def jsonOrNull (v : Option CValue) : Value := (json v).getD .null
-
-/-- What a window's search compares in, besides the pairing. -/
-structure Scope where
-  ctx : Ctx
-  declared : List String
-  window : Nat
-  traceOut : List Out
-  openSnapshot : List (String × Subscription)
-  openTrace : List (String × Subscription)
-
-/-- A pairing that a search builds, with the renamings under which the paired lines are equal. -/
-structure Pairing where
-  ids : Ids
-  keys : Renaming
-  pairs : List (Out × Out) := []
-  subscriptions : List (String × String) := []
-
-/-- Whether the uses that pairing `q` adds to pairing `p` keep to the guide. -/
-def Guide.allows (g : Guide) (p q : Pairing) : Bool :=
-  (q.ids.bound.drop p.ids.bound.length).all g.ids.allows && (q.keys.drop p.keys.length).all g.keys.allows
-
-/-- Whether pairing `s` with `t` keeps the snapshot's `after` order among the pairs. -/
-def ordered (c : Ctx) (pairs : List (Out × Out)) (s t : Out) : Bool :=
-  pairs.all fun (ps, pt) =>
-    (!(c.follows (s.index - 1)).contains (ps.index - 1) || pt.index < t.index) &&
-      (!(c.follows (ps.index - 1)).contains (s.index - 1) || t.index < pt.index)
-
-/--
-The ids of the pairing with `s` paired with `t`: the answered request's ids, a request's own ids, or the ids of the
-request that an event results from.
--/
-def pairIds (sc : Scope) (ids : Ids) (s t : Out) : Option Ids :=
-  match s.line.body with
-  | .answer _ _ to _ => ids.useIds t.index s.index (some to) t.line.body.to?
-  | .event _ _ _ _ resultOf => ids.useIds t.index s.index resultOf t.line.body.resultOf?
-  | .command .. | .query .. =>
-    ids.join sc.window s.line (s.idUse t)
-  | _ => some ids
-
-/-- The pairing with `s` paired with `t`, and the bags left to pair, if `t` can stand for `s`. -/
-def pairOut (sc : Scope) (p : Pairing) (s t : Out) : Option (Pairing × List Goal) := do
-  if !ordered sc.ctx p.pairs s t then none
-  let ids ← pairIds sc p.ids s t
-  let (ev, av) := sc.ctx.compared s.line t.line
-  let (keys, goals) ← walkContent sc.declared t.index s.index ev av p.keys
-  pure ({ p with ids, keys, pairs := p.pairs ++ [(s, t)] }, goals)
-
-/-- The pairing with open snapshot subscription `id` paired with open implementation subscription `tid`. -/
-def pairSubscription (sc : Scope) (p : Pairing) (id tid : String) : Option (Pairing × List Goal) := do
-  let s ← sc.openSnapshot.lookup id
-  let t ← sc.openTrace.lookup tid
-  if s.name != t.name then none
-  let (keys, goals) ← walkContent sc.declared t.out.index s.out.index s.out.line.content t.out.line.content p.keys
-  pure ({ p with keys, subscriptions := p.subscriptions ++ [(id, tid)] }, goals)
-
-/-- The elements of `xs` whose key no earlier element has. -/
-def distinct {α : Type} (key : α → Value) (xs : List α) : List α :=
-  go xs []
+def pairUp {α β : Type} (test : Bindings → α → β → Match) (b : Bindings)
+    (left : List (Nat × α)) (right : List (Nat × β)) : Paired :=
+  go left.length b left right []
 where
-  go : List α → List Value → List α
-    | [], _ => []
-    | x :: xs, seen => if seen.contains (key x) then go xs seen else x :: go xs (key x :: seen)
-
-/-- The implementation `out` lines that are not paired yet and have the type, time and name of `s`. -/
-def candidates (sc : Scope) (p : Pairing) (s : Out) : List Out :=
-  sc.traceOut.filter fun t =>
-    !p.pairs.any (·.2.index == t.index) && t.line.body.type == s.line.body.type && sameTime s.line t.line &&
-      (match s.line.body with | .answer .. => true | _ => t.line.body.name? == s.line.body.name?)
-
-/--
-What pairing an implementation line with snapshot line `s` depends on: the request that it answers or results from, its
-compared value, and its number when `s` is placed.
--/
-def pairingKey (sc : Scope) (s t : Out) : Value :=
-  let id (v : Option String) : Value := (v.map .str).getD .null
-  .arr [id t.line.body.to?, id t.line.body.resultOf?, jsonOrNull (sc.ctx.compared s.line t.line).2,
-    if sc.ctx.placed.contains s.index then .str (toString t.index) else .null]
-
-/--
-The ways to meet goal `g`, each with the goals left. Candidates with the same pairingKey give the same result in the
-same pairing, so only the first of them is tried.
--/
-def ways (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List Goal × Pairing) :=
-  match g with
-  | .out s =>
-    (distinct (pairingKey sc s) (candidates sc p s)).filterMap fun t =>
-      (pairOut sc p s t).map fun (p, goals) => (goals ++ rest, p)
-  | .subscription id =>
-    let open_ := sc.openTrace.filter fun (tid, t) =>
-      !p.subscriptions.any (·.2 == tid) && ((sc.openSnapshot.lookup id).map (·.name == t.name)).getD false
-    (distinct (fun (_, t) => jsonOrNull t.out.line.content) open_).filterMap fun (tid, _) =>
-      (pairSubscription sc p id tid).map fun (p, goals) => (goals ++ rest, p)
-  | .bag line snapshotLine xs ys =>
-    match xs with
-    | [] => [(rest, p)]
-    | x :: more =>
-      (distinct (fun (y, _) => y.flatten) ys.zipIdx).filterMap fun (y, i) =>
-        (walk sc.declared line snapshotLine x y p.keys).map fun (keys, goals) =>
-          (goals ++ [.bag line snapshotLine more (ys.eraseIdx i)] ++ rest, { p with keys })
-
-/-- The ways to meet goal `g` that keep to the guide. -/
-def expand (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List Goal × Pairing) :=
-  (ways sc g rest p).filter fun (_, q) => sc.ctx.guide.allows p q
-
-inductive Outcome where
-  | paired (p : Pairing)
-  | unpaired
-  | limited
-
-/-- Depth-first search over the frames of `stack`, each the goals left and the pairing so far, for `steps` steps. -/
-def search (sc : Scope) : Nat → List (List Goal × Pairing) → Outcome
-  | _, [] => .unpaired
-  | _, ([], p) :: _ => .paired p
-  | 0, _ => .limited
-  | n + 1, (g :: rest, p) :: stack => search sc n (expand sc g rest p ++ stack)
-
-/-- The order in which the search pairs lines: requests and lines that create keys, then answers, then the rest. -/
-def rank (l : Line) : Nat :=
-  if l.isRequest || !(l.created.getD []).isEmpty then 0
-  else
-    match l.body with
-    | .answer .. => 1
-    | _ => 2
-
-def byRank (ss : List Out) : List Out :=
-  [0, 1, 2].flatMap fun r => ss.filter (rank ·.line == r)
-
-/-- Whether a search may pair all `goals`: the counts agree, and each goal has a way at the start. -/
-def pairable (sc : Scope) (goals : List Goal) (start : Pairing) : Bool :=
-  (goals.filter fun | .out _ => true | _ => false).length == sc.traceOut.length &&
-    sc.openSnapshot.length == sc.openTrace.length && goals.all fun g => !(expand sc g [] start).isEmpty
-
-/-- The pairing of all `goals`, unpaired at once unless they are pairable. -/
-def pairAll (sc : Scope) (goals : List Goal) (start : Pairing) : Outcome :=
-  if pairable sc goals start then search sc searchLimit [(goals, start)] else .unpaired
-
-structure St where
-  findings : List Mismatch := []
-  keys : Renaming := []
-  declared : List String := []
-  ids : Ids := {}
-  window : Nat := 0
-  openSnapshot : List (String × Subscription) := []
-  openTrace : List (String × Subscription) := []
-  subscriptionIds : List (String × List String) := []
-  reportedMissing : List String := []
-  reportedUnexpected : List String := []
-
-abbrev CompareM := ReaderT Ctx (StateM St)
-
-def report (m : Mismatch) : CompareM Unit :=
-  modify fun st => { st with findings := st.findings ++ [m] }
-
-def valueMismatch (c : Ctx) (s : Line) (t : Out) (keys : Renaming) : Option Mismatch :=
-  let a := t.line
-  let got := jsonOrNull a.content
-  let subject := Subject.of a.toTraceLine
-  let sub (v : Option CValue) : Value := jsonOrNull (v.map (substitute keys))
-  match s.body, a.body with
-  | .command .., _ | .query .., _ => some (.request t.index subject (sub s.content) got)
-  | .event .., _ => some (.event t.index subject (sub s.content) got)
-  | .operation .., _ | .unacceptedOperation .., _ => some (.operation t.index subject (sub s.content) got)
-  | .answer _ _ snapshotTo e, .answer _ _ _ g =>
-    let output (x y : Option CValue) : Mismatch := .output t.index subject (sub x) (jsonOrNull y)
-    if c.answersQuery snapshotTo then some (output s.queryAnswer a.queryAnswer)
-    else if e.result != g.result then some (.result t.index subject e.result g.result)
-    else
-      match e, g with
-      | .rejected er, .rejected gr => some (.rejection t.index subject er.kind gr.kind)
-      | .accepted _, .accepted _ | .fulfilled _, .fulfilled _ => some (output s.value a.value)
-      | _, _ => none
-  | _, _ => none
-
-def missing (s : Out) (line : Nat) : CompareM Unit := do
-  let st ← get
-  let l := s.line
-  match l.body with
-  | .answer _ _ to _ | .unsubscribe _ _ to =>
-    report (.missingAnswer line (.reply l.body.type ((st.ids.bound.traceOf? to).getD to)) s.index)
-  | _ =>
-    let content := jsonOrNull (l.content.map (substitute st.keys))
-    report (.missingLine line (Subject.of l.toTraceLine) content s.index)
-
-/-- The renaming under which the values are equal, bags included, or `none`. -/
-def contentKeys (sc : Scope) (line snapshotLine : Nat) (s t : Option CValue) (p : Pairing) : Option Renaming :=
-  (walkContent sc.declared line snapshotLine s t p.keys).bind fun (keys, goals) =>
-    match search sc searchLimit [(goals, { p with keys })] with
-    | .paired p => some p.keys
-    | _ => none
-
-/--
-The groups of connected uses in which a value stands for two values, each in the order of the uses. A snapshot value and
-an implementation value connect when a use pairs them.
--/
-def conflicts (uses : List Use) : List (List Use) :=
-  let groups := uses.eraseDups.foldl (init := ([] : List (List Use))) fun groups u =>
-    let touches (g : List Use) : Bool := g.any fun v => v.snapshot == u.snapshot || v.trace == u.trace
-    match groups.findIdx? touches with
-    | none => groups ++ [[u]]
-    | some i =>
-      let rest := groups.filter (!touches ·)
-      rest.take i ++ [(groups.filter touches).flatten ++ [u]] ++ rest.drop i
-  groups.filter fun g =>
-    g.any fun u => g.any fun v => (u.snapshot == v.snapshot && u.trace != v.trace) ||
-      (u.trace == v.trace && u.snapshot != v.snapshot)
-
-/--
-Pairs the lines one by one, preferring equal lines, and reports the differences. When no line differs, including the
-subscriptions reported in an earlier window, it reports the uses of each value that stands for two values.
--/
-def explain (sc : Scope) (specOut : List Out) (missingAt : Nat) : CompareM Unit := do
-  let c ← read
-  let before ← get
-  let mut pairs : List (Out × Out) := []
-  let mut idUses : List Use := []
-  let mut keyUses : List Use := []
-  let mut repeated := false
-  for s in byRank specOut do
-    let st ← get
-    let p : Pairing := { ids := st.ids, keys := st.keys }
-    let cands := sc.traceOut.filter fun t =>
-      !pairs.any (·.2.index == t.index) && t.line.body.type == s.line.body.type &&
-        match s.line.body with
-        | .answer _ _ to _ => (st.ids.useIds t.index s.index (some to) t.line.body.to?).isSome
-        | _ => t.line.body.name? == s.line.body.name?
-    let keysOf (t : Out) : Option Renaming :=
-      let (ev, av) := c.compared s.line t.line
-      contentKeys sc t.index s.index ev av p
-    let equal (t : Out) : Bool := (pairIds sc st.ids s t).isSome && (keysOf t).isSome
-    let renamed (t : Out) : Bool :=
-      let (ev, av) := c.compared s.line t.line
-      (freeContent st.declared t.index s.index ev av).isSome
-    match (cands.find? fun t => equal t && sameTime s.line t.line) <|> cands.find? equal <|> cands.find? renamed <|>
-        cands.head? with
-    | none => missing s missingAt
-    | some t =>
-      pairs := pairs ++ [(s, t)]
-      if !sameTime s.line t.line then
-        report (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text)
-      match pairIds sc st.ids s t, s.line.body with
-      | some ids, _ => modify fun st => { st with ids }
-      | none, .event _ _ _ _ resultOf =>
-        report (.resultOf t.index (Subject.of t.line.toTraceLine) resultOf t.line.body.resultOf?)
-      | none, _ => idUses := idUses ++ [s.idUse t]
-      let (ev, av) := c.compared s.line t.line
-      match keysOf t, freeContent st.declared t.index s.index ev av with
-      | some keys, _ => modify fun st => { st with keys }
-      | none, some uses => keyUses := keyUses ++ uses
-      | none, none => if let some m := valueMismatch c s.line t st.keys then report m
-  let mut subscriptions : List (String × String) := []
-  for (id, s) in sc.openSnapshot do
-    let st ← get
-    let p : Pairing := { ids := st.ids, keys := st.keys }
-    let cands := sc.openTrace.filter fun (tid, t) => !subscriptions.any (·.2 == tid) && t.name == s.name
-    let keysOf (t : Subscription) : Option Renaming :=
-      contentKeys sc t.out.index s.out.index s.out.line.content t.out.line.content p
-    let renamed (t : Subscription) : Bool :=
-      (freeContent st.declared t.out.index s.out.index s.out.line.content t.out.line.content).isSome
-    match (cands.find? fun (_, t) => (keysOf t).isSome) <|> cands.find? (renamed ·.2) with
-    | some (tid, t) =>
-      subscriptions := subscriptions ++ [(id, tid)]
-      match keysOf t, freeContent st.declared t.out.index s.out.index s.out.line.content t.out.line.content with
-      | some keys, _ => modify fun st => { st with keys }
-      | none, uses => keyUses := keyUses ++ uses.getD []
-    | none =>
-      if st.reportedMissing.contains id then repeated := true
-      else
-        set { st with reportedMissing := st.reportedMissing ++ [id] }
-        report (.unopenedSubscription missingAt (Subject.of s.out.line.toTraceLine)
-          (jsonOrNull (s.out.line.content.map (substitute st.keys))) s.out.index)
-  for (tid, t) in sc.openTrace do
-    let st ← get
-    if !subscriptions.any (·.2 == tid) then
-      if st.reportedUnexpected.contains tid then repeated := true
-      else
-        set { st with reportedUnexpected := st.reportedUnexpected ++ [tid] }
-        report (.unexpectedSubscription t.out.index (Subject.of t.out.line.toTraceLine) (jsonOrNull t.out.line.content))
-  modify fun st => { st with subscriptionIds := subscribed sc st.subscriptionIds subscriptions }
-  for (s, t) in pairs do
-    let before := pairs.find? fun (ps, pt) => pt.index > t.index && (c.follows (s.index - 1)).contains (ps.index - 1)
-    if let some (_, bt) := before then
-      report (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of bt.line.toTraceLine))
-  for t in sc.traceOut do
-    if !pairs.any (·.2.index == t.index) then report (.unexpectedLine t.index (Subject.of t.line.toTraceLine))
-  let st ← get
-  if !repeated && st.findings.length == before.findings.length then
-    let found := conflicts (st.ids.uses ++ idUses) ++ conflicts (st.keys ++ keyUses)
-    if found.isEmpty then report (.renaming (keyUses ++ idUses ++ st.keys.drop before.keys.length))
-    else for uses in found do report (.renaming uses)
-where
-  /-- Each paired snapshot subscription with the implementation subscriptions paired with alike subscriptions. -/
-  subscribed (sc : Scope) (known : List (String × List String)) (pairs : List (String × String)) :
-      List (String × List String) :=
-    let lineOf (s : String) : Option Line := (sc.openSnapshot.lookup s).map (·.out.line)
-    pairs.foldl (init := known) fun all (s, _) =>
-      let ids := pairs.foldl (init := (all.lookup s).getD []) fun ids (other, t) =>
-        match lineOf s, lineOf other with
-        | some a, some b => if alike a b && !ids.contains t then ids ++ [t] else ids
-        | _, _ => ids
-      setAt all s ids
-
-/-- The open subscriptions after the subscribe and unsubscribe lines of `lines`. -/
-def follow (open_ : List (String × Subscription)) (lines : List Out) : List (String × Subscription) :=
-  lines.foldl (init := open_) fun o l =>
-    match l.line.body with
-    | .subscribe _ id name _ => if (o.lookup id).isSome then o else o ++ [(id, { out := l, name })]
-    | .unsubscribe _ _ to => o.filter (·.1 != to)
-    | _ => o
-
-/-- The state in which the search of a window with `out` lines `specOut` and `traceOut` starts. -/
-def enter (st : St) (specOut traceOut : List Out) : St :=
-  { st with findings := []
-            declared := specOut.foldl (fun d s => d ++ s.line.created.getD []) st.declared
-            window := st.window + 1
-            openSnapshot := follow st.openSnapshot (specOut.filter (·.line.isSubscribing))
-            openTrace := follow st.openTrace (traceOut.filter (·.line.isSubscribing)) }
-
-/-- The scope of a window's search, with the window's implementation `out` lines `traceOut`. -/
-def scopeOf (c : Ctx) (st : St) (traceOut : List Out) : Scope :=
-  { ctx := c, declared := st.declared, window := st.window,
-    traceOut := traceOut.filter fun t => !t.line.isSubscribing && !c.internal t.line,
-    openSnapshot := st.openSnapshot, openTrace := st.openTrace }
-
-/-- The snapshot `out` lines that a window's search pairs. -/
-def comparedOut (c : Ctx) (specOut : List Out) : List Out :=
-  specOut.filter fun s => !s.line.isSubscribing && !c.internal s.line
-
-def goalsOf (c : Ctx) (st : St) (specOut : List Out) : List Goal :=
-  (byRank (comparedOut c specOut)).map .out ++ st.openSnapshot.map (.subscription ·.1)
-
-/-- The state after a window whose search in scope `sc` found `p`. -/
-def St.paired (st : St) (sc : Scope) (p : Pairing) : St :=
-  { st with ids := p.ids, keys := p.keys, subscriptionIds := explain.subscribed sc st.subscriptionIds p.subscriptions }
-
-/--
-Compares the `out` lines between two `in` lines, which follow the `in` lines `missingAt` and `snapshotAt`. It returns
-the violation when the search stops at `searchLimit`.
--/
-def compareWindow (allSpecOut allTraceOut : List Out) (missingAt snapshotAt : Nat) :
-    CompareM (Option Uncomparable) := do
-  let c ← read
-  modify (enter · allSpecOut allTraceOut)
-  let st ← get
-  let sc := scopeOf c st allTraceOut
-  match pairAll sc (goalsOf c st allSpecOut) { ids := st.ids, keys := st.keys } with
-  | .paired p =>
-    set (st.paired sc p)
-    pure none
-  | .limited => pure (some (.searchLimit missingAt snapshotAt))
-  | .unpaired =>
-    explain sc (comparedOut c allSpecOut) missingAt
-    pure none
-
-/-- Whether answer `t` answers the request that answer `s` answers, through a like subscription or the ids. -/
-def answersPlaced (st : St) (s t : Out) : Option Ids :=
-  match s.line.body, t.line.body with
-  | .answer _ _ snapshotTo _, .answer _ _ to _ =>
-    match st.subscriptionIds.lookup snapshotTo with
-    | some ids => if ids.contains to then some st.ids else none
-    | none => st.ids.useIds t.index s.index (some snapshotTo) (some to)
-  | _, _ => none
-
-/-- The pairing of two `in` lines apart from the elements of bags, and the bags left to pair. -/
-def inputStart (st : St) (s t : Out) : Option (List Goal × Pairing) :=
-  let (sl, tl) := (s.line, t.line)
-  if sl.body.type != tl.body.type || sl.body.name? != tl.body.name? || !sameTime sl tl then none
-  else
-    match st.ids.use (s.idUse t) with
-    | none => none
-    | some ids =>
-      let st := { st with ids }
-      let placed : Option Ids :=
-        match sl.body with
-        | .time .. | .restart .. => some ids
-        | .unsubscribe _ _ to => ids.useIds t.index s.index (some to) tl.body.to?
-        | .answer .. => answersPlaced st s t
-        | _ => ids.useIds t.index s.index sl.body.resultOf? tl.body.resultOf?
-      match placed with
-      | none => none
-      | some ids =>
-        match sl.body with
-        | .time .. | .restart .. | .unsubscribe .. => some ([], { ids, keys := st.keys })
-        | _ =>
-          (walkContent st.declared t.index s.index sl.content tl.content st.keys).map fun (keys, goals) =>
-            (goals, { ids, keys })
-
-/-- The comparison of two `in` lines: the renamings under which they are the same. -/
-def sameInput (sc : Scope) (st : St) (s t : Out) : Outcome :=
-  match inputStart st s t with
-  | none => .unpaired
-  | some (goals, p) => search sc searchLimit [(goals, p)]
-
-def runWindow (c : Ctx) (st : St) (specOut traceOut : List Out) (missingAt snapshotAt : Nat) :
-    List Mismatch × Option Uncomparable × St :=
-  let (limited, st) := ((compareWindow specOut traceOut missingAt snapshotAt).run c).run { st with findings := [] }
-  (st.findings, limited, st)
-
-def differentInput (st : St) (s t : Out) : Uncomparable :=
-  let mismatch : Uncomparable := .differentInput t.index s.index
-    (substitute st.keys (.ofValue (ToValue.toValue s.line.toTraceLine))).flatten (ToValue.toValue t.line.toTraceLine)
-  match s.line.body, t.line.body with
-  | .answer .., .answer .. =>
-    if (answersPlaced st s t).isSome then mismatch else .differentRequest t.index (Subject.of t.line.toTraceLine) s.index
-  | _, _ => mismatch
-
-def bindings (st : St) : Bindings := st.keys.map fun u => (u.snapshot, u.trace)
-
-def inputScope (c : Ctx) (st : St) : Scope :=
-  { ctx := c, declared := st.declared, window := st.window, traceOut := [], openSnapshot := [], openTrace := [] }
+  candidates (b : Bindings) (rs : List (Nat × β)) (s : α) : List (Nat × Bindings) × Bool :=
+    rs.foldl (fun (cs, amb) (j, t) =>
+      match test b s t with
+      | .equal b' => (cs ++ [(j, b')], amb)
+      | .differ => (cs, amb)
+      | .ambiguous => (cs, true)) ([], false)
+  step (b : Bindings) (ls : List (Nat × α)) (rs : List (Nat × β)) : Option (Nat × Nat × Bindings) :=
+    ls.findSome? fun (i, s) =>
+      match candidates b rs s with
+      | ([(j, b')], false) => some (i, j, b')
+      | ((j, b') :: rest, false) =>
+        if rest.all fun (_, c) => c.length == b'.length && c.all b'.contains then some (i, j, b') else none
+      | _ => none
+  go : Nat → Bindings → List (Nat × α) → List (Nat × β) → List (Nat × Nat) → Paired
+    | fuel + 1, b, ls, rs, pairs =>
+      match step b ls rs with
+      | some (i, j, b') => go fuel b' (ls.filter (·.1 != i)) (rs.filter (·.1 != j)) (pairs ++ [(i, j)])
+      | none => go 0 b ls rs pairs
+    | 0, b, ls, rs, pairs =>
+      let left := ls.map fun (i, s) => (i, candidates b rs s)
+      { pairs, bindings := b
+        ambiguous := left.filterMap fun (i, cs, amb) => if amb || cs.length ≥ 2 then some i else none
+        unmatched := left.filterMap fun (i, cs, amb) => if amb || cs.length ≥ 2 then none else some i
+        extra := rs.map (·.1) }
 
 mutual
 
-/--
-The violations from the windows. Each element holds a snapshot window, an implementation window and the previous `in`
-lines of the implementation and of the snapshot. The `out` lines are compared before the `in` line, and `malformed` is
-reported after the last element.
--/
-def compareFrom (c : Ctx) (lineCount : Nat) (malformed : Option Nat) :
-    List (Option Window × Option Window × Option Out × Option Out) → St → Compared
-  | [], st => { findings := (malformed.map fun n => .uncomparable (.lineSchema n)).toList, bindings := bindings st }
-  | (expected, actual, previous, previousSnapshot) :: rest, st =>
-    let (found, limited, st) := runWindow c st ((expected.map (·.before)).getD []) ((actual.map (·.before)).getD [])
-      ((previous.map (·.index)).getD 1) ((previousSnapshot.map (·.index)).getD 1)
-    match limited with
-    | some u => { findings := found.map .mismatch ++ [.uncomparable u], bindings := bindings st }
-    | none =>
-      let later := compareInputs c lineCount malformed (expected.bind (·.input)) (actual.bind (·.input)) rest st
-      { later with findings := found.map .mismatch ++ later.findings }
-termination_by L => 2 * L.length
+/-- How snapshot value `s` compares with implementation value `t` under `b`, binding the fresh strings of `s`. -/
+partial def matchValue (fresh : List String) (b : Bindings) : CValue → CValue → Match
+  | .leaf (.str s), .leaf (.str t) => .ofOption (bindString fresh b s t)
+  | .leaf v, .leaf w => if v == w then .equal b else .differ
+  | .arr xs, .arr ys | .runs xs, .runs ys => matchList fresh b xs ys
+  | .obj fs, .obj gs => if sameKeys fs gs then matchFields fresh b fs gs else .differ
+  | .bag xs, .bag ys => if xs.length == ys.length then matchBag fresh b xs ys else .differ
+  | _, _ => .differ
 
-/--
-The violations from the `in` lines and the rest. The comparison reports and stops when only one side has a line or the
-lines differ, and it stops when neither side has one.
--/
-def compareInputs (c : Ctx) (lineCount : Nat) (malformed : Option Nat) (expected actual : Option Out)
-    (rest : List (Option Window × Option Window × Option Out × Option Out)) (st : St) : Compared :=
-  match expected, actual with
-  | none, none => { findings := [], bindings := bindings st }
-  | none, some t =>
-    { findings := [.uncomparable (.unexpectedInput t.index (ToValue.toValue t.line.toTraceLine))],
-      bindings := bindings st }
-  | some s, none =>
-    { findings := [.uncomparable (.missingInput lineCount (ToValue.toValue s.line.toTraceLine) s.index)],
-      bindings := bindings st }
-  | some s, some t =>
-    match sameInput (inputScope c st) st s t with
-    | .unpaired => { findings := [.uncomparable (differentInput st s t)], bindings := bindings st }
-    | .limited => { findings := [.uncomparable (.searchLimit t.index s.index)], bindings := bindings st }
-    | .paired p => compareFrom c lineCount malformed rest { st with ids := p.ids, keys := p.keys }
-termination_by 2 * rest.length + 1
+partial def matchList (fresh : List String) (b : Bindings) : List CValue → List CValue → Match
+  | [], [] => .equal b
+  | x :: xs, y :: ys =>
+    match matchValue fresh b x y with
+    | .equal b' => matchList fresh b' xs ys
+    | m => m
+  | _, _ => .differ
+
+partial def matchFields (fresh : List String) (b : Bindings) (fs gs : List (String × CValue)) : Match :=
+  fs.foldl (fun m (k, v) =>
+    match m, gs.lookup k with
+    | .equal b', some w => matchValue fresh b' v w
+    | .equal _, none => .differ
+    | m, _ => m) (.equal b)
+
+partial def matchBag (fresh : List String) (b : Bindings) (xs ys : List CValue) : Match :=
+  let p : Paired := pairUp (matchValue fresh) b
+    (xs.zipIdx.map fun (x, i) => (i, x)) (ys.zipIdx.map fun (y, i) => (i, y))
+  if !p.ambiguous.isEmpty then .ambiguous
+  else if p.unmatched.isEmpty then .equal p.bindings
+  else .differ
 
 end
 
-/-- A part of the comparison that one search pairs: the `out` lines of a window, or two `in` lines. -/
-inductive Stage where
-  /-- The `out` lines of a window that follows the `in` lines `missingAt` and `snapshotAt`. -/
-  | outs (specOut traceOut : List Out) (missingAt snapshotAt : Nat)
-  | input (s t : Out)
+def matchOption (fresh : List String) (b : Bindings) : Option CValue → Option CValue → Match
+  | none, none => .equal b
+  | some s, some t => matchValue fresh b s t
+  | _, _ => .differ
 
-/-- The violation when the search of the stage takes more than `searchLimit` steps. -/
-def Stage.limited : Stage → Uncomparable
-  | .outs _ _ missingAt snapshotAt => .searchLimit missingAt snapshotAt
-  | .input s t => .searchLimit t.index s.index
+def Match.andThen : Match → (Bindings → Match) → Match
+  | .equal b, f => f b
+  | m, _ => m
 
-/-- The stages of compareFrom's windows, up to an `in` line that only one side has. -/
-def stagesOf : List (Option Window × Option Window × Option Out × Option Out) → List Stage
-  | [] => []
-  | (expected, actual, previous, previousSnapshot) :: rest =>
-    .outs ((expected.map (·.before)).getD []) ((actual.map (·.before)).getD []) ((previous.map (·.index)).getD 1)
-        ((previousSnapshot.map (·.index)).getD 1) ::
-      match expected.bind (·.input), actual.bind (·.input) with
-      | some s, some t => .input s t :: stagesOf rest
-      | _, _ => []
+def Line.isOutRequest (l : Line) : Bool :=
+  match l.body with
+  | .command .out .. | .query .out .. | .subscribe .out .. => true
+  | _ => false
 
-/-- A frame of the search across stages: the goals left of stage number `stage`, and the pairing so far. -/
-structure Frame where
-  goals : List Goal
-  pairing : Pairing
-  scope : Scope
-  /-- The state before the stage. -/
-  st : St
-  stage : Nat
+/-- The values that the snapshot line introduces: the id of an `out` request and the line's `created` keys. -/
+def Line.fresh (l : Line) : List String :=
+  (if l.isOutRequest then [l.body.id] else []) ++ l.created.getD []
 
-/-- The frame that starts the stage, number `k`, in state `st`, unless the stage has no pairing at once. -/
-def Stage.start (c : Ctx) (k : Nat) (st : St) : Stage → Option Frame
-  | .outs specOut traceOut _ _ =>
-    let st := enter st specOut traceOut
-    let scope := scopeOf c st traceOut
-    let goals := goalsOf c st specOut
-    let pairing : Pairing := { ids := st.ids, keys := st.keys }
-    if pairable scope goals pairing then some { goals, pairing, scope, st, stage := k } else none
-  | .input s t =>
-    (inputStart st s t).map fun (goals, pairing) => { goals, pairing, scope := inputScope c st, st, stage := k }
-
-/-- The state after the stage of `f`, whose goals are met. -/
-def Frame.commit (f : Frame) : Stage → St
-  | .outs .. => f.st.paired f.scope f.pairing
-  | .input .. => { f.st with ids := f.pairing.ids, keys := f.pairing.keys }
+def Line.fields (l : Line) : Value :=
+  match ToValue.toValue l.body with
+  | .obj fs => .obj (fs.filter fun (k, _) => k == "type" || k == "dir" || k == "name")
+  | v => v
 
 /--
-Depth-first search over the frames of `stack` for a pairing of every stage, with the steps left of each stage in
-`left`. A step expands a goal or starts a stage, so `fuel` covers every step. It returns the renamings of the pairing,
-or no guide when there is no pairing.
+How snapshot line `s` compares with implementation line `t`: their type, direction and name are equal; the id of an
+`out` request binds, and an `in` line's id compares, while other `out` lines' ids are not compared; the answered
+request, `resultOf` and the content compare under the binding.
 -/
-def searchAcross (c : Ctx) (stages : List Stage) : Nat → List Nat → List Frame → Except Uncomparable Guide
-  | 0, _, _ | _, _, [] => .ok {}
-  | fuel + 1, left, f :: stack =>
-    match f.goals, stages[f.stage]? with
-    | _, none => .ok {}
-    | g :: rest, some stage =>
-      match left[f.stage]? with
-      | some (n + 1) =>
-        searchAcross c stages fuel (left.set f.stage n)
-          ((expand f.scope g rest f.pairing).map (fun (goals, pairing) => { f with goals, pairing }) ++ stack)
-      | _ => .error stage.limited
-    | [], some stage =>
-      let st := f.commit stage
-      let k := f.stage + 1
-      match stages[k]?, left[k]? with
-      | none, _ => .ok { ids := st.ids.bound, keys := st.keys }
-      | some next, some (n + 1) => searchAcross c stages fuel (left.set k n) ((next.start c k st).toList ++ stack)
-      | some next, _ => .error next.limited
+def matchLine (fresh : List String) (b : Bindings) (s t : Line) : Match :=
+  if s.fields != t.fields then .differ
+  else
+    let ids : Match :=
+      if s.body.dir == .in || s.isOutRequest then .ofOption (bindString fresh b s.body.id t.body.id) else .equal b
+    let opt (x y : Option String) (b : Bindings) : Match :=
+      match x, y with
+      | none, none => .equal b
+      | some x, some y => .ofOption (bindString fresh b x y)
+      | _, _ => .differ
+    ids.andThen fun b =>
+      (opt s.body.to? t.body.to? b).andThen fun b =>
+        (opt s.body.resultOf? t.body.resultOf? b).andThen fun b => matchOption fresh b s.content t.content
 
-/--
-The guide of the comparison of the windows: the renamings of a pairing of every window and `in` line, found by trying
-the other pairings of earlier stages when a later stage has none, or no guide when there is no such pairing. Each stage
-has `searchLimit` steps, its start included, over all the times that the search returns to it; the violation names the
-stage that runs out.
--/
-def guideFor (c : Ctx) (windows : List (Option Window × Option Window × Option Out × Option Out)) :
-    Except Uncomparable Guide :=
-  let stages := stagesOf windows
-  match stages with
-  | [] => .ok {}
-  | first :: _ =>
-    searchAcross c stages (stages.length * (searchLimit + 1))
-      ((stages.map fun _ => searchLimit + 1).set 0 searchLimit) (first.start c 0 {}).toList
+def json (v : Option CValue) : Value := (v.map (·.flatten)).getD .null
 
-/-- The latest of the earlier lines with the id, as an index counted from 0. -/
-def earlierWithId (earlier : List Out) (id : String) : Option Nat :=
-  (earlier.reverse.find? fun o => o.line.body.id == id).map (·.index - 1)
+def lineValue (l : Line) : Value := ToValue.toValue l.toTraceLine
 
-/-- Each `after` id of a snapshot `out` line that names no earlier `out` line of its window, at that snapshot line. -/
+/-- Whether two unpaired lines stand at one place: the same type, direction and name, and for an answer or unsubscribe
+the same request under the binding. -/
+def samePlace (b : Bindings) (s t : Line) : Bool :=
+  s.fields == t.fields && (s.body.to?.map fun to => (b.lookup to).getD to) == t.body.to?
+
+/-- How the paired-by-place line `t` differs from snapshot line `s`. -/
+def difference (s : Line) (t : Numbered) : Mismatch :=
+  let subject := Subject.of t.line.toTraceLine
+  match s.body, t.line.body with
+  | .answer _ _ _ sa, .answer _ _ _ ta =>
+    match sa, ta with
+    | .rejected sr, .rejected tr => .rejection t.index subject sr.kind tr.kind
+    | _, _ =>
+      if sa.result != ta.result then .result t.index subject sa.result ta.result
+      else .output t.index subject (json s.content) (json t.line.content)
+  | .event _ _ _ _ sr, .event _ _ _ _ tr =>
+    if (s.content.map (·.key)) == (t.line.content.map (·.key)) then .resultOf t.index subject sr tr
+    else .event t.index subject (json s.content) (json t.line.content)
+  | .operation .., _ | .unacceptedOperation .., _ => .operation t.index subject (json s.content) (json t.line.content)
+  | _, _ => .request t.index subject (json s.content) (json t.line.content)
+
+/-- The report of snapshot line `s` that the trace lacks, at trace line `place`. -/
+def missing (s : Numbered) (place : Nat) : Mismatch :=
+  let subject := Subject.of s.line.toTraceLine
+  match s.line.body with
+  | .answer .. => .missingAnswer place subject s.index
+  | .subscribe .out .. => .unopenedSubscription place subject (json s.line.content) s.index
+  | _ => .missingLine place subject (json s.line.content) s.index
+
+def unexpected (t : Numbered) : Mismatch :=
+  let subject := Subject.of t.line.toTraceLine
+  match t.line.body with
+  | .subscribe .out .. => .unexpectedSubscription t.index subject (json t.line.content)
+  | _ => .unexpectedLine t.index subject
+
+/-- The latest of the earlier lines with the id. -/
+def earlierWithId (earlier : List Numbered) (id : String) : Option Numbered :=
+  earlier.reverse.find? fun o => o.line.body.id == id
+
+/-- Each `after` id of a snapshot `out` line that names no earlier `out` line of its group, at that snapshot line. -/
 def unknownAfters (snapshot : List (Option Line)) : List Uncomparable :=
-  (steps snapshot).flatMap fun w =>
-    w.before.zipIdx.flatMap fun (o, k) =>
+  (groups snapshot).flatMap fun g =>
+    g.outs.zipIdx.flatMap fun (o, k) =>
       (o.line.after.getD []).filterMap fun id =>
-        if (earlierWithId (w.before.take k) id).isSome then none else some (.unknownAfter o.index id)
+        if (earlierWithId (g.outs.take k) id).isSome then none else some (.unknownAfter o.index id)
 
-/-- The lines that line `n` must follow: the earlier `out` lines of its window that its `after` names. -/
-def mustFollow (snapshot : List (Option Line)) (n : Nat) : List Nat :=
-  (((steps snapshot).flatMap fun w =>
-    w.before.zipIdx.filterMap fun (o, k) =>
-      if o.index - 1 == n then some ((o.line.after.getD []).filterMap (earlierWithId (w.before.take k)))
-      else none).head?).getD []
+/-- The lines of the group, by number, that snapshot line `o` (its `k`th) must follow. -/
+def mustFollow (outs : List Numbered) (o : Numbered) (k : Nat) : List Nat :=
+  (o.line.after.getD []).filterMap fun id => (earlierWithId (outs.take k) id).map (·.index)
 
 /--
-The snapshot lines, by number, whose pairing can depend on where the implementation line stands: those of a window that
-share their type and name with a line that an `after` of the window names or orders.
+Pairs the `out` lines of one group and reports their differences. `fresh` holds the values that this and earlier
+groups introduced, also on lines that are not compared; one that is not bound yet binds where a compared line first
+holds it. `place` is the trace line of the group's input. A group with an ambiguous line reports
+only its ambiguous lines, and the last component tells that nothing later is compared.
 -/
-def placedLines (snapshot : List (Option Line)) : List Nat :=
-  (steps snapshot).flatMap fun w =>
-    let follows := w.before.zipIdx.map fun (o, k) =>
-      (o.index, (o.line.after.getD []).filterMap fun id => (earlierWithId (w.before.take k) id).map (· + 1))
-    let ordered := w.before.filter fun o =>
-      follows.any fun (n, earlier) => (n == o.index && !earlier.isEmpty) || earlier.contains o.index
-    (w.before.filter fun o => ordered.any fun m =>
-      m.line.body.type == o.line.body.type && m.line.body.name? == o.line.body.name?).map (·.index)
+def compareGroup (b : Bindings) (fresh : List String) (snapshot trace : List Numbered) (place : Nat) :
+    List Finding × Bindings × Bool :=
+  let p := pairUp (fun b (s : Numbered) (t : Numbered) => matchLine fresh b s.line t.line)
+    b
+    (snapshot.map fun s => (s.index, s)) (trace.map fun t => (t.index, t))
+  let byIndex {γ : Type} (xs : List Numbered) (i : Nat) (f : Numbered → γ) : List γ :=
+    (xs.find? (·.index == i)).toList.map f
+  let ambiguous := p.ambiguous.flatMap fun i => byIndex snapshot i fun s =>
+    let cands := (trace.filter fun t => !p.pairs.any (·.2 == t.index)).filter fun t =>
+      match matchLine fresh p.bindings s.line t.line with
+      | .differ => false
+      | _ => true
+    Finding.uncomparable (.ambiguous ((cands.head?.map (·.index)).getD place) (Subject.of s.line.toTraceLine) s.index
+      (cands.map (·.index)))
+  if !ambiguous.isEmpty then (ambiguous, p.bindings, true) else
+  -- Unpaired lines pair by place, in snapshot order, each with the first unpaired trace line at its place.
+  let (placed, extra, b) := p.unmatched.foldl (fun (placed, extra, b) i =>
+    match snapshot.find? (·.index == i) with
+    | none => (placed, extra, b)
+    | some s =>
+      match (trace.filter fun t => extra.contains t.index).find? fun t => samePlace b s.line t.line with
+      | some t =>
+        let b := if s.line.isOutRequest then (bindString fresh b s.line.body.id t.line.body.id).getD b else b
+        (placed ++ [(s, some t)], extra.filter (· != t.index), b)
+      | none => (placed ++ [(s, none)], extra, b)) (([] : List (Numbered × Option Numbered)), p.extra, p.bindings)
+  let differences := placed.map fun
+    | (s, some t) => Finding.mismatch (difference s.line t)
+    | (s, none) => .mismatch (missing s place)
+  let unexpectedLines := (trace.filter fun t => extra.contains t.index).map (.mismatch ∘ unexpected)
+  let pairs := (p.pairs.filterMap fun (i, j) => do
+      pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))) ++
+    placed.filterMap fun (s, t) => t.map (s, ·)
+  let times := pairs.filterMap fun (s, t) =>
+    if s.line.time.time == t.line.time.time then none
+    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text))
+  let orders := snapshot.zipIdx.flatMap fun (s, k) =>
+    match pairs.find? (·.1.index == s.index) with
+    | none => []
+    | some (_, t) =>
+      (mustFollow snapshot s k).filterMap fun n => do
+        let (_, before) ← pairs.find? (·.1.index == n)
+        if before.index < t.index then none
+        else some (Finding.mismatch
+          (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
+  (differences ++ unexpectedLines ++ times ++ orders, b, false)
 
-/-- The line that orders a finding in a report: its `line`, or for `renaming` the last line of its uses. -/
+/-- The line that orders a finding in a report. -/
 def Finding.line : Finding → Nat
-  | .mismatch (.renaming uses) => uses.foldl (fun n u => max n u.line) 0
   | .mismatch m =>
     match m.place.lookup "line" with
     | some (.num n) => n.mantissa.toNat
@@ -959,6 +461,51 @@ def Finding.line : Finding → Nat
     | some (.num n) => n.mantissa.toNat
     | _ => 0
 
+def differentInput (b : Bindings) (s t : Numbered) : Finding :=
+  .uncomparable (.differentInput t.index s.index (b.rename (lineValue s.line)) (lineValue t.line))
+
+/--
+Compares the groups in order, carrying the binding. When `cut`, the trace's last group ends at a malformed line, and
+only its input is compared. `internal` selects the `out` lines that are not compared.
+-/
+def compareGroups (lineCount : Nat) (internal : Line → Bool) (expected actual : List Group) (cut : Bool) :
+    Nat → List String → Bindings → List Finding × Bindings
+  | 0, _, b => ([], b)
+  | fuel + 1, fresh, b =>
+    match expected, actual with
+    | [], [] => ([], b)
+    | e :: es, a :: as =>
+      let inputs : Except Finding Bindings :=
+        match e.input, a.input with
+        | none, none => .ok b
+        | some s, some t =>
+          match matchLine [] b s.line t.line with
+          | .equal b' => if s.line.time.time == t.line.time.time then .ok b' else .error (differentInput b s t)
+          | _ => .error (differentInput b s t)
+        | some s, none => .error (.uncomparable (.missingInput lineCount (lineValue s.line) s.index))
+        | none, some t => .error (.uncomparable (.unexpectedInput t.index (lineValue t.line)))
+      match inputs with
+      | .error f => ([f], b)
+      | .ok b =>
+        if cut && as.isEmpty then ([], b)
+        else
+          let place := (a.input.map (·.index)).getD 1
+          let compared (outs : List Numbered) := outs.filter fun o => !internal o.line
+          let fresh := fresh ++ e.outs.flatMap (·.line.fresh)
+          let (found, b, stop) := compareGroup b fresh (compared e.outs) (compared a.outs) place
+          if stop then (found, b)
+          else
+            let (rest, b) := compareGroups lineCount internal es as cut fuel fresh b
+            (found ++ rest, b)
+    | e :: _, [] =>
+      match e.input with
+      | some s => ([.uncomparable (.missingInput lineCount (lineValue s.line) s.index)], b)
+      | none => ([], b)
+    | [], a :: _ =>
+      match a.input with
+      | some t => ([.uncomparable (.unexpectedInput t.index (lineValue t.line))], b)
+      | none => ([], b)
+
 /--
 The violations of comparing a trace with a snapshot, and the bindings. In `snapshot`, `none` is a blank line. `lines`
 holds the trace lines before its first malformed line, with `none` for blank lines and repeated subscription answers,
@@ -966,21 +513,17 @@ and `malformed` is the number of that line. `internal` selects the event lines t
 `unknownAfters` id orders no line, because reading the snapshot reports it before the comparison.
 -/
 def compare (snapshot lines : List (Option Line)) (malformed : Option Nat) (internal : Line → Bool) : Compared :=
-  let expected := steps snapshot
-  let actual := steps lines
-  let count := match malformed with
-    | some _ => actual.length - 1
-    | none => max expected.length actual.length
-  let windows := (List.range count).map fun k =>
-    (expected[k]?, actual[k]?, if k == 0 then none else (actual[k - 1]?).bind (·.input),
-      if k == 0 then none else (expected[k - 1]?).bind (·.input))
-  let ctx : Ctx := {
-    requests := (snapshot.filterMap fun l => l.map fun l => (l.body.id, l)).reverse,
-    follows := mustFollow snapshot,
-    placed := placedLines snapshot,
-    internal }
-  match guideFor ctx windows with
-  | .ok guide => compareFrom { ctx with guide } lines.length malformed windows {}
-  | .error u => { findings := [.uncomparable u], bindings := [] }
+  let expected := groups snapshot
+  let actual := groups lines
+  let (found, bindings) :=
+    compareGroups lines.length internal expected actual malformed.isSome (expected.length + actual.length) [] []
+  { findings := found ++ (malformed.map fun n => Finding.uncomparable (.lineSchema n)).toList, bindings }
+
+def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
+    (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : m Compared := do
+  let (lines, malformed) := untilMalformed trace
+  let (expected, outputByRequestId) ← readLines s service ask snapshot []
+  let (actual, _) ← readLines s service ask lines outputByRequestId
+  pure (compare expected (withoutRepeatedAnswers actual) malformed (internalEvent s service))
 
 end Tazuna.Verify
