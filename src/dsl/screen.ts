@@ -2,7 +2,16 @@ import type { z } from "zod";
 import type { Bag, Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { Named, SomeKey } from "./conditions.ts";
-import type { AnyScreen, Control, Events, InputOf, QueryOutput, Screen, ServiceDefinition } from "./definition.ts";
+import type {
+  AnyOffer,
+  AnyScreen,
+  Control,
+  Events,
+  InputOf,
+  QueryOutput,
+  Screen,
+  ServiceDefinition,
+} from "./definition.ts";
 import type { Entities, Immutable, MadeRow, Records, Row } from "./entity.ts";
 import type {
   BaseArgs,
@@ -159,15 +168,23 @@ type ScreenBehavior<
     StateOffers<Ps, B>,
   CopyKey<F, K>
 >;
-/** The payloads that a state offers; the chart's own offers are the root's. */
+/**
+ * The payloads that the user can choose for a control: `[{}]` offers a control without payload fields, `[]` offers
+ * nothing, and `any` offers every payload that matches the schema.
+ */
+type Offer<P, A> = ((args: A) => Bag<MadeRow<PayloadOf<P>>> | readonly MadeRow<PayloadOf<P>>[]) | AnyOffer;
+
+/** The offers of a state, which override the offers of its ancestors and of the chart for the controls they name. */
 type StateOffers<Ps extends Payloads, A> = {
-  /** The payloads that the user can choose: `[{}]` offers a control without payload fields; `[]` offers nothing. */
   readonly offers?: [keyof Ps] extends [never]
     ? never
-    : SomeKnownKey<{ readonly [K in keyof Ps]: unknown }> & {
-        readonly [K in keyof Ps]?: (args: A) => Bag<MadeRow<PayloadOf<Ps[K]>>> | readonly MadeRow<PayloadOf<Ps[K]>>[];
-      };
+    : SomeKnownKey<{ readonly [K in keyof Ps]: unknown }> & { readonly [K in keyof Ps]?: Offer<Ps[K], A> };
 };
+
+/** The chart's own offers, which name every control, so that no control is offered without a written entry. */
+type ChartOffers<Ps extends Payloads, A> = [keyof Ps] extends [never]
+  ? { readonly offers?: never }
+  : { readonly offers: { readonly [K in keyof Ps]: Offer<Ps[K], A> } };
 
 interface ScreenSetup<
   I extends Shape,
@@ -182,7 +199,7 @@ interface ScreenSetup<
   F,
 > {
   chart<const K extends TableKeys<F> = never, const R extends InitialContext<Ctx> = InitialContext<Ctx>>(
-    definition: StateOffers<Ps, OuterArguments<I, Ctx, Sh, Es>> &
+    definition: ChartOffers<Ps, OuterArguments<I, Ctx, Sh, Es>> &
       InitialContextSetup<I, Ctx, R> &
       ScreenResolve<O, OuterArguments<I, Ctx, Sh, Es>> & {
         /** The transitions that apply in every state. */

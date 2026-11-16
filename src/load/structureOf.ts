@@ -2,7 +2,15 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import { type Shape, stringsOf } from "../data/values.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
-import type { ChartSpec, Contract, Definition, Named, Services, StateSpec } from "../dsl/definition.ts";
+import {
+  any,
+  type ChartSpec,
+  type Contract,
+  type Definition,
+  type Named,
+  type Services,
+  type StateSpec,
+} from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
 import {
   type At,
@@ -224,6 +232,9 @@ export function structureOf(
   return { structure, thrownDefaults };
 }
 
+const offerKinds = (offers: StateSpec["offers"]): Record<string, "any" | "listed"> =>
+  Object.fromEntries(Object.entries(offers ?? {}).map(([control, o]) => [control, o === any ? "any" : "listed"]));
+
 function structureOfChart(
   chart: ChartSpec,
   ref: RefOf,
@@ -271,7 +282,7 @@ function structureOfChart(
         kind: node.type ?? (node.states === undefined ? "atomic" : "compound"),
         initial: node.initial ?? null,
         children: Object.keys(node.states ?? {}),
-        offers: Object.keys(node.offers ?? {}),
+        offers: offerKinds(node.offers),
         activities,
         transitions: transitions(node, name),
         deadlines: Object.keys(node.after ?? {}),
@@ -291,7 +302,7 @@ function structureOfChart(
     requires: Object.keys(chart.requires ?? {}),
     ensures: Object.keys(chart.ensures ?? {}),
     on: transitions({ on: chart.on }, null),
-    offers: Object.keys(chart.offers ?? {}),
+    offers: offerKinds(chart.offers),
     states,
     controls: Object.fromEntries(
       Object.entries(chart.controls ?? {}).map(([name, control]) => [

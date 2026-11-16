@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { screen } from "./data.ts";
 
 export const editScreen = screen({
@@ -14,6 +15,7 @@ export const editScreen = screen({
     },
   },
 }).chart({
+  offers: { save: any },
   states: {
     viewing: { on: { save: [{ target: "renaming" }] } },
     renaming: { offers: { save: () => [] }, on: { save: [{ target: "viewing" }] } },

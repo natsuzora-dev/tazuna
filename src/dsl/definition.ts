@@ -210,7 +210,15 @@ interface RequestSpec {
 
 type Keyed<T> = Readonly<Record<string, T>>;
 
-type Offers = Keyed<(args: unknown) => readonly unknown[]>;
+declare const anyOffer: unique symbol;
+
+/** The type of `any`. */
+export type AnyOffer = { readonly [anyOffer]: true };
+
+/** The offers entry that offers every payload that matches the control's schema (`[{}]` without payload fields). */
+export const any: AnyOffer = Object.freeze({}) as AnyOffer;
+
+type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer>;
 
 export interface StateSpec {
   readonly type?: "parallel" | "map" | "final" | "history";

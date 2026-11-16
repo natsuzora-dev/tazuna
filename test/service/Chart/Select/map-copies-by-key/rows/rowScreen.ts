@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -17,6 +18,7 @@ export const rowScreen = screen({
     },
   },
 }).chart({
+  offers: { complete: any },
   states: {
     showing: { shows: { openTasks: {} } },
     rows: { items: ({ shown }) => (shown.openTasks?.taskIds ?? []).map((taskId) => ({ taskId })) },

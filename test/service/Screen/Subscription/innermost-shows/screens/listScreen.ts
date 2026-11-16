@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -8,6 +9,7 @@ export const listScreen = screen({
   initial: "open",
   states: { open: { initial: "someTasks", states: { someTasks: {}, allTasks: {} } } },
 }).chart({
+  offers: { showAll: any },
   states: {
     open: { shows: { tasks: { input: () => ({ filter: "open" }) } } },
     someTasks: { on: { showAll: [{ target: "allTasks" }] } },

@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -10,6 +11,7 @@ export const listScreen = screen({
   states: { viewing: {}, leaving: {}, cleared: {} },
   invariants: { notLeftOver: ({ active }) => !active.leaving },
 }).chart({
+  offers: { leave: any, back: any },
   states: {
     viewing: { on: { leave: [{ target: "leaving" }] }, shows: { tasks: {} } },
     leaving: { always: [{ guard: { cleared: ({ shown }) => shown.tasks === null }, target: "cleared" }] },

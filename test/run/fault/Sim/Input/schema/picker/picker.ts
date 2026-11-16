@@ -1,4 +1,4 @@
-import { service } from "@natsuzora-dev/tazuna";
+import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { screen } = service({ description: "Pick a task" });
@@ -15,4 +15,4 @@ export const filteredScreen = screen({
   controls: { pick: { label: "Pick", payload: { taskId: z.string().min(1) } } },
   initial: "filtered",
   states: { filtered: {} },
-}).chart({ states: { filtered: { offers: { pick: () => [{ taskId: "" }] } } } });
+}).chart({ offers: { pick: any }, states: { filtered: { offers: { pick: () => [{ taskId: "" }] } } } });

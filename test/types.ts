@@ -15,6 +15,7 @@ import {
 } from "../samples/todo/spec/todo/events.ts";
 import { tasks } from "../samples/todo/spec/todo/queries.ts";
 import {
+  any,
   type Bag,
   bag,
   constants,
@@ -570,7 +571,7 @@ screen({
   controls: { taskAddedRecorded: { label: "Add" } },
   initial: "a",
   states: { a: {} },
-}).chart({});
+}).chart({ offers: { taskAddedRecorded: any } });
 
 screen({
   description: "",
@@ -914,7 +915,16 @@ screen({
   initial: "open",
   states: { open: {} },
 }).chart({
-  offers: { close: () => [{}] },
+  offers: { pick: any, close: () => [{}] },
+});
+screen({
+  description: "",
+  controls: { pick: { label: "Pick", payload: { title: z.string() } }, close: { label: "Close" } },
+  initial: "open",
+  states: { open: {} },
+}).chart({
+  // @ts-expect-error the chart's own offers name every control
+  offers: { close: any },
 });
 screen({
   description: "",
@@ -1216,6 +1226,7 @@ const rowsScreen = screen({
   },
 });
 rowsScreen.chart({
+  offers: { complete: any, add: any },
   states: {
     rows: { items: ({ shown }) => (shown.tasks?.tasks ?? []).map((t) => ({ taskId: t.taskId })) },
     idle: {
@@ -1237,6 +1248,7 @@ rowsScreen.chart({
   },
 });
 rowsScreen.chart({
+  offers: { complete: any, add: any },
   states: {
     rows: { items: () => [] },
     // @ts-expect-error a copy state opens no child screen
@@ -1244,6 +1256,7 @@ rowsScreen.chart({
   },
 });
 rowsScreen.chart({
+  offers: { complete: any, add: any },
   states: {
     rows: { items: () => [] },
     // @ts-expect-error a copy state shows no query
@@ -1324,6 +1337,7 @@ screen({
   initial: "list",
   states: { list: {}, closed: { type: "final" } },
 }).chart({
+  offers: { close: any },
   // @ts-expect-error an expression outside the states reads no state
   resolve: ({ active }) => ({ isClosed: active.closed }),
   states: { list: { on: { close: [{ target: "closed" }] } } },

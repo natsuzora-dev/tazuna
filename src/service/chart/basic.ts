@@ -53,8 +53,8 @@ interface ChartState {
   /** The activities in the order calls, sends, shows, opens. */
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
-  /** The controls that this state declares offers for. */
-  readonly offers: readonly string[];
+  /** The offers that this state declares, by control. */
+  readonly offers: StateStructure["offers"];
 }
 
 /** An executable chart. `tree` is the chart's structure, which the syntax tree functions read. */
@@ -72,8 +72,8 @@ export interface Chart {
   readonly screen: boolean;
   /** Whether another screen's opens opens the chart. */
   readonly opened: boolean;
-  /** The controls that the chart itself declares offers for. */
-  readonly offers: readonly string[];
+  /** The offers that the chart itself declares, by control. */
+  readonly offers: StateStructure["offers"];
   readonly controls: readonly Control[];
 }
 

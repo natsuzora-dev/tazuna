@@ -757,7 +757,7 @@ export class SpecFunctions implements Functions {
       scope.state === null
         ? named.definition.offers?.[control]
         : this.node(scope.machine, scope.state)?.offers?.[control];
-    const given = attempt(() => f?.(this.args(scope, records, access) as never) ?? []);
+    const given = attempt(() => (typeof f === "function" ? f(this.args(scope, records, access) as never) : []));
     if (given instanceof Failed) return given;
     const payloads = bagValues(given) ?? (given as readonly unknown[]);
     const row = strictObjectOf(named.definition.controls?.[control]?.payload ?? {});

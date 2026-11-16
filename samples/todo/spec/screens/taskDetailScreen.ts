@@ -1,4 +1,4 @@
-import { datetime } from "@natsuzora-dev/tazuna";
+import { any, datetime } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -49,6 +49,11 @@ export const taskDetailScreen = screen({
 }).chart({
   initialContext: ({ input }) => ({ newTitle: input.placeholderTitle }),
   offers: {
+    rename: any,
+    dueToggle: any,
+    dueChoose: any,
+    delete: any,
+    close: any,
     complete: ({ shown }) => (shown.taskDetail?.task?.isCompleted === false ? [{}] : []),
     reopen: ({ shown }) => (shown.taskDetail?.task?.isCompleted === true ? [{}] : []),
     dueClear: ({ shown }) => (shown.taskDetail?.task?.dueAt != null ? [{}] : []),

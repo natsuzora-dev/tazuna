@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { screen, taskDropped } from "./todo.ts";
 
 export const pickScreen = screen({
@@ -7,6 +8,7 @@ export const pickScreen = screen({
   initial: "picking",
   states: { picking: {}, picked: { type: "final" } },
 }).chart({
+  offers: { pick: any },
   states: { picking: { on: { pick: [{ target: "picked" }], taskDropped: [{ target: "picked" }] } } },
 });
 
@@ -18,6 +20,7 @@ export const homeScreen = screen({
   initial: "home",
   states: { home: {}, picking: {} },
 }).chart({
+  offers: { openPick: any },
   states: {
     home: { on: { openPick: [{ target: "picking" }] } },
     picking: {

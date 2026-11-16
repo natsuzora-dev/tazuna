@@ -1,4 +1,4 @@
-import { entity, ref, service } from "@natsuzora-dev/tazuna";
+import { any, entity, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 
@@ -14,6 +14,7 @@ export const noteScreen = screen({
   initial: "list",
   states: { list: {}, detail: {} },
 }).chart({
+  offers: { draft: any, open: any },
   states: {
     list: {
       on: {

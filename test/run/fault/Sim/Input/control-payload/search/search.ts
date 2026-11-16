@@ -1,4 +1,4 @@
-import { service } from "@natsuzora-dev/tazuna";
+import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { screen } = service({ description: "Search the tasks" });
@@ -18,4 +18,4 @@ export const searchScreen = screen({
   },
   initial: "searching",
   states: { searching: {} },
-}).chart({ states: { searching: { on: { search: [] } } } });
+}).chart({ offers: { search: any }, states: { searching: { on: { search: [] } } } });

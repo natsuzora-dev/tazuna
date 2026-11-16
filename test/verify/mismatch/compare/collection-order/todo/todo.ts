@@ -1,4 +1,4 @@
-import { bag, datetime, emit, service, set, sortedBy } from "@natsuzora-dev/tazuna";
+import { any, bag, datetime, emit, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, query, screen, event } = service({ description: "Keep tasks" });
@@ -102,4 +102,7 @@ export const tagScreen = screen({
   controls: { pick: { label: "Pick", payload: { tags: bag(z.string()) } } },
   initial: "picking",
   states: { picking: {} },
-}).chart({ states: { picking: { on: { pick: [{ assign: { tags: ({ payload }) => payload.tags } }] } } } });
+}).chart({
+  offers: { pick: any },
+  states: { picking: { on: { pick: [{ assign: { tags: ({ payload }) => payload.tags } }] } } },
+});

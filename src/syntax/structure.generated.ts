@@ -57,7 +57,7 @@ const state = z.object({
   kind: z.enum(["atomic", "compound", "parallel", "final", "history", "map"]),
   initial: z.string().nullable(),
   children: z.array(z.string()),
-  offers: z.array(z.string()),
+  offers: z.record(z.string(), z.enum(["any", "listed"])),
   /** The activities, in the order calls, sends, shows, opens. */
   activities: z.array(activity),
   transitions: z.array(transition),
@@ -73,7 +73,8 @@ const chartFields = z.object({
   requires: z.array(z.string()),
   ensures: z.array(z.string()),
   on: z.array(transition),
-  offers: z.array(z.string()),
+  /** The chart's own offers, which name every control. */
+  offers: z.record(z.string(), z.enum(["any", "listed"])),
   /** The states, in document order. */
   states: z.array(state),
   /** The payload schema of each control, or null for a control without a payload. */

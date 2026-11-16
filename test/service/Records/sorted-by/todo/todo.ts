@@ -1,4 +1,4 @@
-import { bag, date, datetime, emit, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
+import { any, bag, date, datetime, emit, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, event, screen } = service({ description: "Keep tasks" });
@@ -79,7 +79,11 @@ export const pickScreen = screen({
   initial: "picking",
   states: { picking: {}, done: { type: "final" } },
   ensures: { isSortedOutput: ({ output }) => isSorted(output.entries) },
-}).chart({ resolve: () => ({ entries: unsorted() }), states: { picking: { on: { finish: [{ target: "done" }] } } } });
+}).chart({
+  offers: { finish: any },
+  resolve: () => ({ entries: unsorted() }),
+  states: { picking: { on: { finish: [{ target: "done" }] } } },
+});
 
 export const planScreen = screen({
   description: "A screen that lists plans",
@@ -90,6 +94,7 @@ export const planScreen = screen({
   states: { planning: {}, picking: {} },
   invariants: { isSortedContext: ({ context }) => isSorted(context.entries) },
 }).chart({
+  offers: { fill: any, open: any },
   states: {
     planning: { on: { fill: [{ assign: { entries: unsorted } }], open: [{ target: "picking" }] } },
     picking: {

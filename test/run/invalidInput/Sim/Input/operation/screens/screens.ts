@@ -1,4 +1,4 @@
-import { service } from "@natsuzora-dev/tazuna";
+import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { screen } = service({ description: "Show the tasks" });
@@ -8,7 +8,7 @@ export const confirmDialog = screen({
   controls: { cancel: { label: "Cancel" } },
   initial: "asking",
   states: { asking: {}, closed: { type: "final" } },
-}).chart({ states: { asking: { on: { cancel: [{ target: "closed" }] } } } });
+}).chart({ offers: { cancel: any }, states: { asking: { on: { cancel: [{ target: "closed" }] } } } });
 
 export const listScreen = screen({
   description: "A list of two tasks",
@@ -21,7 +21,7 @@ export const listScreen = screen({
   initial: "listing",
   states: { listing: {}, confirming: {} },
 }).chart({
-  offers: { pick: () => [{ taskId: "task-1" }, { taskId: "task-2" }] },
+  offers: { clear: any, pick: () => [{ taskId: "task-1" }, { taskId: "task-2" }] },
   states: {
     listing: {
       on: {

@@ -71,6 +71,14 @@ nor its descendant, the value does not change the domain (domainDepth_outside_so
 -/
 def Transition.reenters (t : Transition) : Bool := t.reenter == some true
 
+/-- What an offers entry gives its control: every payload that matches the schema (`any`), or what its function lists. -/
+inductive Offer where
+  | any
+  | listed
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Offer
+
 structure State where
   name : String
   /-- The names from a child of the root down to the state itself. -/
@@ -80,7 +88,7 @@ structure State where
   kind : StateKind
   initial : Option String
   children : List String
-  offers : List String
+  offers : List (String × Offer)
   /-- The activities, in the order calls, sends, shows, opens. -/
   activities : List Activity
   transitions : List Transition
@@ -102,7 +110,8 @@ structure ChartFields where
   «requires» : List String
   ensures : List String
   on : List Transition
-  offers : List String
+  /-- The chart's own offers, which name every control. -/
+  offers : List (String × Offer)
   /-- The states, in document order. -/
   states : List State
   /-- The payload schema of each control, or null for a control without a payload. -/

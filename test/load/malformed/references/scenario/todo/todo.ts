@@ -1,4 +1,4 @@
-import { at, cannotOperate, emit, entity, scenario, send, service } from "@natsuzora-dev/tazuna";
+import { any, at, cannotOperate, emit, entity, scenario, send, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string() }, key: "id" });
@@ -20,7 +20,7 @@ const adder = screen({
   controls: { cancel: { label: "Cancel" } },
   initial: "asking",
   states: { asking: {}, closed: { type: "final" } },
-}).chart({ states: { asking: { on: { cancel: [{ target: "closed" }] } } } });
+}).chart({ offers: { cancel: any }, states: { asking: { on: { cancel: [{ target: "closed" }] } } } });
 
 export const addThenCancel = scenario("Add a task and cancel the dialog, both of which no export names", [
   at("2026-10-25T09:00:00+09:00"),

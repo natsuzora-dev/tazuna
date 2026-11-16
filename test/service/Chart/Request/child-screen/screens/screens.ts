@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -9,6 +10,7 @@ export const taskListScreen = screen({
   initial: "showing",
   states: { showing: {}, closed: { type: "final" } },
 }).chart({
+  offers: { close: any },
   states: {
     showing: { on: { close: [{ target: "closed" }] }, shows: { tasks: { input: () => ({ filter: "open" }) } } },
   },
@@ -19,7 +21,7 @@ export const helpPanel = screen({
   controls: { closeHelp: { label: "Close help" } },
   initial: "showing",
   states: { showing: {}, closed: { type: "final" } },
-}).chart({ states: { showing: { on: { closeHelp: [{ target: "closed" }] } } } });
+}).chart({ offers: { closeHelp: any }, states: { showing: { on: { closeHelp: [{ target: "closed" }] } } } });
 
 export const homeScreen = screen({
   description: "A home screen that shows the task count and opens the task list for one minute or the help",
@@ -34,6 +36,7 @@ export const homeScreen = screen({
   initial: "open",
   states: { open: { initial: "home", states: { home: {}, listing: {}, helping: {} } } },
 }).chart({
+  offers: { openList: any, openHelp: any, countAll: any },
   states: {
     open: {
       on: { countAll: [{ assign: { filter: () => "all" } }] },

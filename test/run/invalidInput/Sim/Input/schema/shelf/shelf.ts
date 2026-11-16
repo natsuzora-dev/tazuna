@@ -1,4 +1,4 @@
-import { service, set } from "@natsuzora-dev/tazuna";
+import { any, service, set } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { catalog } from "../catalog/contract.ts";
 
@@ -19,4 +19,7 @@ export const shelfScreen = screen({
   controls: { pick: { label: "Pick", payload: { names: set(z.string()) } } },
   initial: "picking",
   states: { picking: {} },
-}).chart({ states: { picking: { on: { pick: [{ assign: { picked: ({ payload }) => payload.names } }] } } } });
+}).chart({
+  offers: { pick: any },
+  states: { picking: { on: { pick: [{ assign: { picked: ({ payload }) => payload.names } }] } } },
+});

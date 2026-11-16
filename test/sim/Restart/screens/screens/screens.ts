@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -7,7 +8,10 @@ export const taskListScreen = screen({
   controls: { close: { label: "Close" } },
   initial: "showing",
   states: { showing: {}, closed: { type: "final" } },
-}).chart({ states: { showing: { on: { close: [{ target: "closed" }] }, shows: { tasks: {} } } } });
+}).chart({
+  offers: { close: any },
+  states: { showing: { on: { close: [{ target: "closed" }] }, shows: { tasks: {} } } },
+});
 
 export const homeScreen = screen({
   description: "A home screen that opens the task list",
@@ -16,6 +20,7 @@ export const homeScreen = screen({
   initial: "home",
   states: { home: {}, listing: {} },
 }).chart({
+  offers: { openList: any },
   states: {
     home: { on: { openList: [{ target: "listing" }] } },
     listing: { opens: { taskList: { modal: true, onDone: [{ target: "home" }] } } },

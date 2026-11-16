@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -14,6 +15,7 @@ export const listScreen = screen({
   initial: "open",
   states: { open: { initial: "loading", states: { loading: {}, ready: {}, peeking: {} } } },
 }).chart({
+  offers: { showAll: any, reload: any, peek: any },
   on: { reload: [{ target: "open" }] },
   states: {
     open: { shows: { tasks: { input: ({ context }) => ({ filter: context.filter }) }, taskCount: {} } },

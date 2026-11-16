@@ -58,8 +58,8 @@ structure ChartState where
   /-- The activities in the order calls, sends, shows, opens. -/
   activities : List Activity
   transitions : List Transition
-  /-- The controls that this state declares offers for. -/
-  offers : List String := []
+  /-- The offers that this state declares, by control. -/
+  offers : List (String × Syntax.Offer) := []
 deriving Repr, Inhabited
 
 def ChartState.shape (st : ChartState) : Shape :=
@@ -80,8 +80,8 @@ structure Chart where
   screen : Bool := false
   /-- Whether another screen's opens opens the chart. -/
   opened : Bool := false
-  /-- The controls that the chart itself declares offers for. -/
-  offers : List String := []
+  /-- The offers that the chart itself declares, by control. -/
+  offers : List (String × Syntax.Offer) := []
   controls : List Control := []
 deriving Repr
 

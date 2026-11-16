@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -13,6 +14,7 @@ export const dayScreen = screen({
   initial: "idle",
   states: { idle: {}, checking: {}, adding: {} },
 }).chart({
+  offers: { check: any },
   states: {
     idle: { on: { check: [{ target: "checking" }] } },
     checking: {

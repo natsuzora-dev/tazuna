@@ -8,6 +8,7 @@ export type { Rejection, RejectionKind, TraceLine } from "./data/trace.generated
 export type { UntimedTraceLine } from "./data/trace.ts";
 export { constants } from "./dsl/constants.ts";
 export type { AnyCommand, AnyQuery } from "./dsl/definition.ts";
+export { any } from "./dsl/definition.ts";
 export type { Immutable, RowOf } from "./dsl/entity.ts";
 export { entity, ref, singleEntity } from "./dsl/entity.ts";
 export { emit } from "./dsl/event.ts";

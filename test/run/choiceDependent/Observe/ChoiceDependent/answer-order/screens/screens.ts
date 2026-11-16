@@ -1,3 +1,4 @@
+import { any } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { notes } from "../notes/contract.ts";
 import { todo } from "../todo/contract.ts";
@@ -25,6 +26,7 @@ export const saveScreen = screen({
     listing: {},
   },
 }).chart({
+  offers: { save: any, back: any, rename: any },
   states: {
     editing: { on: { save: [{ target: "saving" }], rename: [] } },
     saving: { on: { rename: [] }, onDone: [{ target: "listing" }] },

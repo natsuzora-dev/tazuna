@@ -1,4 +1,4 @@
-import { service } from "@natsuzora-dev/tazuna";
+import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 
@@ -12,6 +12,7 @@ export const taskListScreen = screen({
   initial: "list",
   states: { list: {}, closed: { type: "final" } },
 }).chart({
+  offers: { filter: any, close: any },
   states: {
     list: {
       on: { filter: [{ assign: { prefix: ({ payload }) => payload.prefix } }], close: [{ target: "closed" }] },

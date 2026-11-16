@@ -46,7 +46,7 @@ theorem nonmodal_child_lets_parent (screen : String) (pre rest : List String) (p
 theorem accepts_iff (screen control : String) (payload : Value) (top : Instance) :
     acceptsOperation fs st s screen control payload = .ok (.ok top) ↔
       s.accepting screen = .ok top ∧ ∃ applied, offered fs st s top control payload = .ok applied ∧
-        (applied = [] ∨ applied.any (·.2.contains payload) = true) := by
+        applied.any (·.2.admits payload) = true := by
   unfold acceptsOperation
   constructor
   · intro h
@@ -56,23 +56,14 @@ theorem accepts_iff (screen control : String) (payload : Value) (top : Instance)
       simp only [id_bind] at h
       split at h
       · cases h
-      · rename_i ho
-        cases h
-        exact ⟨ha, [], ho, Or.inl rfl⟩
-      · rename_i applied hn ho
+      · rename_i applied ho
         split at h
         · rename_i hl
           cases h
-          exact ⟨ha, applied, ho, Or.inr hl⟩
+          exact ⟨ha, applied, ho, hl⟩
         · cases h
   · rintro ⟨ha, applied, ho, hl⟩
-    simp only [ha, id_bind, ho]
-    rcases hl with rfl | hl
-    · rfl
-    · cases applied with
-      | nil => simp at hl
-      | cons x xs =>
-        simp only [hl, ↓reduceIte, id_pure]
+    simp only [ha, id_bind, ho, hl, ↓reduceIte, id_pure]
 
 theorem foldlM_zip {α β ε : Type} (f : Except ε (List β) → α → Id (Except ε (List β))) (R : β → α → Prop)
     (herr : ∀ v x, f (.error v) x = .error v) (hok : ∀ done x r, f (.ok done) x = .ok r → ∃ p, r = done ++ [p] ∧ R p x) :
