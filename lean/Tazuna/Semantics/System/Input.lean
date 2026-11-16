@@ -69,13 +69,14 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
 
 /--
-The request whose answer the mock input at index `k` gave. A checked scenario names only a mock input before the event
-(Illegal.resultOfUnplaced), so the request has been placed. It is none when that mock reported missingWaitingRequest or
-missingStaleRequest, and after reporting that the request cannot have the event as its result (resultOfMismatch).
+The request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input before
+the event (Illegal.resultOfUnplaced), so the request has been placed. It is none when that mock reported
+missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its result
+(resultOfMismatch).
 -/
-def resultRequest (st : Service) (s : State) (name : String) (k : Nat) : State × Option Pending :=
-  match s.mocks.lookup k with
-  | some (some (p, answer)) =>
+def resultRequest (st : Service) (s : State) (name handle : String) : State × Option Pending :=
+  match s.mocks.lookup handle with
+  | some (p, answer) =>
     match st.«structure».resultOfMismatch p.activity.ref (answer matches .accepted _) (st.refOf name) with
     | some mismatch => (s.report (resultOfFinding (st.refOf name) p.id p.activity.ref mismatch), none)
     | none => (s, some p)
@@ -103,8 +104,8 @@ def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   let (s, step) := s.newMessage.newStep none
   message st fs s { tasks := reactions st s [{ event := name, payload }] false step }
 
-def withResultOf (st : Service) (s : State) (name : String) : Option Nat → State × Option Pending
-  | some k => resultRequest st s name k
+def withResultOf (st : Service) (s : State) (name : String) : Option String → State × Option Pending
+  | some handle => resultRequest st s name handle
   | none => (s, none)
 
 /--
@@ -113,7 +114,7 @@ payload and the event is not processed; a different name or payload is reported 
 processed, so due deadlines and changed subscription answers are still sent.
 -/
 def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (raw : Value) (resultOf : Option Nat) (first : Delivery) : m State := do
+    (raw : Value) (resultOf : Option String) (first : Delivery) : m State := do
   match ← fs.canonical (.payload name) raw with
   | .error e =>
     pure (s.report (.fault (issueViolation st (st.refOf name) e)))
@@ -125,7 +126,7 @@ def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (raw : Value) (resultOf : Option Nat) : m State := do
+    (raw : Value) (resultOf : Option String) : m State := do
   if name ∈ st.received then
     match s.eventDeliveries.find? (s.lineId givenId name) with
     | some first => redeliver st fs s name givenId raw resultOf first
@@ -238,16 +239,16 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
                      recorded := p.activity.keyword == "sends" }
 
 def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sender name : String) (answer : Answer)
-    (choice : Option Choice) : m State := do
+    (choice : Option Choice) (handle : Option String) : m State := do
   match ← canonicalChoice st fs name choice with
   | .error fault => pure (s.report (.fault fault))
   | .ok canonical =>
   match s.answering sender name canonical with
-  | none => pure ({ s with mocks := s.mocks ++ [(s.inputCount, none)] }.report (.invalidInput
+  | none => pure (s.report (.invalidInput
       ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest) (st.refOf sender)
         (st.refOf name))))
   | some p => do
-    let s := { s with mocks := s.mocks ++ [(s.inputCount, some (p, answer))] }
+    let s := { s with mocks := (handle.map (·, p, answer)).toList ++ s.mocks }
     match ← checkAnswer st fs p answer with
     | .error e =>
       pure (s.report (.fault (issueViolation st p.activity.ref e)))

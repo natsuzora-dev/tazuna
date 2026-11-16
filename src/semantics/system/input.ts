@@ -109,13 +109,13 @@ export function endSubscription(r: Processing, id: string): void {
 }
 
 /**
- * Returns the request whose answer the mock input at position `k` gave. A checked scenario names only a mock input
+ * Returns the request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input
  * before the event (Illegal.resultOfUnplaced), so that mock has been placed. Returns undefined when that mock reported
  * missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its
  * result (resultOfMismatch).
  */
-function resultRequest(r: Processing, name: string, k: number): Pending | undefined {
-  const answered = r.state.mocks.get(k)?.answered;
+function resultRequest(r: Processing, name: string, handle: string): Pending | undefined {
+  const answered = r.state.mocks.get(handle);
   if (answered === undefined) return undefined;
   const { request, answer } = answered;
   const target = activityRef(request.activity);
@@ -154,7 +154,7 @@ function redeliver(
   payload: unknown,
   given: { readonly id?: string },
   first: Delivery,
-  resultOf?: number,
+  resultOf?: string,
 ): void {
   const s = r.state;
   const event = refOf(r.st, name);
@@ -180,7 +180,7 @@ export function receive(
   name: string,
   payload: unknown,
   given: { readonly id?: string },
-  resultOf?: number,
+  resultOf?: string,
 ): void {
   const s = r.state;
   if (!r.st.received.includes(name))
@@ -371,7 +371,7 @@ export function mock(r: Processing, value: Mock): Pending | undefined {
   const s = r.state;
   const { sender, target: name } = value;
   const p = answering(s, sender, name, canonicalChoice(r, name, value.choice));
-  s.mocks.set(s.inputCount, p === undefined ? {} : { answered: { request: p, answer: value.answer } });
+  if (p !== undefined && value.handle !== undefined) s.mocks.set(value.handle, { request: p, answer: value.answer });
   if (p === undefined)
     return report(s, {
       kind: choosesStale(value.choice) ? "InvalidInput.missingStaleRequest" : "InvalidInput.missingWaitingRequest",

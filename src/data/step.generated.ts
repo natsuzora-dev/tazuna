@@ -127,14 +127,14 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
   }),
-  /** An event whose `resultOf` is the index, from 0, of the answer input to the request that the event results from. */
+  /** An event whose `resultOf` is the handle of the answer input to the request that the event results from. */
   z.object({
     time: z.iso.datetime({ offset: true }),
     type: z.literal("event"),
     id: z.string().exactOptional(),
     name: z.string(),
     payload: z.unknown(),
-    resultOf: z.int().nonnegative().exactOptional(),
+    resultOf: z.string().exactOptional(),
     deadlineOrder: z.array(deadlineId).exactOptional(),
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
@@ -173,7 +173,7 @@ const step = z.discriminatedUnion("type", [
   }),
   /**
    * An answer to the request from `sender` to `target` that `choice` chooses, or without `choice`, to the longest-waiting
-   * request that is not stale.
+   * request that is not stale. `handle` is the name by which a later event's `resultOf` names the answer.
    */
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -182,6 +182,7 @@ const step = z.discriminatedUnion("type", [
     target: z.string(),
     answer: answer,
     choice: choice.exactOptional(),
+    handle: z.string().exactOptional(),
     deadlineOrder: z.array(deadlineId).exactOptional(),
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
@@ -194,8 +195,8 @@ const step = z.discriminatedUnion("type", [
 
 /**
  * An input of a run in JSON: the fields of its `in` line, with trace names in place of definitions and `id` only when
- * given, except that an answer has `choice` instead of `to` and an event's `resultOf` is the position of the answer input
- * instead of a line id. It arrives at `time`, after the deadlines due by then; `deadlineOrder` is the `deadlineOrder` of
- * its `in` line.
+ * given, except that an answer has `choice` instead of `to` and may have a `handle`, and an event's `resultOf` is the
+ * handle of the answer input instead of a request id. It arrives at `time`, after the deadlines due by then;
+ * `deadlineOrder` is the `deadlineOrder` of its `in` line.
  */
 export type Step = z.infer<typeof step>;

@@ -18,7 +18,7 @@ def arrive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State)
   | .event id name raw resultOf => receive st fs s name id raw resultOf
   | .operation screen control payload => operate st fs s screen control payload true
   | .unacceptedOperation screen control payload => operate st fs s screen control payload false
-  | .answer sender target answer choice => mock st fs s sender target answer choice
+  | .answer sender target answer choice handle => mock st fs s sender target answer choice handle
 
 /-- The state after `input`, which arrives unless the advance halts or a value of it is an uncreated key. -/
 def step [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (input : Step) : m State :=
@@ -30,7 +30,7 @@ def step [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     match t.uncreatedKey st input.body with
     | some (key, entity) => pure (t.report (.invalidInput (.uncreatedKey key (st.ref entity))))
     | none => arrive st fs t input
-  pure { t.checkOrderUsed with inputCount := s.inputCount + 1 }
+  pure t.checkOrderUsed
 
 abbrev Stepper (m : Type → Type) := State → Step → m State
 

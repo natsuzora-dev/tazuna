@@ -182,10 +182,8 @@ structure State where
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []
   results : List Accepted := []
-  /-- The number of inputs taken before the current one, that is, the index (from 0) of the current input. -/
-  inputCount : Nat := 0
-  /-- The processed mocks: input index, the request answered, and the answer. -/
-  mocks : List (Nat × Option (Pending × Answer)) := []
+  /-- The processed mocks that have a handle, latest first: the handle, the request answered, and the answer. -/
+  mocks : List (String × Pending × Answer) := []
   violations : List Violation := []
   /-- The halting violation; after it, no input changes the state. -/
   halted : Option Violation := none

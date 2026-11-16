@@ -81,18 +81,14 @@ const mapOutput = (answer: Answer, f: (v: unknown) => unknown): Answer =>
   "output" in answer ? ({ ...answer, output: f(answer.output) } as Answer) : answer;
 
 /** Lean's Step.Body.forPeer. */
-function forPeer(keys: Bindings, index: (r: number) => number, step: Step): Step {
+function forPeer(keys: Bindings, step: Step): Step {
   switch (step.type) {
     case "command":
     case "query":
     case "subscribe":
       return { ...step, input: rename(keys, step.input) };
     case "event":
-      return {
-        ...step,
-        payload: rename(keys, step.payload),
-        ...(step.resultOf === undefined ? {} : { resultOf: index(step.resultOf) }),
-      };
+      return { ...step, payload: rename(keys, step.payload) };
     case "operation":
     case "unacceptedOperation":
       return { ...step, payload: rename(keys, step.payload) };
@@ -120,8 +116,6 @@ export type Origin =
   | { readonly type: "given" }
   | { readonly type: "line"; readonly line: number }
   | { readonly type: "elsewhere"; readonly index: number };
-
-const sameOrigin = (a: Origin, b: Origin) => canonicalJson(a) === canonicalJson(b);
 
 const instant = (time: string) => Temporal.Instant.from(time);
 const atOrBefore = (a: string, b: string) => Temporal.Instant.compare(instant(a), instant(b)) <= 0;
@@ -411,16 +405,11 @@ export function peerInputs(
   const forward = (n: number): Bindings =>
     new Map([...[...(bindings[Math.min(n, aLines.length)] as Bindings)].map(([k, v]) => [v, k] as const), ...keys]);
   const placed = peerPlaced(service, peer, received, elsewhere, aLines, forward);
-  const index = (r: number) => {
-    if (r < state.length) return r;
-    const found = placed.findIndex((p) => sameOrigin(p.origin, { type: "elsewhere", index: r - state.length }));
-    return state.length + (found < 0 ? 0 : found);
-  };
   return [
     ...state.map((step) => ({ step, origin: { type: "given" } as Origin })),
     ...placed.map(({ step, origin }) =>
       origin.type === "elsewhere"
-        ? { step: forPeer(forward(arrival(elsewhere, origin)), index, step), origin }
+        ? { step: forPeer(forward(arrival(elsewhere, origin)), step), origin }
         : { step, origin },
     ),
   ];

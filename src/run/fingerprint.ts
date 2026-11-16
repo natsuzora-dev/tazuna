@@ -67,7 +67,7 @@ function requestsFingerprint(r: Processing): unknown {
  * write counts of values, which only decide whether a cached evaluation is reused. The sets of violations already
  * reported are left out too: they only stop a run from reporting a violation twice. Paths compared by fingerprint share
  * the scenario, and a later input can name only a mock input of the scenario, so the answered mocks are compared as a
- * set, without their input indexes and the input count. The copies of a map state follow their owner, in the order of
+ * set, without their handles. The copies of a map state follow their owner, in the order of
  * their keys; a closed copy that no map state lists is left out, since the run reads from it only what its resource
  * names (owner, map and key) and that it is closed. The deadlines stay in entry order, which is the order of the due
  * deadlines.
@@ -105,11 +105,7 @@ export function fingerprint(r: Processing): string {
     eventDeliveries: [...s.eventDeliveries]
       .toSorted(byKey)
       .map(([id, { event, payload }]) => [id, event, JSON.stringify(payload)]),
-    mocks: [...s.mocks.values()]
-      .flatMap(({ answered }) =>
-        answered === undefined ? [] : [canonicalJson([answered.request.id, answered.answer])],
-      )
-      .toSorted(),
+    mocks: [...s.mocks.values()].map(({ request, answer }) => canonicalJson([request.id, answer])).toSorted(),
     started: s.started,
   });
 }

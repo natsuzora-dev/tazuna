@@ -26,15 +26,15 @@ inductive Step.Body where
   | query (id : Option String) (name : String) (input : Value)
   | subscribe (id : Option String) (name : String) (input : Value)
   | unsubscribe (to : String)
-  /-- An event whose `resultOf` is the index, from 0, of the answer input to the request that the event results from. -/
-  | event (id : Option String) (name : String) (payload : Value) (resultOf : Option Nat)
+  /-- An event whose `resultOf` is the handle of the answer input to the request that the event results from. -/
+  | event (id : Option String) (name : String) (payload : Value) (resultOf : Option String)
   | operation (screen : String) (control : String) (payload : Value)
   | unacceptedOperation (screen : String) (control : String) (payload : Value)
   /--
   An answer to the request from `sender` to `target` that `choice` chooses, or without `choice`, to the longest-waiting
-  request that is not stale.
+  request that is not stale. `handle` is the name by which a later event's `resultOf` names the answer.
   -/
-  | answer (sender : String) (target : String) (answer : Answer) (choice : Option Choice)
+  | answer (sender : String) (target : String) (answer : Answer) (choice : Option Choice) (handle : Option String)
 deriving Repr, Inhabited
 
 derive_wire Step.Body tag "type" skip_serializing_none
@@ -43,14 +43,14 @@ derive_wire Step.Body tag "type" skip_serializing_none
 def Step.Body.values : Step.Body → List Value
   | .command _ _ input | .query _ _ input | .subscribe _ _ input => [input]
   | .event _ _ payload _ | .operation _ _ payload | .unacceptedOperation _ _ payload => [payload]
-  | .answer _ _ a _ => a.output?.toList
+  | .answer _ _ a _ _ => a.output?.toList
   | .time | .restart | .unsubscribe _ => []
 
 /--
 An input of a run in JSON: the fields of its `in` line, with trace names in place of definitions and `id` only when
-given, except that an answer has `choice` instead of `to` and an event's `resultOf` is the position of the answer input
-instead of a line id. It arrives at `time`, after the deadlines due by then; `deadlineOrder` is the `deadlineOrder` of
-its `in` line.
+given, except that an answer has `choice` instead of `to` and may have a `handle`, and an event's `resultOf` is the
+handle of the answer input instead of a request id. It arrives at `time`, after the deadlines due by then;
+`deadlineOrder` is the `deadlineOrder` of its `in` line.
 -/
 structure Step where
   time : DateTime

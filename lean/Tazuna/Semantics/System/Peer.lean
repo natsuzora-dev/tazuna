@@ -75,18 +75,18 @@ def _root_.Tazuna.Data.Answer.mapOutput (f : Value → Value) : Answer → Answe
   | .fulfilled output => .fulfilled (f output)
   | .rejected r => .rejected r
 
-/-- The body with each string of its values that `keys` binds replaced, and each resultOf moved by `index`. -/
-def Step.Body.forPeer (keys : Bindings) (index : Nat → Nat) : Step.Body → Step.Body
+/-- The body with each string of its values that `keys` binds replaced. -/
+def Step.Body.forPeer (keys : Bindings) : Step.Body → Step.Body
   | .command id name input => .command id name (keys.rename input)
   | .query id name input => .query id name (keys.rename input)
   | .subscribe id name input => .subscribe id name (keys.rename input)
-  | .event id name payload resultOf => .event id name (keys.rename payload) (resultOf.map index)
+  | .event id name payload resultOf => .event id name (keys.rename payload) resultOf
   | .operation screen control payload => .operation screen control (keys.rename payload)
   | .unacceptedOperation screen control payload => .unacceptedOperation screen control (keys.rename payload)
-  | .answer sender target a choice =>
+  | .answer sender target a choice handle =>
     .answer sender target (a.mapOutput keys.rename) (choice.map fun
       | .mock input stale => .mock (input.map keys.rename) stale
-      | c => c)
+      | c => c) handle
   | b => b
 
 /--
@@ -338,20 +338,17 @@ def peerForward (normal : String → Value → CValue) (service peer : String) (
   peerKeys service aLines ++ (peerBindings normal service peer arrivals aLines bLines n).map fun (k, v) => (v, k)
 
 /--
-The peer's inputs, each with its origin: those of the given state `state`, then those of peerPlaced. The resultOf of
-an elsewhere input indexes `state ++ elsewhere`. The run's lines and the elsewhere inputs take the peer's
-strings (peerForward) of the place where they arrive. `bLines` is the peer's run of these inputs.
+The peer's inputs, each with its origin: those of the given state `state`, then those of peerPlaced. The run's lines and
+the elsewhere inputs take the peer's strings (peerForward) of the place where they arrive. `bLines` is the peer's run of
+these inputs.
 -/
 def peerInputs (normal : String → Value → CValue) (service peer : String) (received : List String) (state : List Step)
     (elsewhere : List (Nat × Step)) (aLines bLines : List TraceLine) : List (Step × Origin) :=
   let forward := peerForward normal service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines
   let placed := peerPlaced service peer received elsewhere aLines forward
-  let index (r : Nat) : Nat :=
-    if r < state.length then r
-    else state.length + (placed.findIdx? (·.2 == Origin.elsewhere (r - state.length))).getD 0
   state.map (·, Origin.given) ++ placed.map fun (s, o) =>
     match o with
-    | .elsewhere _ => ({ s with body := s.body.forPeer (forward (o.arrival elsewhere)) index }, o)
+    | .elsewhere _ => ({ s with body := s.body.forPeer (forward (o.arrival elsewhere)) }, o)
     | _ => (s, o)
 
 /--

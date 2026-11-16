@@ -207,14 +207,9 @@ function alikeTo(s: State, request: Pending): Pending[] {
   ];
 }
 
-/** Returns the step of `input`, whose resultOf names one of `inputs` by its position there. */
-function stepOf(spec: Spec, service: string, input: Input, inputs: readonly Input[]): Step {
+/** Returns the step of `input`. */
+function stepOf(spec: Spec, service: string, input: Input): Step {
   const name = (d: unknown) => traceName(spec, d, service);
-  const index = (resultOf: Input) => {
-    const found = inputs.indexOf(resultOf);
-    if (found < 0) throw new Error("resultOf names an input outside the inputs");
-    return found;
-  };
   function body(): Step {
     const { time } = input;
     switch (input.type) {
@@ -233,7 +228,7 @@ function stepOf(spec: Spec, service: string, input: Input, inputs: readonly Inpu
           ...given(input),
           name: name(input.event),
           payload: input.payload,
-          ...(input.resultOf === undefined ? {} : { resultOf: index(input.resultOf) }),
+          ...(input.resultOf?.handle === undefined ? {} : { resultOf: input.resultOf.handle }),
         };
       case "operation":
       case "unacceptedOperation":
@@ -248,6 +243,7 @@ function stepOf(spec: Spec, service: string, input: Input, inputs: readonly Inpu
           target: name(input.target),
           answer: input.answer,
           ...(input.choice === undefined ? {} : { choice: input.choice }),
+          ...(input.handle === undefined ? {} : { handle: input.handle }),
         };
     }
   }
@@ -258,9 +254,10 @@ function stepOf(spec: Spec, service: string, input: Input, inputs: readonly Inpu
   };
 }
 
-/** Returns the inputs of `steps`, as stepsOf would give them back; each resultOf names an input before it. */
+/** Returns the inputs of `steps`, as stepsOf would give them back; each resultOf names the latest answer with its handle. */
 export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): Input[] {
   const inputs: Input[] = [];
+  const handled = new Map<string, Input>();
   const named = <K extends Parameters<typeof definitionOfTraceName>[3]>(name: string, ...kinds: K[]) => {
     const found = definitionOfTraceName(spec, service, name, ...kinds);
     if (found === undefined) throw new Error(`no ${kinds.join(" or ")} ${name} from ${service}`);
@@ -285,9 +282,8 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
         case "unsubscribe":
           return { time, type: "unsubscribe", to: s.to };
         case "event": {
-          const resultOf = s.resultOf === undefined ? undefined : inputs[s.resultOf];
-          if (s.resultOf !== undefined && resultOf?.type !== "answer")
-            throw new Error("resultOf names no answer input");
+          const resultOf = s.resultOf === undefined ? undefined : handled.get(s.resultOf);
+          if (s.resultOf !== undefined && resultOf === undefined) throw new Error("resultOf names no answer handle");
           return {
             time,
             type: "event",
@@ -308,17 +304,20 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
             target: named(s.target, "command", "query"),
             answer: s.answer,
             ...(s.choice === undefined ? {} : { choice: s.choice }),
+            ...(s.handle === undefined ? {} : { handle: s.handle }),
           } as Input;
       }
     };
-    inputs.push({ ...body(), ...scheduled } as Input);
+    const input = { ...body(), ...scheduled } as Input;
+    if (s.type === "answer" && s.handle !== undefined) handled.set(s.handle, input);
+    inputs.push(input);
   }
   return inputs;
 }
 
-/** Returns the steps of `inputs`; each resultOf names an answer input before it. */
+/** Returns the steps of `inputs`. */
 export function stepsOf(spec: Spec, service: string, inputs: readonly Input[]): Step[] {
-  return inputs.map((input, i) => stepOf(spec, service, input, inputs.slice(0, i)));
+  return inputs.map((input) => stepOf(spec, service, input));
 }
 
 /** Two requests to a spec service: `second` was sent while `first` awaited its answer. */
@@ -556,7 +555,7 @@ function feed(execution: Execution, inputs: readonly Input[]): Fed {
   const { processing: r, listener } = execution;
   try {
     for (const input of inputs) {
-      const next = stepOf(listener.spec, r.st.service, input, execution.inputs);
+      const next = stepOf(listener.spec, r.st.service, input);
       execution.inputs.push(input);
       execution.answered.push(step(r, next, (line) => execution.inputLines.push(line)));
       execution.violationCounts.push(r.state.violations.length);

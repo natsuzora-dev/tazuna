@@ -515,12 +515,12 @@ theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload
   · exact Agrees.bind (Agrees.pure _) (fun _ => message_agrees h _ _)
   · exact Agrees.bind (addResult_agrees h _ _ _) (fun _ => message_agrees h _ _)
 
-theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
+theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String)
     (first : Delivery) :
     Agrees (redeliver st fsI s name id raw resultOf first) (redeliver st fs s name id raw resultOf first) := by
   unfold redeliver; agree [h.canonical, message_agrees h]
 
-theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat) :
+theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 
@@ -541,8 +541,9 @@ theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
   dsimp only
   agree [firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
 
-theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice : Option Choice) :
-    Agrees (mock st fsI s sender name answer choice) (mock st fs s sender name answer choice) := by
+theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice : Option Choice)
+    (handle : Option String) :
+    Agrees (mock st fsI s sender name answer choice handle) (mock st fs s sender name answer choice handle) := by
   unfold mock
   agree [canonicalChoice_agrees h, checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 

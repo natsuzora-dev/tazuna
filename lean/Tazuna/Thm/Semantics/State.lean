@@ -19,7 +19,7 @@ structure Fixed where
   records : Records
   now : Time
   started : Bool
-  mocks : List (Nat × Option (Pending × Answer))
+  mocks : List (String × Pending × Answer)
 
 def _root_.Tazuna.Semantics.State.fixed (s : State) : Fixed :=
   ⟨s.commandAnswers, s.records, s.now, s.started, s.mocks⟩

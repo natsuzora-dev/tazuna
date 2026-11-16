@@ -54,7 +54,6 @@ export function clone(r: Processing, functions: Functions, listener: Note & Eval
       created: [...s.created],
       subscriptions: s.subscriptions.clone((subscription) => subscription),
       results: new Map([...s.results].map(([id, a]) => [id, { ...a, events: [...a.events] }])),
-      inputCount: s.inputCount,
       mocks: new Map(s.mocks),
       violations: [...s.violations],
     },

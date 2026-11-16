@@ -22,7 +22,7 @@ theorem arrive_keysDistinct (input : Step) (h : KeysDistinct s.records) :
   · exact receive_keysDistinct _ _ _ _ h
   · exact operate_keysDistinct _ _ _ _ h
   · exact operate_keysDistinct _ _ _ _ h
-  · exact mock_keysDistinct _ _ _ _ h
+  · exact mock_keysDistinct _ _ _ _ _ h
 
 theorem step_keysDistinct (input : Step) (h : KeysDistinct s.records) :
     KeysDistinct (step st fs s input).records := by
@@ -32,9 +32,9 @@ theorem step_keysDistinct (input : Step) (h : KeysDistinct s.records) :
   · simp only [id_bind, id_pure]
     have ha := advance_keysDistinct (st := st) (fs := fs)
       (s := { s with deadlineOrder := input.deadlineOrder.getD [], inputDeadlineOrder := input.deadlineOrder.getD [], stepOrder := input.stepOrder.getD [] }) input h
-    split <;> rw [checkOrderUsed_records]
-    · exact ha
-    · split
+    split
+    · rw [checkOrderUsed_records]; exact ha
+    · split <;> rw [checkOrderUsed_records]
       · simpa using ha
       · exact arrive_keysDistinct _ ha
 
@@ -190,7 +190,7 @@ theorem keys_never_duplicate (inputs : List Step) :
     ((run st fs inputs).records.map fun r => (r.entity, r.key)).Nodup :=
   run_keys_distinct inputs
 
-theorem line_names_accepted_request (name : String) (id : Option String) (raw payload : Value) (k : Nat)
+theorem line_names_accepted_request (name : String) (id : Option String) (raw payload : Value) (k : String)
     (s₁ : State) (p : Pending) (hr : name ∈ st.received)
     (hd : s.eventDeliveries.find? (s.lineId id name) = none)
     (hp : fs.parse (.payload name) raw = .ok (some payload)) (hq : resultRequest st s name k = (s₁, some p)) :
@@ -223,11 +223,11 @@ theorem halting_arrival_stops_run (i : Step) (rest : List Step) (v : Violation) 
     (hv : let s₁ := advance st fs { s with deadlineOrder := i.deadlineOrder.getD [], inputDeadlineOrder := i.deadlineOrder.getD [], stepOrder := i.stepOrder.getD [] } i
       arrive st fs s₁ i = s₁.halt v) :
     runFrom (step st fs) s (i :: rest) =
-      { ((advance st fs { s with deadlineOrder := i.deadlineOrder.getD [], inputDeadlineOrder := i.deadlineOrder.getD [], stepOrder := i.stepOrder.getD [] } i).halt
-          v).checkOrderUsed with inputCount := s.inputCount + 1 } := by
+      ((advance st fs { s with deadlineOrder := i.deadlineOrder.getD [], inputDeadlineOrder := i.deadlineOrder.getD [], stepOrder := i.stepOrder.getD [] } i).halt
+          v).checkOrderUsed := by
   have hs : step st fs s i =
-      { ((advance st fs { s with deadlineOrder := i.deadlineOrder.getD [], inputDeadlineOrder := i.deadlineOrder.getD [], stepOrder := i.stepOrder.getD [] } i).halt
-          v).checkOrderUsed with inputCount := s.inputCount + 1 } := by
+      ((advance st fs { s with deadlineOrder := i.deadlineOrder.getD [], inputDeadlineOrder := i.deadlineOrder.getD [], stepOrder := i.stepOrder.getD [] } i).halt
+          v).checkOrderUsed := by
     rw [step]
     simp only [show s.halted.isSome = false by simp [hh], id_bind, id_pure, ha, Option.isSome_none, Bool.false_eq_true,
       ↓reduceIte, hk]
@@ -242,8 +242,8 @@ theorem other_service_screen_stops_run (screen control : String) (payload : Valu
     (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).uncreatedKey st body = none)
     (hc : st.chart? screen = none) :
     runFrom (step st fs) s (⟨time, body, order, stepOrder⟩ :: rest) =
-      { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).halt
-          (Finding.invalidInput (.unownedTarget (st.refOf screen))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } := by
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).halt
+          (Finding.invalidInput (.unownedTarget (st.refOf screen))).toViolation).checkOrderUsed := by
   rcases hb with rfl | rfl <;>
   exact halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, operate, hc, State.halt, State.report, Finding.halts, InvalidInput.halts])
@@ -255,8 +255,8 @@ theorem unknown_control_stops_run (screen control : String) (payload : Value) (b
     (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).uncreatedKey st body = none)
     (c : Chart) (hc : st.chart? screen = some c) (hn : c.controls.find? (·.name == control) = none) :
     runFrom (step st fs) s (⟨time, body, order, stepOrder⟩ :: rest) =
-      { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).halt
-          (Finding.invalidInput (.unknownControl (st.ref screen) control)).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } := by
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, body, order, stepOrder⟩).halt
+          (Finding.invalidInput (.unknownControl (st.ref screen) control)).toViolation).checkOrderUsed := by
   rcases hb with rfl | rfl <;>
   exact halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, operate, hc, hn, State.halt, State.report, Finding.halts, InvalidInput.halts])
@@ -267,8 +267,8 @@ theorem other_service_command_stops_run (name : String) (id : Option String) (ra
     (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .command id name raw, order, stepOrder⟩).uncreatedKey st (.command id name raw) = none)
     (hc : name ∉ st.commands) :
     runFrom (step st fs) s (⟨time, .command id name raw, order, stepOrder⟩ :: rest) =
-      { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .command id name raw, order, stepOrder⟩).halt
-          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .command id name raw, order, stepOrder⟩).halt
+          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, send, hc, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
@@ -278,8 +278,8 @@ theorem other_service_query_stops_run (name : String) (id : Option String) (raw 
     (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .query id name raw, order, stepOrder⟩).uncreatedKey st (.query id name raw) = none)
     (hq : name ∉ st.queries) :
     runFrom (step st fs) s (⟨time, .query id name raw, order, stepOrder⟩ :: rest) =
-      { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .query id name raw, order, stepOrder⟩).halt
-          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .query id name raw, order, stepOrder⟩).halt
+          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, call, hq, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
@@ -289,19 +289,19 @@ theorem other_service_subscription_stops_run (name : String) (id : Option String
     (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .subscribe id name raw, order, stepOrder⟩).uncreatedKey st (.subscribe id name raw) = none)
     (hq : name ∉ st.queries) :
     runFrom (step st fs) s (⟨time, .subscribe id name raw, order, stepOrder⟩ :: rest) =
-      { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .subscribe id name raw, order, stepOrder⟩).halt
-          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .subscribe id name raw, order, stepOrder⟩).halt
+          (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, subscribe, hq, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
-theorem uncontracted_event_stops_run (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
+theorem uncontracted_event_stops_run (name : String) (id : Option String) (raw : Value) (resultOf : Option String)
     (rest : List Step) (hh : s.halted = none)
     (ha : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .event id name raw resultOf, order, stepOrder⟩).halted = none)
     (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .event id name raw resultOf, order, stepOrder⟩).uncreatedKey st (.event id name raw resultOf) = none)
     (hr : name ∉ st.received) :
     runFrom (step st fs) s (⟨time, .event id name raw resultOf, order, stepOrder⟩ :: rest) =
-      { ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .event id name raw resultOf, order, stepOrder⟩).halt
-          (Finding.invalidInput (.unlistedEvent (st.refOf name))).toViolation).checkOrderUsed with inputCount := s.inputCount + 1 } :=
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [] } ⟨time, .event id name raw resultOf, order, stepOrder⟩).halt
+          (Finding.invalidInput (.unlistedEvent (st.refOf name))).toViolation).checkOrderUsed :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, receive, hr, State.halt, State.report, Finding.halts, InvalidInput.halts])
 

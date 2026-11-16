@@ -410,7 +410,7 @@ theorem mem_peerInputs_given {normal : String → Value → CValue} {service pee
 theorem mem_peerInputs_elsewhere {normal : String → Value → CValue} {service peer : String} {received : List String}
     {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {st : Step} {k : Nat}
     (h : (st, Origin.elsewhere k) ∈ peerInputs normal service peer received state elsewhere aLines bLines) :
-    ∃ s ∈ elsewhere.map (·.2), ∃ keys index, st.body = s.body.forPeer keys index := by
+    ∃ s ∈ elsewhere.map (·.2), ∃ keys, st.body = s.body.forPeer keys := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
   · simp at he
@@ -418,7 +418,7 @@ theorem mem_peerInputs_elsewhere {normal : String → Value → CValue} {service
     · simp only [Prod.mk.injEq] at he
       obtain ⟨rfl, -⟩ := he
       simp only [List.mem_filter] at hm
-      exact ⟨s, List.mem_map.mpr ⟨(p, s), List.mem_of_getElem? (List.mk_mem_zipIdx_iff_getElem?.mp hm.1), rfl⟩, _, _,
+      exact ⟨s, List.mem_map.mpr ⟨(p, s), List.mem_of_getElem? (List.mk_mem_zipIdx_iff_getElem?.mp hm.1), rfl⟩, _,
         rfl⟩
     · cases hl : aLines[n]? with
       | none => simp [hl] at ha
@@ -427,8 +427,8 @@ theorem mem_peerInputs_elsewhere {normal : String → Value → CValue} {service
         obtain ⟨b, -, rfl⟩ := ha
         simp at he
 
-theorem forPeer_event {b : Step.Body} {keys : Bindings} {index : Nat → Nat} {id : Option String} {name : String}
-    {x : Value} {r : Option Nat} (h : b.forPeer keys index = .event id name x r) :
+theorem forPeer_event {b : Step.Body} {keys : Bindings} {id : Option String} {name : String} {x : Value}
+    {r : Option String} (h : b.forPeer keys = .event id name x r) :
     ∃ id' x' r', b = .event id' name x' r' := by
   cases b <;> simp_all [Step.Body.forPeer]
 
@@ -896,7 +896,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
         | given =>
           exact absurd hst (hnone st (List.mem_append_left _ (mem_peerInputs_given (List.mem_of_getElem? hi))) _ _ _)
         | elsewhere j =>
-          obtain ⟨s', hs', keys, index, hb'⟩ := mem_peerInputs_elsewhere (List.mem_of_getElem? hi)
+          obtain ⟨s', hs', keys, hb'⟩ := mem_peerInputs_elsewhere (List.mem_of_getElem? hi)
           rw [hb'] at hst
           obtain ⟨_, _, _, he⟩ := forPeer_event hst
           exact absurd he (hnone s' (List.mem_append_right _ hs') _ _ _)

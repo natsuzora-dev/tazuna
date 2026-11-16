@@ -68,6 +68,5 @@ export function step(r: Processing, input: Step, arrived: (line: number) => void
   checkUncreatedKeys(r, input);
   const answered = arrive(r, input);
   checkOrderUsed(r);
-  r.state.inputCount += 1;
   return answered;
 }

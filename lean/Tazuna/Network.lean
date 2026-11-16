@@ -106,12 +106,12 @@ given id, and an event without resultOf has none; for an end of a subscription t
 def Writes (canon : String → Value → Value) (s : Step) (l : TraceLine) : Prop :=
   l.time = s.time ∧ l.body.dir = .in ∧
   match s.body with
-  | .command id name x => ∃ id', l.body = .command .in id' name (canon name x) ∧ ∀ i, id = some i → id' = some i
-  | .query id name x => ∃ id', l.body = .query .in id' name (canon name x) ∧ ∀ i, id = some i → id' = some i
-  | .subscribe id name x => ∃ id', l.body = .subscribe .in id' name (canon name x) ∧ ∀ i, id = some i → id' = some i
+  | .command id name x => ∃ id', l.body = .command .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
+  | .query id name x => ∃ id', l.body = .query .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
+  | .subscribe id name x => ∃ id', l.body = .subscribe .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
   | .unsubscribe to => ∃ id', l.body = .unsubscribe .in id' to
   | .event id name x resultOf =>
-    ∃ id' r, l.body = .event .in id' name (canon name x) r ∧ (∀ i, id = some i → id' = some i) ∧
+    ∃ id' r, l.body = .event .in id' name (canon name x) r ∧ (∀ i, id = some i → id' = i) ∧
       (resultOf = none → r = none)
   | _ => isEventLine l = false
 

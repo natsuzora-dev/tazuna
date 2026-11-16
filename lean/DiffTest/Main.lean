@@ -331,7 +331,7 @@ def firstDifference (xs ys : List Step) : Option Nat :=
 /-- The request id that an answer step chooses, with the trace name of the answer's sender. -/
 def chosen (step : Step) : Except String (String × String) :=
   match step.body with
-  | .answer sender _ _ (some (.search to)) => pure (to, sender)
+  | .answer sender _ _ (some (.search to)) _ => pure (to, sender)
   | _ => throw "expected an answer step that chooses a request"
 
 /-- The trace name of the command or query that a step requests. -/

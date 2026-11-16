@@ -60,7 +60,8 @@ interface Scheduled {
 /** An input to the run: it arrives at `time`, after the deadlines due by then. */
 export type Input = (LineFields<AnswerInput> | { readonly type: "time" }) & Timed & Scheduled;
 
-type AnswerInput = AnswerFields<MockChoice | SearchChoice> & Timed;
+/** `handle` is the name by which a later event's `resultOf` names the answer (Lean's Step.Body.answer). */
+type AnswerInput = AnswerFields<MockChoice | SearchChoice> & Timed & { readonly handle?: string };
 
 /**
  * An answer choice whose `to` names the request by the id of its trace line. Only test's search sets it; a scenario
@@ -122,13 +123,23 @@ export function scenario(description: string, inputs: ScenarioInputs, options: S
 
 type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string };
 
-/** Returns the entries with times; an event's `resultOf` names the answer input of the mock's first placement. */
+/**
+ * Returns the entries with times; an event's `resultOf` names the answer input of the mock's first placement, which
+ * has the handle `mock#n` for the `n`-th mock that a `resultOf` names.
+ */
 function timedEntries(entries: readonly Entry[]): Input[] {
   const timedOf = ({ input, time }: Entry) => ({ ...input, time }) as Input;
-  const answers = entries.map((e) => (e.input.type === "answer" ? (timedOf(e) as AnswerInput) : undefined));
+  const named = new Set(
+    entries.flatMap(({ input }) => (input.type === "event" && input.resultOf ? [input.resultOf] : [])),
+  );
+  const handles = new Map([...named].map((mock, n) => [mock, `mock#${n + 1}`]));
   const first = new Map<UntimedInput, AnswerInput>();
-  entries.forEach(({ input }, i) => {
-    if (input.type === "answer" && !first.has(input)) first.set(input, answers[i] as AnswerInput);
+  const answers = entries.map(({ input, time }) => {
+    if (input.type !== "answer") return undefined;
+    const handle = first.has(input) ? undefined : handles.get(input);
+    const answer = { ...input, time, ...(handle === undefined ? {} : { handle }) } as AnswerInput;
+    if (!first.has(input)) first.set(input, answer);
+    return answer;
   });
   return entries.map((e, i): Input => {
     const { input, time } = e;

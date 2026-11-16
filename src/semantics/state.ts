@@ -280,10 +280,8 @@ export interface State {
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
-  /** The number of inputs taken before the current one: the index (from 0) of the current input. */
-  inputCount: number;
-  /** For each index of a processed mock input, the request that it answered and the answer. */
-  readonly mocks: Map<number, { readonly answered?: { readonly request: Pending; readonly answer: Answer } }>;
+  /** For each handle of a processed mock input, the request that the latest such input answered and the answer. */
+  readonly mocks: Map<string, { readonly request: Pending; readonly answer: Answer }>;
   readonly violations: Violation[];
 }
 
@@ -314,7 +312,6 @@ export function newState(st: Service): State {
     created: [],
     subscriptions: new Subscriptions(),
     results: new Map(),
-    inputCount: 0,
     mocks: new Map(),
     violations: [],
   };

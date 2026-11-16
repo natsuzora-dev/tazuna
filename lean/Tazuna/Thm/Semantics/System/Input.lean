@@ -18,7 +18,7 @@ theorem addResult_records (id : String) (e : Emit) : (addResult st fs s id e).re
   · rfl
   · split <;> simp
 
-theorem resultRequest_records (name : String) (k : Nat) : (resultRequest st s name k).1.records = s.records := by
+theorem resultRequest_records (name k : String) : (resultRequest st s name k).1.records = s.records := by
   unfold resultRequest
   repeat' split
   all_goals first | rfl | simp
@@ -140,13 +140,13 @@ theorem deliver_keysDistinct (name : String) (id : Option String) (payload : Val
     exact h
   · exact message_keysDistinct _ h
 
-theorem withResultOf_records (name : String) (k : Option Nat) :
+theorem withResultOf_records (name : String) (k : Option String) :
     (withResultOf st s name k).1.records = s.records := by
   cases k
   · rfl
   · exact resultRequest_records _ _
 
-theorem redeliver_records_before_message (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
+theorem redeliver_records_before_message (name : String) (id : Option String) (raw : Value) (resultOf : Option String)
     (first : Delivery) :
     ∃ s', s'.records = s.records ∧
       (redeliver st fs s name id raw resultOf first = message st fs s' {} ∨ redeliver st fs s name id raw resultOf first = s') := by
@@ -159,7 +159,7 @@ theorem redeliver_records_before_message (name : String) (id : Option String) (r
     · exact withResultOf_records _ _
     · simp only [State.newMessage, report_records]; exact withResultOf_records _ _
 
-theorem receive_keysDistinct (name : String) (id : Option String) (raw : Value) (resultOf : Option Nat)
+theorem receive_keysDistinct (name : String) (id : Option String) (raw : Value) (resultOf : Option String)
     (h : KeysDistinct s.records) : KeysDistinct (receive st fs s name id raw resultOf).records := by
   unfold receive
   split
@@ -177,8 +177,8 @@ theorem receive_keysDistinct (name : String) (id : Option String) (raw : Value) 
       · exact deliver_keysDistinct _ _ _ _ ((withResultOf_records (st := st) (s := s) _ _).symm ▸ h)
   · exact h
 
-theorem mock_keysDistinct (sender name : String) (answer : Answer) (choice : Option Choice)
-    (h : KeysDistinct s.records) : KeysDistinct (mock st fs s sender name answer choice).records := by
+theorem mock_keysDistinct (sender name : String) (answer : Answer) (choice : Option Choice) (handle : Option String)
+    (h : KeysDistinct s.records) : KeysDistinct (mock st fs s sender name answer choice handle).records := by
   unfold mock
   simp only [id_bind]
   split
@@ -208,12 +208,12 @@ theorem operate_keysDistinct (screen control : String) (payload : Value) (accept
         | exact h
         | (rw [(keeps_settled _ _ (keeps_dispatch _ _ _ _)).records]; exact h))
 
-theorem result_is_event_of_emits (name : String) (k : Nat) (s' : State) (p : Pending)
+theorem result_is_event_of_emits (name k : String) (s' : State) (p : Pending)
     (h : resultRequest st s name k = (s', some p)) :
     (∃ d ∈ st.«structure».definitions.find? (·.ref == p.activity.ref), match d.body with
       | .command _ _ _ emits .. => some (st.refOf name) ∈ emits
       | _ => False) ∧
-      ∃ o, s.mocks.lookup k = some (some (p, .accepted o)) := by
+      ∃ o, s.mocks.lookup k = some (p, .accepted o) := by
   unfold resultRequest at h
   split at h
   · rename_i q a hk
@@ -236,11 +236,11 @@ theorem result_is_event_of_emits (name : String) (k : Nat) (s' : State) (p : Pen
   · simp at h
 
 theorem subscription_answer_is_own_message (sender name : String) (answer : Answer) (choice : Option Choice)
-    (p : Pending) (canonical : Option Choice) (checked : AnswerCheck) (written : Answer)
+    (handle : Option String) (p : Pending) (canonical : Option Choice) (checked : AnswerCheck) (written : Answer)
     (hc : canonicalChoice st fs name choice = .ok canonical) (hf : s.answering sender name canonical = some p)
     (ha : checkAnswer st fs p answer = .ok checked) (hw : checked.written = .ok written) :
     ∃ t : State, t.lines = (s.writeInput none (.answer p.id written)).1.lines ∧
-      mock st fs s sender name answer choice =
+      mock st fs s sender name answer choice handle =
         let started := t.newMessage.newStep none
         let r := settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
         message st fs r.state r.queue := by
@@ -328,7 +328,7 @@ theorem mock_answers_longest_waiting (sender name : String) (input : Option Valu
     | none => rfl
     | some w => simpa using (h4 w rfl)
 
-theorem resultRequest_lines (name : String) (k : Nat) : (resultRequest st s name k).1.lines = s.lines := by
+theorem resultRequest_lines (name k : String) : (resultRequest st s name k).1.lines = s.lines := by
   unfold resultRequest
   repeat' split
   all_goals first | rfl | simp
@@ -343,12 +343,12 @@ theorem addResult_lines (id : String) (e : Emit) : (addResult st fs s id e).line
     · rfl
     · rfl
 
-theorem resultRequest_now (name : String) (k : Nat) : (resultRequest st s name k).1.now = s.now := by
+theorem resultRequest_now (name k : String) : (resultRequest st s name k).1.now = s.now := by
   unfold resultRequest
   repeat' split
   all_goals first | rfl | simp
 
-theorem resultRequest_inputDeadlineOrder (name : String) (k : Nat) :
+theorem resultRequest_inputDeadlineOrder (name k : String) :
     (resultRequest st s name k).1.inputDeadlineOrder = s.inputDeadlineOrder := by
   unfold resultRequest
   repeat' split
@@ -383,8 +383,8 @@ theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCh
     | exact brokenAssumption_finding _ _ _ _ _ _ (by simpa using hr)
     | (simp only [Except.error.injEq] at hr; subst hr; exact ⟨rfl, by simp⟩)
 
-theorem unmatched_result_violates (name : String) (k : Nat) (s₁ : State) (q : Pending) (a : Answer)
-    (hp : s.mocks.lookup k = some (some (q, a))) (hq : resultRequest st s name k = (s₁, none)) :
+theorem unmatched_result_violates (name k : String) (s₁ : State) (q : Pending) (a : Answer)
+    (hp : s.mocks.lookup k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
     ∃ event requestId target m, s₁ = s.violate (resultOfFinding event requestId target m).toViolation := by
   unfold resultRequest at hq
   split at hq
@@ -454,46 +454,13 @@ theorem no_waiting_request_iff (sender name : String) (input : Option Value) (st
   cases input <;> simp [and_assoc]
 
 theorem mock_without_waiting_request_reported (sender name : String) (answer : Answer) (choice : Option Choice)
-    (canonical : Option Choice) (hc : canonicalChoice st fs name choice = .ok canonical)
+    (handle : Option String) (canonical : Option Choice) (hc : canonicalChoice st fs name choice = .ok canonical)
     (hn : s.answering sender name canonical = none) :
-    mock st fs s sender name answer choice =
-      { s with mocks := s.mocks ++ [(s.inputCount, none)] }.violate
+    mock st fs s sender name answer choice handle =
+      s.violate
         (Finding.invalidInput ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest)
           (st.refOf sender) (st.refOf name))).toViolation := by
   simp only [mock, id_bind, hc, hn]
   cases choosesStale choice <;> simp [State.report, Finding.halts, InvalidInput.halts]
-
-theorem unmatched_mock_reported (sender name : String) (answer : Answer) (choice : Option Choice) (k : Nat)
-    (h : (k, none) ∈ (mock st fs s sender name answer choice).mocks) :
-    (k, none) ∈ s.mocks ∨ k = s.inputCount ∧
-      mock st fs s sender name answer choice = { s with mocks := s.mocks ++ [(s.inputCount, none)] }.violate
-        (Finding.invalidInput ((if choosesStale choice then InvalidInput.missingStaleRequest else .missingWaitingRequest)
-          (st.refOf sender) (st.refOf name))).toViolation := by
-  cases hc : canonicalChoice st fs name choice with
-  | error v =>
-    have e : (mock st fs s sender name answer choice).mocks = s.mocks := by simp [mock, hc]
-    rw [e] at h
-    exact .inl h
-  | ok canonical =>
-  cases hf : s.answering sender name canonical with
-  | none =>
-    have e := mock_without_waiting_request_reported (st := st) sender name answer choice canonical hc hf
-    rw [e] at h
-    simp only [State.violate, List.mem_append, List.mem_singleton, Prod.mk.injEq, and_true] at h
-    exact h.imp_right (⟨·, e⟩)
-  | some p =>
-    have e : (mock st fs s sender name answer choice).mocks = s.mocks ++ [(s.inputCount, some (p, answer))] := by
-      unfold mock
-      simp only [id_bind, id_pure, hc, hf]
-      split
-      · simp
-      · split
-        · split <;> simp
-        · rw [message_mocks, (keeps_settled _ _ (keeps_deliverAnswer _ _ _)).mocks]
-          simp only [State.newStep, State.newMessage, State.writeInput]
-          repeat' split
-          all_goals simp
-    rw [e] at h
-    exact .inl (by simpa using h)
 
 end Tazuna.Thm.Semantics.System.Input
