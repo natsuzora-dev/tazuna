@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 
-export const { machine } = service({ description: "Use the device" });
+export const { machine, scenario } = service({ description: "Use the device" });
 
 export const permission = machine({
   description: "Ask for the permission when the service begins",

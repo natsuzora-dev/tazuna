@@ -10,6 +10,7 @@ import type {
 } from "../data/scenario.generated.ts";
 import {
   createdMark,
+  type DeadlineOf,
   type Expectation,
   factOf,
   type Line,
@@ -219,10 +220,14 @@ export function lower(
       inFlight: (message: unknown) => place({ type: "inFlight", message: factOfHandle(message) }),
     },
     clock: {
-      at: (time: string) => {
+      at: (time: string, options?: { readonly order?: readonly DeadlineOf[] }) => {
         const t = instant(time);
         if (t === undefined) problems.push({ kind: "unparsableTime", line: lines.length });
-        return place({ type: "at", time: t ?? time, order: [] });
+        const order = (options?.order ?? []).map((d, k) => {
+          const chart = named(d.chart, [...at(), "order", k]);
+          return { service: chart.service, deadline: { instance: chart.name, state: d.state, name: d.name } };
+        });
+        return place({ type: "at", time: t ?? time, order });
       },
     },
     host: { restart: () => place({ type: "restart" }) },

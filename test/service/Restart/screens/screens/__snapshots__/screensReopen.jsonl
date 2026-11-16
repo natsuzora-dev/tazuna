@@ -1,6 +1,5 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"homeScreen.openList#1","name":"homeScreen.openList"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"restart","id":"restart#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unacceptedOperation","id":"taskListScreen.close#1","name":"taskListScreen.close"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"homeScreen.openList#2","name":"homeScreen.openList"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#2","name":"todo.tasks","input":{}}

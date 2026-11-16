@@ -239,7 +239,10 @@ function fireTo(time: Temporal.Instant, order: readonly DeadlineId[]): (r: Proce
     s.tieOrderRequired = true;
     fireDue(r, time);
     checkOrderUsed(r);
-    if (Temporal.Instant.compare(time, s.now) > 0) s.now = time;
+    if (Temporal.Instant.compare(time, s.now) > 0) {
+      s.now = time;
+      r.note.wroteNow();
+    }
     s.tieOrderRequired = false;
     writeInput(s, { dir: "in", type: "time" });
   };

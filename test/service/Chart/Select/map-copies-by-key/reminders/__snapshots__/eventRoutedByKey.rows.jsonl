@@ -1,2 +1,0 @@
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.openTasks#1","name":"todo.openTasks","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"notified#1","name":"reminders.notified","payload":{"taskId":"task-1"}}

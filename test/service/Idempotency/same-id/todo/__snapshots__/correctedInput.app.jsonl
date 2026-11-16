@@ -1,2 +1,0 @@
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"device.requestPermission#1","name":"device.requestPermission","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"event","id":"taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"task-1"}}

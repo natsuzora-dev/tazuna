@@ -9,12 +9,14 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"taskId":"task-3"},"resultOf":"addTask#3"}
 {"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{},"after":["answer#3","taskAdded#3"]}
 {"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"followedUp#1","name":"followedUp","payload":{"by":"many"},"after":["answer#3","taskAdded#3"]}
+{"time":"2026-10-25T03:00:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-25T03:00:00Z","dir":"in","type":"command","id":"addTask#4","name":"addTask","input":{"taskId":"task-4"}}
 {"time":"2026-10-25T03:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"addTask#4","answer":{"result":"accepted"}}
 {"time":"2026-10-25T03:00:00Z","dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"taskId":"task-4"},"resultOf":"addTask#4"}
 {"time":"2026-10-25T04:00:00Z","dir":"out","type":"event","id":"reminded#2","name":"reminded","payload":{},"after":["answer#4","taskAdded#4"]}
+{"time":"2026-10-25T04:30:00Z","dir":"in","type":"time","id":"time#2"}
 {"time":"2026-10-25T04:30:00Z","dir":"in","type":"command","id":"addTask#5","name":"addTask","input":{"taskId":"task-5"}}
 {"time":"2026-10-25T04:30:00Z","dir":"out","type":"answer","id":"answer#5","to":"addTask#5","answer":{"result":"accepted"}}
 {"time":"2026-10-25T04:30:00Z","dir":"out","type":"event","id":"taskAdded#5","name":"taskAdded","payload":{"taskId":"task-5"},"resultOf":"addTask#5"}
 {"time":"2026-10-25T05:30:00Z","dir":"out","type":"event","id":"reminded#3","name":"reminded","payload":{},"after":["answer#5","taskAdded#5"]}
-{"time":"2026-10-25T06:00:00Z","dir":"in","type":"time","id":"time#1"}
+{"time":"2026-10-25T06:00:00Z","dir":"in","type":"time","id":"time#3"}

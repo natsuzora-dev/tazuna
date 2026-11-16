@@ -1,12 +1,9 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addNote#1","name":"addNote","input":{"noteId":"N-first","label":"first"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addNote#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"noteAdded#1","name":"noteAdded","payload":{"id":"N-first","label":"first"},"resultOf":"addNote#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#2","name":"noteAdded","payload":{"id":"N-hourly","label":"hourly"},"after":["answer#1","noteAdded#1"],"created":["N-hourly"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#2","name":"noteAdded","payload":{"id":"notes/Note-1","label":"hourly"},"after":["answer#1","noteAdded#1"],"created":["notes/Note-1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#3","name":"noteAdded","payload":{"id":"N-task","label":"task-1"},"after":["taskAdded#1"],"created":["N-task"]}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addNote#2","name":"addNote","input":{"noteId":"N-hourly","label":"again"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"addNote#2","answer":{"result":"rejected","rejection":{"kind":"already-exists"}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addNote#3","name":"addNote","input":{"noteId":"N-task","label":"again"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"addNote#3","answer":{"result":"rejected","rejection":{"kind":"already-exists"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#3","name":"noteAdded","payload":{"id":"notes/Note-2","label":"task-1"},"after":["taskAdded#1"],"created":["notes/Note-2"]}

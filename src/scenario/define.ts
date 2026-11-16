@@ -2,7 +2,16 @@ import type { z } from "zod";
 import type { Rejection } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { Contract, RecordsOf } from "../dsl/contract.ts";
-import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen, Command, Control, Query } from "../dsl/definition.ts";
+import type {
+  AnyCommand,
+  AnyEvent,
+  AnyQuery,
+  AnyScreen,
+  ChartSpec,
+  Command,
+  Control,
+  Query,
+} from "../dsl/definition.ts";
 import type { EncodedPayload } from "../dsl/event.ts";
 
 type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>;
@@ -262,8 +271,11 @@ export interface When<P extends Peers> {
     inFlight(message: Message): Line;
   };
   readonly clock: {
-    /** The clock advances to `time`, and every running service fires its deadlines due by then. */
-    at(time: Instant): CausedLine;
+    /**
+     * The clock advances to `time`, and every running service fires its deadlines due by then; in a tie of deadlines of
+     * one service, the next of `order` that names one of them fires.
+     */
+    at(time: Instant, options?: { readonly order?: readonly DeadlineOf[] }): CausedLine;
   };
   readonly host: {
     /** The host restarts the own service. */
@@ -356,6 +368,24 @@ const createdValue = Object.freeze({ [createdMark]: true });
  * scenario never writes. Later lines read it through the line's handle.
  */
 export const created = (): never => createdValue as never;
+
+/** The deadline `name` of state `state` of the chart instance `chart` names, which a clock line's order names. */
+export interface DeadlineOf {
+  readonly chart: ChartSpec;
+  readonly state: string;
+  readonly name: string;
+}
+
+/** The deadline `name` of state `state` of the chart `chart`'s one instance, for the order of a clock line. */
+export const deadline = <C extends ChartSpec>(
+  chart: C,
+  state: keyof C["states"] & string,
+  name: string,
+): DeadlineOf => ({
+  chart,
+  state,
+  name,
+});
 
 /** A scenario of the own service, as the scenario file writes it. */
 export interface ScenarioDefinition {

@@ -7,7 +7,7 @@ export const Task = entity({
   key: "id",
 });
 
-export const { automation, command, createEvent, updateEvent, contract } = service({
+export const { automation, command, createEvent, updateEvent, contract, scenario } = service({
   description: "Keep the tasks",
   entities: { Task },
 });

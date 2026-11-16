@@ -37,6 +37,7 @@ export type {
   AnswerRef,
   Caused,
   CausedLine,
+  DeadlineOf,
   EventMessage,
   Look,
   OutRequest,
@@ -50,6 +51,7 @@ export type {
 export {
   answered,
   created,
+  deadline,
   emitted,
   endOf,
   event,

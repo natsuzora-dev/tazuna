@@ -1,3 +1,3 @@
 import { service } from "@natsuzora-dev/tazuna";
 
-export const { screen } = service({ description: "Show tasks" });
+export const { screen, contract, scenario } = service({ description: "Show tasks" });
