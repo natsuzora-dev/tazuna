@@ -329,9 +329,38 @@ theorem earliestTurn_spec (ps : List Pending) (p : Pending) (h : earliestTurn ps
   · cases hm
   · exact ⟨hm, hq⟩
 
-theorem mock_answers_longest_waiting (ps : List Pending) (p : Pending) (h : earliestTurn ps = some p) :
-    p ∈ ps ∧ ∀ q ∈ ps, p.turn ≤ q.turn :=
-  earliestTurn_spec ps p h
+theorem eq_of_mem_eraseDups_length_le_one {xs : List Value} (h : xs.eraseDups.length ≤ 1) {x y : Value}
+    (hx : x ∈ xs) (hy : y ∈ xs) : x = y := by
+  have hx' := List.mem_eraseDups.mpr hx
+  have hy' := List.mem_eraseDups.mpr hy
+  match he : xs.eraseDups, h with
+  | [z], _ => rw [he] at hx' hy'; simp_all
+  | [], _ => rw [he] at hx'; simp at hx'
+
+/--
+A mock answers a request that its choice allows, the longest-waiting of them, and every request that the choice allows
+has that request's input: otherwise the mock reports ambiguousMock.
+-/
+theorem mock_answers_longest_waiting {sender name : String} {choice : Option Choice} {p : Pending}
+    (h : s.answering st fs sender name choice = .ok p) :
+    ∃ ps, s.answerable st fs sender name choice = .ok ps ∧ p ∈ ps ∧ (∀ q ∈ ps, q.input = p.input) ∧
+      ∀ q ∈ ps, p.turn ≤ q.turn := by
+  unfold State.answering at h
+  simp only [bind] at h
+  split at h
+  · simp at h
+  · rename_i ps hps
+    split at h
+    · simp at h
+    · rename_i hlen
+      split at h
+      · simp at h
+      · rename_i q hq
+        cases h
+        obtain ⟨hm, hturn⟩ := earliestTurn_spec ps p hq
+        refine ⟨ps, hps, hm, fun r hr => ?_, hturn⟩
+        exact eq_of_mem_eraseDups_length_le_one (Nat.le_of_not_lt hlen) (List.mem_map_of_mem hr)
+          (List.mem_map_of_mem hm)
 
 theorem resultRequest_lines (name k : String) : (resultRequest st s name k).1.lines = s.lines := by
   unfold resultRequest

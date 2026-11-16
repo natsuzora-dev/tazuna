@@ -53,8 +53,8 @@ When `test` reports none of these violations, the scenario's run and the peer's 
 
 - each request of the scenario to the peer that no mock answers as `unavailable` reaches the peer once, not before the scenario sends it, and so does the end of its subscription;
 - each event of the scenario's service that the peer receives is one that the scenario emits, not before it emits it;
-- each request that the scenario takes `from` the peer is one that the peer's run sends, at or before the time the scenario takes it, and the scenario's answers to it reach the peer once each and in the order the scenario sends them;
-- each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive once each and in the order the peer sends them;
+- each request that the scenario takes `from` the peer is one that the peer's run sends, at or before the time the scenario takes it, and the scenario's answers to it that reach the peer arrive at most once each and in the order the scenario sends them;
+- each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive at most once each and in the order the peer sends them;
 - each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken;
 - the peer sends each line that the scenario takes before it receives any line that the scenario sends at or after taking it.
 

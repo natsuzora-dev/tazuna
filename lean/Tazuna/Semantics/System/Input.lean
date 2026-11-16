@@ -81,9 +81,9 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
 
 /--
 The request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input before
-the event (Illegal.namedInputUnplaced), so the request has been placed. It is none when that mock reported
-missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its result
-(resultOfMismatch).
+the event (Illegal.namedInputUnplaced), so the mock has been processed. It is none when that mock answered no request
+(ambiguousMock, missingWaitingRequest, missingStaleRequest), and after reporting that the request cannot have the event
+as its result (resultOfMismatch).
 -/
 def resultRequest (st : Service) (s : State) (name handle : String) : State × Option Pending :=
   match s.mocks.lookup handle with
@@ -161,9 +161,9 @@ def State.waiting (s : State) (sender name : String) (stale : Bool) : List Pendi
   s.pending.filter fun p => p.stale == stale && p.activity.target == name && s.senderOf p.requester == sender
 
 /--
-The requests of `ps` that the mock input `input` chooses: those whose input has each field of `input`, at any depth,
-equal, an array or any other value as a whole. Exactly then the canonical form of the request's input overlaid with
-`input` is the request's input.
+The requests of `ps` that the mock input `input` chooses: those whose input is the canonical form of their input
+overlaid with `input` (Value.overlay), so that `input` gives fields, at any depth, an array or any other value as a
+whole, that the request's input has.
 -/
 def chosen [Monad m] (st : Service) (fs : Functions m) (name : String) (input : Value) :
     List Pending → m (Except Fault (List Pending))

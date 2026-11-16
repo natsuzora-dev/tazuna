@@ -126,9 +126,9 @@ function endOpened(r: Processing, id: string): void {
 
 /**
  * Returns the request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input
- * before the event (Illegal.namedInputUnplaced), so that mock has been placed. Returns undefined when that mock reported
- * missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its
- * result (resultOfMismatch).
+ * before the event (Illegal.namedInputUnplaced), so that mock has been processed. Returns undefined when that mock
+ * answered no request (ambiguousMock, missingWaitingRequest, missingStaleRequest), and after reporting that the request
+ * cannot have the event as its result (resultOfMismatch).
  */
 function resultRequest(r: Processing, name: string, handle: string): Pending | undefined {
   const answered = r.state.mocks.get(handle);
@@ -253,8 +253,8 @@ function waiting(s: State, sender: string, name: string, stale: boolean): Pendin
 }
 
 /**
- * Lean's chosen: the requests of `ps` whose input has each field of the mock input `input` equal, at any depth, an
- * array or any other value as a whole.
+ * Lean's chosen: the requests of `ps` whose input is the canonical form of their input overlaid with the mock input
+ * `input`.
  */
 function chosen(r: Processing, name: string, input: unknown, ps: readonly Pending[]): Pending[] {
   const definition = refOf(r.st, name);
