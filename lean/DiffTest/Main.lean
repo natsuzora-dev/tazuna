@@ -464,8 +464,7 @@ def afters (request : Value) : Except String Value := do
 The reply to request `peer`, which takes the scenario's service, the fields of PeerDerivation, the forms of
 `peerForm` and `ownInputForm` that TS computed as `[name, value, form]`, the lines of the scenario's run and of the
 peer's run, the halt of the peer's run, and the violations of a run that did not halt with their origins, and
-returns peerInputs, peerFindings and peerRunFindings. A value without a form takes the
-form that no schema reads.
+returns peerInputs, peerFindings and peerRunFindings. A value without a form takes the form that no schema reads.
 -/
 def peer (request : Value) : Except String Value := do
   let service ← stringField request "service"

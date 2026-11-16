@@ -216,7 +216,6 @@ function handleOf(named: { readonly handle?: string }): string {
   return named.handle;
 }
 
-/** Returns the step of `input`. */
 function stepOf(spec: Spec, service: string, input: Input): Step {
   const name = (d: unknown) => traceName(spec, d, service);
   function body(): Step {
@@ -356,7 +355,6 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
   return inputs;
 }
 
-/** Returns the steps of `inputs`. */
 export function stepsOf(spec: Spec, service: string, inputs: readonly Input[]): Step[] {
   return inputs.map((input) => stepOf(spec, service, input));
 }

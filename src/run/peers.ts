@@ -126,8 +126,9 @@ function ownInputForm(spec: Spec, service: string): NamedForm {
 /**
  * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
  * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
- * halting violation's kind, or else its violations with the origins of their inputs. The derivation starts from an empty run of the peer and repeats until the inputs stop
- * changing: an input depends only on the peer's run of the inputs before it.
+ * halting violation's kind, or else its violations with the origins of their inputs. The derivation starts from an
+ * empty run of the peer and repeats until the inputs stop changing: an input depends only on the peer's run of the
+ * inputs before it.
  */
 export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[], d: PeerDerivation) {
   const derive = (peerLines: readonly TraceLine[]) => peerInputs(service, d, lines, peerLines);
@@ -152,7 +153,6 @@ export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[]
         }));
         return { derived, run, halted: undefined, reported };
       }
-      // A run halts on the last input that it takes.
       const halting = derived[run.execution.inputs.length - 1] as (typeof derived)[number];
       return { derived, run, halted: [halting.origin, halted.kind] as const, reported: [] };
     }

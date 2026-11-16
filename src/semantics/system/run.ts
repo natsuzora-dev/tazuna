@@ -59,8 +59,8 @@ function arrive(r: Processing, input: Step): Pending | undefined {
 
 /**
  * Processes an input, which arrives at its time after the deadlines due by then, and returns the request that a mock
- * input answered. The advance takes the names of `advanceKeys`, and the input's processing those of `keys`. Only TS has `arrived`, which hears the trace line count when the input arrives, and the returned
- * request.
+ * input answered. The advance takes the names of `advanceKeys`, and the input's processing those of `keys`. Only TS
+ * has `arrived`, which hears the trace line count when the input arrives, and the returned request.
  */
 export function step(r: Processing, input: Step, arrived: (line: number) => void): Pending | undefined {
   const deadlineOrder = input.deadlineOrder ?? [];
