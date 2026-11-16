@@ -76,10 +76,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /** A restart of the service by its environment, such as the OS or a test harness. */
   z.object({
@@ -93,10 +98,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -112,10 +122,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -131,10 +146,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /** A subscribe input. `handle` is the name by which a later unsubscribe input names the subscription. */
   z.object({
@@ -152,10 +172,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -169,10 +194,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /** An event whose `resultOf` is the handle of the answer input to the request that the event results from. */
   z.object({
@@ -190,10 +220,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -209,10 +244,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -228,10 +268,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /**
    * An answer to a request from `sender` to `target` that `choice` chooses, or without `choice`, to a request that is not
@@ -253,10 +298,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /**
    * An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs write: the
@@ -276,10 +326,15 @@ const step = z.discriminatedUnion("type", [
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
     /**
-     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     * The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+     * input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+    /**
+     * The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+     * then and the service's begin. The `at` line that moves the time to the input's writes them.
+     */
+    advanceKeys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
 ]);
 

@@ -21,13 +21,17 @@ def arrive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State)
   | .answer sender target answer choice handle => mock st fs s sender target answer choice handle
   | .answerById to target answer => answerById st fs s to target answer
 
-/-- The state after `input`, which arrives unless the advance halts or a value of it is an uncreated key. -/
+/--
+The state after `input`, which arrives unless the advance halts, leaves names of its `advanceKeys`, or a value of it is
+an uncreated key. The advance takes the names of `advanceKeys`, and the input's processing those of `keys`.
+-/
 def step [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (input : Step) : m State :=
   if s.halted.isSome then pure s else do
   let deadlineOrder := input.deadlineOrder.getD []
   let t ← advance st fs
     { s with deadlineOrder, inputDeadlineOrder := deadlineOrder, stepOrder := input.stepOrder.getD [],
-             keyNames := input.keys.getD [] } input
+             keyNames := input.advanceKeys.getD [] } input
+  let t := t.takeKeys (input.keys.getD [])
   let t ← if t.halted.isSome then pure t else
     match t.uncreatedKey st input.body with
     | some (key, entity) => pure (t.report (.invalidInput (.uncreatedKey key (st.ref entity))))

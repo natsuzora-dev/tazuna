@@ -168,7 +168,7 @@ def peerPlaced (service : String) (d : PeerDerivation) (lines : List TraceLine) 
     match lines[n]? with
     | some l =>
       ((peerInput? service d.peer d.received d.fromLines lines (keys n) l).map fun b =>
-        (⟨l.time, b, none, none, none⟩, PeerOrigin.line n)).toList
+        (⟨l.time, b, none, none, none, none⟩, PeerOrigin.line n)).toList
     | none => []
 
 /-- The number of the run's lines before which the input of origin `o` arrives, `elsewhere` as in PeerDerivation. -/

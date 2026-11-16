@@ -82,10 +82,15 @@ structure Step where
   -/
   stepOrder : Option (List StepName)
   /--
-  The createKey values that the input's processing creates, by entity name, in creation order within the input, which
-  createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+  The names of the createKey values that the input's processing creates, by entity name, in creation order within the
+  input, which createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
   -/
   keys : Option (List (String × List String))
+  /--
+  The names, as in `keys`, of the createKey values that the advance to the input's time creates: the deadlines due by
+  then and the service's begin. The `at` line that moves the time to the input's writes them.
+  -/
+  advanceKeys : Option (List (String × List String))
 deriving Repr, Inhabited
 
 derive_wire Step flatten body skip_serializing_none

@@ -77,7 +77,7 @@ interface CreatesKeys {
   readonly keys?: Keys;
 }
 
-interface AnswerFields<C> {
+interface AnswerFields<C> extends CreatesKeys {
   readonly type: "answer";
   readonly sender: Sender;
   readonly target: AnyCommand | AnyQuery;
@@ -101,9 +101,18 @@ interface Scheduled {
   readonly stepOrder?: readonly StepName[];
 }
 
+/**
+ * The names of the createKey values that the advance to the input's time creates, the deadlines due by then and the
+ * service's begin, as the `at` line that moves the time writes them (Lean's Step.advanceKeys).
+ */
+interface Advanced {
+  readonly advanceKeys?: Keys;
+}
+
 /** An input to the run: it arrives at `time`, after the deadlines due by then. */
 export type Input = (LineFields<AnswerInput, UnsubscribeInput> | AnswerByIdInput | { readonly type: "time" }) &
   Timed &
+  Advanced &
   Scheduled;
 
 /**
@@ -144,7 +153,7 @@ type RequestLine = CommandLine | QueryLine | SubscribeLine | UntimedUnsubscribe;
 
 type UntimedAnswer = AnswerFields<MockChoice>;
 
-interface At extends Timed {
+interface At extends Timed, CreatesKeys {
   readonly type: "at";
 }
 
@@ -198,7 +207,7 @@ export function scenario(description: string, inputs: ScenarioInputs, options: S
   return { kind: "scenario", description, inputs, given: options.given ?? {} };
 }
 
-type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string };
+type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string } & Advanced;
 
 /** The input that `input` names: the mock of an event's `resultOf`, or the subscribe input that an unsubscribe ends. */
 function namedBy(input: Entry["input"]): UntimedInput | undefined {
@@ -212,7 +221,8 @@ function namedBy(input: Entry["input"]): UntimedInput | undefined {
  * placement, which has the handle `subscription#n` for the `n`-th subscribe input that an unsubscribe names.
  */
 function timedEntries(entries: readonly Entry[]): Input[] {
-  const timedOf = ({ input, time }: Entry) => ({ ...input, time }) as Input;
+  const timedOf = ({ input, time, advanceKeys }: Entry) =>
+    ({ ...input, time, ...(advanceKeys === undefined ? {} : { advanceKeys }) }) as Input;
   const named = [...new Set(entries.flatMap(({ input }) => namedBy(input) ?? []))];
   const numbered = (type: string, prefix: string) =>
     named.filter((n) => n.type === type).map((n, i) => [n, `${prefix}#${i + 1}`] as const);
@@ -239,7 +249,7 @@ function timedEntries(entries: readonly Entry[]): Input[] {
  * The written lines with times: each of the service's inputs with its position from 1 and, for a from input, the
  * contract of its sender, and each elsewhere input with its position and the number of the service's inputs before it.
  * Each input takes the time of the `at` before it. An `at` that another `at` or the end follows, with elsewhere inputs
- * skipped, becomes a time input.
+ * skipped, becomes a time input. The `keys` of an `at` become the advanceKeys of the service's first input after it.
  */
 function written(inputs: ScenarioInputs | StateInputs) {
   const own: { readonly entry: Entry; readonly position: number; readonly sender?: object }[] = [];
@@ -250,12 +260,18 @@ function written(inputs: ScenarioInputs | StateInputs) {
     readonly before: number;
   }[] = [];
   let at = inputs[0];
+  let advanceKeys: Keys | undefined;
+  const timedAt = (input: Entry["input"]): Entry => {
+    const entry = { input, time: at.time, ...(advanceKeys === undefined ? {} : { advanceKeys }) };
+    advanceKeys = undefined;
+    return entry;
+  };
   for (const [i, w] of inputs.entries()) {
     if (w.type === "at") {
-      const next = inputs.slice(i + 1).find((n) => n.type !== "elsewhere");
-      if (next === undefined || next.type === "at")
-        own.push({ entry: { input: { type: "time" }, time: w.time }, position: i + 1 });
       at = w;
+      advanceKeys = w.keys;
+      const next = inputs.slice(i + 1).find((n) => n.type !== "elsewhere");
+      if (next === undefined || next.type === "at") own.push({ entry: timedAt({ type: "time" }), position: i + 1 });
     } else if (w.type === "elsewhere")
       others.push({
         entry: { input: w.input, time: at.time },
@@ -263,9 +279,8 @@ function written(inputs: ScenarioInputs | StateInputs) {
         service: w.service,
         before: own.length,
       });
-    else if (w.type === "from")
-      own.push({ entry: { input: w.input, time: at.time }, position: i + 1, sender: w.service });
-    else own.push({ entry: { input: w, time: at.time }, position: i + 1 });
+    else if (w.type === "from") own.push({ entry: timedAt(w.input), position: i + 1, sender: w.service });
+    else own.push({ entry: timedAt(w), position: i + 1 });
   }
   return { own, others };
 }
@@ -417,11 +432,13 @@ type AcceptedAnswer<O> = [O] extends [undefined]
  * Answers, from another service, a request that a definition of kind `sender.kind` has sent and that the choice chooses
  * by its content. When the requests that the mock may answer have different inputs, test reports
  * InvalidInput.ambiguousMock and answers none; of requests with equal inputs, it answers the longest-waiting. The target
- * in `pair` is a query or command that the sender uses (Illegal.unrequestedAnswer).
+ * in `pair` is a query or command that the sender uses (Illegal.unrequestedAnswer). `keys` names the keys that the
+ * sender's reaction to the answer creates (Keys).
  */
 export function mock<const T extends AnyCommand | AnyQuery>(
   sender: Sender,
   pair: readonly [T, MockAnswer<T>] | readonly [T, MockAnswer<T>, MockChoice<InputOfTarget<T>>],
+  options?: { readonly keys?: Keys },
 ): Mock<T> {
   const [target, answer, choice] = pair;
   return {
@@ -430,6 +447,7 @@ export function mock<const T extends AnyCommand | AnyQuery>(
     target,
     answer: answer as Answer,
     ...(choice === undefined ? {} : { choice: choice as MockChoice }),
+    ...options,
   } as Mock<T>;
 }
 
@@ -466,8 +484,9 @@ export function unchecked(value: unknown): never {
 /**
  * Sets the time at which the following inputs arrive: an ISO datetime with seconds, an offset, and no part below a
  * millisecond (Malformed.unparsableTime), not before the time that the inputs before it reached
- * (InvalidInput.earlierAt).
+ * (InvalidInput.earlierAt). `keys` names the keys that the deadlines due by then and the service's begin create (Keys),
+ * before the service's next input arrives.
  */
-export function at(time: string): At {
-  return { type: "at", time };
+export function at(time: string, options?: { readonly keys?: Keys }): At {
+  return { type: "at", time, ...options };
 }

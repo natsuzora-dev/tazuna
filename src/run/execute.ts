@@ -207,6 +207,9 @@ function alikeTo(s: State, request: Pending): Pending[] {
   ];
 }
 
+const copiedKeys = (keys: Readonly<Record<string, readonly string[]>>) =>
+  Object.fromEntries(Object.entries(keys).map(([e, names]) => [e, [...names]]));
+
 /** Returns the step of `input`. */
 function stepOf(spec: Spec, service: string, input: Input): Step {
   const name = (d: unknown) => traceName(spec, d, service);
@@ -266,9 +269,8 @@ function stepOf(spec: Spec, service: string, input: Input): Step {
     ...body(),
     ...(input.deadlineOrder === undefined ? {} : { deadlineOrder: [...input.deadlineOrder] }),
     ...(input.stepOrder === undefined ? {} : { stepOrder: [...input.stepOrder] }),
-    ...("keys" in input && input.keys !== undefined
-      ? { keys: Object.fromEntries(Object.entries(input.keys).map(([e, names]) => [e, [...names]])) }
-      : {}),
+    ...("keys" in input && input.keys !== undefined ? { keys: copiedKeys(input.keys) } : {}),
+    ...(input.advanceKeys === undefined ? {} : { advanceKeys: copiedKeys(input.advanceKeys) }),
   };
 }
 
@@ -286,6 +288,7 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
       ...(s.deadlineOrder === undefined ? {} : { deadlineOrder: s.deadlineOrder }),
       ...(s.stepOrder === undefined ? {} : { stepOrder: s.stepOrder }),
       ...(s.keys === undefined ? {} : { keys: s.keys }),
+      ...(s.advanceKeys === undefined ? {} : { advanceKeys: s.advanceKeys }),
     };
     const { time } = s;
     const body = (): Input => {

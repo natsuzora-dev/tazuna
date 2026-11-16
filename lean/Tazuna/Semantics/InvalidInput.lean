@@ -69,7 +69,10 @@ inductive InvalidInput where
   | unreadyStep (named : StepName) (candidates : List StepName)
   /-- No step choice during the input used the stepOrder `entries`. -/
   | unusedStepOrder (entries : List StepName)
-  /-- createKey returned none of the input's `keys` names `names` of the entity `entity` during the input. -/
+  /--
+  createKey returned none of the names `names` of the entity `entity`: of the input's `keys` during its processing, or
+  of its `advanceKeys` during the advance to its time.
+  -/
   | unusedKeys (entity : String) (names : List String)
   /--
   A value of the input has the form of a createKey value of the service's entity `entity` that createKey has not given

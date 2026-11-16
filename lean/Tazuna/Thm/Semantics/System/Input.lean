@@ -58,6 +58,19 @@ theorem begin_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (begin st
       · simp only [id_bind]
         split <;> simp
 
+@[simp] theorem takeKeys_records (keys : List (String × List String)) : (s.takeKeys keys).records = s.records := by
+  unfold State.takeKeys; split <;> simp
+
+@[simp] theorem takeKeys_started (keys : List (String × List String)) : (s.takeKeys keys).started = s.started := by
+  unfold State.takeKeys; split <;> simp
+
+@[simp] theorem takeKeys_lines (keys : List (String × List String)) : (s.takeKeys keys).lines = s.lines := by
+  unfold State.takeKeys; split <;> simp
+
+@[simp] theorem takeKeys_commandAnswers (keys : List (String × List String)) :
+    (s.takeKeys keys).commandAnswers = s.commandAnswers := by
+  unfold State.takeKeys; split <;> simp
+
 @[simp] theorem checkOrderUsed_records : s.checkOrderUsed.records = s.records := by
   unfold State.checkOrderUsed; split <;> simp
 

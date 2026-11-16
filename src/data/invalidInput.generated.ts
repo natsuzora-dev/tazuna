@@ -289,7 +289,10 @@ export type InvalidInput =
         readonly entries: readonly StepName[];
       };
     }
-  /** createKey returned none of the input's `keys` names `names` of the entity `entity` during the input. */
+  /**
+   * createKey returned none of the names `names` of the entity `entity`: of the input's `keys` during its processing, or
+   * of its `advanceKeys` during the advance to its time.
+   */
   | {
       readonly kind: "InvalidInput.unusedKeys";
       readonly definition: null;

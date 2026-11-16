@@ -338,17 +338,23 @@ def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) 
   let s ← startInstances st fs (← startRecords st fs { s with started := true }.newMessage)
   message st fs s { tasks := st.starting.map (.start ·.name none) }
 
+/-- The state with the names `keys` in place of the current ones, of which it reports the first entity's names left. -/
+def State.takeKeys (s : State) (keys : List (String × List String)) : State :=
+  let t := { s with keyNames := keys }
+  match s.halted, s.keyNames.find? (!·.2.isEmpty) with
+  | none, some (entity, names) => t.report (.invalidInput (.unusedKeys entity names))
+  | _, _ => t
+
 /--
 The state at the end of an input, with the entries of its `deadlineOrder` that no tie used reported, or else the
 entries of its `stepOrder` left unused, or else the first entity's names of its `keys` that no createKey returned.
 -/
 def State.checkOrderUsed (s : State) : State :=
-  let t := { s with inputDeadlineOrder := [], keyNames := [] }
-  match s.halted, s.deadlineOrder, s.stepOrder, s.keyNames.find? (!·.2.isEmpty) with
-  | none, _ :: _, _, _ => t.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
-  | none, [], _ :: _, _ => t.report (.invalidInput (.unusedStepOrder s.stepOrder))
-  | none, [], [], some (entity, names) => t.report (.invalidInput (.unusedKeys entity names))
-  | _, _, _, _ => t
+  let t := { s with inputDeadlineOrder := [] }
+  match s.halted, s.deadlineOrder, s.stepOrder with
+  | none, _ :: _, _ => { t with keyNames := [] }.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
+  | none, [], _ :: _ => { t with keyNames := [] }.report (.invalidInput (.unusedStepOrder s.stepOrder))
+  | _, _, _ => t.takeKeys []
 
 /--
 The first string of the values of `body` that has the form of a createKey value of an own entity that createKey has

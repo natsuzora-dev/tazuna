@@ -461,7 +461,7 @@ theorem mem_peerInputs_line {service : String} {d : PeerDerivation} {lines peerL
     (h : (st, PeerOrigin.line i) ∈ peerInputs service d lines peerLines) :
     ∃ l b, lines[i]? = some l ∧
       peerInput? service d.peer d.received d.fromLines lines (peerForward service d (peerArrivals service d lines) lines peerLines i) l = some b ∧
-      st = ⟨l.time, b, none, none, none⟩ := by
+      st = ⟨l.time, b, none, none, none, none⟩ := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
   · simp at he
@@ -479,10 +479,10 @@ theorem mem_peerInputs_line {service : String} {d : PeerDerivation} {lines peerL
 theorem peerInputs_line_mem {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {i : Nat} {l : TraceLine}
     {b : Step.Body} (hi : lines[i]? = some l)
     (hb : peerBody? d.peer lines (peerForward service d (peerArrivals service d lines) lines peerLines i) l = some b) :
-    (⟨l.time, b, none, none, none⟩, PeerOrigin.line i) ∈
+    (⟨l.time, b, none, none, none, none⟩, PeerOrigin.line i) ∈
       peerInputs service d lines peerLines := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap]
-  refine .inr ⟨(⟨l.time, b, none, none, none⟩, PeerOrigin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
+  refine .inr ⟨(⟨l.time, b, none, none, none, none⟩, PeerOrigin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
   · have := (List.getElem?_eq_some_iff.mp hi).1
     simp only [List.mem_range]
     omega

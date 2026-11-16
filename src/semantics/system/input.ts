@@ -483,9 +483,22 @@ export function begin(r: Processing): void {
   message(r);
 }
 
+/** Lean's State.takeKeys: puts the names `keys` in place of the current ones, reporting the first entity's names left. */
+export function takeKeys(r: Processing, keys: Readonly<Record<string, readonly string[]>> | undefined): void {
+  const s = r.state;
+  const unused = [...s.keyNames].find(([, names]) => names.length > 0);
+  s.keyNames = new Map(Object.entries(keys ?? {}));
+  if (unused !== undefined)
+    report(r.state, {
+      kind: "InvalidInput.unusedKeys",
+      definition: null,
+      data: { entity: unused[0], names: unused[1] },
+    });
+}
+
 /**
  * Ends the input: reports the entries of its `deadlineOrder` that no tie used, then those of its `stepOrder` left
- * unused.
+ * unused, then the names of its `keys` left.
  */
 export function checkOrderUsed(r: Processing): void {
   const s = r.state;
@@ -494,14 +507,7 @@ export function checkOrderUsed(r: Processing): void {
     report(r.state, { kind: "InvalidInput.unusedDeadlineOrder", definition: null, data: { entries: s.deadlineOrder } });
   if (s.stepOrder.length > 0)
     report(r.state, { kind: "InvalidInput.unusedStepOrder", definition: null, data: { entries: s.stepOrder } });
-  const unused = [...s.keyNames].find(([, names]) => names.length > 0);
-  s.keyNames = new Map();
-  if (unused !== undefined)
-    report(r.state, {
-      kind: "InvalidInput.unusedKeys",
-      definition: null,
-      data: { entity: unused[0], names: unused[1] },
-    });
+  takeKeys(r, undefined);
 }
 
 /** Lean's Step.Body.values: the values that the input gives the service, an input, a payload, or an answer's output. */

@@ -14,6 +14,7 @@ import {
   receive,
   send,
   subscribe,
+  takeKeys,
 } from "./input.ts";
 import { restart } from "./restart.ts";
 
@@ -58,7 +59,7 @@ function arrive(r: Processing, input: Step): Pending | undefined {
 
 /**
  * Processes an input, which arrives at its time after the deadlines due by then, and returns the request that a mock
- * input answered. Only TS has `arrived`, which hears the trace line count when the input arrives, and the returned
+ * input answered. The advance takes the names of `advanceKeys`, and the input's processing those of `keys`. Only TS has `arrived`, which hears the trace line count when the input arrives, and the returned
  * request.
  */
 export function step(r: Processing, input: Step, arrived: (line: number) => void): Pending | undefined {
@@ -66,8 +67,9 @@ export function step(r: Processing, input: Step, arrived: (line: number) => void
   r.state.inputDeadlineOrder = deadlineOrder;
   r.state.deadlineOrder = deadlineOrder;
   r.state.stepOrder = input.stepOrder ?? [];
-  r.state.keyNames = new Map(Object.entries(input.keys ?? {}));
+  r.state.keyNames = new Map(Object.entries(input.advanceKeys ?? {}));
   advance(r, input);
+  takeKeys(r, input.keys);
   arrived(r.state.lines.length);
   checkUncreatedKeys(r, input);
   const answered = arrive(r, input);

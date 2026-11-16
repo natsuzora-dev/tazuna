@@ -26,7 +26,7 @@ theorem peerBody_carries {agree : Agree} {ids : Ids} {e : Execution} {canon : Sc
     {lines peerLines : List TraceLine} {keys : Bindings} {i : Nat} {al l : TraceLine} {b : Step.Body}
     (hname : e.name 1 = peer) (hagree : ∀ sch x, agree (0, i) 1 sch x (canon sch (keys.rename x)))
     (hids : ∀ x, ids (0, i) 1 x x)
-    (hb : peerBody? peer lines keys al = some b) (hw : Writes canon peerLines ⟨al.time, b, none, none, none⟩ l) :
+    (hb : peerBody? peer lines keys al = some b) (hw : Writes canon peerLines ⟨al.time, b, none, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       Carries agree ids e (0, i) 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
@@ -71,7 +71,7 @@ theorem peerEvent_carries {agree : Agree} {ids : Ids} {e : Execution} {canon : S
     {service : String} {received : List String} {peerLines : List TraceLine} {keys : Bindings} {i : Nat}
     {al l : TraceLine} {b : Step.Body}
     (hname : e.name 0 = service) (hagree : ∀ sch x, agree (0, i) 1 sch x (canon sch (keys.rename x)))
-    (hb : peerEvent? service received keys al = some b) (hw : Writes canon peerLines ⟨al.time, b, none, none, none⟩ l) :
+    (hb : peerEvent? service received keys al = some b) (hw : Writes canon peerLines ⟨al.time, b, none, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       Carries agree ids e (0, i) 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
@@ -102,7 +102,7 @@ theorem peerAnswer_carries {agree : Agree} {ids : Ids} {e : Execution} {canon : 
     (hname : e.name 0 = service) (hlines : e.lines 1 = peerLines)
     (hagree : ∀ sch x, agree (0, i) 1 sch x (canon sch (keys.rename x)))
     (hids : ∀ x, ids (0, i) 1 x ((keys.lookup x).getD x))
-    (hb : peerAnswer? service lines fromLines keys al = some b) (hw : Writes canon peerLines ⟨al.time, b, none, none, none⟩ l) :
+    (hb : peerAnswer? service lines fromLines keys al = some b) (hw : Writes canon peerLines ⟨al.time, b, none, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧
       (∀ id to a, l.body = .answer .in id to a → a.unavailable = false) ∧ Carries agree ids e (0, i) 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
@@ -133,7 +133,7 @@ theorem peerInput_carries {agree : Agree} {ids : Ids} {e : Execution} {canon : S
     (hagree : ∀ sch x, agree (0, i) 1 sch x (canon sch (keys.rename x)))
     (hids : ∀ x, ids (0, i) 1 x x ∧ ids (0, i) 1 x ((keys.lookup x).getD x))
     (hb : peerInput? service peer received fromLines lines keys al = some b)
-    (hw : Writes canon peerLines ⟨al.time, b, none, none, none⟩ l) :
+    (hw : Writes canon peerLines ⟨al.time, b, none, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧
       (∀ id to a, l.body = .answer .in id to a → a.unavailable = false) ∧ Carries agree ids e (0, i) 1 al l := by
   have notAnswer : ∀ {P : Prop}, (al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧
@@ -722,7 +722,7 @@ theorem network_realizes {canon : Schema → Value → Value} {halted : Option (
         obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hsend'
         obtain ⟨k, hk⟩ :=
           List.mem_iff_getElem?.mp (peerInputs_line_mem (d := d) hl0 hb)
-        have hkm : (inputs.map (·.1))[k]? = some ⟨l.time, b, none, none, none⟩ := by
+        have hkm : (inputs.map (·.1))[k]? = some ⟨l.time, b, none, none, none, none⟩ := by
           rw [List.getElem?_map, show inputs[k]? = _ from hk]
           rfl
         obtain ⟨p, hp⟩ := runOf_isSome hrun hkm
