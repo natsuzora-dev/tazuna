@@ -45,6 +45,18 @@ export type Illegal =
         readonly event: DefinitionRef;
       };
     }
+  /**
+   * A binds or requires key of the command or query, which a requires rejection may name as its reason, is an array index
+   * such as `"1"`. JavaScript lists such keys before the others (ECMA-262 OrdinaryOwnPropertyKeys), so the written order
+   * would not decide which failing condition gives the reason.
+   */
+  | {
+      readonly kind: "Illegal.indexReason";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly reason: string;
+      };
+    }
   /** The contract of service `contract` lists under `key` a definition of another service. */
   | {
       readonly kind: "Illegal.foreignMember";
@@ -138,6 +150,7 @@ export const illegalKinds = [
   "Illegal.ownQuery",
   "Illegal.alwaysCycle",
   "Illegal.foreignEvent",
+  "Illegal.indexReason",
   "Illegal.foreignMember",
   "Illegal.unrequestedAnswer",
   "Illegal.namedInputPlacedTwice",

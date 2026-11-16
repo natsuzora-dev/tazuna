@@ -50,6 +50,10 @@ interface Definers<Es extends Entities> {
     emits: readonly Ev[];
     /** The values that `requires`, `decide`, and `ensures` read as `bound`. */
     binds?: Binds<{ input: Input<I>; records: Records<Es> } & Now, B> & Present<Bn>;
+    /**
+     * Checked after `binds`, each in written order; the first that fails names the rejection reason. No key of either
+     * may be an array index such as `1`, which JavaScript lists before the other keys (Illegal.indexReason).
+     */
     requires?: Named<Rq, { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now>;
     /** `records` holds the records after the events; `bound` holds the values from before them. */
     ensures?: Named<En, { input: Input<I>; records: Records<Es>; bound: Bound<B> }>;
@@ -64,6 +68,7 @@ interface Definers<Es extends Entities> {
     input?: I & SomeKey<keyof I>;
     /** A lookup that can miss uses a nullable field. */
     output: O;
+    /** Checked as a command's `requires`. */
     requires?: Named<Rq, { input: Input<I> }>;
     ensures?: Named<En, { input: Input<I>; output: Row<O>; records: Records<Es> }>;
   }): QuerySetup<I, O, Rq, Es>;

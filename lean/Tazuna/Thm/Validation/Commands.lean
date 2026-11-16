@@ -9,11 +9,11 @@ open Tazuna.Syntax
 open Tazuna.Thm.Service.Command
 
 theorem commands_emit_own_events (s : Structure) :
-    Commands.check s = [] ↔
+    Commands.foreignEvents s = [] ↔
       ∀ d ∈ s.definitions, ∀ rejects input output emits references binds requires,
         d.body = .command rejects input output emits references binds requires →
           ∀ e, some e ∈ emits → e.service = d.service := by
-  simp only [Commands.check, List.flatMap_eq_nil_iff]
+  simp only [Commands.foreignEvents, List.flatMap_eq_nil_iff]
   constructor
   · intro h d hd rejects input output emits references binds requires hb e he
     have hd' := h d hd
@@ -29,7 +29,7 @@ theorem commands_emit_own_events (s : Structure) :
       | some e => simp [h d hd rejects input output emits references binds requires hb e he]
     | _ => rfl
 
-theorem accepted_command_emits_own_events (j : Structure) (h : Commands.check j = []) (st : Service)
+theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignEvents j = []) (st : Service)
     (hj : st.«structure» = j) (fs : Functions Id) (records : Records) (now : Time) (name : String) (raw : Value)
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
     (ha : evaluate st fs records now name raw = .accepted written groups vs) :
@@ -55,5 +55,9 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.check j 
     | _ => simp [hb] at hm
   refine ⟨r, ho, hsv, ?_⟩
   rw [hev, ← beq_iff_eq.mp hname, Ref.traceName, ite_eq_left (by simp [hsv])]
+
+theorem no_index_reasons (s : Structure) :
+    Commands.indexReasons s = [] ↔ ∀ d ∈ s.definitions, ∀ r ∈ s.rejectionReasons d.ref, Commands.isArrayIndex r = false := by
+  simp [Commands.indexReasons, List.flatMap_eq_nil_iff, List.filter_eq_nil_iff]
 
 end Tazuna.Thm.Validation.Commands

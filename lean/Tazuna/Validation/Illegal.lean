@@ -21,6 +21,12 @@ inductive Illegal where
   /-- `statePath` leads from the state of an unguarded always transition back to that state. -/
   | alwaysCycle (definition : Syntax.Ref) (statePath : List String)
   | foreignEvent (definition : Syntax.Ref) (event : Syntax.Ref)
+  /--
+  A binds or requires key of the command or query, which a requires rejection may name as its reason, is an array index
+  such as `"1"`. JavaScript lists such keys before the others (ECMA-262 OrdinaryOwnPropertyKeys), so the written order
+  would not decide which failing condition gives the reason.
+  -/
+  | indexReason (definition : Syntax.Ref) (reason : String)
   /-- The contract of service `contract` lists under `key` a definition of another service. -/
   | foreignMember (contract key : String)
   /--
