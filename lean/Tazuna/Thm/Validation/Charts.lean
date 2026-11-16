@@ -1,12 +1,12 @@
 import Tazuna.Validation.Charts
-import Tazuna.Semantics.System.Input
-import Tazuna.Thm.Semantics.Service.Basic
+import Tazuna.Sim.Input
+import Tazuna.Thm.Service.Basic
 
 namespace Tazuna.Thm.Validation.Charts
 
 open Tazuna.Data Tazuna.Validation Tazuna.Validation.Charts
 open Tazuna.Syntax
-open Tazuna.Thm.Semantics.Service.Basic
+open Tazuna.Thm.Service.Basic
 
 theorem parentKeys_eq_nil (c : Chart) :
     parentKeys c = [] ↔ c.input = [] ∧ c.requires = [] ∧ c.output = [] ∧ c.ensures = [] := by

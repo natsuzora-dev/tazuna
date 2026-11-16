@@ -11,8 +11,9 @@ const allowedImports: Readonly<Record<string, readonly string[]>> = {
   Data: ["Data"],
   Syntax: ["Data", "Syntax"],
   Validation: ["Data", "Syntax", "Validation"],
-  Semantics: ["Data", "Syntax", "Semantics"],
-  Observe: ["Data", "Syntax", "Semantics", "Observe"],
+  Service: ["Data", "Syntax", "Service"],
+  Sim: ["Data", "Syntax", "Service", "Sim"],
+  Observe: ["Data", "Syntax", "Service", "Sim", "Observe"],
   Verify: ["Data", "Syntax", "Verify"],
 };
 
@@ -26,7 +27,7 @@ for (const [folder, allowed] of Object.entries(allowedImports))
     assert.deepEqual(outside, []);
   });
 
-test("The namespace of each Thm file is its path (Tazuna.Thm.Semantics.Chart.Exit for Tazuna/Thm/Semantics/Chart/Exit.lean)", () => {
+test("The namespace of each Thm file is its path (Tazuna.Thm.Service.Chart.Exit for Tazuna/Thm/Service/Chart/Exit.lean)", () => {
   for (const path of leanModulePaths("Thm")) {
     const expected = `Tazuna.Thm.${path.split(sep).join(".")}`;
     const namespaces = [...source("Thm", path).matchAll(/^namespace (\S+)$/gm)].map((m) => m[1]);

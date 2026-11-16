@@ -1,6 +1,6 @@
-import type { Processing } from "../semantics/chart/queue.ts";
-import { operationsOf } from "../semantics/screen/operable.ts";
-import { machine, type State, senderOf } from "../semantics/state.ts";
+import type { Processing } from "../service/chart/queue.ts";
+import { operationsOf } from "../service/screen/operable.ts";
+import { machine, type State, senderOf } from "../service/state.ts";
 
 /**
  * What a run accepts next: the operations of the open screens, the requests that await answers, and the next deadline.

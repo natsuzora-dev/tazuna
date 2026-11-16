@@ -11,7 +11,7 @@ import { execute, stepsOf } from "../src/run/execute.ts";
 import { depth, groupExamples } from "./examples.ts";
 import { testEveryKind, testExamples } from "./expected.ts";
 
-const examples = join(import.meta.dirname, "run/choiceDependent/ChoiceDependent");
+const examples = join(import.meta.dirname, "run/choiceDependent/Observe/ChoiceDependent");
 const separateRegions = await loadSpec(join(examples, "answer-order"));
 const deadlines = await loadSpec(join(examples, "deadline-order"));
 

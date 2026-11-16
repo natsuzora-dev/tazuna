@@ -1,5 +1,5 @@
 import Tazuna.Data.Names
-import Tazuna.Semantics.Message
+import Tazuna.Service.Message
 
 /-! The diff tests compare these constructor values with the TS types. -/
 

@@ -1,7 +1,7 @@
-import { newQueue, type Processing } from "../semantics/chart/queue.ts";
-import type { Functions } from "../semantics/functions.ts";
-import type { Note } from "../semantics/note.ts";
-import type { Evaluations, Instance } from "../semantics/state.ts";
+import { newQueue, type Processing } from "../service/chart/queue.ts";
+import type { Functions } from "../service/functions.ts";
+import type { Note } from "../service/note.ts";
+import type { Evaluations, Instance } from "../service/state.ts";
 
 /**
  * Returns a copy of `instance`. Spec values, context, input, awaitingOnDone and the arrays in lastChildren and copyKeys

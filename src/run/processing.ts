@@ -1,9 +1,9 @@
 import type { Location } from "../data/violation.ts";
-import { newQueue, type Processing } from "../semantics/chart/queue.ts";
-import type { Functions } from "../semantics/functions.ts";
-import type { Note } from "../semantics/note.ts";
-import type { Service } from "../semantics/service/basic.ts";
-import { type Evaluations, newState } from "../semantics/state.ts";
+import type { Service } from "../service/basic.ts";
+import { newQueue, type Processing } from "../service/chart/queue.ts";
+import type { Functions } from "../service/functions.ts";
+import type { Note } from "../service/note.ts";
+import { type Evaluations, newState } from "../service/state.ts";
 
 /**
  * Returns a new processing of the service `st`. `listener` hears the notes and keeps the evaluation cache, and the run

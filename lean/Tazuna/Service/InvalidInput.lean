@@ -1,0 +1,132 @@
+import Tazuna.Data.Group
+import Tazuna.Data.Trace
+import Tazuna.Service.Note
+import Tazuna.Syntax.Structure
+
+namespace Tazuna.Semantics
+
+open Tazuna.Data
+
+/-- A scenario input that no caller or external service gives. The input is the subject, so `definition` is null. -/
+inductive InvalidInput where
+  /-- The time of the input is before `now`, the time that the inputs before it reached. -/
+  | earlierAt («at» now : Time)
+  /-- The input names a command, query, or screen that the service does not own. -/
+  | unownedTarget (target : Syntax.Ref)
+  /-- No contract of another service lists the event, so the service does not receive it. -/
+  | unlistedEvent (event : Syntax.Ref)
+  | eventPayloadSchema (event : Syntax.Ref)
+  | controlPayloadSchema (screen : Syntax.Ref) (control : String)
+  /-- The event input has the id of an earlier event input of another event. -/
+  | reusedEventId (eventId : String) (firstEvent deliveredEvent : Syntax.Ref)
+  /-- The event input delivers the event of an earlier event input with the same id again, with another payload. -/
+  | changedRedeliveryPayload (eventId : String) (event : Syntax.Ref) (firstPayload deliveredPayload : Value)
+  /-- The subscribe input has the id of a subscription that is open. -/
+  | reusedSubscriptionId (subscriptionId : String)
+  /-- The unsubscribe input names a subscription that is not open. -/
+  | unopenedSubscription (subscriptionId : String)
+  | unlistedRejectionKind (requestId : String) (target : Syntax.Ref) (rejection : Rejection)
+  /-- The answer rejects the request for a requires reason that the target does not list. -/
+  | unlistedRejectionReason (requestId : String) (target : Syntax.Ref) (rejection : Rejection)
+  | answerOutputSchema (requestId : String) (target : Syntax.Ref)
+  /-- The answer rejects the request for requires, although the input meets the target's assumed requires. -/
+  | rejectedAssumedRequires (requestId : String) (target : Syntax.Ref)
+  /-- The answer is no rejection, although the input fails the target's assumed requires `condition`. -/
+  | failedAssumedRequires (requestId : String) (target : Syntax.Ref) (condition : String)
+  /-- The answer, or the result events so far, fail the target's assumed ensures `condition`. -/
+  | failedAssumedEnsures (requestId : String) (target : Syntax.Ref) (condition : String)
+  /-- The resultOf of the event input names a request to a target that is not a command. -/
+  | resultOfNonCommand (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
+  /-- The resultOf of the event input names a request that the answer did not accept. -/
+  | resultOfUnacceptedRequest (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
+  /-- The resultOf of the event input names a request to a command whose emits do not list the event. -/
+  | resultOfUnlistedEvent (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
+  /-- No request from `sender` to `target` waits for the answer input. -/
+  | missingWaitingRequest (sender target : Syntax.Ref)
+  /-- No stale request from `sender` to `target` waits for the answer input that chooses a stale request. -/
+  | missingStaleRequest (sender target : Syntax.Ref)
+  /-- No request to `target` whose trace line has id `requestId` waits for the answer input. -/
+  | unwaitedRequest (requestId : String) (target : Syntax.Ref)
+  /--
+  The requests from `sender` to `target` that the answer input may answer have the different inputs `inputs`, so it
+  answers none: a mock's `input` chooses among them by content, and no order decides.
+  -/
+  | ambiguousMock (sender target : Syntax.Ref) (inputs : List Value)
+  | unknownControl (screen : Syntax.Ref) (control : String)
+  /-- The operation input operates a screen that is not open. -/
+  | unopenedScreen (screen : Syntax.Ref) (control : String)
+  /-- The modal screen `child` covers the operated screen. -/
+  | coveredByModal (screen : Syntax.Ref) (control : String) (child : Syntax.Ref)
+  /-- No active state of the screen offers the payload of the operation input. -/
+  | unofferedPayload (screen : Syntax.Ref) (control : String) (payload : Value)
+  /-- The screen accepts the operation of the cannotOperate input. -/
+  | unexpectedlyAccepted (screen : Syntax.Ref) (control : String)
+  /-- The deadlineOrder entry `named` is not among the deadlines due in the tie, `candidates`. -/
+  | unreadyDeadline (named : DeadlineId) (candidates : List DeadlineId)
+  /-- No tie during the input used the deadlineOrder `entries`. -/
+  | unusedDeadlineOrder (entries : List DeadlineId)
+  /-- The stepOrder entry `named` is not among the steps that can begin next, `candidates`. -/
+  | unreadyStep (named : StepName) (candidates : List StepName)
+  /-- No step choice during the input used the stepOrder `entries`. -/
+  | unusedStepOrder (entries : List StepName)
+  /--
+  createKey returned none of the names `names` of the entity `entity`: of the input's `keys` during its processing, or
+  of its `advanceKeys` during the advance to its time.
+  -/
+  | unusedKeys (entity : String) (names : List String)
+  /--
+  A value of the input has the form of a createKey value of the service's entity `entity` that createKey has not given
+  yet. An implementation makes its own keys, such as UUIDs, so no caller knows a key before the service gives it.
+  -/
+  | uncreatedKey (recordKey : String) (entity : Syntax.Ref)
+  /--
+  The mock's answer to the request `requestId` to the spec service of `target` is not the answer that the service's
+  run of the derived inputs gives the request at that place, or that answer comes later than the mock or after the
+  service takes an input that arrives after the mock.
+  -/
+  | unproducibleAnswer (requestId : String) (target : Syntax.Ref)
+  /-- The service's run of the derived inputs gives the request `requestId` fewer answers than the mocks. -/
+  | unansweredRequest (requestId : String) (target : Syntax.Ref)
+  /--
+  The service of `event` emits no `event` with the event input's payload in its run of the derived inputs by the time of
+  the input and before it takes an input that arrives after the event input, while it takes the request that the input
+  names as its resultOf when it names one.
+  -/
+  | unproducibleEvent (eventId : String) (event : Syntax.Ref)
+  /--
+  The run of the spec service `service` of the derived inputs sends no request, or end of a subscription, that the
+  scenario's from input with id `requestId` stands for by the time of the input and before it takes an input that
+  arrives after the input.
+  -/
+  | unproducibleRequest (requestId service : String)
+  /--
+  The comparison of the scenario's line `lineId`, an answer or a received event, with the run of the spec service
+  `service` of the derived inputs did not finish: pairing the elements of a bag used up its tries.
+  -/
+  | peerSearchLimit (lineId service : String)
+  /-- The spec service `service` halted with `halting` in its run of the derived inputs. -/
+  | haltedPeer (service halting : String)
+
+local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
+
+derive_group InvalidInput
+
+/--
+Whether the violation halts the run, which it does when the input cannot be written as a trace line. A trace writes an
+implementation's own key in place of each createKey value, which an input cannot hold before the key exists
+(uncreatedKey).
+-/
+def InvalidInput.halts : InvalidInput → Bool
+  | .earlierAt .. | .unownedTarget .. | .unlistedEvent .. | .eventPayloadSchema .. | .controlPayloadSchema ..
+  | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
+  | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unexpectedlyAccepted .. | .unreadyDeadline ..
+  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .unusedKeys .. | .uncreatedKey .. => true
+  | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
+  | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
+  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest .. | .unwaitedRequest ..
+  | .ambiguousMock ..
+  | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .unproducibleRequest ..
+  | .peerSearchLimit ..
+  | .haltedPeer .. => false
+
+end Tazuna.Semantics

@@ -27,6 +27,7 @@ import type {
 import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { refOfDefinition, traceName } from "../load/traceName.ts";
+import { type Schema, type Service, serviceOf } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -38,11 +39,10 @@ import {
   type Holder,
   type NextKeys,
   type Scope,
-} from "../semantics/functions.ts";
-import type { Emit } from "../semantics/message.ts";
-import type { Note } from "../semantics/note.ts";
-import { type Schema, type Service, serviceOf } from "../semantics/service/basic.ts";
-import type { RecordSource, Row } from "../semantics/service/records.ts";
+} from "../service/functions.ts";
+import type { Emit } from "../service/message.ts";
+import type { Note } from "../service/note.ts";
+import type { RecordSource, Row } from "../service/records.ts";
 import { type ChartStructure, chartStructure, stateNamed, traceNameOfRef } from "../syntax/structure.ts";
 import { isDescendant, pathOf } from "../syntax/tree.ts";
 import { recordsView } from "./records.ts";

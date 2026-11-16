@@ -6,6 +6,7 @@ import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
 import { type Located, type ProblemError, withExtra } from "../data/violation.ts";
+import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -16,13 +17,12 @@ import {
   holderResource,
   type NextKeys,
   type Scope,
-} from "../semantics/functions.ts";
-import type { Emit } from "../semantics/message.ts";
-import type { Note, RegionCheck, RegionPair } from "../semantics/note.ts";
-import { ref, refOf, type Schema, type Service } from "../semantics/service/basic.ts";
-import { normalizeOutput } from "../semantics/service/query.ts";
-import type { RecordSource } from "../semantics/service/records.ts";
-import type { StepInfo } from "../semantics/state.ts";
+} from "../service/functions.ts";
+import type { Emit } from "../service/message.ts";
+import type { Note, RegionCheck, RegionPair } from "../service/note.ts";
+import { normalizeOutput } from "../service/query.ts";
+import type { RecordSource } from "../service/records.ts";
+import type { StepInfo } from "../service/state.ts";
 import { type Causes, leadsTo } from "./trace.ts";
 
 /** Lean's contextKey: the name of a context field, unique across the kinds of value, as recordPartName names parts. */

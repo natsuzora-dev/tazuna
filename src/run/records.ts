@@ -1,7 +1,7 @@
 import { BagValue } from "../data/bag.ts";
 import type { Fields } from "../data/values.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
-import type { RecordSource } from "../semantics/service/records.ts";
+import type { RecordSource } from "../service/records.ts";
 
 /**
  * Returns a view of the records that reads each value from `source`. Read granularity: get(key) reads existence; size,

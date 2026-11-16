@@ -4,7 +4,8 @@ import { check } from "../src/cli/check.ts";
 import type { ProblemError } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 
-export const semanticsRoot = join(import.meta.dirname, "semantics");
+export const serviceRoot = join(import.meta.dirname, "service");
+export const simRoot = join(import.meta.dirname, "sim");
 export const runRoot = join(import.meta.dirname, "run");
 export const leanRoot = join(import.meta.dirname, "../lean/Tazuna");
 
@@ -43,34 +44,36 @@ export const groupExamples = (folder: string, group?: string): string[] =>
     : [join(import.meta.dirname, folder, group)]
   ).flatMap((f) => folders(f).flatMap(folders));
 
-/** Returns the paths of the Lean modules relative to Tazuna/<folder>, such as Chart/Always in Semantics. */
+/** Returns the paths of the Lean modules relative to Tazuna/<folder>, such as Chart/Always in Service. */
 export const leanModulePaths = (folder: string): string[] =>
   readdirSync(join(leanRoot, folder), { recursive: true, encoding: "utf8" })
     .filter((file) => file.endsWith(".lean"))
     .map((file) => file.slice(0, -".lean".length))
     .sort();
 
-/** Returns the folder under lean/Tazuna of the Lean file that defines `group`, such as Semantics for fault. */
-export const leanFolderOf = (group: string): string => {
-  const file = `${group.charAt(0).toUpperCase()}${group.slice(1)}.lean`;
-  const found = readdirSync(leanRoot).filter((folder) => existsSync(join(leanRoot, folder, file)));
-  if (found.length !== 1) throw new Error(`no single folder under lean/Tazuna has ${file}`);
-  return found[0] as string;
-};
+/** Returns the paths relative to Tazuna of the Lean modules outside Thm, such as Service/Chart/Always. */
+export const leanSemanticsPaths = (): string[] => leanModulePaths("").filter((path) => !path.startsWith("Thm/"));
 
-/** Returns the folders directly under <root>/<path of a Lean module under Tazuna/<folder>>. */
-const atLeanPaths = (root: string, folder: string): string[] =>
-  leanModulePaths(folder).flatMap((path) => folders(join(root, path)));
+/** Returns the folders directly under <root>/<path>, for each path. */
+const atPaths = (root: string, paths: readonly string[]): string[] =>
+  paths.flatMap((path) => folders(join(root, path)));
 
-/** Returns the semantics subjects: the folders directly under test/semantics/<Lean Semantics path>. */
-export const semanticsSubjects = (): string[] => atLeanPaths(semanticsRoot, "Semantics");
+/** Each folder of subjects, and the folder under lean/Tazuna whose module paths its subjects sit under. */
+export const subjectRoots = [
+  { root: serviceRoot, folder: "Service" },
+  { root: simRoot, folder: "Sim" },
+] as const;
 
-/** Returns the examples test/run/<group>/<path of a Lean module in the group's Lean folder>/<example>. */
-export const runGroupExamples = (group: string): string[] => atLeanPaths(join(runRoot, group), leanFolderOf(group));
+/** Returns the subjects: the folders directly under test/service/<Lean Service path> and test/sim/<Lean Sim path>. */
+export const subjects = (): string[] =>
+  subjectRoots.flatMap(({ root, folder }) => atPaths(root, leanModulePaths(folder)));
+
+/** Returns the examples test/run/<group>/<path of a Lean module under Tazuna, outside Thm>/<example>. */
+export const runGroupExamples = (group: string): string[] => atPaths(join(runRoot, group), leanSemanticsPaths());
 
 /** Returns the roots that run.test compares with their expected.jsonl and that run.diff and step.test run. */
 export const runExamples = (): string[] => [
-  ...semanticsSubjects(),
+  ...subjects(),
   ...folders(runRoot).flatMap((folder) => runGroupExamples(basename(folder))),
 ];
 

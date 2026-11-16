@@ -4,8 +4,8 @@ import type { DeadlineId, TraceLine } from "../data/trace.generated.ts";
 import { type Bindings, renamed } from "../data/trace.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
-import { stepNameDefinition } from "../semantics/note.ts";
-import type { Records } from "../semantics/service/records.ts";
+import { stepNameDefinition } from "../service/note.ts";
+import type { Records } from "../service/records.ts";
 
 /** What a run gives the relation: the violation that halted it, the trace lines that verify reads, and its records. */
 export interface Outcome {

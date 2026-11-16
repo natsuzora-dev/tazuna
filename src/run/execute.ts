@@ -20,10 +20,10 @@ import {
   shownKey,
 } from "../observe/instrument.ts";
 import { snapshotLines } from "../observe/trace.ts";
-import type { Activity } from "../semantics/chart/basic.ts";
-import type { Processing } from "../semantics/chart/queue.ts";
-import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../semantics/note.ts";
-import type { Records } from "../semantics/service/records.ts";
+import type { Activity } from "../service/chart/basic.ts";
+import type { Processing } from "../service/chart/queue.ts";
+import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../service/note.ts";
+import type { Records } from "../service/records.ts";
 import {
   type Evaluations,
   Halt,
@@ -32,8 +32,8 @@ import {
   type State,
   type StepInfo,
   senderOf,
-} from "../semantics/state.ts";
-import { given, step } from "../semantics/system/run.ts";
+} from "../service/state.ts";
+import { given, step } from "../sim/run.ts";
 import { Cache } from "./cache.ts";
 import { clone } from "./copy.ts";
 import { Coverage } from "./coverage.ts";

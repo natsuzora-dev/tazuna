@@ -4,9 +4,9 @@ import { test } from "node:test";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 import { type ChartStructure, chartStructure, stateNamed } from "../src/syntax/structure.ts";
 import { isDescendant, parallelBetween } from "../src/syntax/tree.ts";
-import { semanticsRoot } from "./examples.ts";
+import { serviceRoot } from "./examples.ts";
 
-const subject = (path: string) => loadSpec(join(semanticsRoot, path));
+const subject = (path: string) => loadSpec(join(serviceRoot, path));
 const chartOf = (spec: Spec, service: string, name: string): ChartStructure => {
   const chart = chartStructure(spec.structure, service, name);
   assert.ok(chart);
@@ -95,7 +95,7 @@ test("A screen has the JSON Schema of each control payload, the controls that ea
 });
 
 test("Commands and events have the JSON Schema of their input and payload and references to the events they emit and to entities", async () => {
-  const spec = await subject("Service/Contract/contracts");
+  const spec = await subject("Contract/contracts");
   const byName = (name: string) => spec.structure.definitions.find((d) => d.name === name);
   assert.deepEqual(byName("Task"), {
     kind: "entity",

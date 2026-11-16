@@ -3,7 +3,8 @@
   "workspaces": {
     ".": {
       "entry": [
-        "test/semantics/**/*.ts",
+        "test/service/**/*.ts",
+        "test/sim/**/*.ts",
         "test/load/**/*.ts",
         "test/validation/**/*.ts",
         "test/explore/**/*.ts",

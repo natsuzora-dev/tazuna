@@ -13,8 +13,8 @@ import type { Spec } from "../src/load/load.ts";
 import { definitionOfTraceName } from "../src/load/traceName.ts";
 import type { Enabled } from "../src/observe/enabled.ts";
 import { execute, extend, type Run, stepsOf } from "../src/run/execute.ts";
-import { limits as tsLimits } from "../src/semantics/limits.ts";
-import { byCallerKinds } from "../src/semantics/message.ts";
+import { limits as tsLimits } from "../src/service/limits.ts";
+import { byCallerKinds } from "../src/service/message.ts";
 import { depth, loadRoot, runExamples } from "./examples.ts";
 import { RunFunctions } from "./lean/functions.ts";
 import { invalidAfter, rejectedAnywhere } from "./lean/invalidMoves.ts";
@@ -159,7 +159,7 @@ for (const { name, spec } of specs) {
 
 test("A step that names a command, query, subscription, or screen of another service, or that receives an event outside the contract, stops without writing a line in both TS and Lean", () => {
   const spec = (item: string) => {
-    const found = specs.find((s) => s.name === join("test/semantics", item));
+    const found = specs.find((s) => s.name === join("test/service", item));
     assert.ok(found);
     return found.spec;
   };
@@ -168,7 +168,7 @@ test("A step that names a command, query, subscription, or screen of another ser
     assert.ok(d !== undefined);
     return d as never;
   };
-  const shop = spec("Service/Command/command-output");
+  const shop = spec("Command/command-output");
   const screens = spec("Chart/Request/child-screen");
   const time = "2026-10-25T10:00:00+09:00";
   const cases: readonly [Spec, string, Input, Data][] = [

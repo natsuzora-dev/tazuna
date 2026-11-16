@@ -1,0 +1,272 @@
+import Tazuna.Service.Chart.Always
+import Tazuna.Service.Screen.Subscription
+import Tazuna.Service.Automation
+import Tazuna.Service.Command
+
+/-!
+As in an SCXML microstep, all chosen transitions run before always transitions are evaluated (settle). As in the SCXML
+main loop, an instance handles events, operations, answers, onDone and deadlines in the configuration left after
+always transitions (settled). The order within one message (run-to-completion) follows W3C SCXML Appendix D: the
+internal queue first processes work caused by steps; whenever work runs out, commands sent to its own service in the
+meantime (a round) are appended to the command queue in sender-definition order and processed one by one. When both
+are empty (end of macrostep), the activities of entered states are sent (sendEntered) and the work and commands that
+they cause are processed. No cause orders the work and commands waiting at one time, so the input's `stepOrder` may take
+any of them first (Queue.take).
+-/
+
+namespace Tazuna.Semantics
+
+open Tazuna.Data
+
+variable {m : Type → Type}
+
+def successAnswer (a : Activity) : String := if a.keyword == "calls" then "onFulfilled" else "onAccepted"
+
+def handlingStateReads (i : Instance) (key : String) (leaves : List (String × Option String)) : List (String × String) :=
+  let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.name) ["on", key]).isEmpty).map (·.name)
+  let holders := i.resource :: dedupe ((leaves.map (·.1)).filter (· != i.resource))
+  holders.flatMap fun h => handling.map (h, ·)
+
+def mapStateReads (i : Instance) : List (String × String) :=
+  let tree := i.chart.tree
+  (i.active.filter (tree.kindOf · == some .map)).map (i.resource, ·)
+
+def State.workName (s : State) (st : Service) : Work → StepName
+  | .reaction a _ _ => .reaction (st.ref a.name)
+  | .answered c _ _ => .answer (st.refOf c.activity.target) (s.who st c.requester.sender)
+  | .start name _ => .start (s.who st name)
+  | .receive name [] _ => .always (s.who st name)
+  | .receive name received _ => .receive (s.who st name) (received.map (·.1))
+  | .onDone name _ => .onDone (s.who st name)
+  | .opensDone name _ key _ _ _ => .opensDone (s.who st name) key
+
+def State.readyName (s : State) (st : Service) : Ready → StepName
+  | .work w => s.workName st w
+  | .command c => .command (st.refOf c.activity.target) (s.who st c.requester.sender)
+
+def Work.cause : Work → Option Nat
+  | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
+    some cause
+  | .start _ cause => cause
+
+def Work.startedResource : Work → Option String
+  | .start name _ => some name
+  | _ => none
+
+section
+
+variable [Monad m] [MonadNote m] (fs : Functions m)
+
+def applyCompletion (st : Service) (step : Nat) (name : String) (ts : List Transition) (extra : Extra) :
+    Processing → m Processing :=
+  withMachine name fun i r => do
+    match ← choose fs st r.state i extra ts with
+    | .error fault => pure (r.report (.fault fault))
+    | .ok none => pure r
+    | .ok (some t) => microstep fs st step name [(name, t)] extra r
+
+def handle (st : Service) (step : Nat) (name state : String) (a : Activity) (answer : Answer) : Processing → m Processing :=
+  withMachine name fun i r => do
+    MonadNote.note (.readStates [(name, state)])
+    if i.closed || !i.isIn state then pure r else
+    match answer with
+    | .rejected rejection =>
+      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, "onRejected"])
+        (.rejection rejection) r
+    | .accepted output =>
+      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, successAnswer a])
+        (match output with | some o => .output o | none => .none) r
+    | .fulfilled output =>
+      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, successAnswer a])
+        (.output output) r
+
+def dispatch (st : Service) (step : Nat) (name key : String) (payload : Value) (r : Processing) : m Processing :=
+  match r.state.machine? name with
+  | none => pure r
+  | some i =>
+    if r.halted || i.closed then pure r else do
+    match ← eventLeaves fs st r.state i payload with
+    | .error fault => pure (r.report (.fault fault))
+    | .ok leaves =>
+    let reads := handlingStateReads i key leaves ++ mapStateReads i
+    MonadNote.note (.readStates reads)
+    match ← select fs st r.state i ["on", key] (.payload payload) leaves with
+    | .error fault => pure (r.report (.fault fault))
+    -- An event that no transition takes is discarded, as in SCXML.
+    | .ok [] => pure r
+    | .ok chosen => microstep fs st step name chosen (.payload payload) r
+
+def receiveWork (st : Service) (step : Nat) (name : String) (received : List (String × Value)) (r : Processing) :
+    m Processing :=
+  received.foldlM (fun r (key, payload) => do dispatch fs st step name key payload (← settle fs st step name r)) r
+
+def done (st : Service) (step : Nat) (name n : String) : Processing → m Processing :=
+  withMachine name fun i r => do
+    MonadNote.note (.readStates [(name, n)])
+    if i.closed || !i.isIn n then pure r
+    else applyCompletion fs st step name (i.chart.transitionsAt (some n) ["onDone"]) .none r
+
+/--
+The processing of the onDone selections of instance `name`. States that finish during the work are handled by the same
+work.
+-/
+def doneWork (st : Service) (step : Nat) (name : String) : Nat → Processing → m Processing
+  | 0, r =>
+    match r.state.machine? name with
+    | some i =>
+      match i.awaitingOnDone with
+      | some (_ :: _) =>
+        pure (r.report (.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)))
+      | _ => pure ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩
+    | none => pure r
+  | fuel + 1, r =>
+    if r.halted then pure r else
+    match r.state.machine? name with
+    | none => pure r
+    | some i =>
+      match i.awaitingOnDone with
+      | some (n :: rest) => do
+        let r ← settle fs st step name ⟨r.state.setMachine name fun i => { i with awaitingOnDone := some rest }, r.queue⟩
+        doneWork st step name fuel (← done fs st step name n r)
+      | _ => pure ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩
+
+def startWork (st : Service) (step : Nat) (name : String) : Processing → m Processing :=
+  withMachine name fun i r => do
+    let r ← enter fs st step name [i.chart.initial] r
+    unlessHalted (settle fs st step name) r
+
+/--
+The processing after an answer to the subscription of shows slot `slot`. A rejection that blames the caller is the
+screen's fault (Fault.rejectedShows). Any other rejection, such as unavailable, keeps the shown value, as HTTP's
+stale-if-error (RFC 5861) serves the last good response while the origin fails. A shows writes no `onRejected` for it,
+unlike `sends` and automations, because a slot has no transition to choose, so keeping the value is the only behavior
+that an `onRejected` could name.
+-/
+def showAnswer (st : Service) (name slot : String) (answer : Answer) (r : Processing) : Processing :=
+  let s := match answer with
+    | .rejected rejection =>
+      if RejectionKind.byCaller rejection.kind then
+        r.state.report (.fault (.rejectedShows (st.ref (r.state.chartName name)) slot rejection))
+      else r.state
+    | _ => r.state
+  let s := match answer with
+    | .fulfilled output => s.setShown name slot output
+    | _ => s
+  ⟨s, r.queue⟩
+
+def answerTo (st : Service) (step : Nat) (activity : Activity) (answer : Answer) : Requester → Processing → m Processing
+  | .state name state => handle fs st step name state activity answer
+  | .slot name slot => fun r => do
+    if answer matches .fulfilled _ && (r.state.machine? name).isSome then
+      MonadNote.note (.wroteShown name slot)
+    pure (showAnswer st name slot answer r)
+  | .automation a => fun r => pure ⟨automationAnswer st a answer r.state, r.queue⟩
+
+def deliverAnswer (st : Service) (step : Nat) (p : Pending) (answer : Answer) (r : Processing) : m Processing :=
+  let (s, live) := r.state.answered p
+  let r : Processing := ⟨s, r.queue⟩
+  if live then answerTo fs st step p.activity answer p.requester r else pure r
+
+end
+
+def Work.settledMachine? : Work → Option String
+  | .receive name _ _ | .onDone name _ | .opensDone name _ _ _ _ _ => some name
+  | .answered c _ _ => c.requester.machine?
+  | .start _ _ | .reaction _ _ _ => none
+
+def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : Nat) : Work → Processing → m Processing
+  | .reaction a e _, ⟨s, q⟩ => do
+    let definition := st.ref a.name
+    match ← fs.react a.name e.payload s.records s.now s.nextKeys with
+    | .error issue =>
+      pure ⟨s.report (.fault (issueViolation st definition issue)), q⟩
+    | .ok (reacted, keys) =>
+    let s := s.createKeys keys
+    match reacted with
+    | none => pure ⟨s, q⟩
+    | some raw =>
+      match ← fs.normalize (.input a.sends.target) (st.sorted (.input a.sends.target) raw) with
+      | .error issue =>
+        pure ⟨s.report (.fault (issueViolation st definition issue)), q⟩
+      | .ok none => pure ⟨s.report (.fault (.automationInputSchema definition)), q⟩
+      | .ok (some input) =>
+        if a.sends.own then
+          pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
+                                                    serial := none, input, cause := step }] }⟩
+        else pure ⟨s.await (.command a.sends.target input) (.automation a.name) a.sends input, q⟩
+  | .answered c answer _, ⟨s, q⟩ =>
+    let (s, live) := match c.serial with
+      | some serial => s.takeQueued serial
+      | none => (s, true)
+    if live then answerTo fs st step c.activity answer c.requester ⟨s, q⟩ else pure ⟨s, q⟩
+  | .start name _, r => startWork fs st step name r
+  | .receive name received _, r => receiveWork fs st step name received r
+  | .onDone name _, r => doneWork fs st step name Limit.onDoneSelections.max r
+  | .opensDone name state key output serial _, ⟨s, q⟩ => do
+    let (s, live) := s.takeQueued serial
+    MonadNote.note (.readStates [(name, state)])
+    if !live then pure ⟨s, q⟩ else
+    withMachine name (fun i r =>
+      applyCompletion fs st step name (i.chart.transitionsAt (some state) ["opens", key, "onDone"]) (.output output) r)
+      ⟨s, q⟩
+
+def runWork [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (q : Queue) (step : Nat) (w : Work) :
+    m Processing :=
+  settled fs st step w.settledMachine? (workBody st fs step w) ⟨s, q⟩
+
+def shownChanged (before after : State) : List String :=
+  (after.machines.filter fun i => (before.machine? i.resource).any (·.shown != i.shown)).map (·.resource)
+
+/--
+The processing after a step that settles screen `name` once its `shown` changed. The step only evaluates always
+transitions, like the step after a record change, and is a barrier, like the step that sends activities. Reconciling
+subscriptions that change `shown` is not a step, so the step has no cause.
+-/
+def settleScreen [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : String) (r : Processing) :
+    m Processing :=
+  if r.halted then pure r else do
+  let (s, step) := r.state.newStep none (barrier := true)
+  MonadNote.note (.stepBegins step (.always (s.who st name)) none)
+  let r ← settle fs st step name ⟨s, r.queue⟩
+  MonadNote.note .stepEnds
+  pure r
+
+def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat) (s : State) (q : Queue) : m State :=
+  if s.halted.isSome then pure s else
+  match fuel with
+  | 0 =>
+    if !q.isEmpty then pure (s.report (.fault (.exceededMessageWork Limit.messageWork.max))) else do
+    let refreshed ← refreshScreens st fs s
+    pure (if refreshed.halted.isNone && !(shownChanged s refreshed).isEmpty then
+      refreshed.report (.fault (.exceededMessageWork Limit.messageWork.max)) else refreshed)
+  | fuel + 1 =>
+    match q.take (s.readyName st) s.stepOrder with
+    | .error invalid => pure (s.report (.invalidInput invalid))
+    | .ok (some (.work w, rest, stepOrder)) => do
+      let (s, step) := { s with stepOrder }.newStep w.cause
+      MonadNote.note (.stepBegins step (s.workName st w) w.startedResource)
+      let r ← runWork st fs s rest step w
+      MonadNote.note .stepEnds
+      drain st fs fuel r.state r.queue
+    | .ok (some (.command c, rest, stepOrder)) => do
+      let ((s, step), runaway) := { s with stepOrder }.newCommandStep c.cause (st.ref (s.senderOf c.requester))
+      match runaway with
+      | some exceeded => pure (s.report (.fault exceeded))
+      | none =>
+        MonadNote.note (.stepBegins step (s.readyName st (.command c)) none)
+        let pc ← processCommand st fs s c.activity.target c.input none step
+        MonadNote.note .stepEnds
+        drain st fs fuel pc.1
+          { rest with tasks := rest.tasks ++ commandWork st pc.1 pc.2.2 step ++ [.answered c pc.2.1 step] }
+    | .ok none =>
+      if !q.entered.isEmpty then do
+        let r ← sendEntered fs st ⟨s, q⟩
+        drain st fs fuel r.state r.queue
+      else do
+        let refreshed ← refreshScreens st fs s
+        let screens := shownChanged s refreshed
+        if screens.isEmpty then pure refreshed else do
+        let r ← screens.foldlM (fun r name => settleScreen st fs name r) ⟨refreshed, q⟩
+        drain st fs fuel r.state r.queue
+
+end Tazuna.Semantics

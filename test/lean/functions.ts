@@ -16,6 +16,7 @@ import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
 import { refOfDefinition } from "../../src/load/traceName.ts";
 import { SpecFunctions } from "../../src/run/functions.ts";
+import type { Schema } from "../../src/service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -25,10 +26,9 @@ import {
   type Issue,
   type NextKeys,
   type Scope,
-} from "../../src/semantics/functions.ts";
-import type { Emit } from "../../src/semantics/message.ts";
-import type { Schema } from "../../src/semantics/service/basic.ts";
-import type { RecordSource } from "../../src/semantics/service/records.ts";
+} from "../../src/service/functions.ts";
+import type { Emit } from "../../src/service/message.ts";
+import type { RecordSource } from "../../src/service/records.ts";
 import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/syntax/structure.ts";
 import type { Message } from "./lean.ts";
 

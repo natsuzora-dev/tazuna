@@ -8,7 +8,7 @@ import type { Contract, Named } from "../dsl/definition.ts";
 import { type ElsewhereInput, fromInputs, peerRunInputs, type Scenario, writtenPositions } from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
-import { serviceOf } from "../semantics/service/basic.ts";
+import { serviceOf } from "../service/basic.ts";
 import {
   type NamedForm,
   type PeerDerivation,
@@ -16,8 +16,8 @@ import {
   peerArrivals,
   peerEvent,
   peerName,
-} from "../semantics/system/peer.ts";
-import { peerFindings, peerInputs, peerRunFindings } from "../semantics/system/peerCheck.ts";
+} from "../sim/peer.ts";
+import { peerFindings, peerInputs, peerRunFindings } from "../sim/peerCheck.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
 /** A peer of a scenario's run: the PeerDerivation of its inputs, with the scenario's elsewhere inputs to it as written. */

@@ -1,5 +1,5 @@
-import Tazuna.Semantics.Note
-import Tazuna.Semantics.State
+import Tazuna.Service.Note
+import Tazuna.Service.State
 
 /-!
 This module computes a snapshot line's `after`: every order that must hold among the lines of one window (between two

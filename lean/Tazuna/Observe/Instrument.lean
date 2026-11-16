@@ -1,4 +1,4 @@
-import Tazuna.Semantics.System.Run
+import Tazuna.Sim.Run
 import Tazuna.Observe.OrderDependent
 import Tazuna.Observe.Trace
 

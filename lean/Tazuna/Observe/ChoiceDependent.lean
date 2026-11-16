@@ -1,9 +1,9 @@
 import Tazuna.Data.Group
 import Tazuna.Data.Trace
-import Tazuna.Semantics.Message
-import Tazuna.Semantics.Note
-import Tazuna.Semantics.Service.Basic
-import Tazuna.Semantics.Service.Records
+import Tazuna.Service.Message
+import Tazuna.Service.Note
+import Tazuna.Service.Basic
+import Tazuna.Service.Records
 
 namespace Tazuna.Observe
 

@@ -1,6 +1,6 @@
 import type { TraceLine } from "../data/trace.generated.ts";
 import { contentOf, sameTime, steps as windows } from "../data/trace.ts";
-import type { StepInfo } from "../semantics/state.ts";
+import type { StepInfo } from "../service/state.ts";
 
 /**
  * Returns whether step `earlier` comes before step `later` through the cause chain or through a barrier of the same

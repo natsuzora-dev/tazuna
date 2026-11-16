@@ -1,5 +1,5 @@
 import Tazuna.Data.Group
-import Tazuna.Semantics.Message
+import Tazuna.Service.Message
 
 namespace Tazuna.Observe
 

@@ -152,7 +152,7 @@ test("check writes one JSON line per violation to stdout and the count, or that 
     ["Illegal.foreignEvent"],
   );
   assert.deepEqual(violating.err, [`Checked ${sourcesOf(violatingFolder).length} files. 1 problem.`]);
-  const cleanFolder = "test/semantics/Chart/Always/always";
+  const cleanFolder = "test/service/Chart/Always/always";
   const clean = await run("check", cleanFolder);
   assert.equal(clean.code, 0);
   assert.deepEqual(clean.out, []);

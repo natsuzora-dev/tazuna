@@ -1,12 +1,12 @@
 import Tazuna.Validation.Commands
-import Tazuna.Thm.Semantics.Service.Command
+import Tazuna.Thm.Service.Command
 import Tazuna.Thm.Syntax.Structure
 
 namespace Tazuna.Thm.Validation.Commands
 
 open Tazuna.Data Tazuna.Semantics Tazuna.Validation
 open Tazuna.Syntax
-open Tazuna.Thm.Semantics.Service.Command
+open Tazuna.Thm.Service.Command
 
 theorem commands_emit_own_events (s : Structure) :
     Commands.check s = [] ↔

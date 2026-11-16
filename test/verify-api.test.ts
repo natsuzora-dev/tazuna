@@ -13,12 +13,12 @@ import {
   traceName,
   verifyTraces,
 } from "../src/verify/index.ts";
-import { semanticsRoot } from "./examples.ts";
-import { createCharge } from "./semantics/Service/Command/command-output/payments/payments.ts";
-import { placeOrder } from "./semantics/Service/Command/command-output/shop/shop.ts";
+import { serviceRoot } from "./examples.ts";
+import { createCharge } from "./service/Command/command-output/payments/payments.ts";
+import { placeOrder } from "./service/Command/command-output/shop/shop.ts";
 import { calendar } from "./verify/mismatch/external/assumptions/calendar/contract.ts";
 
-const commandOutput = join(semanticsRoot, "Service/Command/command-output");
+const commandOutput = join(serviceRoot, "Command/command-output");
 const shop = await loadSpec(commandOutput);
 const refund = { service: "shop", name: "refundCreatedCharge" };
 

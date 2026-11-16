@@ -1,4 +1,4 @@
-import Tazuna.Semantics.System.Run
+import Tazuna.Sim.Run
 
 /-! This module computes what can happen next right after an input, for the explorer. -/
 

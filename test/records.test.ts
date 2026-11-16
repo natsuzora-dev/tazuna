@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Note } from "../src/semantics/note.ts";
-import { recordSource } from "../src/semantics/service/records.ts";
+import type { Note } from "../src/service/note.ts";
+import { recordSource } from "../src/service/records.ts";
 
 test("recordSource gives the keys in code-point order, so that spec functions are called in one order", () => {
   const row = { value: {}, encoded: {} };

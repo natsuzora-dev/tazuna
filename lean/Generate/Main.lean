@@ -1,11 +1,11 @@
 import Lean.Elab.Term
 import Tazuna.Data.Names
-import Tazuna.Semantics.Step
+import Tazuna.Service.Step
 import Tazuna.Data.Trace
 import Tazuna.Observe.ChoiceDependent
 import Tazuna.Observe.OrderDependent
-import Tazuna.Semantics.Fault
-import Tazuna.Semantics.InvalidInput
+import Tazuna.Service.Fault
+import Tazuna.Service.InvalidInput
 import Tazuna.Syntax.Structure
 import Tazuna.Validation.Illegal
 import Tazuna.Verify.Mismatch
