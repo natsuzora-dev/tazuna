@@ -1,4 +1,4 @@
-import { at, mock, operate, scenario } from "@natsuzora-dev/tazuna";
+import { at, elsewhere, mock, operate, scenario, subscribe, unsubscribe } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { boardScreen } from "./board.ts";
 
@@ -81,4 +81,16 @@ export const showsThirtyTasksWithOneKeyTwice = scenario(
     ]),
   ],
   { given: { todo: todo.states.thirtyMilks } },
+);
+
+const watchingTasks = subscribe(todo.tasks, {});
+
+export const endsTodoSubscriptionTwice = scenario(
+  "Subscribe to the tasks of todo from elsewhere and end the subscription twice; todo's run reports unopenedSubscription at the second end, so test reports it at that line",
+  [
+    at("2026-10-25T10:00:00+09:00"),
+    elsewhere(todo, watchingTasks),
+    elsewhere(todo, unsubscribe(watchingTasks)),
+    elsewhere(todo, unsubscribe(watchingTasks)),
+  ],
 );

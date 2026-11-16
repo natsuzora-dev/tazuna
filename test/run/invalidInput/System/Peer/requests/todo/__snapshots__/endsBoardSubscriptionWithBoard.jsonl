@@ -1,0 +1,8 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"tasks#1","name":"tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"close","title":"Close the board"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"close","title":"Close the board","seen":false},"resultOf":"addTask#1"}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"close"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"close","title":"Close the board","seen":false}]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unsubscribe","id":"unsubscribe#1","to":"tasks#1"}

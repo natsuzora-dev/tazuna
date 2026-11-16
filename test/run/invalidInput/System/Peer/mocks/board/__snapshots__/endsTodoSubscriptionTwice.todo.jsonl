@@ -1,0 +1,6 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"todo.tasks#1","name":"tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"tasks#2","name":"tasks","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"tasks#2","answer":{"result":"fulfilled","output":{"tasks":[]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unsubscribe","id":"unsubscribe#1","to":"tasks#2"}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unsubscribe","id":"unsubscribe#2","to":"tasks#2"}

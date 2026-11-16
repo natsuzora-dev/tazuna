@@ -48,10 +48,8 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
       "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
     "InvalidInput.unusedStepOrder":
       "Scenarios do not write stepOrder, and the exploration of test names only the processing steps that a run takes",
-    "InvalidInput.unwaitedRequest":
-      "Only a peer's derived inputs answer a request by its id, and test reports the violations of the peer's run only when it halts",
     "InvalidInput.uncreatedKey":
-      "check reports such a value on a scenario line (Illegal.countedKey), so only a peer's run reaches it, which test reports as haltedPeer",
+      "check reports such a value on a scenario or state line (Illegal.countedKey), so only a peer's run reaches it, which test reports as haltedPeer",
   },
   Fault: {
     "Fault.exceededMessageWork":

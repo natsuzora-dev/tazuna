@@ -228,3 +228,13 @@ export function peerFindings(
     ];
   return peerChecks(service, d, arrivals, lines, peerLines).findings;
 }
+
+/**
+ * Lean's peerRunFindings: the InvalidInput violations among `reported`, the violations of a peer's run that did not halt
+ * with the origins of their inputs.
+ */
+export function peerRunFindings<V extends { readonly kind: string }>(
+  reported: readonly { readonly origin: PeerOrigin; readonly violation: V }[],
+): { readonly origin: PeerOrigin; readonly violation: V }[] {
+  return reported.filter(({ violation }) => violation.kind.startsWith("InvalidInput."));
+}

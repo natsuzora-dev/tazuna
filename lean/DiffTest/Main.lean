@@ -463,7 +463,8 @@ def afters (request : Value) : Except String Value := do
 /--
 The reply to request `peer`, which takes the scenario's service, the fields of PeerDerivation, the forms of
 `peerForm` and `ownInputForm` that TS computed as `[name, value, form]`, the lines of the scenario's run and of the
-peer's run, and the halt of the peer's run, and returns peerInputs and peerFindings. A value without a form takes the
+peer's run, the halt of the peer's run, and the violations of a run that did not halt with their origins, and
+returns peerInputs, peerFindings and peerRunFindings. A value without a form takes the
 form that no schema reads.
 -/
 def peer (request : Value) : Except String Value := do
@@ -481,6 +482,9 @@ def peer (request : Value) : Except String Value := do
     | .null => pure none
     | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : PeerOrigin), kind))
     | _ => throw "expected null or [origin, kind]"
+  let reported ← (← asList (← field request "reported")).mapM fun
+    | .arr [o, v] => do pure ((← FromValue.fromValue o : PeerOrigin), (← FromValue.fromValue v : Violation))
+    | _ => throw "expected [origin, violation]"
   let forms (key : String) := do
     let recorded ← (← asList (← field request key)).mapM fun
       | .arr [.str name, v, form] => do pure (name, v, ← CValue.decode form)
@@ -494,7 +498,9 @@ def peer (request : Value) : Except String Value := do
     ("inputs", .arr ((peerInputs service d lines peerLines).map
       fun (s, o) => .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
     ("findings", .arr ((peerFindings service d (peerArrivals service d lines) lines peerLines halted).map fun (o, f) =>
-      .obj [("origin", ToValue.toValue o), ("violation", f.toValue)]))])
+      .obj [("origin", ToValue.toValue o), ("violation", f.toValue)])),
+    ("runFindings", .arr ((peerRunFindings reported).map fun (o, v) =>
+      .obj [("origin", ToValue.toValue o), ("violation", ToValue.toValue v)]))])
 
 partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do
   let line ← stdin.getLine

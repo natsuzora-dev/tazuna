@@ -1,5 +1,5 @@
 import Tazuna.Data.Unify
-import Tazuna.Semantics.InvalidInput
+import Tazuna.Semantics.Message
 import Tazuna.Semantics.System.Peer
 
 /-!
@@ -161,5 +161,14 @@ def peerFindings (service : String) (d : PeerDerivation) (arrivals : List Nat) (
       match peerLine service d arrivals lines peerLines (peerBindings service d arrivals lines peerLines i) i l with
       | .error v => some (PeerOrigin.line i, v)
       | .ok _ => none
+
+/--
+The violations of the peer's run that come from what the scenario wrote, each with the origin of the input during which
+the run reported it: the InvalidInput violations among `reported`, the violations of a run that did not halt with
+their origins. A given or elsewhere input is the scenario's own line, and a derived input carries a line of the
+scenario's run, so each such violation is one that the scenario's lines cause; a Fault is the peer's own.
+-/
+def peerRunFindings (reported : List (PeerOrigin × Violation)) : List (PeerOrigin × Violation) :=
+  reported.filter fun (_, v) => v.kind.startsWith "InvalidInput."
 
 end Tazuna.Semantics

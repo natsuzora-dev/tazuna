@@ -275,11 +275,12 @@ export class Lean {
     readonly halted: readonly [unknown, string] | null;
     readonly peerForms: readonly (readonly [string, unknown, unknown])[];
     readonly ownInputForms: readonly (readonly [string, unknown, unknown])[];
-  }): { readonly inputs: unknown; readonly findings: unknown } {
+    readonly reported: readonly (readonly [unknown, unknown])[];
+  }): { readonly inputs: unknown; readonly findings: unknown; readonly runFindings: unknown } {
     this.send({ type: "peer", ...request });
     const { type, ...result } = this.receive();
     if (type !== "peer") throw new Error(`tazuna-lean answered peer with ${JSON.stringify({ type, ...result })}`);
-    return result as { readonly inputs: unknown; readonly findings: unknown };
+    return result as { readonly inputs: unknown; readonly findings: unknown; readonly runFindings: unknown };
   }
 
   check(structure: Structure): readonly Illegal[] {

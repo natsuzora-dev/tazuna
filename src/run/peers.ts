@@ -17,7 +17,7 @@ import {
   peerEvent,
   peerName,
 } from "../semantics/system/peer.ts";
-import { peerFindings, peerInputs } from "../semantics/system/peerCheck.ts";
+import { peerFindings, peerInputs, peerRunFindings } from "../semantics/system/peerCheck.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
 /** A peer of a scenario's run: the PeerDerivation of its inputs, with the scenario's elsewhere inputs to it as written. */
@@ -126,7 +126,7 @@ function ownInputForm(spec: Spec, service: string): NamedForm {
 /**
  * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
  * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
- * halting violation's kind. The derivation starts from an empty run of the peer and repeats until the inputs stop
+ * halting violation's kind, or else its violations with the origins of their inputs. The derivation starts from an empty run of the peer and repeats until the inputs stop
  * changing: an input depends only on the peer's run of the inputs before it.
  */
 export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[], d: PeerDerivation) {
@@ -145,10 +145,16 @@ export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[]
     const next = derive(run.outcome.lines);
     if (canonicalJson(next) === canonicalJson(derived)) {
       const { halted } = run;
-      if (halted === undefined) return { derived, run, halted: undefined };
+      if (halted === undefined) {
+        const reported = run.outcome.violations.map((violation) => ({
+          origin: (derived[run.inputOf(violation) ?? 0] as (typeof derived)[number]).origin,
+          violation,
+        }));
+        return { derived, run, halted: undefined, reported };
+      }
       // A run halts on the last input that it takes.
       const halting = derived[run.execution.inputs.length - 1] as (typeof derived)[number];
-      return { derived, run, halted: [halting.origin, halted.kind] as const };
+      return { derived, run, halted: [halting.origin, halted.kind] as const, reported: [] };
     }
     if (round > derived.length) throw new Error(`the inputs of the peer ${d.peer} do not settle`);
     derived = next;
@@ -163,8 +169,9 @@ export interface PeerCheck {
 }
 
 /**
- * Checks the mocks that the scenario's run, which did not halt, takes from each of its peers (peerFindings). A problem
- * caused by a line of the run is located at the scenario's input whose processing wrote that line.
+ * Checks the mocks that the scenario's run, which did not halt, takes from each of its peers (peerFindings), and reports
+ * the violations of each peer's run that the scenario's lines cause (peerRunFindings). A problem caused by a line of the
+ * run is located at the scenario's input whose processing wrote that line.
  */
 export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): PeerCheck[] {
   const positions = writtenPositions(scenario.definition);
@@ -192,7 +199,9 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
     return {
       peer: d.peer,
       lines: peerRun.halted === undefined ? peerRun.run.outcome.lines : undefined,
-      problems: findings.map(({ origin, violation }) => toProblem(violation, locationOf(origin), { scenario: ref })),
+      problems: [...peerRunFindings(peerRun.reported), ...findings].map(({ origin, violation }) =>
+        toProblem(violation, locationOf(origin), { scenario: ref }),
+      ),
     };
   });
 }
