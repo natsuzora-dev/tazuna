@@ -57,6 +57,12 @@ export interface Service {
   readonly events: ReadonlyMap<string, Change>;
   /** The trace names of the events in other services' contracts that this service may receive. */
   readonly received: readonly string[];
+  /**
+   * The trace names of `received` that the service's definitions receive: an automation's or a chart's event, or a
+   * result event of a command that an automation or a chart sends. A simulation delivers an event only to the services
+   * that receive it.
+   */
+  readonly receives: readonly string[];
   /** The automations in definition order. */
   readonly automations: readonly Automation[];
   /** The machines and screens, in definition order. */
@@ -184,6 +190,30 @@ export function serviceOf(structure: Structure, service: string): Service {
           : [],
       ),
     );
+  const refs = (m: Readonly<Record<string, DefinitionRef | null>>) =>
+    Object.values(m).flatMap((r) => (r === null ? [] : [r]));
+  const heard = own.flatMap(({ d }) =>
+    d.kind === "automation"
+      ? d.receives === null
+        ? []
+        : [d.receives]
+      : d.kind === "machine" || d.kind === "screen"
+        ? refs(d.receives)
+        : [],
+  );
+  const sent = own.flatMap(({ d }) =>
+    d.kind === "automation"
+      ? d.command === null
+        ? []
+        : [d.command]
+      : d.kind === "machine" || d.kind === "screen"
+        ? refs(d.commands)
+        : [],
+  );
+  const results = structure.definitions.flatMap((d) =>
+    d.kind === "command" && sent.some((c) => sameRef(c, d)) ? d.emits.flatMap((e) => (e === null ? [] : [e])) : [],
+  );
+  const receives = received.filter((n) => [...heard, ...results].some((r) => traceNameOfRef(r, service) === n));
   const entities = structure.services.find((s) => s.name === service)?.entities ?? [];
   const ownEntity = (e: string) => entity({ service, name: e });
   const references = entities.flatMap((e) =>
@@ -205,6 +235,7 @@ export function serviceOf(structure: Structure, service: string): Service {
     queries,
     events,
     received,
+    receives,
     automations,
     charts,
     entities,

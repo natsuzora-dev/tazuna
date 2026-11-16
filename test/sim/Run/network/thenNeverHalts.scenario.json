@@ -237,23 +237,7 @@
         "event": {
           "service": "calendar",
           "name": "bookingConfirmed"
-        },
-        "receiver": "todo"
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "event",
-        "origin": {
-          "type": "line",
-          "index": 12
-        },
-        "event": {
-          "service": "calendar",
-          "name": "bookingConfirmed"
-        },
-        "receiver": "notifier"
+        }
       }
     },
     {
@@ -306,7 +290,7 @@
     },
     {
       "type": "answered",
-      "line": 15,
+      "line": 14,
       "answers": [
         {
           "value": {

@@ -49,6 +49,8 @@ inductive Report where
   | unlistedService (scenarioLine : Option Nat) (service : String)
   /-- Given writes no record of the single-entity `entity` of the running service `service`. -/
   | missingRecord (service entity : String)
+  /-- The external peer's line emits `event`, which no running service's definitions receive. -/
+  | unreceivedEvent (scenarioLine : Nat) (event : Syntax.Ref)
   /-- The line fails `message`, which is no request: only a request has an answer that can tell its sender. -/
   | unfailable (scenarioLine : Nat) (message : Value)
   /-- The line needs `service` to take part in another way than Given says: running, external, or the own service. -/

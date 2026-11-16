@@ -1,0 +1,26 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [],
+      "violations": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.unreceivedEvent",
+    "definition": null,
+    "data": {
+      "scenarioLine": 0,
+      "event": {
+        "service": "calendar",
+        "name": "slotFreed"
+      }
+    }
+  }
+}

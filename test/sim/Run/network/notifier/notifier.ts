@@ -1,7 +1,9 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
-export const { automation, contract } = service({ description: "Mark each added task seen, and ping todo" });
+export const { automation, contract, machine } = service({
+  description: "Mark each added task seen, ping todo, and follow todo's notes",
+});
 
 export const markAddedSeen = automation({
   receives: { taskAdded: todo.taskAdded },
@@ -10,4 +12,13 @@ export const markAddedSeen = automation({
 
 export const pingOnAdded = automation({ receives: { taskAdded: todo.taskAdded }, commands: { ping: todo.ping } }).send({
   onRejected: [],
+});
+
+export const following = machine({
+  description: "Take todo's notes",
+  receives: { noted: todo.noted },
+  initial: "following",
+  states: { following: {} },
+}).chart({
+  states: { following: { on: { noted: [{ target: "following" }] } } },
 });

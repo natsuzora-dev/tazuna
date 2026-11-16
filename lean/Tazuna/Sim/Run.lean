@@ -305,8 +305,9 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       | some .external =>
         let (w, id) := w.nextId peer event.name
         let body : LineBody := .event event.name v resultId
-        pure (w.services.foldl (init := w) fun w (r, st) =>
-          if !st.received.contains (event.traceName r) then w else
+        let receivers := w.services.filter fun (r, st) => st.receives.contains (event.traceName r)
+        if receivers.isEmpty then return w.report (.unreceivedEvent i event)
+        pure (receivers.foldl (init := w) fun w (r, _) =>
           w.stated i { sender := peer, receiver := r, id, body, origin := .line i, channel := resultId,
                        status := .inFlight })
       | some .run =>

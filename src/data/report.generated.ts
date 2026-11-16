@@ -133,6 +133,15 @@ export type Report =
         readonly entity: string;
       };
     }
+  /** The external peer's line emits `event`, which no running service's definitions receive. */
+  | {
+      readonly kind: "Report.unreceivedEvent";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
+        readonly event: DefinitionRef;
+      };
+    }
   /** The line fails `message`, which is no request: only a request has an answer that can tell its sender. */
   | {
       readonly kind: "Report.unfailable";
@@ -317,6 +326,7 @@ export const reportKinds = [
   "Report.malformedValue",
   "Report.unlistedService",
   "Report.missingRecord",
+  "Report.unreceivedEvent",
   "Report.unfailable",
   "Report.wrongRole",
   "Report.notInFlight",
@@ -345,6 +355,7 @@ export const haltingReportKinds = [
   "Report.missingField",
   "Report.malformedValue",
   "Report.unlistedService",
+  "Report.unreceivedEvent",
   "Report.unfailable",
   "Report.wrongRole",
   "Report.notInFlight",

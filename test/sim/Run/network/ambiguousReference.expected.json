@@ -87,6 +87,11 @@
       "service": "notifier",
       "lines": [],
       "violations": []
+    },
+    {
+      "service": "audit",
+      "lines": [],
+      "violations": []
     }
   ],
   "reports": [],
@@ -111,7 +116,7 @@
         },
         {
           "sender": "calendar",
-          "receiver": "notifier",
+          "receiver": "audit",
           "id": "bookingConfirmed#1",
           "origin": {
             "type": "line",

@@ -168,7 +168,7 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
       | none => w
     | .event name _ resultOf =>
       w.services.foldl (init := w) fun w (r, st) =>
-        if r != service && st.received.contains (renamed service r name) then w.post o service r l resultOf else w
+        if r != service && st.receives.contains (renamed service r name) then w.post o service r l resultOf else w
     | _ => w
 
 /--

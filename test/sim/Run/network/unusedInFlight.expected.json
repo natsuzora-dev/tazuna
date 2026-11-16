@@ -245,16 +245,6 @@
           "id": "answer#2"
         },
         {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "event",
-          "id": "calendar/bookingConfirmed#1",
-          "name": "calendar.bookingConfirmed",
-          "payload": {
-            "bookingId": "todo/Booking-1"
-          }
-        },
-        {
           "time": "2026-10-25T02:00:00Z",
           "dir": "in",
           "type": "time",
@@ -269,7 +259,7 @@
       "kind": "Report.unusedInFlight",
       "definition": null,
       "data": {
-        "scenarioLine": 17
+        "scenarioLine": 16
       }
     }
   ],

@@ -7,13 +7,14 @@ import type { AnyCommand, AnyEvent, AnyQuery, ChartSpec, Named } from "../dsl/de
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { enabled } from "../observe/enabled.ts";
+import { serviceOf } from "../service/basic.ts";
 import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import type { Listener } from "../sim/spec/execute.ts";
 import { fingerprint } from "../sim/spec/fingerprint.ts";
 import { walkSpec } from "../sim/spec/simulate.ts";
-import { contractsListing, refOfTraceName, rejectionKinds } from "../syntax/structure.ts";
+import { refOfTraceName, rejectionKinds, traceNameOfRef } from "../syntax/structure.ts";
 import { search } from "./search.ts";
 import { stringsIn, valuesFor } from "./values.ts";
 
@@ -133,14 +134,10 @@ export function enabledLines(
       ]);
     return [];
   });
+  const receives = serviceOf(spec.structure, own).receives;
   const events = spec.definitions.flatMap(({ service, name, definition: d }): Line[] => {
     const event = { service, name };
-    if (
-      d.kind !== "event" ||
-      !externals.includes(service) ||
-      !contractsListing(spec.structure, event).includes(service)
-    )
-      return [];
+    if (d.kind !== "event" || !externals.includes(service) || !receives.includes(traceNameOfRef(event, own))) return [];
     return values(nameOf(event), (d as AnyEvent).payload).map(
       (payload): Line => ({ type: "emit", peer: service, event, payload: literal(payload) }),
     );

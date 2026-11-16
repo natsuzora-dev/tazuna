@@ -59,6 +59,12 @@ structure Service where
   events : List (String × Change)
   /-- The trace names of the events from other services' contracts that this service may receive. -/
   received : List String
+  /--
+  The trace names of `received` that the service's definitions receive: an automation's or a chart's event, or a result
+  event of a command that an automation or a chart sends. A simulation delivers an event only to the services that
+  receive it.
+  -/
+  receives : List String := []
   /-- The automations in definition order. -/
   automations : List Automation
   /-- The machines and screens in definition order. -/
@@ -173,6 +179,21 @@ def Structure.service (j : Structure) (service : String) : Except String Service
   let received := j.contracts.filter (·.service != service) |>.flatMap fun c =>
     c.members.filterMap fun (_, r) => r.bind fun r =>
       if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some (r.traceName service) else none
+  let heard := own.flatMap fun (d, _) =>
+    match d.body with
+    | .automation (some e) .. => [e]
+    | .machine c | .screen c => c.receives.filterMap (·.2)
+    | _ => []
+  let sent := own.flatMap fun (d, _) =>
+    match d.body with
+    | .automation _ (some c) .. => [c]
+    | .machine c | .screen c => c.commands.filterMap (·.2)
+    | _ => []
+  let results := j.definitions.flatMap fun d =>
+    match d.body with
+    | .command _ _ _ emits .. => if sent.contains d.ref then emits.filterMap id else []
+    | _ => []
+  let receives := received.filter fun n => (heard ++ results).any (·.traceName service == n)
   let entities := ((j.services.find? (·.name == service)).map (·.entities)).getD []
   let references := entities.flatMap fun e =>
     ((j.definitions.findSome? fun d =>
@@ -185,7 +206,7 @@ def Structure.service (j : Structure) (service : String) : Except String Service
       | .entity _ _ unique _ => if d.service == service && d.name == e then some (e, unique) else none
       | _ => none
   let singles := entities.filter fun e => single { service, name := e }
-  pure { service, «structure» := j, commands, queries, events, received, automations, charts, schemas, entities, singles,
+  pure { service, «structure» := j, commands, queries, events, received, receives, automations, charts, schemas, entities, singles,
          references, uniques, requirements }
 
 end Tazuna.Syntax

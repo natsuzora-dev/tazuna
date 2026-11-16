@@ -589,9 +589,17 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
           payload: v,
           ...(resultId === undefined ? {} : { resultOf: resultId }),
         };
-        for (const [r, p] of w.participants)
-          if (p.processing.st.received.includes(traceNameOfRef(l.event, r)))
-            stated(w, i, { sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
+        const receivers = [...w.participants].filter(([r, p]) =>
+          p.processing.st.receives.includes(traceNameOfRef(l.event, r)),
+        );
+        if (receivers.length === 0)
+          return reportedHere({
+            kind: "Report.unreceivedEvent",
+            definition: null,
+            data: { scenarioLine: i, event: l.event },
+          });
+        for (const [r] of receivers)
+          stated(w, i, { sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
         return;
       }
       if (role === "run") {

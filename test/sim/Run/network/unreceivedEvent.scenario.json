@@ -1,0 +1,42 @@
+{
+  "service": "todo",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [
+      {
+        "entity": "Settings",
+        "value": {
+          "remind": true
+        }
+      }
+    ],
+    "peers": [
+      {
+        "service": "calendar",
+        "role": "external"
+      },
+      {
+        "service": "notifier",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "emit",
+      "peer": "calendar",
+      "event": {
+        "service": "calendar",
+        "name": "slotFreed"
+      },
+      "payload": {
+        "value": {
+          "slot": "10:00"
+        },
+        "holes": []
+      }
+    }
+  ],
+  "expectations": []
+}

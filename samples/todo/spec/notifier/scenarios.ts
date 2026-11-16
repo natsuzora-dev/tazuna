@@ -12,7 +12,6 @@ import {
 import { calendar } from "../calendar/contract.ts";
 import { device } from "../device/contract.ts";
 import { todo } from "../todo/contract.ts";
-import { notifier } from "./contract.ts";
 import { scenario } from "./data.ts";
 
 const peers = {
@@ -64,18 +63,13 @@ function shownUnanswered(w: W, line: ProcessingLine): void {
 
 type DeviceEvent = typeof device.notificationPermissionGranted | typeof device.notificationPermissionDenied;
 
-/**
- * device emits `event`, the result of `resultOf` or of none; the network delivers it to notifier, and to todo, which
- * receives device's events too and ignores this one.
- */
+/** device emits `event`, the result of `resultOf` or of none, and the network delivers it to notifier. */
 function deviceTells(
   w: W,
   event: DeviceEvent,
   resultOf: OutRequest<typeof device.requestNotificationPermission> | null,
 ): void {
-  const told = w.peer.device.emit(event, {}, { resultOf });
-  w.net.deliver(told.to(notifier));
-  w.net.deliver(told.to(todo));
+  w.net.deliver(w.peer.device.emit(event, {}, { resultOf }));
 }
 
 /** device receives the permission request, accepts it, and the user's grant reaches notifier as its result. */

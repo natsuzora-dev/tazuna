@@ -159,7 +159,7 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
       }
       case "event":
         for (const [r, p] of w.participants)
-          if (r !== service && p.processing.st.received.includes(renamed(service, r, l.name)))
+          if (r !== service && p.processing.st.receives.includes(renamed(service, r, l.name)))
             post(w, o, service, r, l, l.resultOf);
         break;
       default:

@@ -1,3 +1,3 @@
-import { book, bookingConfirmed, contract } from "./calendar.ts";
+import { book, bookingConfirmed, contract, slotFreed } from "./calendar.ts";
 
-export const calendar = contract({ book, bookingConfirmed });
+export const calendar = contract({ book, bookingConfirmed, slotFreed });
