@@ -136,23 +136,29 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const sameKeys = (s: Record<string, unknown>, t: Record<string, unknown>): boolean =>
   canonicalJson(Object.keys(s).toSorted()) === canonicalJson(Object.keys(t).toSorted());
 
+/** Lean's Unequal. */
+type Unequal = "differ" | "searchLimit";
+
+type Unified = Bindings | Unequal;
+
 /** Lean's unify. */
-function unify(created: ReadonlySet<string>, s: unknown, t: unknown, bs: Bindings): Bindings | undefined {
+function unify(created: ReadonlySet<string>, s: unknown, t: unknown, bs: Bindings): Unified {
   if (typeof s === "string") {
-    if (typeof t !== "string") return undefined;
-    if (created.has(s)) return bind(bs, s, t);
-    return t === s ? bs : undefined;
+    if (typeof t !== "string") return "differ";
+    if (created.has(s)) return bind(bs, s, t) ?? "differ";
+    return t === s ? bs : "differ";
   }
-  if (Array.isArray(s)) return Array.isArray(t) && s.length === t.length ? unifyList(created, s, t, bs) : undefined;
+  if (Array.isArray(s)) return Array.isArray(t) && s.length === t.length ? unifyList(created, s, t, bs) : "differ";
   if (s instanceof Runs)
-    return t instanceof Runs && s.runs.length === t.runs.length ? unifyList(created, s.runs, t.runs, bs) : undefined;
+    return t instanceof Runs && s.runs.length === t.runs.length ? unifyList(created, s.runs, t.runs, bs) : "differ";
   if (s instanceof Bag) {
-    if (!(t instanceof Bag) || !bagFits(created, s.items, t.items)) return undefined;
+    if (!(t instanceof Bag) || !bagFits(created, s.items, t.items)) return "differ";
     const found = unifyBag(created, s.items, t.items, bs, searchLimit);
-    return "bindings" in found ? found.bindings : undefined;
+    if ("bindings" in found) return found.bindings;
+    return found.left === 0 ? "searchLimit" : "differ";
   }
   if (isObject(s)) {
-    if (!isObject(t) || !sameKeys(s, t)) return undefined;
+    if (!isObject(t) || !sameKeys(s, t)) return "differ";
     return unifyList(
       created,
       Object.values(s),
@@ -160,7 +166,7 @@ function unify(created: ReadonlySet<string>, s: unknown, t: unknown, bs: Binding
       bs,
     );
   }
-  return s === t ? bs : undefined;
+  return s === t ? bs : "differ";
 }
 
 /** Lean's unifyList and unifyFields. */
@@ -169,10 +175,10 @@ function unifyList(
   xs: readonly unknown[],
   ys: readonly unknown[],
   bs: Bindings,
-): Bindings | undefined {
-  let bindings: Bindings | undefined = bs;
+): Unified {
+  let bindings: Unified = bs;
   for (const [i, x] of xs.entries()) {
-    if (bindings === undefined) return undefined;
+    if (typeof bindings === "string") return bindings;
     bindings = unify(created, x, ys[i], bindings);
   }
   return bindings;
@@ -215,7 +221,8 @@ function unifyBag(
     if (tries === 0) return { left: 0 };
     tries -= 1;
     const once = unify(created, first, t, bs);
-    if (once === undefined) continue;
+    if (once === "searchLimit") return { left: 0 };
+    if (once === "differ") continue;
     const all = unifyBag(created, rest, ts.toSpliced(i, 1), once, tries);
     if ("bindings" in all) return all;
     tries = all.left;
@@ -233,12 +240,12 @@ function unifyAnswer(
   bs: Bindings,
   b: Answer,
   a: Answer,
-): Bindings | undefined {
+): Unified {
   if (b.result === "rejected" || a.result === "rejected")
-    return b.result === "rejected" && a.result === "rejected" && b.rejection.kind === a.rejection.kind ? bs : undefined;
-  if (b.result !== a.result) return undefined;
+    return b.result === "rejected" && a.result === "rejected" && b.rejection.kind === a.rejection.kind ? bs : "differ";
+  if (b.result !== a.result) return "differ";
   const [x, y] = ["output" in b ? b.output : undefined, "output" in a ? a.output : undefined];
-  return x === undefined || y === undefined ? (x === y ? bs : undefined) : unify(created, seen(x), form(y), bs);
+  return x === undefined || y === undefined ? (x === y ? bs : "differ") : unify(created, seen(x), form(y), bs);
 }
 
 /** The form of an output or payload of the peer's definition, by the peer's own name, that verify compares. */
@@ -254,6 +261,10 @@ function peerBefore(arrivals: readonly number[], bIns: readonly number[], bLengt
   const k = arrivals.findIndex((a) => i < a);
   return k < 0 ? bLength : (bIns[k] ?? bLength);
 }
+
+const searchLimitAt = (l: TraceLine, peer: string): Checked => ({
+  violation: { kind: "InvalidInput.peerSearchLimit", definition: null, data: { lineId: l.id, service: peer } },
+});
 
 /** Lean's peerLine, with its lets as arguments. */
 function peerLine(
@@ -281,14 +292,16 @@ function peerLine(
     const bindings =
       b !== undefined && atOrBefore(b.time, l.time)
         ? unifyAnswer(created, seen(target), (v) => normal(target, v), bs, b.answer, l.answer)
-        : undefined;
-    return bindings === undefined
+        : "differ";
+    if (bindings === "searchLimit") return searchLimitAt(l, peer);
+    return bindings === "differ"
       ? { violation: { kind: "InvalidInput.unproducibleAnswer", definition: null, data } }
       : { bindings };
   }
   if (l.type === "event") {
     const n = peerName(peer, l.name);
     if (n === undefined) return { bindings: bs };
+    let limited = false;
     for (const b of before)
       if (
         b.type === "event" &&
@@ -298,8 +311,10 @@ function peerLine(
         (l.resultOf === undefined || b.resultOf === l.resultOf)
       ) {
         const bindings = unify(created, seen(n)(b.payload), normal(n, l.payload), bs);
-        if (bindings !== undefined) return { bindings };
+        if (typeof bindings !== "string") return { bindings };
+        limited ||= bindings === "searchLimit";
       }
+    if (limited) return searchLimitAt(l, peer);
     return {
       violation: {
         kind: "InvalidInput.unproducibleEvent",

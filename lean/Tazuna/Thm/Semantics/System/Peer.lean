@@ -106,34 +106,39 @@ theorem Unified.mono {created : List String} {bs bs' : Bindings} {P Q : (String 
 
 set_option linter.unusedSimpArgs false in
 theorem unify_sound (c : List String) :
-    (∀ s t bs bs', unify c s t bs = some bs' → Unified c bs bs' (fun f => ValueMatches f s t)) ∧
-    (∀ fs gs bs bs', unifyFields c fs gs bs = some bs' → Unified c bs bs' (fun f => FieldsMatch f fs gs)) ∧
+    (∀ s t bs bs', unify c s t bs = .ok bs' → Unified c bs bs' (fun f => ValueMatches f s t)) ∧
+    (∀ fs gs bs bs', unifyFields c fs gs bs = .ok bs' → Unified c bs bs' (fun f => FieldsMatch f fs gs)) ∧
     (∀ ss ts bs left bs', unifyBag c ss ts bs left = .ok bs' →
       Unified c bs bs' (fun f => ∃ zs, ts.Perm zs ∧ ListMatches f ss zs)) ∧
     (∀ first rest cands passed bs left bs', unifyBagFrom c first rest cands passed bs left = .ok bs' →
       Unified c bs bs' (fun f => ∃ zs, (passed.reverse ++ cands).Perm zs ∧ ListMatches f (first :: rest) zs)) ∧
-    (∀ xs ys bs bs', unifyList c xs ys bs = some bs' → xs.length = ys.length →
+    (∀ xs ys bs bs', unifyList c xs ys bs = .ok bs' → xs.length = ys.length →
       Unified c bs bs' (fun f => ListMatches f xs ys)) := by
   refine unify.mutual_induct c
-    (fun s t bs => ∀ bs', unify c s t bs = some bs' → Unified c bs bs' (fun f => ValueMatches f s t))
-    (fun fs gs bs => ∀ bs', unifyFields c fs gs bs = some bs' → Unified c bs bs' (fun f => FieldsMatch f fs gs))
+    (fun s t bs => ∀ bs', unify c s t bs = .ok bs' → Unified c bs bs' (fun f => ValueMatches f s t))
+    (fun fs gs bs => ∀ bs', unifyFields c fs gs bs = .ok bs' → Unified c bs bs' (fun f => FieldsMatch f fs gs))
     (fun ss ts bs left => ∀ bs', unifyBag c ss ts bs left = .ok bs' →
       Unified c bs bs' (fun f => ∃ zs, ts.Perm zs ∧ ListMatches f ss zs))
     (fun first rest cands passed bs left => ∀ bs', unifyBagFrom c first rest cands passed bs left = .ok bs' →
       Unified c bs bs' (fun f => ∃ zs, (passed.reverse ++ cands).Perm zs ∧ ListMatches f (first :: rest) zs))
-    (fun xs ys bs => ∀ bs', unifyList c xs ys bs = some bs' → xs.length = ys.length →
+    (fun xs ys bs => ∀ bs', unifyList c xs ys bs = .ok bs' → xs.length = ys.length →
       Unified c bs bs' (fun f => ListMatches f xs ys))
-    ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
   · intro bs v w hd bs' h
     rw [unify] at h
     simp only [hd, ite_true] at h
-    obtain ⟨hp, hl, ho⟩ := bind_spec h
+    cases hb : bs.bind v w with
+    | none => simp [hb] at h
+    | some b =>
+    simp only [hb, Option.elim_some, Except.ok.injEq] at h
+    subst h
+    obtain ⟨hp, hl, ho⟩ := bind_spec hb
     refine ⟨hp, ho, fun R hR => ?_⟩
     simp only [ValueMatches]
     exact ⟨w, rfl, .inr (by rw [standsFor, ite_eq_left hd]; exact lookup_prefix hR hl)⟩
   · intro bs v w hd hw bs' h
     rw [unify] at h
-    simp only [hd, hw, Bool.false_eq_true, ite_false, ite_true, Option.some.injEq] at h
+    simp only [hd, hw, Bool.false_eq_true, ite_false, ite_true, Except.ok.injEq] at h
     subst h
     refine Unified.refl c bs fun R => ?_
     simp only [beq_iff_eq] at hw
@@ -153,7 +158,7 @@ theorem unify_sound (c : List String) :
     cases v with
     | str v => exact absurd rfl (hv v)
     | _ =>
-      simp only [hw, ite_true, Option.some.injEq] at h
+      simp only [hw, ite_true, Except.ok.injEq] at h
       subst h
       refine Unified.refl c bs fun R => ?_
       simp only [beq_iff_eq] at hw
@@ -181,9 +186,9 @@ theorem unify_sound (c : List String) :
     rw [unify] at h
     simp only [hf, ite_true] at h
     cases hb : unifyBag c xs ys bs searchLimit with
-    | error _ => simp [hb, Except.toOption] at h
+    | error n => cases n <;> simp [hb, searched] at h
     | ok b =>
-      simp only [hb, Except.toOption, Option.some.injEq] at h
+      simp only [hb, searched, Except.ok.injEq] at h
       subst h
       exact (ih b hb).mono fun f ⟨zs, hp, hm⟩ => ⟨ys, zs, rfl, hp, hm⟩
   · intro bs xs ys hf bs' h
@@ -202,7 +207,7 @@ theorem unify_sound (c : List String) :
     all_goals assumption
   · intro gs bs bs' h
     rw [unifyFields] at h
-    simp only [Option.some.injEq] at h
+    simp only [Except.ok.injEq] at h
     subst h
     exact Unified.refl c bs fun _ => by simp [FieldsMatch]
   · intro gs bs k v fs ih1 ih2 bs' h
@@ -211,9 +216,9 @@ theorem unify_sound (c : List String) :
     | none => simp [hw] at h
     | some w =>
     cases h₁ : unify c v w bs with
-    | none => simp [hw, h₁] at h
-    | some b₁ =>
-    simp only [hw, h₁, Option.bind_some] at h
+    | error => simp [hw, h₁, Except.bind] at h
+    | ok b₁ =>
+    simp only [hw, h₁, Except.bind, Option.elim_some] at h
     exact ((ih1 w b₁ h₁).trans (ih2 b₁ bs' h)).mono fun f hf => ⟨⟨w, hw, hf.1⟩, hf.2⟩
   · intro ss ts bs left hl bs' h
     unfold unifyBag at h
@@ -246,6 +251,10 @@ theorem unify_sound (c : List String) :
     rw [unifyBagFrom] at h
     simp only [h₁, h₂] at h
     exact (ihn bs' h).mono fun f hf => by simpa using hf
+  · intro first rest passed bs t more left h₁ _ bs' h
+    rw [unifyBagFrom] at h
+    simp only [h₁] at h
+    cases h
   · intro first rest passed bs t more left h₁ _ ihn bs' h
     rw [unifyBagFrom] at h
     simp only [h₁] at h
@@ -253,13 +262,13 @@ theorem unify_sound (c : List String) :
   · intro bs x xs y ys ih1 ih2 bs' h hl
     rw [unifyList] at h
     cases h₁ : unify c x y bs with
-    | none => simp [h₁] at h
-    | some b₁ =>
-    simp only [h₁, Option.bind_some] at h
+    | error => simp [h₁, Except.bind] at h
+    | ok b₁ =>
+    simp only [h₁, Except.bind] at h
     exact ((ih1 b₁ h₁).trans (ih2 b₁ bs' h (by simpa using hl))).mono fun f hf => ⟨hf.1, hf.2⟩
   · intro xs ys bs hn bs' h hl
     rw [unifyList] at h
-    · simp only [Option.some.injEq] at h
+    · simp only [Except.ok.injEq] at h
       subst h
       refine Unified.refl c bs fun _ => ?_
       cases xs <;> cases ys
@@ -270,7 +279,7 @@ theorem unify_sound (c : List String) :
     · exact hn
 
 theorem unifyAnswer_sound {c : List String} {seen form : Value → CValue} {bs bs' : Bindings} {b a : Answer}
-    (h : unifyAnswer c seen form bs b a = some bs') :
+    (h : unifyAnswer c seen form bs b a = .ok bs') :
     Unified c bs bs' (fun f => AnswerCarries (fun x y => ValueMatches f (seen x) (form y)) b a) := by
   unfold unifyAnswer at h
   split at h
@@ -334,6 +343,7 @@ theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Stri
         · next htime => exact ⟨t, b, hb, htime, unifyAnswer_sound hs⟩
         · cases hs
       · cases h
+      · cases h
 
 theorem getElem?_take_some {α : Type} {xs : List α} {n j : Nat} {x : α} (h : (xs.take n)[j]? = some x) :
     j < n ∧ xs[j]? = some x := by
@@ -352,18 +362,26 @@ theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Strin
   split at h
   · next bs'' hf =>
     cases h
-    obtain ⟨⟨b, j⟩, hb, hs⟩ := List.exists_of_findSome?_eq_some hf
-    split at hs
+    obtain ⟨x, hx, hs⟩ := List.exists_of_findSome?_eq_some hf
+    obtain ⟨b, hb, hbx⟩ := List.mem_filterMap.mp hx
+    obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hb
+    split at hbx
     · next id' m p r hbody =>
-      split at hs
+      split at hbx
       · next hc =>
+        cases hbx
         simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Option.all_eq_true] at hc
         obtain ⟨⟨rfl, htime⟩, hr⟩ := hc
-        obtain ⟨hj, hb⟩ := getElem?_take_some (List.mk_mem_zipIdx_iff_getElem?.mp hb)
-        exact ⟨j, b, hb, hj, id', p, r, hbody, fun q hq => by simpa using hr q hq,
-          htime, (unify_sound _).1 _ _ _ _ hs⟩
-      · cases hs
-    · cases hs
+        obtain ⟨hj, hb⟩ := getElem?_take_some hj
+        cases hu : unify (createdOf bLines) (seenOf normal service aLines m p) (normal m payload) bs with
+        | error => simp [hu, Except.toOption] at hs
+        | ok b' =>
+          simp only [hu, Except.toOption, Option.some.injEq] at hs
+          subst hs
+          exact ⟨j, b, hb, hj, id', p, r, hbody, fun q hq => by simpa using hr q hq,
+            htime, (unify_sound _).1 _ _ _ _ hu⟩
+      · cases hbx
+    · cases hbx
   · cases h
 
 theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}

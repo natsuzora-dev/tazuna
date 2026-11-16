@@ -336,6 +336,18 @@ export type InvalidInput =
         readonly event: DefinitionRef;
       };
     }
+  /**
+   * The comparison of the scenario's line `lineId`, an answer or a received event, with the run of the spec service
+   * `service` of the derived inputs did not finish: pairing the elements of a bag used up its tries.
+   */
+  | {
+      readonly kind: "InvalidInput.peerSearchLimit";
+      readonly definition: null;
+      readonly data: {
+        readonly lineId: string;
+        readonly service: string;
+      };
+    }
   /** The spec service `service` halted with `halting` in its run of the derived inputs. */
   | {
       readonly kind: "InvalidInput.haltedPeer";
@@ -382,6 +394,7 @@ export const invalidInputKinds = [
   "InvalidInput.unproducibleAnswer",
   "InvalidInput.unansweredRequest",
   "InvalidInput.unproducibleEvent",
+  "InvalidInput.peerSearchLimit",
   "InvalidInput.haltedPeer",
 ] as const;
 

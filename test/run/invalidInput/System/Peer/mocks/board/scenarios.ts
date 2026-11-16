@@ -65,3 +65,20 @@ export const showsOneWrongTitleOfThirty = scenario(
   ],
   { given: { todo: todo.states.thirtyMilks } },
 );
+
+export const showsThirtyTasksWithOneKeyTwice = scenario(
+  "Answer thirty tasks of one title, two of them with one key; every task of todo fits every task of the mock, and no order of them binds the keys one to one, so the search for one stops after its tries and test reports peerSearchLimit",
+  [
+    at("2026-10-25T10:00:00+09:00"),
+    mock(boardScreen, [
+      todo.tasks,
+      {
+        result: "fulfilled",
+        output: {
+          tasks: Array.from({ length: 30 }, (_, i) => ({ taskId: `T-${i === 29 ? 1 : i + 1}`, title: "Buy milk" })),
+        },
+      },
+    ]),
+  ],
+  { given: { todo: todo.states.thirtyMilks } },
+);

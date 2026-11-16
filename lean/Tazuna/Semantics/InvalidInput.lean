@@ -88,6 +88,11 @@ inductive InvalidInput where
   names as its resultOf when it names one.
   -/
   | unproducibleEvent (eventId : String) (event : Syntax.Ref)
+  /--
+  The comparison of the scenario's line `lineId`, an answer or a received event, with the run of the spec service
+  `service` of the derived inputs did not finish: pairing the elements of a bag used up its tries.
+  -/
+  | peerSearchLimit (lineId service : String)
   /-- The spec service `service` halted with `halting` in its run of the derived inputs. -/
   | haltedPeer (service halting : String)
 
@@ -108,6 +113,7 @@ def InvalidInput.halts : InvalidInput → Bool
   | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
   | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest .. | .ambiguousMock ..
-  | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .haltedPeer .. => false
+  | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .peerSearchLimit ..
+  | .haltedPeer .. => false
 
 end Tazuna.Semantics

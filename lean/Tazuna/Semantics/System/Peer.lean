@@ -114,6 +114,20 @@ def _root_.Tazuna.Data.Bindings.bind (bs : Bindings) (v w : String) : Option Bin
   | some x => if x == w then some bs else none
   | none => if bs.any (·.2 == w) then none else some (bs ++ [(v, w)])
 
+/-- Why unify gives no bindings. -/
+inductive Unequal where
+  /-- The values differ. -/
+  | differ
+  /-- A bag's search used up its tries before it found an order. -/
+  | searchLimit
+deriving DecidableEq, Repr, Inhabited
+
+/-- The result of unifyBag with `searchLimit` tries: none left means that the search did not finish. -/
+def searched : Except Nat Bindings → Except Unequal Bindings
+  | .ok bs => .ok bs
+  | .error 0 => .error .searchLimit
+  | .error _ => .error .differ
+
 mutual
 
 /--
@@ -150,44 +164,48 @@ def bagFits (created : List String) (ss ts : List CValue) : Bool :=
 mutual
 
 /--
-`bs` extended so that the peer's value `s` equals the scenario's value `t`, or none. A string of `created` equals the
+`bs` extended so that the peer's value `s` equals the scenario's value `t`, or why not. A string of `created` equals the
 string that it is bound to, and is bound when it is not (Bindings.bind); other strings equal themselves. Bags pair their
-elements by backtracking, as verify's `free` does, after bagFits; a bag whose search takes more than `searchLimit`
-tries does not equal (unifyBag).
+elements by backtracking, as verify's `free` does, after bagFits, with `searchLimit` tries each (unifyBag).
 -/
-def unify (created : List String) (s t : CValue) (bs : Bindings) : Option Bindings :=
+def unify (created : List String) (s t : CValue) (bs : Bindings) : Except Unequal Bindings :=
   match s, t with
   | .leaf (.str v), t =>
     match t with
-    | .leaf (.str w) => if created.contains v then bs.bind v w else if w == v then some bs else none
-    | _ => none
-  | .leaf v, .leaf w => if w == v then some bs else none
-  | .arr xs, .arr ys => if xs.length == ys.length then unifyList created xs ys bs else none
-  | .runs xs, .runs ys => if xs.length == ys.length then unifyList created xs ys bs else none
-  | .bag xs, .bag ys => if bagFits created xs ys then (unifyBag created xs ys bs searchLimit).toOption else none
-  | .obj fs, .obj gs => if sameKeys fs gs then unifyFields created fs gs bs else none
-  | _, _ => none
+    | .leaf (.str w) =>
+      if created.contains v then (bs.bind v w).elim (.error .differ) .ok
+      else if w == v then .ok bs else .error .differ
+    | _ => .error .differ
+  | .leaf v, .leaf w => if w == v then .ok bs else .error .differ
+  | .arr xs, .arr ys => if xs.length == ys.length then unifyList created xs ys bs else .error .differ
+  | .runs xs, .runs ys => if xs.length == ys.length then unifyList created xs ys bs else .error .differ
+  | .bag xs, .bag ys =>
+    if bagFits created xs ys then searched (unifyBag created xs ys bs searchLimit) else .error .differ
+  | .obj fs, .obj gs => if sameKeys fs gs then unifyFields created fs gs bs else .error .differ
+  | _, _ => .error .differ
 termination_by (sizeOf s, 0)
 decreasing_by all_goals lex_decreasing
 
-def unifyList (created : List String) (xs ys : List CValue) (bs : Bindings) : Option Bindings :=
+def unifyList (created : List String) (xs ys : List CValue) (bs : Bindings) : Except Unequal Bindings :=
   match xs, ys with
   | x :: xs, y :: ys => (unify created x y bs).bind (unifyList created xs ys)
-  | _, _ => some bs
+  | _, _ => .ok bs
 termination_by (sizeOf xs, 0)
 decreasing_by all_goals lex_decreasing
 
 /-- The fields in the field order of `fs`. -/
-def unifyFields (created : List String) (fs gs : List (String × CValue)) (bs : Bindings) : Option Bindings :=
+def unifyFields (created : List String) (fs gs : List (String × CValue)) (bs : Bindings) : Except Unequal Bindings :=
   match fs with
-  | [] => some bs
-  | (k, v) :: fs => (gs.lookup k).bind fun w => (unify created v w bs).bind (unifyFields created fs gs)
+  | [] => .ok bs
+  | (k, v) :: fs =>
+    (gs.lookup k).elim (.error .differ) fun w => (unify created v w bs).bind (unifyFields created fs gs)
 termination_by (sizeOf fs, 0)
 decreasing_by all_goals lex_decreasing
 
 /--
 `bs` extended so that the elements of `ss` equal those of `ts` in some order, or, when no order is found within `left`
-tries, the tries left. A try unifies an element of `ss` with an element of `ts`.
+tries, the tries left. A try unifies an element of `ss` with an element of `ts`; a try whose own search did not finish
+ends the search with none left.
 -/
 def unifyBag (created : List String) (ss ts : List CValue) (bs : Bindings) (left : Nat) : Except Nat Bindings :=
   if ss.length != ts.length then .error left
@@ -206,11 +224,12 @@ def unifyBagFrom (created : List String) (first : CValue) (rest cands passed : L
   | _ :: _, 0 => .error 0
   | t :: more, left + 1 =>
     match unify created first t bs with
-    | some bs' =>
+    | .ok bs' =>
       match unifyBag created rest (passed.reverse ++ more) bs' left with
       | .ok bs'' => .ok bs''
       | .error left' => unifyBagFrom created first rest more (t :: passed) bs left'
-    | none => unifyBagFrom created first rest more (t :: passed) bs left
+    | .error .searchLimit => .error 0
+    | .error .differ => unifyBagFrom created first rest more (t :: passed) bs left
 termination_by (sizeOf first + sizeOf rest + 1, cands.length)
 decreasing_by all_goals lex_decreasing
 
@@ -218,14 +237,15 @@ end
 
 /--
 `bs` extended so that the mock's answer `a` is the peer's answer `b`, the peer's values in the form `seen` and the
-mock's in the form `form`, or none. Rejections compare by kind, as verify compares them.
+mock's in the form `form`, or why not. Rejections compare by kind, as verify compares them.
 -/
-def unifyAnswer (created : List String) (seen form : Value → CValue) (bs : Bindings) : Answer → Answer → Option Bindings
+def unifyAnswer (created : List String) (seen form : Value → CValue) (bs : Bindings) :
+    Answer → Answer → Except Unequal Bindings
   | .accepted (some x), .accepted (some y) => unify created (seen x) (form y) bs
-  | .accepted none, .accepted none => some bs
+  | .accepted none, .accepted none => .ok bs
   | .fulfilled x, .fulfilled y => unify created (seen x) (form y) bs
-  | .rejected r, .rejected q => if r.kind == q.kind then some bs else none
-  | _, _ => none
+  | .rejected r, .rejected q => if r.kind == q.kind then .ok bs else .error .differ
+  | _, _ => .error .differ
 
 /-- The lines of `lines` that are `in` lines, each with its place in `lines`. -/
 def inLines (lines : List TraceLine) : List (TraceLine × Nat) := lines.zipIdx.filter (·.1.body.dir == .in)
@@ -278,7 +298,7 @@ that reached it must be the peer's answer at the same place, by its time; a rece
 the peer emits by its time, with the `resultOf` that the event names, if any. Either must come from the peer's lines
 before its inputs that arrive after `l` (peerBefore). The peer's values have its peer keys turned back into the run's
 createKey values, and `normal` gives the form of an output or payload of the peer's definition, by the peer's own name,
-that verify compares.
+that verify compares. A comparison that does not finish within its tries gives peerSearchLimit.
 -/
 def peerLine (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
     (aLines bLines : List TraceLine) (bs : Bindings) (i : Nat) (l : TraceLine) : Except InvalidInput Bindings :=
@@ -287,7 +307,7 @@ def peerLine (normal : String → Value → CValue) (service peer : String) (arr
   let seen (n : String) (v : Value) : CValue := normal n (back.rename v)
   let before := bLines.take (peerBefore arrivals bLines i)
   match l.body with
-  | .answer .in _ to a =>
+  | .answer .in id to a =>
     match peerTarget? peer aLines to with
     | none => .ok bs
     | some target =>
@@ -297,23 +317,27 @@ def peerLine (normal : String → Value → CValue) (service peer : String) (arr
       match (answersTo before .out to)[k]? with
       | none => .error (.unproducibleAnswer to ⟨peer, target⟩)
       | some (t, b) =>
-        match if t.time ≤ l.time.time then unifyAnswer created (seen target) (normal target) bs b a else none with
-        | some bs => .ok bs
-        | none => .error (.unproducibleAnswer to ⟨peer, target⟩)
+        match if t.time ≤ l.time.time then unifyAnswer created (seen target) (normal target) bs b a
+          else .error .differ with
+        | .ok bs => .ok bs
+        | .error .differ => .error (.unproducibleAnswer to ⟨peer, target⟩)
+        | .error .searchLimit => .error (.peerSearchLimit id peer)
   | .event .in id name payload resultOf =>
     match peerName? peer name with
     | none => .ok bs
     | some n =>
-      let found := before.zipIdx.findSome? fun (b, _) =>
+      let tries := before.filterMap fun b =>
         match b.body with
         | .event .out _ m p r =>
           if m == n && b.time.time ≤ l.time.time && resultOf.all (r == some ·) then
-            unify created (seen n p) (normal n payload) bs
+            some (unify created (seen n p) (normal n payload) bs)
           else none
         | _ => none
-      match found with
+      match tries.findSome? (·.toOption) with
       | some bs => .ok bs
-      | none => .error (.unproducibleEvent id ⟨peer, n⟩)
+      | none =>
+        .error (if tries.any (· matches .error .searchLimit) then .peerSearchLimit id peer
+          else .unproducibleEvent id ⟨peer, n⟩)
   | _ => .ok bs
 
 /-- The bindings after the run's first `n` lines (peerLine): a line with a violation keeps them. -/
