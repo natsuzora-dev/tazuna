@@ -40,8 +40,8 @@ def World.uncreated (w : World) (st : Service) (v : Value) : Option (String × S
 
 /-- The world with what the line `i` processed by `service` wrote first as an `in` line recorded as its request. -/
 def World.recordSent (w : World) (i : Nat) (service : String) (before : Nat) : World :=
-  match ((w.state service).lines.extract before).toList.find? (·.dir == .in) with
-  | some l => { w with sent := w.sent ++ [{ line := i, receiver := service, id := l.id }] }
+  match ((w.state service).lines.toList.zipIdx.drop before).find? (·.1.dir == .in) with
+  | some (l, position) => { w with sent := w.sent ++ [{ line := i, receiver := service, id := l.id, position }] }
   | none => w
 
 def requestOf (type : RequestType) (name : String) (id : Option String) (v : Value) :
@@ -91,10 +91,10 @@ def World.deliverCarried (w : World) (fsOf : String → Functions m) (i k : Nat)
   match w.messages[k]? with
   | none => pure w
   | some msg =>
+    let before := (w.state msg.receiver).lines.size
     let w ← w.deliver fsOf (.line i) k
     pure (match msg.body with
-      | .command .. | .query .. | .subscribe .. =>
-        { w with sent := w.sent ++ [{ line := i, receiver := msg.receiver, id := receivedId msg.sender msg.id }] }
+      | .command .. | .query .. | .subscribe .. => w.recordSent i msg.receiver before
       | _ => w)
 
 /-- The id by which a peer names the request that the handle `fact` of line `i` names. -/
@@ -314,8 +314,10 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (k
     let lines := (w.state s.receiver).lines
     let target := (lines.toList.findSome? fun l => if l.dir == .in && l.id == s.id then requestName? l.body else none).getD ""
     let rfs := fsOf s.receiver
-    let actual ← (lines.toList.filterMap fun l => match l.body with
-      | .answer t a => if l.dir == .out && t == s.id then some a else none
+    let after := lines.toList.zipIdx.drop (s.position + 1)
+    let next := (after.find? fun (l, _) => l.dir == .in && l.id == s.id).map (·.2)
+    let actual ← (after.filterMap fun (l, n) => match l.body with
+      | .answer t a => if l.dir == .out && t == s.id && next.all (n < ·) then some a else none
       | _ => none).mapM (canonicalAnswer rfs target)
     match answers.mapM (w.fill line) with
     | .error r => pure (.error r)

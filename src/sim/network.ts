@@ -52,6 +52,7 @@ export interface Sent {
   readonly line: number;
   readonly receiver: string;
   readonly id: string;
+  readonly position: number;
 }
 
 /** A running service: its processing, and the violation that halted it. */

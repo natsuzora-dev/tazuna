@@ -70,11 +70,15 @@ structure Opened where
   resource : String
 deriving Repr, Inhabited
 
-/-- The request that the client or a peer line `line` sent: its receiver and the receiver's id of it. -/
+/--
+The request that the client or a peer line `line` sent: its receiver, the receiver's id of it, and the place of its
+`in` line in the receiver's trace.
+-/
 structure Sent where
   line : Nat
   receiver : String
   id : String
+  position : Nat
 deriving Repr, Inhabited
 
 structure World where

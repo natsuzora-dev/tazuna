@@ -69,8 +69,10 @@ function uncreated(w: World, st: Service, v: unknown): readonly [string, string]
 
 /** Lean's World.recordSent. */
 function recordSent(w: World, i: number, service: string, before: number): void {
-  const l = (stateOf(w, service)?.lines ?? []).slice(before).find((line) => line.dir === "in");
-  if (l !== undefined) w.sent.push({ line: i, receiver: service, id: l.id });
+  const lines = stateOf(w, service)?.lines ?? [];
+  const position = lines.findIndex((line, n) => n >= before && line.dir === "in");
+  const l = lines[position];
+  if (l !== undefined) w.sent.push({ line: i, receiver: service, id: l.id, position });
 }
 
 /** Lean's requestOf. */
@@ -147,9 +149,10 @@ function deliverCarried(w: World, i: number, k: number): void {
   w.carried.push([i, k]);
   const m = w.messages[k];
   if (m === undefined) return;
+  const before = stateOf(w, m.receiver)?.lines.length ?? 0;
   deliver(w, { type: "line", index: i }, k);
   if (m.body.type === "command" || m.body.type === "query" || m.body.type === "subscribe")
-    w.sent.push({ line: i, receiver: m.receiver, id: receivedId(m.sender, m.id) });
+    recordSent(w, i, m.receiver, before);
 }
 
 /** Lean's World.requestId. */
@@ -519,8 +522,11 @@ function compared(w: World, own: string, k: number, e: Expectation): readonly [u
       const target =
         request?.type === "command" || request?.type === "query" || request?.type === "subscribe" ? request.name : "";
       const rr = processingOf(w, s.receiver) as Processing;
-      const actual = lines.flatMap((l) =>
-        l.type === "answer" && l.dir === "out" && l.to === s.id ? [canonicalAnswer(rr, target, l.answer)] : [],
+      const next = lines.findIndex((l, n) => n > s.position && l.dir === "in" && l.id === s.id);
+      const actual = lines.flatMap((l, n) =>
+        n > s.position && (next < 0 || n < next) && l.type === "answer" && l.dir === "out" && l.to === s.id
+          ? [canonicalAnswer(rr, target, l.answer)]
+          : [],
       );
       const filled = e.answers.map((t) => fill(w, e.line, t));
       const expected = filled.map((v) => {
