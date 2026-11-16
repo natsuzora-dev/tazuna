@@ -49,6 +49,11 @@ inductive Step.Body where
   stale (mock). `handle` is the name by which a later event's `resultOf` names the answer.
   -/
   | answer (sender : String) (target : String) (answer : Answer) (choice : Option Choice) (handle : Option String)
+  /--
+  An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs write: the
+  peer's run of them does not know which of its definitions sent the request.
+  -/
+  | answerTo (to : String) (target : String) (answer : Answer)
 deriving Repr, Inhabited
 
 derive_wire Step.Body tag "type" skip_serializing_none
@@ -57,7 +62,7 @@ derive_wire Step.Body tag "type" skip_serializing_none
 def Step.Body.values : Step.Body → List Value
   | .command _ _ input | .query _ _ input | .subscribe _ _ input _ => [input]
   | .event _ _ payload _ | .operation _ _ payload | .unacceptedOperation _ _ payload => [payload]
-  | .answer _ _ a _ _ => a.output?.toList
+  | .answer _ _ a _ _ | .answerTo _ _ a => a.output?.toList
   | .time | .restart | .unsubscribe _ => []
 
 /--

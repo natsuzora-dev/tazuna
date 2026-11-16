@@ -3,6 +3,7 @@ import type { Processing } from "../chart/queue.ts";
 import { type Pending, writeInput } from "../state.ts";
 import {
   advance,
+  answerById,
   call,
   cannotOperate,
   checkOrderUsed,
@@ -44,6 +45,8 @@ function arrive(r: Processing, input: Step): Pending | undefined {
       return;
     case "answer":
       return mock(r, input);
+    case "answerTo":
+      return answerById(r, input);
     case "subscribe":
       subscribe(r, input.name, input.input, given(input), input.handle);
       return;

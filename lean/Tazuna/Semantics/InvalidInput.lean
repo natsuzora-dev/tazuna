@@ -45,6 +45,8 @@ inductive InvalidInput where
   | missingWaitingRequest (sender target : Syntax.Ref)
   /-- No stale request from `sender` to `target` waits for the answer input that chooses a stale request. -/
   | missingStaleRequest (sender target : Syntax.Ref)
+  /-- No request to `target` whose trace line has id `requestId` waits for the answer input. -/
+  | unwaitedRequest (requestId : String) (target : Syntax.Ref)
   /--
   The requests from `sender` to `target` that the answer input may answer have the different inputs `inputs`, so it
   answers none: a mock's `input` chooses among them by content, and no order decides.
@@ -89,6 +91,12 @@ inductive InvalidInput where
   -/
   | unproducibleEvent (eventId : String) (event : Syntax.Ref)
   /--
+  The run of the spec service `service` of the derived inputs sends no request, or end of a subscription, that the
+  scenario's from input with id `requestId` stands for by the time of the input and before it takes an input that
+  arrives after the input.
+  -/
+  | unproducibleRequest (requestId service : String)
+  /--
   The comparison of the scenario's line `lineId`, an answer or a received event, with the run of the spec service
   `service` of the derived inputs did not finish: pairing the elements of a bag used up its tries.
   -/
@@ -112,8 +120,10 @@ def InvalidInput.halts : InvalidInput → Bool
   | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .unusedKeys .. | .uncreatedKey .. => true
   | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
-  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest .. | .ambiguousMock ..
-  | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .peerSearchLimit ..
+  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest .. | .unwaitedRequest ..
+  | .ambiguousMock ..
+  | .unproducibleAnswer .. | .unansweredRequest .. | .unproducibleEvent .. | .unproducibleRequest ..
+  | .peerSearchLimit ..
   | .haltedPeer .. => false
 
 end Tazuna.Semantics

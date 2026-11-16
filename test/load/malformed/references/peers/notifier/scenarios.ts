@@ -1,6 +1,7 @@
-import { at, elsewhere, receive, scenario, send } from "@natsuzora-dev/tazuna";
+import { at, elsewhere, from, receive, scenario, send } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { todo } from "../todo/contract.ts";
+import { notifier } from "./contract.ts";
 import { announce } from "./notifier.ts";
 
 export const givesUnknownServices = scenario(
@@ -24,5 +25,14 @@ export const addsElsewhereToNoPeer = scenario(
     elsewhere(calendar, send(calendar.addReminder, {})),
     elsewhere({ addTask: todo.addTask }, send(todo.addTask, { taskId: "task-1", title: "Buy milk" })),
     receive(todo.taskAdded, { taskId: "task-1" }),
+  ],
+);
+
+export const takesRequestsFromNoPeer = scenario(
+  "Take requests from an external service and from the scenario's own service; check reports unknownPeer for each",
+  [
+    at("2026-10-25T10:00:00+09:00"),
+    from(calendar, send(announce, { taskId: "task-1" })),
+    from(notifier, send(announce, { taskId: "task-2" })),
   ],
 );

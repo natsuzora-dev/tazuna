@@ -23,13 +23,14 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `unparsableTime`: the time of the `at` input of the scenario, or of the state `state` of the contract of
  *   `contract`, is not an ISO datetime with seconds and an offset, or has a part below a millisecond, so the run cannot
  *   read it as an instant in milliseconds.
- * - `unknownPeer`: the scenario's `given` names `service`, or its `elsewhere` input gives an input to the contract of
- *   `service`, or to an object that is no exported contract (null), and `service` is the scenario's own service, an
+ * - `unknownPeer`: the scenario's `given` names `service`, or its `elsewhere` or `from` input names the contract of
+ *   `service`, or an object that is no exported contract (null), and `service` is the scenario's own service, an
  *   external service, or no service of the spec.
  * - `unlistedState`: the scenario's `given` gives `service` a start state that is not one of the states of its
  *   contract.
- * - `ownEventToPeer`: the start state that the scenario's `given` gives `service`, or its `elsewhere` input to
- *   `service`, receives an event of the scenario's own service, which reaches `service` only from the scenario's run.
+ * - `ownMessageToPeer`: the start state that the scenario's `given` gives `service`, or its `elsewhere` input to
+ *   `service`, receives an event of the scenario's own service or answers a request to it, which reach `service` only
+ *   from the scenario's run.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.
  */
@@ -64,7 +65,7 @@ export type Malformed =
       readonly input?: number;
     })
   | (Of<"unlistedState", null, { readonly service: string }> & { readonly scenario: DefinitionRef })
-  | (Of<"ownEventToPeer", null, { readonly service: string }> & {
+  | (Of<"ownMessageToPeer", null, { readonly service: string }> & {
       readonly scenario: DefinitionRef;
       readonly input?: number;
     })

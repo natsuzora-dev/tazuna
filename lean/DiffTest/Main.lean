@@ -462,15 +462,16 @@ def afters (request : Value) : Except String Value := do
 
 /--
 The reply to request `peer`, which takes the scenario's service, the peer, the trace names of the events that the peer
-receives, the steps of the given state, the elsewhere inputs with the line counts before them, the lines of the
-scenario's run and of the peer's run, the halt of the peer's run, and the forms of `normal` that TS computed as
-`[name, value, form]`, and returns peerInputs and peerFindings. A value without a form takes the form that no schema
-reads.
+receives, the scenario's from lines of the peer, the steps of the given state, the elsewhere inputs with the line counts
+before them, the lines of the scenario's run and of the peer's run, the halt of the peer's run, and the forms of
+`normal` and `inputForm` that TS computed as `[name, value, form]`, and returns peerInputs and peerFindings. A value
+without a form takes the form that no schema reads.
 -/
 def peer (request : Value) : Except String Value := do
   let service ← stringField request "service"
   let peer ← stringField request "peer"
   let received : List String ← FromValue.fromValue (← field request "received")
+  let fromLines : List Nat ← FromValue.fromValue (← field request "fromLines")
   let state : List Step ← FromValue.fromValue (← field request "state")
   let elsewhere ← (← asList (← field request "elsewhere")).mapM fun
     | .arr [n, s] => do pure ((← FromValue.fromValue n : Nat), (← FromValue.fromValue s : Step))
@@ -481,16 +482,19 @@ def peer (request : Value) : Except String Value := do
     | .null => pure none
     | .arr [o, .str kind] => pure (some ((← FromValue.fromValue o : Origin), kind))
     | _ => throw "expected null or [origin, kind]"
-  let normals ← (← asList (← field request "normals")).mapM fun
-    | .arr [.str name, v, form] => do pure (name, v, ← CValue.decode form)
-    | _ => throw "expected [name, value, form]"
-  let normal (name : String) (v : Value) : CValue :=
-    ((normals.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD (.ofValue v)
+  let forms (key : String) := do
+    let recorded ← (← asList (← field request key)).mapM fun
+      | .arr [.str name, v, form] => do pure (name, v, ← CValue.decode form)
+      | _ => throw "expected [name, value, form]"
+    pure fun (name : String) (v : Value) =>
+      ((recorded.find? fun (n, w, _) => n == name && w.canonical == v.canonical).map (·.2.2)).getD (.ofValue v)
+  let normal ← forms "normals"
+  let inputForm ← forms "inputForms"
   pure (.obj [("type", .str "peer"),
-    ("inputs", .arr ((peerInputs normal service peer received state elsewhere lines peerLines).map fun (s, o) =>
-      .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
-    ("findings", .arr ((peerFindings normal service peer (peerArrivals service peer received state elsewhere lines) lines
-        peerLines halted).map fun (o, f) =>
+    ("inputs", .arr ((peerInputs normal inputForm service peer received fromLines state elsewhere lines peerLines).map
+      fun (s, o) => .obj [("step", ToValue.toValue s), ("origin", ToValue.toValue o)])),
+    ("findings", .arr ((peerFindings normal inputForm service peer fromLines
+        (peerArrivals service peer received fromLines state elsewhere lines) lines peerLines halted).map fun (o, f) =>
       .obj [("origin", ToValue.toValue o), ("violation", f.toValue)]))])
 
 partial def loop (stdin stdout : IO.FS.Stream) (tree : IO.Ref (Option Tree)) : IO Unit := do

@@ -202,6 +202,22 @@ theorem mock_keysDistinct (sender name : String) (answer : Answer) (choice : Opt
         repeat' split
         all_goals simpa using h
 
+theorem answerById_keysDistinct (to target : String) (answer : Answer) (h : KeysDistinct s.records) :
+    KeysDistinct (answerById st fs s to target answer).records := by
+  unfold answerById answerRequest
+  simp only [id_bind]
+  split
+  · split
+    · simpa using h
+    · split
+      · split <;> simpa using h
+      · apply message_keysDistinct
+        rw [(keeps_settled _ _ (keeps_deliverAnswer _ _ _)).records]
+        simp only [State.newStep, State.newMessage, State.writeInput]
+        repeat' split
+        all_goals simpa using h
+  · simpa using h
+
 theorem operate_keysDistinct (screen control : String) (payload : Value) (accepted : Bool)
     (h : KeysDistinct s.records) : KeysDistinct (operate st fs s screen control payload accepted).records := by
   unfold operate

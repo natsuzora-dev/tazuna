@@ -187,6 +187,15 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** No request to `target` whose trace line has id `requestId` waits for the answer input. */
+  | {
+      readonly kind: "InvalidInput.unwaitedRequest";
+      readonly definition: null;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
+    }
   /**
    * The requests from `sender` to `target` that the answer input may answer have the different inputs `inputs`, so it
    * answers none: a mock's `input` chooses among them by content, and no order decides.
@@ -337,6 +346,19 @@ export type InvalidInput =
       };
     }
   /**
+   * The run of the spec service `service` of the derived inputs sends no request, or end of a subscription, that the
+   * scenario's from input with id `requestId` stands for by the time of the input and before it takes an input that
+   * arrives after the input.
+   */
+  | {
+      readonly kind: "InvalidInput.unproducibleRequest";
+      readonly definition: null;
+      readonly data: {
+        readonly requestId: string;
+        readonly service: string;
+      };
+    }
+  /**
    * The comparison of the scenario's line `lineId`, an answer or a received event, with the run of the spec service
    * `service` of the derived inputs did not finish: pairing the elements of a bag used up its tries.
    */
@@ -379,6 +401,7 @@ export const invalidInputKinds = [
   "InvalidInput.resultOfUnlistedEvent",
   "InvalidInput.missingWaitingRequest",
   "InvalidInput.missingStaleRequest",
+  "InvalidInput.unwaitedRequest",
   "InvalidInput.ambiguousMock",
   "InvalidInput.unknownControl",
   "InvalidInput.unopenedScreen",
@@ -394,6 +417,7 @@ export const invalidInputKinds = [
   "InvalidInput.unproducibleAnswer",
   "InvalidInput.unansweredRequest",
   "InvalidInput.unproducibleEvent",
+  "InvalidInput.unproducibleRequest",
   "InvalidInput.peerSearchLimit",
   "InvalidInput.haltedPeer",
 ] as const;

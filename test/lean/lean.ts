@@ -267,12 +267,14 @@ export class Lean {
     readonly service: string;
     readonly peer: string;
     readonly received: readonly string[];
+    readonly fromLines: readonly number[];
     readonly state: readonly Step[];
     readonly elsewhere: readonly (readonly [number, Step])[];
     readonly lines: readonly TraceLine[];
     readonly peerLines: readonly TraceLine[];
     readonly halted: readonly [unknown, string] | null;
     readonly normals: readonly (readonly [string, unknown, unknown])[];
+    readonly inputForms: readonly (readonly [string, unknown, unknown])[];
   }): { readonly inputs: unknown; readonly findings: unknown } {
     this.send({ type: "peer", ...request });
     const { type, ...result } = this.receive();

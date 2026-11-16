@@ -305,6 +305,13 @@ def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
   | .error f => pure (s.report f)
   | .ok p => answerRequest st fs { s with mocks := (handle.map (·, p, answer)).toList ++ s.mocks } p answer
 
+/-- The state after an answer input answers the request to `target` whose trace line has id `to`. -/
+def answerById [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (to target : String)
+    (answer : Answer) : m State :=
+  match s.pending.find? fun p => p.id == to && p.activity.target == target with
+  | some p => answerRequest st fs s p answer
+  | none => pure (s.report (.invalidInput (.unwaitedRequest to (st.refOf target))))
+
 def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do
   if s.halted.isSome then pure s else
   match ← initialContextOf fs st c.name (.obj []) with

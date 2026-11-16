@@ -258,6 +258,29 @@ const step = z.discriminatedUnion("type", [
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
+  /**
+   * An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs write: the
+   * peer's run of them does not know which of its definitions sent the request.
+   */
+  z.object({
+    time: z.iso.datetime({ offset: true }),
+    type: z.literal("answerTo"),
+    to: z.string(),
+    target: z.string(),
+    answer: answer,
+    deadlineOrder: z.array(deadlineId).exactOptional(),
+    /**
+     * The steps that the internal queue takes first during the input, which only test's search writes: while entries
+     * remain, each work or own-service command that the queue takes is the ready one that the next entry names
+     * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
+     */
+    stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
+  }),
 ]);
 
 /**

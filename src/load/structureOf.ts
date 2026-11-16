@@ -139,35 +139,39 @@ export function structureOf(
       const chart = chartOf(d) as ChartSpec;
       return { kind: chart.kind, service, name, ...structureOfChart(chart, ref, (shape) => schemaOf(d, shape)) };
     }),
-    scenarios: scenarios.map(({ service, name, definition }) => ({
-      service,
-      name,
-      inputs: definition.inputs.map((input) => {
-        if (input.type === "answer")
-          return {
-            type: "answer",
-            sender: ref(input.sender),
-            target: ref(input.target),
-            strings: stringsOfInput(input),
-          };
-        if (input.type === "event")
-          return {
-            type: "event",
-            resultOf:
-              input.resultOf === undefined
-                ? null
-                : definition.inputs.flatMap((other, i) => (other === input.resultOf ? [i] : [])),
-            strings: stringsOfInput(input),
-          };
-        if (input.type === "unsubscribe")
-          return {
-            type: "unsubscribe",
-            subscription: definition.inputs.flatMap((other, i) => (other === input.subscription ? [i] : [])),
-          };
-        if (input.type === "at" || input.type === "restart") return { type: input.type };
-        return { type: input.type, strings: stringsOfInput(input) };
-      }),
-    })),
+    scenarios: scenarios.map(({ service, name, definition }) => {
+      // The scenario's service takes a from input as it takes the request that it wraps.
+      const inputs = definition.inputs.map((input) => (input.type === "from" ? input.input : input));
+      return {
+        service,
+        name,
+        inputs: inputs.map((input) => {
+          if (input.type === "answer")
+            return {
+              type: "answer",
+              sender: ref(input.sender),
+              target: ref(input.target),
+              strings: stringsOfInput(input),
+            };
+          if (input.type === "event")
+            return {
+              type: "event",
+              resultOf:
+                input.resultOf === undefined
+                  ? null
+                  : inputs.flatMap((other, i) => (other === input.resultOf ? [i] : [])),
+              strings: stringsOfInput(input),
+            };
+          if (input.type === "unsubscribe")
+            return {
+              type: "unsubscribe",
+              subscription: inputs.flatMap((other, i) => (other === input.subscription ? [i] : [])),
+            };
+          if (input.type === "at" || input.type === "restart") return { type: input.type };
+          return { type: input.type, strings: stringsOfInput(input) };
+        }),
+      };
+    }),
   };
   return { structure, thrownDefaults };
 }

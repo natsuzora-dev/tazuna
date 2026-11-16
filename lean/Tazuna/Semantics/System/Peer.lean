@@ -4,8 +4,9 @@ import Tazuna.Data.Canonical
 
 /-!
 This module checks the mocks that a scenario takes from a peer, another spec service, against the peer's spec: it
-derives the peer's inputs from the scenario's run, and compares the mocks with the peer's run of those inputs. The
-scenario may name a createKey value of the peer with any string, one-to-one, as verify compares createKey values.
+derives the peer's inputs from the scenario's run, and compares the mocks, and the requests that the scenario takes from
+the peer (from lines), with the peer's run of those inputs. The scenario may name a createKey value of the peer with
+any string, and the peer's run may give a request its own id, one-to-one, as verify compares them.
 -/
 
 namespace Tazuna.Semantics
@@ -70,10 +71,54 @@ def peerEvent? (service : String) (received : List String) (keys : Bindings) (l 
     (received.find? (peerName? service · == some name)).map (.event id · (keys.rename payload) none)
   | _ => none
 
+/-- The type, id, trace name and input of a command, query, or subscribe line in direction `dir`. -/
+def requestOf? (dir : Dir) (b : TraceLine.Body) : Option (String × String × String × Value) :=
+  match b with
+  | .command d id name x | .query d id name x | .subscribe d id name x =>
+    if d == dir then some (b.type, id, name, x) else none
+  | _ => none
+
+/-- `bs` with `v` bound to `w`, when neither is bound yet. -/
+def _root_.Tazuna.Data.Bindings.bindNew (bs : Bindings) (v w : String) : Option Bindings :=
+  if (bs.lookup v).isNone && !bs.any (·.2 == w) then some (bs ++ [(v, w)]) else none
+
+/-- Whether the answer rejects its request as unavailable. -/
+def _root_.Tazuna.Data.Answer.unavailable : Answer → Bool
+  | .rejected r => r.kind == .unavailable
+  | _ => false
+
 def _root_.Tazuna.Data.Answer.mapOutput (f : Value → Value) : Answer → Answer
   | .accepted output => .accepted (output.map f)
   | .fulfilled output => .fulfilled (f output)
   | .rejected r => .rejected r
+
+/--
+The peer's input of the run's line `l`: an answer of the scenario's service `service`, other than unavailable, to a
+request of the run's from lines `fromLines`, which the peer sent. It answers the peer's request whose id `keys` binds
+to the request's (peerForward), with the strings of its output renamed.
+-/
+def peerAnswer? (service : String) (aLines : List TraceLine) (fromLines : List Nat) (keys : Bindings) (l : TraceLine) :
+    Option Step.Body :=
+  match l.body with
+  | .answer .out _ to a =>
+    if a.unavailable then none else
+    (fromLines.findSome? fun k => (aLines[k]?.bind (requestOf? .in ·.body)).bind fun (_, id, name, _) =>
+      if id == to then some name else none).map fun name =>
+      .answerTo ((keys.lookup to).getD to) s!"{service}.{name}" (a.mapOutput keys.rename)
+  | _ => none
+
+/--
+The peer's input of the run's line `l` (peerBody?, peerEvent?, peerAnswer?), the strings of the run renamed by `keys`.
+-/
+def peerInput? (service peer : String) (received : List String) (fromLines : List Nat) (aLines : List TraceLine)
+    (keys : Bindings) (l : TraceLine) : Option Step.Body :=
+  ((peerBody? peer aLines keys l).orElse fun _ => peerEvent? service received keys l).orElse fun _ =>
+    peerAnswer? service aLines fromLines keys l
+
+/-- The trace name of the definition of another service whose message the input gives: an event, or an answer's target. -/
+def Step.Body.received? : Step.Body → Option String
+  | .event _ name _ _ | .answer _ name _ _ _ | .answerTo _ name _ => some name
+  | _ => none
 
 /-- The body with each string of its values that `keys` binds replaced. -/
 def Step.Body.forPeer (keys : Bindings) : Step.Body → Step.Body
@@ -87,6 +132,7 @@ def Step.Body.forPeer (keys : Bindings) : Step.Body → Step.Body
     .answer sender target (a.mapOutput keys.rename) (choice.map fun
       | .mock input stale => .mock (input.map keys.rename) stale
       | c => c) handle
+  | .answerTo to target a => .answerTo to target (a.mapOutput keys.rename)
   | b => b
 
 /-- Where an input of the peer comes from. -/
@@ -252,18 +298,18 @@ def inLines (lines : List TraceLine) : List (TraceLine × Nat) := lines.zipIdx.f
 
 /--
 The run's inputs to the peer and the scenario's elsewhere inputs to it, each with its origin, in the order that they
-arrive: the run's requests to the peer, ends of subscriptions to it, and events that the peer receives (`received`, by
-trace name) at their lines, taking the strings `keys n` at the line `n`, and each elsewhere input before the number of
-the run's lines that `elsewhere` holds with it, unchanged.
+arrive: the run's requests to the peer, ends of subscriptions to it, events that the peer receives (`received`, by trace
+name), and answers to the peer's requests of the from lines `fromLines` at their lines, taking the strings `keys n` at
+the line `n`, and each elsewhere input before the number of the run's lines that `elsewhere` holds with it, unchanged.
 -/
-def peerPlaced (service peer : String) (received : List String) (elsewhere : List (Nat × Step))
+def peerPlaced (service peer : String) (received : List String) (fromLines : List Nat) (elsewhere : List (Nat × Step))
     (aLines : List TraceLine) (keys : Nat → Bindings) : List (Step × Origin) :=
   (List.range (aLines.length + 1)).flatMap fun n =>
     ((elsewhere.zipIdx.filter fun e => e.1.1 == n || (n == aLines.length && n < e.1.1)).map fun e =>
       (e.1.2, Origin.elsewhere e.2)) ++
     match aLines[n]? with
     | some l =>
-      (((peerBody? peer aLines (keys n) l).orElse fun _ => peerEvent? service received (keys n) l).map fun b =>
+      ((peerInput? service peer received fromLines aLines (keys n) l).map fun b =>
         (⟨l.time, b, none, none, none⟩, Origin.line n)).toList
     | none => []
 
@@ -277,9 +323,10 @@ def Origin.arrival (elsewhere : List (Nat × Step)) : Origin → Nat
 The arrival of each input of the peer (Origin.arrival), in the order of peerInputs, the given state `state` first. The
 origins do not depend on the strings that the inputs take.
 -/
-def peerArrivals (service peer : String) (received : List String) (state : List Step) (elsewhere : List (Nat × Step))
-    (aLines : List TraceLine) : List Nat :=
-  state.map (fun _ => 0) ++ (peerPlaced service peer received elsewhere aLines fun _ => []).map (·.2.arrival elsewhere)
+def peerArrivals (service peer : String) (received : List String) (fromLines : List Nat) (state : List Step)
+    (elsewhere : List (Nat × Step)) (aLines : List TraceLine) : List Nat :=
+  state.map (fun _ => 0) ++
+    (peerPlaced service peer received fromLines elsewhere aLines fun _ => []).map (·.2.arrival elsewhere)
 
 /--
 The number of the peer's lines that it writes before it takes an input that arrives after the run's line `i`, the
@@ -292,15 +339,49 @@ def peerBefore (arrivals : List Nat) (bLines : List TraceLine) (i : Nat) : Nat :
   | none => bLines.length
 
 /--
+Whether the peer's line `b` can send the scenario's from line `l`, with the bindings `bs`: none when `b` is not an `out`
+line of the same request to the scenario's service `service`, or of the end of the subscription bound to the one that
+`l` ends, by `l`'s time and with an id that no string is bound to yet. Otherwise `bs` with `b`'s id bound to `l`'s and,
+for a request, extended so that its input is `l`'s (unify), the peer's in the form `seen` and the scenario's in the form
+`form` of the definition by the scenario's own name.
+-/
+def sentAs? (created : List String) (seen form : String → Value → CValue) (service : String) (bs : Bindings)
+    (l b : TraceLine) : Option (Except Unequal Bindings) :=
+  if l.time.time < b.time.time then none else
+  match l.body, b.body with
+  | .unsubscribe .in id to, .unsubscribe .out id' to' =>
+    if bs.lookup to' == some to then (bs.bindNew id' id).map .ok else none
+  | lb, bb =>
+    match requestOf? .in lb, requestOf? .out bb with
+    | some (t, id, name, x), some (t', id', m, y) =>
+      if t' == t && peerName? service m == some name then
+        (bs.bindNew id' id).map (unify created (seen name y) (form name x))
+      else none
+    | _, _ => none
+
+/--
+The first of the lines `before` of the peer that sends the scenario's from line `l` (sentAs?), by its place, with the
+bindings extended, or why none does.
+-/
+def peerSent (created : List String) (seen form : String → Value → CValue) (service : String) (bs : Bindings)
+    (before : List TraceLine) (l : TraceLine) : Except Unequal (Nat × Bindings) :=
+  let tries := before.zipIdx.filterMap fun (b, j) => (sentAs? created seen form service bs l b).map (j, ·)
+  match tries.findSome? fun (j, r) => r.toOption.map (j, ·) with
+  | some p => .ok p
+  | none => .error (if tries.any (·.2 matches .error .searchLimit) then .searchLimit else .differ)
+
+/--
 The check of the run's line `l`, the line `i` of the run, with the bindings `bs` of the peer's createKey values to the
 strings that the scenario has in their place: its violation, or `bs` extended. A mocked answer to a request to the peer
 that reached it must be the peer's answer at the same place, by its time; a received event of the peer must be one that
-the peer emits by its time, with the `resultOf` that the event names, if any. Either must come from the peer's lines
-before its inputs that arrive after `l` (peerBefore). The peer's values have its peer keys turned back into the run's
-createKey values, and `normal` gives the form of an output or payload of the peer's definition, by the peer's own name,
-that verify compares. A comparison that does not finish within its tries gives peerSearchLimit.
+the peer emits by its time, with the `resultOf` that the event names, if any; a from line, one of `fromLines`, must be
+a request that the peer sends by its time (peerSent). Each must come from the peer's lines before its inputs that arrive
+after `l` (peerBefore). The peer's values have its peer keys turned back into the run's createKey values. `normal`
+gives the form of an output or payload of the peer's definition, by the peer's own name, and `inputForm` the form of
+an input of a request to the scenario's service, by its own name, that verify compares. A comparison that does not
+finish within its tries gives peerSearchLimit.
 -/
-def peerLine (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
+def peerLine (normal inputForm : String → Value → CValue) (service peer : String) (fromLines arrivals : List Nat)
     (aLines bLines : List TraceLine) (bs : Bindings) (i : Nat) (l : TraceLine) : Except InvalidInput Bindings :=
   let created := bLines.flatMap (·.created.getD [])
   let back : Bindings := (peerKeys service aLines).map fun (k, v) => (v, k)
@@ -338,31 +419,42 @@ def peerLine (normal : String → Value → CValue) (service peer : String) (arr
       | none =>
         .error (if tries.any (· matches .error .searchLimit) then .peerSearchLimit id peer
           else .unproducibleEvent id ⟨peer, n⟩)
+  | .command .in .. | .query .in .. | .subscribe .in .. | .unsubscribe .in .. =>
+    if fromLines.contains i then
+      match peerSent created (fun n v => inputForm n (back.rename v)) inputForm service bs before l with
+      | .ok (_, bs) => .ok bs
+      | .error .differ => .error (.unproducibleRequest l.body.id peer)
+      | .error .searchLimit => .error (.peerSearchLimit l.body.id peer)
+    else .ok bs
   | _ => .ok bs
 
 /-- The bindings after the run's first `n` lines (peerLine): a line with a violation keeps them. -/
-def peerBindings (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
+def peerBindings (normal inputForm : String → Value → CValue) (service peer : String) (fromLines arrivals : List Nat)
     (aLines bLines : List TraceLine) (n : Nat) : Bindings :=
   (aLines.zipIdx.take n).foldl (init := []) fun bs (l, i) =>
-    (peerLine normal service peer arrivals aLines bLines bs i l).toOption.getD bs
+    (peerLine normal inputForm service peer fromLines arrivals aLines bLines bs i l).toOption.getD bs
 
 /--
 The strings that the peer takes in place of the scenario's strings before the run's line `n`: each createKey value of
-the run as its peer key, and each string bound by then (peerBindings) as the peer's createKey value bound to it.
+the run as its peer key, and each string bound by then (peerBindings) as the peer's createKey value or request id
+bound to it.
 -/
-def peerForward (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
+def peerForward (normal inputForm : String → Value → CValue) (service peer : String) (fromLines arrivals : List Nat)
     (aLines bLines : List TraceLine) (n : Nat) : Bindings :=
-  peerKeys service aLines ++ (peerBindings normal service peer arrivals aLines bLines n).map fun (k, v) => (v, k)
+  peerKeys service aLines ++
+    (peerBindings normal inputForm service peer fromLines arrivals aLines bLines n).map fun (k, v) => (v, k)
 
 /--
 The peer's inputs, each with its origin: those of the given state `state`, then those of peerPlaced. The run's lines and
 the elsewhere inputs take the peer's strings (peerForward) of the place where they arrive. `bLines` is the peer's run of
 these inputs.
 -/
-def peerInputs (normal : String → Value → CValue) (service peer : String) (received : List String) (state : List Step)
-    (elsewhere : List (Nat × Step)) (aLines bLines : List TraceLine) : List (Step × Origin) :=
-  let forward := peerForward normal service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines
-  let placed := peerPlaced service peer received elsewhere aLines forward
+def peerInputs (normal inputForm : String → Value → CValue) (service peer : String) (received : List String)
+    (fromLines : List Nat) (state : List Step) (elsewhere : List (Nat × Step)) (aLines bLines : List TraceLine) :
+    List (Step × Origin) :=
+  let forward := peerForward normal inputForm service peer fromLines
+    (peerArrivals service peer received fromLines state elsewhere aLines) aLines bLines
+  let placed := peerPlaced service peer received fromLines elsewhere aLines forward
   state.map (·, Origin.given) ++ placed.map fun (s, o) =>
     match o with
     | .elsewhere _ => ({ s with body := s.body.forPeer (forward (o.arrival elsewhere)) }, o)
@@ -373,14 +465,14 @@ The violations of the scenario's mocks of the peer, each with the origin of its 
 `peerInputs`, `arrivals` their peerArrivals, and `halted` the origin of the input that halted it, with the halting
 violation's kind. A halted run gives only haltedPeer.
 -/
-def peerFindings (normal : String → Value → CValue) (service peer : String) (arrivals : List Nat)
+def peerFindings (normal inputForm : String → Value → CValue) (service peer : String) (fromLines arrivals : List Nat)
     (aLines bLines : List TraceLine) (halted : Option (Origin × String)) : List (Origin × InvalidInput) :=
   match halted with
   | some (o, kind) => [(o, .haltedPeer peer kind)]
   | none =>
     aLines.zipIdx.filterMap fun (l, i) =>
-      match peerLine normal service peer arrivals aLines bLines
-          (peerBindings normal service peer arrivals aLines bLines i) i l with
+      match peerLine normal inputForm service peer fromLines arrivals aLines bLines
+          (peerBindings normal inputForm service peer fromLines arrivals aLines bLines i) i l with
       | .error v => some (Origin.line i, v)
       | .ok _ => none
 

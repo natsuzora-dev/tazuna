@@ -568,6 +568,11 @@ theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice
   unfold mock
   agree [answering_agrees h, answerRequest_agrees h]
 
+theorem answerById_agrees (s : State) (to target : String) (answer : Answer) :
+    Agrees (answerById st fsI s to target answer) (answerById st fs s to target answer) := by
+  unfold answerById
+  agree [answerRequest_agrees h]
+
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.singleRecord]
@@ -614,7 +619,7 @@ theorem restart_agrees (s : State) : Agrees (restart st fsI s) (restart st fs s)
 theorem arrive_agrees (s : State) (input : Step) : Agrees (arrive st fsI s input) (arrive st fs s input) := by
   unfold arrive
   agree [restart_agrees h, send_agrees h, call_agrees h, subscribe_agrees h, endSubscription_agrees h, receive_agrees h, mock_agrees h,
-    operate_agrees h]
+    answerById_agrees h, operate_agrees h]
 
 theorem step_agrees (s : State) (input : Step) : Agrees (step st fsI s input) (step st fs s input) := by
   unfold step

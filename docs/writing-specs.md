@@ -52,6 +52,7 @@ Precedent: Hypothesis's stateful testing, whose rules refer to values that earli
 `test` checks a scenario's mocks of another service of the spec against that service's run ([guarantees.md](guarantees.md#when-a-scenario-talks-to-another-service)), so write the inputs that the other service needs.
 Write each start state of a service as inputs to it under `states` in its contract, with `keys` on the inputs whose keys the scenario uses, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
 Write an input that the other service takes from someone else, such as the command whose event the scenario receives, as `elsewhere(todo, send(todo.addTask, input))` at its place among the scenario's inputs; the scenario's own service skips it.
+Write a request that the other service sends to the scenario's service as `from(notifier, send(markSeen, input))` at its place among the scenario's inputs, naming the other service by its contract, which may be empty: the scenario's service takes it, `test` checks that the other service's run sends such a request by then, and that run gets the answers; a request of the other service that the scenario does not write gets no answer.
 Repeat such inputs with a plain TypeScript function rather than a new option.
 A mock may also name a key that the other service creates without a name with any string, one to one; `test` sends a later request with that string to the other service as its key.
 

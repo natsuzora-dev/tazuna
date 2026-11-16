@@ -40,27 +40,27 @@ tazuna guarantees nothing about inputs that no scenario contains.
 
 ### When a scenario talks to another service
 
-A scenario's *peer* is another service of the spec, not an external one, that the scenario sends a request to, emits an event to, receives an event from, or names in `given` or `elsewhere`.
-`test` runs the peer's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the peer and the scenario's events that the peer receives, at their send times, with the scenario's `elsewhere` inputs at their places.
+A scenario's *peer* is another service of the spec, not an external one, that the scenario sends a request to, emits an event to, receives an event from, or names in `given`, `elsewhere`, or `from`.
+`test` runs the peer's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the peer, the scenario's events that the peer receives, and the scenario's answers to the requests that it takes `from` the peer, at their send times, with the scenario's `elsewhere` inputs at their places.
 A request that a mock answers as `unavailable` never reaches the peer.
-A mock may name each key that the peer creates with any string, one to one.
-The peer receives the keys that the scenario's service creates renamed, and each string by which an earlier mock names one of its keys as that key, and values compare in the form that `verify` compares, up to these renamings.
-`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit as the result of that request (`unproducibleEvent`), an answer or event whose comparison does not finish because pairing the elements of two bags uses up its 100000 tries (`peerSearchLimit`), and a run that halts (`haltedPeer`).
-The answer or event must come from the run before the peer takes an input that arrives after the scenario takes it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
+A mock may name each key that the peer creates with any string, one to one, and a request `from` the peer has the scenario's id, which stands for the id that the peer's run gives it.
+The peer receives the keys that the scenario's service creates renamed, and each string or id by which an earlier line names one of its keys or requests as that key or request, and values compare in the form that `verify` compares, up to these renamings.
+`test` reports under `InvalidInput` an answer that the run does not give the request at the same place by the answer's time (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit by its time, or, when the event names a request as its `resultOf`, does not emit as the result of that request (`unproducibleEvent`), a request `from` the peer that the run does not send by its time (`unproducibleRequest`), an answer, event, or request whose comparison does not finish because pairing the elements of two bags uses up its 100000 tries (`peerSearchLimit`), and a run that halts (`haltedPeer`).
+Each must come from the run before the peer takes an input that arrives after the scenario takes it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
+A request of the peer's run to the scenario's service that the scenario does not take `from` the peer gets no answer, and `test` does not report it.
 
-When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values compared as above:
+When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values and ids compared as above:
 
 - each request of the scenario to the peer that no mock answers as `unavailable` reaches the peer once, not before the scenario sends it, and so does the end of its subscription;
 - each event of the scenario's service that the peer receives is one that the scenario emits, not before it emits it;
+- each request that the scenario takes `from` the peer is one that the peer's run sends, at or before the time the scenario takes it, and the scenario's answers to it reach the peer once each and in the order the scenario sends them;
 - each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive once each and in the order the peer sends them;
 - each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken;
-- the peer sends each answer or event that the scenario takes before it receives any line that the scenario sends at or after taking it.
+- the peer sends each line that the scenario takes before it receives any line that the scenario sends at or after taking it.
 
 Lean proves this as `network_realizes` for spec runs, given that the peer's run writes one input line for each derived input, in order, which it does not prove.
-`network_realizes` covers only a peer's run that sends no request to the scenario's service, one that names a definition of the scenario's service only on an event that it receives.
-A peer's run can send such requests: in a scenario of `todo` whose peer is `screens`, the run of `screens` subscribes to `todo.tasks`.
-`test` neither delivers these requests to the scenario's service nor compares them with the scenario's run; this is an open point.
-That the given state and the `elsewhere` inputs give the peer no event of the scenario's service is checked when the spec loads.
+`network_realizes` covers only a peer's run whose every request to the scenario's service is one that the scenario takes `from` the peer.
+That the given state and the `elsewhere` inputs give the peer no event of the scenario's service and no answer to a request to it is checked when the spec loads.
 So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
 Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
 

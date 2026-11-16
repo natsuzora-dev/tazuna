@@ -5,7 +5,14 @@ import type { TraceLine } from "../data/trace.generated.ts";
 import { canonicalJson } from "../data/values.ts";
 import type { Location } from "../data/violation.ts";
 import type { Contract, Named } from "../dsl/definition.ts";
-import { type ElsewhereInput, elsewhereInputs, type Scenario, timed, writtenPositions } from "../dsl/scenario.ts";
+import {
+  type ElsewhereInput,
+  elsewhereInputs,
+  fromInputs,
+  type Scenario,
+  timed,
+  writtenPositions,
+} from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
 import { serviceOf } from "../semantics/service/basic.ts";
@@ -24,6 +31,7 @@ import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 export interface PeerDerivation {
   readonly peer: string;
   readonly received: readonly string[];
+  readonly fromLines: readonly number[];
   readonly state: readonly Step[];
   readonly elsewhere: readonly (readonly [number, Step])[];
   readonly written: readonly ElsewhereInput[];
@@ -51,13 +59,18 @@ function linesBefore(run: Run, { input, before }: ElsewhereInput): number {
 }
 
 /**
- * Returns the peers of the scenario's run, the spec services other than its own that it messages, names in `given` or
- * `elsewhere`, or emits an event to that they receive, each with the arguments of peerInputs.
+ * Returns the peers of the scenario's run, the spec services other than its own that it messages, names in `given`,
+ * `elsewhere` or `from`, or emits an event to that they receive, each with the arguments of peerInputs. A from input's
+ * line is the `in` line of the scenario's input.
  */
 export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): PeerDerivation[] {
   const { given } = scenario.definition;
   const written = elsewhereInputs(scenario.definition).map((e) => ({ ...e, peer: contractService(spec, e.service) }));
-  const named = new Set([...Object.keys(given), ...written.map((e) => e.peer)]);
+  const sent = fromInputs(scenario.definition).map((f) => ({
+    peer: contractService(spec, f.service),
+    line: run.inputLines[f.index] as number,
+  }));
+  const named = new Set([...Object.keys(given), ...written.map((e) => e.peer), ...sent.map((f) => f.peer)]);
   const others = [...spec.services]
     .filter(([name, s]) => name !== scenario.service && !s.definition.external)
     .map(([name]) => name);
@@ -79,6 +92,7 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
     return {
       peer,
       received: received.get(peer) ?? [],
+      fromLines: sent.filter((f) => f.peer === peer).map((f) => f.line),
       state: steps.slice(0, stateInputs.length),
       elsewhere: mine.map((e, i) => [linesBefore(run, e), steps[stateInputs.length + i] as Step] as const),
       written: mine,
@@ -102,21 +116,35 @@ export function peerNormal(spec: Spec, peer: string): PeerNormal {
   };
 }
 
+/** Returns the form of an input of a request to the service `service`, by its own name, that verify compares. */
+export function ownInputForm(spec: Spec, service: string): PeerNormal {
+  return (name, value) => {
+    const d = definitionOfTraceName(spec, service, name, "query", "command");
+    try {
+      return comparable(d?.input, value);
+    } catch {
+      return value;
+    }
+  };
+}
+
 /**
  * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
  * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
  * halting violation's kind. The derivation starts from an empty run of the peer and repeats until the inputs stop
- * changing: an input depends only on the peer's run of the inputs before it. `normal` is the peer's peerNormal.
+ * changing: an input depends only on the peer's run of the inputs before it. `normal` is the peer's peerNormal, and
+ * `inputForm` the service's ownInputForm.
  */
 export function runPeer(
   spec: Spec,
   normal: PeerNormal,
+  inputForm: PeerNormal,
   service: string,
   lines: readonly TraceLine[],
   d: PeerDerivation,
 ) {
   const derive = (peerLines: readonly TraceLine[]) =>
-    peerInputs(normal, service, d.peer, d.received, d.state, d.elsewhere, lines, peerLines);
+    peerInputs(normal, inputForm, service, d.peer, d.received, d.fromLines, d.state, d.elsewhere, lines, peerLines);
   let derived = derive([]);
   for (let round = 0; ; round += 1) {
     const run = execute(
@@ -161,18 +189,21 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
     ...(input === undefined ? {} : { input }),
   });
   const lines = run.outcome.lines;
+  const inputForm = ownInputForm(spec, scenario.service);
   return peerDerivations(spec, scenario, run).map((d) => {
     const normal = peerNormal(spec, d.peer);
-    const peerRun = runPeer(spec, normal, scenario.service, lines, d);
+    const peerRun = runPeer(spec, normal, inputForm, scenario.service, lines, d);
     const locationOf = (o: Origin): Location =>
       o.type === "line"
         ? at(positions[run.inputLines.findLastIndex((l) => l <= o.line)])
         : at(o.type === "elsewhere" ? d.written[o.index]?.position : undefined);
     const findings = peerFindings(
       normal,
+      inputForm,
       scenario.service,
       d.peer,
-      peerArrivals(scenario.service, d.peer, d.received, d.state, d.elsewhere, lines),
+      d.fromLines,
+      peerArrivals(scenario.service, d.peer, d.received, d.fromLines, d.state, d.elsewhere, lines),
       lines,
       peerRun.run.outcome.lines,
       peerRun.halted,

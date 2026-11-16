@@ -23,6 +23,7 @@ theorem arrive_keysDistinct (input : Step) (h : KeysDistinct s.records) :
   · exact operate_keysDistinct _ _ _ _ h
   · exact operate_keysDistinct _ _ _ _ h
   · exact mock_keysDistinct _ _ _ _ _ h
+  · exact answerById_keysDistinct _ _ _ h
 
 theorem step_keysDistinct (input : Step) (h : KeysDistinct s.records) :
     KeysDistinct (step st fs s input).records := by

@@ -72,6 +72,7 @@ function inputReferences(input: Scenario["inputs"][number], i: number): Referenc
   const field = (role: string, target: unknown): Reference => ({ path: ["inputs", i, role], target });
   switch (input.type) {
     case "elsewhere":
+    case "from":
       return inputReferences(input.input, i).map((r) => ({ ...r, path: ["inputs", i, "input", ...r.path.slice(2)] }));
     case "at":
     case "unsubscribe":

@@ -14,13 +14,8 @@ export type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in key
  * the unsubscribe input.
  */
 type LineFields<A, U> =
-  | ({
-      readonly type: "command";
-      readonly command: AnyCommand;
-      readonly input: unknown;
-      readonly id?: string;
-    } & CreatesKeys)
-  | ({ readonly type: "query"; readonly query: AnyQuery; readonly input: unknown; readonly id?: string } & CreatesKeys)
+  | CommandLine
+  | QueryLine
   | SubscribeLine
   | U
   | { readonly type: "restart" }
@@ -44,6 +39,20 @@ type LineFields<A, U> =
       readonly payload: unknown;
     }
   | A;
+
+type CommandLine = {
+  readonly type: "command";
+  readonly command: AnyCommand;
+  readonly input: unknown;
+  readonly id?: string;
+} & CreatesKeys;
+
+type QueryLine = {
+  readonly type: "query";
+  readonly query: AnyQuery;
+  readonly input: unknown;
+  readonly id?: string;
+} & CreatesKeys;
 
 /**
  * A subscribe input. `handle`, which only timed() sets, is the name by which a later unsubscribe names the subscription
@@ -93,7 +102,20 @@ interface Scheduled {
 }
 
 /** An input to the run: it arrives at `time`, after the deadlines due by then. */
-export type Input = (LineFields<AnswerInput, UnsubscribeInput> | { readonly type: "time" }) & Timed & Scheduled;
+export type Input = (LineFields<AnswerInput, UnsubscribeInput> | AnswerToInput | { readonly type: "time" }) &
+  Timed &
+  Scheduled;
+
+/**
+ * An answer to the request to `target` whose trace line has id `to`, which only a peer's derived inputs give (Lean's
+ * Step.Body.answerTo).
+ */
+type AnswerToInput = {
+  readonly type: "answerTo";
+  readonly to: string;
+  readonly target: AnyCommand | AnyQuery;
+  readonly answer: Answer;
+};
 
 /**
  * An unsubscribe input: `subscription` is the subscribe input that opened the subscription, or `to`, which only test's
@@ -117,6 +139,9 @@ type UntimedInput = LineFields<UntimedAnswer, UntimedUnsubscribe>;
 
 type UntimedUnsubscribe = { readonly type: "unsubscribe"; readonly subscription: SubscribeLine };
 
+/** A request to the scenario's service, which `from` can say another spec service sends. */
+type RequestLine = CommandLine | QueryLine | SubscribeLine | UntimedUnsubscribe;
+
 type UntimedAnswer = AnswerFields<MockChoice>;
 
 interface At extends Timed {
@@ -136,7 +161,14 @@ interface Elsewhere {
   readonly input: UntimedInput;
 }
 
-type ScenarioInputs = readonly [At, ...(UntimedInput | At | Elsewhere)[]];
+/** A request to the scenario's service that the spec service of the contract `service` sends. */
+interface From {
+  readonly type: "from";
+  readonly service: object;
+  readonly input: RequestLine;
+}
+
+type ScenarioInputs = readonly [At, ...(UntimedInput | At | Elsewhere | From)[]];
 
 /**
  * The options of a scenario. `given` names, by service, the start state of each spec service whose messages the
@@ -204,12 +236,13 @@ function timedEntries(entries: readonly Entry[]): Input[] {
 }
 
 /**
- * The written lines with times: each of the service's inputs with its position from 1, and each elsewhere input with
- * its position and the number of the service's inputs before it. Each input takes the time of the `at` before it. An
- * `at` that another `at` or the end follows, with elsewhere inputs skipped, becomes a time input.
+ * The written lines with times: each of the service's inputs with its position from 1 and, for a from input, the
+ * contract of its sender, and each elsewhere input with its position and the number of the service's inputs before it.
+ * Each input takes the time of the `at` before it. An `at` that another `at` or the end follows, with elsewhere inputs
+ * skipped, becomes a time input.
  */
 function written(inputs: ScenarioInputs | StateInputs) {
-  const own: { readonly entry: Entry; readonly position: number }[] = [];
+  const own: { readonly entry: Entry; readonly position: number; readonly sender?: object }[] = [];
   const others: {
     readonly entry: Entry;
     readonly position: number;
@@ -230,6 +263,8 @@ function written(inputs: ScenarioInputs | StateInputs) {
         service: w.service,
         before: own.length,
       });
+    else if (w.type === "from")
+      own.push({ entry: { input: w.input, time: at.time }, position: i + 1, sender: w.service });
     else own.push({ entry: { input: w, time: at.time }, position: i + 1 });
   }
   return { own, others };
@@ -249,6 +284,13 @@ export function timed(scenario: { readonly inputs: ScenarioInputs | StateInputs 
  */
 export function writtenPositions(scenario: Scenario): number[] {
   return written(scenario.inputs).own.map((o) => o.position);
+}
+
+/** Returns, for each from input of the scenario, the contract of its sender and its index in what `timed` returns. */
+export function fromInputs(scenario: Scenario): { readonly service: object; readonly index: number }[] {
+  return written(scenario.inputs).own.flatMap(({ sender }, index) =>
+    sender === undefined ? [] : [{ service: sender, index }],
+  );
 }
 
 /** An elsewhere input of a scenario with its time, written position, and the number of the service's inputs before it. */
@@ -274,12 +316,21 @@ export function elsewhere(service: Readonly<Record<string, unknown>>, input: Unt
   return { type: "elsewhere", service, input };
 }
 
+/**
+ * Gives the request `input` to the scenario's service as one that the spec service of the contract `service` sends:
+ * test checks that the run that it derives from the scenario for that service sends such a request by then, and gives
+ * that run the service's answers to it.
+ */
+export function from(service: Readonly<Record<string, unknown>>, input: RequestLine): From {
+  return { type: "from", service, input };
+}
+
 /** Sends a command to the service. */
 export function send<I extends Shape, const Id extends string>(
   command: Command<I>,
   input: Encoded<I>,
   options?: Options<Id>,
-): UntimedInput {
+): CommandLine {
   return { type: "command", command, input, ...options };
 }
 
@@ -288,7 +339,7 @@ export function call<I extends Shape, const Id extends string>(
   query: Query<I>,
   input: Encoded<I>,
   options?: Options<Id>,
-): UntimedInput {
+): QueryLine {
   return { type: "query", query, input, ...options };
 }
 
@@ -339,7 +390,7 @@ export function subscribe<I extends Shape, const Id extends string>(
 }
 
 /** Ends, from another service, the subscription that the subscribe input `subscription` opened. */
-export function unsubscribe(subscription: SubscribeLine): UntimedInput {
+export function unsubscribe(subscription: SubscribeLine): UntimedUnsubscribe {
   return { type: "unsubscribe", subscription };
 }
 

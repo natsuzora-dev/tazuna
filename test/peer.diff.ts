@@ -5,8 +5,8 @@ import { canonicalJson, type Json } from "../src/data/values.ts";
 import { timed } from "../src/dsl/scenario.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { execute } from "../src/run/execute.ts";
-import { peerDerivations, peerNormal, runPeer } from "../src/run/peers.ts";
-import { peerArrivals, peerFindings } from "../src/semantics/system/peer.ts";
+import { ownInputForm, peerDerivations, peerNormal, runPeer } from "../src/run/peers.ts";
+import { type PeerNormal, peerArrivals, peerFindings } from "../src/semantics/system/peer.ts";
 import { runExamples } from "./examples.ts";
 import { tagged } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";
@@ -29,18 +29,26 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
         const at = `${relative(join(import.meta.dirname, ".."), root)} ${scenario.service}.${scenario.name} ${d.peer}`;
         const lines = run.outcome.lines;
         const normal = peerNormal(spec, d.peer);
-        const { derived, run: peerRun, halted } = runPeer(spec, normal, scenario.service, lines, d);
-        const normals: [string, unknown, unknown][] = [];
-        const recorded = (name: string, value: unknown) => {
-          const form = normal(name, value);
-          normals.push([name, value, tagged(form)]);
-          return form;
+        const inputForm = ownInputForm(spec, scenario.service);
+        const { derived, run: peerRun, halted } = runPeer(spec, normal, inputForm, scenario.service, lines, d);
+        const recording = (form: PeerNormal) => {
+          const forms: [string, unknown, unknown][] = [];
+          const recorded = (name: string, value: unknown) => {
+            const v = form(name, value);
+            forms.push([name, value, tagged(v)]);
+            return v;
+          };
+          return [forms, recorded] as const;
         };
-        const arrivals = peerArrivals(scenario.service, d.peer, d.received, d.state, d.elsewhere, lines);
+        const [normals, recorded] = recording(normal);
+        const [inputForms, recordedInput] = recording(inputForm);
+        const arrivals = peerArrivals(scenario.service, d.peer, d.received, d.fromLines, d.state, d.elsewhere, lines);
         const findings = peerFindings(
           recorded,
+          recordedInput,
           scenario.service,
           d.peer,
+          d.fromLines,
           arrivals,
           lines,
           peerRun.outcome.lines,
@@ -50,12 +58,14 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
           service: scenario.service,
           peer: d.peer,
           received: d.received,
+          fromLines: d.fromLines,
           state: d.state,
           elsewhere: d.elsewhere,
           lines,
           peerLines: peerRun.outcome.lines,
           halted: halted ?? null,
           normals,
+          inputForms,
         });
         assert.ok(same(fromLean.inputs, derived), `the derived inputs differ for ${at}`);
         assert.ok(same(fromLean.findings, findings), `the findings differ for ${at}`);

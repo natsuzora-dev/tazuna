@@ -419,7 +419,25 @@ export function mock(r: Processing, value: Mock): Pending | undefined {
   const p = answering(r, sender, name, value.choice);
   if ("kind" in p) return report(s, p);
   if (value.handle !== undefined) s.mocks.set(value.handle, { request: p, answer: value.answer });
-  const checked = checkAnswer(r, p, value.answer);
+  return answerRequest(r, p, value.answer);
+}
+
+/** Lean's answerById. */
+export function answerById(r: Processing, value: Extract<Step, { readonly type: "answerTo" }>): Pending | undefined {
+  const s = r.state;
+  const p = s.pending.find((q) => q.id === value.to && q.activity.target === value.target);
+  if (p !== undefined) return answerRequest(r, p, value.answer);
+  return report(s, {
+    kind: "InvalidInput.unwaitedRequest",
+    definition: null,
+    data: { requestId: value.to, target: refOf(r.st, value.target) },
+  });
+}
+
+/** Lean's answerRequest. */
+function answerRequest(r: Processing, p: Pending, answer: Answer): Pending | undefined {
+  const s = r.state;
+  const checked = checkAnswer(r, p, answer);
   if (checked.assumption !== undefined) report(s, checked.assumption);
   if ("malformed" in checked.written) {
     const { malformed, error } = checked.written;
@@ -498,6 +516,7 @@ function valuesOf(input: Step): unknown[] {
     case "unacceptedOperation":
       return [input.payload];
     case "answer":
+    case "answerTo":
       return input.answer.result === "rejected" || input.answer.output === undefined ? [] : [input.answer.output];
     default:
       return [];
