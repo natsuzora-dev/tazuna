@@ -16,17 +16,19 @@ import {
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName } from "../load/traceName.ts";
 import { serviceOf } from "../semantics/service/basic.ts";
-import { type NamedForm, type PeerOrigin, peerArrivals, peerEvent, peerName } from "../semantics/system/peer.ts";
+import {
+  type NamedForm,
+  type PeerDerivation,
+  type PeerOrigin,
+  peerArrivals,
+  peerEvent,
+  peerName,
+} from "../semantics/system/peer.ts";
 import { peerFindings, peerInputs } from "../semantics/system/peerCheck.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
-/** The arguments of peerInputs for one peer of a scenario's run, with the scenario's elsewhere inputs to the peer. */
-export interface PeerDerivation {
-  readonly peer: string;
-  readonly received: readonly string[];
-  readonly fromLines: readonly number[];
-  readonly state: readonly Step[];
-  readonly elsewhere: readonly (readonly [number, Step])[];
+/** A peer of a scenario's run: the PeerDerivation of its inputs, with the scenario's elsewhere inputs to it as written. */
+export interface ScenarioPeer extends PeerDerivation {
   readonly written: readonly ElsewhereInput[];
 }
 
@@ -53,10 +55,10 @@ function linesBefore(run: Run, { input, before }: ElsewhereInput): number {
 
 /**
  * Returns the peers of the scenario's run, the spec services other than its own that it messages, names in `given`,
- * `elsewhere` or `from`, or emits an event to that they receive, each with the arguments of peerInputs. A from input's
- * line is the `in` line of the scenario's input.
+ * `elsewhere` or `from`, or emits an event to that they receive, each with its PeerDerivation. A from input's line
+ * is the `in` line of the scenario's input.
  */
-export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): PeerDerivation[] {
+export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run): ScenarioPeer[] {
   const { given } = scenario.definition;
   const written = elsewhereInputs(scenario.definition).map((e) => ({ ...e, peer: contractService(spec, e.service) }));
   const sent = fromInputs(scenario.definition).map((f) => ({
@@ -88,6 +90,8 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
       fromLines: sent.filter((f) => f.peer === peer).map((f) => f.line),
       state: steps.slice(0, stateInputs.length),
       elsewhere: mine.map((e, i) => [linesBefore(run, e), steps[stateInputs.length + i] as Step] as const),
+      peerForm: peerForm(spec, peer),
+      ownInputForm: ownInputForm(spec, scenario.service),
       written: mine,
     };
   });
@@ -97,7 +101,7 @@ export function peerDerivations(spec: Spec, scenario: Named<Scenario>, run: Run)
  * Returns the peer's form of an output or payload that verify compares (comparable), with its bags and runs. A value
  * that does not match its schema stays as it is.
  */
-export function peerForm(spec: Spec, peer: string): NamedForm {
+function peerForm(spec: Spec, peer: string): NamedForm {
   return (name, value) => {
     const d = definitionOfTraceName(spec, peer, name, "query", "command", "event");
     const shape = d?.kind === "event" ? d.payload : d?.output;
@@ -110,7 +114,7 @@ export function peerForm(spec: Spec, peer: string): NamedForm {
 }
 
 /** Returns the form of an input of a request to the service `service`, by its own name, that verify compares. */
-export function ownInputForm(spec: Spec, service: string): NamedForm {
+function ownInputForm(spec: Spec, service: string): NamedForm {
   return (name, value) => {
     const d = definitionOfTraceName(spec, service, name, "query", "command");
     try {
@@ -125,30 +129,10 @@ export function ownInputForm(spec: Spec, service: string): NamedForm {
  * Runs the peer on the inputs that peerInputs derives from the scenario's run `lines` and the peer's own run of them,
  * and returns the derived inputs, the peer's run, and, when it halted, the origin of the input that halted it with the
  * halting violation's kind. The derivation starts from an empty run of the peer and repeats until the inputs stop
- * changing: an input depends only on the peer's run of the inputs before it. `peerForm` is the peer's peerForm, and
- * `ownInputForm` the service's ownInputForm.
+ * changing: an input depends only on the peer's run of the inputs before it.
  */
-export function runPeer(
-  spec: Spec,
-  peerForm: NamedForm,
-  ownInputForm: NamedForm,
-  service: string,
-  lines: readonly TraceLine[],
-  d: PeerDerivation,
-) {
-  const derive = (peerLines: readonly TraceLine[]) =>
-    peerInputs(
-      peerForm,
-      ownInputForm,
-      service,
-      d.peer,
-      d.received,
-      d.fromLines,
-      d.state,
-      d.elsewhere,
-      lines,
-      peerLines,
-    );
+export function runPeer(spec: Spec, service: string, lines: readonly TraceLine[], d: PeerDerivation) {
+  const derive = (peerLines: readonly TraceLine[]) => peerInputs(service, d, lines, peerLines);
   let derived = derive([]);
   for (let round = 0; ; round += 1) {
     const run = execute(
@@ -193,21 +177,16 @@ export function checkPeers(spec: Spec, scenario: Named<Scenario>, run: Run): Pee
     ...(input === undefined ? {} : { input }),
   });
   const lines = run.outcome.lines;
-  const own = ownInputForm(spec, scenario.service);
   return peerDerivations(spec, scenario, run).map((d) => {
-    const forms = peerForm(spec, d.peer);
-    const peerRun = runPeer(spec, forms, own, scenario.service, lines, d);
+    const peerRun = runPeer(spec, scenario.service, lines, d);
     const locationOf = (o: PeerOrigin): Location =>
       o.type === "line"
         ? at(positions[run.inputLines.findLastIndex((l) => l <= o.line)])
         : at(o.type === "elsewhere" ? d.written[o.index]?.position : undefined);
     const findings = peerFindings(
-      forms,
-      own,
       scenario.service,
-      d.peer,
-      d.fromLines,
-      peerArrivals(scenario.service, d.peer, d.received, d.fromLines, d.state, d.elsewhere, lines),
+      d,
+      peerArrivals(scenario.service, d, lines),
       lines,
       peerRun.run.outcome.lines,
       peerRun.halted,

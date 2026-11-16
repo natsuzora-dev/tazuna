@@ -154,28 +154,38 @@ export type PeerOrigin =
   | { readonly type: "line"; readonly line: number }
   | { readonly type: "elsewhere"; readonly index: number };
 
-/** The form of an output or payload of the peer's definition, by the peer's own name, that verify compares. */
+/** Lean's NamedForm. */
 export type NamedForm = (name: string, value: unknown) => unknown;
+
+/** Lean's PeerDerivation. */
+export interface PeerDerivation {
+  readonly peer: string;
+  readonly received: readonly string[];
+  readonly fromLines: readonly number[];
+  readonly state: readonly Step[];
+  readonly elsewhere: readonly (readonly [number, Step])[];
+  readonly peerForm: NamedForm;
+  readonly ownInputForm: NamedForm;
+}
+
 /** Lean's inLines, as the places of the in lines. */
 export const inLines = (lines: readonly TraceLine[]): number[] => lines.flatMap((l, j) => (l.dir === "in" ? [j] : []));
+
 export type Placed = { readonly step: Step; readonly origin: PeerOrigin };
 
 /** Lean's peerPlaced. */
 export function peerPlaced(
   service: string,
-  peer: string,
-  received: readonly string[],
-  fromLines: readonly number[],
-  elsewhere: readonly (readonly [number, Step])[],
+  d: PeerDerivation,
   lines: readonly TraceLine[],
   keys: (n: number) => Bindings,
 ): Placed[] {
   return Array.from({ length: lines.length + 1 }, (_, n) => {
-    const others = elsewhere.flatMap(([p, step], index): Placed[] =>
+    const others = d.elsewhere.flatMap(([p, step], index): Placed[] =>
       p === n || (n === lines.length && n < p) ? [{ step, origin: { type: "elsewhere", index } }] : [],
     );
     const l = lines[n];
-    const body = l === undefined ? undefined : peerInput(service, peer, received, fromLines, lines, keys(n), l);
+    const body = l === undefined ? undefined : peerInput(service, d.peer, d.received, d.fromLines, lines, keys(n), l);
     return l === undefined || body === undefined
       ? others
       : [...others, { step: { time: l.time, ...body } as Step, origin: { type: "line", line: n } as PeerOrigin }];
@@ -189,19 +199,9 @@ export function arrival(elsewhere: readonly (readonly [number, Step])[], o: Peer
 }
 
 /** Lean's peerArrivals. */
-export function peerArrivals(
-  service: string,
-  peer: string,
-  received: readonly string[],
-  fromLines: readonly number[],
-  state: readonly Step[],
-  elsewhere: readonly (readonly [number, Step])[],
-  lines: readonly TraceLine[],
-): number[] {
+export function peerArrivals(service: string, d: PeerDerivation, lines: readonly TraceLine[]): number[] {
   return [
-    ...state.map(() => 0),
-    ...peerPlaced(service, peer, received, fromLines, elsewhere, lines, () => new Map()).map((p) =>
-      arrival(elsewhere, p.origin),
-    ),
+    ...d.state.map(() => 0),
+    ...peerPlaced(service, d, lines, () => new Map()).map((p) => arrival(d.elsewhere, p.origin)),
   ];
 }

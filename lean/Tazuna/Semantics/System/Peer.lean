@@ -1,3 +1,4 @@
+import Tazuna.Data.Canonical
 import Tazuna.Semantics.Step
 
 /-!
@@ -134,37 +135,53 @@ derive_wire PeerOrigin tag "type"
 /-- The lines of `lines` that are `in` lines, each with its place in `lines`. -/
 def inLines (lines : List TraceLine) : List (TraceLine × Nat) := lines.zipIdx.filter (·.1.body.dir == .in)
 
+/-- The form of a value of a definition, by the definition's trace name, that verify compares. -/
+abbrev NamedForm := String → Value → CValue
+
+/--
+What a peer's inputs derive from, besides the scenario's run: the peer `peer`, the trace names `received` of the
+events that it receives, the scenario's from lines `fromLines` of the peer, the inputs `state` of its given state, and
+the scenario's elsewhere inputs `elsewhere` to it, each with the number of the run's lines before which it arrives. The
+peer check compares the peer's outputs and payloads in the form `peerForm`, by the peer's own names, and the inputs of
+the requests that the scenario takes from the peer in the form `ownInputForm`, by the scenario's own names.
+-/
+structure PeerDerivation where
+  peer : String
+  received : List String
+  fromLines : List Nat
+  state : List Step
+  elsewhere : List (Nat × Step)
+  peerForm : NamedForm
+  ownInputForm : NamedForm
+
 /--
 The run's inputs to the peer and the scenario's elsewhere inputs to it, each with its origin, in the order that they
-arrive: the run's requests to the peer, ends of subscriptions to it, events that the peer receives (`received`, by trace
-name), and answers to the peer's requests of the from lines `fromLines` at their lines, taking the strings `keys n` at
-the line `n`, and each elsewhere input before the number of the run's lines that `elsewhere` holds with it, unchanged.
+arrive: the run's requests to the peer, ends of subscriptions to it, events that the peer receives, and answers to the
+peer's requests of the from lines at their lines, taking the strings `keys n` at the line `n`, and each elsewhere input
+before the number of the run's lines that it holds, unchanged.
 -/
-def peerPlaced (service peer : String) (received : List String) (fromLines : List Nat) (elsewhere : List (Nat × Step))
-    (lines : List TraceLine) (keys : Nat → Bindings) : List (Step × PeerOrigin) :=
+def peerPlaced (service : String) (d : PeerDerivation) (lines : List TraceLine) (keys : Nat → Bindings) :
+    List (Step × PeerOrigin) :=
   (List.range (lines.length + 1)).flatMap fun n =>
-    ((elsewhere.zipIdx.filter fun e => e.1.1 == n || (n == lines.length && n < e.1.1)).map fun e =>
+    ((d.elsewhere.zipIdx.filter fun e => e.1.1 == n || (n == lines.length && n < e.1.1)).map fun e =>
       (e.1.2, PeerOrigin.elsewhere e.2)) ++
     match lines[n]? with
     | some l =>
-      ((peerInput? service peer received fromLines lines (keys n) l).map fun b =>
+      ((peerInput? service d.peer d.received d.fromLines lines (keys n) l).map fun b =>
         (⟨l.time, b, none, none, none⟩, PeerOrigin.line n)).toList
     | none => []
 
-/-- The number of the run's lines before which the input of origin `o` arrives, `elsewhere` as in peerPlaced. -/
+/-- The number of the run's lines before which the input of origin `o` arrives, `elsewhere` as in PeerDerivation. -/
 def PeerOrigin.arrival (elsewhere : List (Nat × Step)) : PeerOrigin → Nat
   | .given => 0
   | .line n => n
   | .elsewhere k => (elsewhere[k]?.map (·.1)).getD 0
 
 /--
-The arrival of each input of the peer (PeerOrigin.arrival), in the order of peerInputs, the given state `state` first. The
+The arrival of each input of the peer (PeerOrigin.arrival), in the order of peerInputs, the given state first. The
 origins do not depend on the strings that the inputs take.
 -/
-def peerArrivals (service peer : String) (received : List String) (fromLines : List Nat) (state : List Step)
-    (elsewhere : List (Nat × Step)) (lines : List TraceLine) : List Nat :=
-  state.map (fun _ => 0) ++
-    (peerPlaced service peer received fromLines elsewhere lines fun _ => []).map (·.2.arrival elsewhere)
-
+def peerArrivals (service : String) (d : PeerDerivation) (lines : List TraceLine) : List Nat :=
+  d.state.map (fun _ => 0) ++ (peerPlaced service d lines fun _ => []).map (·.2.arrival d.elsewhere)
 
 end Tazuna.Semantics

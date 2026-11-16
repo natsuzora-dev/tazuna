@@ -7,14 +7,14 @@ namespace Tazuna.Thm.Semantics.System.PeerCheck
 open Tazuna.Data Tazuna.Semantics Tazuna.Thm.Data.Trace Tazuna.Thm.Data.Unify Tazuna.Thm.Semantics.System.Peer
   Tazuna.Thm.Verify.Matching
 
-variable {peerForm ownInputForm : String → Value → CValue} {service peer : String} {fromLines arrivals : List Nat}
+variable {service : String} {d : PeerDerivation} {arrivals : List Nat}
   {lines peerLines : List TraceLine}
 
 /-- The peer's createKey values, which the bindings bind. -/
 abbrev createdOf (peerLines : List TraceLine) : List String := peerLines.flatMap (·.created.getD [])
 
 /-- The peer's form of its value `x` of the definition `n`, with its peer keys turned back. -/
-abbrev seenOf (peerForm : String → Value → CValue) (service : String) (lines : List TraceLine) (n : String)
+abbrev seenOf (peerForm : NamedForm) (service : String) (lines : List TraceLine) (n : String)
     (x : Value) : CValue :=
   peerForm n (Bindings.rename ((peerKeys service lines).map fun (k, v) => (v, k)) x)
 
@@ -23,7 +23,7 @@ Whether the scenario's value `y` of the peer's definition `n` stands for the pee
 in the forms that verify compares, `x` with its peer keys turned back into the run's createKey values matches `y` when
 each createKey value of the peer stands for its binding (ValueMatches).
 -/
-def PeerSees (peerForm : String → Value → CValue) (service : String) (lines peerLines : List TraceLine) (bs : Bindings)
+def PeerSees (peerForm : NamedForm) (service : String) (lines peerLines : List TraceLine) (bs : Bindings)
     (n : String) (x y : Value) : Prop :=
   ValueMatches (standsFor (createdOf peerLines) bs) (seenOf peerForm service lines n x) (peerForm n y)
 
@@ -31,18 +31,18 @@ def PeerSees (peerForm : String → Value → CValue) (service : String) (lines 
 Whether the peer's line `b` emits the event `n`, at or before `time`, with a payload that `payload` stands for, as the
 result of the request `resultOf` when it is given.
 -/
-def PeerEmits (peerForm : String → Value → CValue) (service : String) (lines peerLines : List TraceLine) (bs : Bindings)
+def PeerEmits (peerForm : NamedForm) (service : String) (lines peerLines : List TraceLine) (bs : Bindings)
     (n : String) (payload : Value) (resultOf : Option String) (time : DateTime) (b : TraceLine) : Prop :=
   ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → r = some q) ∧
     b.time.time ≤ time.time ∧ PeerSees peerForm service lines peerLines bs n p payload
 
 theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : String} {to target : String}
-    {a : Answer} (hl : l.body = .answer .in id to a) (ht : peerTarget? peer lines to = some target)
-    (hu : unreached lines to = false) (h : peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines bs i l = .ok bs') :
+    {a : Answer} (hl : l.body = .answer .in id to a) (ht : peerTarget? d.peer lines to = some target)
+    (hu : unreached lines to = false) (h : peerLine service d arrivals lines peerLines bs i l = .ok bs') :
     ∃ t b, (answersTo (peerLines.take (peerBefore arrivals peerLines i)) .out to)[(answersTo (lines.take i) .in to).length]? =
         some (t, b) ∧ t.time ≤ l.time.time ∧ Unified (createdOf peerLines) bs bs'
-          (fun f => AnswerCarries (fun x y => ValueMatches f (seenOf peerForm service lines target x)
-            (peerForm target y)) b a) := by
+          (fun f => AnswerCarries (fun x y => ValueMatches f (seenOf d.peerForm service lines target x)
+            (d.peerForm target y)) b a) := by
   simp only [peerLine, hl, ht, hu, Bool.false_eq_true, ite_false] at h
   split at h
   · cases h
@@ -67,10 +67,10 @@ theorem getElem?_take_some {α : Type} {xs : List α} {n j : Nat} {x : α} (h : 
 
 theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : String} {name n : String}
     {payload : Value} {resultOf : Option String} (hl : l.body = .event .in id name payload resultOf)
-    (hn : peerName? peer name = some n) (h : peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines bs i l = .ok bs') :
+    (hn : peerName? d.peer name = some n) (h : peerLine service d arrivals lines peerLines bs i l = .ok bs') :
     ∃ j b, peerLines[j]? = some b ∧ j < peerBefore arrivals peerLines i ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
       (∀ q, resultOf = some q → r = some q) ∧ b.time.time ≤ l.time.time ∧
-      Unified (createdOf peerLines) bs bs' (fun f => ValueMatches f (seenOf peerForm service lines n p) (peerForm n payload)) := by
+      Unified (createdOf peerLines) bs bs' (fun f => ValueMatches f (seenOf d.peerForm service lines n p) (d.peerForm n payload)) := by
   simp only [peerLine, hl, hn] at h
   split at h
   · next bs'' hf =>
@@ -86,7 +86,7 @@ theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Strin
         simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Option.all_eq_true] at hc
         obtain ⟨⟨rfl, htime⟩, hr⟩ := hc
         obtain ⟨hj, hb⟩ := getElem?_take_some hj
-        cases hu : unify (createdOf peerLines) (seenOf peerForm service lines m p) (peerForm m payload) bs with
+        cases hu : unify (createdOf peerLines) (seenOf d.peerForm service lines m p) (d.peerForm m payload) bs with
         | error => simp [hu, Except.toOption] at hs
         | ok b' =>
           simp only [hu, Except.toOption, Option.some.injEq] at hs
@@ -103,7 +103,7 @@ theorem requestOf_id {d : Dir} {b : TraceLine.Body} {t id name : String} {x : Va
   split at h <;> first | (split at h <;> simp_all [TraceLine.Body.id]) | cases h
 
 /-- What the peer's line `b` that sends the scenario's from line `l` (sentAs?) gives, from the bindings `bs` to `bs'`. -/
-structure SentAs (c : List String) (seen form : String → Value → CValue) (service : String) (bs bs' : Bindings)
+structure SentAs (c : List String) (seen form : NamedForm) (service : String) (bs bs' : Bindings)
     (l b : TraceLine) : Prop where
   time : b.time.time ≤ l.time.time
   fresh : bs.lookup b.body.id = none
@@ -115,7 +115,7 @@ structure SentAs (c : List String) (seen form : String → Value → CValue) (se
       ∀ R, bs' <+: R → ValueMatches (standsFor c R) (seen name y) (form name x)) ∨
     (∃ id to id' to', l.body = .unsubscribe .in id to ∧ b.body = .unsubscribe .out id' to' ∧ bs.lookup to' = some to)
 
-theorem sentAs_spec {c : List String} {seen form : String → Value → CValue} {service : String} {bs bs' : Bindings}
+theorem sentAs_spec {c : List String} {seen form : NamedForm} {service : String} {bs bs' : Bindings}
     {l b : TraceLine} (h : sentAs? c seen form service bs l b = some (.ok bs')) :
     SentAs c seen form service bs bs' l b := by
   unfold sentAs? at h
@@ -155,7 +155,7 @@ theorem sentAs_spec {c : List String} {seen form : String → Value → CValue} 
         · cases h
       · cases h
 
-theorem peerSent_spec {c : List String} {seen form : String → Value → CValue} {service : String} {bs bs' : Bindings}
+theorem peerSent_spec {c : List String} {seen form : NamedForm} {service : String} {bs bs' : Bindings}
     {before : List TraceLine} {l : TraceLine} {j : Nat} (h : peerSent c seen form service bs before l = .ok (j, bs')) :
     ∃ b, before[j]? = some b ∧ SentAs c seen form service bs bs' l b := by
   unfold peerSent at h
@@ -177,16 +177,16 @@ theorem peerSent_spec {c : List String} {seen form : String → Value → CValue
   · cases h
 
 /-- The scenario's form of the peer's input `x` of a request to the definition `n` of `service`, its peer keys turned back. -/
-abbrev seenInputOf (ownInputForm : String → Value → CValue) (service : String) (lines : List TraceLine) (n : String)
+abbrev seenInputOf (ownInputForm : NamedForm) (service : String) (lines : List TraceLine) (n : String)
     (x : Value) : CValue :=
   ownInputForm n (Bindings.rename ((peerKeys service lines).map fun (k, v) => (v, k)) x)
 
 /-- The check of a line that is neither an `in` answer nor an `in` event keeps the bindings or pairs a from line. -/
 theorem peerLine_sent {bs bs' : Bindings} {i : Nat} {l : TraceLine}
     (ha : ∀ id to a, l.body ≠ .answer .in id to a) (he : ∀ id name p r, l.body ≠ .event .in id name p r)
-    (h : peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines bs i l = .ok bs') :
-    bs' = bs ∨ (fromLines.contains i ∧ ∃ j, peerSent (createdOf peerLines) (seenInputOf ownInputForm service lines)
-      ownInputForm service bs (peerLines.take (peerBefore arrivals peerLines i)) l = .ok (j, bs')) := by
+    (h : peerLine service d arrivals lines peerLines bs i l = .ok bs') :
+    bs' = bs ∨ (d.fromLines.contains i ∧ ∃ j, peerSent (createdOf peerLines) (seenInputOf d.ownInputForm service lines)
+      d.ownInputForm service bs (peerLines.take (peerBefore arrivals peerLines i)) l = .ok (j, bs')) := by
   unfold peerLine at h
   dsimp only at h
   split at h
@@ -203,14 +203,14 @@ theorem peerLine_sent {bs bs' : Bindings} {i : Nat} {l : TraceLine}
        · cases h; exact .inl rfl)
 
 theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}
-    (h : peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines bs i l = .ok bs') :
+    (h : peerLine service d arrivals lines peerLines bs i l = .ok bs') :
     bs <+: bs' ∧ (OneToOne bs → OneToOne bs') := by
   cases hb : l.body with
   | answer d _ to a =>
     cases d with
     | out => simp [peerLine, hb] at h; subst h; exact ⟨List.prefix_refl _, id⟩
     | «in» =>
-      cases ht : peerTarget? peer lines to with
+      cases ht : peerTarget? d.peer lines to with
       | none => simp [peerLine, hb, ht] at h; subst h; exact ⟨List.prefix_refl _, id⟩
       | some target =>
         cases hu : unreached lines to with
@@ -222,7 +222,7 @@ theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}
     cases d with
     | out => simp [peerLine, hb] at h; subst h; exact ⟨List.prefix_refl _, id⟩
     | «in» =>
-      cases hn : peerName? peer name with
+      cases hn : peerName? d.peer name with
       | none => simp [peerLine, hb, hn] at h; subst h; exact ⟨List.prefix_refl _, id⟩
       | some n =>
         obtain ⟨_, _, _, _, _, _, _, _, _, _, hU⟩ := peerLine_event hb hn h
@@ -234,56 +234,56 @@ theorem peerLine_grows {bs bs' : Bindings} {i : Nat} {l : TraceLine}
       exact ⟨hS.grows, hS.oneToOne⟩
 
 theorem peerBindings_succ {i : Nat} {l : TraceLine} (hi : lines[i]? = some l) :
-    peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1) =
-      (peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i) i l).toOption.getD
-        (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i) := by
+    peerBindings service d arrivals lines peerLines (i + 1) =
+      (peerLine service d arrivals lines peerLines (peerBindings service d arrivals lines peerLines i) i l).toOption.getD
+        (peerBindings service d arrivals lines peerLines i) := by
   have hz : lines.zipIdx[i]? = some (l, i) := by simp [List.getElem?_zipIdx, hi]
   simp only [peerBindings, List.take_add_one, List.foldl_append, hz]
   rfl
 
 theorem peerBindings_grows (i : Nat) :
-    peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i <+: peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1) ∧
-      (OneToOne (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i) →
-        OneToOne (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1))) := by
+    peerBindings service d arrivals lines peerLines i <+: peerBindings service d arrivals lines peerLines (i + 1) ∧
+      (OneToOne (peerBindings service d arrivals lines peerLines i) →
+        OneToOne (peerBindings service d arrivals lines peerLines (i + 1))) := by
   cases hi : lines[i]? with
   | none =>
     have hz : lines.zipIdx[i]? = none := by simp [List.getElem?_zipIdx, hi]
-    have he : peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1) =
-        peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i := by
+    have he : peerBindings service d arrivals lines peerLines (i + 1) =
+        peerBindings service d arrivals lines peerLines i := by
       simp only [peerBindings, List.take_add_one, List.foldl_append, hz]
       rfl
     rw [he]
     exact ⟨List.prefix_refl _, id⟩
   | some l =>
     rw [peerBindings_succ hi]
-    cases h : peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i) i l with
+    cases h : peerLine service d arrivals lines peerLines (peerBindings service d arrivals lines peerLines i) i l with
     | error _ => exact ⟨List.prefix_refl _, id⟩
     | ok bs' => exact peerLine_grows h
 
 theorem peerBindings_prefix {i j : Nat} (h : i ≤ j) :
-    peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i <+: peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines j := by
+    peerBindings service d arrivals lines peerLines i <+: peerBindings service d arrivals lines peerLines j := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
   induction k with
   | zero => exact List.prefix_refl _
   | succ k ih => exact (ih (by omega)).trans (peerBindings_grows (i + k)).1
 
 /-- The bindings that the check builds are one-to-one. -/
-theorem peerBindings_oneToOne (n : Nat) : OneToOne (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines n) := by
+theorem peerBindings_oneToOne (n : Nat) : OneToOne (peerBindings service d arrivals lines peerLines n) := by
   induction n with
   | zero => simp [peerBindings, OneToOne]
   | succ n ih => exact (peerBindings_grows n).2 ih
 
 /-- No violation means that the peer's run of the derived inputs did not halt. -/
 theorem peerFindings_halted {halted : Option (PeerOrigin × String)}
-    (h : peerFindings peerForm ownInputForm service peer fromLines arrivals lines peerLines halted = []) : halted = none := by
+    (h : peerFindings service d arrivals lines peerLines halted = []) : halted = none := by
   cases halted with
   | none => rfl
   | some p => simp [peerFindings] at h
 
 theorem peerLine_ok {halted : Option (PeerOrigin × String)} {i : Nat} {l : TraceLine}
-    (h : peerFindings peerForm ownInputForm service peer fromLines arrivals lines peerLines halted = []) (hi : lines[i]? = some l) :
-    peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i) i l =
-      .ok (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1)) := by
+    (h : peerFindings service d arrivals lines peerLines halted = []) (hi : lines[i]? = some l) :
+    peerLine service d arrivals lines peerLines (peerBindings service d arrivals lines peerLines i) i l =
+      .ok (peerBindings service d arrivals lines peerLines (i + 1)) := by
   cases peerFindings_halted h
   simp only [peerFindings] at h
   have hz : (l, i) ∈ lines.zipIdx := List.mem_zipIdx_iff_getElem?.mpr hi
@@ -294,12 +294,12 @@ theorem peerLine_ok {halted : Option (PeerOrigin × String)} {i : Nat} {l : Trac
   · next bs' hb => rw [hb]; rfl
 
 /-- The bindings after the whole run: the one renaming under which the stage 1 theorems hold. -/
-abbrev peerFinal (peerForm ownInputForm : String → Value → CValue) (service peer : String) (fromLines arrivals : List Nat)
+abbrev peerFinal (service : String) (d : PeerDerivation) (arrivals : List Nat)
     (lines peerLines : List TraceLine) : Bindings :=
-  peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines lines.length
+  peerBindings service d arrivals lines peerLines lines.length
 
 theorem final_of {i : Nat} {l : TraceLine} (hi : lines[i]? = some l) :
-    peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1) <+: peerFinal peerForm ownInputForm service peer fromLines arrivals lines peerLines :=
+    peerBindings service d arrivals lines peerLines (i + 1) <+: peerFinal service d arrivals lines peerLines :=
   peerBindings_prefix (List.getElem?_eq_some_iff.mp hi).1
 
 /--
@@ -310,12 +310,12 @@ takes an input that arrives after the mock (peerBefore).
 -/
 theorem mocked_answer_given {halted : Option (PeerOrigin × String)} {i : Nat} {l : TraceLine} {id : String}
     {to target : String} {a : Answer}
-    (h : peerFindings peerForm ownInputForm service peer fromLines arrivals lines peerLines halted = []) (hi : lines[i]? = some l)
-    (hl : l.body = .answer .in id to a) (ht : peerTarget? peer lines to = some target)
+    (h : peerFindings service d arrivals lines peerLines halted = []) (hi : lines[i]? = some l)
+    (hl : l.body = .answer .in id to a) (ht : peerTarget? d.peer lines to = some target)
     (hu : unreached lines to = false) :
     ∃ t b, (answersTo (peerLines.take (peerBefore arrivals peerLines i)) .out to)[(answersTo (lines.take i) .in to).length]? =
         some (t, b) ∧
-      AnswerCarries (PeerSees peerForm service lines peerLines (peerFinal peerForm ownInputForm service peer fromLines arrivals lines peerLines) target) b a ∧
+      AnswerCarries (PeerSees d.peerForm service lines peerLines (peerFinal service d arrivals lines peerLines) target) b a ∧
         t.time ≤ l.time.time := by
   obtain ⟨t, b, hb, htime, hU⟩ := peerLine_answer hl ht hu (peerLine_ok h hi)
   exact ⟨t, b, hb, hU.sound _ (final_of hi), htime⟩
@@ -374,11 +374,11 @@ peer that reached it are, in order and as the scenario sees the peer's values un
 prefix of the peer's answers to the request, each given at or before the mock's time.
 -/
 theorem mocked_answers_prefix {halted : Option (PeerOrigin × String)} {to target : String} {k : Nat} {t : DateTime}
-    {a : Answer} (h : peerFindings peerForm ownInputForm service peer fromLines arrivals lines peerLines halted = [])
-    (ht : peerTarget? peer lines to = some target)
+    {a : Answer} (h : peerFindings service d arrivals lines peerLines halted = [])
+    (ht : peerTarget? d.peer lines to = some target)
     (hu : unreached lines to = false) (hk : (answersTo lines .in to)[k]? = some (t, a)) :
     ∃ t' b, (answersTo peerLines .out to)[k]? = some (t', b) ∧
-      AnswerCarries (PeerSees peerForm service lines peerLines (peerFinal peerForm ownInputForm service peer fromLines arrivals lines peerLines) target) b a ∧
+      AnswerCarries (PeerSees d.peerForm service lines peerLines (peerFinal service d arrivals lines peerLines) target) b a ∧
         t'.time ≤ t.time := by
   obtain ⟨i, l, id, hi, hl, rfl, rfl⟩ := answersTo_getElem? hk
   obtain ⟨t', b, hb, hc, hle⟩ := mocked_answer_given h hi hl ht hu
@@ -393,10 +393,10 @@ Two deliveries of one event may name the same line of the peer.
 -/
 theorem received_event_emitted {halted : Option (PeerOrigin × String)} {i : Nat} {l : TraceLine} {id : String}
     {name n : String} {payload : Value} {resultOf : Option String}
-    (h : peerFindings peerForm ownInputForm service peer fromLines arrivals lines peerLines halted = []) (hi : lines[i]? = some l)
-    (hl : l.body = .event .in id name payload resultOf) (hn : peerName? peer name = some n) :
+    (h : peerFindings service d arrivals lines peerLines halted = []) (hi : lines[i]? = some l)
+    (hl : l.body = .event .in id name payload resultOf) (hn : peerName? d.peer name = some n) :
     ∃ j b, peerLines[j]? = some b ∧ j < peerBefore arrivals peerLines i ∧
-      PeerEmits peerForm service lines peerLines (peerFinal peerForm ownInputForm service peer fromLines arrivals lines peerLines) n payload resultOf l.time b := by
+      PeerEmits d.peerForm service lines peerLines (peerFinal service d arrivals lines peerLines) n payload resultOf l.time b := by
   obtain ⟨j, b, hb, hj, id', p, r, hbody, hr, htime, hU⟩ := peerLine_event hl hn (peerLine_ok h hi)
   exact ⟨j, b, hb, hj, id', p, r, hbody, hr, htime, hU.sound _ (final_of hi)⟩
 
@@ -457,11 +457,10 @@ theorem answerAt_same {lines : List TraceLine} {d : Dir} {to to' : String} {k k'
   cases hl'
   exact ⟨rfl, rfl⟩
 
-theorem mem_peerInputs_line {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} {st : Step} {i : Nat}
-    (h : (st, PeerOrigin.line i) ∈ peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines) :
+theorem mem_peerInputs_line {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {st : Step} {i : Nat}
+    (h : (st, PeerOrigin.line i) ∈ peerInputs service d lines peerLines) :
     ∃ l b, lines[i]? = some l ∧
-      peerInput? service peer received fromLines lines (peerForward peerForm ownInputForm service peer fromLines (peerArrivals service peer received fromLines state elsewhere lines) lines peerLines i) l = some b ∧
+      peerInput? service d.peer d.received d.fromLines lines (peerForward service d (peerArrivals service d lines) lines peerLines i) l = some b ∧
       st = ⟨l.time, b, none, none, none⟩ := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
@@ -477,12 +476,11 @@ theorem mem_peerInputs_line {peerForm ownInputForm : String → Value → CValue
         obtain ⟨rfl, rfl⟩ := he
         exact ⟨l, b, hl, hb, rfl⟩
 
-theorem peerInputs_line_mem {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} {i : Nat} {l : TraceLine}
+theorem peerInputs_line_mem {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {i : Nat} {l : TraceLine}
     {b : Step.Body} (hi : lines[i]? = some l)
-    (hb : peerBody? peer lines (peerForward peerForm ownInputForm service peer fromLines (peerArrivals service peer received fromLines state elsewhere lines) lines peerLines i) l = some b) :
+    (hb : peerBody? d.peer lines (peerForward service d (peerArrivals service d lines) lines peerLines i) l = some b) :
     (⟨l.time, b, none, none, none⟩, PeerOrigin.line i) ∈
-      peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines := by
+      peerInputs service d lines peerLines := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap]
   refine .inr ⟨(⟨l.time, b, none, none, none⟩, PeerOrigin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
   · have := (List.getElem?_eq_some_iff.mp hi).1
@@ -490,10 +488,9 @@ theorem peerInputs_line_mem {peerForm ownInputForm : String → Value → CValue
     omega
   · simp [hi, hb, peerInput?]
 
-theorem peerInputs_lines_pairwise {peerForm ownInputForm : String → Value → CValue} {service peer : String}
-    {received : List String} {fromLines : List Nat} {state : List Step} {elsewhere : List (Nat × Step)}
+theorem peerInputs_lines_pairwise {service : String} {d : PeerDerivation}
     {lines peerLines : List TraceLine} :
-    ((peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines).filterMap
+    ((peerInputs service d lines peerLines).filterMap
       (·.2.line?)).Pairwise (· < ·) := by
   have hnone : ∀ {α : Type} (l : List α), l.filterMap (fun _ => (none : Option Nat)) = [] :=
     fun _ => List.filterMap_eq_nil_iff.mpr fun _ _ => rfl
@@ -512,33 +509,30 @@ theorem peerInputs_lines_pairwise {peerForm ownInputForm : String → Value → 
       cases o <;> simp
     · simp
 
-theorem peerInputs_lines_nodup {peerForm ownInputForm : String → Value → CValue} {service peer : String}
-    {received : List String} {fromLines : List Nat} {state : List Step} {elsewhere : List (Nat × Step)}
+theorem peerInputs_lines_nodup {service : String} {d : PeerDerivation}
     {lines peerLines : List TraceLine} :
-    ((peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines).filterMap
+    ((peerInputs service d lines peerLines).filterMap
       (·.2.line?)).Nodup :=
   peerInputs_lines_pairwise.imp Nat.ne_of_lt
 
 /-- The arrivals of the peer's inputs are those of peerArrivals. -/
-theorem peerInputs_arrivals {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} :
-    (peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines).map (·.2.arrival elsewhere) =
-      peerArrivals service peer received fromLines state elsewhere lines := by
-  have key : ∀ f g, (peerPlaced service peer received fromLines elsewhere lines f).map (·.2.arrival elsewhere) =
-      (peerPlaced service peer received fromLines elsewhere lines g).map (·.2.arrival elsewhere) := fun f g => by
-    have := congrArg (List.map (PeerOrigin.arrival elsewhere)) (peerPlaced_origins (service := service) (peer := peer)
-      (received := received) (fromLines := fromLines) (elsewhere := elsewhere) (lines := lines) f g)
+theorem peerInputs_arrivals {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} :
+    (peerInputs service d lines peerLines).map (·.2.arrival d.elsewhere) =
+      peerArrivals service d lines := by
+  have key : ∀ f g, (peerPlaced service d lines f).map (·.2.arrival d.elsewhere) =
+      (peerPlaced service d lines g).map (·.2.arrival d.elsewhere) := fun f g => by
+    have := congrArg (List.map (PeerOrigin.arrival d.elsewhere)) (peerPlaced_origins (service := service) (d := d)
+      (lines := lines) f g)
     simpa only [List.map_map, Function.comp_def] using this
   simp only [peerInputs, peerArrivals, List.map_append, List.map_map]
   congr 1
   refine Eq.trans (List.map_congr_left fun ⟨_, o⟩ _ => ?_) (key _ _)
   cases o <;> rfl
 
-theorem arrivals_of_line {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} {k n : Nat} {st : Step}
-    (h : (peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines)[k]? = some (st, PeerOrigin.line n)) :
-    (peerArrivals service peer received fromLines state elsewhere lines)[k]? = some n := by
-  rw [← peerInputs_arrivals (peerForm := peerForm) (peerLines := peerLines), List.getElem?_map, h]
+theorem arrivals_of_line {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {k n : Nat} {st : Step}
+    (h : (peerInputs service d lines peerLines)[k]? = some (st, PeerOrigin.line n)) :
+    (peerArrivals service d lines)[k]? = some n := by
+  rw [← peerInputs_arrivals (d := d) (peerLines := peerLines), List.getElem?_map, h]
   rfl
 
 /-- A line before peerBefore of the run's line `i` is a line of an input that arrives at or before `i`. -/
@@ -608,16 +602,14 @@ theorem index_unique {α β : Type} {f : α → Option β} :
     have hn' : (xs.filterMap f).Nodup := hn.sublist ((List.sublist_cons_self x xs).filterMap f)
     exact congrArg (· + 1) (index_unique hn' hk hk' ha ha')
 
-theorem peerInputs_line_unique {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} {k k' i : Nat}
-    {x x' : Step} (hk : (peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines)[k]? = some (x, .line i))
-    (hk' : (peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines)[k']? = some (x', .line i)) :
+theorem peerInputs_line_unique {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {k k' i : Nat}
+    {x x' : Step} (hk : (peerInputs service d lines peerLines)[k]? = some (x, .line i))
+    (hk' : (peerInputs service d lines peerLines)[k']? = some (x', .line i)) :
     k = k' :=
   index_unique (f := (·.2.line?)) peerInputs_lines_nodup hk hk' rfl rfl
 
-theorem mem_peerInputs_given {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} {st : Step}
-    (h : (st, PeerOrigin.given) ∈ peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines) : st ∈ state := by
+theorem mem_peerInputs_given {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {st : Step}
+    (h : (st, PeerOrigin.given) ∈ peerInputs service d lines peerLines) : st ∈ d.state := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨s, hs, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
   · simp only [Prod.mk.injEq] at he
@@ -632,10 +624,9 @@ theorem mem_peerInputs_given {peerForm ownInputForm : String → Value → CValu
         obtain ⟨b, -, rfl⟩ := ha
         simp at he
 
-theorem mem_peerInputs_elsewhere {peerForm ownInputForm : String → Value → CValue} {service peer : String} {received : List String} {fromLines : List Nat}
-    {state : List Step} {elsewhere : List (Nat × Step)} {lines peerLines : List TraceLine} {st : Step} {k : Nat}
-    (h : (st, PeerOrigin.elsewhere k) ∈ peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines) :
-    ∃ s ∈ elsewhere.map (·.2), ∃ keys, st.body = s.body.forPeer keys := by
+theorem mem_peerInputs_elsewhere {service : String} {d : PeerDerivation} {lines peerLines : List TraceLine} {st : Step} {k : Nat}
+    (h : (st, PeerOrigin.elsewhere k) ∈ peerInputs service d lines peerLines) :
+    ∃ s ∈ d.elsewhere.map (·.2), ∃ keys, st.body = s.body.forPeer keys := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
   · simp at he
@@ -653,7 +644,7 @@ theorem mem_peerInputs_elsewhere {peerForm ownInputForm : String → Value → C
         simp at he
 
 /-- A line that a from line pairs (SentAs) is an `in` request or end of a subscription. -/
-theorem SentAs.request {c : List String} {seen form : String → Value → CValue} {service : String}
+theorem SentAs.request {c : List String} {seen form : NamedForm} {service : String}
     {bs bs' : Bindings} {l b : TraceLine} (h : SentAs c seen form service bs bs' l b) :
     l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       (∀ id name p r, l.body ≠ .event .in id name p r) ∧ b.body.dir = .out ∧ isEventLine b = false ∧
@@ -666,10 +657,10 @@ theorem SentAs.request {c : List String} {seen form : String → Value → CValu
 
 /-- The check of a from line pairs it with the line that peerSent finds. -/
 theorem peerLine_paired {bs bs' bs'' : Bindings} {i j : Nat} {l : TraceLine}
-    (hc : fromLines.contains i = true)
-    (hs : peerSent (createdOf peerLines) (seenInputOf ownInputForm service lines) ownInputForm service bs
+    (hc : d.fromLines.contains i = true)
+    (hs : peerSent (createdOf peerLines) (seenInputOf d.ownInputForm service lines) d.ownInputForm service bs
       (peerLines.take (peerBefore arrivals peerLines i)) l = .ok (j, bs'))
-    (h : peerLine peerForm ownInputForm service peer fromLines arrivals lines peerLines bs i l = .ok bs'') : bs'' = bs' := by
+    (h : peerLine service d arrivals lines peerLines bs i l = .ok bs'') : bs'' = bs' := by
   obtain ⟨b, -, hS⟩ := peerSent_spec hs
   obtain ⟨-, ha, he, -⟩ := hS.request
   unfold peerLine at h
@@ -693,11 +684,11 @@ theorem peerLine_paired {bs bs' bs'' : Bindings} {i j : Nat} {l : TraceLine}
        · simp_all)
 
 /-- The place in the peer's run of the line that sends the scenario's from line `i` (peerSent), if any. -/
-def peerPaired? (peerForm ownInputForm : String → Value → CValue) (service peer : String) (fromLines arrivals : List Nat)
+def peerPaired? (service : String) (d : PeerDerivation) (arrivals : List Nat)
     (lines peerLines : List TraceLine) (i : Nat) : Option Nat :=
-  if fromLines.contains i then
-    (lines[i]?.bind fun l => (peerSent (createdOf peerLines) (seenInputOf ownInputForm service lines) ownInputForm service
-      (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i)
+  if d.fromLines.contains i then
+    (lines[i]?.bind fun l => (peerSent (createdOf peerLines) (seenInputOf d.ownInputForm service lines) d.ownInputForm service
+      (peerBindings service d arrivals lines peerLines i)
       (peerLines.take (peerBefore arrivals peerLines i)) l).toOption).map (·.1)
   else none
 
@@ -706,12 +697,12 @@ With no violation, the peer's line that sends the scenario's from line `i` comes
 arrives after the line, and the check binds its id to the line's (SentAs).
 -/
 theorem paired_spec {halted : Option (PeerOrigin × String)} {i j : Nat}
-    (h : peerFindings peerForm ownInputForm service peer fromLines arrivals lines peerLines halted = [])
-    (hp : peerPaired? peerForm ownInputForm service peer fromLines arrivals lines peerLines i = some j) :
+    (h : peerFindings service d arrivals lines peerLines halted = [])
+    (hp : peerPaired? service d arrivals lines peerLines i = some j) :
     ∃ al bl, lines[i]? = some al ∧ peerLines[j]? = some bl ∧ j < peerBefore arrivals peerLines i ∧
-      SentAs (createdOf peerLines) (seenInputOf ownInputForm service lines) ownInputForm service
-        (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i)
-        (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines (i + 1)) al bl := by
+      SentAs (createdOf peerLines) (seenInputOf d.ownInputForm service lines) d.ownInputForm service
+        (peerBindings service d arrivals lines peerLines i)
+        (peerBindings service d arrivals lines peerLines (i + 1)) al bl := by
   unfold peerPaired? at hp
   split at hp
   · next hc =>
@@ -722,12 +713,12 @@ theorem paired_spec {halted : Option (PeerOrigin × String)} {i j : Nat}
       obtain ⟨⟨j', bs'⟩, hs, he⟩ := hp
       simp only at he
       subst he
-      have hs' : peerSent (createdOf peerLines) (seenInputOf ownInputForm service lines) ownInputForm service
-          (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i)
+      have hs' : peerSent (createdOf peerLines) (seenInputOf d.ownInputForm service lines) d.ownInputForm service
+          (peerBindings service d arrivals lines peerLines i)
           (peerLines.take (peerBefore arrivals peerLines i)) al = .ok (j', bs') := by
         revert hs
-        cases peerSent (createdOf peerLines) (seenInputOf ownInputForm service lines) ownInputForm service
-          (peerBindings peerForm ownInputForm service peer fromLines arrivals lines peerLines i)
+        cases peerSent (createdOf peerLines) (seenInputOf d.ownInputForm service lines) d.ownInputForm service
+          (peerBindings service d arrivals lines peerLines i)
           (peerLines.take (peerBefore arrivals peerLines i)) al <;> simp [Except.toOption]
       obtain ⟨bl, hbl, hS⟩ := peerSent_spec hs'
       obtain ⟨hj, hbl⟩ := getElem?_take_some hbl
@@ -751,11 +742,9 @@ theorem filterMap_lt {α : Type} {f : α → Option Nat} :
     have hp' : (zs.filterMap f).Pairwise (· < ·) := hp.sublist ((List.sublist_cons_self z zs).filterMap f)
     exact filterMap_lt hp' hk hk' ha ha' (by omega)
 
-theorem peerInputs_lines_lt {received : List String} {state : List Step} {elsewhere : List (Nat × Step)} {k k' i i' : Nat}
-    {x x' : Step}
-    (hk : (peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines)[k]? = some (x, .line i))
-    (hk' : (peerInputs peerForm ownInputForm service peer received fromLines state elsewhere lines peerLines)[k']? =
-      some (x', .line i')) (hlt : k < k') : i < i' :=
+theorem peerInputs_lines_lt {k k' i i' : Nat} {x x' : Step}
+    (hk : (peerInputs service d lines peerLines)[k]? = some (x, .line i))
+    (hk' : (peerInputs service d lines peerLines)[k']? = some (x', .line i')) (hlt : k < k') : i < i' :=
   filterMap_lt (f := (·.2.line?)) peerInputs_lines_pairwise hk hk' rfl rfl hlt
 
 end Tazuna.Thm.Semantics.System.PeerCheck

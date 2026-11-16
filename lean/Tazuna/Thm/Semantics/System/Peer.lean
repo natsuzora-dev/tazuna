@@ -71,22 +71,20 @@ theorem peerInput_isSome {service peer : String} {received : List String} {fromL
     simp_all [Option.orElse]
 
 /-- The origins of peerPlaced do not depend on the strings that the inputs take. -/
-theorem peerPlaced_origins {service peer : String} {received : List String} {fromLines : List Nat} {elsewhere : List (Nat × Step)}
-    {lines : List TraceLine} (f g : Nat → Bindings) :
-    (peerPlaced service peer received fromLines elsewhere lines f).map (·.2) =
-      (peerPlaced service peer received fromLines elsewhere lines g).map (·.2) := by
+theorem peerPlaced_origins {service : String} {d : PeerDerivation} {lines : List TraceLine} (f g : Nat → Bindings) :
+    (peerPlaced service d lines f).map (·.2) = (peerPlaced service d lines g).map (·.2) := by
   simp only [peerPlaced, List.map_flatMap, List.map_append]
   congr 1
   funext n
   congr 1
   split
   · next l _ =>
-    have hf := peerInput_isSome (service := service) (peer := peer) (received := received) (fromLines := fromLines)
-      (lines := lines) (keys := f n) (l := l)
-    have hg := peerInput_isSome (service := service) (peer := peer) (received := received) (fromLines := fromLines)
-      (lines := lines) (keys := g n) (l := l)
-    cases h1 : peerInput? service peer received fromLines lines (f n) l <;>
-      cases h2 : peerInput? service peer received fromLines lines (g n) l <;> simp_all
+    have hf := peerInput_isSome (service := service) (peer := d.peer) (received := d.received)
+      (fromLines := d.fromLines) (lines := lines) (keys := f n) (l := l)
+    have hg := peerInput_isSome (service := service) (peer := d.peer) (received := d.received)
+      (fromLines := d.fromLines) (lines := lines) (keys := g n) (l := l)
+    cases h1 : peerInput? service d.peer d.received d.fromLines lines (f n) l <;>
+      cases h2 : peerInput? service d.peer d.received d.fromLines lines (g n) l <;> simp_all
   · rfl
 
 theorem inLines_le {lines : List TraceLine} {k k' j j' : Nat} {l l' : TraceLine}

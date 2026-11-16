@@ -5,7 +5,7 @@ import { canonicalJson, type Json } from "../src/data/values.ts";
 import { timed } from "../src/dsl/scenario.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { execute } from "../src/run/execute.ts";
-import { ownInputForm, peerDerivations, peerForm, runPeer } from "../src/run/peers.ts";
+import { peerDerivations, runPeer } from "../src/run/peers.ts";
 import { type NamedForm, peerArrivals } from "../src/semantics/system/peer.ts";
 import { peerFindings } from "../src/semantics/system/peerCheck.ts";
 import { runExamples } from "./examples.ts";
@@ -29,9 +29,7 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
       for (const d of peerDerivations(spec, scenario, run)) {
         const at = `${relative(join(import.meta.dirname, ".."), root)} ${scenario.service}.${scenario.name} ${d.peer}`;
         const lines = run.outcome.lines;
-        const forms = peerForm(spec, d.peer);
-        const own = ownInputForm(spec, scenario.service);
-        const { derived, run: peerRun, halted } = runPeer(spec, forms, own, scenario.service, lines, d);
+        const { derived, run: peerRun, halted } = runPeer(spec, scenario.service, lines, d);
         const recording = (form: NamedForm) => {
           const forms: [string, unknown, unknown][] = [];
           const recorded = (name: string, value: unknown) => {
@@ -41,16 +39,12 @@ test("Lean and TS derive the same inputs of each peer from each scenario run tha
           };
           return [forms, recorded] as const;
         };
-        const [peerForms, recorded] = recording(forms);
-        const [ownInputForms, recordedInput] = recording(own);
-        const arrivals = peerArrivals(scenario.service, d.peer, d.received, d.fromLines, d.state, d.elsewhere, lines);
+        const [peerForms, peerForm] = recording(d.peerForm);
+        const [ownInputForms, ownInputForm] = recording(d.ownInputForm);
         const findings = peerFindings(
-          recorded,
-          recordedInput,
           scenario.service,
-          d.peer,
-          d.fromLines,
-          arrivals,
+          { ...d, peerForm, ownInputForm },
+          peerArrivals(scenario.service, d, lines),
           lines,
           peerRun.outcome.lines,
           halted,
