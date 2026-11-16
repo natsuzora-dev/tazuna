@@ -110,7 +110,10 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [k, node.shape[k] === undefined ? v : sorted(node.shape[k], v)]),
+        Object.entries(value).map(([k, v]) => [
+          k,
+          Object.hasOwn(node.shape, k) ? sorted(node.shape[k] as z.ZodType, v) : v,
+        ]),
       );
     case "union":
       for (const option of node.options) {
@@ -144,7 +147,10 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [k, node.shape[k] === undefined ? v : bagged(node.shape[k], v)]),
+        Object.entries(value).map(([k, v]) => [
+          k,
+          Object.hasOwn(node.shape, k) ? bagged(node.shape[k] as z.ZodType, v) : v,
+        ]),
       );
     case "union": {
       const option = node.options.find((o) => z.safeEncode(o, value as never).success);

@@ -9,3 +9,8 @@ export const addCountedNote = scenario(
     send(addNote, { noteId: "Note-1", label: "again" }),
   ],
 );
+
+export const addHugeCountedNote = scenario(
+  "Add the note Note-9007199254740993, whose count is past the largest exact JavaScript number; check reports countedKey",
+  [at("2026-10-25T09:00:00+09:00"), send(addNote, { noteId: "Note-9007199254740993", label: "huge" })],
+);

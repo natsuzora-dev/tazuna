@@ -42,10 +42,11 @@ export function canonical(shape: Shape, value: unknown, options: { readonly tole
   return Object.fromEntries(
     Object.entries(shape as Record<string, z.ZodType>).flatMap(([k, field]) => {
       const schema = options.tolerant === true ? tolerant(field) : field;
-      const parsed = schema.safeParse(fields[k]);
-      if (!parsed.success) return k in fields ? [[k, fields[k]]] : [];
+      const given = Object.hasOwn(fields, k);
+      const parsed = schema.safeParse(given ? fields[k] : undefined);
+      if (!parsed.success) return given ? [[k, fields[k]]] : [];
       const encoded = z.encode(schema, parsed.data as never);
-      return encoded === undefined && !(k in fields) ? [] : [[k, encoded]];
+      return encoded === undefined && !given ? [] : [[k, encoded]];
     }),
   );
 }
@@ -99,7 +100,10 @@ function bagged(schema: z.ZodType, value: unknown): unknown {
     case "object":
       if (!value || typeof value !== "object") return value;
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [k, node.shape[k] === undefined ? v : bagged(node.shape[k], v)]),
+        Object.entries(value).map(([k, v]) => [
+          k,
+          Object.hasOwn(node.shape, k) ? bagged(node.shape[k] as z.ZodType, v) : v,
+        ]),
       );
     case "union": {
       const option = node.options.find((o) => tolerant(o).safeParse(value).success);

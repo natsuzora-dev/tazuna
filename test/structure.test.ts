@@ -148,8 +148,9 @@ test("A scenario has the kinds of its inputs in written order, the sender and ta
     },
   ]);
   const counted = await loadSpec(join(import.meta.dirname, "validation/illegal/scenarios/counted-key"));
-  assert.deepEqual(
-    counted.structure.scenarios.flatMap((sc) => sc.inputs),
-    [{ type: "at" }, { type: "command", strings: ["task-1"] }, { type: "command", strings: ["Note-1", "again"] }],
-  );
+  assert.deepEqual(counted.structure.scenarios.find((sc) => sc.name === "addCountedNote")?.inputs, [
+    { type: "at" },
+    { type: "command", strings: ["task-1"] },
+    { type: "command", strings: ["Note-1", "again"] },
+  ]);
 });

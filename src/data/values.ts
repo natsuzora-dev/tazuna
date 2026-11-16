@@ -69,7 +69,7 @@ export function overlay(value: unknown, over: unknown): unknown {
     v !== null && typeof v === "object" && !Array.isArray(v);
   if (!isObject(value) || !isObject(over)) return over;
   return Object.fromEntries([
-    ...Object.entries(value).map(([k, v]) => [k, k in over ? overlay(v, over[k]) : v]),
-    ...Object.entries(over).filter(([k]) => !(k in value)),
+    ...Object.entries(value).map(([k, v]) => [k, Object.hasOwn(over, k) ? overlay(v, over[k]) : v]),
+    ...Object.entries(over).filter(([k]) => !Object.hasOwn(value, k)),
   ]);
 }

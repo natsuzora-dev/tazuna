@@ -208,6 +208,5 @@ export function schemaProperties(schema: unknown): string[] {
 
 /** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value that no `keys` name gives. */
 export function isKeyOf(entity: string, value: string): boolean {
-  const n = Number(value.slice(entity.length + 1));
-  return Number.isSafeInteger(n) && n > 0 && value === `${entity}-${n}`;
+  return value.startsWith(`${entity}-`) && /^[1-9][0-9]*$/.test(value.slice(entity.length + 1));
 }

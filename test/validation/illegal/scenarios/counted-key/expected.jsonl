@@ -1,1 +1,2 @@
 {"kind":"Illegal.countedKey","definition":null,"data":{"value":"Note-1","entity":{"service":"notes","name":"Note"}},"location":{"file":"notes/scenarios.ts","line":4,"input":3},"scenario":{"service":"notes","name":"addCountedNote"}}
+{"kind":"Illegal.countedKey","definition":null,"data":{"value":"Note-9007199254740993","entity":{"service":"notes","name":"Note"}},"location":{"file":"notes/scenarios.ts","line":13,"input":2},"scenario":{"service":"notes","name":"addHugeCountedNote"}}
