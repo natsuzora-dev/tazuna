@@ -11,8 +11,10 @@ import {
   type Assignment,
   Failed,
   type Functions,
+  givenKeys,
   type Holder,
   holderResource,
+  type NextKeys,
   type Scope,
 } from "../semantics/functions.ts";
 import type { Emit } from "../semantics/message.ts";
@@ -315,27 +317,15 @@ function unorderedJson(value: unknown, rename: (s: string) => string): string {
     .map((k) => `${JSON.stringify(k)}:${unorderedJson(fields[k], rename)}`)}}`;
 }
 
-type KeyCounts = readonly (readonly [string, number])[];
-
-/** Lean's createdKeys: each key that the createKey calls of one call gave, with its entity. */
-function createdKeys(keys: KeyCounts, created: readonly string[]): Map<string, string> {
-  const counts = new Map(keys);
-  return new Map(
-    created.map((entity) => {
-      const n = (counts.get(entity) ?? 0) + 1;
-      counts.set(entity, n);
-      return [`${entity}-${n}`, entity];
-    }),
-  );
-}
+type Keys = readonly (readonly [string, NextKeys])[];
 
 /** Lean's madeText and sameMade: the text that compares a value that one call made and the keys that it created. */
-function madeJson(keys: KeyCounts, created: readonly string[], value: unknown): string {
+function madeJson(keys: Keys, created: readonly string[], value: unknown): string {
   const entities = canonicalJson(created.toSorted(byCodePoint));
   if (created.length === 0) return `${entities}${text(value)}`;
-  const given = createdKeys(keys, created);
+  const given = givenKeys(keys, created);
   const rename = (s: string) => {
-    const entity = given.get(s);
+    const entity = given.find(([, key]) => key === s)?.[0];
     return entity === undefined ? s : `${entity}-*`;
   };
   return `${entities}${unorderedJson(unbagged(value), rename)}`;
@@ -490,7 +480,7 @@ export class InstrumentedFunctions implements Functions {
       this.resolveAudit(query, input, records, now, resolved);
     return resolved;
   }
-  react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: KeyCounts) {
+  react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: Keys) {
     const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
     return this.audited(
       ref(this.st, automation),
@@ -510,7 +500,7 @@ export class InstrumentedFunctions implements Functions {
   guard(scope: Scope, records: RecordSource, transition: TransitionRef, extra: Fields, access: Access) {
     return this.chartAudited(scope, access, "guard", (fs, a) => fs.guard(scope, records, transition, extra, a), String);
   }
-  assign(scope: Scope, records: RecordSource, assignment: Assignment, extra: Fields, keys: KeyCounts, access: Access) {
+  assign(scope: Scope, records: RecordSource, assignment: Assignment, extra: Fields, keys: Keys, access: Access) {
     return this.chartAudited(
       scope,
       access,
@@ -523,7 +513,7 @@ export class InstrumentedFunctions implements Functions {
     scope: Scope,
     records: RecordSource,
     activity: { readonly keyword: string; readonly key: string },
-    keys: KeyCounts,
+    keys: Keys,
     access: Access,
   ) {
     return this.chartAudited(

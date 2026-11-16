@@ -205,3 +205,9 @@ export function schemaProperties(schema: unknown): string[] {
   const properties = (schema as { readonly properties?: unknown } | null)?.properties;
   return properties !== null && typeof properties === "object" ? Object.keys(properties) : [];
 }
+
+/** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value that no `keys` name gives. */
+export function isKeyOf(entity: string, value: string): boolean {
+  const n = Number(value.slice(entity.length + 1));
+  return Number.isSafeInteger(n) && n > 0 && value === `${entity}-${n}`;
+}

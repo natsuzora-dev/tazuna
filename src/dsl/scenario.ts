@@ -13,25 +13,52 @@ export type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in key
  * answer input, which an event's `resultOf` also names.
  */
 type LineFields<A> =
-  | { readonly type: "command"; readonly command: AnyCommand; readonly input: unknown; readonly id?: string }
-  | { readonly type: "query"; readonly query: AnyQuery; readonly input: unknown; readonly id?: string }
-  | { readonly type: "subscribe"; readonly query: AnyQuery; readonly input: unknown; readonly id?: string }
+  | ({
+      readonly type: "command";
+      readonly command: AnyCommand;
+      readonly input: unknown;
+      readonly id?: string;
+    } & CreatesKeys)
+  | ({ readonly type: "query"; readonly query: AnyQuery; readonly input: unknown; readonly id?: string } & CreatesKeys)
+  | ({
+      readonly type: "subscribe";
+      readonly query: AnyQuery;
+      readonly input: unknown;
+      readonly id?: string;
+    } & CreatesKeys)
   | { readonly type: "unsubscribe"; readonly to: string }
   | { readonly type: "restart" }
-  | {
+  | ({
       readonly type: "event";
       readonly event: AnyEvent;
       readonly payload: unknown;
       readonly id?: string;
       readonly resultOf?: A;
-    }
+    } & CreatesKeys)
+  | ({
+      readonly type: "operation";
+      readonly screen: AnyScreen;
+      readonly control: string;
+      readonly payload: unknown;
+    } & CreatesKeys)
   | {
-      readonly type: "operation" | "unacceptedOperation";
+      readonly type: "unacceptedOperation";
       readonly screen: AnyScreen;
       readonly control: string;
       readonly payload: unknown;
     }
   | A;
+
+/**
+ * The createKey values that the input's processing creates, by entity name, in creation order within the input: createKey
+ * returns these strings in place of `<entity>-<n>` (Lean's Step.keys). A later line names a created key by its string,
+ * never by `<entity>-<n>` (Illegal.countedKey).
+ */
+type Keys = Readonly<Record<string, readonly string[]>>;
+
+interface CreatesKeys {
+  readonly keys?: Keys;
+}
 
 interface AnswerFields<C> {
   readonly type: "answer";
@@ -109,8 +136,8 @@ export interface Scenario {
   readonly given: Readonly<Record<string, StateInputs>>;
 }
 
-/** The options of an input. `id` is the message id, and a given id has no `#`. */
-type Options<Id extends string> = { readonly id: GivenId<Id> };
+/** The options of an input. `id` is the message id, and a given id has no `#`; `keys` names the created keys (Keys). */
+type Options<Id extends string> = { readonly id?: GivenId<Id>; readonly keys?: Keys };
 type GivenId<Id extends string> = Id extends `${string}#${string}` ? never : Id;
 
 /**
@@ -244,11 +271,14 @@ type OperationArgs<Cs extends Readonly<Record<string, Control>>, K extends keyof
   ...payload: Cs[K] extends Control<infer P> ? (keyof P extends never ? [] : [Encoded<P>]) : [],
 ];
 
-/** Operates a control of the screen `target` as the user. */
+/** Operates a control of the screen `target` as the user. `options` follow the payload of a control that has one. */
 export function operate<Cs extends Readonly<Record<string, Control>>, const K extends keyof Cs & string>(
-  ...[target, control, ...payload]: OperationArgs<Cs, K>
+  ...args: [...OperationArgs<Cs, K>, options?: { readonly keys?: Keys }]
 ): UntimedInput {
-  return { type: "operation", screen: target as AnyScreen, control, payload: payload[0] ?? {} };
+  const [target, control, ...rest] = args as unknown as [AnyScreen, string, ...unknown[]];
+  const hasPayload = Object.keys(target.controls?.[control]?.payload ?? {}).length > 0;
+  const [payload, options] = hasPayload ? rest : [{}, ...rest];
+  return { type: "operation", screen: target, control, payload: payload ?? {}, ...(options as object | undefined) };
 }
 
 /** Asserts that the screen does not accept the operation at this point. */

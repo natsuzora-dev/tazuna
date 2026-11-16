@@ -2,13 +2,14 @@ import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { InvalidInput } from "../../data/invalidInput.generated.ts";
 import type { Step } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import { plain } from "../../data/values.ts";
+import { plain, stringsOf } from "../../data/values.ts";
 import { type ProblemError, withExtra } from "../../data/violation.ts";
 import {
   type AssumptionMismatch,
   assumptionMismatch,
   hasOutput,
   isAssumed,
+  isKeyOf,
   rejectionKinds,
   rejectionReasons,
   requiresOf,
@@ -37,7 +38,6 @@ import { resolveChecked } from "../service/query.ts";
 import {
   type Accepted,
   halt,
-  isKeyOf,
   lineId,
   machineOf,
   newMessage,
@@ -435,6 +435,14 @@ export function checkOrderUsed(r: Processing): void {
     report(r.state, { kind: "InvalidInput.unusedDeadlineOrder", definition: null, data: { entries: s.deadlineOrder } });
   if (s.stepOrder.length > 0)
     report(r.state, { kind: "InvalidInput.unusedStepOrder", definition: null, data: { entries: s.stepOrder } });
+  const unused = [...s.keyNames].find(([, names]) => names.length > 0);
+  s.keyNames = new Map();
+  if (unused !== undefined)
+    report(r.state, {
+      kind: "InvalidInput.unusedKeys",
+      definition: null,
+      data: { entity: unused[0], names: unused[1] },
+    });
 }
 
 /** Lean's Step.Body.values: the values that the input gives the service, an input, a payload, or an answer's output. */
@@ -455,18 +463,13 @@ function valuesOf(input: Step): unknown[] {
   }
 }
 
-function* stringsOf(value: unknown): Generator<string> {
-  if (typeof value === "string") yield value;
-  else if (value !== null && typeof value === "object") for (const v of Object.values(value)) yield* stringsOf(v);
-}
-
 /**
  * Reports the first string of the input's values that has the form of a createKey value of an own entity that createKey
  * has not given yet (InvalidInput.uncreatedKey).
  */
 export function checkUncreatedKeys(r: Processing, input: Step): void {
   const { st, state: s } = r;
-  for (const value of valuesOf(input).flatMap((v) => [...stringsOf(v)])) {
+  for (const value of valuesOf(input).flatMap(stringsOf)) {
     if (s.created.some(([, key]) => key === value)) continue;
     const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(e, value));
     if (entity !== undefined)

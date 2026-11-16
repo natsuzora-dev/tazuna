@@ -10,9 +10,9 @@ import {
   createKeys,
   halt,
   type Instance,
-  keyCounts,
   machine,
   NoteAccess,
+  nextKeys,
   type Pending,
   type Requester,
   removeFromStack,
@@ -52,7 +52,7 @@ export function runAssign(
   const definition = ref(r.st, instance.chart.name);
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
-  const assigned = r.functions.assign(scope, records, assignment, extra, keyCounts(r.state), new NoteAccess(r, scope));
+  const assigned = r.functions.assign(scope, records, assignment, extra, nextKeys(r.state), new NoteAccess(r, scope));
   if (assigned instanceof Failed)
     halt(
       issueViolation(definition, assigned, (schema) =>

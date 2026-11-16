@@ -23,6 +23,7 @@ import {
   Failed,
   type Holder,
   type Issue,
+  type NextKeys,
   type Scope,
 } from "../../src/semantics/functions.ts";
 import type { Emit } from "../../src/semantics/message.ts";
@@ -472,7 +473,7 @@ export class RunFunctions implements Answering {
         const a = this.functions.definition<Automation>(["automation"], name).definition;
         const event = this.spec.names.get(Object.values(a.receives)[0]) as Named<AnyEvent>;
         const schema: Schema = { kind: "payload", event: { service: event.service, name: event.name } };
-        const keys = Object.entries(message["keys"] as Record<string, number>);
+        const keys = Object.entries(message["keys"] as Record<string, NextKeys>);
         return this.replied(decode(schema, event.definition.payload, message["payload"]), (payload) =>
           this.replied(
             this.functions.react(name, payload, this.records, this.now(message), keys),
@@ -513,7 +514,7 @@ export class RunFunctions implements Answering {
         const assignment: Assignment =
           at.kind === "transition" ? { kind: "transition", transition: transitionRef(at.transition) } : at;
         const transitionKeys = at.kind === "transition" ? at.transition.keys : [];
-        const keys = Object.entries(message["keys"] as Record<string, number>);
+        const keys = Object.entries(message["keys"] as Record<string, NextKeys>);
         return this.scoped(message, (scope, access) =>
           this.replied(this.extraOf(scope.machine, transitionKeys, message["extra"] as Fields), (extra) =>
             this.replied(
@@ -534,7 +535,7 @@ export class RunFunctions implements Answering {
       }
       case "input": {
         const activity = message["activity"] as { keyword: string; key: string };
-        const keys = Object.entries(message["keys"] as Record<string, number>);
+        const keys = Object.entries(message["keys"] as Record<string, NextKeys>);
         return this.scoped(message, (scope, access) =>
           this.replied(this.functions.input(scope, this.records, activity, keys, access), ({ encoded, created }) => ({
             input: encoded,

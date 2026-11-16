@@ -114,6 +114,31 @@ export type Assignment =
  * How the time of a deadline is set: `delay` is milliseconds after entering the state, and an `atExpression` time is
  * recomputed whenever a message finishes.
  */
+/**
+ * What createKey returns next for an entity: each of `names` in order, then `<entity>-<n>` for the entity's `n`-th
+ * createKey value, `count` being the number of its createKey values so far.
+ */
+export interface NextKeys {
+  readonly count: number;
+  readonly names: readonly string[];
+}
+
+/**
+ * Lean's givenKeys: the createKey values, each with its entity, that createKey gives to calls for the entities
+ * `created`, in call order, when `keys` holds what it returns next.
+ */
+export function givenKeys(
+  keys: readonly (readonly [string, NextKeys])[],
+  created: readonly string[],
+): [string, string][] {
+  const next = new Map(keys);
+  return created.map((e, i) => {
+    const k = next.get(e) ?? { count: 0, names: [] };
+    const before = created.slice(0, i).filter((c) => c === e).length;
+    return [e, k.names[before] ?? `${e}-${k.count + before + 1}`];
+  });
+}
+
 export type DeadlineTime = { readonly kind: "delay"; readonly ms: number } | { readonly kind: "atExpression" };
 
 /** A checked value, decoded for spec functions and encoded as written, or why it does not match its schema. */
@@ -167,15 +192,15 @@ export interface Functions {
   resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown;
   /**
    * Returns the input of the automation's command, undefined when a binds value is null or the guard fails. `keys`
-   * holds the createKey calls so far per entity, and `created` holds the entities that react called createKey for, in
-   * call order.
+   * holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and `created` holds the
+   * entities that react called createKey for, in call order.
    */
   react(
     automation: string,
     payload: Fields,
     records: RecordSource,
     now: Temporal.Instant,
-    keys: readonly (readonly [string, number])[],
+    keys: readonly (readonly [string, NextKeys])[],
   ): { readonly input?: unknown; readonly created: readonly string[] } | Failed;
   /**
    * Returns a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements with
@@ -200,7 +225,7 @@ export interface Functions {
     records: RecordSource,
     assignment: Assignment,
     extra: Fields,
-    keys: readonly (readonly [string, number])[],
+    keys: readonly (readonly [string, NextKeys])[],
     access: Access,
   ):
     | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
@@ -213,7 +238,7 @@ export interface Functions {
     scope: Scope,
     records: RecordSource,
     activity: { readonly keyword: string; readonly key: string },
-    keys: readonly (readonly [string, number])[],
+    keys: readonly (readonly [string, NextKeys])[],
     access: Access,
   ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed;
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;

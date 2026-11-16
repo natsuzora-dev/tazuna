@@ -34,13 +34,22 @@ Keep a callback from changing a variable outside it, through which it sees the o
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 
+## Refer to an earlier line by a name, not by a count
+
+A scenario line refers to a fact of an earlier line only by a name that a line binds, never by a position or a count, because a count changes whenever a line is added before it.
+createKey stands for a key that the implementation or its UI makes, such as a UUID, which no caller knows in advance.
+When a later line uses a key that an input's processing creates, name the key on that input with `keys`, by entity and in creation order: after `send(addTitle, { title: "Buy bread" }, { keys: { Task: ["T-bread"] } })`, createKey returns `T-bread` for the first `Task` key of that input.
+`check` reports a value in the form of a counted key, such as `Task-2` (`Illegal.countedKey`), and `test` reports a name that createKey does not return during its input (`InvalidInput.unusedKeys`).
+
+Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.
+
 ## Prepare the other services that a scenario mocks
 
 `test` checks a scenario's mocks of another service of the spec against that service's run ([guarantees.md](guarantees.md#when-a-scenario-talks-to-another-service)), so write the inputs that the other service needs.
-Write each start state of a service as inputs to it under `states` in its contract, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
+Write each start state of a service as inputs to it under `states` in its contract, with `keys` on the inputs whose keys the scenario uses, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
 Write an input that the other service takes from someone else, such as the command whose event the scenario receives, as `elsewhere(todo, send(todo.addTask, input))` at its place among the scenario's inputs; the scenario's own service skips it.
 Repeat such inputs with a plain TypeScript function rather than a new option.
-A mock may name a key that the other service creates with any string, one to one, such as `T-bread` for todo's `Task-2`; `test` sends a later request with `T-bread` to todo as `Task-2`.
+A mock may also name a key that the other service creates without a name with any string, one to one; `test` sends a later request with that string to the other service as its key.
 
 ## Reach every part with a scenario
 

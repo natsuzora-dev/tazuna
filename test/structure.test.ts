@@ -131,15 +131,25 @@ test("Commands and events have the JSON Schema of their input and payload and re
   );
 });
 
-test("A scenario has the kinds of its inputs in written order, the sender and target of each answer, and every position of the answer that the resultOf of an event points to", async () => {
+test("A scenario has the kinds of its inputs in written order, the sender and target of each answer, every position of the answer that the resultOf of an event points to, and the strings of the values that each input gives", async () => {
   const spec = await loadSpec(join(import.meta.dirname, "validation/illegal/scenarios/placed-twice"));
   const requestPermission = { service: "device", name: "requestPermission" };
-  const answer = { type: "answer", sender: { service: "app", name: "permission" }, target: requestPermission };
+  const answer = {
+    type: "answer",
+    sender: { service: "app", name: "permission" },
+    target: requestPermission,
+    strings: [],
+  };
   assert.deepEqual(spec.structure.scenarios, [
     {
       service: "app",
       name: "grantAfterRetries",
-      inputs: [{ type: "at" }, answer, answer, answer, { type: "event", resultOf: [1, 2] }],
+      inputs: [{ type: "at" }, answer, answer, answer, { type: "event", resultOf: [1, 2], strings: [] }],
     },
   ]);
+  const counted = await loadSpec(join(import.meta.dirname, "validation/illegal/scenarios/counted-key"));
+  assert.deepEqual(
+    counted.structure.scenarios.flatMap((sc) => sc.inputs),
+    [{ type: "at" }, { type: "command", strings: ["task-1"] }, { type: "command", strings: ["Note-1", "again"] }],
+  );
 });

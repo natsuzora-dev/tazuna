@@ -63,6 +63,7 @@ export function step(r: Processing, input: Step, arrived: (line: number) => void
   r.state.inputDeadlineOrder = deadlineOrder;
   r.state.deadlineOrder = deadlineOrder;
   r.state.stepOrder = input.stepOrder ?? [];
+  r.state.keyNames = new Map(Object.entries(input.keys ?? {}));
   advance(r, input);
   arrived(r.state.lines.length);
   checkUncreatedKeys(r, input);

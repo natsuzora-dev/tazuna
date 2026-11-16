@@ -244,7 +244,7 @@ def peerPlaced (service peer : String) (received : List String) (elsewhere : Lis
     match aLines[n]? with
     | some l =>
       (((peerBody? peer aLines (keys n) l).orElse fun _ => peerEvent? service received (keys n) l).map fun b =>
-        (⟨l.time, b, none, none⟩, Origin.line n)).toList
+        (⟨l.time, b, none, none, none⟩, Origin.line n)).toList
     | none => []
 
 /-- The number of the run's lines before which the input of origin `o` arrives, `elsewhere` as in peerPlaced. -/

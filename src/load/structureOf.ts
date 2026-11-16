@@ -1,6 +1,6 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
-import type { Shape } from "../data/values.ts";
+import { type Shape, stringsOf } from "../data/values.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
 import type { ChartSpec, Contract, Definition, Named, Services, StateSpec } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
@@ -15,6 +15,26 @@ import type {
 } from "../syntax/structure.ts";
 
 type RefOf = (value: unknown) => DefinitionRef | null;
+
+/** The strings of the values that a written input gives (Lean's ScenarioInput.strings). */
+function stringsOfInput(input: Scenario["inputs"][number]): string[] {
+  switch (input.type) {
+    case "command":
+    case "query":
+    case "subscribe":
+      return stringsOf(input.input);
+    case "event":
+    case "operation":
+    case "unacceptedOperation":
+      return stringsOf(input.payload);
+    case "answer":
+      return [...stringsOf("output" in input.answer ? input.answer.output : null), ...stringsOf(input.choice?.input)];
+    case "elsewhere":
+      return stringsOfInput(input.input);
+    default:
+      return [];
+  }
+}
 
 /** The value that a default function threw while a schema that `definition` declares was converted to JSON Schema. */
 export interface ThrownDefault {
@@ -123,7 +143,13 @@ export function structureOf(
       service,
       name,
       inputs: definition.inputs.map((input) => {
-        if (input.type === "answer") return { type: "answer", sender: ref(input.sender), target: ref(input.target) };
+        if (input.type === "answer")
+          return {
+            type: "answer",
+            sender: ref(input.sender),
+            target: ref(input.target),
+            strings: stringsOfInput(input),
+          };
         if (input.type === "event")
           return {
             type: "event",
@@ -131,8 +157,11 @@ export function structureOf(
               input.resultOf === undefined
                 ? null
                 : definition.inputs.flatMap((other, i) => (other === input.resultOf ? [i] : [])),
+            strings: stringsOfInput(input),
           };
-        return { type: input.type };
+        if (input.type === "at" || input.type === "unsubscribe" || input.type === "restart")
+          return { type: input.type };
+        return { type: input.type, strings: stringsOfInput(input) };
       }),
     })),
   };

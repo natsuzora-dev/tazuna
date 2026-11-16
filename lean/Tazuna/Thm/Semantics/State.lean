@@ -495,9 +495,6 @@ theorem foldl_earliest (xs : List Pending) : ∀ (best : Option Pending) (p : Pe
           · exact Nat.le_trans (hb _ rfl) (Nat.le_of_not_lt hlt)
           · exact hq q hq'
 
-theorem createKey_counts_entity (e : String) :
-    (s.createKey e).created = s.created ++ [(e, s!"{e}-{(s.created.filter (·.1 == e)).length + 1}")] := rfl
-
 theorem answered_fixed (p : Pending) : (s.answered p).1.fixed = s.fixed := by
   unfold State.answered; split <;> rfl
 

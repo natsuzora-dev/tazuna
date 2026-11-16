@@ -334,26 +334,22 @@ def decideCollect (name : String) (records : Records) (decided : Except Issue (L
   | .ok normalized => modify (·.stepAccess (writesOf st records (orderedGroups decided normalized).flatten).values)
   | .error _ => pure ()
 
-/-- The keys that the createKey calls of one call gave, with their entity, from the key counts `keys` before it. -/
-def createdKeys (keys : List (String × Nat)) (created : List String) : List (String × String) :=
-  created.zipIdx.map fun (e, i) => (s!"{e}-{(keys.lookup e).getD 0 + ((created.take i).filter (· == e)).length + 1}", e)
-
 /--
 The text that compares a value that one call made, as TS madeJson gives it. When the call created keys, each created
 key becomes its entity and arrays lose their order, so that values equal up to a renaming of these keys compare equal.
 -/
-def madeText (keys : List (String × Nat)) (created : List String) (v : Value) : String :=
+def madeText (keys : List (String × NextKeys)) (created : List String) (v : Value) : String :=
   if created.isEmpty then v.canonical else
-  let given := createdKeys keys created
-  (v.mapStrings fun s => match given.lookup s with
-    | some e => s!"{e}-*"
+  let given := givenKeys keys created
+  (v.mapStrings fun s => match given.find? (·.2 == s) with
+    | some (e, _) => s!"{e}-*"
     | none => s).unorderedText
 
 /-- The texts in code-point order, which compare two lists as multisets. -/
 def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
 
 /-- Whether two answers that made a value and created keys are equal up to a renaming of the created keys. -/
-def sameMade (keys : List (String × Nat)) (a b : Value × List String) : Bool :=
+def sameMade (keys : List (String × NextKeys)) (a b : Value × List String) : Bool :=
   sortedTexts a.2 == sortedTexts b.2 && madeText keys a.2 a.1 == madeText keys b.2 b.1
 
 /-- The texts without order or repetition, which compare two lists as sets. -/

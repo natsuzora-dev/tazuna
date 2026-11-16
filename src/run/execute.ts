@@ -251,6 +251,9 @@ function stepOf(spec: Spec, service: string, input: Input): Step {
     ...body(),
     ...(input.deadlineOrder === undefined ? {} : { deadlineOrder: [...input.deadlineOrder] }),
     ...(input.stepOrder === undefined ? {} : { stepOrder: [...input.stepOrder] }),
+    ...("keys" in input && input.keys !== undefined
+      ? { keys: Object.fromEntries(Object.entries(input.keys).map(([e, names]) => [e, [...names]])) }
+      : {}),
   };
 }
 
@@ -267,6 +270,7 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
     const scheduled = {
       ...(s.deadlineOrder === undefined ? {} : { deadlineOrder: s.deadlineOrder }),
       ...(s.stepOrder === undefined ? {} : { stepOrder: s.stepOrder }),
+      ...(s.keys === undefined ? {} : { keys: s.keys }),
     };
     const { time } = s;
     const body = (): Input => {

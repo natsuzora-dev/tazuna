@@ -55,3 +55,10 @@ export function canonicalJson(value: unknown): string {
 export type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
 export const plain = (value: unknown): Json => JSON.parse(JSON.stringify(value) ?? "null") as Json;
+
+/** Lean's Value.strings: the strings of `value`, excluding object field names, in order. */
+export function stringsOf(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (value !== null && typeof value === "object") return Object.values(value).flatMap(stringsOf);
+  return [];
+}

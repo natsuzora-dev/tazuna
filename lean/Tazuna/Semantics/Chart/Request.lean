@@ -21,7 +21,7 @@ variable [Monad m] [MonadNote m] (fs : Functions m)
 
 def request (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
-    match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts with
+    match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
     | .error e =>
       pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
         .requestInputSchema (st.ref i.chart.name) a.ref)))
@@ -41,7 +41,7 @@ def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) 
     match st.chart? a.name with
     | none => pure r
     | some c =>
-      match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts with
+      match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
       | .error e =>
         pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
           .screenInputSchema (st.ref i.chart.name) (st.ref c.name))))

@@ -62,6 +62,8 @@ inductive InvalidInput where
   | unreadyStep (named : StepName) (candidates : List StepName)
   /-- No step choice during the input used the stepOrder `entries`. -/
   | unusedStepOrder (entries : List StepName)
+  /-- createKey returned none of the input's `keys` names `names` of the entity `entity` during the input. -/
+  | unusedKeys (entity : String) (names : List String)
   /--
   A value of the input has the form of a createKey value of the service's entity `entity` that createKey has not given
   yet. An implementation makes its own keys, such as UUIDs, so no caller knows a key before the service gives it.
@@ -97,7 +99,7 @@ def InvalidInput.halts : InvalidInput → Bool
   | .earlierAt .. | .unownedTarget .. | .unlistedEvent .. | .eventPayloadSchema .. | .controlPayloadSchema ..
   | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
   | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unexpectedlyAccepted .. | .unreadyDeadline ..
-  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .uncreatedKey .. => true
+  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .unusedKeys .. | .uncreatedKey .. => true
   | .reusedEventId .. | .changedRedeliveryPayload .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
   | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. | .missingWaitingRequest .. | .missingStaleRequest ..

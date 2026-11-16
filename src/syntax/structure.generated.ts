@@ -177,9 +177,9 @@ const serviceInfo = z.object({
 });
 
 /**
- * A written scenario input, reduced to an answer's definitions and an event's `resultOf`. `resultOf` holds every
- * position of the input that `resultOf` names, counting the written inputs from 0 with `at` included, or null without
- * `resultOf`.
+ * A written scenario input, reduced to an answer's definitions, an event's `resultOf`, and the strings of the values that
+ * the input gives: an input, a payload, an answer's output, and a mock's `input`. `resultOf` holds every position of the
+ * input that `resultOf` names, counting the written inputs from 0 with `at` included, or null without `resultOf`.
  */
 const scenarioInput = z.discriminatedUnion("type", [
   z.object({
@@ -187,12 +187,15 @@ const scenarioInput = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("command"),
+    strings: z.array(z.string()),
   }),
   z.object({
     type: z.literal("query"),
+    strings: z.array(z.string()),
   }),
   z.object({
     type: z.literal("subscribe"),
+    strings: z.array(z.string()),
   }),
   z.object({
     type: z.literal("unsubscribe"),
@@ -203,21 +206,26 @@ const scenarioInput = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("event"),
     resultOf: z.array(z.int().nonnegative()).nullable(),
+    strings: z.array(z.string()),
   }),
   z.object({
     type: z.literal("operation"),
+    strings: z.array(z.string()),
   }),
   z.object({
     type: z.literal("unacceptedOperation"),
+    strings: z.array(z.string()),
   }),
   z.object({
     type: z.literal("answer"),
     sender: ref.nullable(),
     target: ref.nullable(),
+    strings: z.array(z.string()),
   }),
   /** An input to another spec service, which the scenario's service skips. */
   z.object({
     type: z.literal("elsewhere"),
+    strings: z.array(z.string()),
   }),
 ]);
 

@@ -34,7 +34,9 @@ import {
   type DeadlineTime,
   Failed,
   type Functions,
+  givenKeys,
   type Holder,
+  type NextKeys,
   type Scope,
 } from "../semantics/functions.ts";
 import type { Emit } from "../semantics/message.ts";
@@ -331,19 +333,15 @@ export class SpecFunctions implements Functions {
     return recordsView(this.owner?.entities ?? {}, records);
   }
 
-  /** Returns createKey over the key counts `keys`, and the entities that it was called for, in call order. */
-  private keysFrom(keys: readonly (readonly [string, number])[]): {
+  /** Returns createKey over `keys`, what it returns next, and the entities that it was called for, in call order. */
+  private keysFrom(keys: readonly (readonly [string, NextKeys])[]): {
     readonly createKey: (key: Ref<AnyKeyedEntity>) => string;
     readonly created: readonly string[];
   } {
-    const counts = new Map(keys);
     const created: string[] = [];
     const createKey = (key: Ref<AnyKeyedEntity>) => {
-      const entity = this.spec.names.get(refTarget(key))?.name ?? "id";
-      const n = (counts.get(entity) ?? 0) + 1;
-      counts.set(entity, n);
-      created.push(entity);
-      return `${entity}-${n}`;
+      created.push(this.spec.names.get(refTarget(key))?.name ?? "id");
+      return givenKeys(keys, created).at(-1)?.[1] as string;
     };
     return { createKey, created };
   }
@@ -556,7 +554,7 @@ export class SpecFunctions implements Functions {
     payload: Fields,
     records: RecordSource,
     now: Temporal.Instant,
-    keys: readonly (readonly [string, number])[],
+    keys: readonly (readonly [string, NextKeys])[],
   ): { readonly input?: unknown; readonly created: readonly string[] } | Failed {
     const found = this.definition<Automation>(["automation"], name);
     const a = found.definition;
@@ -640,7 +638,7 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     assignment: Assignment,
     extra: Fields,
-    keys: readonly (readonly [string, number])[],
+    keys: readonly (readonly [string, NextKeys])[],
     access: Access,
   ):
     | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
@@ -683,7 +681,7 @@ export class SpecFunctions implements Functions {
     scope: Scope,
     records: RecordSource,
     { keyword, key }: { readonly keyword: string; readonly key: string },
-    keys: readonly (readonly [string, number])[],
+    keys: readonly (readonly [string, NextKeys])[],
     access: Access,
   ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed {
     const chart = this.chartOf(scope.machine).named.definition;

@@ -19,11 +19,11 @@ import {
   halt,
   type Instance,
   inStep,
-  keyCounts,
   machine,
   machineOf,
   newCommandStep,
   newStep,
+  nextKeys,
   type Pending,
   type Requester,
   report,
@@ -219,7 +219,7 @@ function workBody(r: Processing, work: Work, step: number): void {
         event.payload,
         recordSource(r.state.records, r.note),
         r.state.now,
-        keyCounts(r.state),
+        nextKeys(r.state),
       );
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
       createKeys(r.state, reacted.created);

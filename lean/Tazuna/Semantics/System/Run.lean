@@ -25,7 +25,8 @@ def step [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
   if s.halted.isSome then pure s else do
   let deadlineOrder := input.deadlineOrder.getD []
   let t ← advance st fs
-    { s with deadlineOrder, inputDeadlineOrder := deadlineOrder, stepOrder := input.stepOrder.getD [] } input
+    { s with deadlineOrder, inputDeadlineOrder := deadlineOrder, stepOrder := input.stepOrder.getD [],
+             keyNames := input.keys.getD [] } input
   let t ← if t.halted.isSome then pure t else
     match t.uncreatedKey st input.body with
     | some (key, entity) => pure (t.report (.invalidInput (.uncreatedKey key (st.ref entity))))

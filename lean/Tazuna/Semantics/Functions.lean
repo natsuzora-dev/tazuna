@@ -10,6 +10,25 @@ namespace Tazuna.Semantics
 
 open Tazuna.Data
 
+/--
+What createKey returns next for an entity: each of `names` in order, then `<entity>-<n>` for the entity's `n`-th
+createKey value, `count` being the number of its createKey values so far.
+-/
+structure NextKeys where
+  count : Nat
+  names : List String
+deriving DecidableEq, Repr, Inhabited
+
+/--
+The createKey values, each with its entity, that createKey gives to calls for the entities `created`, in call order,
+when `keys` holds what it returns next.
+-/
+def givenKeys (keys : List (String × NextKeys)) (created : List String) : List (String × String) :=
+  created.zipIdx.map fun (e, i) =>
+    let k := (keys.lookup e).getD ⟨0, []⟩
+    let before := ((created.take i).filter (· == e)).length
+    (e, k.names[before]?.getD s!"{e}-{k.count + before + 1}")
+
 /-- The scope of a copy whose map state is `map`. -/
 structure CopyScope where
   map : String
@@ -115,8 +134,8 @@ at load) always answer.
   whose refinement or codec threw.
 - resolve: a query's output.
 - react: the input of the command that an automation sends for an event, or none when a binds value is null or the
-  guard fails. `keys` holds the createKey calls so far per entity, and react also returns the entities that it called
-  createKey for, in call order.
+  guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
+  react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
 - initialContext: the initial context of a machine or screen started with the input (the input that `input` checked for
@@ -153,14 +172,14 @@ structure Functions (m : Type → Type) where
   serviceInvariant : Records → m (Except (Option Schema) (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))
   resolve : String → Value → Records → Time → m (Except Issue Value)
-  react : String → Value → Records → Time → List (String × Nat) →
+  react : String → Value → Records → Time → List (String × NextKeys) →
     m (Except Issue (Option Value × List String))
   comparable : String → Answer → m (Except Issue Value)
   initialContext : String → Value → m (Except Issue Value)
   guard : Scope → Records → Transition → Extra → m (Except Issue Bool)
-  assign : Scope → Records → Assignment → Extra → List (String × Nat) →
+  assign : Scope → Records → Assignment → Extra → List (String × NextKeys) →
     m (Except Issue (Value × Option Value × List String))
-  input : Scope → Records → Activity → List (String × Nat) → m (Except Issue (Value × List String))
+  input : Scope → Records → Activity → List (String × NextKeys) → m (Except Issue (Value × List String))
   holds : Scope → Records → m (Except Issue Unit)
   deadlines : String → String → m (List (String × DeadlineTime))
   deadlineAt : Scope → Records → String → m (Except Issue Time)

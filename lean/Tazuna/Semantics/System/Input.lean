@@ -295,13 +295,15 @@ def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) 
 
 /--
 The state at the end of an input, with the entries of its `deadlineOrder` that no tie used reported, or else the
-entries of its `stepOrder` left unused.
+entries of its `stepOrder` left unused, or else the first entity's names of its `keys` that no createKey returned.
 -/
 def State.checkOrderUsed (s : State) : State :=
-  match s.halted, s.deadlineOrder, s.stepOrder with
-  | none, _ :: _, _ => { s with inputDeadlineOrder := [] }.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
-  | none, [], _ :: _ => { s with inputDeadlineOrder := [] }.report (.invalidInput (.unusedStepOrder s.stepOrder))
-  | _, _, _ => { s with inputDeadlineOrder := [] }
+  let t := { s with inputDeadlineOrder := [], keyNames := [] }
+  match s.halted, s.deadlineOrder, s.stepOrder, s.keyNames.find? (!·.2.isEmpty) with
+  | none, _ :: _, _, _ => t.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
+  | none, [], _ :: _, _ => t.report (.invalidInput (.unusedStepOrder s.stepOrder))
+  | none, [], [], some (entity, names) => t.report (.invalidInput (.unusedKeys entity names))
+  | _, _, _, _ => t
 
 /--
 The first string of the values of `body` that has the form of a createKey value of an own entity that createKey has
@@ -310,7 +312,7 @@ not given yet, with the entity.
 def State.uncreatedKey (s : State) (st : Service) (body : Step.Body) : Option (String × String) :=
   (body.values.flatMap Value.strings).findSome? fun v =>
     if s.created.any (·.2 == v) then none
-    else (st.entities.find? fun e => !st.singles.contains e && isKeyOf e v).map (v, ·)
+    else (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf e v).map (v, ·)
 
 /--
 The state in which `input` arrives. Every input first advances the time to its own, firing the deadlines due by then;

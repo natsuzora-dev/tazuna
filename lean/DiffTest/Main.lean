@@ -90,7 +90,8 @@ def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : 
   memo.modify (·.insert line answered)
   pure answered.reply
 
-def keyCounts (keys : List (String × Nat)) : Value := .obj (keys.map fun (e, n) => (e, .num n))
+def nextKeys (keys : List (String × NextKeys)) : Value :=
+  .obj (keys.map fun (e, k) => (e, .obj [("count", .num k.count), ("names", .arr (k.names.map .str))]))
 
 def schemaRequest (type : String) (schema : Schema) (value : Value) : Value :=
   .obj [("type", .str type), ("schema", Schema.toValue schema), ("value", value)]
@@ -167,7 +168,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
   react name payload records now keys := do
     let reply ← ask stdin stdout reads memo reversed records
       (.obj [("type", .str "react"), ("automation", .str name), ("payload", payload), ("now", .str (renderTime now)),
-             ("keys", keyCounts keys)])
+             ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (optional r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   comparable name answer := do
@@ -185,12 +186,12 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
   assign scope records a extra keys := do
     let reply ← ask stdin stdout reads memo reversed records
       (.obj [("type", .str "assign"), ("scope", Scope.toValue scope), ("at", Assignment.toValue a), ("extra", Extra.toValue extra),
-             ("keys", keyCounts keys)])
+             ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "context", optional r "copy", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   input scope records a keys := do
     let reply ← ask stdin stdout reads memo reversed records
-      (.obj [("type", .str "input"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a), ("keys", keyCounts keys)])
+      (.obj [("type", .str "input"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a), ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   holds scope records := do

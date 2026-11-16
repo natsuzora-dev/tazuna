@@ -133,7 +133,7 @@ theorem activate_opens (step : Nat) (name state : String) (a : Activity) (hk : a
 theorem entering_opens_one_child (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
     (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : st.chart? a.name = some c)
-    (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts = .ok (given, keys))
+    (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (given, keys))
     (hr : firstFalse (fs.inputRequirement c.name · given) (st.requirementsOf c.name).requires = .ok none)
     (hx : fs.initialContext c.name given = .ok context) :
     ∃ child : Instance, (openScreen fs st step name state a r).1.machines = r.state.machines ++ [child] ∧
@@ -146,7 +146,7 @@ theorem entering_opens_one_child (step : Nat) (name state : String) (a : Activit
 
 theorem requests_wait_in_send_order (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
     (input : Value) (keys : List String) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (ho : a.own = false) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.keyCounts = .ok (input, keys)) :
+    (ho : a.own = false) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (input, keys)) :
     ∃ p, (request fs st step name state a r).1.pending = r.state.pending ++ [p] ∧ p.activity = a ∧ p.requester = .state name state ∧
       p.input = input ∧ p.turn = r.state.turn ∧ (request fs st step name state a r).1.turn = r.state.turn + 1 := by
   refine ⟨{ id := ((r.state.createKeys keys).write .out none (if a.keyword == "calls" then LineBody.query a.target input

@@ -83,6 +83,21 @@ export type Illegal =
       readonly definition: null;
       readonly scenario: DefinitionRef;
       readonly data: Readonly<Record<string, never>>;
+    }
+  /**
+   * The input has `value`, of the form of a createKey value of the keyed entity `entity` that counts the entity's keys. A
+   * scenario names a createKey value on the line that creates it (Step.keys), as no caller knows how many keys an
+   * implementation has made.
+   */
+  | {
+      readonly kind: "Illegal.countedKey";
+      readonly definition: null;
+      readonly scenario: DefinitionRef;
+      readonly input: number;
+      readonly data: {
+        readonly value: string;
+        readonly entity: DefinitionRef;
+      };
     };
 
 export const illegalKinds = [
@@ -96,4 +111,5 @@ export const illegalKinds = [
   "Illegal.resultOfPlacedTwice",
   "Illegal.resultOfUnplaced",
   "Illegal.scenarioOfExternalService",
+  "Illegal.countedKey",
 ] as const;

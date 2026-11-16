@@ -2,7 +2,11 @@ import { emit, entity, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { shop } from "../shop/contract.ts";
 
-export const Entry = entity({ description: "A sold item", fields: { id: z.string(), item: z.string() }, key: "id" });
+export const Entry = entity({
+  description: "A sold item",
+  fields: { id: z.string(), item: z.string().max(8) },
+  key: "id",
+});
 
 export const { automation, command, createEvent } = service({ description: "Record the sales", entities: { Entry } });
 

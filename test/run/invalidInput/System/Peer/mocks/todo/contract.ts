@@ -12,10 +12,16 @@ export const todo = contract({
   tasks,
   states: {
     milk: [at("2026-10-25T08:00:00+09:00"), send(addTask, { taskId: "task-1", title: "Buy milk" })],
+    countedMilk: [at("2026-10-25T08:00:00+09:00"), send(addTask, { taskId: "Task-1", title: "Buy milk" })],
     milkAndBread: [
       at("2026-10-25T08:00:00+09:00"),
       send(addTitle, { title: "Buy milk" }),
       send(addTitle, { title: "Buy bread" }),
+    ],
+    namedMilkAndBread: [
+      at("2026-10-25T08:00:00+09:00"),
+      send(addTitle, { title: "Buy milk" }, { keys: { Task: ["T-milk"] } }),
+      send(addTitle, { title: "Buy bread" }, { keys: { Task: ["T-bread"] } }),
     ],
     thirtyMilks: [
       at("2026-10-25T08:00:00+09:00"),

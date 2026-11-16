@@ -177,7 +177,7 @@ def Work.settledMachine? : Work → Option String
 def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : Nat) : Work → Processing → m Processing
   | .reaction a e _, ⟨s, q⟩ => do
     let definition := st.ref a.name
-    match ← fs.react a.name e.payload s.records s.now s.keyCounts with
+    match ← fs.react a.name e.payload s.records s.now s.nextKeys with
     | .error issue =>
       pure ⟨s.report (.fault (issueViolation st definition issue)), q⟩
     | .ok (reacted, keys) =>

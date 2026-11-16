@@ -36,7 +36,7 @@ variable [Monad m] [MonadNote m] (fs : Functions m)
 def runAssign (st : Service) (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
     Processing → m Processing :=
   withMachine name fun i r => do
-    match ← fs.assign (r.state.scopeOf i scope) r.state.records a extra r.state.keyCounts with
+    match ← fs.assign (r.state.scopeOf i scope) r.state.records a extra r.state.nextKeys with
     | .error e =>
       pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun
         | .mapContext _ map => .copyContextSchema (st.ref i.chart.name) map

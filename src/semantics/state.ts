@@ -9,7 +9,15 @@ import { type Fields, plain } from "../data/values.ts";
 import type { Located, Location, Violation } from "../data/violation.ts";
 import { descendants, pathOf } from "../syntax/tree.ts";
 import type { Activity, Chart, Transition } from "./chart/basic.ts";
-import { type Access, type Functions, type Holder, holderResource, type Scope } from "./functions.ts";
+import {
+  type Access,
+  type Functions,
+  givenKeys,
+  type Holder,
+  holderResource,
+  type NextKeys,
+  type Scope,
+} from "./functions.ts";
 import { limits } from "./limits.ts";
 import { type Emit, type Halting, halts } from "./message.ts";
 import type { Note } from "./note.ts";
@@ -277,6 +285,8 @@ export interface State {
   messageCount: number;
   /** The createKey values and the names of their entities, in creation order. */
   readonly created: (readonly [string, string])[];
+  /** The names of the current input's `keys` that createKey has not returned yet, by entity. */
+  keyNames: Map<string, readonly string[]>;
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
@@ -310,6 +320,7 @@ export function newState(st: Service): State {
     steps: [],
     messageCount: 0,
     created: [],
+    keyNames: new Map(),
     subscriptions: new Subscriptions(),
     results: new Map(),
     mocks: new Map(),
@@ -363,18 +374,20 @@ export function keyCounts(s: State): [string, number][] {
   return [...new Set(s.created.map(([e]) => e))].map((e) => [e, keyCount(s, e)]);
 }
 
-/** Returns whether `value` has the form of a createKey value of entity `entity`, which createKey numbers from 1. */
-export function isKeyOf(entity: string, value: string): boolean {
-  const n = Number(value.slice(entity.length + 1));
-  return Number.isSafeInteger(n) && n > 0 && value === `${entity}-${n}`;
-}
-
-function createKey(s: State, entity: string): void {
-  s.created.push([entity, `${entity}-${keyCount(s, entity) + 1}`]);
+/**
+ * Returns what createKey returns next for each entity that has a createKey value or a name left: the names left, in
+ * order, and after them `<entity>-<n>` for the entity's `n`-th createKey value.
+ */
+export function nextKeys(s: State): [string, NextKeys][] {
+  return [...new Set([...s.created.map(([e]) => e), ...s.keyNames.keys()])].map((e) => [
+    e,
+    { count: keyCount(s, e), names: s.keyNames.get(e) ?? [] },
+  ]);
 }
 
 export function createKeys(s: State, entities: readonly string[]): void {
-  for (const entity of entities) createKey(s, entity);
+  s.created.push(...givenKeys(nextKeys(s), entities));
+  for (const [e, names] of s.keyNames) s.keyNames.set(e, names.slice(entities.filter((c) => c === e).length));
 }
 
 export function newMessage(s: State): void {

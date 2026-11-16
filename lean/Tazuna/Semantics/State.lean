@@ -179,6 +179,8 @@ structure State where
   messageCount : Nat := 0
   /-- The createKey values with their entity, in creation order. -/
   created : List (String × String) := []
+  /-- The names of the current input's `keys` that createKey has not returned yet, by entity. -/
+  keyNames : List (String × List String) := []
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []
   results : List Accepted := []
@@ -209,21 +211,17 @@ def State.await (s : State) (body : LineBody) (requester : Requester) (activity 
 
 def State.keyCount (s : State) (entity : String) : Nat := (s.created.filter (·.1 == entity)).length
 
-def State.keyCounts (s : State) : List (String × Nat) :=
-  (s.created.map (·.1)).foldl (fun acc e => if acc.any (·.1 == e) then acc else acc ++ [(e, s.keyCount e)]) []
+/--
+What createKey returns next for each entity that has a createKey value or a name left: the names left, in order, and
+after them `<entity>-<n>` for the entity's `n`-th createKey value.
+-/
+def State.nextKeys (s : State) : List (String × NextKeys) :=
+  (s.created.map (·.1) ++ s.keyNames.map (·.1)).eraseDups.map fun e =>
+    (e, { count := s.keyCount e, names := (s.keyNames.lookup e).getD [] })
 
-def addCreated (created : List (String × String)) (e : String) : List (String × String) :=
-  created ++ [(e, s!"{e}-{(created.filter (·.1 == e)).length + 1}")]
-
-/-- Whether `v` has the form of a createKey value of entity `e`, which addCreated numbers from 1. -/
-def isKeyOf (e v : String) : Bool :=
-  match (v.drop (e.length + 1)).toNat? with
-  | some n => 0 < n && v == s!"{e}-{n}"
-  | none => false
-
-def State.createKey (s : State) (e : String) : State := { s with created := addCreated s.created e }
-
-def State.createKeys (s : State) (entities : List String) : State := { s with created := entities.foldl addCreated s.created }
+def State.createKeys (s : State) (entities : List String) : State :=
+  { s with created := s.created ++ givenKeys s.nextKeys entities,
+           keyNames := s.keyNames.map fun (e, names) => (e, names.drop (entities.count e)) }
 
 def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
 

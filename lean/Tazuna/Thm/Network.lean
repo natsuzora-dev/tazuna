@@ -101,7 +101,7 @@ theorem mem_peerInputs_line {normal : String → Value → CValue} {service peer
     (h : (st, Origin.line i) ∈ peerInputs normal service peer received state elsewhere aLines bLines) :
     ∃ l b, aLines[i]? = some l ∧
       peerInput? service peer received aLines (peerForward normal service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines i) l = some b ∧
-      st = ⟨l.time, b, none, none⟩ := by
+      st = ⟨l.time, b, none, none, none⟩ := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap] at h
   rcases h with ⟨_, _, he⟩ | ⟨a, ⟨n, _, ha⟩, he⟩
   · simp at he
@@ -120,10 +120,10 @@ theorem peerInputs_line_mem {normal : String → Value → CValue} {service peer
     {state : List Step} {elsewhere : List (Nat × Step)} {aLines bLines : List TraceLine} {i : Nat} {l : TraceLine}
     {b : Step.Body} (hi : aLines[i]? = some l)
     (hb : peerBody? peer aLines (peerForward normal service peer (peerArrivals service peer received state elsewhere aLines) aLines bLines i) l = some b) :
-    (⟨l.time, b, none, none⟩, Origin.line i) ∈
+    (⟨l.time, b, none, none, none⟩, Origin.line i) ∈
       peerInputs normal service peer received state elsewhere aLines bLines := by
   simp only [peerInputs, peerPlaced, List.mem_append, List.mem_map, List.mem_flatMap]
-  refine .inr ⟨(⟨l.time, b, none, none⟩, Origin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
+  refine .inr ⟨(⟨l.time, b, none, none, none⟩, Origin.line i), ⟨i, ?_, .inr ?_⟩, rfl⟩
   · have := (List.getElem?_eq_some_iff.mp hi).1
     simp only [List.mem_range]
     omega
@@ -286,7 +286,7 @@ The peer's `in` line for a request or end of subscription of the scenario's run 
 theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {peer : String}
     {lines : List TraceLine} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
     (hname : e.name 1 = peer) (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
-    (hb : peerBody? peer lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none⟩ l) :
+    (hb : peerBody? peer lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       Carries agree e 0 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
@@ -329,7 +329,7 @@ theorem peerBody_carries {agree : Agree} {e : Execution} {canon : String → Val
 theorem peerEvent_carries {agree : Agree} {e : Execution} {canon : String → Value → Value} {service : String}
     {received : List String} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
     (hname : e.name 0 = service) (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
-    (hb : peerEvent? service received keys al = some b) (hw : Writes canon ⟨al.time, b, none, none⟩ l) :
+    (hb : peerEvent? service received keys al = some b) (hw : Writes canon ⟨al.time, b, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       Carries agree e 0 1 al l := by
   obtain ⟨ht, hd, hw⟩ := hw
@@ -350,7 +350,7 @@ theorem peerInput_carries {agree : Agree} {e : Execution} {canon : String → Va
     {received : List String} {lines : List TraceLine} {keys : Bindings} {al l : TraceLine} {b : Step.Body}
     (hname0 : e.name 0 = service) (hname1 : e.name 1 = peer)
     (hagree : ∀ n x, agree 0 1 n x (canon n (keys.rename x)))
-    (hb : peerInput? service peer received lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none⟩ l) :
+    (hb : peerInput? service peer received lines keys al = some b) (hw : Writes canon ⟨al.time, b, none, none, none⟩ l) :
     al.body.dir = .out ∧ l.time = al.time ∧ l.body.dir = .in ∧ (∀ id to a, l.body ≠ .answer .in id to a) ∧
       Carries agree e 0 1 al l := by
   cases hp : peerBody? peer lines keys al with
@@ -920,7 +920,7 @@ theorem network_realizes {normal : String → Value → CValue} {canon : String 
         obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hsend'
         obtain ⟨k, hk⟩ :=
           List.mem_iff_getElem?.mp (peerInputs_line_mem (state := state) (elsewhere := elsewhere) hl0 hb)
-        have hkm : (inputs.map (·.1))[k]? = some ⟨l.time, b, none, none⟩ := by
+        have hkm : (inputs.map (·.1))[k]? = some ⟨l.time, b, none, none, none⟩ := by
           rw [List.getElem?_map, show inputs[k]? = _ from hk]
           rfl
         obtain ⟨p, hp⟩ := runOf_isSome hrun hkm

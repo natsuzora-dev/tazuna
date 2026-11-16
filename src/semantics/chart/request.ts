@@ -12,10 +12,10 @@ import {
   type Instance,
   inStep,
   instanceWho,
-  keyCounts,
   machine,
   NoteAccess,
   newStep,
+  nextKeys,
   ownerOf,
   type Requester,
   report,
@@ -67,7 +67,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const target = activityRef(a);
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
-  const checked = r.functions.input(scope, records, a, keyCounts(r.state), new NoteAccess(r, scope));
+  const checked = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (checked instanceof Failed)
     halt(
       issueViolation(definition, checked, () => ({ kind: "Fault.requestInputSchema", definition, data: { target } })),
@@ -99,7 +99,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const screen = ref(r.st, child.name);
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
-  const given = r.functions.input(scope, records, a, keyCounts(r.state), new NoteAccess(r, scope));
+  const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed)
     halt(issueViolation(definition, given, () => ({ kind: "Fault.screenInputSchema", definition, data: { screen } })));
   const input = given.value;

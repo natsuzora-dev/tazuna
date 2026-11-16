@@ -30,6 +30,12 @@ inductive Illegal where
   /-- The scenario places the resultOf answer of the event input only after the event, or not at all. -/
   | resultOfUnplaced (scenario : Syntax.Ref) (input : Nat)
   | scenarioOfExternalService (scenario : Syntax.Ref)
+  /--
+  The input has `value`, of the form of a createKey value of the keyed entity `entity` that counts the entity's keys. A
+  scenario names a createKey value on the line that creates it (Step.keys), as no caller knows how many keys an
+  implementation has made.
+  -/
+  | countedKey (scenario : Syntax.Ref) (input : Nat) (value : String) (entity : Syntax.Ref)
 
 derive_group Illegal
 

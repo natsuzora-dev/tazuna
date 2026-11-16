@@ -182,9 +182,19 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
             type: "answer",
             sender: pick([null, ...refsOf(s, senderKinds)], c) ?? null,
             target: pick([null, ...refsOf(s, ["command", "query"])], b) ?? null,
+            strings: [],
           }
-        : { type: "event", resultOf: c % 2 === 0 ? null : [b % 5, c % 5] },
+        : { type: "event", resultOf: c % 2 === 0 ? null : [b % 5, c % 5], strings: [] },
     );
+  },
+  strings(s, [a, b, c]) {
+    const input = pick(
+      s.scenarios.flatMap((sc) => sc.inputs).filter((i) => "strings" in i),
+      a,
+    );
+    if (input === undefined || !("strings" in input)) return;
+    const name = pick([...s.definitions.filter((d) => d.kind === "entity").map((d) => d.name), "Other"], b) ?? "Other";
+    (input.strings as string[]).push(pick([`${name}-${c + 1}`, `${name}-0`, `${name}-0${c + 1}`, name], c) ?? name);
   },
   external(s, [a]) {
     const service = pick(s.services, a);

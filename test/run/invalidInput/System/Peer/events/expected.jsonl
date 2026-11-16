@@ -1,1 +1,1 @@
-{"kind":"InvalidInput.haltedPeer","definition":null,"data":{"service":"ledger","halting":"InvalidInput.uncreatedKey"},"location":{"file":"shop/scenarios.ts","line":9,"input":2},"scenario":{"service":"shop","name":"sellsKeyLikeItem"}}
+{"kind":"InvalidInput.haltedPeer","definition":null,"data":{"service":"ledger","halting":"Fault.automationInputSchema"},"location":{"file":"shop/scenarios.ts","line":9,"input":2},"scenario":{"service":"shop","name":"sellsLongItem"}}

@@ -60,6 +60,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /** A restart of the service by its environment, such as the OS or a test harness. */
   z.object({
@@ -72,6 +77,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -86,6 +96,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -100,6 +115,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -114,6 +134,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -126,6 +151,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /** An event whose `resultOf` is the handle of the answer input to the request that the event results from. */
   z.object({
@@ -142,6 +172,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -156,6 +191,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   z.object({
     time: z.iso.datetime({ offset: true }),
@@ -170,6 +210,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
   /**
    * An answer to the request from `sender` to `target` that `choice` chooses, or without `choice`, to the longest-waiting
@@ -190,6 +235,11 @@ const step = z.discriminatedUnion("type", [
      * (InvalidInput.unreadyStep, InvalidInput.unusedStepOrder); after them, the queue order.
      */
     stepOrder: z.array(z.custom<StepName>()).exactOptional(),
+    /**
+     * The createKey values that the input's processing creates, by entity name, in creation order within the input, which
+     * createKey returns in place of `<entity>-<n>` (InvalidInput.unusedKeys).
+     */
+    keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
 ]);
 

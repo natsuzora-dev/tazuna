@@ -267,6 +267,15 @@ export type InvalidInput =
         readonly entries: readonly StepName[];
       };
     }
+  /** createKey returned none of the input's `keys` names `names` of the entity `entity` during the input. */
+  | {
+      readonly kind: "InvalidInput.unusedKeys";
+      readonly definition: null;
+      readonly data: {
+        readonly entity: string;
+        readonly names: readonly string[];
+      };
+    }
   /**
    * A value of the input has the form of a createKey value of the service's entity `entity` that createKey has not given
    * yet. An implementation makes its own keys, such as UUIDs, so no caller knows a key before the service gives it.
@@ -354,6 +363,7 @@ export const invalidInputKinds = [
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
+  "InvalidInput.unusedKeys",
   "InvalidInput.uncreatedKey",
   "InvalidInput.unproducibleAnswer",
   "InvalidInput.unansweredRequest",
@@ -380,5 +390,6 @@ export const haltingInvalidInputKinds = [
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
+  "InvalidInput.unusedKeys",
   "InvalidInput.uncreatedKey",
 ] as const;

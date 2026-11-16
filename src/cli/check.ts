@@ -29,7 +29,8 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.unrequestedAnswer":
     case "Illegal.resultOfPlacedTwice":
     case "Illegal.resultOfUnplaced":
-    case "Illegal.scenarioOfExternalService": {
+    case "Illegal.scenarioOfExternalService":
+    case "Illegal.countedKey": {
       const { service, name } = illegal.scenario;
       const scenario = spec.scenarios.find((s) => sameRef(s, illegal.scenario));
       if (scenario === undefined) throw new Error(`no scenario ${service}.${name}`);

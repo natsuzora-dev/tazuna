@@ -216,23 +216,23 @@ deriving Repr, Inhabited
 derive_wire ServiceInfo
 
 /--
-A written scenario input, reduced to an answer's definitions and an event's `resultOf`. `resultOf` holds every
-position of the input that `resultOf` names, counting the written inputs from 0 with `at` included, or null without
-`resultOf`.
+A written scenario input, reduced to an answer's definitions, an event's `resultOf`, and the strings of the values that
+the input gives: an input, a payload, an answer's output, and a mock's `input`. `resultOf` holds every position of the
+input that `resultOf` names, counting the written inputs from 0 with `at` included, or null without `resultOf`.
 -/
 inductive ScenarioInput where
   | «at»
-  | command
-  | query
-  | subscribe
+  | command (strings : List String)
+  | query (strings : List String)
+  | subscribe (strings : List String)
   | unsubscribe
   | restart
-  | event (resultOf : Option (List Nat))
-  | operation
-  | unacceptedOperation
-  | answer (sender : Option Ref) (target : Option Ref)
+  | event (resultOf : Option (List Nat)) (strings : List String)
+  | operation (strings : List String)
+  | unacceptedOperation (strings : List String)
+  | answer (sender : Option Ref) (target : Option Ref) (strings : List String)
   /-- An input to another spec service, which the scenario's service skips. -/
-  | elsewhere
+  | elsewhere (strings : List String)
 deriving Repr, Inhabited
 
 derive_wire ScenarioInput tag "type"
@@ -246,6 +246,17 @@ deriving Repr, Inhabited
 derive_wire Scenario
 
 def Scenario.ref (sc : Scenario) : Ref := { service := sc.service, name := sc.name }
+
+def ScenarioInput.strings : ScenarioInput → List String
+  | .command strings | .query strings | .subscribe strings | .event _ strings | .operation strings
+  | .unacceptedOperation strings | .answer _ _ strings | .elsewhere strings => strings
+  | .at | .unsubscribe | .restart => []
+
+/-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e` that no `keys` name gives. -/
+def isKeyOf (e v : String) : Bool :=
+  match (v.drop (e.length + 1)).toNat? with
+  | some n => 0 < n && v == s!"{e}-{n}"
+  | none => false
 
 /-- The whole spec without function bodies and source locations, as TS `structureOf` writes it. -/
 structure Structure where

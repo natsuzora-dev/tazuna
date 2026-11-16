@@ -603,6 +603,10 @@ screen({
 operate(taskListScreen, "remove");
 // @ts-expect-error a control with payload is operated with a payload
 operate(taskListScreen, "openTask");
+// Options follow the payload: `keys` names the keys that the operation's createKey calls create.
+operate(taskListScreen, "add", { title: "Buy bread" }, { keys: { Task: ["T-bread"] } });
+// @ts-expect-error a keys entry lists names
+operate(taskListScreen, "add", { title: "Buy bread" }, { keys: { Task: "T-bread" } });
 
 machine({
   description: "",
@@ -675,8 +679,6 @@ receive(taskDeletedRecorded, { id: "task-1" }, { id: "e1" });
 receive(taskDeletedRecorded, { id: "task-1" }, { id: "taskDeleted#1" });
 // @ts-expect-error scenario ids have no #
 send(addTask, { taskId: "task-1", title: "t" }, { id: "addTask#1" });
-// @ts-expect-error receive options have id or resultOf
-receive(taskDeletedRecorded, { id: "task-1" }, {});
 
 // initialContext sets a screen's context fields without defaults from input.
 screen({
