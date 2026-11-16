@@ -25,7 +25,9 @@ theorem keeps_request (step : Nat) (name state : String) (a : Activity) : Keeps 
   try simp only [id_bind]
   split
   · simp [Processing.report]
-  · split <;> rfl
+  · split
+    · simp [Processing.report]
+    · split <;> rfl
 
 theorem keeps_openScreen (step : Nat) (name state : String) (a : Activity) :
     Keeps (openScreen fs st step name state a) := by
@@ -61,9 +63,11 @@ theorem growsBy_request (step : Nat) (name state : String) (a : Activity) : Grow
   split
   · exact Grows.of_lines (report_lines ..)
   · split
-    · exact Grows.refl _
-    · refine ⟨#[_], Array.push_eq_append, ?_⟩
-      simp [State.createKeys]
+    · exact Grows.of_lines (report_lines ..)
+    · split
+      · exact Grows.refl _
+      · refine ⟨#[_], Array.push_eq_append, ?_⟩
+        simp [State.createKeys]
 
 theorem sameLines_openScreen (step : Nat) (name state : String) (a : Activity) :
     SameLines (openScreen fs st step name state a) := by
@@ -131,7 +135,7 @@ theorem activate_opens (step : Nat) (name state : String) (a : Activity) (hk : a
   simp [activate, hk]
 
 theorem entering_opens_one_child (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
-    (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
+    (c : Chart) (given : Value) (keys : List KeyCall) (context : Value) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : st.chart? a.name = some c)
     (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (given, keys))
     (hr : firstFalse (fs.inputRequirement c.name · given) (st.requirementsOf c.name).requires = .ok none)
@@ -145,18 +149,19 @@ theorem entering_opens_one_child (step : Nat) (name state : String) (a : Activit
   exact ⟨_, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem requests_wait_in_send_order (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
-    (input : Value) (keys : List String) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (ho : a.own = false) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (input, keys)) :
+    (input : Value) (keys : List KeyCall) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
+    (ho : a.own = false) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (input, keys))
+    (hk : r.state.repeatedKeyCall? keys = none) :
     ∃ p, (request fs st step name state a r).1.pending = r.state.pending ++ [p] ∧ p.activity = a ∧ p.requester = .state name state ∧
       p.input = input ∧ p.turn = r.state.turn ∧ (request fs st step name state a r).1.turn = r.state.turn + 1 := by
   refine ⟨{ id := ((r.state.createKeys keys).write .out none (if a.keyword == "calls" then LineBody.query a.target input
                   else .command a.target input)).2,
              activity := a, requester := .state name state, input := input, turn := r.state.turn }, ?_, rfl, rfl, rfl, rfl, ?_⟩
   · simp only [request, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
-      hp, ho]
+      hp, hk, ho]
     rfl
   · simp only [request, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
-      hp, ho]
+      hp, hk, ho]
     rfl
 
 def AddsFor (name state : String) (f : Processing → Id Processing) : Prop :=
@@ -174,11 +179,14 @@ theorem addsFor_request (step : Nat) (name state : String) (a : Activity) : Adds
       · exact ⟨fun _ h h' => absurd (by simpa [Processing.report] using h) h',
           fun _ h h' => absurd (by simpa [Processing.report] using h) h'⟩
       · split
-        · exact ⟨fun _ h h' => absurd h h', fun _ h h' => absurd h h'⟩
-        · refine ⟨fun p hp hn => ?_, fun c hc hn => absurd hc hn⟩
-          rcases List.mem_append.mp hp with hp | hp
-          · exact absurd hp hn
-          · rw [List.mem_singleton.mp hp]
+        · exact ⟨fun _ h h' => absurd (by simpa [Processing.report] using h) h',
+            fun _ h h' => absurd (by simpa [Processing.report] using h) h'⟩
+        · split
+          · exact ⟨fun _ h h' => absurd h h', fun _ h h' => absurd h h'⟩
+          · refine ⟨fun p hp hn => ?_, fun c hc hn => absurd hc hn⟩
+            rcases List.mem_append.mp hp with hp | hp
+            · exact absurd hp hn
+            · rw [List.mem_singleton.mp hp]
     · exact ⟨fun _ h h' => absurd h h', fun _ h h' => absurd h h'⟩
 
 theorem addsFor_openScreen (step : Nat) (name state : String) (a : Activity) :
@@ -327,8 +335,10 @@ theorem keepsEntered_request (step : Nat) (name state : String) (a : Activity) :
       split
       · exact EnteredFrom.of_machines (by simp [Processing.report]) (by simp [Processing.report])
       · split
-        · exact EnteredFrom.of_machines rfl rfl
-        · exact EnteredFrom.of_machines rfl rfl
+        · exact EnteredFrom.of_machines (by simp [Processing.report]) (by simp [Processing.report])
+        · split
+          · exact EnteredFrom.of_machines rfl rfl
+          · exact EnteredFrom.of_machines rfl rfl
     · exact EnteredFrom.refl _
 
 theorem keepsEntered_openScreen (step : Nat) (name state : String) (a : Activity) :

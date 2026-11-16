@@ -42,6 +42,9 @@ def runAssign (st : Service) (name : String) (a : Assignment) (scope : Option St
         | .mapContext _ map => .copyContextSchema (st.ref i.chart.name) map
         | _ => .contextSchema (st.ref i.chart.name))))
     | .ok (context, copyContext, keys) =>
+      match r.state.repeatedKeyCall? keys with
+      | some c => pure (r.report (.fault (.repeatedKeyLabel (st.ref i.chart.name) c.entity c.label)))
+      | none =>
       let s := r.state.createKeys keys
       match i.copyOf with
       | some c =>

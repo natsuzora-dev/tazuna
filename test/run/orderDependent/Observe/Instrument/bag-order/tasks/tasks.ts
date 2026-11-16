@@ -30,7 +30,7 @@ export const addNotes = command({
 
 export const noteEveryTask = automation({ receives: { taskAdded }, commands: { addNotes } }).send({
   input: ({ createKey, records }) => ({
-    notes: records.Task.map((t) => ({ noteId: createKey(ref(Note)), taskId: t.id })),
+    notes: records.Task.map((t) => ({ noteId: createKey(ref(Note), `note:${t.id}`), taskId: t.id })),
   }),
 });
 

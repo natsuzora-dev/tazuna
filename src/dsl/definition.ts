@@ -125,8 +125,15 @@ export interface Now {
   readonly now: Temporal.Instant;
 }
 
-/** The function that creates a new key; the implementation decides the key's form. */
-export type CreateKey = { readonly createKey: <E extends AnyKeyedEntity>(key: Ref<E>) => KeyValue<E> };
+/**
+ * The function that creates a new key; the implementation decides the key's form. `label` names the key among the keys
+ * of the entity that one message creates, so no two calls of a message give an entity the same label
+ * (Fault.repeatedKeyLabel): a map chart or an automation that reacts to several events adds the key or a payload field,
+ * as in `` createKey(ref(Note), `note:${payload.taskId}`) ``.
+ */
+export type CreateKey = {
+  readonly createKey: <E extends AnyKeyedEntity>(key: Ref<E>, label: string) => KeyValue<E>;
+};
 
 export interface CreateEvent<E extends AnyKeyedEntity = AnyKeyedEntity> {
   readonly kind: "event";

@@ -29,7 +29,9 @@ export const see = command({
 export const seeAdded = automation({
   receives: { taskAdded },
   commands: { see },
-}).send({ input: ({ payload, createKey }) => ({ id: createKey(ref(Seen)), taskId: payload.id }) });
+}).send({
+  input: ({ payload, createKey }) => ({ id: createKey(ref(Seen), `seen:${payload.id}`), taskId: payload.id }),
+});
 
 export const seenIds = query({
   output: {

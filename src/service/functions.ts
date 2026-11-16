@@ -123,6 +123,13 @@ export interface NextKeys {
   readonly names: readonly string[];
 }
 
+/** A createKey call: the entity of the key, and the label that names the key among the keys of the entity that one
+ * message creates. */
+export interface KeyCall {
+  readonly entity: string;
+  readonly label: string;
+}
+
 /**
  * Lean's givenKeys: the createKey values, each with its entity, that createKey gives to calls for the entities
  * `created`, in call order, when `keys` holds what it returns next.
@@ -193,7 +200,7 @@ export interface Functions {
   /**
    * Returns the input of the automation's command, undefined when a binds value is null or the guard fails. `keys`
    * holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and `created` holds the
-   * entities that react called createKey for, in call order.
+   * createKey calls of react, in call order.
    */
   react(
     automation: string,
@@ -201,7 +208,7 @@ export interface Functions {
     records: RecordSource,
     now: Temporal.Instant,
     keys: readonly (readonly [string, NextKeys])[],
-  ): { readonly input?: unknown; readonly created: readonly string[] } | Failed;
+  ): { readonly input?: unknown; readonly created: readonly KeyCall[] } | Failed;
   /**
    * Returns a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements with
    * equal keys.
@@ -228,7 +235,7 @@ export interface Functions {
     keys: readonly (readonly [string, NextKeys])[],
     access: Access,
   ):
-    | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
+    | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly KeyCall[] }
     | Failed;
   /**
    * Returns the input of the request that a state sends, or of the screen it opens. `keys` and `created` are as in
@@ -240,7 +247,7 @@ export interface Functions {
     activity: { readonly keyword: string; readonly key: string },
     keys: readonly (readonly [string, NextKeys])[],
     access: Access,
-  ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed;
+  ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly KeyCall[] } | Failed;
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;
   /** Returns the names of a state's `after` deadlines and how each time is set, in declaration order. */
   deadlines(machine: string, state: string): readonly (readonly [string, DeadlineTime])[];

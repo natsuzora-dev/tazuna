@@ -16,6 +16,7 @@ import {
   type Pending,
   type Requester,
   removeFromStack,
+  repeatedKeyCall,
   report,
   type State,
   scopeOf,
@@ -61,6 +62,13 @@ export function runAssign(
           : { kind: "Fault.contextSchema", definition, data: {} },
       ),
     );
+  const repeated = repeatedKeyCall(r.state, assigned.created);
+  if (repeated !== undefined)
+    halt({
+      kind: "Fault.repeatedKeyLabel",
+      definition: definition,
+      data: { entity: repeated.entity, label: repeated.label },
+    });
   createKeys(r.state, assigned.created);
   const copy = instance.copyOf;
   if (copy === undefined) {

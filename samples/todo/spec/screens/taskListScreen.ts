@@ -93,7 +93,7 @@ export const taskListScreen = screen({
       offers: awaitingList,
       sends: {
         addTask: {
-          input: ({ held, createKey }) => ({ taskId: createKey(todo.TaskId), title: held.title }),
+          input: ({ held, createKey }) => ({ taskId: createKey(todo.TaskId, "added"), title: held.title }),
           onAccepted: [{ target: "listing" }],
           onRejected: [{ target: "listing" }],
         },

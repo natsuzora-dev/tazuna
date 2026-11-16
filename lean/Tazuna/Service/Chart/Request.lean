@@ -26,6 +26,9 @@ def request (st : Service) (step : Nat) (name state : String) (a : Activity) : P
       pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
         .requestInputSchema (st.ref i.chart.name) a.ref)))
     | .ok (input, keys) =>
+      match r.state.repeatedKeyCall? keys with
+      | some c => pure (r.report (.fault (.repeatedKeyLabel (st.ref i.chart.name) c.entity c.label)))
+      | none =>
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
       if a.own then
         let (s, serial) := r.state.startQueued name state

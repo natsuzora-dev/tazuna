@@ -36,7 +36,9 @@ export const addNote = command({
 export const noteAddedTask = automation({
   receives: { taskAdded },
   commands: { addNote },
-}).send({ input: ({ payload, createKey }) => ({ noteId: createKey(ref(Note)), taskId: payload.id }) });
+}).send({
+  input: ({ payload, createKey }) => ({ noteId: createKey(ref(Note), `note:${payload.id}`), taskId: payload.id }),
+});
 
 export const addTag = command({
   input: { tagId: Tag.fields.id, taskId: ref(Task) },
@@ -59,7 +61,7 @@ export const tagger = machine({
           {
             guard: { pinned: ({ payload }) => payload.id.startsWith("pin") },
             target: "tagging",
-            assign: { kept: ({ createKey }) => createKey(ref(Tag)), taskId: ({ payload }) => payload.id },
+            assign: { kept: ({ createKey }) => createKey(ref(Tag), "kept"), taskId: ({ payload }) => payload.id },
           },
         ],
       },
@@ -68,7 +70,7 @@ export const tagger = machine({
       holds: { taskId: ({ context }) => context.taskId },
       sends: {
         addTag: {
-          input: ({ held, createKey }) => ({ tagId: createKey(ref(Tag)), taskId: held.taskId }),
+          input: ({ held, createKey }) => ({ tagId: createKey(ref(Tag), "tag"), taskId: held.taskId }),
           onAccepted: [{ target: "idle" }],
           onRejected: [{ target: "idle" }],
         },

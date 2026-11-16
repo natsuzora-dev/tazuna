@@ -15,6 +15,7 @@ import {
   givenKeys,
   type Holder,
   holderResource,
+  type KeyCall,
   type NextKeys,
   type Scope,
 } from "../service/functions.ts";
@@ -320,7 +321,8 @@ function unorderedJson(value: unknown, rename: (s: string) => string): string {
 type Keys = readonly (readonly [string, NextKeys])[];
 
 /** Lean's madeText and sameMade: the text that compares a value that one call made and the keys that it created. */
-function madeJson(keys: Keys, created: readonly string[], value: unknown): string {
+function madeJson(keys: Keys, calls: readonly KeyCall[], value: unknown): string {
+  const created = calls.map((c) => c.entity);
   const entities = canonicalJson(created.toSorted(byCodePoint));
   if (created.length === 0) return `${entities}${text(value)}`;
   const given = givenKeys(keys, created);

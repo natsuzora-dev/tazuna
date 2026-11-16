@@ -349,8 +349,10 @@ def madeText (keys : List (String × NextKeys)) (created : List String) (v : Val
 def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
 
 /-- Whether two answers that made a value and created keys are equal up to a renaming of the created keys. -/
-def sameMade (keys : List (String × NextKeys)) (a b : Value × List String) : Bool :=
-  sortedTexts a.2 == sortedTexts b.2 && madeText keys a.2 a.1 == madeText keys b.2 b.1
+def sameMade (keys : List (String × NextKeys)) (a b : Value × List KeyCall) : Bool :=
+  let ea := a.2.map (·.entity)
+  let eb := b.2.map (·.entity)
+  sortedTexts ea == sortedTexts eb && madeText keys ea a.1 == madeText keys eb b.1
 
 /-- The texts without order or repetition, which compare two lists as sets. -/
 def textSet (texts : List String) : List String := (sortedTexts texts).eraseDups

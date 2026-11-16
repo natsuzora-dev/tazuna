@@ -18,5 +18,5 @@ export const record = command({
 }).decide(({ input }) => [emit(entryRecorded, { id: input.entryId, item: input.item })]);
 
 export const recordSold = automation({ receives: { sold: shop.sold }, commands: { record } }).send({
-  input: ({ createKey, payload }) => ({ entryId: createKey(ref(Entry)), item: payload.item }),
+  input: ({ createKey, payload }) => ({ entryId: createKey(ref(Entry), `sold:${payload.item}`), item: payload.item }),
 });

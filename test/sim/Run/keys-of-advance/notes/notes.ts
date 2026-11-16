@@ -20,7 +20,7 @@ export const addNote = command({ input: { noteId: Note.fields.id, label: z.strin
 );
 
 export const noteOnTask = automation({ receives: { taskAdded }, commands: { addNote } }).send({
-  input: ({ createKey, payload }) => ({ noteId: createKey(ref(Note)), label: payload.id }),
+  input: ({ createKey, payload }) => ({ noteId: createKey(ref(Note), `note:${payload.id}`), label: payload.id }),
 });
 
 export const hourly = machine({
@@ -34,7 +34,7 @@ export const hourly = machine({
     noting: {
       sends: {
         addNote: {
-          input: ({ createKey }) => ({ noteId: createKey(ref(Note)), label: "hourly" }),
+          input: ({ createKey }) => ({ noteId: createKey(ref(Note), "hourly"), label: "hourly" }),
           onAccepted: [{ target: "done" }],
           onRejected: [{ target: "done" }],
         },

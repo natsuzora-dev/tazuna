@@ -17,7 +17,9 @@ theorem keeps_runAssign (name : String) (a : Assignment) (scope : Option String)
   try simp only [id_bind]
   split
   · simp [Processing.report, report_eq, State.fixed]
-  · split <;> rfl
+  · split
+    · simp [Processing.report, report_eq, State.fixed]
+    · split <;> rfl
 
 theorem keeps_endWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, Keeps (exit c n))
     (c : String) : Keeps (endWith exit c) := by
@@ -62,7 +64,9 @@ theorem sameLines_runAssign (name : String) (a : Assignment) (scope : Option Str
   try simp only [id_bind]
   split
   · simp [Processing.report]
-  · split <;> rfl
+  · split
+    · simp [Processing.report]
+    · split <;> rfl
 
 theorem endSubscription_grows (p : Pending) : Grows s (s.endSubscription p) :=
   ⟨#[_], Array.push_eq_append, by simp⟩
@@ -189,7 +193,9 @@ theorem runAssign_deadlines (name : String) (a : Assignment) (scope : Option Str
     · simp only [id_bind]
       split
       · simp [Processing.report, report_eq]
-      · split <;> rfl
+      · split
+        · simp [Processing.report, report_eq]
+        · split <;> rfl
     · rfl
 
 theorem deadlinesShrink_endWith {exit : String → String → Processing → Id Processing}
@@ -287,7 +293,9 @@ theorem runAssign_pending (name : String) (a : Assignment) (scope : Option Strin
     · simp only [id_bind]
       split
       · simp [Processing.report, report_eq]
-      · split <;> rfl
+      · split
+        · simp [Processing.report, report_eq]
+        · split <;> rfl
     · rfl
 
 theorem leaveMark_marked (name n : String) (q : Pending) : Marked q (leaveMark name n q) := by
@@ -388,12 +396,14 @@ theorem machinesKept_runAssign (name : String) (a : Assignment) (scope : Option 
   split
   · simp [Processing.report, report_eq]
   · split
-    · simp only [id_pure]
-      rw [setMachine_resources _ _ _ (by intro _; rfl), setMachine_resources _ _ _ (by intro _; rfl)]
-      rfl
-    · simp only [id_pure]
-      rw [setMachine_resources _ _ _ (by intro _; rfl)]
-      rfl
+    · simp [Processing.report, report_eq]
+    · split
+      · simp only [id_pure]
+        rw [setMachine_resources _ _ _ (by intro _; rfl), setMachine_resources _ _ _ (by intro _; rfl)]
+        rfl
+      · simp only [id_pure]
+        rw [setMachine_resources _ _ _ (by intro _; rfl)]
+        rfl
 
 theorem machinesKept_endWith {exit : String → String → Processing → Id Processing}
     (h : ∀ c n, MachinesKept (exit c n)) (c : String) : MachinesKept (endWith exit c) := by
@@ -660,19 +670,21 @@ theorem keepsAbsent_runAssign (name : String) (a : Assignment) (scope : Option S
   split
   · exact ha.of_eq (by simp [Processing.report, report_eq]) (by simp [Processing.report, report_eq])
   · split
-    · simp only [id_pure]
-      refine Absent.setMachine _ _ (fun _ => ?_) (fun _ _ h => ?_) ?_
-      · rfl
-      · exact h
-      refine Absent.setMachine _ _ (fun _ => ?_) (fun _ _ h => ?_) ?_
-      · rfl
-      · exact h
-      exact ha.of_eq rfl rfl
-    · simp only [id_pure]
-      refine Absent.setMachine _ _ (fun _ => ?_) (fun _ _ h => ?_) ?_
-      · rfl
-      · exact h
-      exact ha.of_eq rfl rfl
+    · exact ha.of_eq (by simp [Processing.report, report_eq]) (by simp [Processing.report, report_eq])
+    · split
+      · simp only [id_pure]
+        refine Absent.setMachine _ _ (fun _ => ?_) (fun _ _ h => ?_) ?_
+        · rfl
+        · exact h
+        refine Absent.setMachine _ _ (fun _ => ?_) (fun _ _ h => ?_) ?_
+        · rfl
+        · exact h
+        exact ha.of_eq rfl rfl
+      · simp only [id_pure]
+        refine Absent.setMachine _ _ (fun _ => ?_) (fun _ _ h => ?_) ?_
+        · rfl
+        · exact h
+        exact ha.of_eq rfl rfl
 
 theorem keepsAbsent_endWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, KeepsAbsent (exit c n))
     (c : String) : KeepsAbsent (endWith exit c) := by

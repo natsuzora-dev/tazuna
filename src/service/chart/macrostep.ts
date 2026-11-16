@@ -26,6 +26,7 @@ import {
   nextKeys,
   type Pending,
   type Requester,
+  repeatedKeyCall,
   report,
   sender,
   senderOf,
@@ -222,6 +223,9 @@ function workBody(r: Processing, work: Work, step: number): void {
         nextKeys(r.state),
       );
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
+      const repeated = repeatedKeyCall(r.state, reacted.created);
+      if (repeated !== undefined)
+        halt({ kind: "Fault.repeatedKeyLabel", definition, data: { entity: repeated.entity, label: repeated.label } });
       createKeys(r.state, reacted.created);
       if (reacted.input === undefined) return;
       const activity = automation.sends;

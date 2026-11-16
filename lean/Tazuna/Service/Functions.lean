@@ -20,6 +20,15 @@ structure NextKeys where
 deriving DecidableEq, Repr, Inhabited
 
 /--
+A createKey call: the entity of the key, and the label that names the key among the keys of the entity that one
+message creates.
+-/
+structure KeyCall where
+  entity : String
+  label : String
+deriving DecidableEq, Repr, Inhabited
+
+/--
 The createKey values, each with its entity, that createKey gives to calls for the entities `created`, in call order,
 when `keys` holds what it returns next.
 -/
@@ -135,7 +144,7 @@ at load) always answer.
 - resolve: a query's output.
 - react: the input of the command that an automation sends for an event, or none when a binds value is null or the
   guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
-  react also returns the entities that it called createKey for, in call order.
+  react also returns its createKey calls, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
 - initialContext: the initial context of a machine or screen started with the input (the input that `input` checked for
@@ -151,7 +160,7 @@ at load) always answer.
 - close: the output of a screen that closes in a final state (the resolve value, schema-checked and encoded) and the
   first failing ensures.
 - assign: the context after the assign, unchanged where there is none. For a copy, copy context fields go to the copy
-  and the rest to the owner, and assign returns both. `keys` and the returned entities are as in react.
+  and the rest to the owner, and assign returns both. `keys` and the returned calls are as in react.
 - input: the schema-checked, encoded input of the request that a state sends, or of the screen that it opens, on entry.
   A sends input may call createKey; `keys` is as in react.
 - holds: the check of a state's holds values against their held schemas.
@@ -173,13 +182,13 @@ structure Functions (m : Type → Type) where
   chartInvariant : Scope → Records → m (Except Issue (Option String))
   resolve : String → Value → Records → Time → m (Except Issue Value)
   react : String → Value → Records → Time → List (String × NextKeys) →
-    m (Except Issue (Option Value × List String))
+    m (Except Issue (Option Value × List KeyCall))
   comparable : String → Answer → m (Except Issue Value)
   initialContext : String → Value → m (Except Issue Value)
   guard : Scope → Records → Transition → Extra → m (Except Issue Bool)
   assign : Scope → Records → Assignment → Extra → List (String × NextKeys) →
-    m (Except Issue (Value × Option Value × List String))
-  input : Scope → Records → Activity → List (String × NextKeys) → m (Except Issue (Value × List String))
+    m (Except Issue (Value × Option Value × List KeyCall))
+  input : Scope → Records → Activity → List (String × NextKeys) → m (Except Issue (Value × List KeyCall))
   holds : Scope → Records → m (Except Issue Unit)
   deadlines : String → String → m (List (String × DeadlineTime))
   deadlineAt : Scope → Records → String → m (Except Issue Time)

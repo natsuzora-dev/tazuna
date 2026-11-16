@@ -181,6 +181,8 @@ structure State where
   created : List (String × String) := []
   /-- The names of the current input's `keys` that createKey has not returned yet, by entity. -/
   keyNames : List (String × List String) := []
+  /-- The createKey calls of the current message, in call order. -/
+  keyCalls : List KeyCall := []
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []
   results : List Accepted := []
@@ -221,11 +223,17 @@ def State.nextKeys (s : State) : List (String × NextKeys) :=
   (s.created.map (·.1) ++ s.keyNames.map (·.1)).eraseDups.map fun e =>
     (e, { count := s.keyCount e, names := (s.keyNames.lookup e).getD [] })
 
-def State.createKeys (s : State) (entities : List String) : State :=
-  { s with created := s.created ++ givenKeys s.nextKeys entities,
-           keyNames := s.keyNames.map fun (e, names) => (e, names.drop (entities.count e)) }
+/-- The first of `calls` whose entity and label an earlier call of the current message or of `calls` has. -/
+def State.repeatedKeyCall? (s : State) (calls : List KeyCall) : Option KeyCall :=
+  (calls.zipIdx.find? fun (c, i) => c ∈ s.keyCalls || c ∈ calls.take i).map (·.1)
 
-def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
+def State.createKeys (s : State) (calls : List KeyCall) : State :=
+  let entities := calls.map (·.entity)
+  { s with created := s.created ++ givenKeys s.nextKeys entities,
+           keyNames := s.keyNames.map fun (e, names) => (e, names.drop (entities.count e)),
+           keyCalls := s.keyCalls ++ calls }
+
+def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1, keyCalls := [] }
 
 def State.newStep (s : State) (cause : Option Nat) (barrier := false) (nested := false) : State × Nat :=
   let message := match cause.bind (s.steps[·]?) with
