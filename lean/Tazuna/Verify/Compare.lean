@@ -315,6 +315,8 @@ structure Ctx where
   requests : List (String × Line)
   /-- The lines that must precede snapshot line `n`, counted from 0. -/
   follows : Nat → List Nat
+  /-- The snapshot lines, by number, whose pairing can depend on where the implementation line stands (placedLines). -/
+  placed : List Nat
   /-- Whether a line is an event that no contract lists, which verify does not compare. -/
   internal : Line → Bool
 
@@ -423,14 +425,23 @@ def candidates (sc : Scope) (p : Pairing) (s : Out) : List Out :=
       (match s.line.body with | .answer .. => true | _ => t.line.body.name? == s.line.body.name?)
 
 /--
-The ways to meet goal `g`, each with the goals left. Candidates with the same JSON give the same result in the same
-pairing, so only the first of them is tried.
+What pairing an implementation line with snapshot line `s` depends on: the request that it answers or results from, its
+compared value, and its number when `s` is placed.
+-/
+def pairingKey (sc : Scope) (s t : Out) : Value :=
+  let id (v : Option String) : Value := (v.map .str).getD .null
+  .arr [id t.line.body.to?, id t.line.body.resultOf?, jsonOrNull (sc.ctx.compared s.line t.line).2,
+    if sc.ctx.placed.contains s.index then .str (toString t.index) else .null]
+
+/--
+The ways to meet goal `g`, each with the goals left. Candidates with the same pairingKey give the same result in the
+same pairing, so only the first of them is tried.
 -/
 def expand (sc : Scope) (g : Goal) (rest : List Goal) (p : Pairing) : List (List Goal × Pairing) :=
   match g with
   | .out s =>
-    (distinct (fun t => .arr [(t.line.body.to?.map .str).getD .null, jsonOrNull (sc.ctx.compared s.line t.line).2])
-      (candidates sc p s)).filterMap fun t => (pairOut sc p s t).map fun (p, goals) => (goals ++ rest, p)
+    (distinct (pairingKey sc s) (candidates sc p s)).filterMap fun t =>
+      (pairOut sc p s t).map fun (p, goals) => (goals ++ rest, p)
   | .subscription id =>
     let open_ := sc.openTrace.filter fun (tid, t) =>
       !p.subscriptions.any (·.2 == tid) && ((sc.openSnapshot.lookup id).map (·.name == t.name)).getD false
@@ -791,6 +802,19 @@ def mustFollow (snapshot : List (Option Line)) (n : Nat) : List Nat :=
       if o.index - 1 == n then some ((o.line.after.getD []).filterMap (earlierWithId (w.before.take k)))
       else none).head?).getD []
 
+/--
+The snapshot lines, by number, whose pairing can depend on where the implementation line stands: those of a window that
+share their type and name with a line that an `after` of the window names or orders.
+-/
+def placedLines (snapshot : List (Option Line)) : List Nat :=
+  (steps snapshot).flatMap fun w =>
+    let follows := w.before.zipIdx.map fun (o, k) =>
+      (o.index, (o.line.after.getD []).filterMap fun id => (earlierWithId (w.before.take k) id).map (· + 1))
+    let ordered := w.before.filter fun o =>
+      follows.any fun (n, earlier) => (n == o.index && !earlier.isEmpty) || earlier.contains o.index
+    (w.before.filter fun o => ordered.any fun m =>
+      m.line.body.type == o.line.body.type && m.line.body.name? == o.line.body.name?).map (·.index)
+
 /-- The line that orders a finding in a report: its `line`, or for `renaming` the last line of its uses. -/
 def Finding.line : Finding → Nat
   | .mismatch (.renaming uses) => uses.foldl (fun n u => max n u.line) 0
@@ -821,6 +845,7 @@ def compare (snapshot lines : List (Option Line)) (malformed : Option Nat) (inte
   let ctx : Ctx := {
     requests := (snapshot.filterMap fun l => l.map fun l => (l.body.id, l)).reverse,
     follows := mustFollow snapshot,
+    placed := placedLines snapshot,
     internal }
   compareFrom ctx lines.length malformed windows {}
 

@@ -9,6 +9,7 @@ import {
   type NumberedLine,
   nameOf,
   resultOf,
+  type Steps,
   sameTime,
   steps,
   subjectOf,
@@ -382,6 +383,22 @@ const rank = (l: TraceLine): number =>
 const byRank = (ss: readonly NumberedLine[]): NumberedLine[] =>
   [0, 1, 2].flatMap((r) => ss.filter((s) => rank(s.line) === r));
 
+/**
+ * Returns the snapshot lines, by number, whose pairing can depend on where the implementation line stands: those of a
+ * window that share their type and name with a line that an after of the window names or orders.
+ */
+function placedLines(windows: Steps, follows: ReadonlyMap<number, ReadonlySet<number>>): ReadonlySet<number> {
+  const placed = new Set<number>();
+  for (const { before } of windows) {
+    const ordered = before.filter(
+      (o) => (follows.get(o.at)?.size ?? 0) > 0 || before.some((e) => follows.get(e.at)?.has(o.at) === true),
+    );
+    for (const o of before)
+      if (ordered.some((m) => m.line.type === o.line.type && nameOf(m.line) === nameOf(o.line))) placed.add(o.at);
+  }
+  return placed;
+}
+
 /** The violations of a comparison, and the bindings that it ends with. */
 export interface Compared {
   readonly found: Found[];
@@ -414,6 +431,7 @@ export function compare(
   const reportedUnexpected = new Set<string>();
   const bindings = () => new Map(keys.map((u) => [u.snapshot, u.trace]));
   const { follows } = resolveAfters(snapshot);
+  const placed = placedLines(expected, follows);
 
   const answersQuery = (to: string) => {
     const request = requestsById.get(to);
@@ -485,8 +503,20 @@ export function compare(
     );
 
   /**
-   * Returns the ways to meet goal `g`, each with the goals left. Candidates with the same JSON give the same result in
-   * the same pairing, so only the first of them is tried.
+   * Returns what pairing an implementation line with snapshot line `s` depends on: the request that it answers or
+   * results from, its compared value, and its number when `s` is placed.
+   */
+  const pairingKey = (s: NumberedLine, t: NumberedLine): string =>
+    json([
+      toOf(t.line) ?? null,
+      resultOf(t.line) ?? null,
+      compared(s.line, t.line)[1] ?? null,
+      placed.has(s.at) ? String(t.at) : null,
+    ]);
+
+  /**
+   * Returns the ways to meet goal `g`, each with the goals left. Candidates with the same pairingKey give the same
+   * result in the same pairing, so only the first of them is tried.
    */
   const expand = (sc: Scope, g: Goal, rest: readonly Goal[], p: Pairing): Frame[] => {
     const frames: Frame[] = [];
@@ -494,11 +524,7 @@ export function compare(
       if (found !== undefined) frames.push([[...found[1], ...after, ...rest], found[0]]);
     };
     if (g.kind === "out")
-      for (const t of distinct(
-        (t) => json([toOf(t.line) ?? null, compared(g.s.line, t.line)[1] ?? null]),
-        candidates(sc, p, g.s),
-      ))
-        add(pairOut(sc, p, g.s, t));
+      for (const t of distinct((t) => pairingKey(g.s, t), candidates(sc, p, g.s))) add(pairOut(sc, p, g.s, t));
     else if (g.kind === "subscription") {
       const name = sc.openSnapshot.get(g.id)?.line.name;
       const open = sc.openTrace

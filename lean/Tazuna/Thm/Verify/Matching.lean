@@ -44,6 +44,7 @@ def ContentMatches (rename : String → Option String) : Option CValue → Optio
 def context (snapshot : List (Option Line)) (internal : Line → Bool) : Ctx :=
   { requests := (snapshot.filterMap fun l => l.map fun l => (l.body.id, l)).reverse,
     follows := mustFollow snapshot,
+    placed := placedLines snapshot,
     internal }
 
 /-- The `out` lines of a window that verify pairs: neither subscribe nor unsubscribe lines, nor internal events. -/

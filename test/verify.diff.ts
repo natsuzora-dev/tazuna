@@ -347,6 +347,90 @@ describe("Content comparison", () => {
     assert.ok(violationCountOfBoth(base, trace, base.label) > 0);
   });
 
+  const caseOf = (folder: string, service: string, snapshot: readonly Line[]): Case => {
+    const spec = [...specs].find(([root]) => root.endsWith(folder))?.[1];
+    assert.ok(spec !== undefined, folder);
+    return { spec, service, snapshot: snapshot as unknown as TraceLine[] };
+  };
+  const at = "2026-10-25T00:00:00Z";
+  const addTask = (id: string, n: number): Line => ({
+    time: at,
+    dir: "in",
+    type: "command",
+    id,
+    name: "addTask",
+    input: { taskId: `task-${n}`, title: "Buy milk" },
+  });
+  const countChanged = (id: string, more: Line = {}): Line => ({
+    time: at,
+    dir: "out",
+    type: "event",
+    id,
+    name: "taskCountChanged",
+    payload: { count: 1 },
+    ...more,
+  });
+  const nextDay = (id: string): Line => ({
+    time: at,
+    dir: "out",
+    type: "query",
+    id,
+    name: "calendar.nextDay",
+    input: { from: at },
+  });
+
+  test("TS and Lean find no violation when equal out lines pair one way only, by the snapshot's after or their resultOf", () => {
+    const after = caseOf("compare/order", "todo", [
+      addTask("addTask#1", 1),
+      nextDay("calendar.nextDay#1"),
+      countChanged("taskCountChanged#1", { after: ["calendar.nextDay#1"] }),
+      countChanged("taskCountChanged#2"),
+    ]);
+    assert.equal(
+      violationCountOfBoth(after, [addTask("a", 1), countChanged("e1"), nextDay("r1"), countChanged("e2")], "after"),
+      0,
+    );
+    const named = caseOf("compare/order", "todo", [
+      addTask("addTask#1", 1),
+      countChanged("taskCountChanged#1"),
+      countChanged("taskCountChanged#2"),
+      nextDay("calendar.nextDay#1"),
+    ]);
+    const nameAfter = {
+      ...named,
+      snapshot: named.snapshot.map((l) =>
+        l?.id === "calendar.nextDay#1" ? ({ ...l, after: ["taskCountChanged#2"] } as TraceLine) : l,
+      ),
+    };
+    assert.equal(
+      violationCountOfBoth(
+        nameAfter,
+        [addTask("a", 1), countChanged("e1"), nextDay("r1"), countChanged("e2")],
+        "named by an after",
+      ),
+      0,
+    );
+    const resultOf = caseOf("compare/order", "todo", [
+      addTask("addTask#1", 1),
+      addTask("addTask#2", 2),
+      countChanged("taskCountChanged#1", { resultOf: "addTask#2" }),
+      countChanged("taskCountChanged#2", { resultOf: "addTask#1" }),
+    ]);
+    assert.equal(
+      violationCountOfBoth(
+        resultOf,
+        [
+          addTask("a", 1),
+          addTask("b", 2),
+          countChanged("e1", { resultOf: "a" }),
+          countChanged("e2", { resultOf: "b" }),
+        ],
+        "resultOf",
+      ),
+      0,
+    );
+  });
+
   test("TS and Lean find the same comparison violations for traces with a mutated resultOf on an in event line", () => {
     fc.assert(
       fc.property(
