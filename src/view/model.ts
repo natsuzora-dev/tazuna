@@ -149,10 +149,16 @@ function entityView(spec: Spec, entity: AnyEntity, structure: EntityStructure): 
   };
 }
 
+/** The service that sent the message with id `id` in a simulation, which names it `<sender>/<id>` (Sim.receivedId). */
+function senderOf(id: string): string | undefined {
+  const parts = id.split("/");
+  return parts.length === 2 ? parts[0] : undefined;
+}
+
 /**
- * Returns the lifelines and messages of a trace. A scenario input comes from the scenario lifeline, a request goes to
- * the service that its name starts with, and an answer or a subscription end goes back between the request's two
- * lifelines.
+ * Returns the lifelines and messages of a trace. A message from another service of the simulation comes from its
+ * sender's lifeline and any other scenario input from the scenario lifeline, a request goes to the service that its
+ * name starts with, and an answer or a subscription end goes back between the request's two lifelines.
  */
 function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, "participants" | "entries"> {
   const participants = [service];
@@ -162,8 +168,11 @@ function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, 
     dir === "in" ? { from: other, to: service } : { from: service, to: other };
   const entries = trace.flatMap((l, line): FlowEntry[] => {
     if (l.type === "time") return [{ type: "time", line }];
-    if (l.dir === "in")
-      return [{ type: "message", line, ...between(l.type === "answer" ? targetOf(l.to) : null, "in") }];
+    if (l.dir === "in") {
+      const sender = l.type === "answer" ? (targetOf(l.to) ?? senderOf(l.id) ?? null) : (senderOf(l.id) ?? null);
+      if (sender !== null && !participants.includes(sender)) participants.push(sender);
+      return [{ type: "message", line, ...between(sender, "in") }];
+    }
     if (l.type === "event") return [{ type: "message", line, from: service, to: service }];
     if (l.type === "answer") return [{ type: "message", line, from: service, to: null }];
     if (l.type === "unsubscribe") return [{ type: "message", line, from: service, to: targetOf(l.to) }];

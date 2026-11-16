@@ -245,7 +245,7 @@ test("A scenario in viewModel has, for each snapshot line, the sender and receiv
     "3 in answer todo.reminderSettings#1: todo -> screens",
     "4 in operation taskListScreen.openTask: scenario -> screens",
     "5 out subscribe todo.taskDetail: screens -> todo",
-    "6 in event todo.taskDeleted: scenario -> screens",
+    "6 in event todo.taskDeleted: todo -> screens",
     "7 out unsubscribe todo.taskDetail#1: screens -> todo",
   ]);
   assert.deepEqual(flow("todo", "answersSubscriptions").slice(-3), [
