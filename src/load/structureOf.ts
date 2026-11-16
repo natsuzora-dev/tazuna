@@ -43,7 +43,7 @@ export interface ThrownDefault {
 }
 
 /**
- * Computes state trees and definition refs, which every other part reads from this JSON, and resultOf positions. A
+ * Computes state trees and definition refs, which every other part reads from this JSON, and named input positions. A
  * schema whose conversion throws is {} in the structure; check stops at the Malformed.defaultSchema that the throw
  * becomes, before anything reads it.
  */
@@ -159,8 +159,12 @@ export function structureOf(
                 : definition.inputs.flatMap((other, i) => (other === input.resultOf ? [i] : [])),
             strings: stringsOfInput(input),
           };
-        if (input.type === "at" || input.type === "unsubscribe" || input.type === "restart")
-          return { type: input.type };
+        if (input.type === "unsubscribe")
+          return {
+            type: "unsubscribe",
+            subscription: definition.inputs.flatMap((other, i) => (other === input.subscription ? [i] : [])),
+          };
+        if (input.type === "at" || input.type === "restart") return { type: input.type };
         return { type: input.type, strings: stringsOfInput(input) };
       }),
     })),

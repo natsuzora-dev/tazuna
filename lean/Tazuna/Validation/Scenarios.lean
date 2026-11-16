@@ -20,19 +20,19 @@ def unrequestedAnswers (s : Structure) : List Illegal :=
         else some (.unrequestedAnswer sc.ref (i + 1))
       | _ => none
 
-def resultsOfPlacedTwice (s : Structure) : List Illegal :=
+def namedInputsPlacedTwice (s : Structure) : List Illegal :=
   s.scenarios.flatMap fun sc =>
     sc.inputs.zipIdx.filterMap fun (input, i) =>
-      match input with
-      | .event (some positions) _ => if 1 < positions.length then some (.resultOfPlacedTwice sc.ref (i + 1)) else none
-      | _ => none
+      match input.named with
+      | some positions => if 1 < positions.length then some (.namedInputPlacedTwice sc.ref (i + 1)) else none
+      | none => none
 
-def resultsOfUnplaced (s : Structure) : List Illegal :=
+def namedInputsUnplaced (s : Structure) : List Illegal :=
   s.scenarios.flatMap fun sc =>
     sc.inputs.zipIdx.filterMap fun (input, i) =>
-      match input with
-      | .event (some positions) _ => if positions.any (· < i) then none else some (.resultOfUnplaced sc.ref (i + 1))
-      | _ => none
+      match input.named with
+      | some positions => if positions.any (· < i) then none else some (.namedInputUnplaced sc.ref (i + 1))
+      | none => none
 
 def scenariosOfExternalServices (s : Structure) : List Illegal :=
   s.scenarios.filterMap fun sc =>
@@ -52,7 +52,7 @@ def countedKeys (s : Structure) : List Illegal :=
         ((keyedEntities s).find? (isKeyOf ·.name v)).map (.countedKey sc.ref (i + 1) v ·)
 
 def check (s : Structure) : List Illegal :=
-  unrequestedAnswers s ++ resultsOfPlacedTwice s ++ resultsOfUnplaced s ++ scenariosOfExternalServices s ++
+  unrequestedAnswers s ++ namedInputsPlacedTwice s ++ namedInputsUnplaced s ++ scenariosOfExternalServices s ++
     countedKeys s
 
 end Tazuna.Validation.Scenarios

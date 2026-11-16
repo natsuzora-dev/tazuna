@@ -58,7 +58,7 @@ function peerBody(peer: string, lines: readonly TraceLine[], keys: Bindings, l: 
     }
     case "unsubscribe":
       return peerTarget(peer, lines, l.to) !== undefined && !unreached(lines, l.to)
-        ? { type: "unsubscribe", to: l.to }
+        ? { type: "unsubscribe", subscription: { to: l.to } }
         : undefined;
     default:
       return undefined;

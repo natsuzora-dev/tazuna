@@ -62,17 +62,20 @@ export type Illegal =
       readonly input: number;
       readonly data: Readonly<Record<string, never>>;
     }
-  /** The resultOf of the event input names an answer input that the scenario places more than once. */
+  /**
+   * The input names an input that the scenario places more than once: the mock of an event's resultOf, or the subscribe
+   * input of an unsubscribe.
+   */
   | {
-      readonly kind: "Illegal.resultOfPlacedTwice";
+      readonly kind: "Illegal.namedInputPlacedTwice";
       readonly definition: null;
       readonly scenario: DefinitionRef;
       readonly input: number;
       readonly data: Readonly<Record<string, never>>;
     }
-  /** The scenario places the resultOf answer of the event input only after the event, or not at all. */
+  /** The scenario places the input that the input names (ScenarioInput.named) only after it, or not at all. */
   | {
-      readonly kind: "Illegal.resultOfUnplaced";
+      readonly kind: "Illegal.namedInputUnplaced";
       readonly definition: null;
       readonly scenario: DefinitionRef;
       readonly input: number;
@@ -108,8 +111,8 @@ export const illegalKinds = [
   "Illegal.foreignEvent",
   "Illegal.foreignMember",
   "Illegal.unrequestedAnswer",
-  "Illegal.resultOfPlacedTwice",
-  "Illegal.resultOfUnplaced",
+  "Illegal.namedInputPlacedTwice",
+  "Illegal.namedInputUnplaced",
   "Illegal.scenarioOfExternalService",
   "Illegal.countedKey",
 ] as const;

@@ -51,6 +51,18 @@ const choice = z.union([
   }),
 ]);
 
+/** The subscription that an unsubscribe input ends. */
+const ended = z.union([
+  /** The subscription whose subscribe line has id `to`, which only test's search and a peer's derived inputs write. */
+  z.object({
+    to: z.string(),
+  }),
+  /** The subscription that the subscribe input with handle `handle` opened. */
+  z.object({
+    handle: z.string(),
+  }),
+]);
+
 const step = z.discriminatedUnion("type", [
   /** An input that only advances the time and writes its line. */
   z.object({
@@ -124,12 +136,14 @@ const step = z.discriminatedUnion("type", [
      */
     keys: z.record(z.string(), z.array(z.string())).exactOptional(),
   }),
+  /** A subscribe input. `handle` is the name by which a later unsubscribe input names the subscription. */
   z.object({
     time: z.iso.datetime({ offset: true }),
     type: z.literal("subscribe"),
     id: z.string().exactOptional(),
     name: z.string(),
     input: z.unknown(),
+    handle: z.string().exactOptional(),
     deadlineOrder: z.array(deadlineId).exactOptional(),
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
@@ -146,7 +160,7 @@ const step = z.discriminatedUnion("type", [
   z.object({
     time: z.iso.datetime({ offset: true }),
     type: z.literal("unsubscribe"),
-    to: z.string(),
+    subscription: ended,
     deadlineOrder: z.array(deadlineId).exactOptional(),
     /**
      * The steps that the internal queue takes first during the input, which only test's search writes: while entries
@@ -248,8 +262,8 @@ const step = z.discriminatedUnion("type", [
 
 /**
  * An input of a run in JSON: the fields of its `in` line, with trace names in place of definitions and `id` only when
- * given, except that an answer has `choice` instead of `to` and may have a `handle`, and an event's `resultOf` is the
- * handle of the answer input instead of a request id. It arrives at `time`, after the deadlines due by then;
+ * given, except that an answer has `choice` instead of `to`, an unsubscribe has `subscription` instead of `to`, an answer
+ * or a subscribe may have a `handle`, and an event's `resultOf` is the handle of the answer input instead of a request id. It arrives at `time`, after the deadlines due by then;
  * `deadlineOrder` is the `deadlineOrder` of its `in` line.
  */
 export type Step = z.infer<typeof step>;

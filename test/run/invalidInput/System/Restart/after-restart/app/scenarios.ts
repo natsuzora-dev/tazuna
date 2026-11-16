@@ -12,7 +12,9 @@ export const answerAfterRestart = scenario(
   ],
 );
 
+const watching = subscribe(status, {});
+
 export const unsubscribeAfterRestart = scenario(
-  "Subscribe to status with the id s1, restart, and end s1; the restart drops the subscription, so test reports unopenedSubscription",
-  [at("2026-10-25T10:00:00+09:00"), subscribe(status, {}, { id: "s1" }), restart(), unsubscribe("s1")],
+  "Subscribe to status, restart, and end the subscription; the restart drops the subscription, so test reports unopenedSubscription",
+  [at("2026-10-25T10:00:00+09:00"), watching, restart(), unsubscribe(watching)],
 );

@@ -45,10 +45,10 @@ function arrive(r: Processing, input: Step): Pending | undefined {
     case "answer":
       return mock(r, input);
     case "subscribe":
-      subscribe(r, input.name, input.input, given(input));
+      subscribe(r, input.name, input.input, given(input), input.handle);
       return;
     case "unsubscribe":
-      endSubscription(r, input.to);
+      endSubscription(r, input.subscription);
       return;
   }
 }

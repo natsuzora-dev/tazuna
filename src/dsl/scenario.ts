@@ -9,10 +9,11 @@ export type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in key
 
 /**
  * The fields of an input that its `in` line shows, under the line's type, with definitions in place of trace names and
- * without the fields the run derives: the generated `id`, and the `to` of an answer, which `choice` decides. `A` is the
- * answer input, which an event's `resultOf` also names.
+ * without the fields the run derives: the generated `id`, the `to` of an answer, which `choice` decides, and the `to` of
+ * an unsubscribe, which `subscription` decides. `A` is the answer input, which an event's `resultOf` also names, and `U`
+ * the unsubscribe input.
  */
-type LineFields<A> =
+type LineFields<A, U> =
   | ({
       readonly type: "command";
       readonly command: AnyCommand;
@@ -20,13 +21,8 @@ type LineFields<A> =
       readonly id?: string;
     } & CreatesKeys)
   | ({ readonly type: "query"; readonly query: AnyQuery; readonly input: unknown; readonly id?: string } & CreatesKeys)
-  | ({
-      readonly type: "subscribe";
-      readonly query: AnyQuery;
-      readonly input: unknown;
-      readonly id?: string;
-    } & CreatesKeys)
-  | { readonly type: "unsubscribe"; readonly to: string }
+  | SubscribeLine
+  | U
   | { readonly type: "restart" }
   | ({
       readonly type: "event";
@@ -48,6 +44,18 @@ type LineFields<A> =
       readonly payload: unknown;
     }
   | A;
+
+/**
+ * A subscribe input. `handle`, which only timed() sets, is the name by which a later unsubscribe names the subscription
+ * (Lean's Step.Body.subscribe).
+ */
+type SubscribeLine = {
+  readonly type: "subscribe";
+  readonly query: AnyQuery;
+  readonly input: unknown;
+  readonly id?: string;
+  readonly handle?: string;
+} & CreatesKeys;
 
 /**
  * The createKey values that the input's processing creates, by entity name, in creation order within the input: createKey
@@ -85,7 +93,15 @@ interface Scheduled {
 }
 
 /** An input to the run: it arrives at `time`, after the deadlines due by then. */
-export type Input = (LineFields<AnswerInput> | { readonly type: "time" }) & Timed & Scheduled;
+export type Input = (LineFields<AnswerInput, UnsubscribeInput> | { readonly type: "time" }) & Timed & Scheduled;
+
+/**
+ * An unsubscribe input: `subscription` is the subscribe input that opened the subscription, or `to`, which only test's
+ * search sets, its id.
+ */
+type UnsubscribeInput =
+  | { readonly type: "unsubscribe"; readonly subscription: SubscribeLine & Timed }
+  | { readonly type: "unsubscribe"; readonly to: string };
 
 /** `handle` is the name by which a later event's `resultOf` names the answer (Lean's Step.Body.answer). */
 type AnswerInput = AnswerFields<MockChoice | SearchChoice> & Timed & { readonly handle?: string };
@@ -97,7 +113,9 @@ type AnswerInput = AnswerFields<MockChoice | SearchChoice> & Timed & { readonly 
 type SearchChoice = { readonly to: string; readonly input?: never; readonly stale?: never };
 
 /** An input as a scenario writes it, before timed() gives it the time of the `at` before it. */
-type UntimedInput = LineFields<UntimedAnswer>;
+type UntimedInput = LineFields<UntimedAnswer, UntimedUnsubscribe>;
+
+type UntimedUnsubscribe = { readonly type: "unsubscribe"; readonly subscription: SubscribeLine };
 
 type UntimedAnswer = AnswerFields<MockChoice>;
 
@@ -150,29 +168,38 @@ export function scenario(description: string, inputs: ScenarioInputs, options: S
 
 type Entry = { readonly input: UntimedInput | { readonly type: "time" }; readonly time: string };
 
+/** The input that `input` names: the mock of an event's `resultOf`, or the subscribe input that an unsubscribe ends. */
+function namedBy(input: Entry["input"]): UntimedInput | undefined {
+  if (input.type === "event") return input.resultOf;
+  return input.type === "unsubscribe" ? input.subscription : undefined;
+}
+
 /**
- * Returns the entries with times; an event's `resultOf` names the answer input of the mock's first placement, which
- * has the handle `mock#n` for the `n`-th mock that a `resultOf` names.
+ * Returns the entries with times. An event's `resultOf` names the answer input of the mock's first placement, which has
+ * the handle `mock#n` for the `n`-th mock that a `resultOf` names; an unsubscribe names the subscribe input's first
+ * placement, which has the handle `subscription#n` for the `n`-th subscribe input that an unsubscribe names.
  */
 function timedEntries(entries: readonly Entry[]): Input[] {
   const timedOf = ({ input, time }: Entry) => ({ ...input, time }) as Input;
-  const named = new Set(
-    entries.flatMap(({ input }) => (input.type === "event" && input.resultOf ? [input.resultOf] : [])),
-  );
-  const handles = new Map([...named].map((mock, n) => [mock, `mock#${n + 1}`]));
-  const first = new Map<UntimedInput, AnswerInput>();
-  const answers = entries.map(({ input, time }) => {
-    if (input.type !== "answer") return undefined;
-    const handle = first.has(input) ? undefined : handles.get(input);
-    const answer = { ...input, time, ...(handle === undefined ? {} : { handle }) } as AnswerInput;
-    if (!first.has(input)) first.set(input, answer);
-    return answer;
+  const named = [...new Set(entries.flatMap(({ input }) => namedBy(input) ?? []))];
+  const numbered = (type: string, prefix: string) =>
+    named.filter((n) => n.type === type).map((n, i) => [n, `${prefix}#${i + 1}`] as const);
+  const handles = new Map([...numbered("answer", "mock"), ...numbered("subscribe", "subscription")]);
+  const first = new Map<UntimedInput, Input>();
+  const placed = entries.map((e): Input => {
+    const { input } = e;
+    if (input.type === "time" || first.has(input)) return timedOf(e);
+    const handle = handles.get(input);
+    const timed = { ...timedOf(e), ...(handle === undefined ? {} : { handle }) } as Input;
+    first.set(input, timed);
+    return timed;
   });
   return entries.map((e, i): Input => {
     const { input, time } = e;
-    if (input.type !== "event" || input.resultOf === undefined) return answers[i] ?? timedOf(e);
-    const resultOf = first.get(input.resultOf) ?? (timedOf({ input: input.resultOf, time }) as AnswerInput);
-    return { ...timedOf(e), resultOf } as Input;
+    const target = namedBy(input);
+    if (target === undefined) return placed[i] as Input;
+    const found = first.get(target) ?? timedOf({ input: target, time });
+    return { ...timedOf(e), [input.type === "event" ? "resultOf" : "subscription"]: found } as Input;
   });
 }
 
@@ -302,18 +329,18 @@ type SomeFields<T> = T extends readonly unknown[]
 
 type Sender = { readonly kind: "screen" | "machine" | "automation" };
 
-/** Subscribes another service to a query of the service. */
+/** Subscribes another service to a query of the service; unsubscribe takes the returned input to end it. */
 export function subscribe<I extends Shape, const Id extends string>(
   query: Query<I>,
   input: Encoded<I>,
   options?: Options<Id>,
-): UntimedInput {
+): SubscribeLine {
   return { type: "subscribe", query, input, ...options };
 }
 
-/** Ends the subscription `id` from another service. */
-export function unsubscribe(id: string): UntimedInput {
-  return { type: "unsubscribe", to: id };
+/** Ends, from another service, the subscription that the subscribe input `subscription` opened. */
+export function unsubscribe(subscription: SubscribeLine): UntimedInput {
+  return { type: "unsubscribe", subscription };
 }
 
 /**

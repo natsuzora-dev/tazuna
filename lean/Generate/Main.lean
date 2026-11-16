@@ -317,7 +317,7 @@ def files : List (String × String) :=
       Tazuna.Syntax.Definition Tazuna.Syntax.Contract Tazuna.Syntax.ServiceInfo Tazuna.Syntax.ScenarioInput Tazuna.Syntax.Scenario),
    ("data/step.generated.ts",
     zodType% Tazuna.Semantics.Step Tazuna.Data.Rejection Tazuna.Data.Answer Tazuna.Data.DeadlineId
-      Tazuna.Semantics.Choice)]
+      Tazuna.Semantics.Choice Tazuna.Semantics.Ended)]
 
 /--
 The entry point. Without `--write`, it exits 1 when a file differs from the Lean definitions or is missing, and writes

@@ -248,9 +248,9 @@ test("A scenario in viewModel has, for each snapshot line, the sender and receiv
     "6 out unsubscribe todo.taskDetail#1: screens -> todo",
   ]);
   assert.deepEqual(flow("todo", "answersSubscriptions").slice(-3), [
-    "16 out answer s2: todo -> scenario",
-    "17 in unsubscribe s1: scenario -> todo",
-    "18 in unsubscribe s2: scenario -> todo",
+    "16 out answer taskDetail#1: todo -> scenario",
+    "17 in unsubscribe tasks#1: scenario -> todo",
+    "18 in unsubscribe taskDetail#1: scenario -> todo",
   ]);
   assert.ok(flow("todo", "remindAtRemindAt").includes("7 in time "));
 });

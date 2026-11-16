@@ -39,43 +39,43 @@ theorem answers_requested (s : Structure) :
       have : s.definitions.any (fun d => d.ref == sender && requests d target) = true :=
         List.any_eq_true.mpr ⟨d, hd, by simp [hr, (requests_iff d target).mpr hreq]⟩
       simp [this]
-    | .answer none _ _, _ | .answer (some _) none _, _ | .at, _ | .command _, _ | .query _, _ | .subscribe _, _ | .unsubscribe, _
+    | .answer none _ _, _ | .answer (some _) none _, _ | .at, _ | .command _, _ | .query _, _ | .subscribe _, _ | .unsubscribe _, _
     | .restart, _ | .event _ _, _ | .operation _, _ | .unacceptedOperation _, _ | .elsewhere _, _ => rfl
 
-theorem results_placed_at_most_once (s : Structure) :
-    resultsOfPlacedTwice s = [] ↔
-      ∀ sc ∈ s.scenarios, ∀ positions strings, ScenarioInput.event (some positions) strings ∈ sc.inputs → positions.length ≤ 1 := by
-  simp only [resultsOfPlacedTwice, List.flatMap_eq_nil_iff]
+theorem named_inputs_placed_at_most_once (s : Structure) :
+    namedInputsPlacedTwice s = [] ↔
+      ∀ sc ∈ s.scenarios, ∀ input ∈ sc.inputs, ∀ positions, input.named = some positions → positions.length ≤ 1 := by
+  simp only [namedInputsPlacedTwice, List.flatMap_eq_nil_iff]
   constructor
-  · intro h sc hsc positions strings hin
+  · intro h sc hsc input hin positions hp
     obtain ⟨i, hi⟩ := mem_zipIdx_of_mem hin
     have := List.filterMap_eq_nil_iff.mp (h sc hsc) _ hi
+    simp only [hp] at this
     simpa using this
   · intro h sc hsc
     refine List.filterMap_eq_nil_iff.mpr fun ⟨input, i⟩ hi => ?_
     have hin := List.fst_mem_of_mem_zipIdx hi
-    match input, hin with
-    | .event (some positions) strings, hin => simpa using h sc hsc positions strings hin
-    | .event none _, _ | .at, _ | .command _, _ | .query _, _ | .subscribe _, _ | .unsubscribe, _ | .restart, _
-    | .operation _, _ | .unacceptedOperation _, _ | .answer _ _ _, _ | .elsewhere _, _ => rfl
+    cases hp : input.named with
+    | none => simp
+    | some positions => simpa [hp] using h sc hsc input hin positions hp
 
-theorem results_placed_before (s : Structure) :
-    resultsOfUnplaced s = [] ↔
-      ∀ sc ∈ s.scenarios, ∀ i positions strings, sc.inputs[i]? = some (ScenarioInput.event (some positions) strings) →
+theorem named_inputs_placed_before (s : Structure) :
+    namedInputsUnplaced s = [] ↔
+      ∀ sc ∈ s.scenarios, ∀ i (input : ScenarioInput) positions, sc.inputs[i]? = some input → input.named = some positions →
         ∃ p ∈ positions, p < i := by
-  simp only [resultsOfUnplaced, List.flatMap_eq_nil_iff]
+  simp only [namedInputsUnplaced, List.flatMap_eq_nil_iff]
   constructor
-  · intro h sc hsc i positions strings hi
-    have hz : (ScenarioInput.event (some positions) strings, i) ∈ sc.inputs.zipIdx := List.mem_zipIdx_iff_getElem?.mpr hi
+  · intro h sc hsc i input positions hi hp
+    have hz : (input, i) ∈ sc.inputs.zipIdx := List.mem_zipIdx_iff_getElem?.mpr hi
     have := List.filterMap_eq_nil_iff.mp (h sc hsc) _ hz
+    simp only [hp] at this
     simpa using this
   · intro h sc hsc
     refine List.filterMap_eq_nil_iff.mpr fun ⟨input, i⟩ hz => ?_
     have hi : sc.inputs[i]? = some input := List.mem_zipIdx_iff_getElem?.mp hz
-    match input, hi with
-    | .event (some positions) strings, hi => simpa using h sc hsc i positions strings hi
-    | .event none _, _ | .at, _ | .command _, _ | .query _, _ | .subscribe _, _ | .unsubscribe, _ | .restart, _
-    | .operation _, _ | .unacceptedOperation _, _ | .answer _ _ _, _ | .elsewhere _, _ => rfl
+    cases hp : input.named with
+    | none => simp
+    | some positions => simpa [hp] using h sc hsc i input positions hi hp
 
 theorem scenarios_of_internal_services (s : Structure) :
     scenariosOfExternalServices s = [] ↔

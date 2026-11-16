@@ -25,10 +25,13 @@ inductive Illegal where
   | foreignMember (contract key : String)
   /-- The sender of the answer input does not request its target. -/
   | unrequestedAnswer (scenario : Syntax.Ref) (input : Nat)
-  /-- The resultOf of the event input names an answer input that the scenario places more than once. -/
-  | resultOfPlacedTwice (scenario : Syntax.Ref) (input : Nat)
-  /-- The scenario places the resultOf answer of the event input only after the event, or not at all. -/
-  | resultOfUnplaced (scenario : Syntax.Ref) (input : Nat)
+  /--
+  The input names an input that the scenario places more than once: the mock of an event's resultOf, or the subscribe
+  input of an unsubscribe.
+  -/
+  | namedInputPlacedTwice (scenario : Syntax.Ref) (input : Nat)
+  /-- The scenario places the input that the input names (ScenarioInput.named) only after it, or not at all. -/
+  | namedInputUnplaced (scenario : Syntax.Ref) (input : Nat)
   | scenarioOfExternalService (scenario : Syntax.Ref)
   /--
   The input has `value`, of the form of a createKey value of the keyed entity `entity` that counts the entity's keys. A

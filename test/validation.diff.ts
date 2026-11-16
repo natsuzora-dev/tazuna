@@ -184,7 +184,9 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
             target: pick([null, ...refsOf(s, ["command", "query"])], b) ?? null,
             strings: [],
           }
-        : { type: "event", resultOf: c % 2 === 0 ? null : [b % 5, c % 5], strings: [] },
+        : b % 4 === 1
+          ? { type: "event", resultOf: c % 2 === 0 ? null : [b % 5, c % 5], strings: [] }
+          : { type: "unsubscribe", subscription: Array.from({ length: c % 3 }, (_, k) => (b + k) % 5) },
     );
   },
   strings(s, [a, b, c]) {

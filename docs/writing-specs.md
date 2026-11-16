@@ -42,6 +42,8 @@ When a later line uses a key that an input's processing creates, name the key on
 `check` reports a value in the form of a counted key, such as `Task-2` (`Illegal.countedKey`), and `test` reports a name that createKey does not return during its input (`InvalidInput.unusedKeys`).
 A mock chooses the request that it answers by content: `mock(planner, [calendar.nextDay, answer, { input: { from: "2026-10-25T11:00:00+09:00" } }])` answers the waiting request whose input has that `from`, whatever its other fields.
 When the requests that a mock may answer have different inputs, `test` reports `InvalidInput.ambiguousMock` instead of choosing by the order of sending; of requests with equal inputs, which a trace cannot tell apart, the mock answers the longest-waiting.
+An event names the mock whose request it results from, as in `receive(taskAdded, payload, { resultOf: added })`, and an unsubscribe names the subscribe input that opened its subscription, as in `const watching = subscribe(tasks, {})` and later `unsubscribe(watching)`; `check` reports such a named input that the scenario places more than once or only after the line that names it (`Illegal.namedInputPlacedTwice`, `Illegal.namedInputUnplaced`).
+Give an input an `id` only where the id itself is the point, such as an event delivered again or a command sent again.
 
 Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.
 

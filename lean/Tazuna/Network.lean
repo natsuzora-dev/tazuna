@@ -108,8 +108,9 @@ def Writes (canon : String → Value → Value) (s : Step) (l : TraceLine) : Pro
   match s.body with
   | .command id name x => ∃ id', l.body = .command .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
   | .query id name x => ∃ id', l.body = .query .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
-  | .subscribe id name x => ∃ id', l.body = .subscribe .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
-  | .unsubscribe to => ∃ id', l.body = .unsubscribe .in id' to
+  | .subscribe id name x _ => ∃ id', l.body = .subscribe .in id' name (canon name x) ∧ ∀ i, id = some i → id' = i
+  | .unsubscribe (.id to) => ∃ id', l.body = .unsubscribe .in id' to
+  | .unsubscribe (.handle _) => False
   | .event id name x resultOf =>
     ∃ id' r, l.body = .event .in id' name (canon name x) r ∧ (∀ i, id = some i → id' = i) ∧
       (resultOf = none → r = none)

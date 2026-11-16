@@ -498,13 +498,17 @@ theorem call_agrees (s : State) (name : String) (id : Option String) (raw : Valu
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
   unfold call; agree [h.canonical, resolveChecked_agrees h, message_agrees h]
 
-theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
-    Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
+theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) (handle : Option String) :
+    Agrees (subscribe st fsI s name id raw handle) (subscribe st fs s name id raw handle) := by
   unfold subscribe; agree [h.canonical, message_agrees h]
 
-theorem endSubscription_agrees (s : State) (id : String) :
-    Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
-  unfold endSubscription; agree [message_agrees h]
+theorem endOpened_agrees (s : State) (id : String) :
+    Agrees (endOpened st fsI s id) (endOpened st fs s id) := by
+  unfold endOpened; agree [message_agrees h]
+
+theorem endSubscription_agrees (s : State) (subscription : Ended) :
+    Agrees (endSubscription st fsI s subscription) (endSubscription st fs s subscription) := by
+  unfold endSubscription; agree [endOpened_agrees h]
 
 theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload : Value) (request : Option Pending) :
     Agrees (deliver st fsI s name id payload request) (deliver st fs s name id payload request) := by
@@ -553,11 +557,16 @@ theorem answering_agrees (s : State) (sender name : String) (choice : Option Cho
     Agrees (s.answering st fsI sender name choice) (s.answering st fs sender name choice) := by
   unfold State.answering; agree [answerable_agrees h]
 
+theorem answerRequest_agrees (s : State) (p : Pending) (answer : Answer) :
+    Agrees (answerRequest st fsI s p answer) (answerRequest st fs s p answer) := by
+  unfold answerRequest
+  agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
+
 theorem mock_agrees (s : State) (sender name : String) (answer : Answer) (choice : Option Choice)
     (handle : Option String) :
     Agrees (mock st fsI s sender name answer choice handle) (mock st fs s sender name answer choice handle) := by
   unfold mock
-  agree [answering_agrees h, checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
+  agree [answering_agrees h, answerRequest_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by

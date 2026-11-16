@@ -86,20 +86,36 @@ export function call(r: Processing, name: string, input: unknown, given: { reado
   message(r);
 }
 
-export function subscribe(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
+export function subscribe(
+  r: Processing,
+  name: string,
+  input: unknown,
+  given: { readonly id?: string },
+  handle: string | undefined,
+): void {
   const s = r.state;
   if (!r.st.queries.includes(name)) unownedTarget(r, name);
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
   const id = writeInput(s, { dir: "in", type: "subscribe", ...given, name, input: canonicalInput });
+  if (handle !== undefined) s.subscribed.set(handle, id);
   if (!s.subscriptions.subscribe(id, { query: name, input }))
     report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
   newMessage(s);
   message(r);
 }
 
-export function endSubscription(r: Processing, id: string): void {
+/**
+ * Lean's endSubscription. A checked scenario names by handle only a subscribe input before it
+ * (Illegal.namedInputUnplaced), so the handle names a subscription that the input opened.
+ */
+export function endSubscription(r: Processing, subscription: Ended): void {
+  const id = "to" in subscription ? subscription.to : r.state.subscribed.get(subscription.handle);
+  if (id !== undefined) endOpened(r, id);
+}
+
+function endOpened(r: Processing, id: string): void {
   const s = r.state;
   writeInput(s, { dir: "in", type: "unsubscribe", to: id });
   if (!s.subscriptions.unsubscribe(id))
@@ -110,7 +126,7 @@ export function endSubscription(r: Processing, id: string): void {
 
 /**
  * Returns the request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input
- * before the event (Illegal.resultOfUnplaced), so that mock has been placed. Returns undefined when that mock reported
+ * before the event (Illegal.namedInputUnplaced), so that mock has been placed. Returns undefined when that mock reported
  * missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its
  * result (resultOfMismatch).
  */
@@ -221,6 +237,8 @@ export function receive(
 }
 
 type Mock = Extract<Step, { readonly type: "answer" }>;
+
+type Ended = Extract<Step, { readonly type: "unsubscribe" }>["subscription"];
 
 type Choice = NonNullable<Mock["choice"]>;
 

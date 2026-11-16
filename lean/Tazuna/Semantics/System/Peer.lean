@@ -54,9 +54,9 @@ def peerBody? (peer : String) (lines : List TraceLine) (keys : Bindings) (l : Tr
   match l.body with
   | .command .out id name input => (reached id name).map (.command (some id) · (keys.rename input))
   | .query .out id name input => (reached id name).map (.query (some id) · (keys.rename input))
-  | .subscribe .out id name input => (reached id name).map (.subscribe (some id) · (keys.rename input))
+  | .subscribe .out id name input => (reached id name).map (.subscribe (some id) · (keys.rename input) none)
   | .unsubscribe .out _ to =>
-    if (peerTarget? peer lines to).isSome && !unreached lines to then some (.unsubscribe to) else none
+    if (peerTarget? peer lines to).isSome && !unreached lines to then some (.unsubscribe (.id to)) else none
   | _ => none
 
 /--
@@ -79,7 +79,7 @@ def _root_.Tazuna.Data.Answer.mapOutput (f : Value → Value) : Answer → Answe
 def Step.Body.forPeer (keys : Bindings) : Step.Body → Step.Body
   | .command id name input => .command id name (keys.rename input)
   | .query id name input => .query id name (keys.rename input)
-  | .subscribe id name input => .subscribe id name (keys.rename input)
+  | .subscribe id name input handle => .subscribe id name (keys.rename input) handle
   | .event id name payload resultOf => .event id name (keys.rename payload) resultOf
   | .operation screen control payload => .operation screen control (keys.rename payload)
   | .unacceptedOperation screen control payload => .unacceptedOperation screen control (keys.rename payload)

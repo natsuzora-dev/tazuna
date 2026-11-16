@@ -44,24 +44,35 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
 
 /-- The state after a subscribe input. The first answer is sent when the message finishes. -/
 def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (raw : Value) : m State := do
+    (raw : Value) (handle : Option String) : m State := do
   if name ∈ st.queries then
     match ← fs.canonical (.input name) raw with
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref name) e)))
     | .ok input =>
     let (s, id) := s.writeInput givenId (.subscribe name input)
+    let s := { s with subscribed := (handle.map (·, id)).toList ++ s.subscribed }
     let s := if s.subscriptions.any (·.id == id) then
         s.report (.invalidInput (.reusedSubscriptionId id))
       else { s with subscriptions := s.subscriptions ++ [{ id, query := name, input := raw }] }
     message st fs s.newMessage {}
   else pure (s.report (.invalidInput (.unownedTarget (st.refOf name))))
 
-def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
+def endOpened [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
   let s := (s.writeInput none (.unsubscribe id)).1
   let s := if s.subscriptions.any (·.id == id) then { s with subscriptions := s.subscriptions.filter (·.id != id) }
     else s.report (.invalidInput (.unopenedSubscription id))
   message st fs s.newMessage {}
+
+/--
+The state after an unsubscribe input. A checked scenario names by handle only a subscribe input before it
+(Illegal.namedInputUnplaced), so the handle names a subscription that the input opened.
+-/
+def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : Ended → m State
+  | .id id => endOpened st fs s id
+  | .handle h => match s.subscribed.lookup h with
+    | some id => endOpened st fs s id
+    | none => pure s
 
 def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref) : Syntax.ResultOfMismatch → Finding
   | .resultOfNonCommand => .invalidInput (.resultOfNonCommand event requestId target)
@@ -70,7 +81,7 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
 
 /--
 The request whose answer the latest mock input with handle `handle` gave. A checked scenario names only a mock input before
-the event (Illegal.resultOfUnplaced), so the request has been placed. It is none when that mock reported
+the event (Illegal.namedInputUnplaced), so the request has been placed. It is none when that mock reported
 missingWaitingRequest or missingStaleRequest, and after reporting that the request cannot have the event as its result
 (resultOfMismatch).
 -/
@@ -267,29 +278,32 @@ def State.answering [Monad m] (st : Service) (fs : Functions m) (s : State) (sen
         (st.refOf name))))
   | some p => pure (.ok p)
 
+/-- The state after an answer input answers the request `p`, as checkAnswer checks the answer. -/
+def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+    m State := do
+  match ← checkAnswer st fs p answer with
+  | .error e =>
+    pure (s.report (.fault (issueViolation st p.activity.ref e)))
+  | .ok checked =>
+  let s := match checked.assumption with
+    | some f => s.report f
+    | none => s
+  match checked.written with
+  | .error f => pure (s.report f)
+  | .ok written =>
+    let s := if checked.recorded then
+        { s with results := s.results ++ [{ id := p.id, activity := p.activity, input := p.input,
+                                             output := written.output? }] }
+      else s
+    let started := (s.writeInput none (.answer p.id written)).1.newMessage.newStep none
+    let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
+    message st fs r.state r.queue
+
 def mock [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sender name : String) (answer : Answer)
     (choice : Option Choice) (handle : Option String) : m State := do
   match ← s.answering st fs sender name choice with
   | .error f => pure (s.report f)
-  | .ok p => do
-    let s := { s with mocks := (handle.map (·, p, answer)).toList ++ s.mocks }
-    match ← checkAnswer st fs p answer with
-    | .error e =>
-      pure (s.report (.fault (issueViolation st p.activity.ref e)))
-    | .ok checked =>
-    let s := match checked.assumption with
-      | some f => s.report f
-      | none => s
-    match checked.written with
-    | .error f => pure (s.report f)
-    | .ok written =>
-      let s := if checked.recorded then
-          { s with results := s.results ++ [{ id := p.id, activity := p.activity, input := p.input,
-                                               output := written.output? }] }
-        else s
-      let started := (s.writeInput none (.answer p.id written)).1.newMessage.newStep none
-      let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
-      message st fs r.state r.queue
+  | .ok p => answerRequest st fs { s with mocks := (handle.map (·, p, answer)).toList ++ s.mocks } p answer
 
 def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do
   if s.halted.isSome then pure s else

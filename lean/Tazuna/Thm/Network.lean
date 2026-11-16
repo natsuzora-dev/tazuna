@@ -456,11 +456,14 @@ theorem writes_event {canon : String → Value → Value} {st : Step} {l : Trace
     obtain ⟨_, hl, -⟩ := hw
     rw [hb] at hl
     cases hl
-  | unsubscribe =>
-    simp only [hs] at hw
-    obtain ⟨_, hl⟩ := hw
-    rw [hb] at hl
-    cases hl
+  | unsubscribe e =>
+    cases e with
+    | id to =>
+      simp only [hs] at hw
+      obtain ⟨_, hl⟩ := hw
+      rw [hb] at hl
+      cases hl
+    | handle => simp only [hs] at hw
   | _ =>
     simp only [hs] at hw
     simp [isEventLine, hb] at hw

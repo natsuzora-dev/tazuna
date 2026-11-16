@@ -122,15 +122,18 @@ export const remindsAfterNotShown = scenario(
   ],
 );
 
+const openTasks = subscribe(tasks, { filter: "open" });
+const milkDetail = subscribe(taskDetail, { taskId: "task-1" });
+
 export const answersSubscriptions = scenario(
   "Subscribe to tasks and taskDetail, and complete a task; todo sends a new answer for each subscription whose answer changes",
   [
     ...addMilk,
-    subscribe(tasks, { filter: "open" }, { id: "s1" }),
-    subscribe(taskDetail, { taskId: "task-1" }, { id: "s2" }),
+    openTasks,
+    milkDetail,
     send(completeTask, { taskId: "task-1" }),
-    unsubscribe("s1"),
-    unsubscribe("s2"),
+    unsubscribe(openTasks),
+    unsubscribe(milkDetail),
   ],
 );
 

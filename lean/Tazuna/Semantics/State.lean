@@ -186,6 +186,8 @@ structure State where
   results : List Accepted := []
   /-- The processed mocks that have a handle, latest first: the handle, the request answered, and the answer. -/
   mocks : List (String × Pending × Answer) := []
+  /-- The processed subscribe inputs that have a handle, latest first: the handle and the subscription's id. -/
+  subscribed : List (String × String) := []
   violations : List Violation := []
   /-- The halting violation; after it, no input changes the state. -/
   halted : Option Violation := none

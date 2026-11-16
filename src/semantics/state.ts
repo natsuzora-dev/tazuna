@@ -292,6 +292,8 @@ export interface State {
   readonly results: Map<string, Accepted>;
   /** For each handle of a processed mock input, the request that the latest such input answered and the answer. */
   readonly mocks: Map<string, { readonly request: Pending; readonly answer: Answer }>;
+  /** For each handle of a processed subscribe input, the id of the subscription that the latest such input opened. */
+  readonly subscribed: Map<string, string>;
   readonly violations: Violation[];
 }
 
@@ -324,6 +326,7 @@ export function newState(st: Service): State {
     subscriptions: new Subscriptions(),
     results: new Map(),
     mocks: new Map(),
+    subscribed: new Map(),
     violations: [],
   };
 }

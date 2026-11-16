@@ -27,8 +27,8 @@ const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<No
 function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
   switch (illegal.kind) {
     case "Illegal.unrequestedAnswer":
-    case "Illegal.resultOfPlacedTwice":
-    case "Illegal.resultOfUnplaced":
+    case "Illegal.namedInputPlacedTwice":
+    case "Illegal.namedInputUnplaced":
     case "Illegal.scenarioOfExternalService":
     case "Illegal.countedKey": {
       const { service, name } = illegal.scenario;

@@ -1,6 +1,9 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Illegal } from "../data/illegal.generated.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
+
+type ScenarioInput = Structure["scenarios"][number]["inputs"][number];
+
 import { type DefinitionStructure, isKeyOf } from "../syntax/structure.ts";
 
 function requests(d: DefinitionStructure, target: DefinitionRef): boolean {
@@ -33,39 +36,47 @@ function unrequestedAnswers(structure: Structure): Illegal[] {
   );
 }
 
-function resultsOfPlacedTwice(structure: Structure): Illegal[] {
+/** Lean's ScenarioInput.named: the positions of the input that the input names. */
+function named(input: ScenarioInput): readonly number[] | null {
+  if (input.type === "event") return input.resultOf;
+  return input.type === "unsubscribe" ? input.subscription : null;
+}
+
+function namedInputsPlacedTwice(structure: Structure): Illegal[] {
   return structure.scenarios.flatMap((sc) =>
-    sc.inputs.flatMap((input, i): Illegal[] =>
-      input.type === "event" && input.resultOf !== null && 1 < input.resultOf.length
+    sc.inputs.flatMap((input, i): Illegal[] => {
+      const positions = named(input);
+      return positions !== null && 1 < positions.length
         ? [
             {
-              kind: "Illegal.resultOfPlacedTwice",
+              kind: "Illegal.namedInputPlacedTwice",
               definition: null,
               scenario: { service: sc.service, name: sc.name },
               input: i + 1,
               data: {},
             },
           ]
-        : [],
-    ),
+        : [];
+    }),
   );
 }
 
-function resultsOfUnplaced(structure: Structure): Illegal[] {
+function namedInputsUnplaced(structure: Structure): Illegal[] {
   return structure.scenarios.flatMap((sc) =>
-    sc.inputs.flatMap((input, i): Illegal[] =>
-      input.type === "event" && input.resultOf !== null && !input.resultOf.some((p) => p < i)
+    sc.inputs.flatMap((input, i): Illegal[] => {
+      const positions = named(input);
+      return positions !== null && !positions.some((p) => p < i)
         ? [
             {
-              kind: "Illegal.resultOfUnplaced",
+              kind: "Illegal.namedInputUnplaced",
               definition: null,
               scenario: { service: sc.service, name: sc.name },
               input: i + 1,
               data: {},
             },
           ]
-        : [],
-    ),
+        : [];
+    }),
   );
 }
 
@@ -109,8 +120,8 @@ function countedKeys(structure: Structure): Illegal[] {
 export function check(structure: Structure): Illegal[] {
   return [
     ...unrequestedAnswers(structure),
-    ...resultsOfPlacedTwice(structure),
-    ...resultsOfUnplaced(structure),
+    ...namedInputsPlacedTwice(structure),
+    ...namedInputsUnplaced(structure),
     ...scenariosOfExternalServices(structure),
     ...countedKeys(structure),
   ];

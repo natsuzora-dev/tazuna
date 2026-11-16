@@ -216,16 +216,17 @@ deriving Repr, Inhabited
 derive_wire ServiceInfo
 
 /--
-A written scenario input, reduced to an answer's definitions, an event's `resultOf`, and the strings of the values that
-the input gives: an input, a payload, an answer's output, and a mock's `input`. `resultOf` holds every position of the
-input that `resultOf` names, counting the written inputs from 0 with `at` included, or null without `resultOf`.
+A written scenario input, reduced to an answer's definitions, the input that an event's `resultOf` or an unsubscribe
+names, and the strings of the values that the input gives: an input, a payload, an answer's output, and a mock's
+`input`. `resultOf` and `subscription` hold every position of the named input, counting the written inputs from 0 with
+`at` included; `resultOf` is null without `resultOf`.
 -/
 inductive ScenarioInput where
   | «at»
   | command (strings : List String)
   | query (strings : List String)
   | subscribe (strings : List String)
-  | unsubscribe
+  | unsubscribe (subscription : List Nat)
   | restart
   | event (resultOf : Option (List Nat)) (strings : List String)
   | operation (strings : List String)
@@ -250,7 +251,13 @@ def Scenario.ref (sc : Scenario) : Ref := { service := sc.service, name := sc.na
 def ScenarioInput.strings : ScenarioInput → List String
   | .command strings | .query strings | .subscribe strings | .event _ strings | .operation strings
   | .unacceptedOperation strings | .answer _ _ strings | .elsewhere strings => strings
-  | .at | .unsubscribe | .restart => []
+  | .at | .unsubscribe _ | .restart => []
+
+/-- The positions of the input that the input names: the mock of an event's `resultOf`, or an unsubscribe's subscription. -/
+def ScenarioInput.named : ScenarioInput → Option (List Nat)
+  | .event resultOf _ => resultOf
+  | .unsubscribe subscription => some subscription
+  | _ => none
 
 /-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e` that no `keys` name gives. -/
 def isKeyOf (e v : String) : Bool :=

@@ -6,21 +6,23 @@ import {
   elsewhereInputs,
   restart,
   scenario,
+  subscribe,
   timed,
   unsubscribe,
   writtenPositions,
 } from "../src/dsl/scenario.ts";
 
 const peer = {};
+const query = { kind: "query", input: {} } as never;
 
 test("The service of a scenario skips its elsewhere inputs, which keep their times, written positions, and the number of the service's inputs before them", () => {
   const s = scenario("", [
     at("2026-10-25T10:00:00+09:00"),
-    unsubscribe("a"),
+    unsubscribe(subscribe(query, {})),
     at("2026-10-25T11:00:00+09:00"),
     elsewhere(peer, restart()),
     at("2026-10-25T12:00:00+09:00"),
-    elsewhere(peer, unsubscribe("b")),
+    elsewhere(peer, unsubscribe(subscribe(query, {}))),
   ]);
   assert.deepEqual(
     timed(s).map((i) => [i.type, i.time]),

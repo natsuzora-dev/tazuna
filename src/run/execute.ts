@@ -219,8 +219,16 @@ function stepOf(spec: Spec, service: string, input: Input): Step {
       case "command":
         return { time, type: "command", ...given(input), name: name(input.command), input: input.input };
       case "query":
-      case "subscribe":
         return { time, type: input.type, ...given(input), name: name(input.query), input: input.input };
+      case "subscribe":
+        return {
+          time,
+          type: input.type,
+          ...given(input),
+          name: name(input.query),
+          input: input.input,
+          ...(input.handle === undefined ? {} : { handle: input.handle }),
+        };
       case "event":
         return {
           time,
@@ -233,8 +241,13 @@ function stepOf(spec: Spec, service: string, input: Input): Step {
       case "operation":
       case "unacceptedOperation":
         return { time, type: input.type, screen: name(input.screen), control: input.control, payload: input.payload };
-      case "unsubscribe":
-        return { time, type: "unsubscribe", to: input.to };
+      case "unsubscribe": {
+        if ("to" in input) return { time, type: "unsubscribe", subscription: { to: input.to } };
+        const { handle } = input.subscription;
+        if (handle === undefined)
+          throw new Error("unsubscribe names a subscribe input that the scenario does not place");
+        return { time, type: "unsubscribe", subscription: { handle } };
+      }
       case "answer":
         return {
           time,
@@ -281,10 +294,22 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
         case "command":
           return { time, type: "command", ...given(s), command: named(s.name, "command"), input: s.input };
         case "query":
-        case "subscribe":
           return { time, type: s.type, ...given(s), query: named(s.name, "query"), input: s.input };
-        case "unsubscribe":
-          return { time, type: "unsubscribe", to: s.to };
+        case "subscribe":
+          return {
+            time,
+            type: s.type,
+            ...given(s),
+            query: named(s.name, "query"),
+            input: s.input,
+            ...(s.handle === undefined ? {} : { handle: s.handle }),
+          };
+        case "unsubscribe": {
+          if ("to" in s.subscription) return { time, type: "unsubscribe", to: s.subscription.to };
+          const subscription = handled.get(s.subscription.handle);
+          if (subscription?.type !== "subscribe") throw new Error("unsubscribe names no subscribe handle");
+          return { time, type: "unsubscribe", subscription };
+        }
         case "event": {
           const resultOf = s.resultOf === undefined ? undefined : handled.get(s.resultOf);
           if (s.resultOf !== undefined && resultOf === undefined) throw new Error("resultOf names no answer handle");
@@ -313,7 +338,7 @@ export function inputsOf(spec: Spec, service: string, steps: readonly Step[]): I
       }
     };
     const input = { ...body(), ...scheduled } as Input;
-    if (s.type === "answer" && s.handle !== undefined) handled.set(s.handle, input);
+    if ((s.type === "answer" || s.type === "subscribe") && s.handle !== undefined) handled.set(s.handle, input);
     inputs.push(input);
   }
   return inputs;

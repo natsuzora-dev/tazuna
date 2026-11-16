@@ -9,7 +9,7 @@ const unavailable = mock(permission, [
 const accepted = mock(permission, [device.requestPermission, { result: "accepted" }]);
 
 export const grantAfterRetries = scenario(
-  "Link a result to a mock that answers two requests; check reports resultOfPlacedTwice",
+  "Link a result to a mock that answers two requests; check reports namedInputPlacedTwice",
   [
     at("2026-10-25T09:00:00+09:00"),
     unavailable,

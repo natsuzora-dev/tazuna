@@ -13,8 +13,8 @@ def arrive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State)
   | .restart => restart st fs s
   | .command id name raw => send st fs s name id raw
   | .query id name raw => call st fs s name id raw
-  | .subscribe id name raw => subscribe st fs s name id raw
-  | .unsubscribe to => endSubscription st fs s to
+  | .subscribe id name raw handle => subscribe st fs s name id raw handle
+  | .unsubscribe subscription => endSubscription st fs s subscription
   | .event id name raw resultOf => receive st fs s name id raw resultOf
   | .operation screen control payload => operate st fs s screen control payload true
   | .unacceptedOperation screen control payload => operate st fs s screen control payload false

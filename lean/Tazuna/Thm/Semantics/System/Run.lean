@@ -17,7 +17,7 @@ theorem arrive_keysDistinct (input : Step) (h : KeysDistinct s.records) :
   · exact restart_keysDistinct h
   · exact send_keysDistinct _ _ _ h
   · exact call_keysDistinct _ _ _ h
-  · exact subscribe_keysDistinct _ _ _ h
+  · exact subscribe_keysDistinct _ _ _ _ h
   · exact endSubscription_keysDistinct _ h
   · exact receive_keysDistinct _ _ _ _ h
   · exact operate_keysDistinct _ _ _ _ h
@@ -283,13 +283,14 @@ theorem other_service_query_stops_run (name : String) (id : Option String) (raw 
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, call, hq, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
-theorem other_service_subscription_stops_run (name : String) (id : Option String) (raw : Value) (rest : List Step)
+theorem other_service_subscription_stops_run (name : String) (id : Option String) (raw : Value) (handle : Option String)
+    (rest : List Step)
     (hh : s.halted = none)
-    (ha : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [], keyNames := keys.getD [] } ⟨time, .subscribe id name raw, order, stepOrder, keys⟩).halted = none)
-    (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [], keyNames := keys.getD [] } ⟨time, .subscribe id name raw, order, stepOrder, keys⟩).uncreatedKey st (.subscribe id name raw) = none)
+    (ha : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [], keyNames := keys.getD [] } ⟨time, .subscribe id name raw handle, order, stepOrder, keys⟩).halted = none)
+    (hk : (advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [], keyNames := keys.getD [] } ⟨time, .subscribe id name raw handle, order, stepOrder, keys⟩).uncreatedKey st (.subscribe id name raw handle) = none)
     (hq : name ∉ st.queries) :
-    runFrom (step st fs) s (⟨time, .subscribe id name raw, order, stepOrder, keys⟩ :: rest) =
-      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [], keyNames := keys.getD [] } ⟨time, .subscribe id name raw, order, stepOrder, keys⟩).halt
+    runFrom (step st fs) s (⟨time, .subscribe id name raw handle, order, stepOrder, keys⟩ :: rest) =
+      ((advance st fs { s with deadlineOrder := order.getD [], inputDeadlineOrder := order.getD [], stepOrder := stepOrder.getD [], keyNames := keys.getD [] } ⟨time, .subscribe id name raw handle, order, stepOrder, keys⟩).halt
           (Finding.invalidInput (.unownedTarget (st.refOf name))).toViolation).checkOrderUsed :=
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, subscribe, hq, State.halt, State.report, Finding.halts, InvalidInput.halts])

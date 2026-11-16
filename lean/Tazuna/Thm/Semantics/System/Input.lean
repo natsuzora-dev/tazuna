@@ -110,8 +110,8 @@ theorem call_keysDistinct (name : String) (id : Option String) (raw : Value) (h 
       · simpa using h
   · exact h
 
-theorem subscribe_keysDistinct (name : String) (id : Option String) (raw : Value) (h : KeysDistinct s.records) :
-    KeysDistinct (subscribe st fs s name id raw).records := by
+theorem subscribe_keysDistinct (name : String) (id : Option String) (raw : Value) (handle : Option String)
+    (h : KeysDistinct s.records) : KeysDistinct (subscribe st fs s name id raw handle).records := by
   unfold subscribe
   split
   · simp only [id_bind]
@@ -123,11 +123,20 @@ theorem subscribe_keysDistinct (name : String) (id : Option String) (raw : Value
       · exact h
   · exact h
 
-theorem endSubscription_keysDistinct (id : String) (h : KeysDistinct s.records) :
-    KeysDistinct (endSubscription st fs s id).records := by
-  unfold endSubscription
+theorem endOpened_keysDistinct (id : String) (h : KeysDistinct s.records) :
+    KeysDistinct (endOpened st fs s id).records := by
+  unfold endOpened
   apply message_keysDistinct
   split <;> exact h
+
+theorem endSubscription_keysDistinct (subscription : Ended) (h : KeysDistinct s.records) :
+    KeysDistinct (endSubscription st fs s subscription).records := by
+  unfold endSubscription
+  split
+  · exact endOpened_keysDistinct _ h
+  · split
+    · exact endOpened_keysDistinct _ h
+    · exact h
 
 theorem deliver_keysDistinct (name : String) (id : Option String) (payload : Value) (request : Option Pending)
     (h : KeysDistinct s.records) : KeysDistinct (deliver st fs s name id payload request).records := by
@@ -179,7 +188,7 @@ theorem receive_keysDistinct (name : String) (id : Option String) (raw : Value) 
 
 theorem mock_keysDistinct (sender name : String) (answer : Answer) (choice : Option Choice) (handle : Option String)
     (h : KeysDistinct s.records) : KeysDistinct (mock st fs s sender name answer choice handle).records := by
-  unfold mock
+  unfold mock answerRequest
   simp only [id_bind]
   split
   · simpa using h
@@ -242,7 +251,7 @@ theorem subscription_answer_is_own_message (sender name : String) (answer : Answ
         let started := t.newMessage.newStep none
         let r := settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
         message st fs r.state r.queue := by
-  unfold mock
+  unfold mock answerRequest
   simp only [id_bind, id_pure]
   rw [hf]
   simp only [ha, hw]

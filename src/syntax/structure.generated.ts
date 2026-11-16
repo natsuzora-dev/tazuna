@@ -177,9 +177,10 @@ const serviceInfo = z.object({
 });
 
 /**
- * A written scenario input, reduced to an answer's definitions, an event's `resultOf`, and the strings of the values that
- * the input gives: an input, a payload, an answer's output, and a mock's `input`. `resultOf` holds every position of the
- * input that `resultOf` names, counting the written inputs from 0 with `at` included, or null without `resultOf`.
+ * A written scenario input, reduced to an answer's definitions, the input that an event's `resultOf` or an unsubscribe
+ * names, and the strings of the values that the input gives: an input, a payload, an answer's output, and a mock's
+ * `input`. `resultOf` and `subscription` hold every position of the named input, counting the written inputs from 0 with
+ * `at` included; `resultOf` is null without `resultOf`.
  */
 const scenarioInput = z.discriminatedUnion("type", [
   z.object({
@@ -199,6 +200,7 @@ const scenarioInput = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("unsubscribe"),
+    subscription: z.array(z.int().nonnegative()),
   }),
   z.object({
     type: z.literal("restart"),
