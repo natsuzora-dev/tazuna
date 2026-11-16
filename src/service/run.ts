@@ -1,6 +1,5 @@
 import type { Step } from "../data/step.generated.ts";
-import type { Processing } from "../service/chart/queue.ts";
-import { type Pending, writeInput } from "../service/state.ts";
+import type { Processing } from "./chart/queue.ts";
 import {
   advance,
   answerById,
@@ -17,6 +16,7 @@ import {
   takeKeys,
 } from "./input.ts";
 import { restart } from "./restart.ts";
+import { type Pending, writeInput } from "./state.ts";
 
 export const given = ({ id }: { readonly id?: string | undefined }) => (id === undefined ? {} : { id });
 

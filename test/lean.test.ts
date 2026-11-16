@@ -13,7 +13,7 @@ const allowedImports: Readonly<Record<string, readonly string[]>> = {
   Validation: ["Data", "Syntax", "Validation"],
   Service: ["Data", "Syntax", "Service"],
   Sim: ["Data", "Syntax", "Service", "Sim"],
-  Observe: ["Data", "Syntax", "Service", "Sim", "Observe"],
+  Observe: ["Data", "Syntax", "Service", "Observe"],
   Verify: ["Data", "Syntax", "Verify"],
 };
 

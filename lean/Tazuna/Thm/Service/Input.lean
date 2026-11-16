@@ -1,11 +1,11 @@
-import Tazuna.Sim.Input
-import Tazuna.Thm.Sim.Queue
+import Tazuna.Service.Input
+import Tazuna.Thm.Service.Queue
 import Tazuna.Thm.Syntax.Structure
 
-namespace Tazuna.Thm.Sim.Input
+namespace Tazuna.Thm.Service.Input
 
 open Tazuna.Data Tazuna.Semantics
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Sim.Clock Tazuna.Thm.Sim.Queue
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Clock Tazuna.Thm.Service.Queue
 
 open Tazuna.Thm.Syntax.Structure (resultOfMismatch_eq_none_iff resultOfMismatch_unaccepted)
 
@@ -510,4 +510,4 @@ theorem mock_reports_unanswered (sender name : String) (answer : Answer) (choice
     mock st fs s sender name answer choice handle = s.report f := by
   simp [mock, hf]
 
-end Tazuna.Thm.Sim.Input
+end Tazuna.Thm.Service.Input

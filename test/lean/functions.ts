@@ -15,7 +15,6 @@ import type { AnyCommand, AnyEvent, AnyQuery, Automation, Named, ServiceDefiniti
 import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
 import { refOfDefinition } from "../../src/load/traceName.ts";
-import { SpecFunctions } from "../../src/run/functions.ts";
 import type { Schema } from "../../src/service/basic.ts";
 import {
   type Access,
@@ -29,6 +28,7 @@ import {
 } from "../../src/service/functions.ts";
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
+import { SpecFunctions } from "../../src/sim/spec/functions.ts";
 import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/syntax/structure.ts";
 import type { Message } from "./lean.ts";
 
@@ -39,7 +39,7 @@ const json = (value: unknown): unknown => (value === undefined ? undefined : JSO
 
 /**
  * Returns `f()`, which decodes a value of Lean's message, or, when it throws, a `thrown` failure of `schema`, as in
- * src/run.
+ * src/sim/spec.
  */
 function decoding<T>(f: () => T, schema?: Schema): T | Failed {
   try {
@@ -158,7 +158,7 @@ type LeanSchema =
   | { readonly kind: "mapContext" | "mapKey"; readonly chart: string; readonly map: string };
 
 /**
- * Carries Lean's questions to the spec functions of src/run: decodes Lean's values, answers with the same SpecFunctions
+ * Carries Lean's questions to the spec functions of src/sim/spec: decodes Lean's values, answers with the same SpecFunctions
  * that the TS run asks, and sends an answer that failed as its Issue.
  */
 export class RunFunctions implements Answering {

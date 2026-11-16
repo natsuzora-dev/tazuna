@@ -1,6 +1,6 @@
-import { canonicalJson } from "../data/values.ts";
-import type { Processing } from "../service/chart/queue.ts";
-import { copyName, type Instance, keyCounts, machine, type Requester } from "../service/state.ts";
+import { canonicalJson } from "../../data/values.ts";
+import type { Processing } from "../../service/chart/queue.ts";
+import { copyName, type Instance, keyCounts, machine, type Requester } from "../../service/state.ts";
 
 const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) => (a < b ? -1 : 1);
 

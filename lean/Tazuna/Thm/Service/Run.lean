@@ -1,10 +1,10 @@
-import Tazuna.Sim.Run
-import Tazuna.Thm.Sim.Restart
+import Tazuna.Service.Run
+import Tazuna.Thm.Service.Restart
 
-namespace Tazuna.Thm.Sim.Run
+namespace Tazuna.Thm.Service.Run
 
 open Tazuna.Data Tazuna.Semantics
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Sim.Clock Tazuna.Thm.Sim.Input Tazuna.Thm.Sim.Queue Tazuna.Thm.Sim.Restart
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Clock Tazuna.Thm.Service.Input Tazuna.Thm.Service.Queue Tazuna.Thm.Service.Restart
 
 variable {st : Service} {fs : Functions Id} {s : State} {time : DateTime} {order : Option (List DeadlineId)}
   {stepOrder : Option (List StepName)} {keys advanceKeys : Option (List (String × List String))}
@@ -307,4 +307,4 @@ theorem uncontracted_event_stops_run (name : String) (id : Option String) (raw :
   halting_arrival_stops_run _ rest _ hh ha hk
     (by simp [arrive, receive, hr, State.halt, State.report, Finding.halts, InvalidInput.halts])
 
-end Tazuna.Thm.Sim.Run
+end Tazuna.Thm.Service.Run

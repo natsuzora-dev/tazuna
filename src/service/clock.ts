@@ -1,9 +1,9 @@
 import { canonicalJson } from "../data/values.ts";
-import { transitionsAt } from "../service/chart/basic.ts";
-import { takeDeadline } from "../service/chart/deadline.ts";
-import { applyCompletion } from "../service/chart/macrostep.ts";
-import type { Processing } from "../service/chart/queue.ts";
-import { type Deadline, deadlineId, machine, report } from "../service/state.ts";
+import { transitionsAt } from "./chart/basic.ts";
+import { takeDeadline } from "./chart/deadline.ts";
+import { applyCompletion } from "./chart/macrostep.ts";
+import type { Processing } from "./chart/queue.ts";
+import { type Deadline, deadlineId, machine, report } from "./state.ts";
 
 export function fire(r: Processing, due: Deadline, step: number): void {
   const waiting = takeDeadline(r.state, due);

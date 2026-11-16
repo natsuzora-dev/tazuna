@@ -1,29 +1,30 @@
-import { reversedBags } from "../data/bag.ts";
-import { alike } from "../data/canonical.ts";
-import type { StepName } from "../data/choiceDependent.generated.ts";
-import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Step } from "../data/step.generated.ts";
-import type { DeadlineId, TraceLine } from "../data/trace.generated.ts";
-import type { Obligation } from "../data/uncovered.ts";
-import type { Violation } from "../data/violation.ts";
-import type { AnyCommand, AnyQuery, Place } from "../dsl/definition.ts";
-import type { Input } from "../dsl/scenario.ts";
-import { placeOf } from "../load/found.ts";
-import type { Spec } from "../load/load.ts";
-import { definitionOfTraceName, traceName } from "../load/traceName.ts";
-import { type Enabled, enabled } from "../observe/enabled.ts";
+import { reversedBags } from "../../data/bag.ts";
+import { alike } from "../../data/canonical.ts";
+import type { StepName } from "../../data/choiceDependent.generated.ts";
+import type { DefinitionRef } from "../../data/definitionRef.ts";
+import type { Step } from "../../data/step.generated.ts";
+import type { DeadlineId, TraceLine } from "../../data/trace.generated.ts";
+import type { Obligation } from "../../data/uncovered.ts";
+import type { Violation } from "../../data/violation.ts";
+import type { AnyCommand, AnyQuery, Place } from "../../dsl/definition.ts";
+import type { Input } from "../../dsl/scenario.ts";
+import { placeOf } from "../../load/found.ts";
+import type { Spec } from "../../load/load.ts";
+import { definitionOfTraceName, traceName } from "../../load/traceName.ts";
+import { type Enabled, enabled } from "../../observe/enabled.ts";
 import {
   Collect,
   contextKey,
   InstrumentedFunctions,
   type InstrumentFunctions,
   shownKey,
-} from "../observe/instrument.ts";
-import { snapshotLines } from "../observe/trace.ts";
-import type { Activity } from "../service/chart/basic.ts";
-import type { Processing } from "../service/chart/queue.ts";
-import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../service/note.ts";
-import type { Records } from "../service/records.ts";
+} from "../../observe/instrument.ts";
+import { snapshotLines } from "../../observe/trace.ts";
+import type { Activity } from "../../service/chart/basic.ts";
+import type { Processing } from "../../service/chart/queue.ts";
+import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../../service/note.ts";
+import type { Records } from "../../service/records.ts";
+import { given, step } from "../../service/run.ts";
 import {
   type Evaluations,
   Halt,
@@ -32,8 +33,7 @@ import {
   type State,
   type StepInfo,
   senderOf,
-} from "../service/state.ts";
-import { given, step } from "../sim/run.ts";
+} from "../../service/state.ts";
 import { Cache } from "./cache.ts";
 import { clone } from "./copy.ts";
 import { Coverage } from "./coverage.ts";

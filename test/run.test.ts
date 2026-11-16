@@ -14,7 +14,7 @@ import {
   runExamples,
   runGroupExamples,
   runRoot,
-  subjectRoots,
+  serviceRoot,
   subjects,
 } from "./examples.ts";
 import { exampleTest, expected, expectedOf, kindOfLine, testEveryKind } from "./expected.ts";
@@ -24,7 +24,7 @@ const tests = import.meta.dirname;
 /**
  * The kinds of each group. Its examples are in test/run/<group with a lowercase first letter>/<path>/<example>, where
  * <path> is the path, relative to lean/Tazuna, of the one Lean file that reports the violations of the example's
- * scenarios: the Service or Sim file that calls State.report, Processing.report or State.reportAll, or the Observe file
+ * scenarios: the Service file that calls State.report, Processing.report or State.reportAll, or the Observe file
  * that builds the OrderDependent or ChoiceDependent violations. An example without violations is in the
  * same folder as the example that it counters.
  */
@@ -69,9 +69,9 @@ test("The folder names directly under test/run are the group names of groups wit
   );
 });
 
-test("Every folder under test/service, test/sim and test/run/<group> is a Lean module path, an ancestor of one, or an example directly under one or inside it, and every file is inside an example. The modules are those of lean/Tazuna/Service for test/service, of lean/Tazuna/Sim for test/sim, and of lean/Tazuna outside Thm for test/run/<group>", () => {
+test("Every folder under test/service and test/run/<group> is a Lean module path, an ancestor of one, or an example directly under one or inside it, and every file is inside an example. The modules are those of lean/Tazuna/Service for test/service and of lean/Tazuna outside Thm for test/run/<group>", () => {
   const roots = [
-    ...subjectRoots.map(({ root, folder }) => ({ root, modules: leanModulePaths(folder) })),
+    { root: serviceRoot, modules: leanModulePaths("Service") },
     ...folders(runRoot).map((root) => ({ root, modules: leanSemanticsPaths() })),
   ];
   for (const { root, modules } of roots) {
@@ -88,7 +88,7 @@ test("Every folder under test/service, test/sim and test/run/<group> is a Lean m
   }
 });
 
-test("Each test/service and test/sim subject and test/run example holds only service folders and expected.jsonl", () => {
+test("Each test/service subject and test/run example holds only service folders and expected.jsonl", () => {
   for (const example of [...subjects(), ...groupFolderExamples])
     for (const entry of readdirSync(example, { withFileTypes: true }))
       assert.ok(

@@ -1,4 +1,4 @@
-import Tazuna.Sim.Restart
+import Tazuna.Service.Restart
 
 namespace Tazuna.Semantics
 

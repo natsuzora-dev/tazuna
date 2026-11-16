@@ -1,5 +1,5 @@
-import type { Obligation } from "../data/uncovered.ts";
-import { canonicalJson } from "../data/values.ts";
+import type { Obligation } from "../../data/uncovered.ts";
+import { canonicalJson } from "../../data/values.ts";
 
 export class Coverage {
   private readonly reached = new Set<string>();

@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { testSpec } from "../src/cli/test.ts";
 import type { Candidate } from "../src/explore/orders.ts";
 import type { Spec } from "../src/load/load.ts";
-import { type Run, stepsOf } from "../src/run/execute.ts";
+import { type Run, stepsOf } from "../src/sim/spec/execute.ts";
 import { depth, loadRoot, runExamples, runGroupExamples } from "./examples.ts";
 import { type Answering, RunFunctions, VerifyFunctions } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";

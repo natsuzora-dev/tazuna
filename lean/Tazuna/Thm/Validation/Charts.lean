@@ -1,5 +1,5 @@
 import Tazuna.Validation.Charts
-import Tazuna.Sim.Input
+import Tazuna.Service.Input
 import Tazuna.Thm.Service.Basic
 
 namespace Tazuna.Thm.Validation.Charts

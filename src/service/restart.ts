@@ -1,7 +1,7 @@
 import { Subscriptions } from "../data/subscriptions.ts";
-import type { Processing } from "../service/chart/queue.ts";
-import { type State, writeInput } from "../service/state.ts";
+import type { Processing } from "./chart/queue.ts";
 import { begin } from "./input.ts";
+import { type State, writeInput } from "./state.ts";
 
 /**
  * Stops the service process, discarding the part of the state that lives in its memory: the instances, copies, open

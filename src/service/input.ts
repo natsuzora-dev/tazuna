@@ -4,26 +4,31 @@ import type { Step } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Json, overlay, plain, stringsOf } from "../data/values.ts";
 import { type ProblemError, withExtra } from "../data/violation.ts";
-import { ref, refOf, type Service } from "../service/basic.ts";
-import { settled } from "../service/chart/always.ts";
-import { type Activity, activityRef, type Chart } from "../service/chart/basic.ts";
-import { deliverAnswer, dispatch } from "../service/chart/macrostep.ts";
-import { commandWork, type Processing, reactions, type Work } from "../service/chart/queue.ts";
-import { initialContextOf, newInstance } from "../service/chart/request.ts";
-import { processCommand } from "../service/command.ts";
-import { firstFalse } from "../service/contract.ts";
-import { Failed, issueViolation } from "../service/functions.ts";
 import {
-  answerAgain,
-  type Delivery,
-  keep,
-  malformedRedelivery,
-  type Request,
-  sameDelivery,
-} from "../service/idempotency.ts";
-import type { Emit } from "../service/message.ts";
-import { resolveChecked } from "../service/query.ts";
-import { accepting } from "../service/screen/operable.ts";
+  type AssumptionMismatch,
+  assumptionMismatch,
+  hasOutput,
+  isAssumed,
+  isKeyOf,
+  rejectionKinds,
+  rejectionReasons,
+  requiresOf,
+  resultOfMismatch,
+} from "../syntax/structure.ts";
+import { ref, refOf, type Service } from "./basic.ts";
+import { settled } from "./chart/always.ts";
+import { type Activity, activityRef, type Chart } from "./chart/basic.ts";
+import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
+import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
+import { initialContextOf, newInstance } from "./chart/request.ts";
+import { processCommand } from "./command.ts";
+import { firstFalse } from "./contract.ts";
+import { Failed, issueViolation } from "./functions.ts";
+import { answerAgain, type Delivery, keep, malformedRedelivery, type Request, sameDelivery } from "./idempotency.ts";
+import type { Emit } from "./message.ts";
+import { resolveChecked } from "./query.ts";
+import { fireDue, message } from "./queue.ts";
+import { accepting } from "./screen/operable.ts";
 import {
   type Accepted,
   halt,
@@ -37,19 +42,7 @@ import {
   senderOf,
   write,
   writeInput,
-} from "../service/state.ts";
-import {
-  type AssumptionMismatch,
-  assumptionMismatch,
-  hasOutput,
-  isAssumed,
-  isKeyOf,
-  rejectionKinds,
-  rejectionReasons,
-  requiresOf,
-  resultOfMismatch,
-} from "../syntax/structure.ts";
-import { fireDue, message } from "./queue.ts";
+} from "./state.ts";
 
 export function send(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;

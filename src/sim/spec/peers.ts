@@ -1,23 +1,16 @@
-import { comparable } from "../data/canonical.ts";
-import { type Problem, toProblem } from "../data/problem.ts";
-import type { Step } from "../data/step.generated.ts";
-import type { TraceLine } from "../data/trace.generated.ts";
-import { canonicalJson } from "../data/values.ts";
-import type { Location } from "../data/violation.ts";
-import type { Contract, Named } from "../dsl/definition.ts";
-import { type ElsewhereInput, fromInputs, peerRunInputs, type Scenario, writtenPositions } from "../dsl/scenario.ts";
-import type { Spec } from "../load/load.ts";
-import { definitionOfTraceName } from "../load/traceName.ts";
-import { serviceOf } from "../service/basic.ts";
-import {
-  type NamedForm,
-  type PeerDerivation,
-  type PeerOrigin,
-  peerArrivals,
-  peerEvent,
-  peerName,
-} from "../sim/peer.ts";
-import { peerFindings, peerInputs, peerRunFindings } from "../sim/peerCheck.ts";
+import { comparable } from "../../data/canonical.ts";
+import { type Problem, toProblem } from "../../data/problem.ts";
+import type { Step } from "../../data/step.generated.ts";
+import type { TraceLine } from "../../data/trace.generated.ts";
+import { canonicalJson } from "../../data/values.ts";
+import type { Location } from "../../data/violation.ts";
+import type { Contract, Named } from "../../dsl/definition.ts";
+import { type ElsewhereInput, fromInputs, peerRunInputs, type Scenario, writtenPositions } from "../../dsl/scenario.ts";
+import type { Spec } from "../../load/load.ts";
+import { definitionOfTraceName } from "../../load/traceName.ts";
+import { serviceOf } from "../../service/basic.ts";
+import { type NamedForm, type PeerDerivation, type PeerOrigin, peerArrivals, peerEvent, peerName } from "../peer.ts";
+import { peerFindings, peerInputs, peerRunFindings } from "../peerCheck.ts";
 import { execute, inputsOf, type Run, stepsOf } from "./execute.ts";
 
 /** A peer of a scenario's run: the PeerDerivation of its inputs, with the scenario's elsewhere inputs to it as written. */

@@ -1,5 +1,5 @@
-import type { Conditions } from "../dsl/conditions.ts";
-import type { AnyCommand, AnyQuery, Emit } from "../dsl/definition.ts";
+import type { Conditions } from "../../dsl/conditions.ts";
+import type { AnyCommand, AnyQuery, Emit } from "../../dsl/definition.ts";
 
 const readsRecords = Symbol("reads records");
 const unreadableRecords = new Proxy(

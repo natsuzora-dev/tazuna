@@ -1,4 +1,4 @@
-import Tazuna.Sim.Queue
+import Tazuna.Service.Queue
 import Tazuna.Service.Screen.Operable
 import Tazuna.Service.Step
 

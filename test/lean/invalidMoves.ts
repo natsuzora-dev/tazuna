@@ -5,7 +5,7 @@ import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen, ChartSpec } from "../..
 import type { Input } from "../../src/dsl/scenario.ts";
 import { valuesFor } from "../../src/explore/values.ts";
 import type { Spec } from "../../src/load/load.ts";
-import type { Run } from "../../src/run/execute.ts";
+import type { Run } from "../../src/sim/spec/execute.ts";
 import { contractsListing } from "../../src/syntax/structure.ts";
 
 const malformed = "not an object";

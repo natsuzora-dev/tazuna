@@ -5,7 +5,7 @@ import type { AnyCommand, AnyEvent, AnyQuery, ChartSpec } from "../dsl/definitio
 import type { Input } from "../dsl/scenario.ts";
 import type { Spec } from "../load/load.ts";
 import { refOfDefinition, traceName } from "../load/traceName.ts";
-import type { Run } from "../run/execute.ts";
+import type { Run } from "../sim/spec/execute.ts";
 import { contractsListing, rejectionKinds } from "../syntax/structure.ts";
 import { stringsIn, valuesFor } from "./values.ts";
 

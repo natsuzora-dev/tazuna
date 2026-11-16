@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { type Input, timed } from "../src/dsl/scenario.ts";
 import { enabledMoves, orderedInputs, seenValues, valuesPerPayload } from "../src/explore/moves.ts";
 import { search } from "../src/explore/search.ts";
-import { execute, extend, type Run } from "../src/run/execute.ts";
+import { execute, extend, type Run } from "../src/sim/spec/execute.ts";
 import { depth, loadRoot, maskedStack, runExamples } from "./examples.ts";
 
 const observed = (run: Run) => ({

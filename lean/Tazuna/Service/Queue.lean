@@ -1,4 +1,4 @@
-import Tazuna.Sim.Clock
+import Tazuna.Service.Clock
 import Tazuna.Service.Screen.Subscription
 import Tazuna.Service.Query
 

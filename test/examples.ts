@@ -5,7 +5,6 @@ import type { ProblemError } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 
 export const serviceRoot = join(import.meta.dirname, "service");
-export const simRoot = join(import.meta.dirname, "sim");
 export const runRoot = join(import.meta.dirname, "run");
 export const leanRoot = join(import.meta.dirname, "../lean/Tazuna");
 
@@ -58,15 +57,8 @@ export const leanSemanticsPaths = (): string[] => leanModulePaths("").filter((pa
 const atPaths = (root: string, paths: readonly string[]): string[] =>
   paths.flatMap((path) => folders(join(root, path)));
 
-/** Each folder of subjects, and the folder under lean/Tazuna whose module paths its subjects sit under. */
-export const subjectRoots = [
-  { root: serviceRoot, folder: "Service" },
-  { root: simRoot, folder: "Sim" },
-] as const;
-
-/** Returns the subjects: the folders directly under test/service/<Lean Service path> and test/sim/<Lean Sim path>. */
-export const subjects = (): string[] =>
-  subjectRoots.flatMap(({ root, folder }) => atPaths(root, leanModulePaths(folder)));
+/** Returns the subjects: the folders directly under test/service/<Lean Service path>. */
+export const subjects = (): string[] => atPaths(serviceRoot, leanModulePaths("Service"));
 
 /** Returns the examples test/run/<group>/<path of a Lean module under Tazuna, outside Thm>/<example>. */
 export const runGroupExamples = (group: string): string[] => atPaths(join(runRoot, group), leanSemanticsPaths());

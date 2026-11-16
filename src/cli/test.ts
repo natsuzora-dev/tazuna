@@ -17,9 +17,9 @@ import * as charts from "../explore/uncovered/charts.ts";
 import * as requests from "../explore/uncovered/requests.ts";
 import { comparePlaces, type Found, placeOf, problemOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
-import { Coverage } from "../run/coverage.ts";
-import { execute, type Run, stepsOf } from "../run/execute.ts";
-import { checkPeers } from "../run/peers.ts";
+import { Coverage } from "../sim/spec/coverage.ts";
+import { execute, type Run, stepsOf } from "../sim/spec/execute.ts";
+import { checkPeers } from "../sim/spec/peers.ts";
 import { pairingProblem } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotProblems } from "../verify/snapshot.ts";
 

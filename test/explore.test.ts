@@ -7,7 +7,7 @@ import { timed } from "../src/dsl/scenario.ts";
 import { type Bounds, explore } from "../src/explore/index.ts";
 import { seenValues } from "../src/explore/moves.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
-import { execute, stepsOf } from "../src/run/execute.ts";
+import { execute, stepsOf } from "../src/sim/spec/execute.ts";
 import { depth, groupExamples } from "./examples.ts";
 import { testEveryKind, testExamples } from "./expected.ts";
 

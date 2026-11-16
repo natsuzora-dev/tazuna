@@ -71,27 +71,15 @@
       }
     },
     {
-      "name": "contract",
-      "comment": "src/contract imports only data, dsl, syntax, load, and contract",
-      "severity": "error",
-      "from": {
-        "path": "^src/contract/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|contract)/"
-      }
-    },
-    {
       "name": "verify",
-      "comment": "src/verify imports only data, dsl, syntax, load, contract, and verify",
+      "comment": "src/verify imports only data, dsl, syntax, load, and verify",
       "severity": "error",
       "from": {
         "path": "^src/verify/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|contract|verify)/"
+        "pathNot": "^src/(data|dsl|syntax|load|verify|sim)/"
       }
     },
     {
@@ -108,39 +96,27 @@
     },
     {
       "name": "sim",
-      "comment": "src/sim imports only data, syntax, service, and sim",
+      "comment": "src/sim, outside src/sim/spec, imports only data, syntax, service, and sim",
       "severity": "error",
       "from": {
-        "path": "^src/sim/"
+        "path": "^src/sim/",
+        "pathNot": "^src/sim/spec/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|syntax|service|sim)/"
+        "pathNot": "^src/((data|syntax|service)/|sim/(?!spec/))"
       }
     },
     {
-      "name": "run",
-      "comment": "src/run imports only data, dsl, syntax, load, contract, service, sim, and run",
+      "name": "sim/spec",
+      "comment": "src/sim/spec, which runs the spec's JS functions, imports only data, dsl, syntax, load, service, sim, and observe",
       "severity": "error",
       "from": {
-        "path": "^src/run/",
-        "pathNot": "^src/run/execute[.]ts$"
+        "path": "^src/sim/spec/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|contract|service|sim|run)/"
-      }
-    },
-    {
-      "name": "run/execute.ts",
-      "comment": "src/run/execute.ts imports only data, dsl, syntax, load, contract, service, sim, run, and observe",
-      "severity": "error",
-      "from": {
-        "path": "^src/run/execute[.]ts$"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|contract|service|sim|run|observe)/"
+        "pathNot": "^src/(data|dsl|syntax|load|service|sim|observe)/"
       }
     },
     {
@@ -157,7 +133,7 @@
     },
     {
       "name": "explore",
-      "comment": "src/explore imports only data, dsl, syntax, load, contract, verify, service, sim, run, observe, and explore",
+      "comment": "src/explore imports only data, dsl, syntax, load, verify, service, sim, observe, and explore",
       "severity": "error",
       "from": {
         "path": "^src/explore/",
@@ -165,19 +141,19 @@
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|contract|verify|service|sim|run|observe|explore)/"
+        "pathNot": "^src/(data|dsl|syntax|load|verify|service|sim|observe|explore)/"
       }
     },
     {
       "name": "explore/uncovered",
-      "comment": "src/explore/uncovered imports only data, dsl, syntax, load, service, sim, run, observe, and explore/uncovered",
+      "comment": "src/explore/uncovered imports only data, dsl, syntax, load, service, sim, observe, and explore/uncovered",
       "severity": "error",
       "from": {
         "path": "^src/explore/uncovered/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|service|sim|run|observe|explore/uncovered)/"
+        "pathNot": "^src/(data|dsl|syntax|load|service|sim|observe|explore/uncovered)/"
       }
     },
     {

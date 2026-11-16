@@ -18,7 +18,7 @@ import {
   stepOrder,
 } from "../observe/choiceDependent.ts";
 import { leadsTo } from "../observe/trace.ts";
-import type { Run } from "../run/execute.ts";
+import type { Run } from "../sim/spec/execute.ts";
 import { compareTrace } from "../verify/prepare.ts";
 import { type Child, givable, type Ordered } from "./moves.ts";
 

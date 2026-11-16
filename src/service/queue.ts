@@ -1,12 +1,13 @@
-import { ref } from "../service/basic.ts";
-import { settled } from "../service/chart/always.ts";
-import { rearm } from "../service/chart/deadline.ts";
-import { drain } from "../service/chart/macrostep.ts";
-import type { Processing } from "../service/chart/queue.ts";
-import { Failed, issueViolation } from "../service/functions.ts";
-import { limits } from "../service/limits.ts";
-import { publish } from "../service/query.ts";
-import { LazyRecordSource } from "../service/records.ts";
+import { ref } from "./basic.ts";
+import { settled } from "./chart/always.ts";
+import { rearm } from "./chart/deadline.ts";
+import { drain } from "./chart/macrostep.ts";
+import type { Processing } from "./chart/queue.ts";
+import { chooseDeadline, earliestDeadline, fire } from "./clock.ts";
+import { Failed, issueViolation } from "./functions.ts";
+import { limits } from "./limits.ts";
+import { publish } from "./query.ts";
+import { LazyRecordSource } from "./records.ts";
 import {
   type Deadline,
   halt,
@@ -18,8 +19,7 @@ import {
   running,
   scopeOf,
   who,
-} from "../service/state.ts";
-import { chooseDeadline, earliestDeadline, fire } from "./clock.ts";
+} from "./state.ts";
 
 function checkHolds(r: Processing): void {
   for (const instance of running(r.state)) {

@@ -1,4 +1,4 @@
-import Tazuna.Sim.Input
+import Tazuna.Service.Input
 
 namespace Tazuna.Semantics
 

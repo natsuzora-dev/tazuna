@@ -1,15 +1,14 @@
 import { z } from "zod";
-import { assumedEnsures } from "../contract/checks.ts";
-import { type Bag, bagValues, NotOnly } from "../data/bag.ts";
-import { canonical as canonicalOf, comparableAnswer, orderFree } from "../data/canonical.ts";
-import { bag, bagged, defaultRow, sorted } from "../data/collections.ts";
-import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Answer } from "../data/trace.generated.ts";
-import type { TransitionRef } from "../data/transitionRef.ts";
-import { canonicalJson, encode, type Fields, objectOf, type Shape, strictObjectOf } from "../data/values.ts";
-import { thrown, zodError } from "../data/violation.ts";
-import { stateAt, transitionAt } from "../dsl/chart.ts";
-import { type Conditions, firstFailing } from "../dsl/conditions.ts";
+import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
+import { canonical as canonicalOf, comparableAnswer, orderFree } from "../../data/canonical.ts";
+import { bag, bagged, defaultRow, sorted } from "../../data/collections.ts";
+import type { DefinitionRef } from "../../data/definitionRef.ts";
+import type { Answer } from "../../data/trace.generated.ts";
+import type { TransitionRef } from "../../data/transitionRef.ts";
+import { canonicalJson, encode, type Fields, objectOf, type Shape, strictObjectOf } from "../../data/values.ts";
+import { thrown, zodError } from "../../data/violation.ts";
+import { stateAt, transitionAt } from "../../dsl/chart.ts";
+import { type Conditions, firstFailing } from "../../dsl/conditions.ts";
 import type {
   AnyCommand,
   AnyEvent,
@@ -23,11 +22,11 @@ import type {
   ServiceDefinition,
   StateSpec,
   TransitionSpec,
-} from "../dsl/definition.ts";
-import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../dsl/entity.ts";
-import type { Spec } from "../load/load.ts";
-import { refOfDefinition, traceName } from "../load/traceName.ts";
-import { type Schema, type Service, serviceOf } from "../service/basic.ts";
+} from "../../dsl/definition.ts";
+import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../../dsl/entity.ts";
+import type { Spec } from "../../load/load.ts";
+import { refOfDefinition, traceName } from "../../load/traceName.ts";
+import { type Schema, type Service, serviceOf } from "../../service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -39,12 +38,13 @@ import {
   type Holder,
   type NextKeys,
   type Scope,
-} from "../service/functions.ts";
-import type { Emit } from "../service/message.ts";
-import type { Note } from "../service/note.ts";
-import type { RecordSource, Row } from "../service/records.ts";
-import { type ChartStructure, chartStructure, stateNamed, traceNameOfRef } from "../syntax/structure.ts";
-import { isDescendant, pathOf } from "../syntax/tree.ts";
+} from "../../service/functions.ts";
+import type { Emit } from "../../service/message.ts";
+import type { Note } from "../../service/note.ts";
+import type { RecordSource, Row } from "../../service/records.ts";
+import { type ChartStructure, chartStructure, stateNamed, traceNameOfRef } from "../../syntax/structure.ts";
+import { isDescendant, pathOf } from "../../syntax/tree.ts";
+import { assumedEnsures } from "./contract.ts";
 import { recordsView } from "./records.ts";
 
 // Every `input` and `payload` argument here is a decoded value.

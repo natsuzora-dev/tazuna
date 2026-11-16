@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { assumedEnsures } from "../contract/checks.ts";
 import { tolerant } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
@@ -13,6 +12,7 @@ import type { AnyCommand, AnyEvent, AnyQuery, Emit } from "../dsl/definition.ts"
 import { emit } from "../dsl/event.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
+import { assumedEnsures } from "../sim/spec/contract.ts";
 import {
   type AssumptionMismatch,
   assumptionMismatch,
