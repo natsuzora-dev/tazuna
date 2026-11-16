@@ -320,11 +320,18 @@ export function newState(st: Service): State {
   };
 }
 
+/** A trace line before `write` adds the time and, unless the line gives one, the id. */
+type UnwrittenLine = UntimedTraceLine extends infer L
+  ? L extends UntimedTraceLine
+    ? Omit<L, "id"> & { readonly id?: string }
+    : never
+  : never;
+
 export function lineId(s: State, givenId: string | undefined, name: string): string {
   return givenId ?? `${name}#${(s.lineCounts.get(name) ?? 0) + 1}`;
 }
 
-export function write(s: State, line: UntimedTraceLine): string {
+export function write(s: State, line: UnwrittenLine): string {
   const name = "name" in line ? line.name : line.type;
   const id = lineId(s, line.id, name);
   s.lineCounts.set(name, (s.lineCounts.get(name) ?? 0) + 1);
@@ -333,14 +340,14 @@ export function write(s: State, line: UntimedTraceLine): string {
 }
 
 /** Writes the `in` line of the current input, with the input's `deadlineOrder`. */
-export function writeInput(s: State, line: UntimedTraceLine): string {
+export function writeInput(s: State, line: UnwrittenLine): string {
   return write(s, s.inputDeadlineOrder.length === 0 ? line : { ...line, deadlineOrder: [...s.inputDeadlineOrder] });
 }
 
 /** Lean's State.await: writes the request line and waits for its answer. TS cannot name a function `await`. */
 export function awaitAnswer(
   s: State,
-  line: Extract<UntimedTraceLine, { readonly type: "command" | "query" | "subscribe" }>,
+  line: Extract<UnwrittenLine, { readonly type: "command" | "query" | "subscribe" }>,
   requester: Requester,
   activity: Activity,
   value: Fields,

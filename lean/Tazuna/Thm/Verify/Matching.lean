@@ -42,7 +42,7 @@ def ContentMatches (rename : String → Option String) : Option CValue → Optio
 
 /-- The context that verify compares `snapshot` in. -/
 def context (snapshot : List (Option Line)) (internal : Line → Bool) : Ctx :=
-  { requests := (snapshot.filterMap fun l => l.bind fun l => l.body.id.map (·, l)).reverse,
+  { requests := (snapshot.filterMap fun l => l.map fun l => (l.body.id, l)).reverse,
     follows := mustFollow snapshot,
     internal }
 
@@ -93,7 +93,7 @@ structure InMatches (keys ids : String → Option String) (subscribed : String �
   type : t.body.type = s.body.type
   name : t.body.name? = s.body.name?
   time : t.time.time = s.time.time
-  id : ∀ i j, s.body.id = some i → t.body.id = some j → ids i = some j
+  id : ids s.body.id = some t.body.id
   rest : match s.body with
     | .time .. | .restart .. => True
     | .unsubscribe _ _ to => Placed ids subscribed (some to) t.body.to?

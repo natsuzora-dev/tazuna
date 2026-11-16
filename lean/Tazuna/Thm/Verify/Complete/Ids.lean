@@ -158,19 +158,6 @@ theorem useIds_spec {ids ids' : Ids} {l sl : Nat} {a b : Option String} (h : ids
     exact ⟨List.prefix_refl _, (fun _ h => nomatch h), fun _ => rfl, id⟩
   · cases h
 
-theorem useOwn_spec {ids ids' : Ids} {l sl : Nat} {a b : Option String} (h : ids.useOwn l sl a b = some ids') :
-    Grows ids ids' ∧ (∀ s t, a = some s → b = some t → ids'.bound.traceOf? s = some t) ∧
-      (IdsWf ids → IdsWf ids') := by
-  unfold Ids.useOwn at h
-  split at h
-  · obtain ⟨g, ht, w⟩ := use_spec h
-    refine ⟨g, fun s t hs ht' => ?_, w⟩
-    cases Option.some.inj hs; cases Option.some.inj ht'; exact ht
-  · cases h
-    refine ⟨List.prefix_refl _, fun s t hs ht => ?_, id⟩
-    rename_i hn
-    exact (hn s t hs ht).elim
-
 theorem flatMap_modify {f : Block → Block} (x : String) (hf : ∀ b, (f b).trace = b.trace ++ [x]) :
     ∀ (bs : List Block) (i : Nat), i < bs.length → ((bs.modify i f).flatMap (·.trace)).Perm (x :: bs.flatMap (·.trace))
   | [], _, h => absurd h (Nat.not_lt_zero _)

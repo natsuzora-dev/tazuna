@@ -164,13 +164,6 @@ theorem pairIds_spec {sc : Scope} {ids ids' : Ids} {s t : Out} (h : pairIds sc i
     Grows ids ids' ∧ (IdsWf ids → IdsWf ids') ∧ ∀ d i to x, s.line.body = .answer d i to x →
       ∃ t', t.line.body.to? = some t' ∧ ids'.bound.traceOf? to = some t' := by
   have refl : ∀ ids : Ids, Grows ids ids ∧ (IdsWf ids → IdsWf ids) := fun ids => ⟨List.prefix_refl _, id⟩
-  have own : ∀ a b, (match a, b with
-      | some a, some b =>
-        ids.join sc.window s.line { snapshot := a, trace := b, line := t.index, snapshotLine := s.index }
-      | _, _ => some ids) = some ids' → Grows ids ids' ∧ (IdsWf ids → IdsWf ids') := fun a b h => by
-    split at h
-    · exact join_spec h
-    · cases h; exact refl ids
   unfold pairIds at h
   cases hb : s.line.body with
   | answer d i to x =>
@@ -181,7 +174,7 @@ theorem pairIds_spec {sc : Scope} {ids ids' : Ids} {s t : Out} (h : pairIds sc i
     exact hs to rfl
   | command | query =>
     rw [hb] at h
-    exact ⟨(own _ _ h).1, (own _ _ h).2, fun _ _ _ _ h => nomatch h⟩
+    exact ⟨(join_spec h).1, (join_spec h).2, fun _ _ _ _ h => nomatch h⟩
   | _ =>
     rw [hb] at h
     cases h

@@ -51,6 +51,10 @@ structure Out where
   index : Nat
 deriving Inhabited
 
+/-- The use of the id of the snapshot line `s` for the id of the implementation line `t`. -/
+def Out.idUse (s t : Out) : Use :=
+  { snapshot := s.line.body.id, trace := t.line.body.id, line := t.index, snapshotLine := s.index }
+
 /-- The `out` lines before an `in` line, and that line. The last window has no `in` line. -/
 structure Window where
   before : List Out
@@ -286,11 +290,6 @@ def Ids.useIds (ids : Ids) (line snapshotLine : Nat) : Option String → Option 
   | none, none => some ids
   | _, _ => none
 
-/-- The ids with a line's own ids bound. A line whose own id is missing on one side binds nothing. -/
-def Ids.useOwn (ids : Ids) (line snapshotLine : Nat) : Option String → Option String → Option Ids
-  | some s, some t => ids.use { snapshot := s, trace := t, line, snapshotLine }
-  | _, _ => some ids
-
 /--
 The ids with the ids `u` of a paired `out` request `l` in the block of its alike requests of window `window`. An id
 that is already bound or in a block binds instead.
@@ -385,9 +384,7 @@ def pairIds (sc : Scope) (ids : Ids) (s t : Out) : Option Ids :=
   match s.line.body with
   | .answer _ _ to _ => ids.useIds t.index s.index (some to) t.line.body.to?
   | .command .. | .query .. =>
-    match s.line.body.id, t.line.body.id with
-    | some a, some b => ids.join sc.window s.line { snapshot := a, trace := b, line := t.index, snapshotLine := s.index }
-    | _, _ => some ids
+    ids.join sc.window s.line (s.idUse t)
   | _ => some ids
 
 /-- The pairing with `s` paired with `t`, and the bags left to pair, if `t` can stand for `s`. -/
@@ -580,8 +577,7 @@ def explain (sc : Scope) (specOut : List Out) (missingAt : Nat) : CompareM Unit 
       match pairIds sc st.ids s t with
       | some ids => modify fun st => { st with ids }
       | none =>
-        if let (some a, some b) := (s.line.body.id, t.line.body.id) then
-          idUses := idUses ++ [{ snapshot := a, trace := b, line := t.index, snapshotLine := s.index }]
+        idUses := idUses ++ [s.idUse t]
       let (ev, av) := c.compared s.line t.line
       match keysOf t, freeContent st.declared t.index s.index ev av with
       | some keys, _ => modify fun st => { st with keys }
@@ -643,7 +639,7 @@ where
 def follow (open_ : List (String × Subscription)) (lines : List Out) : List (String × Subscription) :=
   lines.foldl (init := open_) fun o l =>
     match l.line.body with
-    | .subscribe _ (some id) name _ => if (o.lookup id).isSome then o else o ++ [(id, { out := l, name })]
+    | .subscribe _ id name _ => if (o.lookup id).isSome then o else o ++ [(id, { out := l, name })]
     | .unsubscribe _ _ to => o.filter (·.1 != to)
     | _ => o
 
@@ -690,7 +686,7 @@ def sameInput (sc : Scope) (st : St) (s t : Out) : Outcome :=
   let (sl, tl) := (s.line, t.line)
   if sl.body.type != tl.body.type || sl.body.name? != tl.body.name? || !sameTime sl tl then .unpaired
   else
-    match st.ids.useOwn t.index s.index sl.body.id tl.body.id with
+    match st.ids.use (s.idUse t) with
     | none => .unpaired
     | some ids =>
       let st := { st with ids }
@@ -773,7 +769,7 @@ end
 
 /-- The latest of the earlier lines with the id, as an index counted from 0. -/
 def earlierWithId (earlier : List Out) (id : String) : Option Nat :=
-  (earlier.reverse.find? fun o => o.line.body.id == some id).map (·.index - 1)
+  (earlier.reverse.find? fun o => o.line.body.id == id).map (·.index - 1)
 
 /-- Each `after` id of a snapshot `out` line that names no earlier `out` line of its window, at that snapshot line. -/
 def unknownAfters (snapshot : List (Option Line)) : List Uncomparable :=
@@ -817,7 +813,7 @@ def compare (snapshot lines : List (Option Line)) (malformed : Option Nat) (inte
     (expected[k]?, actual[k]?, if k == 0 then none else (actual[k - 1]?).bind (·.input),
       if k == 0 then none else (expected[k - 1]?).bind (·.input))
   let ctx : Ctx := {
-    requests := (snapshot.filterMap fun l => l.bind fun l => l.body.id.map (·, l)).reverse,
+    requests := (snapshot.filterMap fun l => l.map fun l => (l.body.id, l)).reverse,
     follows := mustFollow snapshot,
     internal }
   compareFrom ctx lines.length malformed windows {}

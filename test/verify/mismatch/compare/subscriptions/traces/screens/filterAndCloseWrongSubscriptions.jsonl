@@ -1,6 +1,6 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s1","name":"todo.tasksNamed","input":{"prefix":"x"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","name":"taskListScreen.filter","payload":{"prefix":"Buy"}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"taskListScreen.filter#1","name":"taskListScreen.filter","payload":{"prefix":"Buy"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s2","name":"todo.tasksNamed","input":{"prefix":"Buy"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","name":"taskListScreen.close"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"unsubscribe","to":"s2"}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"taskListScreen.close#1","name":"taskListScreen.close"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"s2"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s9","name":"todo.tasksNamed","input":{"prefix":""}}

@@ -15,7 +15,7 @@ export type Subject =
   | {
       readonly type: string;
       readonly name: string | null;
-      readonly id: string | null;
+      readonly id: string;
     };
 
 /** A snapshot value and the trace value that a pair of lines uses for it. */

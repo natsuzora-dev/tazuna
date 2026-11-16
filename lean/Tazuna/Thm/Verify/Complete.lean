@@ -207,7 +207,7 @@ theorem compare_complete (snapshot lines : List (Option Line)) (internal : Line 
     have hK' : p'.keys <+: F.keys := fk.trans (by rw [← W2.keys]; exact monoK (k + 1) hk1)
     have hI' : p'.ids.bound <+: F.ids.bound := fi.trans (by rw [← W2.ids]; exact monoI (k + 1) hk1)
     have hren' := renameBy_eq _ _ _ W1.inv.declared F.keys
-    refine ⟨I.type, I.name, time_eq I.time, fun i j hi hj => traceOf?_prefix hI' (I.own i j hi hj), ?_⟩
+    refine ⟨I.type, I.name, time_eq I.time, traceOf?_prefix hI' I.own, ?_⟩
     have hr := I.rest
     revert hr
     cases s.line.body with

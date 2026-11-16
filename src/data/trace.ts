@@ -37,7 +37,7 @@ export const toOf = (l: TraceLine): string | undefined => ("to" in l ? l.to : un
 export const subjectOf = (l: TraceLine): Subject =>
   l.type === "answer" || l.type === "unsubscribe"
     ? { type: l.type, to: l.to }
-    : { type: l.type, name: nameOf(l) ?? null, id: l.id ?? null };
+    : { type: l.type, name: nameOf(l) ?? null, id: l.id };
 
 export const resultOf = (l: TraceLine): string | undefined => ("resultOf" in l ? l.resultOf : undefined);
 

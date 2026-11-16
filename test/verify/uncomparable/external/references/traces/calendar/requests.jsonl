@@ -1,8 +1,8 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q1","name":"nextWeek","input":{"from":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"q1","answer":{"result":"fulfilled","output":{"day":"2026-11-01T00:00:00Z"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"q1","answer":{"result":"fulfilled","output":{"day":"2026-11-01T00:00:00Z"}}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e1","name":"moved","payload":{"day":"2026-10-26T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e3","name":"booked","resultOf":"c9","payload":{"day":"2026-10-26T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q2","name":"nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"q2","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"q2","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e4","name":"booked","resultOf":"q2","payload":{"day":"2026-10-26T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"q9","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"q9","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}

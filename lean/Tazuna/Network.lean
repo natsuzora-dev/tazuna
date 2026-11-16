@@ -46,9 +46,9 @@ service has its name before a dot, as in a trace.
 -/
 def Carries (agree : Agree) (e : Execution) (s r : Nat) (sent recv : TraceLine) : Prop :=
   match sent.body, recv.body with
-  | .command .out (some i) name x, .command .in (some j) n y
-  | .query .out (some i) name x, .query .in (some j) n y
-  | .subscribe .out (some i) name x, .subscribe .in (some j) n y =>
+  | .command .out i name x, .command .in j n y
+  | .query .out i name x, .query .in j n y
+  | .subscribe .out i name x, .subscribe .in j n y =>
     j = i ∧ peerName? (e.name r) name = some n ∧ agree s r n x y
   | .unsubscribe .out _ to, .unsubscribe .in _ to' => to' = to
   | .answer .out _ to b, .answer .in _ to' a =>

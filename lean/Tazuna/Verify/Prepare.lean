@@ -105,7 +105,7 @@ where
     | none :: ls, o => none :: go ls o
     | some l :: ls, o =>
       match l.body with
-      | .subscribe .in (some id) _ _ => some l :: go ls (if (o.lookup id).isSome then o else o ++ [(id, none)])
+      | .subscribe .in id _ _ => some l :: go ls (if (o.lookup id).isSome then o else o ++ [(id, none)])
       | .unsubscribe .in _ to => some l :: go ls (o.filter (·.1 != to))
       | .answer .out _ to answer =>
         match o.lookup to with

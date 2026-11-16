@@ -52,7 +52,7 @@ function peerBody(peer: string, lines: readonly TraceLine[], keys: Bindings, l: 
     case "command":
     case "query":
     case "subscribe": {
-      if (l.id === undefined || unreached(lines, l.id)) return undefined;
+      if (unreached(lines, l.id)) return undefined;
       const name = peerName(peer, l.name);
       return name === undefined ? undefined : { type: l.type, id: l.id, name, input: rename(keys, l.input) };
     }
@@ -74,9 +74,7 @@ export function peerEvent(
 ): Body | undefined {
   if (l.dir !== "out" || l.type !== "event") return undefined;
   const name = received.find((r) => peerName(service, r) === l.name);
-  return name === undefined
-    ? undefined
-    : { type: "event", ...(l.id === undefined ? {} : { id: l.id }), name, payload: rename(keys, l.payload) };
+  return name === undefined ? undefined : { type: "event", id: l.id, name, payload: rename(keys, l.payload) };
 }
 
 const mapOutput = (answer: Answer, f: (v: unknown) => unknown): Answer =>
@@ -316,7 +314,7 @@ function peerLine(
       violation: {
         kind: "InvalidInput.unproducibleEvent",
         definition: null,
-        data: { eventId: l.id ?? "", event: { service: peer, name: n } },
+        data: { eventId: l.id, event: { service: peer, name: n } },
       },
     };
   }

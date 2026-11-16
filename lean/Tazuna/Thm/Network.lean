@@ -16,7 +16,7 @@ theorem answersTo_append (xs ys : List TraceLine) (d : Dir) (to : String) :
     answersTo (xs ++ ys) d to = answersTo xs d to ++ answersTo ys d to := by
   simp [answersTo, List.filterMap_append]
 
-theorem answersTo_take_succ {lines : List TraceLine} {i : Nat} {l : TraceLine} {d : Dir} {id : Option String}
+theorem answersTo_take_succ {lines : List TraceLine} {i : Nat} {l : TraceLine} {d : Dir} {id : String}
     {to : String} {a : Answer} (hi : lines[i]? = some l) (hl : l.body = .answer d id to a) :
     answersTo (lines.take (i + 1)) d to = answersTo (lines.take i) d to ++ [(l.time, a)] := by
   rw [List.take_add_one, hi, answersTo_append]
@@ -30,7 +30,7 @@ theorem answersTo_take_mono {lines : List TraceLine} {d : Dir} {to : String} {j 
   rw [answersTo_append, List.length_append]
   omega
 
-theorem answersTo_take_lt {lines : List TraceLine} {i i' : Nat} {l : TraceLine} {d : Dir} {id : Option String}
+theorem answersTo_take_lt {lines : List TraceLine} {i i' : Nat} {l : TraceLine} {d : Dir} {id : String}
     {to : String} {a : Answer} (hi : lines[i]? = some l) (hl : l.body = .answer d id to a) (h : i < i') :
     (answersTo (lines.take i) d to).length < (answersTo (lines.take i') d to).length := by
   have := answersTo_take_mono (lines := lines) (d := d) (to := to) (Nat.succ_le_of_lt h)
@@ -38,7 +38,7 @@ theorem answersTo_take_lt {lines : List TraceLine} {i i' : Nat} {l : TraceLine} 
   simp at this
   omega
 
-theorem answersTo_at {lines : List TraceLine} {j : Nat} {l : TraceLine} {d : Dir} {id : Option String} {to : String}
+theorem answersTo_at {lines : List TraceLine} {j : Nat} {l : TraceLine} {d : Dir} {id : String} {to : String}
     {b : Answer} (hj : lines[j]? = some l) (hl : l.body = .answer d id to b) :
     (answersTo lines d to)[(answersTo (lines.take j) d to).length]? = some (l.time, b) := by
   rw [show answersTo lines d to = answersTo (lines.take (j + 1)) d to ++ answersTo (lines.drop (j + 1)) d to by
@@ -440,7 +440,7 @@ theorem inLines_of {lines : List TraceLine} {i : Nat} {l : TraceLine} (hl : line
   exact List.mem_iff_getElem?.mp hm
 
 /-- The input that a run writes an `in` event line for is an event of the same name. -/
-theorem writes_event {canon : String → Value → Value} {st : Step} {l : TraceLine} {id : Option String}
+theorem writes_event {canon : String → Value → Value} {st : Step} {l : TraceLine} {id : String}
     {name : String} {payload : Value} {resultOf : Option String} (hw : Writes canon st l)
     (hb : l.body = .event .in id name payload resultOf) : ∃ sid x r, st.body = .event sid name x r := by
   obtain ⟨-, -, hw⟩ := hw
@@ -501,7 +501,7 @@ theorem peerBody_none {p : String} {lines : List TraceLine} {keys : Bindings} {l
        simp only [Option.map_eq_none_iff, ite_eq_left_iff, Bool.not_eq_true]
        exact fun _ => h l hl (by simp [isEventLine, hb]) _ (by simp [hb, TraceLine.Body.name?]))
 
-theorem unreached_of {lines : List TraceLine} {i : Nat} {l : TraceLine} {id : Option String} {to : String}
+theorem unreached_of {lines : List TraceLine} {i : Nat} {l : TraceLine} {id : String} {to : String}
     {rejection : Rejection} (hl : lines[i]? = some l) (hb : l.body = .answer .in id to (.rejected rejection))
     (hk : rejection.kind = .unavailable) : unreached lines to = true := by
   simp only [unreached, List.any_eq_true]

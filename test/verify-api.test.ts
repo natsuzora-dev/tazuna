@@ -83,7 +83,7 @@ test("verifyTraces compares an external service trace under any name with the co
     mkdirSync(join(traces, "calendar"), { recursive: true });
     const lines = [
       { time, dir: "in", type: "query", id: "q1", name: "nextDay", input: { from: monday } },
-      { time, dir: "out", type: "answer", to: "q1", answer: { result: "fulfilled", output: { day } } },
+      { time, dir: "out", type: "answer", id: "answer#1", to: "q1", answer: { result: "fulfilled", output: { day } } },
     ];
     writeFileSync(join(traces, "calendar", `${name}.jsonl`), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
     return verifyTraces(spec, traces).problems.map((p) => p.kind);

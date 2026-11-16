@@ -9,6 +9,7 @@ import type {
 import type { Spec } from "@natsuzora-dev/tazuna/spec";
 import { decodeAnswer, matchRequest, readSnapshot, rename, traceName } from "@natsuzora-dev/tazuna/verify";
 import type { z } from "zod";
+import { lineIds } from "./traces.ts";
 
 type SnapshotAnswer = Extract<TraceLine, { type: "answer" }>["answer"];
 
@@ -110,6 +111,7 @@ export async function replay(
   const renaming = new Map<string, string>();
   const subscriptions = new Map<string, AbortController>();
   let sent = 0;
+  const lineId = lineIds();
 
   const place = () => ({ at: lines.push(undefined) - 1, time: adapter.now(), inputsBefore: inputsGiven });
   const write = (line: UntimedTraceLine, { at, time } = place()) => {
@@ -139,9 +141,9 @@ export async function replay(
       subscribe: (request) => wait(request, undefined, "subscribe", at),
       unsubscribe: (subscription) => {
         waiting.delete(subscription);
-        write({ dir: "out", type: "unsubscribe", to: subscription }, at);
+        write({ dir: "out", type: "unsubscribe", id: lineId("unsubscribe"), to: subscription }, at);
       },
-      event: ({ name, payload }) => write({ dir: "out", type: "event", name, payload }, at),
+      event: ({ name, payload }) => write({ dir: "out", type: "event", id: lineId(name), name, payload }, at),
     };
   };
   const outputs: Outputs = {
@@ -152,13 +154,14 @@ export async function replay(
     later,
   };
   const outputCount = () => lines.filter((l) => l?.dir === "out").length;
-  const writeAnswer = (to: string, answer: SnapshotAnswer) => write({ dir: "out", type: "answer", to, answer });
+  const writeAnswer = (to: string, answer: SnapshotAnswer) =>
+    write({ dir: "out", type: "answer", id: lineId("answer"), to, answer });
 
   function pair(request: TraceLine, inputsBeforeRequest: number): void {
     for (const [i, { line: snapshotRequest, inputsBefore }] of unpaired.entries()) {
       if (inputsBefore !== inputsBeforeRequest) continue;
       const keys = matchRequest(snapshotRequest, request, renaming);
-      if (keys === undefined || snapshotRequest.id === undefined || request.id === undefined) continue;
+      if (keys === undefined) continue;
       unpaired.splice(i, 1);
       renaming.set(snapshotRequest.id, request.id);
       for (const [key, appKey] of keys) renaming.set(key, appKey);
@@ -179,7 +182,6 @@ export async function replay(
       return request.answer(line.answer);
     }
     const { id } = line;
-    if (id === undefined) throw new Error(`the snapshot line ${JSON.stringify(line)} has no id`);
     switch (line.type) {
       case "time":
         return;

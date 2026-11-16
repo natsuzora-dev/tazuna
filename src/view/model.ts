@@ -171,7 +171,7 @@ function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, 
     const [owner] = l.name.split(".");
     if (owner === undefined || owner === l.name) return [{ type: "message", line, from: service, to: null }];
     if (!participants.includes(owner)) participants.push(owner);
-    targets.set(l.id ?? "", owner);
+    targets.set(l.id, owner);
     return [{ type: "message", line, from: service, to: owner }];
   });
   return { participants, entries };

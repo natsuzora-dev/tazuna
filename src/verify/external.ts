@@ -64,8 +64,7 @@ function checkLine(
 ): Found | Resolved | undefined {
   if (l.dir === "in" && (l.type === "command" || l.type === "query")) {
     const definition = definitionOfTraceName(spec, service, l.name, l.type);
-    if (l.id !== undefined)
-      requests.set(l.id, definition === undefined ? undefined : { definition, line: l, accepted: false });
+    requests.set(l.id, definition === undefined ? undefined : { definition, line: l, accepted: false });
     return definition === undefined
       ? ({
           kind: "Uncomparable.unknownRequest",

@@ -3,7 +3,7 @@ import { expect, type Page } from "@playwright/test";
 import type * as Pages from "../../src/device/pages.server.ts";
 import type * as Held from "../doubles/held.ts";
 import { keepOpen } from "../doubles/pushedStream.ts";
-import { writeTrace } from "../harness/traces.ts";
+import { lineIds, writeTrace } from "../harness/traces.ts";
 import { toSpec } from "../support/answers.ts";
 import { TaskListPage } from "../support/pages/TaskListPage.ts";
 import { type App, test } from "./fixtures.ts";
@@ -17,16 +17,19 @@ async function playDevice(
   requests: readonly DeviceRequest[],
 ): Promise<TraceLine[]> {
   const trace: TraceLine[] = [];
+  const lineId = lineIds();
   const record = (line: UntimedTraceLine) => trace.push({ ...line, time: Temporal.Now.instant().toString() });
   const { sendToPage } = await app.runner.import<typeof Pages>("/src/device/pages.server.ts");
   const askingPermission: string[] = [];
   held.whenHeld({
     onNotificationPermission: (call) => {
       const resultOf = askingPermission.shift();
+      const name = toSpec.permission(call.input);
       const event: Extract<UntimedTraceLine, { type: "event" }> = {
         dir: "out",
         type: "event",
-        name: toSpec.permission(call.input),
+        id: lineId(name),
+        name,
         payload: {},
       };
       record(resultOf === undefined ? event : { ...event, resultOf });
@@ -42,7 +45,7 @@ async function playDevice(
     const id = `${name}-${i + 1}`;
     record({ dir: "in", type: "command", id, name, input });
     const result = await sendToPage(request);
-    record({ dir: "out", type: "answer", to: id, answer: toSpec.device(result) });
+    record({ dir: "out", type: "answer", id: lineId("answer"), to: id, answer: toSpec.device(result) });
     if (name === "requestNotificationPermission" && result.ok) {
       askingPermission.push(id);
       await expect.poll(() => askingPermission.includes(id)).toBe(false);

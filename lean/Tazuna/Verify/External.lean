@@ -25,9 +25,7 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
   | .command .in id name _ | .query .in id name _ =>
     let definition := s.named service (some name) [l.body.type]
     (if definition.isSome then none else some (.uncomparable (.unknownRequest line (Subject.of l))),
-      match id with
-      | some id => setAt requests id (definition.map fun definition => { definition, accepted := false })
-      | none => requests)
+      setAt requests id (definition.map fun definition => { definition, accepted := false }))
   | .answer .out _ to answer =>
     match requests.lookup to, answer with
     | none, _ => (some (.uncomparable (.unknownAnswer line (Subject.of l))), requests)

@@ -13,7 +13,7 @@ id.
 -/
 inductive Subject where
   | reply (type to : String)
-  | named (type : String) (name id : Option String)
+  | named (type : String) (name : Option String) (id : String)
 
 derive_wire Subject untagged
 

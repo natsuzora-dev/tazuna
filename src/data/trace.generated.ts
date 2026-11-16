@@ -50,7 +50,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("command"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     name: z.string(),
     input: z.unknown(),
     /**
@@ -67,7 +67,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("query"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     name: z.string(),
     input: z.unknown(),
     /**
@@ -84,7 +84,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("subscribe"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     name: z.string(),
     input: z.unknown(),
     /**
@@ -101,7 +101,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("answer"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     to: z.string(),
     answer: answer,
     /**
@@ -118,7 +118,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("unsubscribe"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     to: z.string(),
     /**
      * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
@@ -134,7 +134,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("event"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     name: z.string(),
     payload: z.unknown(),
     resultOf: z.string().exactOptional(),
@@ -152,7 +152,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("operation"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     name: z.string(),
     payload: z.unknown().exactOptional(),
     /**
@@ -169,7 +169,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("unacceptedOperation"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     name: z.string(),
     payload: z.unknown().exactOptional(),
     /**
@@ -186,7 +186,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in"]),
     type: z.literal("time"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     /**
      * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
      * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
@@ -201,7 +201,7 @@ export const traceLine = z.discriminatedUnion("type", [
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in"]),
     type: z.literal("restart"),
-    id: z.string().exactOptional(),
+    id: z.string(),
     /**
      * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
      * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline

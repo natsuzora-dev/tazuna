@@ -132,6 +132,7 @@ tazuna detects breaks of each assumption only partly or not at all.
   A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
   `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, the keys that one call creates up to a renaming.
 - **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
+  Every line has an ID: the implementation's ID of the message, or, for a message without one, such as an answer, an ID that the recorder gives it.
   An input line therefore carries the implementation's IDs and keys, not the snapshot's.
   `verify` reports a message that the recorder leaves out.
 - **External services.** Each external service keeps the contract that the spec assumes of it.

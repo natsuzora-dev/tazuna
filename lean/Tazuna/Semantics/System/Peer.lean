@@ -37,7 +37,7 @@ def unreached (lines : List TraceLine) (id : String) : Bool :=
 def requestName? (lines : List TraceLine) (id : String) : Option String :=
   lines.findSome? fun l =>
     match l.body with
-    | .command .out (some i) name _ | .query .out (some i) name _ | .subscribe .out (some i) name _ =>
+    | .command .out i name _ | .query .out i name _ | .subscribe .out i name _ =>
       if i == id then some name else none
     | _ => none
 
@@ -52,9 +52,9 @@ subscription to the peer. `keys` renames the strings of the request (peerForward
 def peerBody? (peer : String) (lines : List TraceLine) (keys : Bindings) (l : TraceLine) : Option Step.Body :=
   let reached (id name : String) : Option String := if unreached lines id then none else peerName? peer name
   match l.body with
-  | .command .out (some id) name input => (reached id name).map (.command (some id) · (keys.rename input))
-  | .query .out (some id) name input => (reached id name).map (.query (some id) · (keys.rename input))
-  | .subscribe .out (some id) name input => (reached id name).map (.subscribe (some id) · (keys.rename input))
+  | .command .out id name input => (reached id name).map (.command (some id) · (keys.rename input))
+  | .query .out id name input => (reached id name).map (.query (some id) · (keys.rename input))
+  | .subscribe .out id name input => (reached id name).map (.subscribe (some id) · (keys.rename input))
   | .unsubscribe .out _ to =>
     if (peerTarget? peer lines to).isSome && !unreached lines to then some (.unsubscribe to) else none
   | _ => none
@@ -94,7 +94,7 @@ The id of the `in` line at or before the run's line `j`, from 0: an event that t
 follows the request's `in` line before the next input.
 -/
 def requestOfLine? (lines : List TraceLine) (j : Nat) : Option String :=
-  ((lines.take (j + 1)).reverse.find? (·.body.dir == .in)).bind (·.body.id)
+  ((lines.take (j + 1)).reverse.find? (·.body.dir == .in)).map (·.body.id)
 
 /-- Where an input of the peer comes from. -/
 inductive Origin where
@@ -320,7 +320,7 @@ def peerLine (normal : String → Value → CValue) (service peer : String) (arr
         | _ => none
       match found with
       | some bs => .ok bs
-      | none => .error (.unproducibleEvent (id.getD "") ⟨peer, n⟩)
+      | none => .error (.unproducibleEvent id ⟨peer, n⟩)
   | _ => .ok bs
 
 /-- The bindings after the run's first `n` lines (peerLine): a line with a violation keeps them. -/

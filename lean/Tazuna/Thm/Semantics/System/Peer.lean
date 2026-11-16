@@ -314,7 +314,7 @@ def PeerEmits (normal : String → Value → CValue) (service : String) (aLines 
   ∃ id p r, b.body = .event .out id n p r ∧ (∀ q, resultOf = some q → requestOfLine? bLines j = some q) ∧
     b.time.time ≤ time.time ∧ PeerSees normal service aLines bLines bs n p payload
 
-theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {to target : String}
+theorem peerLine_answer {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : String} {to target : String}
     {a : Answer} (hl : l.body = .answer .in id to a) (ht : peerTarget? peer aLines to = some target)
     (hu : unreached aLines to = false) (h : peerLine normal service peer arrivals aLines bLines bs i l = .ok bs') :
     ∃ t b, (answersTo (bLines.take (peerBefore arrivals bLines i)) .out to)[(answersTo (aLines.take i) .in to).length]? =
@@ -342,7 +342,7 @@ theorem getElem?_take_some {α : Type} {xs : List α} {n j : Nat} {x : α} (h : 
   · exact ⟨by assumption, h⟩
   · cases h
 
-theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : Option String} {name n : String}
+theorem peerLine_event {bs bs' : Bindings} {i : Nat} {l : TraceLine} {id : String} {name n : String}
     {payload : Value} {resultOf : Option String} (hl : l.body = .event .in id name payload resultOf)
     (hn : peerName? peer name = some n) (h : peerLine normal service peer arrivals aLines bLines bs i l = .ok bs') :
     ∃ j b, bLines[j]? = some b ∧ j < peerBefore arrivals bLines i ∧ ∃ id' p r, b.body = .event .out id' n p r ∧
@@ -468,7 +468,7 @@ peer's answer to the request at the same place, the k-th answer to it when the m
 the peer's values under the final bindings (PeerSees), and the peer gives it at or before the mock's time, before it
 takes an input that arrives after the mock (peerBefore).
 -/
-theorem mocked_answer_given {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : Option String}
+theorem mocked_answer_given {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : String}
     {to target : String} {a : Answer}
     (h : peerFindings normal service peer arrivals aLines bLines halted = []) (hi : aLines[i]? = some l)
     (hl : l.body = .answer .in id to a) (ht : peerTarget? peer aLines to = some target)
@@ -551,7 +551,7 @@ the time the scenario receives it, with a payload that the scenario's stands for
 after the scenario's line (peerBefore).
 Two deliveries of one event may name the same line of the peer.
 -/
-theorem received_event_emitted {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : Option String}
+theorem received_event_emitted {halted : Option (Origin × String)} {i : Nat} {l : TraceLine} {id : String}
     {name n : String} {payload : Value} {resultOf : Option String}
     (h : peerFindings normal service peer arrivals aLines bLines halted = []) (hi : aLines[i]? = some l)
     (hl : l.body = .event .in id name payload resultOf) (hn : peerName? peer name = some n) :

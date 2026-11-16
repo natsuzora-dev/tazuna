@@ -30,7 +30,7 @@ function canonicalLine(spec: Spec, service: string): (l: TraceLine) => TraceLine
       case "subscribe": {
         const def = definitionOfTraceName(spec, service, l.name, l.type === "command" ? "command" : "query");
         if (def === undefined) return l;
-        if (def.output !== undefined && l.id !== undefined) outputByRequestId.set(l.id, def.output);
+        if (def.output !== undefined) outputByRequestId.set(l.id, def.output);
         return { ...l, input: comparable(def.input, l.input) };
       }
       case "unsubscribe":
@@ -44,7 +44,7 @@ function canonicalLine(spec: Spec, service: string): (l: TraceLine) => TraceLine
 function withoutRepeatedAnswers(lines: readonly (TraceLine | undefined)[]): (TraceLine | undefined)[] {
   const open = new Subscriptions<undefined>();
   return lines.map((l) => {
-    if (l?.dir === "in" && l.type === "subscribe" && l.id !== undefined) open.subscribe(l.id, undefined);
+    if (l?.dir === "in" && l.type === "subscribe") open.subscribe(l.id, undefined);
     else if (l?.dir === "in" && l.type === "unsubscribe") open.unsubscribe(l.to);
     else if (l?.dir === "out" && l.type === "answer" && open.repeats(l.to, l.answer)) return undefined;
     return l;

@@ -95,7 +95,7 @@ def obj (fields : List (String × Option Value)) : Value :=
   .obj (fields.filterMap fun (k, v) => v.map (k, ·))
 
 def traceLineOf (line : Line) (after created : List String) : TraceLine :=
-  let (dir, id) := (line.dir, some line.id)
+  let (dir, id) := (line.dir, line.id)
   let body : TraceLine.Body := match line.body with
     | .command name input => .command dir id name input
     | .query name input => .query dir id name input

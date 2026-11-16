@@ -199,7 +199,7 @@ structure InputOK (st : St) (s t : Out) (p : Pairing) : Prop where
   keys : st.keys <+: p.keys
   oneToOne : OneToOne st.keys → OneToOne p.keys
   declared : ∀ u ∈ p.keys, u ∈ st.keys ∨ st.declared.contains u.snapshot = true
-  own : ∀ i j, s.line.body.id = some i → t.line.body.id = some j → p.ids.bound.traceOf? i = some j
+  own : p.ids.bound.traceOf? s.line.body.id = some t.line.body.id
   rest : match s.line.body with
     | .time .. | .restart .. => True
     | .unsubscribe _ _ to => IdPlaced p.ids (some to) t.line.body.to?
@@ -218,12 +218,12 @@ theorem input_ok {c : Ctx} {st : St} {s t : Out} {p : Pairing}
   simp only [Bool.or_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true', not_or, Decidable.not_not,
     Bool.not_eq_false] at hc
   obtain ⟨⟨hty, hna⟩, hti⟩ := hc
-  cases hown : st.ids.useOwn t.index s.index s.line.body.id t.line.body.id with
+  cases hown : st.ids.use (s.idUse t) with
   | none => rw [hown] at h; cases h
   | some ids₁ =>
   rw [hown] at h
   dsimp only at h
-  obtain ⟨g₁, ho₁, w₁⟩ := useOwn_spec hown
+  obtain ⟨g₁, ho₁, w₁⟩ := use_spec hown
   have content : ∀ ids₂ : Ids, Grows ids₁ ids₂ → (IdsWf ids₁ → IdsWf ids₂) →
       (match walkContent st.declared t.index s.index s.line.content t.line.content st.keys with
         | none => Outcome.unpaired
@@ -238,9 +238,8 @@ theorem input_ok {c : Ctx} {st : St} {s t : Out} {p : Pairing}
     · rename_i keys goals hw
       obtain ⟨g₃, w₃, k₃, o₃, d₃, c₃⟩ := input_search hw hc
       exact ⟨g₁.trans (g₂.trans g₃), fun w => w₃ (w₂ (w₁ w)), k₃, o₃, d₃, g₃, c₃⟩
-  have own : ∀ ids : Ids, Grows ids₁ ids →
-      ∀ i j, s.line.body.id = some i → t.line.body.id = some j → ids.bound.traceOf? i = some j :=
-    fun ids g i j hi hj => traceOf?_prefix g (ho₁ i j hi hj)
+  have own : ∀ ids : Ids, Grows ids₁ ids → ids.bound.traceOf? s.line.body.id = some t.line.body.id :=
+    fun ids g => traceOf?_prefix g ho₁
   have hti' : sameTime s.line t.line = true := by simpa using hti
   cases hb : s.line.body with
   | time | restart =>

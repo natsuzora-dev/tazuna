@@ -276,15 +276,13 @@ const useIds = (
       : undefined
     : use(ids, { snapshot: s, trace: t, line, snapshotLine });
 
-/** Returns the ids with a line's own ids bound. A line whose own id is missing on one side binds nothing. */
-const useOwn = (
-  ids: Ids,
-  line: number,
-  snapshotLine: number,
-  s: string | undefined,
-  t: string | undefined,
-): Ids | undefined =>
-  s === undefined || t === undefined ? ids : use(ids, { snapshot: s, trace: t, line, snapshotLine });
+/** Lean's Out.idUse: the use of the id of the snapshot line `s` for the id of the implementation line `t`. */
+const idUse = (s: NumberedLine, t: NumberedLine): Use => ({
+  snapshot: s.line.id,
+  trace: t.line.id,
+  line: t.at,
+  snapshotLine: s.at,
+});
 
 /**
  * Returns the ids with the ids `u` of a paired `out` request `l` in the block of its alike requests of window
@@ -404,7 +402,7 @@ export function compare(
   const problems: (Mismatch | Uncomparable)[] = [];
   const expected = steps(snapshot);
   const actual = steps(lines);
-  const requestsById = new Map(snapshot.flatMap((l) => (l?.id === undefined ? [] : [[l.id, l] as const])));
+  const requestsById = new Map(snapshot.flatMap((l) => (l === undefined ? [] : [[l.id, l] as const])));
   let ids: Ids = { bound: [], blocks: [] };
   let keys: Renaming = [];
   let window = 0;
@@ -438,9 +436,7 @@ export function compare(
   const pairIds = (sc: Scope, current: Ids, s: NumberedLine, t: NumberedLine): Ids | undefined => {
     if (s.line.type === "answer") return useIds(current, t.at, s.at, s.line.to, toOf(t.line));
     if (s.line.type !== "command" && s.line.type !== "query") return current;
-    const [a, b] = [s.line.id, t.line.id];
-    if (a === undefined || b === undefined) return current;
-    return join(current, sc.window, s.line, { snapshot: a, trace: b, line: t.at, snapshotLine: s.at });
+    return join(current, sc.window, s.line, idUse(s, t));
   };
 
   /** Returns the pairing with `s` paired with `t`, and the bags left to pair, if `t` can stand for `s`. */
@@ -689,8 +685,7 @@ export function compare(
         });
       const paired = pairIds(sc, ids, s, t);
       if (paired !== undefined) ids = paired;
-      else if (s.line.id !== undefined && t.line.id !== undefined)
-        idUses.push({ snapshot: s.line.id, trace: t.line.id, line: t.at, snapshotLine: s.at });
+      else idUses.push(idUse(s, t));
       const found = keysOf(t);
       const uses = usesOf(t);
       if (found !== undefined) keys = found;
@@ -774,7 +769,7 @@ export function compare(
 
   const follow = (open: Open, lines: readonly NumberedLine[]) => {
     for (const o of lines)
-      if (o.line.type === "subscribe" && o.line.id !== undefined) open.subscribe(o.line.id, { line: o.line, at: o.at });
+      if (o.line.type === "subscribe") open.subscribe(o.line.id, { line: o.line, at: o.at });
       else if (o.line.type === "unsubscribe") open.unsubscribe(o.line.to);
   };
   const isSubscribing = (l: TraceLine) => l.type === "subscribe" || l.type === "unsubscribe";
@@ -840,7 +835,7 @@ export function compare(
   const sameInput = (s: NumberedLine, t: NumberedLine): Outcome => {
     const [sl, tl] = [s.line, t.line];
     if (sl.type !== tl.type || nameOf(sl) !== nameOf(tl) || !sameTime(sl, tl)) return { kind: "unpaired" };
-    const withId = useOwn(ids, t.at, s.at, sl.id, tl.id);
+    const withId = use(ids, idUse(s, t));
     if (withId === undefined) return { kind: "unpaired" };
     const placed =
       sl.type === "time" || sl.type === "restart"

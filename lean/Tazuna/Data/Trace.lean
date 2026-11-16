@@ -33,16 +33,16 @@ The body of a trace line. Every line has `dir` and `id`, `type` decides the othe
 restart line is "in".
 -/
 inductive TraceLine.Body where
-  | command (dir : Dir) (id : Option String) (name : String) (input : Value)
-  | query (dir : Dir) (id : Option String) (name : String) (input : Value)
-  | subscribe (dir : Dir) (id : Option String) (name : String) (input : Value)
-  | answer (dir : Dir) (id : Option String) (to : String) (answer : Answer)
-  | unsubscribe (dir : Dir) (id : Option String) (to : String)
-  | event (dir : Dir) (id : Option String) (name : String) (payload : Value) (resultOf : Option String)
-  | operation (dir : Dir) (id : Option String) (name : String) (payload : Option Value)
-  | unacceptedOperation (dir : Dir) (id : Option String) (name : String) (payload : Option Value)
-  | time (dir : InDir) (id : Option String)
-  | restart (dir : InDir) (id : Option String)
+  | command (dir : Dir) (id : String) (name : String) (input : Value)
+  | query (dir : Dir) (id : String) (name : String) (input : Value)
+  | subscribe (dir : Dir) (id : String) (name : String) (input : Value)
+  | answer (dir : Dir) (id : String) (to : String) (answer : Answer)
+  | unsubscribe (dir : Dir) (id : String) (to : String)
+  | event (dir : Dir) (id : String) (name : String) (payload : Value) (resultOf : Option String)
+  | operation (dir : Dir) (id : String) (name : String) (payload : Option Value)
+  | unacceptedOperation (dir : Dir) (id : String) (name : String) (payload : Option Value)
+  | time (dir : InDir) (id : String)
+  | restart (dir : InDir) (id : String)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire TraceLine.Body tag "type" after dir skip_serializing_none
@@ -52,7 +52,7 @@ def TraceLine.Body.dir : TraceLine.Body → Dir
   | .operation dir .. | .unacceptedOperation dir .. => dir
   | .time .in _ | .restart .in _ => .in
 
-def TraceLine.Body.id : TraceLine.Body → Option String
+def TraceLine.Body.id : TraceLine.Body → String
   | .command _ id .. | .query _ id .. | .subscribe _ id .. | .answer _ id .. | .unsubscribe _ id .. | .event _ id ..
   | .operation _ id .. | .unacceptedOperation _ id .. | .time _ id | .restart _ id => id
 

@@ -1,5 +1,5 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c1","name":"addTask","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"c1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e1","name":"seen","payload":{"id":"z1","taskId":"task-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c2","name":"forget","input":{"id":"Seen-1"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","to":"c2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"c2","answer":{"result":"accepted"}}
