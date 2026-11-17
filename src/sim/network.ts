@@ -1,6 +1,6 @@
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import { haltingReportKinds, type Report } from "../data/report.generated.ts";
-import type { Origin } from "../data/scenario.generated.ts";
+import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { Violation } from "../data/violation.ts";
 import type { Processing } from "../service/chart/queue.ts";
@@ -52,6 +52,9 @@ export interface StepOrder {
   readonly order: readonly StepName[];
 }
 
+/** Lean's World.assignments entry: a group of handles of `requests`, and the place of the message of each handle. */
+export type Assignment = readonly [Fact, readonly number[]];
+
 export interface Opened {
   readonly origin: Origin;
   readonly service: string;
@@ -89,6 +92,8 @@ export interface World {
   halted: Report | undefined;
   /** Lean's World.stepOrders. */
   stepOrders: readonly StepOrder[];
+  /** Lean's World.assignments. */
+  assignments: readonly Assignment[];
 }
 
 export const stateOf = (w: World, service: string): State | undefined => w.participants.get(service)?.processing.state;

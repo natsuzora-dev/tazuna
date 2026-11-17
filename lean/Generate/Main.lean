@@ -50,7 +50,7 @@ def tsTypes : List TsType :=
    ⟨``Tazuna.Semantics.Who, "Who", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Semantics.StepName, "StepName", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Semantics.Violation, "ViolationValue", some "./violation.ts"⟩,
-   ⟨``Tazuna.Observe.Difference, "Difference", none⟩]
+   ⟨``Tazuna.Observe.Difference, "Difference", none⟩, ⟨``Tazuna.Observe.Assigned, "Assigned", none⟩]
 
 /-- The TS type of a Lean type. The state collects the imports that the TS type needs. -/
 partial def tsType : Expr → StateT (List (String × String)) MetaM String
@@ -343,7 +343,7 @@ def files : List (String × String) :=
    ("data/orderDependent.generated.ts", typescript% Tazuna.Observe.OrderDependent),
    ("data/choiceDependent.generated.ts",
     typescript% Tazuna.Observe.ChoiceDependent Tazuna.Semantics.Copy Tazuna.Semantics.Who Tazuna.Semantics.StepName
-      Tazuna.Observe.Difference),
+      Tazuna.Observe.Difference Tazuna.Observe.Assigned),
    ("data/trace.generated.ts",
     zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer),
    ("syntax/structure.generated.ts",

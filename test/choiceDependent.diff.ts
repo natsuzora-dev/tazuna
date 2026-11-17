@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
+import { type AssignmentSearch, assignmentSearch } from "../src/explore/assignments.ts";
 import { type Searched, stepOrderChanges } from "../src/explore/stepOrders.ts";
 import { loadSpec } from "../src/load/load.ts";
-import { stepOrderLimit } from "../src/observe/choiceDependent.ts";
+import { assignmentLimit, stepOrderLimit } from "../src/observe/choiceDependent.ts";
 import { simulateSpec } from "../src/sim/spec/simulate.ts";
 import { runExamples, runGroupExamples } from "./examples.ts";
 import { SimFunctions, VerifyFunctions } from "./lean/functions.ts";
@@ -25,15 +26,19 @@ const simCases = await Promise.all(
     const scenarios = spec.scenarios.map(({ service, name, definition }) => {
       const searched: Searched[] = [];
       stepOrderChanges(spec, definition.scenario, simulateSpec(spec, definition.scenario), 0, (s) => searched.push(s));
-      return { label: `${service}/${name}`, scenario: definition.scenario, searched };
+      const assigned = assignmentSearch(spec, definition.scenario);
+      return { label: `${service}/${name}`, scenario: definition.scenario, searched, assigned };
     });
     return { root, spec, scenarios };
   }),
 );
 
+const assignedOf = (scenarios: readonly { readonly assigned: AssignmentSearch }[]) =>
+  scenarios.filter((s) => s.assigned.tried.length > 0 || s.assigned.found.length > 0);
+
 for (const { root, spec, scenarios } of simCases) {
   const searches = scenarios.flatMap((s) => s.searched);
-  if (searches.length === 0 && !relationExamples.has(root)) continue;
+  if (searches.length === 0 && (!relationExamples.has(root) || assignedOf(scenarios).length > 0)) continue;
   test(`${relative(tests, root)}: TS and Lean run the same step-order searches, with the same orders, verdicts, and violations`, (t) => {
     assert.ok(searches.length > 0, "each example of a ChoiceDependent violation searches some processing");
     for (const { label, scenario, searched } of scenarios) {
@@ -53,4 +58,22 @@ for (const { root, spec, scenarios } of simCases) {
 
 test("stepOrderLimit is Lean's", () => {
   assert.equal(stepOrderLimit, lean.names().stepOrderLimit);
+});
+
+for (const { root, spec, scenarios } of simCases) {
+  if (assignedOf(scenarios).length === 0) continue;
+  test(`${relative(tests, root)}: TS and Lean run the same assignment searches of the handles of requests, with the same assignments and violations`, () => {
+    for (const { label, scenario, assigned } of scenarios) {
+      const functions = new SimFunctions(spec, (part) => lean.read(part));
+      const verify = new VerifyFunctions(spec);
+      const fromLean = lean.assignmentChanges(spec, scenario, {
+        answer: (message) => (message["type"] === "comparableValue" ? verify : functions).answer(message),
+      });
+      assert.deepEqual(fromLean, JSON.parse(JSON.stringify(assigned)), label);
+    }
+  });
+}
+
+test("assignmentLimit is Lean's", () => {
+  assert.equal(assignmentLimit, lean.names().assignmentLimit);
 });

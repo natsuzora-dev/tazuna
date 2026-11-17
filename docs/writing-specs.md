@@ -73,6 +73,10 @@ Precedent: model checkers such as Stateright, which model the network as a set o
 
 A line refers to a fact of an earlier line only through the handle that the line returned and the content it picks, never by a position or a count, because a count changes whenever a line is added before it.
 When a handle matches more than one fact, pick by content, as in `add.request(calendar.nextBusinessDay, { input: { from: "2026-10-25" } })`.
+When one processing sends equal requests, such as copies of a map state that ask `calendar.nextBusinessDay` with the same input, name them one by one with `requests`, as in `const [first, second] = add.requests(calendar.nextBusinessDay)`.
+Nothing tells which request each handle names, so `test` runs every assignment and reports `ChoiceDependent` when one changes the result; requests that differ are `Report.ambiguousReference`, since a pick tells them apart.
+Each request still needs its line, so a request that no handle names is `Report.leftInFlight`, and a handle beyond the requests sent is `Report.unresolvedReference`.
+When the requests must be told apart, put an id in the input, such as the task's id, and pick by it.
 Never write a key that a participant creates: read it through a handle, such as the `output` of the answer that holds it, and write `created()` in a running peer's message where its run creates the key.
 Loading reports a value in the form of a created key (`<service>/<Entity>-<n>`) in Given or on a line as `Malformed.writtenCreatedKey`.
 Send a request again with `w.client.resend(line)`, and a new input under the id of an earlier line with `w.client.send(command, input, { sameIdAs: line })`.

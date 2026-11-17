@@ -88,7 +88,7 @@ deriving Repr, Inhabited
 def findingKey : ChoiceDependent → String
   | .stepOrder _ first second _ _ difference =>
     (Value.arr [ToValue.toValue first, ToValue.toValue second, ToValue.toValue difference]).canonical
-  | .searchLimit .. => ""
+  | .searchLimit .. | .assignment .. => ""
 
 /--
 The order that runs the pair `(i, j)` of a walk's candidates the other way: the steps before `i` as the walk took them,

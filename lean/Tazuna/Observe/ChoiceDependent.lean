@@ -25,8 +25,20 @@ deriving Repr, Inhabited
 derive_wire Difference tag "aspect"
 
 /--
-A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders, or
-of two deadlines of one service due at one time. Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
+The handles of one group of `requests` to `target`: handle `j` names the group's message at place `handles[j]`, counted
+in sending order.
+-/
+structure Assigned where
+  target : Syntax.Ref
+  handles : List Nat
+deriving Repr, Inhabited
+
+derive_wire Assigned
+
+/--
+A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, or
+of two deadlines of one service due at one time, or which of equal requests each handle of `requests` names. Every other
+order of a simulation is a written line. stepOrder writes the pair in canonical order.
 -/
 inductive ChoiceDependent where
   /--
@@ -40,9 +52,17 @@ inductive ChoiceDependent where
   /--
   The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
   a result that only those change is not reported. `definition` is the definition of the first step of the first pair
-  that the search swapped.
+  that the search swapped. The search of the assignments of one scenario stops alike at assignmentLimit, with the
+  target of the first group as `definition`.
   -/
   | searchLimit (definition : Syntax.Ref) (limit : Nat)
+  /--
+  The walk in which each handle of `requests` names the message at its own place and the walk with the handles of each
+  group as `assigned` lists them differ by `difference` in the outcome of the running service `service`. The requests
+  are equal, so nothing outside tells which answer belongs to which. `definition` is the target of the first group that
+  `assigned` changes.
+  -/
+  | assignment (definition : Syntax.Ref) (service : String) (assigned : List Assigned) (difference : Difference)
 deriving Repr, Inhabited
 
 derive_group ChoiceDependent
@@ -52,6 +72,12 @@ The number of step orders that the search of one processing runs at most (stepOr
 processing with many steps that touch the same values, whose count grows factorially.
 -/
 def stepOrderLimit : Nat := 64
+
+/--
+The number of assignments of handles of `requests` that the search of one scenario runs at most (assignmentSearch). It
+bounds the assignments of many equal requests, whose count grows factorially.
+-/
+def assignmentLimit : Nat := 64
 
 /-- The result of a run: the violation that halted it, the trace lines that verify reads, and its records. -/
 structure Outcome where
@@ -109,18 +135,23 @@ variable {m : Type → Type} [Monad m]
 /--
 The first difference: the halting violations, then the outputs as `compare` finds them with `original` as the
 snapshot, then the records, which later inputs read, with the createKey values of `original` replaced by the values of
-`alternative` that the outputs bind them to.
+`alternative` that the outputs bind them to. Outputs that `compare` cannot compare with themselves, as when equal
+requests get different answers, tell no choice apart, so only the records are compared then.
 -/
 def difference (compare : Compare m) (original alternative : Outcome) :
     m (Option Difference) := do
   if original.halted.isSome || alternative.halted.isSome then
     return if haltIdentity original.halted == haltIdentity alternative.halted then none
       else some (.halt original.halted alternative.halted)
+  let records (bindings : Bindings) : Option Difference :=
+    if recordsText bindings original.records == recordsText [] alternative.records then none
+    else some (.records original.records alternative.records)
   match ← compare original.lines alternative.lines with
-  | .error mismatch => return some (.outputs mismatch)
-  | .ok bindings =>
-    return if recordsText bindings original.records == recordsText [] alternative.records then none
-      else some (.records original.records alternative.records)
+  | .ok bindings => return records bindings
+  | .error mismatch =>
+    match ← compare original.lines original.lines with
+    | .ok _ => return some (.outputs mismatch)
+    | .error _ => return records []
 
 /--
 The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFirst` takes `a` first and is the walk with
@@ -134,6 +165,17 @@ def stepOrder (compare : Compare m) (a b : StepName) (aOrder bOrder : List StepN
     else (b, a, bOrder, aOrder, bFirst, aFirst)
   return (← difference compare original alternative).map
     (.stepOrder first.definition first second firstOrder secondOrder)
+
+/--
+The ChoiceDependent violation, if any, for the assignment `assigned` of handles of `requests`: the first difference,
+in the order of `outcomes`, between the outcome of a running service in the walk with each handle at its own place and
+in the walk with `assigned`. `definition` is the target of the first group that `assigned` changes.
+-/
+def assignment (compareFor : String → Compare m) (definition : Syntax.Ref) (assigned : List Assigned)
+    (outcomes : List (String × Outcome × Outcome)) : m (Option ChoiceDependent) :=
+  outcomes.foldlM (init := none) fun found (service, original, alternative) => do
+    if found.isSome then return found
+    return (← difference (compareFor service) original alternative).map (.assignment definition service assigned)
 
 end
 

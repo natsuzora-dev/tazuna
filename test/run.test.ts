@@ -55,14 +55,16 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
   },
 };
 
-/**
- * The kinds of another group that an example reports besides those of its own, each example with the reason: a halt
- * that the example shows not to hide its own group's violations.
- */
+/** The kinds of another group that an example reports besides those of its own, each example with the reason. */
 const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string[]; readonly because: string }>> = {
   "choiceDependent/Observe/ChoiceDependent/halted-later": {
     kinds: ["Fault.outputSchema"],
     because: "the fault halts the scenario at its last line, and the stepOrder of its first line is still reported",
+  },
+  "choiceDependent/Observe/ChoiceDependent/identical-requests": {
+    kinds: ["Report.leftInFlight", "Report.unresolvedReference"],
+    because:
+      "each handle of requests needs a line of its own, and a handle beyond the requests sent names nothing, beside the assignments that the example searches",
   },
 };
 

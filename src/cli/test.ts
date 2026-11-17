@@ -8,6 +8,7 @@ import { peerSnapshotName, snapshotEntryPath, snapshotPath } from "../data/trace
 import type { Uncovered } from "../data/uncovered.ts";
 import { canonicalJson } from "../data/values.ts";
 import type { Named } from "../dsl/definition.ts";
+import { assignmentChanges } from "../explore/assignments.ts";
 import { exploreLines, seenLines, valuesPerPayload } from "../explore/paths.ts";
 import { stepOrderChanges } from "../explore/stepOrders.ts";
 import * as automations from "../explore/uncovered/automations.ts";
@@ -123,7 +124,8 @@ export function testSpec(spec: Spec, options: { readonly update: boolean; readon
 
 /**
  * Simulates each scenario and returns the problems that it reports, each at the line it names, with the step orders
- * that change the result of one of its processings, and the trace of each
+ * that change the result of one of its processings and the assignment of its handles of `requests` that changes the
+ * result of a running service, and the trace of each
  * running service when the simulation did not halt: the own service's under the scenario's name, and each running
  * peer's that has lines under peerSnapshotName.
  */
@@ -143,7 +145,7 @@ function simulateScenarios(spec: Spec): { readonly problems: Problem[]; readonly
       problems.push(toProblem(report, at(line) ?? named.place, { scenario: ref }));
     }
     const halted = world.halted !== undefined || [...world.participants.values()].some((p) => p.halted !== undefined);
-    for (const v of stepOrderChanges(spec, scenario, simulated, 0))
+    for (const v of [...stepOrderChanges(spec, scenario, simulated, 0), ...assignmentChanges(spec, scenario)])
       problems.push(toProblem(v, v.location ?? named.place, { scenario: ref }));
     for (const service of world.participants.keys()) {
       for (const v of participantViolations(simulated, service))

@@ -28,7 +28,7 @@ export type OnSearched = ((searched: Searched) => void) | undefined;
 
 const violationValue = ({ kind, definition, data }: ViolationValue): ViolationValue => ({ kind, definition, data });
 
-const compareOf =
+export const compareOf =
   (spec: Spec, service: string): Compare =>
   (expected, actual) => {
     const { found, first } = compareTrace(spec, service, expected, actual);
@@ -37,7 +37,7 @@ const compareOf =
   };
 
 /** Lean's Walk.outcome. */
-function outcomeFor(m: Made, service: string): Outcome {
+export function outcomeFor(m: Made, service: string): Outcome {
   const p = m.world.participants.get(service);
   if (p === undefined) throw new Error(`${service} does not run`);
   const lines = snapshotsOf(m).get(service) ?? [];

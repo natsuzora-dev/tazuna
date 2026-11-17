@@ -42,6 +42,12 @@ inductive Fact where
   -/
   | request (origin : Origin) (kind : RequestType) (target : Syntax.Ref) (input : Option Template)
   /--
+  The handle `handle`, from 0, of the requests that `request` with the same fields names, which are equal as the
+  target's input schema compares them and so interchangeable: which of them each handle names is a choice that test
+  searches (World.assignments), and handles beyond their number name nothing.
+  -/
+  | requests (origin : Origin) (kind : RequestType) (target : Syntax.Ref) (input : Option Template) (handle : Nat)
+  /--
   The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
   given, as it travels to `receiver` when given, or to its only receiver.
   -/
@@ -100,7 +106,7 @@ def Template.created (t : Template) : Bool := t.holes.any (·.fill == .created)
 mutual
 /-- The templates that the handle writes as picks, with the picks of the handles that their holes read, at any depth. -/
 partial def Fact.picks : Fact → List Template
-  | .request _ _ _ input => (input.map fun t => t :: t.picks).getD []
+  | .request _ _ _ input | .requests _ _ _ input _ => (input.map fun t => t :: t.picks).getD []
   | .event _ _ payload _ => (payload.map fun t => t :: t.picks).getD []
   | .«end» _ subscription => subscription.picks
   | _ => []
@@ -109,6 +115,26 @@ partial def Fact.picks : Fact → List Template
 partial def Template.picks (t : Template) : List Template :=
   t.holes.flatMap fun h => match h.fill with
     | .ref r => r.fact.picks
+    | .created => []
+end
+
+/-- The group of the handle of `requests`: the fact with the handle 0, which every handle of the group shares. -/
+def Fact.group? : Fact → Option Fact
+  | .requests o kind target input _ => some (.requests o kind target input 0)
+  | _ => none
+
+mutual
+/-- The handle and the handles that it reads, at any depth: those of an end's subscription and of its picks' holes. -/
+partial def Fact.named (f : Fact) : List Fact :=
+  f :: match f with
+    | .request _ _ _ input | .requests _ _ _ input _ | .event _ _ input _ => (input.map Template.named).getD []
+    | .«end» _ subscription => subscription.named
+    | _ => []
+
+/-- The handles that the template's holes read, at any depth. -/
+partial def Template.named (t : Template) : List Fact :=
+  t.holes.flatMap fun h => match h.fill with
+    | .ref r => r.fact.named
     | .created => []
 end
 

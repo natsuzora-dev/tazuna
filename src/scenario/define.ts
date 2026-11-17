@@ -174,6 +174,19 @@ export interface ScreenRef<Sc = AnyScreen> {
   readonly screen: Sc;
 }
 
+/** The number of handles of `requests` that a scenario names one by one at most. */
+export const handleLimit = 64;
+
+type Tuple<H, N extends number, A extends readonly H[] = []> = A["length"] extends N
+  ? A
+  : Tuple<H, N, readonly [...A, H]>;
+
+/**
+ * The handles of `requests`, named one by one: their number exists only when the scenario runs, so a spread or a loop
+ * over them is misusedObserved, and a handle beyond handleLimit a type error.
+ */
+export type Handles<H> = Tuple<H, typeof handleLimit>;
+
 /** Nothing that `D` lacks, unless a service of `S` owns the definition `D`. */
 type OwnedBy<D, S extends string> = OwnerOf<D> extends S ? unknown : never;
 
@@ -186,6 +199,15 @@ export interface Caused<S extends string = string> {
     target: T & OwnedBy<T, S>,
     pick?: { readonly input?: SomeFields<InputOf<T>> },
   ): OutRequest<T>;
+  /**
+   * The handles of the requests that `request` with these arguments names, which must be equal: named one by one, as in
+   * `const [first, second] = line.requests(target)`. Which request each handle names is no line's, so test runs every
+   * assignment and reports ChoiceDependent when one changes the result; a handle beyond their number names nothing.
+   */
+  requests<T extends Request>(
+    target: T & OwnedBy<T, S>,
+    pick?: { readonly input?: SomeFields<InputOf<T>> },
+  ): Handles<OutRequest<T>>;
   subscription<Q extends AnyQuery>(
     query: Q & OwnedBy<Q, S>,
     pick?: { readonly input?: SomeFields<InputOf<Q>> },

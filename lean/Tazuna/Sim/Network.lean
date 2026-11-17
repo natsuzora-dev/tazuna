@@ -112,6 +112,12 @@ structure World where
   order of steps that test's search runs, which no line writes.
   -/
   stepOrders : List (Origin × String × List StepName) := []
+  /--
+  The message that each handle of a group of `requests` names, by group (Fact.group?): handle `j` names the group's
+  message at place `j` of the list, counted in sending order. A group without an entry has each handle name the message
+  at its own place. The assignment that test's search runs, which no line writes.
+  -/
+  assignments : List (Scenario.Fact × List Nat) := []
 deriving Inhabited
 
 def World.state (w : World) (service : String) : State := (w.states.lookup service).getD {}

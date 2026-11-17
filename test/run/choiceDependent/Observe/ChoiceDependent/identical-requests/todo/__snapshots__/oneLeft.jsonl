@@ -1,0 +1,6 @@
+{"time":"2026-10-25T10:00:00Z","dir":"in","type":"command","id":"addTasks#1","name":"addTasks","input":{"taskIds":["task-1","task-2"]}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTasks#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","due":null},"resultOf":"addTasks#1"}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","due":null},"resultOf":"addTasks#1","after":["taskAdded#1"]}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25T10:00:00Z"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#2","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25T10:00:00Z"}}

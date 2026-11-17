@@ -121,7 +121,8 @@ def World.answersOf (w : World) (s : Sent) : List Answer :=
 mutual
 /--
 The message that the handle `fact` of line `i` names. A pick's value is filled as the line fills its values, and
-compared with the message's as the schema of its sender compares them.
+compared with the message's as the schema of its sender compares them. The handles of `requests` name only requests
+equal as that schema compares them: the scenario cannot tell them apart, so which handle names which is no line's.
 -/
 partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
     ExceptT Report m Nat := do
@@ -139,6 +140,12 @@ partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat
   | .request o kind target input =>
     ofExcept (w.only i fact (← picked (fun msg => msg.origin == o && msg.body.requestType? == some kind &&
       msg.target? == some target) input))
+  | .requests _ _ _ _ h =>
+    let found ← w.requestsOf fsOf i fact
+    let place := ((w.assignments.lookup (fact.group?.getD fact)).bind (·[h]?)).getD h
+    match found[place]? with
+    | some k => pure k
+    | none => throw (.unresolvedReference i (ToValue.toValue fact))
   | .event o event payload receiver =>
     ofExcept (w.only i fact (← picked (fun msg => msg.origin == o && msg.event? == some event &&
       receiver.all (· == msg.receiver)) payload))
@@ -158,6 +165,26 @@ partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat
         | _ => false))
   | .line j => ofExcept (w.only i fact (w.carried.filterMap fun (l, k) => if l == j then some k else none))
   | .screen .. => throw (.unresolvedReference i (ToValue.toValue fact))
+
+/--
+The messages, in sending order, of the group of the handle `fact` of `requests` of line `i`: the requests that `request`
+with the same fields names, which must be equal as the schema of their sender compares them.
+-/
+partial def World.requestsOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
+    ExceptT Report m (List Nat) := do
+  let .requests o kind target input _ := fact | throw (.unresolvedReference i (ToValue.toValue fact))
+  let pick ← input.mapM (w.fill fsOf i)
+  let found ← w.messages.toList.zipIdx.filterMapM fun (msg, k) => do
+    if !(msg.origin == o && msg.body.requestType? == some kind && msg.target? == some target) then return none
+    match w.schemaOf? msg, msg.body.value? with
+    | some (side, schema), some v =>
+      if ← (picks (fsOf side) schema pick v : m Bool) then
+        return some (k, (← (comparedOr (fsOf side) schema v : m Value)).canonical)
+      else return none
+    | _, _ => return none
+  if !found.all (·.2 == (found.head?.map (·.2)).getD "") then
+    throw (.ambiguousReference i (ToValue.toValue fact) (found.filterMap (w.messages[·.1]?) |>.map (·.describe)))
+  pure (found.map (·.1))
 
 /--
 The value of the part `part` of the request that the handle `fact` of line `i` names: of a line's request or of a

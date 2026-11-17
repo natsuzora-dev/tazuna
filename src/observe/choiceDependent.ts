@@ -1,4 +1,4 @@
-import type { ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
+import type { Assigned, ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { type Bindings, substituted } from "../data/trace.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
@@ -8,6 +8,9 @@ import type { Records } from "../service/records.ts";
 
 /** Lean's stepOrderLimit: the number of step orders that the search of one processing runs at most. */
 export const stepOrderLimit = 64;
+
+/** Lean's assignmentLimit: the number of assignments of handles of `requests` that the search of a scenario runs at most. */
+export const assignmentLimit = 64;
 
 /** What a run gives the relation: the violation that halted it, the trace lines that verify reads, and its records. */
 export interface Outcome {
@@ -73,18 +76,23 @@ const haltIdentity = (v: ViolationValue | null): string | null => (v === null ? 
 /**
  * Returns the first difference: the halting violations, then the outputs as `compare` finds them with `original` as the
  * snapshot, then the records, which later inputs read, with the createKey values of `original` replaced by the values
- * of `alternative` that the outputs bind them to.
+ * of `alternative` that the outputs bind them to. Outputs that `compare` cannot compare with themselves, as when equal
+ * requests get different answers, tell no choice apart, so only the records are compared then.
  */
 function difference(compare: Compare, original: Outcome, alternative: Outcome): Difference | undefined {
   if (original.halted !== null || alternative.halted !== null)
     return haltIdentity(original.halted) === haltIdentity(alternative.halted)
       ? undefined
       : { aspect: "halt", original: original.halted, alternative: alternative.halted };
+  const records = (bindings: Bindings): Difference | undefined =>
+    recordsText(bindings, original.records) === recordsText(new Map(), alternative.records)
+      ? undefined
+      : { aspect: "records", original: original.records, alternative: alternative.records };
   const compared = compare(original.lines, alternative.lines);
-  if ("mismatch" in compared) return { aspect: "outputs", mismatch: compared.mismatch };
-  return recordsText(compared.bindings, original.records) === recordsText(new Map(), alternative.records)
-    ? undefined
-    : { aspect: "records", original: original.records, alternative: alternative.records };
+  if (!("mismatch" in compared)) return records(compared.bindings);
+  return "mismatch" in compare(original.lines, original.lines)
+    ? records(new Map())
+    : { aspect: "outputs", mismatch: compared.mismatch };
 }
 
 /**
@@ -113,4 +121,22 @@ export function stepOrder(
         definition: stepNameDefinition(first),
         data: { firstStep: first, secondStep: second, originalOrder, alternativeOrder, difference: found },
       };
+}
+
+/**
+ * Lean's assignment: the violation for the assignment `assigned` at the first running service, in the order of
+ * `outcomes`, whose outcome differs between the walk with each handle at its own place and the walk with `assigned`.
+ */
+export function assignment(
+  compareFor: (service: string) => Compare,
+  definition: Of<"ChoiceDependent.assignment">["definition"],
+  assigned: readonly Assigned[],
+  outcomes: readonly (readonly [string, Outcome, Outcome])[],
+): Of<"ChoiceDependent.assignment"> | undefined {
+  for (const [service, original, alternative] of outcomes) {
+    const found = difference(compareFor(service), original, alternative);
+    if (found !== undefined)
+      return { kind: "ChoiceDependent.assignment", definition, data: { service, assigned, difference: found } };
+  }
+  return undefined;
 }

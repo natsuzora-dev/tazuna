@@ -137,6 +137,37 @@ function only(w: World, i: number, fact: Fact, found: readonly number[]): number
   });
 }
 
+/** Lean's Fact.group?. */
+export const groupOf = (fact: Extract<Fact, { type: "requests" }>): Fact => ({ ...fact, handle: 0 });
+
+/** Lean's World.requestsOf. */
+export function requestsOf(w: World, i: number, fact: Fact): number[] {
+  if (fact.type !== "requests") return unresolved(i, fact);
+  const pick = fact.input === undefined ? undefined : fill(w, i, fact.input);
+  const found = w.messages.flatMap((m, k) => {
+    if (!(sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m), fact.target)))
+      return [];
+    const schema = schemaOf(w, m);
+    const v = valueOfLine(m.body);
+    if (schema === undefined || v === undefined || !picks(w, schema[0], schema[1], pick, v)) return [];
+    return [[k, canonicalJson(comparedOr(w, schema[0], schema[1], v))] as const];
+  });
+  if (!found.every(([, c]) => c === found[0]?.[1]))
+    return reported({
+      kind: "Report.ambiguousReference",
+      definition: null,
+      data: {
+        scenarioLine: i,
+        fact: json(fact),
+        candidates: found.flatMap(([k]) => {
+          const m = w.messages[k];
+          return m === undefined ? [] : [describe(m)];
+        }),
+      },
+    });
+  return found.map(([k]) => k);
+}
+
 /** Lean's World.messageOf. */
 export function messageOf(w: World, i: number, fact: Fact): number {
   const matching = (p: (m: Message) => boolean) => w.messages.flatMap((m, k) => (p(m) ? [k] : []));
@@ -160,6 +191,13 @@ export function messageOf(w: World, i: number, fact: Fact): number {
           fact.input,
         ),
       );
+    case "requests": {
+      const found = requestsOf(w, i, fact);
+      const key = canonicalJson(groupOf(fact) as Json);
+      const place = w.assignments.find(([g]) => canonicalJson(g as Json) === key)?.[1][fact.handle] ?? fact.handle;
+      const k = found[place];
+      return k === undefined ? unresolved(i, fact) : k;
+    }
     case "event":
       return only(
         w,

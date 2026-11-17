@@ -24,6 +24,8 @@ import {
   type EventMessage,
   type Expectation,
   factOf,
+  type Handles,
+  handleLimit,
   type Line,
   type Look,
   lineIndex,
@@ -40,7 +42,7 @@ import {
 
 /** How a scenario reads an observed value that exists only when the scenario runs. */
 export type ObservedUse =
-  /** It lists its fields: a spread, `Object.keys`, or a loop over it. */
+  /** It lists its fields, or the handles of `requests`: a spread, `Object.keys`, or a loop over it. */
   | "spread"
   /** It asks whether a field is present (`in`). */
   | "presence"
@@ -236,9 +238,21 @@ export function lower(
       };
       return requestMessage(fact, target);
     };
+    const requests = (target: unknown, pick?: { readonly input?: unknown }) => {
+      const group = request(false)(target, pick)[factOf] as Extract<Fact, { type: "request" }>;
+      return {
+        *[Symbol.iterator]() {
+          for (let handle = 0; handle < handleLimit; handle++)
+            yield requestMessage({ ...group, type: "requests", handle }, target);
+          throw new Misused("spread", []);
+        },
+      };
+    };
     return {
       request: <T extends AnyCommand | AnyQuery>(target: T, pick?: { readonly input?: unknown }) =>
         handle<OutRequest<T>>(request(false)(target, pick)),
+      requests: <T extends AnyCommand | AnyQuery>(target: T, pick?: { readonly input?: unknown }) =>
+        handle<Handles<OutRequest<T>>>(requests(target, pick)),
       subscription: <Q extends AnyQuery>(query: Q, pick?: { readonly input?: unknown }) =>
         handle<OutSubscription<Q>>(request(true)(query, pick)),
       event: <Ev extends AnyEvent>(event: Ev, pick?: { readonly payload?: unknown; readonly to?: unknown }) => {

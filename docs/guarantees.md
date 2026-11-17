@@ -26,6 +26,7 @@ They share one clock, and a message between two of them stays *in flight* until 
 Messages travel on *channels*: a request, its answers, its end, and the events that name it as their `resultOf` share the request's channel, and an event without `resultOf` travels on the channel of its sender and receiver.
 The simulation is deterministic: the scenario writes every choice that nobody's code makes, such as which message arrives next and when the time advances.
 Deadlines of one service due at the same time are no such choice: they tie inside the service, `test` runs them in every order, and it reports `ChoiceDependent` when the order changes the result.
+Nor is which of equal requests of one processing each handle of `requests` names: nothing outside tells them apart, so `test` runs every assignment of the handles and reports `ChoiceDependent` when one changes the result.
 
 The trace of the own service is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 tazuna has three tools that report violations:
@@ -61,6 +62,7 @@ When `test` reports no `Report` violation, the scenario stated everything that h
 - a message never overtook an earlier one on its channel (`Report.overtaking`);
 - each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered, not both (`Report.awaitingAnswer`, `Report.repeatedAnswer`);
 - an event's `resultOf` names a request that its emitter received (`Report.unreceivedRequest`), and the receiver took that request's answer before the event (`InvalidInput.resultOfUnansweredRequest`);
+- each handle named one fact, and the handles of `requests` named equal requests (`Report.unresolvedReference`, `Report.ambiguousReference`);
 - each message that the scenario names as in flight at the end, it names once (`Report.repeatedInFlight`);
 - the clock only advanced (`Report.notLater`);
 - the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>`, in a line or in a Given record (`Report.writtenKey`, `Report.writtenGivenKey`).
@@ -116,7 +118,7 @@ An explored path uses values from the scenarios and new IDs, and it neither rese
 | Violations that `test` finds on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by another name than the ones that `check` looks for in the spec's source. |
 | `OrderDependent` | Orders of a `Bag` other than the written one and its reverse. |
-| `ChoiceDependent` | Orders of steps and of tied deadlines beyond the `ChoiceDependent.searchLimit` of one processing. |
+| `ChoiceDependent` | Orders of steps and of tied deadlines beyond the `ChoiceDependent.searchLimit` of one processing, assignments of the handles of `requests` beyond it in one scenario, and a difference in outputs that `verify` cannot compare with themselves, as when equal requests get different answers; the records are still compared. |
 | `InvalidInput` | An external peer's answer is checked only against the requires that read the input alone and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 

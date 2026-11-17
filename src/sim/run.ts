@@ -82,6 +82,7 @@ const hasCreated = (t: Template): boolean => t.holes.some((h) => h.fill.type ===
 function factPicks(f: Fact): Template[] {
   switch (f.type) {
     case "request":
+    case "requests":
       return f.input === undefined ? [] : [f.input, ...templatePicks(f.input)];
     case "event":
       return f.payload === undefined ? [] : [f.payload, ...templatePicks(f.payload)];
@@ -141,7 +142,7 @@ const linePicks = (l: Line): Template[] => [
 ];
 
 /** Lean's Expectation.line. */
-const expectationLine = (e: Expectation): number => (e.type === "offered" ? e.look : e.line);
+export const expectationLine = (e: Expectation): number => (e.type === "offered" ? e.look : e.line);
 
 /** Lean's Expectation.written. */
 function expectationWritten(e: Expectation): Template[] {
@@ -161,6 +162,37 @@ function expectationWritten(e: Expectation): Template[] {
 const expectationPicks = (e: Expectation): Template[] => [
   ...(e.type === "requested" ? e.ends.flatMap(factPicks) : []),
   ...expectationWritten(e).flatMap(templatePicks),
+];
+
+/** Lean's Fact.named. */
+function factNamed(f: Fact): Fact[] {
+  switch (f.type) {
+    case "request":
+    case "requests":
+      return [f, ...(f.input === undefined ? [] : templateNamed(f.input))];
+    case "event":
+      return [f, ...(f.payload === undefined ? [] : templateNamed(f.payload))];
+    case "end":
+      return [f, ...factNamed(f.subscription)];
+    default:
+      return [f];
+  }
+}
+
+/** Lean's Template.named. */
+const templateNamed = (t: Template): Fact[] =>
+  t.holes.flatMap((h) => (h.fill.type === "ref" ? factNamed(h.fill.value.fact) : []));
+
+/** Lean's Line.named. */
+export const lineNamed = (l: Line): Fact[] => [
+  ...lineFacts(l).flatMap(factNamed),
+  ...lineWritten(l).flatMap(templateNamed),
+];
+
+/** Lean's Expectation.named. */
+export const expectationNamed = (e: Expectation): Fact[] => [
+  ...(e.type === "requested" ? e.ends.flatMap(factNamed) : []),
+  ...expectationWritten(e).flatMap(templateNamed),
 ];
 
 /** Lean's World.checkWritten. */

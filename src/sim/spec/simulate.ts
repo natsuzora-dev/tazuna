@@ -9,7 +9,7 @@ import type { Processing } from "../../service/chart/queue.ts";
 import { created } from "../../service/state.ts";
 import type { Structure } from "../../syntax/structure.generated.ts";
 import { encodedGivenRecords, start } from "../given.ts";
-import type { StepOrder, World } from "../network.ts";
+import type { Assignment, StepOrder, World } from "../network.ts";
 import { simulate, walk } from "../run.ts";
 import { instrumented, Listener } from "./listener.ts";
 import { newProcessing } from "./processing.ts";
@@ -36,6 +36,7 @@ function made(
   sc: Scenario,
   run: (structure: Structure, w: World, sc: Scenario) => World,
   stepOrders: readonly StepOrder[],
+  assignments: readonly Assignment[] = [],
 ): Made {
   const listeners = new Map<string, Listener>();
   const w = start(sc, (service) => {
@@ -44,6 +45,7 @@ function made(
     return processingFor(spec, service, listener);
   });
   w.stepOrders = stepOrders;
+  w.assignments = assignments;
   return { world: run(spec.structure, w, sc), listeners };
 }
 
@@ -51,9 +53,13 @@ function made(
 export const simulateSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
   made(spec, sc, simulate, stepOrders);
 
-/** Runs the lines of the scenario on the spec's services as explore does (walk). */
-export const walkSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
-  made(spec, sc, walk, stepOrders);
+/** Runs the lines of the scenario on the spec's services as explore does (walk), with the handles of `assignments`. */
+export const walkSpec = (
+  spec: Spec,
+  sc: Scenario,
+  stepOrders: readonly StepOrder[] = [],
+  assignments: readonly Assignment[] = [],
+): Made => made(spec, sc, walk, stepOrders, assignments);
 
 /** Each running service's trace as its snapshot holds it. */
 export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, readonly TraceLine[]> =>

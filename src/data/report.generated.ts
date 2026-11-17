@@ -92,7 +92,10 @@ export type Report =
         readonly fact: Json;
       };
     }
-  /** Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. */
+  /**
+   * Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. For a
+   * handle of `requests`, the candidates differ in content, so a pick tells them apart.
+   */
   | {
       readonly kind: "Report.ambiguousReference";
       readonly definition: null;

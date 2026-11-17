@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Names
-import Tazuna.Explore.StepOrders
+import Tazuna.Explore.Assignments
 import Tazuna.Sim.Run
 
 /-!
@@ -424,6 +424,28 @@ def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO
     walkWith sc (← walkWith sc []) 0
   pure (.obj [("type", .str "stepOrderChanges"), ("searched", .arr (searched.map searchValue))])
 
+/--
+The reply to request `assignmentChanges`, which takes a structure and a scenario and returns assignmentSearch of the
+scenario's handle groups: each assignment it ran, with the violation it found, and what it reports.
+-/
+def assignmentChangesRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
+  let (spec, sc, start) ← worldOf request
+  let walkWith (assignments : List (Scenario.Fact × List Nat)) : IO Walk := do
+    let start := { start with assignments }
+    let ran : ActingIO Sim.World := Sim.walk spec (← instrumentedOf stdin stdout start) start sc
+    let (w, acting) ← ran.run {}
+    pure { world := w, collect := acting.collect }
+  let base ← walkWith []
+  let fsOf ← instrumentedOf stdin stdout start
+  let sizeOf (g : HandleGroup) : IO Nat := do pure (← (groupSize fsOf base.world g).run {}).1
+  let reads ← IO.mkRef {}
+  let search ← assignmentSearch (fun service => compareOf spec service (askComparable stdin stdout reads)) sizeOf
+    walkWith base (handleGroups sc)
+  pure (.obj [("type", .str "assignmentChanges"),
+    ("tried", .arr (search.tried.map fun t => .obj [("assigned", ToValue.toValue t.assigned),
+      ("found", (t.found.map (·.toValue)).getD .null)])),
+    ("found", .arr (search.found.map (·.toValue)))])
+
 partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
   let line ← stdin.getLine
   if line.isEmpty then return
@@ -440,6 +462,7 @@ partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
       | some (.str "decodeLines") => IO.ofExcept (decodeLines request)
       | some (.str "simulate") => simulateRequest stdin stdout request
       | some (.str "stepOrderChanges") => stepOrderChangesRequest stdin stdout request
+      | some (.str "assignmentChanges") => assignmentChangesRequest stdin stdout request
       | some (.str "names") =>
         pure (.obj [("type", .str "names"),
           ("byCaller", .obj (rejectionKinds.filterMap fun k =>
@@ -447,7 +470,7 @@ partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
             | .str s => some (s, .bool (RejectionKind.byCaller k))
             | _ => none)),
           ("limits", .obj (limits.map fun l => (l.name, .num (.fromInt l.max)))),
-          ("stepOrderLimit", .num stepOrderLimit)])
+          ("stepOrderLimit", .num stepOrderLimit), ("assignmentLimit", .num assignmentLimit)])
       | _ => throw (IO.userError s!"unknown request {line.trimAscii}")
     catch e => pure (.obj [("type", .str "error"), ("message", .str (toString e))])
   send stdout reply

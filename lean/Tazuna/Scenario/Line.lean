@@ -86,4 +86,8 @@ def Line.facts : Line → List Fact
 def Line.picks (l : Line) : List Template :=
   l.facts.flatMap Fact.picks ++ l.written.flatMap Template.picks
 
+/-- The handles that the line names, with those that they and its written values read, at any depth. -/
+def Line.named (l : Line) : List Fact :=
+  l.facts.flatMap Fact.named ++ l.written.flatMap Template.named
+
 end Tazuna.Scenario

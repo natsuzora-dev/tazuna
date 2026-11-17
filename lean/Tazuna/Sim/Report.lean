@@ -42,7 +42,10 @@ inductive Report where
   | brokenGivenInvariant (service : String) (entity key invariant : Option String)
   /-- No fact matches the handle `fact` that the line names. -/
   | unresolvedReference (scenarioLine : Nat) (fact : Value)
-  /-- Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. -/
+  /--
+  Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. For a
+  handle of `requests`, the candidates differ in content, so a pick tells them apart.
+  -/
   | ambiguousReference (scenarioLine : Nat) (fact : Value) (candidates : List Value)
   /-- The line reads the output of the answer to `fact`, which has no answer with an output by then. -/
   | missingOutput (scenarioLine : Nat) (fact : Value)

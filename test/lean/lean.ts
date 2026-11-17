@@ -10,6 +10,7 @@ import type { TraceLine } from "../../src/data/trace.generated.ts";
 import { type FileLine, isMalformed } from "../../src/data/trace.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
 import type { Json } from "../../src/data/values.ts";
+import type { AssignmentSearch } from "../../src/explore/assignments.ts";
 import type { Searched } from "../../src/explore/stepOrders.ts";
 import type { Spec } from "../../src/load/load.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
@@ -48,6 +49,7 @@ interface LeanNames {
   readonly byCaller: Readonly<Record<string, boolean>>;
   readonly limits: Readonly<Record<string, number>>;
   readonly stepOrderLimit: number;
+  readonly assignmentLimit: number;
 }
 
 /**
@@ -223,6 +225,16 @@ export class Lean {
     return result["searched"] as readonly Searched[];
   }
 
+  /** Lean's assignmentSearch of the scenario's handle groups: each assignment it ran, and what it found. */
+  assignmentChanges(spec: Spec, scenario: Scenario, functions: Answering): AssignmentSearch {
+    const { tried, found } = this.exchange(
+      { type: "assignmentChanges", structure: spec.structure, scenario },
+      "assignmentChanges",
+      functions,
+    );
+    return { tried, found } as AssignmentSearch;
+  }
+
   names(): LeanNames {
     this.send({ type: "names" });
     const message = this.receive();
@@ -231,6 +243,7 @@ export class Lean {
       byCaller: message["byCaller"] as Record<string, boolean>,
       limits: message["limits"] as Record<string, number>,
       stepOrderLimit: message["stepOrderLimit"] as number,
+      assignmentLimit: message["assignmentLimit"] as number,
     };
   }
 

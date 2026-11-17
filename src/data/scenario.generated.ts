@@ -36,6 +36,21 @@ const fact = z.discriminatedUnion("type", [
     },
   }),
   /**
+   * The handle `handle`, from 0, of the requests that `request` with the same fields names, which are equal as the
+   * target's input schema compares them and so interchangeable: which of them each handle names is a choice that test
+   * searches (World.assignments), and handles beyond their number name nothing.
+   */
+  z.object({
+    type: z.literal("requests"),
+    origin: origin,
+    kind: z.enum(["command", "query", "subscribe"]),
+    target: ref,
+    get input() {
+      return template.exactOptional();
+    },
+    handle: z.int().nonnegative(),
+  }),
+  /**
    * The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
    * given, as it travels to `receiver` when given, or to its only receiver.
    */

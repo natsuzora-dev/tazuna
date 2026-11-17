@@ -208,6 +208,32 @@ for (const [use, misuse] of [
     assert.equal(problems[0]?.kind === "misusedObserved" ? problems[0].use : undefined, use);
   });
 
+test("The handles of requests name the same requests by their place, and a spread of them is a problem", () => {
+  const named = lowered((w) => {
+    const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
+    const [, second] = adding.requests(calendar.nextBusinessDay);
+    w.net.deliver(second);
+  });
+  assert.deepEqual(named.lines[1], {
+    type: "deliver",
+    message: {
+      type: "requests",
+      origin: { type: "line", index: 0 },
+      kind: "query",
+      target: { service: "calendar", name: "nextBusinessDay" },
+      handle: 1,
+    },
+  });
+  const spread = lowered((w) => {
+    const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
+    for (const request of [...adding.requests(calendar.nextBusinessDay)]) w.net.deliver(request);
+  });
+  assert.deepEqual(
+    spread.problems.map((p) => (p.kind === "misusedObserved" ? [p.use, p.path] : p.kind)),
+    [["spread", []]],
+  );
+});
+
 test("A position read in a bag of an observed value is a problem, and one in a sequence is a hole", () => {
   const { problems } = lowered((w) => {
     const listed = w.client.call(todo.tasks, { filter: "all" });
