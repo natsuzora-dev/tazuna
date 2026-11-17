@@ -36,7 +36,7 @@ tazuna aims to report each mistake with the earliest tool that can find it, in t
 
 - When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
 - When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
-  No path that appends up to `--depth` moves reports a violation.
+  No explored path of up to `--depth` moves after a scenario reports a violation.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
   This holds for the own service and for each running peer that has an implementation.
 
@@ -112,7 +112,7 @@ A *detection* is a check that can miss violations.
 When a detection reports a violation, the violation is real.
 When it reports nothing, the violation can still exist.
 
-`test` explores paths that append *moves* to each scenario, up to `--depth` moves.
+`test` explores paths of up to `--depth` *moves* after each scenario.
 A move is one act that faces the own service, with the network lines that it needs.
 An explored path uses values from the scenarios and new ids, and it neither resends a command nor redelivers an event.
 
@@ -131,7 +131,7 @@ The guarantees hold only under the following assumptions.
 tazuna detects a break of each assumption only partly or not at all.
 
 - **Runtime.** The TypeScript runtime returns the same traces and violations as the Lean definitions.
-  Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths that append up to two moves to the example scenarios.
+  Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.

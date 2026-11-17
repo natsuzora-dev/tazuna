@@ -36,13 +36,13 @@ const commands: Readonly<Record<string, Command>> = {
   test: {
     positionals: ["spec"],
     description:
-      "Run the checks of check first; if they report a violation, report those violations and run no scenario. Otherwise simulate every scenario, explore the paths that --depth appends to it (lines that face the own service), and search the orders of the steps of each processing that no cause orders. Report the violations of every path once per kind, definition, data and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first; a stepOrder violation counts as the same violation whichever of its two steps comes first, and a violation that only a path reports lists the lines it appended in its appendedLines field. Compare the trace of each running service of a scenario that did not halt with its snapshot: the own service's <service>/__snapshots__/<scenario>.jsonl, and each running peer's with lines <service>/__snapshots__/<scenario>.<peer>.jsonl. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
+      "Run the checks of check first; if they report a violation, report those violations and run no scenario. Otherwise simulate every scenario, explore the paths of up to --depth moves after it, and search the orders of the steps of each processing that no cause orders. Report the violations of every path once per kind, definition, data and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first; a stepOrder violation counts as the same violation whichever of its two steps comes first, and a violation that only an explored path reports lists the path's lines after the scenario in its appendedLines field. Compare the trace of each running service of a scenario that did not halt with its snapshot: the own service's <service>/__snapshots__/<scenario>.jsonl, and each running peer's with lines <service>/__snapshots__/<scenario>.<peer>.jsonl. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
     options: {
       "--depth": {
         value: "n",
         required: true,
         description:
-          "Append up to n moves to each scenario. A move is one act that faces the own service, with the network lines it needs, such as a client request, or an external peer's answer with the lines that deliver the request and the answer.",
+          "Explore paths of up to n moves after each scenario. A move is one act that faces the own service, with the network lines it needs, such as a client request, or an external peer's answer with the lines that deliver the request and the answer.",
       },
       "--update": {
         description:
@@ -50,7 +50,7 @@ const commands: Readonly<Record<string, Command>> = {
       },
       "--coverage": {
         description:
-          "Also report the parts of commands, queries, automations, and charts that neither a scenario's run nor a path that --depth appends reaches (Uncovered).",
+          "Also report the parts of commands, queries, automations, and charts that neither a scenario's run nor an explored path reaches (Uncovered).",
       },
     },
   },
@@ -68,9 +68,24 @@ const commands: Readonly<Record<string, Command>> = {
   },
 };
 
+const helpWidth = 100;
+
+/** Breaks `text` between words into lines of at most helpWidth characters, each starting with `indent`. */
+function wrap(indent: string, text: string): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/)) {
+    if (line !== "" && indent.length + line.length + 1 + word.length > helpWidth) {
+      lines.push(indent + line);
+      line = word;
+    } else line = line === "" ? word : `${line} ${word}`;
+  }
+  return [...lines, indent + line];
+}
+
 const entry = (indent: string, usage: string, description: string) => [
   `${indent}${usage}`,
-  `${indent}    ${description}`,
+  ...wrap(`${indent}    `, description),
 ];
 
 const help = [
@@ -91,25 +106,19 @@ const help = [
   "Options:",
   ...entry("  ", "-h, --help", "Print this help."),
   "",
-  `A violation after which the spec's behavior is undefined, or a scenario line that cannot take place, stops the run:
-test neither writes nor compares that scenario's snapshot. test --update leaves an existing snapshot of that scenario
-as it is, and verify still compares traces with it. test and verify compare nothing with a snapshot that has a line
-that the trace line schema cannot read or an after field that names no earlier out line since the input line before
-it. verify compares no line of a trace after an input line that differs from the snapshot's. Unless such an input line
-stops the comparison first, verify stops at the first line of a trace that the trace line schema cannot read and
-reports that line: it compares no line after the last input line before that line, and checks no line of an external
-service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.
-
-<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__. check and test first run tsc --noEmit, from the typescript
-package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files,
-and write tsc's output to stderr. If tsc reports an error, check and test stop without checking the spec. If loading
-the spec finds a Malformed violation, check and test report the violations that loading finds (Malformed,
-NonCanonical, Restricted) and stop without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package
-that <spec> resolves, or a tsc that does not finish, is a usage error. Unless tsc reports an error or a usage error
-stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the
-current directory, and write to stderr the number of violations, or that they found none, and the paths of the
-snapshots that test --update writes or removes.
-The exit code is 1 when tsc reports an error or a command reports a violation, 2 on a usage error, and 0 otherwise.`,
+  ...wrap(
+    "",
+    "A violation after which the spec's behavior is undefined, or a scenario line that cannot take place, stops the run: test neither writes nor compares that scenario's snapshot. test --update leaves an existing snapshot of that scenario as it is, and verify still compares traces with it. test and verify compare nothing with a snapshot that has a line that the trace line schema cannot read or an after field that names no earlier out line since the input line before it. verify compares no line of a trace after an input line that differs from the snapshot's. Unless such an input line stops the comparison first, verify stops at the first line of a trace that the trace line schema cannot read and reports that line: it compares no line after the last input line before that line, and checks no line of an external service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.",
+  ),
+  "",
+  ...wrap(
+    "",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__. check and test first run tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files, and write tsc's output to stderr. If tsc reports an error, check and test stop without checking the spec. If loading the spec finds a Malformed violation, check and test report the violations that loading finds (Malformed, NonCanonical, Restricted) and stop without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, or a tsc that does not finish, is a usage error. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none, and the paths of the snapshots that test --update writes or removes.",
+  ),
+  ...wrap(
+    "",
+    "The exit code is 1 when tsc reports an error or a command reports a violation, 2 on a usage error, and 0 otherwise.",
+  ),
 ].join("\n");
 
 const isFolder = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
@@ -194,7 +203,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     for (const written of result.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
     for (const removed of result.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
     const violations = [...(options.has("--coverage") ? uncoveredOf(spec, result.reached) : []), ...result.violations];
-    const paths = `the paths that append up to ${count(depth, "input")}`;
+    const paths = `explored paths of up to ${count(depth, "move")} after each scenario`;
     return report(io, spec.root, violations, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
   }
   const traces = resolve(io.cwd, traceFolder ?? "");

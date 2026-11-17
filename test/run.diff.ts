@@ -113,7 +113,7 @@ function invalidLines(spec: Spec, sc: Scenario, executed: Executed, enabledLines
 for (const { name, spec } of specs) {
   const seen = seenLines(spec);
   for (const named of spec.scenarios)
-    test(`${name}: ${named.service}/${named.name} and every path that appends up to ${depth} lines to it execute alike in TS and Lean`, (t) => {
+    test(`${name}: ${named.service}/${named.name} and every path of up to ${depth} moves after it execute alike in TS and Lean`, (t) => {
       const sc = (named.definition as LoadedScenario).scenario;
       const functions = () => new SimFunctions(spec, (part) => lean.read(part));
       const appendedOf = new Map<Executed, readonly Line[]>();

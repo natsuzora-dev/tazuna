@@ -296,7 +296,7 @@ function worldFingerprint(w: World): string {
 export const valuesPerPayload = 2;
 
 export interface Bounds {
-  /** The maximum number of lines appended to a scenario. */
+  /** The most moves on a path after a scenario. */
   readonly depth: number;
   readonly valuesPerPayload: number;
 }

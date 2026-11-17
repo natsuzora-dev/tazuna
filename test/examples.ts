@@ -18,7 +18,7 @@ export const folders = (dir: string): string[] =>
     : [];
 
 /**
- * The number of inputs appended to each scenario when the examples run under test and the Lean oracle. 2, since 3
+ * The most moves on a path after each scenario when the examples run under test and the Lean oracle. 2, since 3
  * makes npm test and npm run lean:check several times slower.
  */
 export const depth = 2;
