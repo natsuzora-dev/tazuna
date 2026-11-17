@@ -381,7 +381,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
   let ran : ActingIO Sim.World :=
     if executing then Sim.execute spec fsOf start sc else Sim.simulate spec fsOf start sc
   let (w, acting) ← ran.run {}
-  let (participants, _) ← (w.states.mapM fun ((service, s) : String × State) => do
+  let (services, _) ← (w.states.mapM fun ((service, s) : String × State) => do
     let c := acting.collect service
     let enabled ← match executing, s.halted, w.services.lookup service with
       | true, none, some st => do
@@ -396,7 +396,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
         fun ((i, j) : Nat × Nat) => .arr [.num i, .num j]))]
     pure (Value.obj (fields ++ enabled))).run acting
   pure (.obj [("type", .str "simulated"),
-    ("participants", .arr participants),
+    ("services", .arr services),
     ("violations", .arr (w.violations.map Sim.InvalidScenario.toValue)),
     ("halted", (w.halted.map Sim.InvalidScenario.toValue).getD .null)])
 

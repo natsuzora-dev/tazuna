@@ -2,7 +2,7 @@ import Tazuna.Service.State
 import Tazuna.Spec.Structure
 
 /-!
-The createKey values of a state: each is `<entity>-<n>` for the entity's `n`-th value, qualified by the participant that
+The createKey values of a state: each is `<entity>-<n>` for the entity's `n`-th value, qualified by the running service that
 creates it, so no two of them are equal.
 -/
 

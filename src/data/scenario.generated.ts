@@ -23,7 +23,7 @@ export type Origin = z.infer<typeof origin>;
 
 const fact = z.discriminatedUnion("type", [
   /**
-   * The request of kind `kind` to `target` that a participant sent while `origin` was processed, whose input has each
+   * The request of kind `kind` to `target` that a running service sent while `origin` was processed, whose input has each
    * field of `input`, when given, equal as the target's input schema compares it.
    */
   z.object({
@@ -51,7 +51,7 @@ const fact = z.discriminatedUnion("type", [
     handle: z.int().nonnegative(),
   }),
   /**
-   * The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
+   * The event `event` that a running service emitted while `origin` was processed, with each field of `payload` equal when
    * given, as it travels to `receiver` when given, or to its only receiver.
    */
   z.object({
@@ -254,7 +254,7 @@ const line = z.discriminatedUnion("type", [
  * the request answered.
  *
  * A line of a peer only states what the peer sends, a message in flight: what an external peer sends is the line's, and
- * what a running peer sends is its run's, which must equal the line. Every message between participants reaches its
+ * what a running peer sends is its run's, which must equal the line. Every message between running services reaches its
  * receiver only by a line of the network.
  */
 export type Line = z.infer<typeof line>;

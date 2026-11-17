@@ -39,10 +39,10 @@ export const compareOf =
 
 /** Lean's Execution.outcome. */
 export function outcomeFor(m: Made, service: string): Outcome {
-  const p = m.world.participants.get(service);
+  const p = m.world.services.get(service);
   if (p === undefined) throw new Error(`${service} does not run`);
   const lines = snapshotsOf(m).get(service) ?? [];
-  const keys = [...m.world.participants].flatMap(([q, r]) =>
+  const keys = [...m.world.services].flatMap(([q, r]) =>
     created(r.processing.state).map(([entity, key]) => [key, `${q}/${entity}`] as const),
   );
   return outcomeOf(
@@ -55,7 +55,7 @@ export function outcomeFor(m: Made, service: string): Outcome {
 
 /** Lean's Execution.refused. */
 function refused(m: Made, service: string): boolean {
-  const kind = m.world.participants.get(service)?.halted?.kind;
+  const kind = m.world.services.get(service)?.halted?.kind;
   return kind === "InvalidInput.unreadyStep" || kind === "InvalidInput.unusedStepOrder";
 }
 
@@ -65,7 +65,7 @@ const spanOf = (m: Made, origin: Origin, service: string): Span | undefined =>
 
 /** Lean's Execution.taken. */
 function taken(m: Made, span: Span): (readonly [number, StepName])[] {
-  const steps = m.world.participants.get(span.service)?.processing.state.steps ?? [];
+  const steps = m.world.services.get(span.service)?.processing.state.steps ?? [];
   const collected = m.listeners.get(span.service)?.collected;
   return (collected?.names(span.stepsFrom) ?? []).filter(
     ([n, name]) =>
@@ -75,14 +75,14 @@ function taken(m: Made, span: Span): (readonly [number, StepName])[] {
 
 /** Lean's Execution.haltedIn. */
 function haltedIn(m: Made, span: Span): boolean {
-  if (m.world.participants.get(span.service)?.halted === undefined) return false;
+  if (m.world.services.get(span.service)?.halted === undefined) return false;
   const last = m.world.spans.findLast((s) => s.service === span.service);
   return last !== undefined && canonicalJson(last.origin as Json) === canonicalJson(span.origin as Json);
 }
 
 /** Lean's Execution.candidatesOf. */
 function candidatesOf(m: Made, span: Span): (readonly [number, number])[] {
-  const p = m.world.participants.get(span.service);
+  const p = m.world.services.get(span.service);
   if (p === undefined || haltedIn(m, span)) return [];
   const collected = m.listeners.get(span.service)?.collected;
   return (collected?.candidates(p.processing.st, p.processing.state, span.stepsFrom) ?? []).filter(
@@ -118,7 +118,7 @@ function stepOrderSearch(
     if (span === undefined) continue;
     const names = taken(executed, span);
     const nameOf = new Map(names);
-    const steps = executed.world.participants.get(service)?.processing.state.steps ?? [];
+    const steps = executed.world.services.get(service)?.processing.state.steps ?? [];
     const parentOutcome = outcomeFor(executed, service);
     for (const [i, j] of candidatesOf(executed, span)) {
       const [a, b] = [nameOf.get(i), nameOf.get(j)];

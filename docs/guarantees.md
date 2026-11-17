@@ -21,7 +21,7 @@ A *scenario* of a service, the *own* service, has three parts:
   A line returns a *handle*, through which later lines and Then name the line and what it caused.
 - *Then* states what the own service did on the lines of When.
 
-The own service and its running peers are the *participants* of one *simulation*.
+The own service and its running peers are the *running services* of one *simulation*.
 They share one clock, and a message between two of them stays *in flight* until a network line delivers, redelivers, loses, or fails it.
 Messages travel on *channels*: a request, its answers, its end, and the events that name it as their `resultOf` share the request's channel, and an event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
@@ -35,7 +35,7 @@ The trace of the own service is the scenario's *snapshot*, and the trace of each
 tazuna has three tools that report violations:
 
 - `check` reads the spec and reports its violations without running it.
-- `test` simulates every scenario and compares each participant's trace with its snapshot.
+- `test` simulates every scenario and compares each running service's trace with its snapshot.
 - `verify` compares the traces that `drive` from `@natsuzora-dev/tazuna/verify` makes of an implementation with the snapshots.
 
 A *violation* is what a tool reports: a rule of the spec, the scenario, or the implementation that does not hold.
@@ -50,7 +50,7 @@ A line halts when the scenario as written describes no run, or not one run, from
 A tool *passes* when it reports no violation.
 
 - When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
-- When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each participant's trace equals its snapshot.
+- When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot, for the own service and for each running peer that has an implementation.
 
 When, in addition, the [assumptions](#assumptions) hold, the implementation sends the messages that the spec defines for the lines of each scenario.
@@ -59,17 +59,17 @@ tazuna guarantees nothing about lines that no scenario contains.
 ### When a scenario simulates
 
 Lean defines the simulation in `lean/Tazuna/Sim`, and `Sim.InvalidScenario` holds what it reports about a scenario.
-When `test` reports no `InvalidScenario` violation, the scenario stated everything that happened between the participants:
+When `test` reports no `InvalidScenario` violation, the scenario stated everything that happened between the running services:
 
-- every message between two participants reached its receiver by a line of When, or the scenario names it as lost, refused, or left in flight at the end (`InvalidScenario.leftInFlight`);
+- every message between two running services reached its receiver by a line of When, or the scenario names it as lost, refused, or left in flight at the end (`InvalidScenario.leftInFlight`);
 - a message never overtook an earlier one on its channel (`InvalidScenario.overtaking`);
 - each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered, not both (`InvalidScenario.awaitingAnswer`, `InvalidScenario.repeatedAnswer`);
 - an event's `resultOf` names a request that its emitter received (`InvalidScenario.unreceivedRequest`), and the receiver took that request's answer before the event (`InvalidInput.resultOfUnansweredRequest`);
 - each handle named one fact, and the handles of `requests` named equal requests (`InvalidScenario.unresolvedReference`, `InvalidScenario.ambiguousReference`);
 - each message that the scenario names as in flight at the end, it names once (`InvalidScenario.repeatedInFlight`);
 - the clock only advanced (`InvalidScenario.notLater`);
-- the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>`, in a line or in a Given record (`InvalidScenario.writtenKey`, `InvalidScenario.writtenGivenKey`);
-- no spec computed a string of that form that no participant created, in a record or an `out` line (`InvalidScenario.computedKey`).
+- the scenario wrote no key that a running service creates, of the form `<service>/<Entity>-<n>`, in a line or in a Given record (`InvalidScenario.writtenKey`, `InvalidScenario.writtenGivenKey`);
+- no spec computed a string of that form that no running service created, in a record or an `out` line (`InvalidScenario.computedKey`).
 
 The [simulation section](#simulation) of the proven properties lists what Lean proves about these rules.
 
@@ -102,7 +102,7 @@ The following table names the side at fault for each group.
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
 | `InvalidScenario` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold. |
-| `InvalidInput` | `test` | The scenario: a message that no sender could give the participant, including an external peer's answer that breaks the contract that the spec assumes of it. |
+| `InvalidInput` | `test` | The scenario: a message that no sender could give the running service, including an external peer's answer that breaks the contract that the spec assumes of it. |
 | `Fault` | `test` | The spec. |
 | `BagOrderDependent` | `test` | The spec. |
 | `ChoiceDependent` | `test` | The spec. |
@@ -175,11 +175,11 @@ A map state has one *copy* of its child states for each key of its items.
 
 - Then only adds reports: a scenario leaves the same traces, messages, and halt as the same scenario without expectations, so a snapshot depends on Given and When alone (`then_only_reports`). A payload of Then that names nothing is reported and stops no line. The end checks also only add reports to what the lines leave (`simulate_reported`).
 - A line other than a deliver, lose, or refuse line leaves every message in flight in place, and such a line changes no message in flight except the one its handle names: no message is delivered, lost, or refused unless a line names it (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
-- A line that gives no participant anything to process, such as a peer's message, an answer, an event, or a lost message, changes no participant's state: a message reaches its receiver only through a deliver, redeliver, or refuse line (`line_keeps_states`).
+- A line that gives no running service anything to process, such as a peer's message, an answer, an event, or a lost message, changes no running service's state: a message reaches its receiver only through a deliver, redeliver, or refuse line (`line_keeps_states`).
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer line that names a request that has not reached that peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A report that halts stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
-- No two createKey calls of a participant in a simulation return the same key: each line keeps every value that a participant has created and may only add to them (`execute_keepsKeys`, `created_kept`), and no two of its values are equal, since the `n`-th value of an entity is `<participant>/<Entity>-<n>` (`created_distinct`). A key of a keyed entity that the scenario may write, such as the key of a Given record, is none of them at any point of the run (`unwritten_not_created`, `execute_unwritten_not_created`).
+- No two createKey calls of a running service in a simulation return the same key: each line keeps every value that a running service has created and may only add to them (`execute_keepsKeys`, `created_kept`), and no two of its values are equal, since the `n`-th value of an entity is `<service>/<Entity>-<n>` (`created_distinct`). A key of a keyed entity that the scenario may write, such as the key of a Given record, is none of them at any point of the run (`unwritten_not_created`, `execute_unwritten_not_created`).
 - The order in which Given writes the records of a running service reaches nothing: Given places them ordered by entity and key, so a scenario that writes the same records in another order, no two of one entity and key, simulates alike, with the same traces, messages, halt, and reports (`simulate_records_perm`).
 
 ### Data validity

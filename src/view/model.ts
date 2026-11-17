@@ -160,8 +160,8 @@ function senderOf(id: string): string | undefined {
  * sender's lifeline, and any other `in` line from the scenario lifeline; a request goes to the service that its name
  * starts with, and an answer or a subscription end goes back between the request's two lifelines.
  */
-function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, "participants" | "entries"> {
-  const participants = [service];
+function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, "lifelines" | "entries"> {
+  const lifelines = [service];
   const targets = new Map<string, string>();
   const targetOf = (id: string) => targets.get(id) ?? null;
   const between = (other: string | null, dir: TraceLine["dir"]) =>
@@ -170,7 +170,7 @@ function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, 
     if (l.type === "time") return [{ type: "time", line }];
     if (l.dir === "in") {
       const sender = l.type === "answer" ? (targetOf(l.to) ?? senderOf(l.id) ?? null) : (senderOf(l.id) ?? null);
-      if (sender !== null && !participants.includes(sender)) participants.push(sender);
+      if (sender !== null && !lifelines.includes(sender)) lifelines.push(sender);
       return [{ type: "message", line, ...between(sender, "in") }];
     }
     if (l.type === "event") return [{ type: "message", line, from: service, to: service }];
@@ -178,11 +178,11 @@ function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, 
     if (l.type === "unsubscribe") return [{ type: "message", line, from: service, to: targetOf(l.to) }];
     const [owner] = l.name.split(".");
     if (owner === undefined || owner === l.name) return [{ type: "message", line, from: service, to: null }];
-    if (!participants.includes(owner)) participants.push(owner);
+    if (!lifelines.includes(owner)) lifelines.push(owner);
     targets.set(l.id, owner);
     return [{ type: "message", line, from: service, to: owner }];
   });
-  return { participants, entries };
+  return { lifelines, entries };
 }
 
 function snapshot(path: string): { readonly trace: TraceLine[] | null; readonly error: MalformedLine | null } {

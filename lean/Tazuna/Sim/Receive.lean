@@ -1,7 +1,7 @@
 import Tazuna.Service.Restart
 
 /-!
-A running service of a simulation is a participant: the one-service semantics (Service) take each message it receives.
+Each running service of a simulation takes each message it receives by the one-service semantics (Service).
 The simulation names a message by the sender's id of it; its receiver writes it with the id `<sender>/<id>`, unique
 among the messages it receives, and answers it with that id.
 -/

@@ -143,7 +143,7 @@ export function enabledLines(
   });
   return (lines, { world: w }) => {
     const self = (k: number): Fact => ({ type: "line", index: lines.length + k });
-    const r = w.participants.get(own)?.processing;
+    const r = w.services.get(own)?.processing;
     if (r === undefined) return [];
     const next = enabled(r);
     const ownLines = stateOf(w, own)?.lines ?? [];
@@ -254,12 +254,12 @@ export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Lin
 const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
 
 /**
- * The violations of each participant of `child` that its execution added after the execution of `parent`: its own, those its
+ * The violations of each running service of `child` that its execution added after the execution of `parent`: its own, those its
  * listener collected, and its halt.
  */
 function violationsSince(parent: Executed, child: Executed): Violation[] {
-  return [...child.world.participants].flatMap(([service, p]) => {
-    const before = parent.world.participants.get(service);
+  return [...child.world.services].flatMap(([service, p]) => {
+    const before = parent.world.services.get(service);
     const was = before?.processing.state.violations.length ?? 0;
     const collected = child.listeners.get(service)?.collected.violations ?? [];
     const collectedWas = parent.listeners.get(service)?.collected.violations.length ?? 0;
@@ -272,23 +272,23 @@ function violationsSince(parent: Executed, child: Executed): Violation[] {
 }
 
 const halted = (w: World): boolean =>
-  w.halted !== undefined || [...w.participants.values()].some((p) => p.halted !== undefined);
+  w.halted !== undefined || [...w.services.values()].some((p) => p.halted !== undefined);
 
 /**
  * Returns whether the lines appended after `parent` are lines that someone could write: no report of the simulation
- * and no InvalidInput violation of a participant. explore discards the others.
+ * and no InvalidInput violation of a running service. explore discards the others.
  */
 const givable = (parent: Executed, child: Executed): boolean =>
   child.world.violations.length === parent.world.violations.length &&
   (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
 
-/** The state of a world that explore merges paths by: each participant's and the messages in flight. */
+/** The state of a world that explore merges paths by: each running service's and the messages in flight. */
 function worldFingerprint(w: World): string {
   return canonicalJson([
     halted(w),
     w.now.toString(),
-    [...w.participants].map(([service, p]) => [service, fingerprint(p.processing)]),
+    [...w.services].map(([service, p]) => [service, fingerprint(p.processing)]),
     w.messages.flatMap((m) => (m.status === "inFlight" ? [[m.sender, m.receiver, m.body as never]] : [])),
   ]);
 }
@@ -322,7 +322,7 @@ const coverageOf = (executed: Executed, reached: Coverage) => {
 /**
  * Explores the scenario: executes its lines, and the paths that append up to `depth` lines that face the own service,
  * breadth-first, without extending a path whose world an earlier path reached, discarding a path whose last line no one
- * could write (givable). Returns the violations of the participants that each path added, the step orders of its last
+ * could write (givable). Returns the violations of the running services that each path added, the step orders of its last
  * move's processings that change their result, and what the executions reached.
  */
 export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: Seen, bounds: Bounds): ExploredLines {

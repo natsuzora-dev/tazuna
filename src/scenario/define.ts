@@ -134,7 +134,7 @@ export interface Line {
 
 type MessageKind = "request" | "subscription" | "event" | "answer" | "end";
 
-/** A message between participants, named by a handle: what a line caused, or a line that carried it. */
+/** A message between running services, named by a handle: what a line caused, or a line that carried it. */
 export interface Message<K extends MessageKind = MessageKind> {
   readonly [factOf]: unknown;
   readonly [messageKind]: K;
@@ -147,13 +147,13 @@ export interface RequestMessage<T = Request, K extends "request" | "subscription
   readonly input: ObservedShape<InputShape<T>>;
 }
 
-/** A command or query that a participant sent while a line or the startup was processed. */
+/** A command or query that a running service sent while a line or the startup was processed. */
 export type OutRequest<T = Request> = RequestMessage<T, "request">;
 
-/** A subscription that a participant opened while a line or the startup was processed. */
+/** A subscription that a running service opened while a line or the startup was processed. */
 export type OutSubscription<T = AnyQuery> = RequestMessage<T, "subscription">;
 
-/** An event that a participant emitted while a line or the startup was processed. */
+/** An event that a running service emitted while a line or the startup was processed. */
 export interface EventMessage<Ev = AnyEvent> extends Message<"event"> {
   readonly event: Ev;
   /** The event's payload, observed when the scenario runs. */

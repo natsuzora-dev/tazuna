@@ -188,7 +188,7 @@ partial def World.requestsOf (w : World) (fsOf : String → Functions m) (i : Na
 
 /--
 The value of the part `part` of the request that the handle `fact` of line `i` names: of a line's request or of a
-request that a participant sent, its input and the output of the first answer to it; of an answer, the output of the
+request that a running service sent, its input and the output of the first answer to it; of an answer, the output of the
 one answer that the receiver of the line's request gave to it while the answer's origin was processed, which names
 each answer of a subscription by the line that caused it; of an answer that a line states, its output.
 -/

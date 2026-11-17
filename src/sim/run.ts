@@ -28,7 +28,7 @@ import {
   stopped,
   type World,
 } from "./network.ts";
-import { receivedId } from "./participant.ts";
+import { receivedId } from "./receive.ts";
 import {
   answersOf,
   fill,
@@ -74,7 +74,7 @@ function reportedHere(report: Parameters<typeof reportTo>[1]): never {
   throw new Reported(report);
 }
 
-const processingOf = (w: World, service: string): Processing | undefined => w.participants.get(service)?.processing;
+const processingOf = (w: World, service: string): Processing | undefined => w.services.get(service)?.processing;
 
 const hasCreated = (t: Template): boolean => t.holes.some((h) => h.fill.type === "created");
 
@@ -621,7 +621,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           payload: v,
           ...(resultId === undefined ? {} : { resultOf: resultId }),
         };
-        const receivers = [...w.participants].filter(([r, p]) =>
+        const receivers = [...w.services].filter(([r, p]) =>
           p.processing.st.receives.includes(traceNameOfRef(l.event, r)),
         );
         if (receivers.length === 0)
@@ -731,7 +731,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           definition: null,
           data: { scenarioLine: i, at: time.toString(), now: w.now.toString() },
         });
-      for (const service of w.participants.keys()) {
+      for (const service of w.services.keys()) {
         if (stopped(w)) break;
         act(w, origin, service, fireTo(time));
       }
@@ -938,7 +938,7 @@ function expect(
 
 /** Lean's World.execute, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
 function executeLines(w: World, sc: Scenario, looked?: Found[]): void {
-  for (const service of w.participants.keys()) if (!stopped(w)) act(w, { type: "startup" }, service, begin);
+  for (const service of w.services.keys()) if (!stopped(w)) act(w, { type: "startup" }, service, begin);
   sc.lines.forEach((l, i) => {
     if (stopped(w)) return;
     looked?.push(...found(w, sc.expectations, i, l));

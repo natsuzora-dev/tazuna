@@ -58,7 +58,7 @@ test("Lean and TS refuse a step order that names a step no processing takes, as 
         const ts = outcomeOf(simulateSpec(spec, sc, stepOrders));
         const fromLean = lean.simulate(spec, sc, new SimFunctions(spec, (part) => lean.read(part)), false, stepOrders);
         assert.equal(canonicalJson(fromLean as Json), canonicalJson(ts as unknown as Json), `${root} line ${index}`);
-        const own = ts.participants.find((p) => p.service === sc.service);
+        const own = ts.services.find((p) => p.service === sc.service);
         for (const v of own?.violations ?? [])
           if (v.kind.endsWith("StepOrder") || v.kind.endsWith("Step")) kinds.add(`${v.kind} ${line.type}`);
       }

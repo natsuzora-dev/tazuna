@@ -64,7 +64,7 @@ export const executeSpec = (
 /** Each running service's trace as its snapshot holds it. */
 export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, readonly TraceLine[]> =>
   new Map(
-    [...world.participants].map(([service, p]) => {
+    [...world.services].map(([service, p]) => {
       const s = p.processing.state;
       const causes = (listeners.get(service) as Listener).collected.causes;
       return [
@@ -82,8 +82,8 @@ export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, rea
  * Lean's reportedViolations of a running service: its own violations, then those its listener collected, then its
  * halt.
  */
-export function participantViolations({ world, listeners }: Made, service: string): Violation[] {
-  const p = world.participants.get(service);
+export function serviceViolations({ world, listeners }: Made, service: string): Violation[] {
+  const p = world.services.get(service);
   if (p === undefined) return [];
   return [
     ...p.processing.state.violations,
@@ -93,8 +93,8 @@ export function participantViolations({ world, listeners }: Made, service: strin
 }
 
 /** Lean's candidates of a running service: none once it halted. */
-function participantCandidates({ world, listeners }: Made, service: string): (readonly [number, number])[] {
-  const p = world.participants.get(service);
+function serviceCandidates({ world, listeners }: Made, service: string): (readonly [number, number])[] {
+  const p = world.services.get(service);
   if (p === undefined || p.halted !== undefined) return [];
   return listeners.get(service)?.collected.candidates(p.processing.st, p.processing.state, 0) ?? [];
 }
@@ -104,7 +104,7 @@ function participantCandidates({ world, listeners }: Made, service: string): (re
  * violations and the halting one.
  */
 export interface Outcome {
-  readonly participants: readonly {
+  readonly services: readonly {
     readonly service: string;
     readonly lines: readonly TraceLine[];
     readonly violations: readonly Pick<Violation, "kind" | "definition" | "data">[];
@@ -117,11 +117,11 @@ export interface Outcome {
 const violationValue = ({ kind, definition, data }: Violation) => ({ kind, definition, data });
 
 export const outcomeOf = (m: Made): Outcome => ({
-  participants: [...m.world.participants].map(([service, p]) => ({
+  services: [...m.world.services].map(([service, p]) => ({
     service,
     lines: p.processing.state.lines,
-    violations: participantViolations(m, service).map(violationValue),
-    candidates: participantCandidates(m, service),
+    violations: serviceViolations(m, service).map(violationValue),
+    candidates: serviceCandidates(m, service),
   })),
   violations: m.world.violations,
   halted: m.world.halted ?? null,

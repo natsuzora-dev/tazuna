@@ -1,5 +1,5 @@
 import Tazuna.Scenario.Given
-import Tazuna.Sim.Participant
+import Tazuna.Sim.Receive
 import Tazuna.Sim.InvalidScenario
 
 /-!
@@ -186,7 +186,7 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
 
 /--
 A monad that is told whose processing runs, so that what the processing notes belongs to that running service: an
-instrumented simulation keeps one Collect per participant. Any other monad ignores it.
+instrumented simulation keeps one Collect per running service. Any other monad ignores it.
 -/
 class MonadActing (m : Type → Type) where
   acting {α : Type} (service : String) (x : m α) : m α
@@ -198,14 +198,14 @@ def checkStepOrder (s : State) : State :=
   let t := { s with stepOrder := [] }
   if s.halted.isNone && !s.stepOrder.isEmpty then t.report (.invalidInput (.unusedStepOrder s.stepOrder)) else t
 
-/-- The keyed entity of a running participant whose key form `<participant>/<e>-<n>` the string `x` has. -/
+/-- The keyed entity of a running service whose key form `<service>/<e>-<n>` the string `x` has. -/
 def World.keyEntity? (w : World) (x : String) : Option Spec.Ref :=
   w.services.findSome? fun (owner, st) =>
     (st.entities.find? fun e => !st.singles.contains e && Spec.isKeyOf s!"{owner}/{e}" x).map st.ref
 
 /--
 The least string, in code-point order, of the `out` lines `sent` and the records `records` that has a running
-participant's key form (keyEntity?) and that no running participant created, with the entity: a spec computed it.
+running service's key form (keyEntity?) and that no running service created, with the entity: a spec computed it.
 -/
 def World.computedKey? (w : World) (sent : List Line) (records : Records) : Option (String × Spec.Ref) :=
   let strings := (sent.filter (·.dir == .out)).flatMap (·.body.content.strings) ++

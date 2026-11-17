@@ -162,7 +162,7 @@ const edgeTypes = { line: Line };
 /** The minimum zoom. Fitting a wide trace can need less than React Flow's default minZoom of 0.5. */
 const minZoom = 0.1;
 
-const columns = (scenario: ScenarioView): readonly (string | null)[] => [null, ...scenario.participants];
+const columns = (scenario: ScenarioView): readonly (string | null)[] => [null, ...scenario.lifelines];
 const headId = (column: number) => `head:${column}`;
 const labelId = (index: number) => `label:${index}`;
 const timeId = (index: number) => `time:${index}`;

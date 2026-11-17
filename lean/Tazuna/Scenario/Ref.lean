@@ -37,7 +37,7 @@ mutual
 /-- A fact that a line or the startup caused, named by content. -/
 inductive Fact where
   /--
-  The request of kind `kind` to `target` that a participant sent while `origin` was processed, whose input has each
+  The request of kind `kind` to `target` that a running service sent while `origin` was processed, whose input has each
   field of `input`, when given, equal as the target's input schema compares it.
   -/
   | request (origin : Origin) (kind : RequestType) (target : Spec.Ref) (input : Option Template)
@@ -48,7 +48,7 @@ inductive Fact where
   -/
   | requests (origin : Origin) (kind : RequestType) (target : Spec.Ref) (input : Option Template) (handle : Nat)
   /--
-  The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
+  The event `event` that a running service emitted while `origin` was processed, with each field of `payload` equal when
   given, as it travels to `receiver` when given, or to its only receiver.
   -/
   | event (origin : Origin) (event : Spec.Ref) (payload : Option Template) (receiver : Option String)

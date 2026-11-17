@@ -415,7 +415,7 @@ theorem external_answer_needs_delivery (w : World) (own : String) (lines : List 
         exact absurd ⟨hne, hst⟩ hd
   · exact h
 
-/-- `w'` holds every participant's state as `w` holds it. -/
+/-- `w'` holds every running service's state as `w` holds it. -/
 def SameStates (w w' : World) : Prop := w'.states = w.states
 
 theorem same_refl (w : World) : SameStates w w := rfl
@@ -450,7 +450,7 @@ theorem same_attempt {α : Type} {w w' : World} (h : SameStates w w') (r : Excep
   · exact same_report h _
   · exact hk _
 
-/-- Closes `SameStates w x` where `x` is built from `w` by steps that change no participant's state. -/
+/-- Closes `SameStates w x` where `x` is built from `w` by steps that change no running service's state. -/
 macro "same_tac" : tactic => `(tactic| repeat' (first
   | contradiction
   | with_reducible assumption
@@ -468,7 +468,7 @@ macro "same_tac" : tactic => `(tactic| repeat' (first
   | split))
 
 /--
-Whether the line gives a participant something to process: a request or end of the client, a resend, an operation, the
+Whether the line gives a running service something to process: a request or end of the client, a resend, an operation, the
 clock, a restart, or a message that a deliver, redeliver, or refuse line names.
 -/
 def reaches : Scenario.Line → Bool
@@ -477,7 +477,7 @@ def reaches : Scenario.Line → Bool
   | _ => false
 
 /--
-A line that gives no participant anything to process changes no participant's state: a peer's message, an answer, an
+A line that gives no running service anything to process changes no running service's state: a peer's message, an answer, an
 event, a lost message, or a leaveInFlight or look line leaves every receiver as it was until a line delivers the message.
 -/
 theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line)

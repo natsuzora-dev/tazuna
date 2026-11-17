@@ -7,7 +7,7 @@ import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { type Row, recordSource } from "../service/records.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-import { keyEntity, noteTo, type Participant, type Role, type World } from "./network.ts";
+import { keyEntity, noteTo, type Role, type RunningService, type World } from "./network.ts";
 
 /** Lean's staticPeers. */
 function staticPeers(structure: Structure, own: string): string[] {
@@ -52,7 +52,7 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
   const peers = peersOf(sc);
   const roles = new Map<string, Role>([[sc.service, "own"], ...peers.map((p) => [p.service, p.role] as const)]);
   const running = [sc.service, ...peers.flatMap((p) => (p.role === "run" ? [p.service] : []))];
-  const participants = new Map<string, Participant>(
+  const services = new Map<string, RunningService>(
     running.map((service) => {
       const processing = processingFor(service);
       processing.state.now = now;
@@ -63,7 +63,7 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
   return {
     now,
     roles,
-    participants,
+    services,
     messages: [],
     spans: [],
     opened: [],
@@ -211,7 +211,7 @@ export function given(w: World, structure: Structure, sc: Scenario): void {
   for (const service of staticPeers(structure, sc.service))
     if (!peers.some((p) => p.service === service))
       noteTo(w, { kind: "InvalidScenario.unlistedPeer", definition: null, data: { service } });
-  for (const [service, { processing: r }] of w.participants) {
+  for (const [service, { processing: r }] of w.services) {
     const written = givenRecords(sc, service);
     const { rows, violations } = givenRows(r, (v) => writtenKey(w, v), service, written);
     const { records } = r.state;

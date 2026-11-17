@@ -82,7 +82,7 @@ def assignmentLimit : Nat := 64
 
 /--
 The result of a run: the violation that halted it, the trace lines that verify reads, its records, and the keys that its
-participants created, each with its domain `<participant>/<entity>` as verify's valueDomains names a key reference's.
+running services created, each with its domain `<service>/<entity>` as verify's valueDomains names a key reference's.
 -/
 structure Outcome where
   halted : Option Violation

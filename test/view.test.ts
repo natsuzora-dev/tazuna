@@ -214,7 +214,7 @@ test("A scenario in viewModel has, for each snapshot line, the sender and receiv
     assert.ok(scenario?.trace);
     const trace = scenario.trace;
     return [
-      scenario.participants.join(" "),
+      scenario.lifelines.join(" "),
       ...scenario.entries.map((entry) => {
         const l = trace[entry.line];
         const place = l === undefined ? "" : "name" in l ? l.name : "to" in l ? l.to : "";

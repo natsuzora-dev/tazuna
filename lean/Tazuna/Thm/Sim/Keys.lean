@@ -3,8 +3,8 @@ import Tazuna.Thm.Service.Keys
 import Tazuna.Thm.Service.KeyGrowth
 
 /-!
-The createKey values of the participants of a simulation: each participant's values differ from each other, and from
-every string that the scenario may write, so a Given record never holds a key that a participant creates later.
+The createKey values of the running services of a simulation: each running service's values differ from each other, and from
+every string that the scenario may write, so a Given record never holds a key that a running service creates later.
 -/
 
 namespace Tazuna.Thm.Sim.Keys
@@ -14,7 +14,7 @@ open Tazuna.Thm.Service.Keys Tazuna.Thm.Service.KeyGrowth
 open Tazuna.Thm.Data.Basic
 
 /--
-A string that writtenKey? lets a scenario write is no createKey value of a keyed entity of a running participant `p`,
+A string that writtenKey? lets a scenario write is no createKey value of a keyed entity of a running service `p`,
 in any state whose values `p` qualifies.
 -/
 theorem unwritten_not_created {w : World} {p : String} {st : Service} (hs : (p, st) ∈ w.services) {s : State}
@@ -35,7 +35,7 @@ theorem unwritten_not_created {w : World} {p : String} {st : Service} (hs : (p, 
 
 variable {fsOf : String → Functions Id}
 
-/-- Every participant of `w'` keeps the createKey values that it has in `w`. -/
+/-- Every running service of `w'` keeps the createKey values that it has in `w`. -/
 def KeepsWorld (w w' : World) : Prop := ∀ p, KeepsKeys (w.state p) (w'.state p)
 
 theorem KeepsWorld.refl (w : World) : KeepsWorld w w := fun _ => .refl _
@@ -253,7 +253,7 @@ theorem keepsWorld_deliverInOrder {w w' : World} (h : KeepsWorld w w') (i k : Na
   · exact keepsWorld_report h _
   · exact keepsWorld_deliverCarried h _ _
 
-/-- Closes `KeepsWorld w x` where `x` is built from `w` by steps that keep every participant's createKey values. -/
+/-- Closes `KeepsWorld w x` where `x` is built from `w` by steps that keep every running service's createKey values. -/
 macro "kw_tac" : tactic => `(tactic| repeat' (first
   | contradiction
   | with_reducible assumption
@@ -292,7 +292,7 @@ theorem keepsWorld_line (w : World) (own : String) (lines : List Scenario.Line) 
   · exact keepsWorld_report (.refl w) _
   · exact keepsWorld_take w own lines i l
 
-/-- A line of When keeps every participant's createKey values: it may only add to them. -/
+/-- A line of When keeps every running service's createKey values: it may only add to them. -/
 theorem step_keepsKeys (w : World) (sc : Scenario) (l : Scenario.Line) (i : Nat) :
     KeepsWorld w (w.step fsOf sc l i) := by
   unfold World.step
@@ -352,7 +352,7 @@ theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : Keep
     refine ⟨rfl, ?_⟩
     split <;> exact .refl _
 
-/-- The lines of a scenario keep every participant's createKey values from the start: they may only add to them. -/
+/-- The lines of a scenario keep every running service's createKey values from the start: they may only add to them. -/
 theorem execute_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
     KeepsWorld start (execute j fsOf start sc) := by
   unfold execute World.execute
@@ -385,7 +385,7 @@ theorem givenKeys_prefix (o : Option String) {es es' : List String} (h : es <+: 
     · apply String.toList_inj.mp
       rw [a₂, b₂, he, ht]
 
-/-- A participant keeps every createKey value that it has: each is among its values in any later world. -/
+/-- A running service keeps every createKey value that it has: each is among its values in any later world. -/
 theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
     (w.state p).created <+: (w'.state p).created := by
   unfold State.created
@@ -393,8 +393,8 @@ theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
   exact givenKeys_prefix _ (h p).2
 
 /--
-No createKey value of a running participant at the end of the lines of a scenario equals a key of a keyed entity that
-the start's writtenKey? lets the scenario write: the participant qualifies its values by its name throughout the run.
+No createKey value of a running service at the end of the lines of a scenario equals a key of a keyed entity that
+the start's writtenKey? lets the scenario write: the running service qualifies its values by its name throughout the run.
 -/
 theorem execute_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
     (hs : (p, st) ∈ start.services) (ho : (start.state p).keyOwner = some p) {e k : String} (he : e ∈ st.entities)

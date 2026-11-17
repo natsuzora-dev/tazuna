@@ -17,8 +17,8 @@ deriving DecidableEq, Repr, Inhabited
 
 /--
 What createKey returns next: `next` per entity (an entity that `next` lacks has none so far), each `<entity>-<n>`
-qualified as `<owner>/<entity>-<n>` by the participant `owner` of a simulation that creates it, as a received id is,
-so that the participants' keys differ whatever order they are created in.
+qualified as `<owner>/<entity>-<n>` by the running service `owner` of a simulation that creates it, as a received id is,
+so that the running services' keys differ whatever order they are created in.
 -/
 structure Keys where
   owner : Option String := none

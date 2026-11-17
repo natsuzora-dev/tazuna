@@ -8,7 +8,7 @@ import { Failed } from "../service/functions.ts";
 import { created } from "../service/state.ts";
 import { refOfTraceName } from "../spec/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
-import { nameIn } from "./participant.ts";
+import { nameIn } from "./receive.ts";
 
 /** A violation that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
@@ -63,7 +63,7 @@ function setValueAt(v: unknown, x: unknown, path: readonly string[]): unknown {
 
 /** Lean's comparedOr. */
 function comparedOr(w: World, service: string, schema: Schema, v: unknown): unknown {
-  const r = w.participants.get(service)?.processing;
+  const r = w.services.get(service)?.processing;
   if (r === undefined) return v;
   const c = r.functions.unordered(schema, v);
   return c instanceof Failed ? v : c;
@@ -77,7 +77,7 @@ const picks = (w: World, service: string, schema: Schema, pick: unknown, v: unkn
 /** Lean's World.schemaOf?. */
 function schemaOf(w: World, m: Message): readonly [string, Schema] | undefined {
   const side = running(w.roles.get(m.sender)) ? m.sender : m.receiver;
-  const st = w.participants.get(side)?.processing.st;
+  const st = w.services.get(side)?.processing.st;
   if (st === undefined) return undefined;
   const b = m.body;
   if (b.type === "command" || b.type === "query" || b.type === "subscribe")

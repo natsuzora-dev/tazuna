@@ -11,7 +11,7 @@ import type { Processing } from "../service/chart/queue.ts";
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf, refOfTraceName } from "../spec/structure.ts";
-import { arriveFrom, nameIn, receivedId, senderOf } from "./participant.ts";
+import { arriveFrom, nameIn, receivedId, senderOf } from "./receive.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -74,16 +74,16 @@ export interface Sent {
   readonly position: number;
 }
 
-export interface Participant {
+export interface RunningService {
   readonly processing: Processing;
   halted: Violation | undefined;
 }
 
-/** Lean's World. The running services are in `participants`, the own service first. */
+/** Lean's World. The running services are in `services`, the own service first. */
 export interface World {
   now: Temporal.Instant;
   readonly roles: ReadonlyMap<string, Role>;
-  readonly participants: ReadonlyMap<string, Participant>;
+  readonly services: ReadonlyMap<string, RunningService>;
   readonly messages: Message[];
   readonly spans: Span[];
   readonly opened: Opened[];
@@ -101,11 +101,11 @@ export interface World {
   assignments: readonly Assignment[];
 }
 
-export const stateOf = (w: World, service: string): State | undefined => w.participants.get(service)?.processing.state;
+export const stateOf = (w: World, service: string): State | undefined => w.services.get(service)?.processing.state;
 
 /** Lean's World.stopped. */
 export const stopped = (w: World): boolean =>
-  w.halted !== undefined || [...w.participants.values()].some((p) => p.halted !== undefined);
+  w.halted !== undefined || [...w.services.values()].some((p) => p.halted !== undefined);
 
 const halting: ReadonlySet<string> = new Set(haltingInvalidScenarioKinds);
 
@@ -178,7 +178,7 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
         break;
       }
       case "event":
-        for (const [r, p] of w.participants)
+        for (const [r, p] of w.services)
           if (r !== service && p.processing.st.receives.includes(nameIn(service, r, l.name)))
             post(w, o, service, r, l, l.resultOf);
         break;
@@ -188,9 +188,9 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
   }
 }
 
-/** Lean's World.keyEntity?: the keyed entity of a running participant whose key form the string `x` has. */
+/** Lean's World.keyEntity?: the keyed entity of a running service whose key form the string `x` has. */
 export function keyEntity(w: World, x: string): DefinitionRef | undefined {
-  for (const [owner, { processing }] of w.participants) {
+  for (const [owner, { processing }] of w.services) {
     const { st } = processing;
     const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(`${owner}/${e}`, x));
     if (entity !== undefined) return ref(st, entity);
@@ -211,7 +211,7 @@ function computedKey(
     ),
     ...[...records.singles.values()].flatMap((row) => stringsOf(row.encoded)),
   ];
-  const made = new Set([...w.participants.values()].flatMap((p) => created(p.processing.state).map(([, key]) => key)));
+  const made = new Set([...w.services.values()].flatMap((p) => created(p.processing.state).map(([, key]) => key)));
   const [least] = strings.filter((x) => !made.has(x) && keyEntity(w, x) !== undefined).toSorted(byCodePoint);
   const entity = least === undefined ? undefined : keyEntity(w, least);
   return least === undefined || entity === undefined ? undefined : [least, entity];
@@ -231,7 +231,7 @@ function checkComputed(w: World, service: string, sent: readonly TraceLine[], re
 
 /** Lean's World.act. */
 export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
-  const p = w.participants.get(service);
+  const p = w.services.get(service);
   if (p === undefined) return;
   const r = p.processing;
   const s = r.state;

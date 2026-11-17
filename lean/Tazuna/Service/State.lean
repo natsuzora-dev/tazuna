@@ -176,7 +176,7 @@ structure State where
   messageCount : Nat := 0
   /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
   createdEntities : List String := []
-  /-- The participant of a simulation that the service is, whose name qualifies its createKey values (Keys). -/
+  /-- The name of the service in a simulation, which qualifies its createKey values (Keys). -/
   keyOwner : Option String := none
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []

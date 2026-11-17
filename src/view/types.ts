@@ -93,7 +93,7 @@ export interface ScenarioView {
   /** The first snapshot line that fails the trace schema. */
   readonly error: MalformedLine | null;
   /** The scenario's service, then the others in the order of their first request in the trace. */
-  readonly participants: readonly string[];
+  readonly lifelines: readonly string[];
   readonly entries: readonly FlowEntry[];
 }
 

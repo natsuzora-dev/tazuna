@@ -15,7 +15,7 @@ export const assignmentLimit = 64;
 
 /**
  * Lean's Outcome: the violation that halted a run, the trace lines that verify reads, its records, and the keys that its
- * participants created, each with its domain.
+ * running services created, each with its domain.
  */
 export interface Outcome {
   readonly halted: ViolationValue | null;

@@ -115,7 +115,7 @@ export interface NextKeys {
   readonly count: number;
 }
 
-/** Lean's Keys: what createKey returns next per entity, qualified by the participant `owner` of a simulation. */
+/** Lean's Keys: what createKey returns next per entity, qualified by the running service `owner` of a simulation. */
 export interface Keys {
   readonly owner?: string;
   readonly next: readonly (readonly [string, NextKeys])[];

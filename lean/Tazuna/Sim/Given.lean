@@ -77,8 +77,8 @@ def givenRecords (sc : Scenario) (service : String) : List GivenRecord :=
   (writtenRecords sc service).mergeSort recordBefore
 
 /--
-The first string of `v` of the form `<participant>/<e>-<n>` of a key of the keyed entity `e` that the running
-participant creates, with the entity.
+The first string of `v` of the form `<service>/<e>-<n>` of a key of the keyed entity `e` that the running
+running service creates, with the entity.
 -/
 def World.writtenKey? (w : World) (v : Value) : Option (String × Spec.Ref) :=
   v.strings.findSome? fun x => (w.keyEntity? x).map (x, ·)

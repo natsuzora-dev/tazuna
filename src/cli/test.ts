@@ -18,7 +18,7 @@ import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/fou
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
-import { participantViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
+import { serviceViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
 import { pairingViolation } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotViolations } from "../verify/snapshot.ts";
 
@@ -147,11 +147,11 @@ function simulateScenarios(spec: Spec): {
       const line = "scenarioLine" in report.data ? report.data.scenarioLine : undefined;
       violations.push(toReported(report, at(line) ?? named.place, { scenario: ref }));
     }
-    const halted = world.halted !== undefined || [...world.participants.values()].some((p) => p.halted !== undefined);
+    const halted = world.halted !== undefined || [...world.services.values()].some((p) => p.halted !== undefined);
     for (const v of [...stepOrderChanges(spec, scenario, simulated, 0), ...assignmentChanges(spec, scenario)])
       violations.push(toReported(v, v.location ?? named.place, { scenario: ref }));
-    for (const service of world.participants.keys()) {
-      for (const v of participantViolations(simulated, service))
+    for (const service of world.services.keys()) {
+      for (const v of serviceViolations(simulated, service))
         violations.push(
           toReported(v, v.location ?? (v.definition === null ? named.place : placeOf(spec, v.definition)), {
             scenario: ref,

@@ -21,7 +21,7 @@ import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { limits as tsLimits } from "../src/service/limits.ts";
 import { byCallerKinds } from "../src/service/message.ts";
 import { Halt } from "../src/service/state.ts";
-import type { Participant } from "../src/sim/network.ts";
+import type { RunningService } from "../src/sim/network.ts";
 import { outcomeOf } from "../src/sim/spec/simulate.ts";
 import { depth, loadRoot, runExamples } from "./examples.ts";
 import { SimFunctions } from "./lean/functions.ts";
@@ -59,8 +59,8 @@ function executedOutcome(executed: Executed) {
   const { world } = executed;
   return {
     ...outcomeOf(executed),
-    participants: outcomeOf(executed).participants.map((p) => {
-      const { processing, halted } = world.participants.get(p.service) as Participant;
+    services: outcomeOf(executed).services.map((p) => {
+      const { processing, halted } = world.services.get(p.service) as RunningService;
       if (halted !== undefined) return p;
       try {
         return { ...p, enabled: enabled(processing) };
@@ -134,7 +134,7 @@ for (const { name, spec } of specs) {
       const next = (path: readonly Move[], executed: Executed): Move[] => {
         const last = path.at(-1);
         const stopped =
-          executed.world.halted !== undefined || [...executed.world.participants.values()].some((p) => p.halted);
+          executed.world.halted !== undefined || [...executed.world.services.values()].some((p) => p.halted);
         if (stopped || (last !== undefined && invalid.has(last))) return [];
         const appended = appendedOf.get(executed) ?? [];
         let moves: Move[];

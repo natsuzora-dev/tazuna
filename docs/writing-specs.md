@@ -62,7 +62,7 @@ Precedent: Given-When-Then (Behavior-Driven Development).
 
 ## Write every delivery
 
-A message between two participants arrives only by a line that the scenario writes: `w.net.deliver(message)`, `redeliver`, `lose`, or `refuse`, or `w.net.leaveInFlight(message)` for a message that is still undelivered at the end.
+A message between two running services arrives only by a line that the scenario writes: `w.net.deliver(message)`, `redeliver`, `lose`, or `refuse`, or `w.net.leaveInFlight(message)` for a message that is still undelivered at the end.
 An external peer answers only a request that reached it, and a request that reached it needs its answer or `leaveUnanswered`.
 A message never overtakes an earlier one on its channel; to deliver the later one, lose or refuse the earlier one first.
 The clock line `w.clock.at(time)` names no order for deadlines of one service due at the same time: `test` fires them in every order that can change the result and reports `ChoiceDependent` when the result differs, which the definition fixes, for example by guarding one transition on the other chart's state.
@@ -78,9 +78,9 @@ When one processing sends equal requests, such as copies of a map state that ask
 Nothing tells which request each handle names, so `test` runs every assignment and reports `ChoiceDependent` when one changes the result; requests that differ are `InvalidScenario.ambiguousReference`, since a pick tells them apart.
 Each request still needs its line, so a request that no handle names is `InvalidScenario.leftInFlight`, and a handle beyond the requests sent is `InvalidScenario.unresolvedReference`.
 When the requests must be told apart, put an id in the input, such as the task's id, and pick by it.
-Never write a key that a participant creates: read it through a handle, such as the `output` of the answer that holds it, and write `created()` in a running peer's message where its run creates the key.
+Never write a key that a running service creates: read it through a handle, such as the `output` of the answer that holds it, and write `created()` in a running peer's message where its run creates the key.
 Loading reports a value in the form of a created key (`<service>/<Entity>-<n>`) in Given or on a line as `Malformed.writtenCreatedKey`.
-A spec does not compute such a string either: `test` compares runs up to a renaming of created keys, so the simulation reports one that no participant created as `InvalidScenario.computedKey`.
+A spec does not compute such a string either: `test` compares runs up to a renaming of created keys, so the simulation reports one that no running service created as `InvalidScenario.computedKey`.
 Send a request again with `w.client.resend(line)`, and a new input under the id of an earlier line with `w.client.send(command, input, { sameIdAs: line })`.
 
 Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.

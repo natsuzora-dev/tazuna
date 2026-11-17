@@ -105,7 +105,7 @@ export function assignmentSearch(spec: Spec, sc: Scenario): AssignmentSearch {
         handles,
       }),
     );
-    const outcomes = [...base.world.participants.keys()].map(
+    const outcomes = [...base.world.services.keys()].map(
       (service) => [service, outcomeFor(base, service), outcomeFor(alternative, service)] as const,
     );
     const found = assignment(
