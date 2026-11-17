@@ -23,8 +23,14 @@ export interface Adapter {
   readonly now: () => Temporal.Instant;
   /** Moves the implementation's clock to `time`, firing its timers due by then in its own order. */
   readonly advanceTo: (time: Temporal.Instant) => Promise<void>;
-  /** Resolves when the implementation has stopped writing outputs. `outputs` counts the trace's output lines. */
-  readonly untilQuiet: (outputs: () => number) => Promise<void>;
+  /**
+   * Resolves when the implementation has settled: it has no work left that it can do before it gets a message or the
+   * clock moves, such as a callback or a timer due at the current time. Work that waits for an answer from another
+   * service, or for a later time, does not keep it from settling. The harness relies on this alone to know that an
+   * output will not come before the next input. An adapter that can only wait for the implementation to settle bounds
+   * the wait and rejects with Unsettled when the bound passes.
+   */
+  readonly settled: () => Promise<void>;
   readonly command?: (command: InputMessage) => Promise<CommandAnswer>;
   readonly query?: (query: InputMessage) => Promise<QueryAnswer>;
   /** `signal` aborts when the subscription ends. */
@@ -36,6 +42,15 @@ export interface Adapter {
   readonly operate?: (operation: InputMessage) => Promise<void>;
   /** Starts a new process of the implementation on the same storage, without the timers and requests of the old one. */
   readonly restart?: () => Promise<void>;
+}
+
+/** The rejection of Adapter.settled when the implementation did not settle within `bound` milliseconds. */
+export class Unsettled extends Error {
+  readonly bound: number;
+  constructor(bound: number) {
+    super(`the implementation did not settle within ${bound} ms`);
+    this.bound = bound;
+  }
 }
 
 /** A request that the implementation sent to another service, which the harness answers by the scenario. */

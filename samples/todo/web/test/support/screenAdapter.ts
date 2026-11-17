@@ -1,5 +1,5 @@
 import type { AnyCommand, AnyQuery, CommandAnswer } from "@natsuzora-dev/tazuna";
-import { type Adapter, commandRequest, type OutputSlot, queryRequest } from "@natsuzora-dev/tazuna/verify";
+import { type Adapter, commandRequest, type OutputSlot, queryRequest, Unsettled } from "@natsuzora-dev/tazuna/verify";
 import { expect, type Locator, type Page, type Request } from "@playwright/test";
 import { todo } from "@todo/spec/todo";
 import { z } from "zod";
@@ -103,6 +103,9 @@ const isSentAs = (call: Call) => (sent: Sent) =>
  * Requests on separate connections may reach the server out of order, so output lines follow the order of Playwright's
  * request and requestfailed events.
  */
+/** How long, in wall-clock milliseconds, the screen adapter waits for the browser to settle. */
+const settleBound = 5_000;
+
 export function screenAdapter(page: Page, held: typeof Held): Adapter & { readonly unboundCalls: () => Call[] } {
   const list = new TaskListPage(page);
   const detail = new TaskDetailPage(page);
@@ -237,22 +240,25 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
       time = to;
       await page.clock.setFixedTime(time.epochMilliseconds);
     },
-    async untilQuiet(outputs) {
-      // The browser does not signal when a request from a React effect is sent, so wait until the request and output
-      // counts hold still for a poll interval.
-      let before = "";
-      await expect
-        .poll(
-          async () => {
-            const now = `${sent.length} ${outputs()}`;
-            const isUnchanged = now === before;
-            before = now;
-            const isBusy = (await busy.count()) > 0;
-            return isUnchanged && unbound.length === 0 && isBusy === unansweredCommands > 0;
-          },
-          { intervals: [100] },
-        )
-        .toBe(true);
+    async settled() {
+      // The browser does not signal when a request from a React effect is sent, so wait, up to settleBound, until the
+      // sent requests hold still for a poll interval with every one bound to its slot.
+      let before = -1;
+      try {
+        await expect
+          .poll(
+            async () => {
+              const isUnchanged = sent.length === before;
+              before = sent.length;
+              const isBusy = (await busy.count()) > 0;
+              return isUnchanged && unbound.length === 0 && isBusy === unansweredCommands > 0;
+            },
+            { intervals: [100], timeout: settleBound },
+          )
+          .toBe(true);
+      } catch {
+        throw new Unsettled(settleBound);
+      }
       for (const expectShown of unshownAnswers.values()) await expectShown();
       unshownAnswers.clear();
     },

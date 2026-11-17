@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { setImmediate as afterPendingCallbacks } from "node:timers/promises";
 import type { QueryAnswer } from "@natsuzora-dev/tazuna";
 import {
   type Adapter,
@@ -7,9 +8,7 @@ import {
   type Outputs,
   queryRequest,
 } from "@natsuzora-dev/tazuna/verify";
-import type { ClientOptions } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import { SimpleCsrfProtectionLinkPlugin } from "@orpc/client/plugins";
+import { createRouterClient } from "@orpc/server";
 import { calendar } from "@todo/spec/calendar";
 import { device } from "@todo/spec/device";
 import { migrate } from "drizzle-orm/node-sqlite/migrator";
@@ -20,26 +19,14 @@ import * as schema from "../../src/db/schema.ts";
 import type * as Device from "../../src/device/device.server.ts";
 import type { DeviceResult } from "../../src/device/pages.server.ts";
 import type * as Notifier from "../../src/notifier/notifier.server.ts";
-import { customJsonSerializers } from "../../src/orpc/serializers.ts";
-import type Server from "../../src/server.ts";
 import { toApp, toSpec } from "./answers.ts";
 
-interface ClientContext {
+interface CallOptions {
   readonly idempotencyKey?: string;
+  readonly signal?: AbortSignal;
 }
 
-type Procedure = (input: unknown, options: ClientOptions<ClientContext>) => Promise<unknown>;
-
-function todoLink(server: typeof Server) {
-  return new RPCLink<ClientContext>({
-    url: "http://localhost/api/rpc",
-    fetch: async (request) => server.fetch(request),
-    headers: ({ context }) =>
-      context.idempotencyKey === undefined ? {} : { "Idempotency-Key": context.idempotencyKey },
-    customJsonSerializers,
-    plugins: [new SimpleCsrfProtectionLinkPlugin()],
-  });
-}
+type Procedure = (input: unknown, options: CallOptions) => Promise<unknown>;
 
 const instant = (value: unknown) => (typeof value === "string" ? Temporal.Instant.from(value) : null);
 
@@ -123,7 +110,8 @@ async function loadApp(
   }
   return {
     db: loaded.db,
-    link: todoLink((await import("../../src/server.ts")).default),
+    // The server module starts the event subscriptions, reminders and notifier that the app runs beside its router.
+    server: await import("../../src/server.ts"),
     todoRouter: (await import("../../src/todo/todo.router.ts")).todoRouter,
     events: (await import("../../src/todo/events.server.ts")).events,
     notifier: await import("../../src/notifier/notifier.server.ts"),
@@ -147,7 +135,13 @@ export function serverAdapter(service: "todo" | "notifier"): Adapter {
   };
   const procedure = (name: string): Procedure => {
     if (!Object.hasOwn(app.todoRouter, name)) throw new Error(`the app implements no ${name}`);
-    return (input, options) => app.link.call(["todo", name], input, options);
+    // The router runs in this process without HTTP, so the app's work is callbacks and fake timers that settled sees.
+    return (input, { idempotencyKey, signal }) => {
+      const headers = new Headers(idempotencyKey === undefined ? {} : { "Idempotency-Key": idempotencyKey });
+      type Call = (input: unknown, options: { readonly signal?: AbortSignal | undefined }) => Promise<unknown>;
+      const client = createRouterClient(app.todoRouter, { context: { headers } }) as unknown as Record<string, Call>;
+      return (client[name] as Call)(input, { signal });
+    };
   };
   return {
     async start(appOutputs, time, records) {
@@ -161,15 +155,18 @@ export function serverAdapter(service: "todo" | "notifier"): Adapter {
       const until = time.epochMilliseconds - Date.now();
       if (until > 0) await vi.advanceTimersByTimeAsync(until);
     },
-    async untilQuiet(outputs) {
-      for (let before = -1; before !== outputs(); ) {
-        before = outputs();
+    // The app does its work in callbacks and fake timers, so it has settled when running the timers due now and then
+    // every pending callback (a real setImmediate runs after them) schedules no timer.
+    async settled() {
+      for (let timers = -1; timers !== vi.getTimerCount(); ) {
         await vi.advanceTimersByTimeAsync(0);
+        timers = vi.getTimerCount();
+        await afterPendingCallbacks();
       }
     },
     async command({ id, name, input }) {
       try {
-        await procedure(name)(input, { context: { idempotencyKey: id } });
+        await procedure(name)(input, { idempotencyKey: id });
         return { result: "accepted" };
       } catch (error) {
         return toSpec.rejected(error);
@@ -207,7 +204,7 @@ const isAsyncIterable = (value: unknown): value is AsyncIterable<unknown> =>
   typeof value === "object" && value !== null && Symbol.asyncIterator in value;
 
 async function answers(subscription: Procedure, input: unknown, signal: AbortSignal): Promise<AsyncIterable<unknown>> {
-  const outputs = await subscription(input, { signal, context: {} });
+  const outputs = await subscription(input, { signal });
   if (!isAsyncIterable(outputs)) throw new Error("the subscription answered with no event iterator");
   return outputs;
 }

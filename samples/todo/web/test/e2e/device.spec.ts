@@ -1,9 +1,10 @@
 import type { TraceLine, UntimedTraceLine } from "@natsuzora-dev/tazuna";
+import { lineIds } from "@natsuzora-dev/tazuna/verify";
 import { expect, type Page } from "@playwright/test";
 import type * as Pages from "../../src/device/pages.server.ts";
 import type * as Held from "../doubles/held.ts";
 import { keepOpen } from "../doubles/pushedStream.ts";
-import { lineIds, writeTrace } from "../harness/traces.ts";
+import { writeTrace } from "../harness/traces.ts";
 import { toSpec } from "../support/answers.ts";
 import { TaskListPage } from "../support/pages/TaskListPage.ts";
 import { type App, test } from "./fixtures.ts";

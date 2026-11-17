@@ -1,5 +1,5 @@
-import type { TraceLine } from "../data/trace.generated.ts";
-import { substituted, type UntimedTraceLine } from "../data/trace.ts";
+import { type TraceLine, traceLine } from "../data/trace.generated.ts";
+import { type Bindings, substituted, type UntimedTraceLine } from "../data/trace.ts";
 import { plain } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { traceName } from "../load/traceName.ts";
@@ -20,11 +20,8 @@ interface Waiting extends ForeignRequest {
   readonly subscription: boolean;
 }
 
-/** How many quiet periods the harness waits before an answer for the implementation to send the answered request. */
-const quietPeriodsBeforeAnswer = 20;
-
 /** Returns a function that gives an output line without an implementation id the id `<name>#<n>`, per name. */
-function lineIds(): (name: string) => string {
+export function lineIds(): (name: string) => string {
   const counts = new Map<string, number>();
   return (name) => {
     const n = (counts.get(name) ?? 0) + 1;
@@ -39,10 +36,28 @@ function required<F>(receive: F | undefined, type: string): F {
 }
 
 /**
+ * The `in` line with the snapshot values that the bindings bind replaced in its value positions (the answered request,
+ * resultOf and the content), read by the trace line schema.
+ */
+function substitutedLine(bindings: Bindings, line: TraceLine): TraceLine {
+  const value = (v: unknown) => substituted(bindings, plain(v));
+  const id = (s: string | undefined) => (s === undefined ? undefined : (bindings.get(s) ?? s));
+  return traceLine.parse({
+    ...line,
+    ...("to" in line ? { to: id(line.to) } : {}),
+    ...("resultOf" in line && line.resultOf !== undefined ? { resultOf: id(line.resultOf) } : {}),
+    ...("input" in line ? { input: value(line.input) } : {}),
+    ...("payload" in line ? { payload: value(line.payload) } : {}),
+    ...("answer" in line ? { answer: value(line.answer) } : {}),
+  });
+}
+
+/**
  * Drives the implementation through the run as the simulation ran it, and returns the trace at the implementation's
  * boundary. The implementation starts at the scenario's start from the Given records, then gets the snapshot's `in`
- * lines one by one: before each, the clock moves to the line's time and the harness waits until the implementation is
- * quiet. A value of the snapshot that the implementation stands for in its own way (a key it created, the id of a
+ * lines one by one: before each, the harness waits until the implementation has settled (Adapter.settled), and moves
+ * the clock to the line's time. A command, query or subscription does not hold the harness: its answer is an output
+ * that the trace gets when the implementation gives it, maybe after later inputs. A value of the snapshot that the implementation stands for in its own way (a key it created, the id of a
  * request it sent) is substituted to the implementation's value by the bindings that verify's comparison makes of the
  * trace so far, so an answer reaches the request that the implementation sent; where the binding keeps several values
  * open, it chooses by position, and the comparison reports the line as ambiguous when another choice could give the
@@ -111,7 +126,8 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
     later,
   };
   const written = () => lines.filter((l) => l !== undefined);
-  const outputCount = () => written().filter((l) => l.dir === "out").length;
+  const failures: unknown[] = [];
+  const running = (work: Promise<void>) => void work.catch((error: unknown) => failures.push(error));
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
   const comparedBefore = (k: number) => compareTrace(spec, runner, snapshot.slice(0, k), written());
@@ -121,7 +137,8 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
     write(untimed as UntimedTraceLine);
     if (line.type === "answer") {
       const request = waiting.get(line.to);
-      // The implementation never sent the answered request, which the comparison reports as missing.
+      // The settled implementation sent no request with this id, and the comparison reports the snapshot's request as
+      // missing; the answer stays in the trace as its in line.
       if (request === undefined) return;
       if (!request.subscription) waiting.delete(line.to);
       return request.answer(line.answer);
@@ -134,25 +151,28 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
         // The requests that the old process sent get no answers.
         waiting.clear();
         return required(adapter.restart, line.type)();
-      case "command":
-        return writeAnswer(id, await required(adapter.command, line.type)({ ...line, payload: undefined }));
-      case "query":
-        return writeAnswer(id, await required(adapter.query, line.type)({ ...line, payload: undefined }));
+      case "command": {
+        const command = required(adapter.command, line.type);
+        return running((async () => writeAnswer(id, await command({ ...line, payload: undefined })))());
+      }
+      case "query": {
+        const query = required(adapter.query, line.type);
+        return running((async () => writeAnswer(id, await query({ ...line, payload: undefined })))());
+      }
       case "subscribe": {
+        const subscribe = required(adapter.subscribe, line.type);
         const controller = new AbortController();
         subscriptions.set(id, controller);
-        const answers = await required(adapter.subscribe, line.type)(
-          { ...line, payload: undefined },
-          controller.signal,
+        return running(
+          (async () => {
+            try {
+              for await (const answer of await subscribe({ ...line, payload: undefined }, controller.signal))
+                writeAnswer(id, answer);
+            } catch (error) {
+              if (!controller.signal.aborted) throw error;
+            }
+          })(),
         );
-        void (async () => {
-          try {
-            for await (const answer of answers) writeAnswer(id, answer);
-          } catch (error) {
-            if (!controller.signal.aborted) throw error;
-          }
-        })();
-        return;
       }
       case "unsubscribe":
         subscriptions.get(line.to)?.abort();
@@ -168,23 +188,19 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
   for (const [k, line] of snapshot.entries()) {
     if (line.dir === "out") continue;
     const time = Temporal.Instant.from(line.time);
+    await adapter.settled();
     if (!time.equals(adapter.now())) {
-      await adapter.untilQuiet(outputCount);
       await adapter.advanceTo(time);
+      await adapter.settled();
     }
-    await adapter.untilQuiet(outputCount);
-    let compared = comparedBefore(k);
-    if (line.type === "answer")
-      for (let i = 0; i < quietPeriodsBeforeAnswer && !waiting.has(compared.bindings.get(line.to) ?? line.to); i += 1) {
-        await adapter.untilQuiet(outputCount);
-        compared = comparedBefore(k);
-      }
+    const compared = comparedBefore(k);
     // The comparison compares nothing after an Uncomparable finding, so the later lines would go by no binding.
     if (compared.found.some(({ kind }) => kind.startsWith("Uncomparable."))) break;
-    await give(substituted(compared.bindings, plain(line)) as unknown as TraceLine);
+    await give(substitutedLine(compared.bindings, line));
   }
-  await adapter.untilQuiet(outputCount);
+  await adapter.settled();
   for (const controller of subscriptions.values()) controller.abort();
-  await adapter.untilQuiet(outputCount);
+  await adapter.settled();
+  if (failures.length > 0) throw failures[0];
   return written();
 }

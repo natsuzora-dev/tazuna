@@ -71,9 +71,10 @@ test("verifyTraces compares an external service trace under any name with the co
 
 /**
  * An implementation of shop that charges through payments with its own request ids, and refunds the charge that
- * payments created, or a charge of its own when `refunds` says so.
+ * payments created, or a charge of its own when `refunds` says so. With `answersAfterCharge`, it answers placeOrder
+ * only once payments answers the charge.
  */
-function shopAdapter(refunds: (chargeId: string) => string): Adapter {
+function shopAdapter(refunds: (chargeId: string) => string, { answersAfterCharge = false } = {}): Adapter {
   let time: Temporal.Instant;
   let chargeId = "";
   let requests = 0;
@@ -87,18 +88,22 @@ function shopAdapter(refunds: (chargeId: string) => string): Adapter {
     async advanceTo(to) {
       time = to;
     },
-    untilQuiet: () => new Promise((resolve) => setImmediate(resolve)),
+    settled: () => new Promise((resolve) => setImmediate(resolve)),
     async command({ id, name }) {
       requests += 1;
       if (name === "placeOrder") {
         outputs.event({ name: "orderPlaced", payload: { amount: 1200 }, resultOf: id });
-        outputs.request({
-          ...commandRequest(payments.createCharge, { amount: 1200 }, (a) => {
-            const output = decodeAnswer(payments.createCharge, a);
-            if (output.result === "accepted") chargeId = output.output.chargeId;
+        const charged = new Promise<void>((resolve) =>
+          outputs.request({
+            ...commandRequest(payments.createCharge, { amount: 1200 }, (a) => {
+              const output = decodeAnswer(payments.createCharge, a);
+              if (output.result === "accepted") chargeId = output.output.chargeId;
+              resolve();
+            }),
+            id: `pay-${requests}`,
           }),
-          id: `pay-${requests}`,
-        });
+        );
+        if (answersAfterCharge) await charged;
       } else {
         outputs.event({ name: "orderCancelled", payload: {}, resultOf: id });
         outputs.request({
@@ -137,4 +142,12 @@ test("drive and verifyTraces report a request that the implementation sends with
     shopAdapter(() => "ch_other"),
   );
   assert.deepEqual(kinds, ["Mismatch.request"]);
+});
+
+test("drive does not wait for a command's answer, so an answer that comes after a later input is a mismatch", async () => {
+  const { kinds } = await verifyDriven(
+    "answered-late",
+    shopAdapter((chargeId) => chargeId, { answersAfterCharge: true }),
+  );
+  assert.ok(kinds.includes("Mismatch.missingAnswer"), kinds.join());
 });

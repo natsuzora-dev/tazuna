@@ -1,7 +1,8 @@
 import type { TraceLine } from "@natsuzora-dev/tazuna";
+import { lineIds } from "@natsuzora-dev/tazuna/verify";
 import { test } from "vitest";
 import { nextBusinessDay } from "../src/calendar/calendar.server.ts";
-import { lineIds, writeTrace } from "./harness/traces.ts";
+import { writeTrace } from "./harness/traces.ts";
 import { toSpec } from "./support/answers.ts";
 
 const inputs = { friday: "2026-10-30", saturday: "2026-10-31", sunday: "2026-11-01", monday: "2026-11-02" };

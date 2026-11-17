@@ -11,7 +11,7 @@ import { pairingProblem, pairTraces, traceFolderOf } from "./pairing.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
 export type { GivenRecord } from "../data/scenario.generated.ts";
-export { drive, type Run } from "./harness.ts";
+export { drive, lineIds, type Run } from "./harness.ts";
 export {
   type Adapter,
   commandRequest,
@@ -21,6 +21,7 @@ export {
   type OutputSlot,
   type Outputs,
   queryRequest,
+  Unsettled,
 } from "./ports.ts";
 
 /**
