@@ -334,11 +334,11 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       let some msg := w.messages[k]? | return w
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
       pure (w.setStatus k .lost)
-  | .fail message =>
+  | .refuse message =>
     w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
-      if requestName? msg.body |>.isNone then return w.report (.unfailable i msg.describe)
+      if requestName? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
       let to := receivedId msg.sender msg.id
       let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := s!"answer:{to}",
                                body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
@@ -346,11 +346,11 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       let w := w.setStatus k .lost
       let w := { w with messages := w.messages.push reply }
       w.deliverCarried fsOf i w.messages.size.pred
-  | .inFlight message =>
+  | .leaveInFlight message =>
     w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
-      if w.inFlight.any (·.2 == k) then return w.report (.repeatedInFlight i msg.describe)
-      pure { w with inFlight := w.inFlight ++ [(i, k)] }
+      if w.leftInFlight.any (·.2 == k) then return w.report (.repeatedInFlight i msg.describe)
+      pure { w with leftInFlight := w.leftInFlight ++ [(i, k)] }
   | .at time => do
     if time.time ≤ w.now then return w.report (.notLater i time.time w.now)
     let w ← w.services.foldlM (init := w) fun w (service, _) =>
@@ -397,15 +397,15 @@ def World.found (w : World) (fsOf : String → Functions m) (expectations : List
   | _ => pure []
 
 /--
-The world with each message left in flight reported, unless an inFlight line names it, each inFlight line whose message
+The world with each message left in flight reported, unless an leaveInFlight line names it, each leaveInFlight line whose message
 is not left in flight reported, and each request that an external peer received and neither answers nor leaves
 unanswered reported.
 -/
 def World.checkEnd (w : World) : World :=
   let indexed := w.messages.toList.zipIdx
   let w := indexed.foldl (init := w) fun w (msg, k) =>
-    if msg.status == .inFlight && !w.inFlight.any (·.2 == k) then w.report (.leftInFlight msg.describe) else w
-  let w := w.inFlight.foldl (init := w) fun w (i, k) =>
+    if msg.status == .inFlight && !w.leftInFlight.any (·.2 == k) then w.report (.leftInFlight msg.describe) else w
+  let w := w.leftInFlight.foldl (init := w) fun w (i, k) =>
     if (w.messages[k]?.map (·.status)) == some .inFlight then w else w.report (.unusedInFlight i)
   indexed.foldl (init := w) fun w (msg, _) =>
     if msg.status == .delivered && w.role msg.receiver == some .external && (requestName? msg.body).isSome &&
@@ -492,7 +492,7 @@ def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lin
     | .ok (some (expected, actual)) =>
       pure (if expected.canonical == actual.canonical then w else w.note (.unmetExpectation k expected actual))
 
-/-- The world after the line `l` at `i` of the scenario, unless an earlier line or begin stopped the simulation. -/
+/-- The world after the line `l` at `i` of the scenario, unless an earlier line or the startup stopped the simulation. -/
 def World.step (w : World) (fsOf : String → Functions m) (sc : Scenario) (l : Scenario.Line) (i : Nat) : m World :=
   if w.stopped then pure w else w.line fsOf sc.service sc.lines i l
 
@@ -509,10 +509,10 @@ def World.stepFinding (fsOf : String → Functions m) (sc : Scenario) (wf : Worl
 
 /-- The world after every running service begins, until one stops it. -/
 def World.beginAll (w : World) (fsOf : String → Functions m) : m World :=
-  w.services.foldlM (init := w) fun w (s, _) => if w.stopped then pure w else w.act fsOf .begin s begin
+  w.services.foldlM (init := w) fun w (s, _) => if w.stopped then pure w else w.act fsOf .startup s begin
 
 /-- The world after every running service begins and the lines take place, until one stops it. -/
-def World.walk (w : World) (fsOf : String → Functions m) (sc : Scenario) : m World := do
+def World.execute (w : World) (fsOf : String → Functions m) (sc : Scenario) : m World := do
   let w ← w.beginAll fsOf
   sc.lines.zipIdx.foldlM (init := w) fun w (l, i) => w.step fsOf sc l i
 
@@ -520,10 +520,10 @@ def World.walk (w : World) (fsOf : String → Functions m) (sc : Scenario) : m W
 The world after the lines of the scenario take place from `start`, as `simulate` runs them, without checking the end
 and Then: explore appends lines to a scenario this way, so what the appended lines leave in flight is no mistake.
 -/
-def walk (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
+def execute (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
   if !w.violations.isEmpty then return w
-  w.walk fsOf sc
+  w.execute fsOf sc
 
 /--
 The world after the scenario runs from `start`, each running service asking `fsOf` its spec's functions: Given is

@@ -63,8 +63,8 @@ export type StepName =
     };
 
 /**
- * A difference between the results of two walks. `original` is the result of the walk that takes the step that the
- * violation names first before the second, and `alternative` is the result of the walk that takes the second first.
+ * A difference between the results of two executions. `original` is the result of the execution that takes the step that the
+ * violation names first before the second, and `alternative` is the result of the execution that takes the second first.
  * `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
  * snapshot.
  */
@@ -100,8 +100,8 @@ export type Assigned = {
  */
 export type ChoiceDependent =
   /**
-   * The walk with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the walk with
-   * `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the walk without one.
+   * The execution with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the execution with
+   * `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the execution without one.
    * One order comes from the other (stepOrderSearch), so the pair is the steps whose order they swap. `definition` is the
    * definition of the first step.
    */
@@ -130,7 +130,7 @@ export type ChoiceDependent =
       };
     }
   /**
-   * The walk in which each handle of `requests` names the message at its own place and the walk with the handles of each
+   * The execution in which each handle of `requests` names the message at its own place and the execution with the handles of each
    * group as `assigned` lists them differ by `difference` in the outcome of the running service `service`. The requests
    * are equal, so nothing outside tells which answer belongs to which. `definition` is the target of the first group that
    * `assigned` changes.

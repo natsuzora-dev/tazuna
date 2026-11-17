@@ -147,13 +147,13 @@ export interface RequestMessage<T = Request, K extends "request" | "subscription
   readonly input: ObservedShape<InputShape<T>>;
 }
 
-/** A command or query that a participant sent while a line or the begin was processed. */
+/** A command or query that a participant sent while a line or the startup was processed. */
 export type OutRequest<T = Request> = RequestMessage<T, "request">;
 
-/** A subscription that a participant opened while a line or the begin was processed. */
+/** A subscription that a participant opened while a line or the startup was processed. */
 export type OutSubscription<T = AnyQuery> = RequestMessage<T, "subscription">;
 
-/** An event that a participant emitted while a line or the begin was processed. */
+/** An event that a participant emitted while a line or the startup was processed. */
 export interface EventMessage<Ev = AnyEvent> extends Message<"event"> {
   readonly event: Ev;
   /** The event's payload, observed when the scenario runs. */
@@ -168,7 +168,7 @@ export interface AnswerRef<T = Request> extends Message<"answer"> {
 /** The end of a subscription, which a handle names. */
 export type EndRef = Message<"end">;
 
-/** The instance of a screen that opened while a line or the begin was processed. */
+/** The instance of a screen that opened while a line or the startup was processed. */
 export interface ScreenRef<Sc = AnyScreen> {
   readonly [factOf]: unknown;
   readonly screen: Sc;
@@ -191,7 +191,7 @@ export type Handles<H> = Tuple<H, typeof handleLimit>;
 type OwnedBy<D, S extends string> = OwnerOf<D> extends S ? unknown : never;
 
 /**
- * What a line's processing, or the begin, caused, named by content; none or several matches are reported. A message
+ * What a line's processing, or the startup, caused, named by content; none or several matches are reported. A message
  * travels between services of `S`: the own service and the peers that Given lists as running or external.
  */
 export interface Caused<S extends string = string> {
@@ -219,12 +219,12 @@ export interface Caused<S extends string = string> {
   ): EventMessage<Ev>;
   screen<Sc extends AnyScreen>(screen: Sc): ScreenRef<Sc>;
   /**
-   * The one answer to the request of `request` that its receiver gave while this line or the begin was processed: the
+   * The one answer to the request of `request` that its receiver gave while this line or the startup was processed: the
    * own service's answer to a peer's request, or one answer of a subscription, named by the line that caused it.
    * `request` is the line that sent the request or delivered it.
    */
   answer<T>(request: RequestLine<T> | DeliveredRequest<T>): AnswerRef<T>;
-  /** The end of the subscription `subscription` that its sender sent while this line or the begin was processed. */
+  /** The end of the subscription `subscription` that its sender sent while this line or the startup was processed. */
   end(subscription: OutSubscription | PeerSubscribeLine): EndRef;
 }
 
@@ -461,8 +461,8 @@ export interface When<
   S extends string = Own | Taking<P>,
   X extends Listed = { readonly own: Own; readonly peers: keyof P & string },
 > {
-  /** What the begin of every running service at Given's start caused. */
-  readonly begin: Caused<S>;
+  /** What the startup of every running service at Given's start caused. */
+  readonly startup: Caused<S>;
   readonly client: Client<Own | Running<P>, S, X>;
   readonly user: User<S, X>;
   readonly peer: {
@@ -480,12 +480,12 @@ export interface When<
     /** The network loses the message: its receiver never gets it, and nothing tells its sender. */
     lose(message: Message): Line;
     /**
-     * The network fails to deliver the request: its receiver never gets it, and its sender gets the transport's answer,
+     * The network refuses the request: its receiver never gets it, and its sender gets the transport's answer,
      * rejected as unavailable.
      */
-    fail(request: RequestMessage): ProcessingLine<S, X>;
+    refuse(request: RequestMessage): ProcessingLine<S, X>;
     /** The message is undelivered at the end. */
-    inFlight(message: Message): Line;
+    leaveInFlight(message: Message): Line;
   };
   readonly clock: {
     /**

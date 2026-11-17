@@ -8,8 +8,8 @@ export const offersPerCopy = scenario(
   {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } },
     when: (w) => {
-      const rows = w.begin.screen(rowScreen);
-      const openTasks = w.begin.subscription(todo.openTasks);
+      const rows = w.startup.screen(rowScreen);
+      const openTasks = w.startup.subscription(todo.openTasks);
       w.net.deliver(openTasks);
       w.net.deliver(
         w.peer.todo.answer(openTasks, {

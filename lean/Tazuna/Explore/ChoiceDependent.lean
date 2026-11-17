@@ -12,8 +12,8 @@ namespace Tazuna.Explore
 open Tazuna.Data Tazuna.Service Tazuna.Sim
 
 /--
-A difference between the results of two walks. `original` is the result of the walk that takes the step that the
-violation names first before the second, and `alternative` is the result of the walk that takes the second first.
+A difference between the results of two executions. `original` is the result of the execution that takes the step that the
+violation names first before the second, and `alternative` is the result of the execution that takes the second first.
 `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
 snapshot.
 -/
@@ -43,8 +43,8 @@ order of a simulation is a written line. stepOrder writes the pair in canonical 
 -/
 inductive ChoiceDependent where
   /--
-  The walk with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the walk with
-  `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the walk without one.
+  The execution with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the execution with
+  `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the execution without one.
   One order comes from the other (stepOrderSearch), so the pair is the steps whose order they swap. `definition` is the
   definition of the first step.
   -/
@@ -58,7 +58,7 @@ inductive ChoiceDependent where
   -/
   | searchLimit (definition : Spec.Ref) (limit : Nat)
   /--
-  The walk in which each handle of `requests` names the message at its own place and the walk with the handles of each
+  The execution in which each handle of `requests` names the message at its own place and the execution with the handles of each
   group as `assigned` lists them differ by `difference` in the outcome of the running service `service`. The requests
   are equal, so nothing outside tells which answer belongs to which. `definition` is the target of the first group that
   `assigned` changes.
@@ -167,8 +167,8 @@ def difference (compare : Compare m) (original alternative : Outcome) :
     | .error _ => return records [.empty]
 
 /--
-The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFirst` takes `a` first and is the walk with
-the step order `aOrder`, and `bFirst` takes `b` first and is the walk with `bOrder`. The pair is in the order of their
+The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFirst` takes `a` first and is the execution with
+the step order `aOrder`, and `bFirst` takes `b` first and is the execution with `bOrder`. The pair is in the order of their
 canonical texts.
 -/
 def stepOrder (compare : Compare m) (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Outcome) :
@@ -181,8 +181,8 @@ def stepOrder (compare : Compare m) (a b : StepName) (aOrder bOrder : List StepN
 
 /--
 The ChoiceDependent violation, if any, for the assignment `assigned` of handles of `requests`: the first difference,
-in the order of `outcomes`, between the outcome of a running service in the walk with each handle at its own place and
-in the walk with `assigned`. `definition` is the target of the first group that `assigned` changes.
+in the order of `outcomes`, between the outcome of a running service in the execution with each handle at its own place and
+in the execution with `assigned`. `definition` is the target of the first group that `assigned` changes.
 -/
 def assignment (compareFor : String → Compare m) (definition : Spec.Ref) (assigned : List Assigned)
     (outcomes : List (String × Outcome × Outcome)) : m (Option ChoiceDependent) :=

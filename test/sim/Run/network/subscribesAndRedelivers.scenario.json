@@ -124,7 +124,7 @@
       }
     },
     {
-      "type": "inFlight",
+      "type": "leaveInFlight",
       "message": {
         "type": "request",
         "origin": {
@@ -139,7 +139,7 @@
       }
     },
     {
-      "type": "inFlight",
+      "type": "leaveInFlight",
       "message": {
         "type": "request",
         "origin": {

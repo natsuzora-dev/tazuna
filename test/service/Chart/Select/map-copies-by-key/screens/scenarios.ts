@@ -7,10 +7,10 @@ const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: 
 type W = When<typeof given.peers>;
 
 const deliveredList = (w: W, ...taskIds: string[]) => {
-  const tasks = w.begin.subscription(todo.tasks);
+  const tasks = w.startup.subscription(todo.tasks);
   w.net.deliver(tasks);
   w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds } }));
-  return w.begin.screen(listScreen);
+  return w.startup.screen(listScreen);
 };
 
 export const routedByKey = scenario(

@@ -7,12 +7,14 @@ import { taskScreen } from "./taskScreen.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 type W = When<typeof given.peers>;
 
-const deliverTaskSubscription = (w: W) => w.net.deliver(w.begin.subscription(todo.task));
+const deliverTaskSubscription = (w: W) => w.net.deliver(w.startup.subscription(todo.task));
 const deliverShown = (w: W, isCompleted: boolean) =>
-  w.net.deliver(w.peer.todo.answer(w.begin.subscription(todo.task), { result: "fulfilled", output: { isCompleted } }));
+  w.net.deliver(
+    w.peer.todo.answer(w.startup.subscription(todo.task), { result: "fulfilled", output: { isCompleted } }),
+  );
 const deliverNeverShown = (w: W) => {
   deliverTaskSubscription(w);
-  w.peer.todo.leaveUnanswered(w.begin.subscription(todo.task));
+  w.peer.todo.leaveUnanswered(w.startup.subscription(todo.task));
 };
 const deliverAccepted = (w: W, line: ProcessingLine) => {
   const complete = line.request(todo.completeTask);
@@ -25,7 +27,7 @@ export const offersDecide = scenario(
   {
     given,
     when: (w) => {
-      const task = w.begin.screen(taskScreen);
+      const task = w.startup.screen(taskScreen);
       const beforeAnswer = w.user.look(task);
       deliverTaskSubscription(w);
       deliverShown(w, true);
@@ -46,7 +48,7 @@ export const innermostOffers = scenario(
   {
     given,
     when: (w) => {
-      const task = w.begin.screen(taskScreen);
+      const task = w.startup.screen(taskScreen);
       deliverTaskSubscription(w);
       deliverShown(w, false);
       deliverAccepted(w, w.user.operate(task, "complete"));
@@ -61,7 +63,7 @@ export const acceptedWithoutTransition = scenario(
   {
     given,
     when: (w) => {
-      const task = w.begin.screen(taskScreen);
+      const task = w.startup.screen(taskScreen);
       deliverTaskSubscription(w);
       deliverShown(w, false);
       const first = w.user.operate(task, "complete");
@@ -77,7 +79,7 @@ export const unionOfRegionOffers = scenario(
   {
     given,
     when: (w) => {
-      const edit = w.begin.screen(editScreen);
+      const edit = w.startup.screen(editScreen);
       w.user.operate(edit, "save");
       w.user.operate(edit, "save");
       deliverNeverShown(w);
@@ -91,11 +93,11 @@ export const parentlessSideBySide = scenario(
   {
     given,
     when: (w) => {
-      const edit = w.begin.screen(editScreen);
+      const edit = w.startup.screen(editScreen);
       w.user.operate(edit, "save");
       deliverTaskSubscription(w);
       deliverShown(w, false);
-      const completing = w.user.operate(w.begin.screen(taskScreen), "complete");
+      const completing = w.user.operate(w.startup.screen(taskScreen), "complete");
       w.user.operate(edit, "save");
       const complete = completing.request(todo.completeTask);
       w.net.deliver(complete);
@@ -110,7 +112,7 @@ export const datetimeOffers = scenario(
   {
     given,
     when: (w) => {
-      w.user.operate(w.begin.screen(taskScreen), "remind", { at: "2026-10-25T03:00:00Z" });
+      w.user.operate(w.startup.screen(taskScreen), "remind", { at: "2026-10-25T03:00:00Z" });
       deliverNeverShown(w);
     },
     then: () => [],

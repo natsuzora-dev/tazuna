@@ -2,7 +2,7 @@ import Tazuna.Service.Integrity
 import Tazuna.Sim.Network
 
 /-!
-Given arranges the world before the begin: the roles that it lists, and each running service at the start with its
+Given arranges the world before the startup: the roles that it lists, and each running service at the start with its
 records. What Given gets wrong is reported before anything begins.
 -/
 
@@ -36,7 +36,7 @@ def peersOf (sc : Scenario) : List (String × Peer) :=
     if p.service == sc.service || ps.any (·.1 == p.service) then ps else ps ++ [(p.service, p.peer)]
 
 /--
-The world before the begin: the roles that Given lists, and each running service at the start, whose name qualifies its
+The world before the startup: the roles that Given lists, and each running service at the start, whose name qualifies its
 createKey values, or why the Lean model does not cover a service.
 -/
 def World.start (j : Spec.Structure) (sc : Scenario) : Except String World := do

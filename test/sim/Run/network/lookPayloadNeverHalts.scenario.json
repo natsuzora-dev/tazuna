@@ -28,7 +28,7 @@
       "screen": {
         "type": "screen",
         "origin": {
-          "type": "begin"
+          "type": "startup"
         },
         "screen": {
           "service": "todo",
@@ -41,7 +41,7 @@
       "screen": {
         "type": "screen",
         "origin": {
-          "type": "begin"
+          "type": "startup"
         },
         "screen": {
           "service": "todo",
@@ -59,7 +59,7 @@
       "screen": {
         "type": "screen",
         "origin": {
-          "type": "begin"
+          "type": "startup"
         },
         "screen": {
           "service": "todo",

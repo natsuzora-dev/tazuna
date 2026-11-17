@@ -11,7 +11,7 @@ export const draftAndOpen = scenario(
       peers: { todo: skip(todo, "verify compares the subscriptions that the screen opens, not their answers") },
     },
     when: (w) => {
-      const notes = w.begin.screen(noteScreen);
+      const notes = w.startup.screen(noteScreen);
       w.user.operate(notes, "draft");
       w.user.operate(notes, "open");
     },

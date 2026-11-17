@@ -7,14 +7,14 @@ export const grantRejected = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { device: external(device) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(device.requestPermission));
+      w.net.deliver(w.startup.request(device.requestPermission));
       w.net.deliver(
-        w.peer.device.answer(w.begin.request(device.requestPermission), {
+        w.peer.device.answer(w.startup.request(device.requestPermission), {
           result: "rejected",
           rejection: { kind: "unavailable" },
         }),
       );
-      w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: w.begin.request(device.requestPermission) }));
+      w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: w.startup.request(device.requestPermission) }));
     },
     then: () => [],
   },
@@ -25,9 +25,9 @@ export const denyUnlisted = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { device: external(device) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(device.requestPermission));
-      w.net.deliver(w.peer.device.answer(w.begin.request(device.requestPermission), { result: "accepted" }));
-      w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: w.begin.request(device.requestPermission) }));
+      w.net.deliver(w.startup.request(device.requestPermission));
+      w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), { result: "accepted" }));
+      w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: w.startup.request(device.requestPermission) }));
     },
     then: () => [],
   },

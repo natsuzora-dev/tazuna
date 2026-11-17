@@ -17,7 +17,7 @@
       "message": {
         "type": "request",
         "origin": {
-          "type": "begin"
+          "type": "startup"
         },
         "kind": "command",
         "target": {
@@ -46,7 +46,7 @@
                 "fact": {
                   "type": "request",
                   "origin": {
-                    "type": "begin"
+                    "type": "startup"
                   },
                   "kind": "command",
                   "target": {
@@ -64,7 +64,7 @@
       "resultOf": {
         "type": "request",
         "origin": {
-          "type": "begin"
+          "type": "startup"
         },
         "kind": "command",
         "target": {

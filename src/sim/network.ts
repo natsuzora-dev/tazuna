@@ -39,7 +39,7 @@ export const sameChannel = (m: Message, n: Message): boolean =>
   m.sender === n.sender && m.receiver === n.receiver && m.channel === n.channel;
 
 export const sameOrigin = (a: Origin, b: Origin): boolean =>
-  a.type === b.type && (a.type === "begin" || (b.type === "line" && a.index === b.index));
+  a.type === b.type && (a.type === "startup" || (b.type === "line" && a.index === b.index));
 
 export interface Span {
   readonly origin: Origin;
@@ -89,8 +89,8 @@ export interface World {
   readonly opened: Opened[];
   readonly sent: Sent[];
   readonly carried: (readonly [number, number])[];
-  /** The messages that inFlight lines name: the line, and the message. */
-  readonly inFlight: (readonly [number, number])[];
+  /** The messages that leaveInFlight lines name: the line, and the message. */
+  readonly leftInFlight: (readonly [number, number])[];
   /** Lean's World.counts. */
   readonly counts: Map<string, number>;
   readonly violations: InvalidScenario[];

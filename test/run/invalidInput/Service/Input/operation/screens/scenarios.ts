@@ -6,7 +6,7 @@ const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} } as 
 export const pickAndCancel = scenario("Pick a shown task, open the dialog, and cancel it; no violation", {
   given,
   when: (w) => {
-    const list = w.begin.screen(listScreen);
+    const list = w.startup.screen(listScreen);
     w.user.operate(list, "pick", { taskId: "task-1" });
     const cleared = w.user.operate(list, "clear");
     w.user.operate(cleared.screen(confirmDialog), "cancel");
@@ -20,7 +20,7 @@ export const cannotPickUnaccepted = scenario(
   {
     given,
     when: (w) => {
-      const list = w.begin.screen(listScreen);
+      const list = w.startup.screen(listScreen);
       const before = w.user.look(list);
       w.user.operate(list, "clear");
       const covered = w.user.look(list);
@@ -38,7 +38,7 @@ export const cancelUnopened = scenario(
   {
     given,
     when: (w) => {
-      const dialog = w.user.operate(w.begin.screen(listScreen), "clear").screen(confirmDialog);
+      const dialog = w.user.operate(w.startup.screen(listScreen), "clear").screen(confirmDialog);
       w.user.operate(dialog, "cancel");
       w.user.operate(dialog, "cancel");
     },
@@ -49,7 +49,7 @@ export const cancelUnopened = scenario(
 export const pickUnderDialog = scenario("Pick a task while the dialog covers the list; test reports coveredByModal", {
   given,
   when: (w) => {
-    const list = w.begin.screen(listScreen);
+    const list = w.startup.screen(listScreen);
     w.user.operate(list, "clear");
     w.user.operate(list, "pick", { taskId: "task-1" });
   },
@@ -59,7 +59,7 @@ export const pickUnderDialog = scenario("Pick a task while the dialog covers the
 export const pickUnoffered = scenario("Pick a task that the list does not show; test reports unofferedPayload", {
   given,
   when: (w) => {
-    w.user.operate(w.begin.screen(listScreen), "pick", { taskId: "task-3" });
+    w.user.operate(w.startup.screen(listScreen), "pick", { taskId: "task-3" });
   },
   then: () => [],
 });

@@ -7,7 +7,7 @@ export const answerToClosedScreen = scenario(
   {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } },
     when: (w) => {
-      const tasks = w.begin.subscription(todo.tasks);
+      const tasks = w.startup.subscription(todo.tasks);
       w.net.deliver(tasks);
       w.clock.at("2026-10-25T11:00:00+09:00");
       const answered = w.net.deliver(
@@ -16,7 +16,7 @@ export const answerToClosedScreen = scenario(
           rejection: { kind: "requires", reason: "isListed" },
         }),
       );
-      w.net.inFlight(answered.end(tasks));
+      w.net.leaveInFlight(answered.end(tasks));
     },
     then: () => [],
   },

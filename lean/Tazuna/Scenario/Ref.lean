@@ -2,7 +2,7 @@ import Tazuna.Data.Trace
 import Tazuna.Spec.Structure
 
 /-!
-A scenario names an earlier fact only through a handle: what a line, or the begin at the start, caused. Handles name
+A scenario names an earlier fact only through a handle: what a line, or the startup at the start, caused. Handles name
 facts by content; the index of a line is internal and never written.
 -/
 
@@ -10,9 +10,9 @@ namespace Tazuna.Scenario
 
 open Tazuna.Data
 
-/-- What caused a fact: the begin of every running service at the start, or the scenario line `index`, from 0. -/
+/-- What caused a fact: the startup of every running service at the start, or the scenario line `index`, from 0. -/
 inductive Origin where
-  | begin
+  | startup
   | line (index : Nat)
 deriving DecidableEq, Repr, Inhabited
 
@@ -34,7 +34,7 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Part
 
 mutual
-/-- A fact that a line or the begin caused, named by content. -/
+/-- A fact that a line or the startup caused, named by content. -/
 inductive Fact where
   /--
   The request of kind `kind` to `target` that a participant sent while `origin` was processed, whose input has each

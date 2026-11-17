@@ -10,16 +10,16 @@ export const listClosedByParent = scenario(
   {
     given,
     when: (w) => {
-      const home = w.begin.screen(homeScreen);
-      const count = w.net.deliver(w.begin.subscription(todo.taskCount));
-      w.net.inFlight(count.answer(count));
+      const home = w.startup.screen(homeScreen);
+      const count = w.net.deliver(w.startup.subscription(todo.taskCount));
+      w.net.leaveInFlight(count.answer(count));
       const firstList = w.user.operate(home, "openList").subscription(todo.tasks);
       const first = w.net.deliver(firstList);
-      w.net.inFlight(first.answer(first));
+      w.net.leaveInFlight(first.answer(first));
       const closing = w.clock.at("2026-10-25T10:02:00+09:00");
-      w.net.inFlight(closing.end(firstList));
+      w.net.leaveInFlight(closing.end(firstList));
       const second = w.net.deliver(w.user.operate(home, "openList").subscription(todo.tasks));
-      w.net.inFlight(second.answer(second));
+      w.net.leaveInFlight(second.answer(second));
     },
     then: () => [],
   },
@@ -30,19 +30,19 @@ export const modalChild = scenario(
   {
     given,
     when: (w) => {
-      const home = w.begin.screen(homeScreen);
-      const countSubscription = w.begin.subscription(todo.taskCount);
+      const home = w.startup.screen(homeScreen);
+      const countSubscription = w.startup.subscription(todo.taskCount);
       const count = w.net.deliver(countSubscription);
-      w.net.inFlight(count.answer(count));
+      w.net.leaveInFlight(count.answer(count));
       const opening = w.user.operate(home, "openList");
       const list = w.net.deliver(opening.subscription(todo.tasks));
-      w.net.inFlight(list.answer(list));
+      w.net.leaveInFlight(list.answer(list));
       const closing = w.user.operate(opening.screen(taskListScreen), "close");
-      w.net.inFlight(closing.end(opening.subscription(todo.tasks)));
+      w.net.leaveInFlight(closing.end(opening.subscription(todo.tasks)));
       const countingAll = w.user.operate(home, "countAll");
-      w.net.inFlight(countingAll.end(countSubscription));
+      w.net.leaveInFlight(countingAll.end(countSubscription));
       const all = w.net.deliver(countingAll.subscription(todo.taskCount));
-      w.net.inFlight(all.answer(all));
+      w.net.leaveInFlight(all.answer(all));
     },
     then: () => [],
   },
@@ -53,15 +53,15 @@ export const nonModalChild = scenario(
   {
     given,
     when: (w) => {
-      const home = w.begin.screen(homeScreen);
-      const countSubscription = w.begin.subscription(todo.taskCount);
+      const home = w.startup.screen(homeScreen);
+      const countSubscription = w.startup.subscription(todo.taskCount);
       const count = w.net.deliver(countSubscription);
-      w.net.inFlight(count.answer(count));
+      w.net.leaveInFlight(count.answer(count));
       const opening = w.user.operate(home, "openHelp");
       const countingAll = w.user.operate(home, "countAll");
-      w.net.inFlight(countingAll.end(countSubscription));
+      w.net.leaveInFlight(countingAll.end(countSubscription));
       const all = w.net.deliver(countingAll.subscription(todo.taskCount));
-      w.net.inFlight(all.answer(all));
+      w.net.leaveInFlight(all.answer(all));
       w.user.operate(opening.screen(helpPanel), "closeHelp");
     },
     then: () => [],

@@ -16,7 +16,7 @@ export const grouped = scenario(
   {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} },
     when: (w) => {
-      const tags = w.begin.screen(tagScreen);
+      const tags = w.startup.screen(tagScreen);
       w.client.call(taskGroups, {});
       w.client.send(tagTask, { tags: ["home", "store"] });
       w.user.operate(tags, "pick", { tags: ["home", "store"] });

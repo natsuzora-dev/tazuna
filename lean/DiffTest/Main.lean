@@ -371,19 +371,19 @@ def worldOf (request : Value) : IO (Spec.Structure × Scenario × Sim.World) := 
 /--
 The reply to request `simulate`, which takes a structure, a scenario, and step orders, and returns each running
 service's trace lines, violations (its own, then those Instrument collected, then its halt), and candidates, and the
-simulation's reports and halting report. With `walk` true, the lines take place as explore runs them (Sim.walk), and
+simulation's violations and halting violation. With `execute` true, the lines take place as explore runs them (Sim.execute), and
 each running service that did not halt also returns what it enables next.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
   let (spec, sc, start) ← worldOf request
-  let walking := request.field? "walk" == some (.bool true)
+  let executing := request.field? "execute" == some (.bool true)
   let fsOf ← instrumentedOf stdin stdout start
   let ran : ActingIO Sim.World :=
-    if walking then Sim.walk spec fsOf start sc else Sim.simulate spec fsOf start sc
+    if executing then Sim.execute spec fsOf start sc else Sim.simulate spec fsOf start sc
   let (w, acting) ← ran.run {}
   let (participants, _) ← (w.states.mapM fun ((service, s) : String × State) => do
     let c := acting.collect service
-    let enabled ← match walking, s.halted, w.services.lookup service with
+    let enabled ← match executing, s.halted, w.services.lookup service with
       | true, none, some st => do
         match ← Explore.enabled st (fsOf service) s with
         | .ok e => pure [("enabled", Tazuna.Json.Enabled.toValue e)]
@@ -410,19 +410,19 @@ def searchValue (r : Searched) : Value :=
 
 /--
 The reply to request `stepOrderChanges`, which takes a structure and a scenario and returns stepOrderChanges of the
-scenario walked, from its begin: every search, with each step order it ran and its verdict, and what it found.
+scenario executed, from its startup: every search, with each step order it ran and its verdict, and what it found.
 -/
 def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
   let (spec, sc, _) ← worldOf request
-  let walkWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Walk := do
+  let executeWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Execution := do
     let start ← IO.ofExcept (Sim.World.start spec sc)
     let start := { start with stepOrders }
-    let ran : ActingIO Sim.World := Sim.walk spec (← instrumentedOf stdin stdout start) start sc
+    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
     let (w, acting) ← ran.run {}
     pure { world := w, collect := acting.collect }
   let reads ← IO.mkRef {}
   let searched ← stepOrderChanges (fun service => compareOf spec service (askComparable stdin stdout reads))
-    walkWith sc (← walkWith sc []) 0
+    executeWith sc (← executeWith sc []) 0
   pure (.obj [("type", .str "stepOrderChanges"), ("searched", .arr (searched.map searchValue))])
 
 /--
@@ -431,17 +431,17 @@ scenario's handle groups: each assignment it ran, with the violation it found, a
 -/
 def assignmentChangesRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
   let (spec, sc, start) ← worldOf request
-  let walkWith (assignments : List (Scenario.Fact × List Nat)) : IO Walk := do
+  let executeWith (assignments : List (Scenario.Fact × List Nat)) : IO Execution := do
     let start := { start with assignments }
-    let ran : ActingIO Sim.World := Sim.walk spec (← instrumentedOf stdin stdout start) start sc
+    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
     let (w, acting) ← ran.run {}
     pure { world := w, collect := acting.collect }
-  let base ← walkWith []
+  let base ← executeWith []
   let fsOf ← instrumentedOf stdin stdout start
   let sizeOf (g : HandleGroup) : IO Nat := do pure (← (groupSize fsOf base.world g).run {}).1
   let reads ← IO.mkRef {}
   let search ← assignmentSearch (fun service => compareOf spec service (askComparable stdin stdout reads)) sizeOf
-    walkWith base (handleGroups sc)
+    executeWith base (handleGroups sc)
   pure (.obj [("type", .str "assignmentChanges"),
     ("tried", .arr (search.tried.map fun t => .obj [("assigned", ToValue.toValue t.assigned),
       ("found", (t.found.map (·.toValue)).getD .null)])),

@@ -11,7 +11,7 @@ const given = {
 export const draftAndOpen = scenario("Draft two notes and open the first; no violation", {
   given,
   when: (w) => {
-    const notes = w.begin.screen(noteScreen);
+    const notes = w.startup.screen(noteScreen);
     w.user.operate(notes, "draft");
     w.user.operate(notes, "open");
   },
@@ -23,7 +23,7 @@ export const draftAndOpenWrongKeys = scenario(
   {
     given,
     when: (w) => {
-      const notes = w.begin.screen(noteScreen);
+      const notes = w.startup.screen(noteScreen);
       w.user.operate(notes, "draft");
       w.user.operate(notes, "open");
     },

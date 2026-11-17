@@ -41,7 +41,7 @@ function lowered(when: (w: When<typeof peers>) => unknown, then: (lines: never) 
   return { lines, expectations, violations };
 }
 
-const begin = { type: "begin" } as const;
+const startup = { type: "startup" } as const;
 const line = (index: number) => ({ type: "line", index }) as const;
 
 test("A handle's observed value in a written value becomes a hole that reads the handle's fact", () => {
@@ -79,7 +79,7 @@ test("A handle's observed value in a written value becomes a hole that reads the
 
 test("A pick that holds an observed value becomes a template, and a subscription handle names a subscribe request", () => {
   const { lines } = lowered((w) => {
-    const watching = w.begin.subscription(todo.tasks, { input: { filter: "open" } });
+    const watching = w.startup.subscription(todo.tasks, { input: { filter: "open" } });
     const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     w.net.deliver(adding.request(todo.completeTask, { input: { taskId: watching.input.filter } }));
   });
@@ -100,7 +100,7 @@ test("A pick that holds an observed value becomes a template, and a subscription
               value: {
                 fact: {
                   type: "request",
-                  origin: begin,
+                  origin: startup,
                   kind: "subscribe",
                   target: { service: "todo", name: "tasks" },
                   input: { value: { filter: "open" }, holes: [] },
@@ -134,15 +134,15 @@ test("A peer's line names the message it states; a deliver line names it too, an
   const { lines } = lowered((w) => {
     const sent = w.peer.calendar.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     const reached = w.net.deliver(sent);
-    w.net.inFlight(reached.answer(sent));
+    w.net.leaveInFlight(reached.answer(sent));
     const told = w.peer.device.emit(device.notificationPermissionGranted, {}, { resultOf: null });
     w.net.deliver(told.to(todo));
-    const watching = w.begin.subscription(todo.tasks);
+    const watching = w.startup.subscription(todo.tasks);
     w.net.lose(reached.end(watching));
   });
   assert.deepEqual(lines.slice(1), [
     { type: "deliver", message: line(0) },
-    { type: "inFlight", message: { type: "answer", origin: line(1), to: 0 } },
+    { type: "leaveInFlight", message: { type: "answer", origin: line(1), to: 0 } },
     {
       type: "emit",
       peer: "device",
@@ -163,7 +163,12 @@ test("A peer's line names the message it states; a deliver line names it too, an
       message: {
         type: "end",
         origin: line(1),
-        subscription: { type: "request", origin: begin, kind: "subscribe", target: { service: "todo", name: "tasks" } },
+        subscription: {
+          type: "request",
+          origin: startup,
+          kind: "subscribe",
+          target: { service: "todo", name: "tasks" },
+        },
       },
     },
   ]);

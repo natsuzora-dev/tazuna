@@ -39,7 +39,7 @@
       }
     },
     {
-      "type": "deliver",
+      "type": "refuse",
       "message": {
         "type": "request",
         "origin": {
@@ -54,39 +54,7 @@
       }
     },
     {
-      "type": "answer",
-      "peer": "calendar",
-      "request": {
-        "type": "request",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "kind": "command",
-        "target": {
-          "service": "calendar",
-          "name": "book"
-        }
-      },
-      "answer": {
-        "value": {
-          "result": "accepted",
-          "output": {
-            "slot": "10:00"
-          }
-        },
-        "holes": []
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "line",
-        "index": 2
-      }
-    },
-    {
-      "type": "fail",
+      "type": "leaveInFlight",
       "message": {
         "type": "event",
         "origin": {
@@ -96,6 +64,20 @@
         "event": {
           "service": "todo",
           "name": "taskAdded"
+        }
+      }
+    },
+    {
+      "type": "leaveInFlight",
+      "message": {
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "event": {
+          "service": "todo",
+          "name": "noted"
         }
       }
     }

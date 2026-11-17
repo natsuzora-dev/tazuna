@@ -125,8 +125,8 @@ function lineFacts(l: Line): Fact[] {
     case "deliver":
     case "redeliver":
     case "lose":
-    case "fail":
-    case "inFlight":
+    case "refuse":
+    case "leaveInFlight":
       return [l.message];
     case "emit":
       return l.resultOf === undefined ? [] : [l.resultOf];
@@ -687,13 +687,13 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       m.status = "lost";
       return;
     }
-    case "fail": {
+    case "refuse": {
       const k = messageOf(w, i, l.message);
       const m = w.messages[k] as Message;
       if (m.status !== "inFlight") return notInFlight(i, m);
       if (!isRequest(m.body))
         return reportedHere({
-          kind: "InvalidScenario.unfailable",
+          kind: "InvalidScenario.unrefusable",
           definition: null,
           data: { scenarioLine: i, message: describe(m) },
         });
@@ -712,15 +712,15 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       });
       return deliverCarried(w, i, w.messages.length - 1);
     }
-    case "inFlight": {
+    case "leaveInFlight": {
       const k = messageOf(w, i, l.message);
-      if (w.inFlight.some(([, j]) => j === k))
+      if (w.leftInFlight.some(([, j]) => j === k))
         return reportedHere({
           kind: "InvalidScenario.repeatedInFlight",
           definition: null,
           data: { scenarioLine: i, message: describe(w.messages[k] as Message) },
         });
-      w.inFlight.push([i, k]);
+      w.leftInFlight.push([i, k]);
       return;
     }
     case "at": {
@@ -808,10 +808,10 @@ function answerOfValue(v: unknown): Answer | undefined {
 /** Lean's World.checkEnd. */
 function checkEnd(w: World): void {
   w.messages.forEach((m, k) => {
-    if (m.status === "inFlight" && !w.inFlight.some(([, j]) => j === k))
+    if (m.status === "inFlight" && !w.leftInFlight.some(([, j]) => j === k))
       reportTo(w, { kind: "InvalidScenario.leftInFlight", definition: null, data: { message: describe(m) } });
   });
-  for (const [i, k] of w.inFlight)
+  for (const [i, k] of w.leftInFlight)
     if (w.messages[k]?.status !== "inFlight")
       reportTo(w, { kind: "InvalidScenario.unusedInFlight", definition: null, data: { scenarioLine: i } });
   for (const m of w.messages)
@@ -936,9 +936,9 @@ function expect(
   });
 }
 
-/** Lean's World.walk, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
-function walkLines(w: World, sc: Scenario, looked?: Found[]): void {
-  for (const service of w.participants.keys()) if (!stopped(w)) act(w, { type: "begin" }, service, begin);
+/** Lean's World.execute, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
+function executeLines(w: World, sc: Scenario, looked?: Found[]): void {
+  for (const service of w.participants.keys()) if (!stopped(w)) act(w, { type: "startup" }, service, begin);
   sc.lines.forEach((l, i) => {
     if (stopped(w)) return;
     looked?.push(...found(w, sc.expectations, i, l));
@@ -951,11 +951,11 @@ function walkLines(w: World, sc: Scenario, looked?: Found[]): void {
   });
 }
 
-/** Lean's walk. */
-export function walk(structure: Structure, w: World, sc: Scenario): World {
+/** Lean's execute. */
+export function execute(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
   if (w.violations.length > 0) return w;
-  walkLines(w, sc);
+  executeLines(w, sc);
   return w;
 }
 
@@ -964,7 +964,7 @@ export function simulate(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
   if (w.violations.length > 0) return w;
   const looked: Found[] = [];
-  walkLines(w, sc, looked);
+  executeLines(w, sc, looked);
   if (stopped(w)) return w;
   checkEnd(w);
   expect(w, sc.service, sc.lines, sc.expectations, looked);

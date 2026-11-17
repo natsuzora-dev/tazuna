@@ -101,8 +101,8 @@ structure World where
   sent : List Sent := []
   /-- The message that each line carried, by line. -/
   carried : List (Nat × Nat) := []
-  /-- The messages that inFlight lines name: the line, and the message. -/
-  inFlight : List (Nat × Nat) := []
+  /-- The messages that leaveInFlight lines name: the line, and the message. -/
+  leftInFlight : List (Nat × Nat) := []
   /-- The number of messages of each definition that each external peer sent, by `<peer>.<name>`: their ids count. -/
   counts : List (String × Nat) := []
   violations : List InvalidScenario := []
@@ -151,7 +151,7 @@ def targetOf (service : String) (lines : Array Line) (id : String) : Option Stri
 def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) (channel : Option String) : World :=
   let line := match o with
     | .line i => some i
-    | .begin => none
+    | .startup => none
   match w.role receiver with
   | none => w.report (.unlistedService line receiver)
   | some role =>

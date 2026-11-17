@@ -239,8 +239,8 @@ theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) 
 
 theorem keepsWorld_now_iff {w w' : World} (now : Time) : KeepsWorld w { w' with now } ↔ KeepsWorld w w' := Iff.rfl
 
-theorem keepsWorld_inFlight_iff {w w' : World} (inFlight : List (Nat × Nat)) :
-    KeepsWorld w { w' with inFlight } ↔ KeepsWorld w w' := Iff.rfl
+theorem keepsWorld_inFlight_iff {w w' : World} (leftInFlight : List (Nat × Nat)) :
+    KeepsWorld w { w' with leftInFlight } ↔ KeepsWorld w w' := Iff.rfl
 
 theorem keepsWorld_messages_iff {w w' : World} (messages : Array Message) :
     KeepsWorld w { w' with messages } ↔ KeepsWorld w w' := Iff.rfl
@@ -353,9 +353,9 @@ theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : Keep
     split <;> exact .refl _
 
 /-- The lines of a scenario keep every participant's createKey values from the start: they may only add to them. -/
-theorem walk_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
-    KeepsWorld start (walk j fsOf start sc) := by
-  unfold walk World.walk
+theorem execute_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
+    KeepsWorld start (execute j fsOf start sc) := by
+  unfold execute World.execute
   simp only [bind, pure]
   have hg := keepsWorld_given (fsOf := fsOf) start j sc
   split
@@ -396,10 +396,10 @@ theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
 No createKey value of a running participant at the end of the lines of a scenario equals a key of a keyed entity that
 the start's writtenKey? lets the scenario write: the participant qualifies its values by its name throughout the run.
 -/
-theorem walk_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
+theorem execute_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
     (hs : (p, st) ∈ start.services) (ho : (start.state p).keyOwner = some p) {e k : String} (he : e ∈ st.entities)
     (hk : st.singles.contains e = false) (hw : start.writtenKey? (.str k) = none) :
-    (e, k) ∉ ((walk j fsOf start sc).state p).created :=
-  unwritten_not_created hs (((walk_keepsKeys j start sc) p).1.trans ho) he hk hw
+    (e, k) ∉ ((execute j fsOf start sc).state p).created :=
+  unwritten_not_created hs (((execute_keepsKeys j start sc) p).1.trans ho) he hk hw
 
 end Tazuna.Thm.Sim.Keys

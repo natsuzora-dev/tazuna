@@ -11,7 +11,7 @@ const given = {
 export const addOne = scenario("Add one task; the trace has a second input, so verify reports unexpectedInput", {
   given,
   when: (w) => {
-    w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
   },
   then: () => [],
 });
@@ -19,8 +19,8 @@ export const addOne = scenario("Add one task; the trace has a second input, so v
 export const addTwo = scenario("Add two tasks; the trace lacks the second input, so verify reports missingInput", {
   given,
   when: (w) => {
-    w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
-    w.net.inFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
   },
   then: () => [],
 });
@@ -30,7 +30,7 @@ export const addMilk = scenario(
   {
     given,
     when: (w) => {
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
     },
     then: () => [],
   },

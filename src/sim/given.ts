@@ -69,7 +69,7 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     opened: [],
     sent: [],
     carried: [],
-    inFlight: [],
+    leftInFlight: [],
     counts: new Map(),
     violations: [],
     halted: undefined,

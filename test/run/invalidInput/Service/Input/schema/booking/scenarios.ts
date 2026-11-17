@@ -5,9 +5,9 @@ import { scenario } from "./booking.ts";
 export const answerBooking = scenario("Answer the booking with its id; no violation", {
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
   when: (w) => {
-    w.net.deliver(w.begin.request(calendar.book));
+    w.net.deliver(w.startup.request(calendar.book));
     w.net.deliver(
-      w.peer.calendar.answer(w.begin.request(calendar.book), {
+      w.peer.calendar.answer(w.startup.request(calendar.book), {
         result: "accepted",
         output: { bookingId: "booking-1" },
       }),
@@ -21,9 +21,9 @@ export const answerBookingEmptyId = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.book));
+      w.net.deliver(w.startup.request(calendar.book));
       w.net.deliver(
-        w.peer.calendar.answer(w.begin.request(calendar.book), { result: "accepted", output: { bookingId: "" } }),
+        w.peer.calendar.answer(w.startup.request(calendar.book), { result: "accepted", output: { bookingId: "" } }),
       );
     },
     then: () => [],

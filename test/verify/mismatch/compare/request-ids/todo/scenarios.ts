@@ -27,7 +27,7 @@ export const addOneOwnAnswer = scenario(
   {
     given,
     when: (w) => {
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
     },
     then: () => [],
   },

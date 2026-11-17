@@ -12,14 +12,14 @@ import { type Message, stateOf, type World } from "../sim/network.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { fingerprint } from "../sim/spec/fingerprint.ts";
 import type { Listener } from "../sim/spec/listener.ts";
-import { walkSpec } from "../sim/spec/simulate.ts";
+import { executeSpec } from "../sim/spec/simulate.ts";
 import { refOfTraceName, rejectionKinds, traceNameOfRef } from "../spec/structure.ts";
 import { enabled } from "./enabled.ts";
 import { search } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
 import { stringsIn, valuesFor } from "./values.ts";
 
-export interface Walked {
+export interface Executed {
   readonly world: World;
   readonly listeners: ReadonlyMap<string, Listener>;
 }
@@ -98,7 +98,7 @@ function requestFact(m: Message): Fact | undefined {
 export type Move = readonly Line[];
 
 /**
- * Returns a function that lists the moves that may come next after a walked world, all facing the own service: a
+ * Returns a function that lists the moves that may come next after an executed world, all facing the own service: a
  * client's request to each of its commands and queries, a subscription's end for each subscription a client line opened
  * and no line ended, an external peer's answer to each request the own service awaits from it (delivering the request
  * first when it is in flight) and each event of an external peer that the own service receives, each delivered to the
@@ -110,7 +110,7 @@ export function enabledLines(
   sc: Scenario,
   seen: Seen,
   valuesPerInput: number,
-): (lines: readonly Line[], walked: Walked) => Move[] {
+): (lines: readonly Line[], executed: Executed) => Move[] {
   const own = sc.service;
   const values = (key: string, shape: Shape) =>
     valuesFor(shape, seen.messages.get(key) ?? [], seen.words, valuesPerInput);
@@ -248,16 +248,16 @@ export function enabledLines(
   };
 }
 
-export const walkAppended = (spec: Spec, sc: Scenario, appended: readonly Line[]): Walked =>
-  walkSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] });
+export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[]): Executed =>
+  executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] });
 
 const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
 
 /**
- * The violations of each participant of `child` that its walk added after the walk of `parent`: its own, those its
+ * The violations of each participant of `child` that its execution added after the execution of `parent`: its own, those its
  * listener collected, and its halt.
  */
-function violationsSince(parent: Walked, child: Walked): Violation[] {
+function violationsSince(parent: Executed, child: Executed): Violation[] {
   return [...child.world.participants].flatMap(([service, p]) => {
     const before = parent.world.participants.get(service);
     const was = before?.processing.state.violations.length ?? 0;
@@ -278,7 +278,7 @@ const halted = (w: World): boolean =>
  * Returns whether the lines appended after `parent` are lines that someone could write: no report of the simulation
  * and no InvalidInput violation of a participant. explore discards the others.
  */
-const givable = (parent: Walked, child: Walked): boolean =>
+const givable = (parent: Executed, child: Executed): boolean =>
   child.world.violations.length === parent.world.violations.length &&
   (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
@@ -310,38 +310,38 @@ export interface ExploredLines {
   readonly found: readonly FoundOnPath[];
   /** The lines each path appended, breadth-first. */
   readonly paths: readonly (readonly Line[])[];
-  /** What the scenario's walk and every path reached, except a walk that halted. */
+  /** What the scenario's execution and every path reached, except an execution that halted. */
   readonly reached: Coverage;
 }
 
-const coverageOf = (walked: Walked, reached: Coverage) => {
-  if (halted(walked.world)) return;
-  for (const l of walked.listeners.values()) reached.addAll(l.coverage);
+const coverageOf = (executed: Executed, reached: Coverage) => {
+  if (halted(executed.world)) return;
+  for (const l of executed.listeners.values()) reached.addAll(l.coverage);
 };
 
 /**
- * Explores the scenario: walks its lines, and the paths that append up to `depth` lines that face the own service,
+ * Explores the scenario: executes its lines, and the paths that append up to `depth` lines that face the own service,
  * breadth-first, without extending a path whose world an earlier path reached, discarding a path whose last line no one
  * could write (givable). Returns the violations of the participants that each path added, the step orders of its last
- * move's processings that change their result, and what the walks reached.
+ * move's processings that change their result, and what the executions reached.
  */
 export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: Seen, bounds: Bounds): ExploredLines {
   const sc = named.definition.scenario;
-  const base = walkAppended(spec, sc, []);
+  const base = executeAppended(spec, sc, []);
   const found: FoundOnPath[] = [];
   const paths: (readonly Line[])[] = [];
   const reached = new Coverage();
   coverageOf(base, reached);
   if (halted(base.world) || base.world.violations.length > 0) return { found, paths, reached };
   const enabledAfter = enabledLines(spec, sc, seen, bounds.valuesPerPayload);
-  const children = new Map<Walked, Map<Move, Walked>>();
-  const next = (path: readonly Move[], walked: Walked): Move[] => {
-    if (halted(walked.world)) return [];
+  const children = new Map<Executed, Map<Move, Executed>>();
+  const next = (path: readonly Move[], executed: Executed): Move[] => {
+    if (halted(executed.world)) return [];
     const appended = path.flat();
-    const made = new Map<Move, Walked>();
+    const made = new Map<Move, Executed>();
     let moves: Move[];
     try {
-      moves = enabledAfter([...sc.lines, ...appended], walked);
+      moves = enabledAfter([...sc.lines, ...appended], executed);
     } catch (error) {
       // What the own service enables next is evaluated after the path, so a Fault there is the path's.
       if (!(error instanceof Halt)) throw error;
@@ -349,25 +349,25 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
       return [];
     }
     for (const move of moves) {
-      const child = walkAppended(spec, sc, [...appended, ...move]);
-      if (givable(walked, child)) made.set(move, child);
+      const child = executeAppended(spec, sc, [...appended, ...move]);
+      if (givable(executed, child)) made.set(move, child);
     }
-    if (made.size > 0) children.set(walked, made);
+    if (made.size > 0) children.set(executed, made);
     return [...made.keys()];
   };
-  const step = (parent: Walked, move: Move): Walked => {
-    const made = children.get(parent) as Map<Move, Walked>;
-    const walked = made.get(move) as Walked;
+  const step = (parent: Executed, move: Move): Executed => {
+    const made = children.get(parent) as Map<Move, Executed>;
+    const executed = made.get(move) as Executed;
     made.delete(move);
     if (made.size === 0) children.delete(parent);
-    return walked;
+    return executed;
   };
-  for (const { path, result, parent } of search<Move, Walked>({
+  for (const { path, result, parent } of search<Move, Executed>({
     start: { path: [], result: base },
     bound: bounds.depth,
     step,
     next,
-    merge: { fingerprint: (walked) => worldFingerprint(walked.world) },
+    merge: { fingerprint: (executed) => worldFingerprint(executed.world) },
   })) {
     if (parent === undefined) continue;
     const appended = path.flat();

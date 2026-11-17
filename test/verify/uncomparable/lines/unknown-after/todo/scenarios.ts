@@ -7,7 +7,7 @@ export const addOne = scenario(
   {
     given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
     },
     then: () => [],
   },
@@ -18,7 +18,7 @@ export const addOneUnknownAfter = scenario(
   {
     given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
     },
     then: () => [],
   },

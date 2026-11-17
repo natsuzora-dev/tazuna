@@ -93,7 +93,7 @@
   ],
   "violations": [],
   "halted": {
-    "kind": "InvalidScenario.unfailable",
+    "kind": "InvalidScenario.unrefusable",
     "definition": null,
     "data": {
       "scenarioLine": 4,

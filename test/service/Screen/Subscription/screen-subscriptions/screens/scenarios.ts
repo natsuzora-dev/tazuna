@@ -8,14 +8,14 @@ type W = When<typeof given.peers>;
 
 const deliverSubscription = (w: W, sub: OutSubscription) => {
   const reached = w.net.deliver(sub);
-  w.net.inFlight(reached.answer(reached));
+  w.net.leaveInFlight(reached.answer(reached));
 };
 const deliverBeginSubscriptions = (w: W) => {
-  const tasksSub = w.begin.subscription(todo.tasks);
-  const countSub = w.begin.subscription(todo.taskCount);
+  const tasksSub = w.startup.subscription(todo.tasks);
+  const countSub = w.startup.subscription(todo.taskCount);
   w.net.deliver(tasksSub);
   w.net.deliver(countSub);
-  return { list: w.begin.screen(listScreen), tasksSub, countSub };
+  return { list: w.startup.screen(listScreen), tasksSub, countSub };
 };
 const deliverTasksShown = (w: W, sub: OutSubscription<typeof todo.tasks>) =>
   w.net.deliver(w.peer.todo.answer(sub, { result: "fulfilled", output: { taskIds: [] } }));
@@ -32,7 +32,7 @@ export const answersOneByOne = scenario(
       const loading = w.user.operate(list, "showAll");
       deliverCountShown(w, countSub);
       const ready = w.user.operate(list, "showAll");
-      w.net.inFlight(ready.end(tasksSub));
+      w.net.leaveInFlight(ready.end(tasksSub));
       deliverSubscription(w, ready.subscription(todo.tasks));
       return { tasksSub, loading, ready };
     },

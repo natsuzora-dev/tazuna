@@ -8,12 +8,12 @@ import { canonicalJson, type Json } from "../src/data/values.ts";
 import type { Violation } from "../src/data/violation.ts";
 import { enabled } from "../src/explore/enabled.ts";
 import {
+  type Executed,
   enabledLines,
+  executeAppended,
   type Move,
   seenLines,
   valuesPerPayload,
-  type Walked,
-  walkAppended,
 } from "../src/explore/paths.ts";
 import { search } from "../src/explore/search.ts";
 import type { Spec } from "../src/load/load.ts";
@@ -54,12 +54,12 @@ test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values mat
   );
 });
 
-/** What a walk shows, as Lean's reply to `simulate` with `walk` gives it. */
-function walkedOutcome(walked: Walked) {
-  const { world } = walked;
+/** What an execution shows, as Lean's reply to `simulate` with `execute` gives it. */
+function executedOutcome(executed: Executed) {
+  const { world } = executed;
   return {
-    ...outcomeOf(walked),
-    participants: outcomeOf(walked).participants.map((p) => {
+    ...outcomeOf(executed),
+    participants: outcomeOf(executed).participants.map((p) => {
       const { processing, halted } = world.participants.get(p.service) as Participant;
       if (halted !== undefined) return p;
       try {
@@ -75,17 +75,17 @@ function walkedOutcome(walked: Walked) {
 const violationValue = ({ kind, definition, data }: Violation) => ({ kind, definition, data });
 
 /**
- * Returns lines that no one could write after a walk, each placed only at the end of a path: a clock line before now, a
+ * Returns lines that no one could write after an execution, each placed only at the end of a path: a clock line before now, a
  * request and an operation whose value its schema rejects, an answer to the first awaited request with a rejection
  * reason its target never gives, and a subscription's end of a line that opened none.
  */
-function invalidLines(spec: Spec, sc: Scenario, walked: Walked, enabledLines: readonly Line[]): Move[] {
+function invalidLines(spec: Spec, sc: Scenario, executed: Executed, enabledLines: readonly Line[]): Move[] {
   const malformed = { value: "not an object", holes: [] };
   const command = spec.structure.definitions.find((d) => d.kind === "command" && d.service === sc.service);
   const answer = enabledLines.find((l) => l.type === "answer");
   const operate = enabledLines.find((l) => l.type === "operate");
   const lines: Line[] = [
-    { type: "at", time: walked.world.now.subtract({ milliseconds: 1 }).toString() },
+    { type: "at", time: executed.world.now.subtract({ milliseconds: 1 }).toString() },
     { type: "unsubscribe", subscription: 0 },
     ...(command === undefined
       ? []
@@ -113,54 +113,55 @@ function invalidLines(spec: Spec, sc: Scenario, walked: Walked, enabledLines: re
 for (const { name, spec } of specs) {
   const seen = seenLines(spec);
   for (const named of spec.scenarios)
-    test(`${name}: ${named.service}/${named.name} and every path that appends up to ${depth} lines to it walk alike in TS and Lean`, (t) => {
+    test(`${name}: ${named.service}/${named.name} and every path that appends up to ${depth} lines to it execute alike in TS and Lean`, (t) => {
       const sc = (named.definition as LoadedScenario).scenario;
       const functions = () => new SimFunctions(spec, (part) => lean.read(part));
-      const appendedOf = new Map<Walked, readonly Line[]>();
-      const both = (appended: readonly Line[]): Walked => {
-        const walked = walkAppended(spec, sc, appended);
-        appendedOf.set(walked, appended);
+      const appendedOf = new Map<Executed, readonly Line[]>();
+      const both = (appended: readonly Line[]): Executed => {
+        const executed = executeAppended(spec, sc, appended);
+        appendedOf.set(executed, appended);
         const fromLean = lean.simulate(spec, { ...sc, lines: [...sc.lines, ...appended] }, functions(), true);
         assert.equal(
           canonicalJson(fromLean as Json),
-          canonicalJson(walkedOutcome(walked) as unknown as Json),
-          `the walks differ after appending ${JSON.stringify(appended)}`,
+          canonicalJson(executedOutcome(executed) as unknown as Json),
+          `the executions differ after appending ${JSON.stringify(appended)}`,
         );
-        return walked;
+        return executed;
       };
       const enabledAfter = enabledLines(spec, sc, seen, valuesPerPayload);
       const invalid = new WeakSet<Move>();
-      const made = new Map<Walked, Map<Move, Walked>>();
-      const next = (path: readonly Move[], walked: Walked): Move[] => {
+      const made = new Map<Executed, Map<Move, Executed>>();
+      const next = (path: readonly Move[], executed: Executed): Move[] => {
         const last = path.at(-1);
         const stopped =
-          walked.world.halted !== undefined || [...walked.world.participants.values()].some((p) => p.halted);
+          executed.world.halted !== undefined || [...executed.world.participants.values()].some((p) => p.halted);
         if (stopped || (last !== undefined && invalid.has(last))) return [];
-        const appended = appendedOf.get(walked) ?? [];
+        const appended = appendedOf.get(executed) ?? [];
         let moves: Move[];
         try {
-          moves = enabledAfter([...sc.lines, ...appended], walked);
+          moves = enabledAfter([...sc.lines, ...appended], executed);
         } catch (error) {
           if (error instanceof Halt) return [];
           throw error;
         }
         const children = new Map(moves.map((move) => [move, both([...appended, ...move])]));
-        made.set(walked, children);
-        const others = invalidLines(spec, sc, walked, moves.flat());
+        made.set(executed, children);
+        const others = invalidLines(spec, sc, executed, moves.flat());
         for (const move of others) invalid.add(move);
         return [...children.keys(), ...others];
       };
       let paths = 0;
-      for (const _ of search<Move, Walked>({
+      for (const _ of search<Move, Executed>({
         start: { path: [], result: both([]) },
         bound: depth,
         step: (parent, move) => {
           const children = made.get(parent);
-          const walked = children?.get(move);
-          if (children === undefined || walked === undefined) return both([...(appendedOf.get(parent) ?? []), ...move]);
+          const executed = children?.get(move);
+          if (children === undefined || executed === undefined)
+            return both([...(appendedOf.get(parent) ?? []), ...move]);
           children.delete(move);
           if (children.size === 0) made.delete(parent);
-          return walked;
+          return executed;
         },
         next,
         merge: "none",

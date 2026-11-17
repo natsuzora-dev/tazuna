@@ -12,12 +12,12 @@ export const settlesAfterShownChange = scenario(
       peers: { todo: run(todo, { Task: [], Signal: [] }) },
     },
     when: (w) => {
-      const list = w.begin.screen(listScreen);
-      const tasks = w.begin.subscription(todo.tasks);
+      const list = w.startup.screen(listScreen);
+      const tasks = w.startup.subscription(todo.tasks);
       w.net.deliver(tasks);
       w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds: [] } }));
       const leaving = w.user.operate(list, "leave");
-      w.net.inFlight(leaving.end(tasks));
+      w.net.leaveInFlight(leaving.end(tasks));
     },
     then: () => [],
   },

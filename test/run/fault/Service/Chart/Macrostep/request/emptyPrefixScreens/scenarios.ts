@@ -7,7 +7,7 @@ export const show = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { todo: run(todo, { Task: [] }) } },
     when: (w) => {
-      const titled = w.begin.subscription(todo.titled);
+      const titled = w.startup.subscription(todo.titled);
       w.net.deliver(titled);
       w.net.deliver(
         w.peer.todo.answer(titled, { result: "rejected", rejection: { kind: "requires", reason: "notEmpty" } }),

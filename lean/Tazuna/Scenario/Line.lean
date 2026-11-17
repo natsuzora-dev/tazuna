@@ -53,9 +53,9 @@ inductive Line where
   The network fails to deliver the request `message`: its receiver never gets it, and its sender gets the transport's
   answer, rejected as unavailable.
   -/
-  | fail (message : Fact)
+  | refuse (message : Fact)
   /-- The message `message` is undelivered at the end. -/
-  | inFlight (message : Fact)
+  | leaveInFlight (message : Fact)
   /--
   The clock advances to `time`, and every running service fires its deadlines due by then; a tie of a service is
   internal to it (chooseDeadline).
@@ -77,8 +77,8 @@ def Line.written : Line → List Template
 
 /-- The handles that the line names. -/
 def Line.facts : Line → List Fact
-  | .operate f _ _ | .look f | .answer _ f _ | .leaveUnanswered _ f | .deliver f | .redeliver f | .lose f | .fail f
-  | .inFlight f => [f]
+  | .operate f _ _ | .look f | .answer _ f _ | .leaveUnanswered _ f | .deliver f | .redeliver f | .lose f | .refuse f
+  | .leaveInFlight f => [f]
   | .emit _ _ _ resultOf => resultOf.toList
   | _ => []
 

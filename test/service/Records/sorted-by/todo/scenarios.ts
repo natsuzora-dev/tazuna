@@ -18,7 +18,7 @@ export const sortedInSpec = scenario(
   {
     given,
     when: (w) => {
-      const plan = w.begin.screen(planScreen);
+      const plan = w.startup.screen(planScreen);
       w.user.operate(plan, "fill");
       const open = w.user.operate(plan, "open");
       w.user.operate(open.screen(pickScreen), "finish");

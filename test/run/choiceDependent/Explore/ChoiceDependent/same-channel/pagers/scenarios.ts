@@ -9,8 +9,8 @@ export const pageTie = scenario(
     when: (w) => {
       w.client.send(arm, {});
       const tick = w.clock.at("2026-10-25T10:30:00+09:00");
-      w.net.inFlight(tick.request(pager.page, { input: { by: "first" } }));
-      w.net.inFlight(tick.request(pager.page, { input: { by: "second" } }));
+      w.net.leaveInFlight(tick.request(pager.page, { input: { by: "first" } }));
+      w.net.leaveInFlight(tick.request(pager.page, { input: { by: "second" } }));
     },
     then: () => [],
   },

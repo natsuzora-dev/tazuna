@@ -86,7 +86,7 @@
       }
     },
     {
-      "type": "inFlight",
+      "type": "leaveInFlight",
       "message": {
         "type": "event",
         "origin": {
@@ -100,7 +100,7 @@
       }
     },
     {
-      "type": "inFlight",
+      "type": "leaveInFlight",
       "message": {
         "type": "event",
         "origin": {

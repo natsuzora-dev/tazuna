@@ -62,9 +62,9 @@ Precedent: Given-When-Then (Behavior-Driven Development).
 
 ## Write every delivery
 
-A message between two participants arrives only by a line that the scenario writes: `w.net.deliver(message)`, `redeliver`, `lose`, or `fail`, or `w.net.inFlight(message)` for a message that is still undelivered at the end.
+A message between two participants arrives only by a line that the scenario writes: `w.net.deliver(message)`, `redeliver`, `lose`, or `refuse`, or `w.net.leaveInFlight(message)` for a message that is still undelivered at the end.
 An external peer answers only a request that reached it, and a request that reached it needs its answer or `leaveUnanswered`.
-A message never overtakes an earlier one on its channel; to deliver the later one, lose or fail the earlier one first.
+A message never overtakes an earlier one on its channel; to deliver the later one, lose or refuse the earlier one first.
 The clock line `w.clock.at(time)` names no order for deadlines of one service due at the same time: `test` fires them in every order that can change the result and reports `ChoiceDependent` when the result differs, which the definition fixes, for example by guarding one transition on the other chart's state.
 Two outcomes are the same when the records are equal and each channel carries the same messages in the same order; order across channels does not count, so two tied deadlines that each send a request differ in nothing, while two that each emit an event without `resultOf` differ in the order of the service's event channel.
 

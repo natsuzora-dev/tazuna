@@ -1,8 +1,8 @@
 import Tazuna.Explore.StepOrders
 
 /-!
-The assignment search: it walks a scenario again with every other assignment of the handles of its `requests` groups to
-their equal messages, and compares each walk's outcome with the walk in which each handle names the message at its own
+The assignment search: it executes a scenario again with every other assignment of the handles of its `requests` groups to
+their equal messages, and compares each execution's outcome with the execution in which each handle names the message at its own
 place (ChoiceDependent.assignment), as TLA+ checks every value of a nondeterministic choice.
 -/
 
@@ -77,20 +77,20 @@ def groupSize (fsOf : String → Functions m) (w : Sim.World) (g : HandleGroup) 
   | .error _ => pure 0
 
 /--
-The search of the assignments of the handle groups `groups` of a scenario, from `base`, the scenario walked with each
-handle at its own place; `sizeOf` gives the number of messages of a group in `base`, and `walkWith` walks the scenario
-with an assignment. Each other assignment is walked and compared with `base` for each running service, until one
+The search of the assignments of the handle groups `groups` of a scenario, from `base`, the scenario executed with each
+handle at its own place; `sizeOf` gives the number of messages of a group in `base`, and `executeWith` executes the scenario
+with an assignment. Each other assignment is executed and compared with `base` for each running service, until one
 differs, which is the one violation it reports, or until assignmentLimit assignments ran with more left (searchLimit).
 -/
 def assignmentSearch (compareFor : String → Compare m) (sizeOf : HandleGroup → m Nat)
-    (walkWith : List (Fact × List Nat) → m Walk) (base : Walk) (groups : List HandleGroup) : m AssignmentSearch := do
+    (executeWith : List (Fact × List Nat) → m Execution) (base : Execution) (groups : List HandleGroup) : m AssignmentSearch := do
   if groups.isEmpty then return {}
   let sized ← groups.mapM fun g => do pure (g, ← sizeOf g)
   let first := ((groups.head?).map (targetOf ·.group)).getD default
   (assignmentsOf sized).drop 1 |>.foldlM (init := {}) fun r a => do
     if !r.found.isEmpty then return r
     if r.tried.length == assignmentLimit then return { r with found := [.searchLimit first assignmentLimit] }
-    let alternative ← walkWith a
+    let alternative ← executeWith a
     let changed := (a.zip sized).find? fun ((_, handles), (g, _)) => handles != List.range g.handles
     let definition := (changed.map (targetOf ·.2.1.group)).getD first
     let outcomes := base.world.services.map fun (service, st) => (service, base.outcome st, alternative.outcome st)

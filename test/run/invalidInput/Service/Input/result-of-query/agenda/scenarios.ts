@@ -7,15 +7,15 @@ export const changedByQuery = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.nextDay));
+      w.net.deliver(w.startup.request(calendar.nextDay));
       w.net.deliver(
-        w.peer.calendar.answer(w.begin.request(calendar.nextDay), {
+        w.peer.calendar.answer(w.startup.request(calendar.nextDay), {
           result: "fulfilled",
           output: { day: "2026-10-25T15:00:00Z" },
         }),
       );
       w.net.deliver(
-        w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.begin.request(calendar.nextDay)) }),
+        w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.startup.request(calendar.nextDay)) }),
       );
     },
     then: () => [],

@@ -80,12 +80,12 @@ theorem given_then (j : Spec.Structure) (w : World) (sc : Scenario) (then' : Lis
     w.given j fsOf { sc with expectations := then' } = w.given j fsOf sc := rfl
 
 /--
-Then and the end checks only add reports: the world that `simulate` leaves is the one `walk` leaves, with the same
+Then and the end checks only add reports: the world that `simulate` leaves is the one `execute` leaves, with the same
 traces, messages, and halt, and more reports.
 -/
 theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario) :
-    Reported (walk j fsOf start sc) (simulate j fsOf start sc) := by
-  unfold simulate walk World.walk
+    Reported (execute j fsOf start sc) (simulate j fsOf start sc) := by
+  unfold simulate execute World.execute
   simp only [bind, pure]
   split
   · exact reported_refl _
@@ -254,8 +254,8 @@ theorem keeps_nextId {w w' : World} (h : KeepsInFlight e w w') (peer name : Stri
 theorem keeps_now_iff {w w' : World} (now : Time) : KeepsInFlight e w { w' with now } ↔ KeepsInFlight e w w' :=
   Iff.rfl
 
-theorem keeps_inFlight_iff {w w' : World} (inFlight : List (Nat × Nat)) :
-    KeepsInFlight e w { w' with inFlight } ↔ KeepsInFlight e w w' := Iff.rfl
+theorem keeps_inFlight_iff {w w' : World} (leftInFlight : List (Nat × Nat)) :
+    KeepsInFlight e w { w' with leftInFlight } ↔ KeepsInFlight e w w' := Iff.rfl
 
 /-- Closes `KeepsInFlight e w x` where `x` is built from `w` by the steps that keep in-flight messages. -/
 macro "keeps_tac" : tactic => `(tactic| repeat' (first
@@ -300,9 +300,9 @@ theorem status_ne {w : World} {k : Nat} {msg : Message} {s : Status} (hm : w.mes
   simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hs
   exact hne (hs ▸ hst)
 
-/-- What the line moves: the message that a deliver, lose, or fail line names. -/
+/-- What the line moves: the message that a deliver, lose, or refuse line names. -/
 def moved : Scenario.Line → Option Scenario.Fact
-  | .deliver f | .lose f | .fail f => some f
+  | .deliver f | .lose f | .refuse f => some f
   | _ => none
 
 theorem take_keeps (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
@@ -336,10 +336,10 @@ theorem line_eq (w : World) (own : String) (lines : List Scenario.Line) (i : Nat
   (repeat' split) <;> first | exact Or.inl rfl | exact Or.inr ⟨_, checkWritten_halts ‹_›, rfl⟩
 
 /--
-A line that is not a deliver, lose, or fail line leaves every message in flight as it is: no message reaches its
+A line that is not a deliver, lose, or refuse line leaves every message in flight as it is: no message reaches its
 receiver, or is lost, unless a line names it.
 -/
-theorem line_keeps_inFlight (w : World) (own : String) (lines : List Scenario.Line)
+theorem line_keeps_leftInFlight (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (l : Scenario.Line) (hl : moved l = none) :
     KeepsInFlight (fun _ => False) w (w.line fsOf own lines i l) := by
   rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
@@ -347,7 +347,7 @@ theorem line_keeps_inFlight (w : World) (own : String) (lines : List Scenario.Li
   · exact keeps_report (keeps_refl w) r
 
 /--
-A deliver, lose, or fail line leaves every message in flight as it is, except the one its handle names.
+A deliver, lose, or refuse line leaves every message in flight as it is, except the one its handle names.
 -/
 theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (l : Scenario.Line) (f : Scenario.Fact) (hl : moved l = some f) (k : Nat)
@@ -435,8 +435,8 @@ theorem same_stated {w w' : World} (h : SameStates w w') (i : Nat) (msg : Messag
 
 theorem same_nextId {w w' : World} (h : SameStates w w') (peer name : String) : SameStates w (w'.nextId peer name).1 := h
 
-theorem same_inFlight_iff {w w' : World} (inFlight : List (Nat × Nat)) :
-    SameStates w { w' with inFlight } ↔ SameStates w w' := Iff.rfl
+theorem same_inFlight_iff {w w' : World} (leftInFlight : List (Nat × Nat)) :
+    SameStates w { w' with leftInFlight } ↔ SameStates w w' := Iff.rfl
 
 theorem same_resolving {α : Type} {w w' : World} (h : SameStates w w') (r : ExceptT InvalidScenario Id α)
     (k : α → Id World) (hk : ∀ a, SameStates w (k a)) : SameStates w (w'.resolving r k) := by
@@ -469,16 +469,16 @@ macro "same_tac" : tactic => `(tactic| repeat' (first
 
 /--
 Whether the line gives a participant something to process: a request or end of the client, a resend, an operation, the
-clock, a restart, or a message that a deliver, redeliver, or fail line names.
+clock, a restart, or a message that a deliver, redeliver, or refuse line names.
 -/
 def reaches : Scenario.Line → Bool
   | .request none .. | .unsubscribe none _ | .resend _ | .operate .. | .at .. | .restart
-  | .deliver _ | .redeliver _ | .fail _ => true
+  | .deliver _ | .redeliver _ | .refuse _ => true
   | _ => false
 
 /--
 A line that gives no participant anything to process changes no participant's state: a peer's message, an answer, an
-event, a lost message, or an inFlight or look line leaves every receiver as it was until a line delivers the message.
+event, a lost message, or a leaveInFlight or look line leaves every receiver as it was until a line delivers the message.
 -/
 theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line)
     (hl : reaches l = false) : (w.line fsOf own lines i l).states = w.states := by

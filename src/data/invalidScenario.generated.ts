@@ -4,7 +4,7 @@ import type { Json } from "./values.ts";
 
 /**
  * What the simulation of a scenario reports about the scenario. `scenarioLine` is the line of When, from 0. A message is
- * named by its sender, its receiver, the sender's id of it, and its origin: the line, or the begin, whose processing sent
+ * named by its sender, its receiver, the sender's id of it, and its origin: the line, or the startup, whose processing sent
  * it.
  *
  * Given is checked first, and each of its violations is given; after any of them, nothing begins. A violation of a line of When
@@ -160,9 +160,9 @@ export type InvalidScenario =
         readonly event: DefinitionRef;
       };
     }
-  /** The line fails `message`, which is no request: only a request has an answer that can tell its sender. */
+  /** The line refuses `message`, which is no request: only a request has an answer that can tell its sender. */
   | {
-      readonly kind: "InvalidScenario.unfailable";
+      readonly kind: "InvalidScenario.unrefusable";
       readonly definition: null;
       readonly data: {
         readonly scenarioLine: number;
@@ -178,7 +178,7 @@ export type InvalidScenario =
         readonly service: string;
       };
     }
-  /** The line delivers, loses or fails `message`, or a running peer's line states it, and it is not in flight. */
+  /** The line delivers, loses or refuses `message`, or a running peer's line states it, and it is not in flight. */
   | {
       readonly kind: "InvalidScenario.notInFlight";
       readonly definition: null;
@@ -317,7 +317,7 @@ export type InvalidScenario =
         readonly actual: Json;
       };
     }
-  /** The message `message` is undelivered at the end, and no inFlight line names it. */
+  /** The message `message` is undelivered at the end, and no leaveInFlight line names it. */
   | {
       readonly kind: "InvalidScenario.leftInFlight";
       readonly definition: null;
@@ -325,7 +325,7 @@ export type InvalidScenario =
         readonly message: Json;
       };
     }
-  /** The message that the inFlight line names is not undelivered at the end. */
+  /** The message that the leaveInFlight line names is not undelivered at the end. */
   | {
       readonly kind: "InvalidScenario.unusedInFlight";
       readonly definition: null;
@@ -333,7 +333,7 @@ export type InvalidScenario =
         readonly scenarioLine: number;
       };
     }
-  /** The inFlight line names `message`, which an earlier inFlight line names. */
+  /** The leaveInFlight line names `message`, which an earlier leaveInFlight line names. */
   | {
       readonly kind: "InvalidScenario.repeatedInFlight";
       readonly definition: null;
@@ -385,7 +385,7 @@ export const invalidScenarioKinds = [
   "InvalidScenario.unlistedService",
   "InvalidScenario.missingRecord",
   "InvalidScenario.unreceivedEvent",
-  "InvalidScenario.unfailable",
+  "InvalidScenario.unrefusable",
   "InvalidScenario.wrongRole",
   "InvalidScenario.notInFlight",
   "InvalidScenario.notDelivered",
@@ -417,7 +417,7 @@ export const haltingInvalidScenarioKinds = [
   "InvalidScenario.malformedValue",
   "InvalidScenario.unlistedService",
   "InvalidScenario.unreceivedEvent",
-  "InvalidScenario.unfailable",
+  "InvalidScenario.unrefusable",
   "InvalidScenario.wrongRole",
   "InvalidScenario.notInFlight",
   "InvalidScenario.notDelivered",

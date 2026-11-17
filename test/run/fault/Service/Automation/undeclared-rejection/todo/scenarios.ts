@@ -8,7 +8,7 @@ export const notificationAwaited = scenario(
     given: { start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: { device: external(device) } },
     when: (w) => {
       const l0 = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-      w.net.inFlight(l0.request(device.showNotification));
+      w.net.leaveInFlight(l0.request(device.showNotification));
     },
     then: () => [],
   },

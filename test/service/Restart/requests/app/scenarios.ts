@@ -10,7 +10,7 @@ export const firstRestart = scenario(
     given,
     when: (w) => {
       const restarting = w.host.restart();
-      const first = w.begin.request(device.requestPermission);
+      const first = w.startup.request(device.requestPermission);
       w.net.deliver(first);
       w.peer.device.leaveUnanswered(first);
       const second = restarting.request(device.requestPermission);
@@ -26,7 +26,7 @@ export const requestsDiscarded = scenario(
   {
     given,
     when: (w) => {
-      const first = w.begin.request(device.requestPermission);
+      const first = w.startup.request(device.requestPermission);
       w.net.deliver(first);
       w.peer.device.leaveUnanswered(first);
       w.clock.at("2026-10-25T10:05:00+09:00");

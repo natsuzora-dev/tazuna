@@ -8,7 +8,7 @@ export const addOne = scenario(
     given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-      w.net.inFlight(add.request(calendar.nextDay));
+      w.net.leaveInFlight(add.request(calendar.nextDay));
     },
     then: () => [],
   },
@@ -20,7 +20,7 @@ export const addOneReordered = scenario(
     given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-      w.net.inFlight(add.request(calendar.nextDay));
+      w.net.leaveInFlight(add.request(calendar.nextDay));
     },
     then: () => [],
   },

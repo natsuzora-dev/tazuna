@@ -11,7 +11,7 @@ const given = {
 export const filterAndClose = scenario("Filter the list and close it; no violation", {
   given,
   when: (w) => {
-    const list = w.begin.screen(taskListScreen);
+    const list = w.startup.screen(taskListScreen);
     w.user.operate(list, "filter", { prefix: "Buy" });
     w.user.operate(list, "close");
   },
@@ -23,7 +23,7 @@ export const filterAndCloseWrongSubscriptions = scenario(
   {
     given,
     when: (w) => {
-      const list = w.begin.screen(taskListScreen);
+      const list = w.startup.screen(taskListScreen);
       w.user.operate(list, "filter", { prefix: "Buy" });
       w.user.operate(list, "close");
     },

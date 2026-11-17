@@ -7,8 +7,8 @@ export const removeAccepted = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.removeReminder));
-      w.net.deliver(w.peer.calendar.answer(w.begin.request(calendar.removeReminder), { result: "accepted" }));
+      w.net.deliver(w.startup.request(calendar.removeReminder));
+      w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.removeReminder), { result: "accepted" }));
     },
     then: () => [],
   },

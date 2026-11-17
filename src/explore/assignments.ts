@@ -8,7 +8,7 @@ import type { Spec } from "../load/load.ts";
 import type { Assignment } from "../sim/network.ts";
 import { groupOf, Reported, requestsOf } from "../sim/resolve.ts";
 import { expectationLine, expectationNamed, lineNamed } from "../sim/run.ts";
-import { type Made, walkSpec } from "../sim/spec/simulate.ts";
+import { executeSpec, type Made } from "../sim/spec/simulate.ts";
 import { assignment, assignmentLimit } from "./choiceDependent.ts";
 import { compareOf, outcomeFor } from "./stepOrders.ts";
 
@@ -80,12 +80,12 @@ function groupSize(w: Made["world"], g: HandleGroup): number {
   }
 }
 
-/** Lean's assignmentSearch of the handle groups of the scenario `sc`, from its walk with each handle at its own place. */
+/** Lean's assignmentSearch of the handle groups of the scenario `sc`, from its execution with each handle at its own place. */
 export function assignmentSearch(spec: Spec, sc: Scenario): AssignmentSearch {
   const groups = handleGroups(sc);
   const [firstGroup] = groups;
   if (firstGroup === undefined) return { tried: [], found: [] };
-  const base = walkSpec(spec, sc);
+  const base = executeSpec(spec, sc);
   const sized = groups.map((g) => [g, groupSize(base.world, g)] as const);
   const tried: AssignmentTried[] = [];
   for (const a of assignmentsOf(sized).slice(1)) {
@@ -97,7 +97,7 @@ export function assignmentSearch(spec: Spec, sc: Scenario): AssignmentSearch {
       };
       return { tried, found: [limit] };
     }
-    const alternative = walkSpec(spec, sc, [], a);
+    const alternative = executeSpec(spec, sc, [], a);
     const changed = sized.find(([g], k) => canonicalJson(a[k]?.[1] as Json) !== canonicalJson(range(g.handles)));
     const assigned = a.map(
       ([, handles], k): Assigned => ({

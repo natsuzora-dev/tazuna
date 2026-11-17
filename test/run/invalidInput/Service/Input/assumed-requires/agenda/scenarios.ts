@@ -5,9 +5,9 @@ import { scenario } from "./agenda.ts";
 export const answer = scenario("Answer the start of a day, then reject an hour later with requires; no violation", {
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
   when: (w) => {
-    w.net.deliver(w.begin.request(calendar.holiday));
+    w.net.deliver(w.startup.request(calendar.holiday));
     const l0 = w.net.deliver(
-      w.peer.calendar.answer(w.begin.request(calendar.holiday), { result: "fulfilled", output: { isHoliday: true } }),
+      w.peer.calendar.answer(w.startup.request(calendar.holiday), { result: "fulfilled", output: { isHoliday: true } }),
     );
     w.net.deliver(l0.request(calendar.holiday));
     w.net.deliver(
@@ -25,9 +25,9 @@ export const rejectStartOfDay = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.holiday));
+      w.net.deliver(w.startup.request(calendar.holiday));
       const l0 = w.net.deliver(
-        w.peer.calendar.answer(w.begin.request(calendar.holiday), {
+        w.peer.calendar.answer(w.startup.request(calendar.holiday), {
           result: "rejected",
           rejection: { kind: "requires", reason: "startOfDay" },
         }),

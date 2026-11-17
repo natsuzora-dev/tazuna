@@ -10,7 +10,7 @@ export type Ref = z.infer<typeof ref>;
 
 const origin = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("begin"),
+    type: z.literal("startup"),
   }),
   z.object({
     type: z.literal("line"),
@@ -18,7 +18,7 @@ const origin = z.discriminatedUnion("type", [
   }),
 ]);
 
-/** What caused a fact: the begin of every running service at the start, or the scenario line `index`, from 0. */
+/** What caused a fact: the startup of every running service at the start, or the scenario line `index`, from 0. */
 export type Origin = z.infer<typeof origin>;
 
 const fact = z.discriminatedUnion("type", [
@@ -96,7 +96,7 @@ const fact = z.discriminatedUnion("type", [
   }),
 ]);
 
-/** A fact that a line or the begin caused, named by content. */
+/** A fact that a line or the startup caused, named by content. */
 export type Fact = z.infer<typeof fact>;
 
 const valueRef = z.object({
@@ -226,12 +226,12 @@ const line = z.discriminatedUnion("type", [
    * answer, rejected as unavailable.
    */
   z.object({
-    type: z.literal("fail"),
+    type: z.literal("refuse"),
     message: fact,
   }),
   /** The message `message` is undelivered at the end. */
   z.object({
-    type: z.literal("inFlight"),
+    type: z.literal("leaveInFlight"),
     message: fact,
   }),
   /**

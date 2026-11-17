@@ -8,7 +8,7 @@ type W = When<typeof given.peers>;
 
 const deliverSubscription = (w: W, sub: OutSubscription) => {
   const reached = w.net.deliver(sub);
-  w.net.inFlight(reached.answer(reached));
+  w.net.leaveInFlight(reached.answer(reached));
 };
 
 export const screensReopen = scenario(
@@ -16,7 +16,7 @@ export const screensReopen = scenario(
   {
     given,
     when: (w) => {
-      const home = w.begin.screen(homeScreen);
+      const home = w.startup.screen(homeScreen);
       const opening = w.user.operate(home, "openList");
       deliverSubscription(w, opening.subscription(todo.tasks));
       const restarting = w.host.restart();

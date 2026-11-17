@@ -95,8 +95,8 @@ function difference(compare: Compare, original: Outcome, alternative: Outcome): 
 }
 
 /**
- * Lean's stepOrder: the violation when the two walks differ. `aFirst` takes step `a` first and is the walk with the step
- * order `aOrder`, and `bFirst` takes `b` first and is the walk with `bOrder`. The pair is in the order of their canonical
+ * Lean's stepOrder: the violation when the two executions differ. `aFirst` takes step `a` first and is the execution with the step
+ * order `aOrder`, and `bFirst` takes `b` first and is the execution with `bOrder`. The pair is in the order of their canonical
  * texts.
  */
 export function stepOrder(
@@ -124,7 +124,7 @@ export function stepOrder(
 
 /**
  * Lean's assignment: the violation for the assignment `assigned` at the first running service, in the order of
- * `outcomes`, whose outcome differs between the walk with each handle at its own place and the walk with `assigned`.
+ * `outcomes`, whose outcome differs between the execution with each handle at its own place and the execution with `assigned`.
  */
 export function assignment(
   compareFor: (service: string) => Compare,

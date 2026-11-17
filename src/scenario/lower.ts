@@ -379,7 +379,7 @@ export function lower(
   };
 
   const w = {
-    begin: caused({ type: "begin" }),
+    startup: caused({ type: "startup" }),
     client: {
       send: <C extends AnyCommand>(command: C, input: unknown, options?: { readonly sameIdAs?: Line }) =>
         handle<ClientRequestLine<C>>(
@@ -423,9 +423,9 @@ export function lower(
         handle<Delivered<M>>(delivery({ type: "redeliver", message: factOfHandle(message) }, message)),
       lose: (message: Message) =>
         handle<Line>({ [lineIndex]: place({ type: "lose", message: factOfHandle(message) }) }),
-      fail: (message: Message) => processing({ type: "fail", message: factOfHandle(message) }),
-      inFlight: (message: Message) =>
-        handle<Line>({ [lineIndex]: place({ type: "inFlight", message: factOfHandle(message) }) }),
+      refuse: (message: Message) => processing({ type: "refuse", message: factOfHandle(message) }),
+      leaveInFlight: (message: Message) =>
+        handle<Line>({ [lineIndex]: place({ type: "leaveInFlight", message: factOfHandle(message) }) }),
     },
     clock: {
       at: (time: string) => {

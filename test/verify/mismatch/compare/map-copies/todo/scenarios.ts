@@ -8,8 +8,8 @@ export const twoCopies = scenario(
     given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: { device: external(device) } },
     when: (w) => {
       const added = w.client.send(addTasks, { taskIds: ["task-1", "task-2"] });
-      w.net.inFlight(added.request(device.showNotification, { input: { text: "task-1" } }));
-      w.net.inFlight(added.request(device.showNotification, { input: { text: "task-2" } }));
+      w.net.leaveInFlight(added.request(device.showNotification, { input: { text: "task-1" } }));
+      w.net.leaveInFlight(added.request(device.showNotification, { input: { text: "task-2" } }));
     },
     then: () => [],
   },

@@ -8,7 +8,7 @@ open Tazuna.Data
 
 /--
 What the simulation of a scenario reports about the scenario. `scenarioLine` is the line of When, from 0. A message is
-named by its sender, its receiver, the sender's id of it, and its origin: the line, or the begin, whose processing sent
+named by its sender, its receiver, the sender's id of it, and its origin: the line, or the startup, whose processing sent
 it.
 
 Given is checked first, and each of its violations is given; after any of them, nothing begins. A violation of a line of When
@@ -59,11 +59,11 @@ inductive InvalidScenario where
   | missingRecord (service entity : String)
   /-- The external peer's line emits `event`, which no running service's definitions receive. -/
   | unreceivedEvent (scenarioLine : Nat) (event : Spec.Ref)
-  /-- The line fails `message`, which is no request: only a request has an answer that can tell its sender. -/
-  | unfailable (scenarioLine : Nat) (message : Value)
+  /-- The line refuses `message`, which is no request: only a request has an answer that can tell its sender. -/
+  | unrefusable (scenarioLine : Nat) (message : Value)
   /-- The line needs `service` to take part in another way than Given says: running, external, or the own service. -/
   | wrongRole (scenarioLine : Nat) (service : String)
-  /-- The line delivers, loses or fails `message`, or a running peer's line states it, and it is not in flight. -/
+  /-- The line delivers, loses or refuses `message`, or a running peer's line states it, and it is not in flight. -/
   | notInFlight (scenarioLine : Nat) (message : Value)
   /--
   The line delivers `message` again, or its external receiver answers it or leaves it unanswered, and no line delivered
@@ -105,11 +105,11 @@ inductive InvalidScenario where
   | unoperableScreen (scenarioLine : Nat) (screen : String)
   /-- The running peer's answer `actual`, which the line delivers, is not the line's `expected`. -/
   | differentPeerAnswer (scenarioLine : Nat) (expected actual : Value)
-  /-- The message `message` is undelivered at the end, and no inFlight line names it. -/
+  /-- The message `message` is undelivered at the end, and no leaveInFlight line names it. -/
   | leftInFlight (message : Value)
-  /-- The message that the inFlight line names is not undelivered at the end. -/
+  /-- The message that the leaveInFlight line names is not undelivered at the end. -/
   | unusedInFlight (scenarioLine : Nat)
-  /-- The inFlight line names `message`, which an earlier inFlight line names. -/
+  /-- The leaveInFlight line names `message`, which an earlier leaveInFlight line names. -/
   | repeatedInFlight (scenarioLine : Nat) (message : Value)
   /-- The external peer received the request `message`, and no line answers it or leaves it unanswered. -/
   | awaitingAnswer (message : Value)

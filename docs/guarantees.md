@@ -61,7 +61,7 @@ tazuna guarantees nothing about lines that no scenario contains.
 Lean defines the simulation in `lean/Tazuna/Sim`, and `Sim.InvalidScenario` holds what it reports about a scenario.
 When `test` reports no `InvalidScenario` violation, the scenario stated everything that happened between the participants:
 
-- every message between two participants reached its receiver by a line of When, or the scenario names it as lost, failed, or in flight at the end (`InvalidScenario.leftInFlight`);
+- every message between two participants reached its receiver by a line of When, or the scenario names it as lost, refused, or left in flight at the end (`InvalidScenario.leftInFlight`);
 - a message never overtook an earlier one on its channel (`InvalidScenario.overtaking`);
 - each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered, not both (`InvalidScenario.awaitingAnswer`, `InvalidScenario.repeatedAnswer`);
 - an event's `resultOf` names a request that its emitter received (`InvalidScenario.unreceivedRequest`), and the receiver took that request's answer before the event (`InvalidInput.resultOfUnansweredRequest`);
@@ -174,12 +174,12 @@ A map state has one *copy* of its child states for each key of its items.
 ### Simulation
 
 - Then only adds reports: a scenario leaves the same traces, messages, and halt as the same scenario without expectations, so a snapshot depends on Given and When alone (`then_only_reports`). A payload of Then that names nothing is reported and stops no line. The end checks also only add reports to what the lines leave (`simulate_reported`).
-- A line other than a deliver, lose, or fail line leaves every message in flight in place, and such a line changes no message in flight except the one its handle names: no message is delivered, lost, or failed unless a line names it (`line_keeps_inFlight`, `moving_line_keeps_others`).
-- A line that gives no participant anything to process, such as a peer's message, an answer, an event, or a lost message, changes no participant's state: a message reaches its receiver only through a deliver, redeliver, or fail line (`line_keeps_states`).
+- A line other than a deliver, lose, or refuse line leaves every message in flight in place, and such a line changes no message in flight except the one its handle names: no message is delivered, lost, or refused unless a line names it (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
+- A line that gives no participant anything to process, such as a peer's message, an answer, an event, or a lost message, changes no participant's state: a message reaches its receiver only through a deliver, redeliver, or refuse line (`line_keeps_states`).
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer line that names a request that has not reached that peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A report that halts stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
-- No two createKey calls of a participant in a simulation return the same key: each line keeps every value that a participant has created and may only add to them (`walk_keepsKeys`, `created_kept`), and no two of its values are equal, since the `n`-th value of an entity is `<participant>/<Entity>-<n>` (`created_distinct`). A key of a keyed entity that the scenario may write, such as the key of a Given record, is none of them at any point of the run (`unwritten_not_created`, `walk_unwritten_not_created`).
+- No two createKey calls of a participant in a simulation return the same key: each line keeps every value that a participant has created and may only add to them (`execute_keepsKeys`, `created_kept`), and no two of its values are equal, since the `n`-th value of an entity is `<participant>/<Entity>-<n>` (`created_distinct`). A key of a keyed entity that the scenario may write, such as the key of a Given record, is none of them at any point of the run (`unwritten_not_created`, `execute_unwritten_not_created`).
 - The order in which Given writes the records of a running service reaches nothing: Given places them ordered by entity and key, so a scenario that writes the same records in another order, no two of one entity and key, simulates alike, with the same traces, messages, halt, and reports (`simulate_records_perm`).
 
 ### Data validity

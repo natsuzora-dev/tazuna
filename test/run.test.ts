@@ -44,9 +44,9 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
     "InvalidInput.unknownControl":
       "The type of operate accepts only the controls of the screen, and the exploration of test operates only those",
     "InvalidInput.unreadyStep":
-      "Only test's step-order search writes a step order, naming only the steps that a walk took",
+      "Only test's step-order search writes a step order, naming only the steps that an execution took",
     "InvalidInput.unusedStepOrder":
-      "Only test's step-order search writes a step order, naming only the steps that a walk took",
+      "Only test's step-order search writes a step order, naming only the steps that an execution took",
   },
   Fault: {
     "Fault.exceededMessageWork":

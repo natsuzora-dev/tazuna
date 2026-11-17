@@ -5,11 +5,11 @@ import { addTask, scenario } from "./todo.ts";
 export const addHourly = scenario("Add a task every hour; no violation", {
   given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
   when: (w) => {
-    w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
     w.clock.at("2026-10-25T01:00:00Z");
-    w.net.inFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
     w.clock.at("2026-10-25T02:00:00Z");
-    w.net.inFlight(w.client.send(addTask, { taskId: "task-3", title: "Buy tea" }).request(calendar.nextDay));
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-3", title: "Buy tea" }).request(calendar.nextDay));
   },
   then: () => [],
 });
@@ -19,11 +19,11 @@ export const addHourlyWrongRequests = scenario(
   {
     given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
       w.clock.at("2026-10-25T01:00:00Z");
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
       w.clock.at("2026-10-25T02:00:00Z");
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-3", title: "Buy tea" }).request(calendar.nextDay));
+      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-3", title: "Buy tea" }).request(calendar.nextDay));
     },
     then: () => [],
   },

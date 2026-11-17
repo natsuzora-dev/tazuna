@@ -13,7 +13,7 @@ export const draftTwo = scenario(
   {
     given,
     when: (w) => {
-      const links = w.begin.screen(linkScreen);
+      const links = w.startup.screen(linkScreen);
       w.user.operate(links, "draft");
     },
     then: () => [],
@@ -25,7 +25,7 @@ export const draftTwoPointed = scenario(
   {
     given,
     when: (w) => {
-      const links = w.begin.screen(linkScreen);
+      const links = w.startup.screen(linkScreen);
       w.user.operate(links, "draft");
       w.user.operate(links, "point");
     },
@@ -38,7 +38,7 @@ export const draftTwoBroken = scenario(
   {
     given,
     when: (w) => {
-      const links = w.begin.screen(linkScreen);
+      const links = w.startup.screen(linkScreen);
       w.user.operate(links, "draft");
     },
     then: () => [],

@@ -5,9 +5,9 @@ import { scenario } from "./alarm.ts";
 export const addOnce = scenario("The calendar adds the reminder once; no violation", {
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
   when: (w) => {
-    w.net.deliver(w.begin.request(calendar.addReminder));
+    w.net.deliver(w.startup.request(calendar.addReminder));
     w.net.deliver(
-      w.peer.calendar.answer(w.begin.request(calendar.addReminder), {
+      w.peer.calendar.answer(w.startup.request(calendar.addReminder), {
         result: "accepted",
         output: { reminderId: "r-1" },
       }),
@@ -16,7 +16,7 @@ export const addOnce = scenario("The calendar adds the reminder once; no violati
       w.peer.calendar.emit(
         calendar.reminderAdded,
         { reminderId: "r-1" },
-        { resultOf: w.begin.request(calendar.addReminder) },
+        { resultOf: w.startup.request(calendar.addReminder) },
       ),
     );
   },
@@ -28,9 +28,9 @@ export const addTwice = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.addReminder));
+      w.net.deliver(w.startup.request(calendar.addReminder));
       w.net.deliver(
-        w.peer.calendar.answer(w.begin.request(calendar.addReminder), {
+        w.peer.calendar.answer(w.startup.request(calendar.addReminder), {
           result: "accepted",
           output: { reminderId: "r-1" },
         }),
@@ -39,14 +39,14 @@ export const addTwice = scenario(
         w.peer.calendar.emit(
           calendar.reminderAdded,
           { reminderId: "r-1" },
-          { resultOf: w.begin.request(calendar.addReminder) },
+          { resultOf: w.startup.request(calendar.addReminder) },
         ),
       );
       w.net.deliver(
         w.peer.calendar.emit(
           calendar.reminderAdded,
           { reminderId: "r-1" },
-          { resultOf: w.begin.request(calendar.addReminder) },
+          { resultOf: w.startup.request(calendar.addReminder) },
         ),
       );
     },
@@ -59,9 +59,9 @@ export const addOther = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.addReminder));
+      w.net.deliver(w.startup.request(calendar.addReminder));
       w.net.deliver(
-        w.peer.calendar.answer(w.begin.request(calendar.addReminder), {
+        w.peer.calendar.answer(w.startup.request(calendar.addReminder), {
           result: "accepted",
           output: { reminderId: "r-1" },
         }),
@@ -70,7 +70,7 @@ export const addOther = scenario(
         w.peer.calendar.emit(
           calendar.reminderAdded,
           { reminderId: "r-2" },
-          { resultOf: w.begin.request(calendar.addReminder) },
+          { resultOf: w.startup.request(calendar.addReminder) },
         ),
       );
     },

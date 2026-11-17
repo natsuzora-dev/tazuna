@@ -1378,8 +1378,8 @@ scenarioOfScreens("types", {
     },
   },
   when: (w) => {
-    const list = w.begin.screen(taskListScreen);
-    const watching = w.begin.subscription(todoPeer.tasks);
+    const list = w.startup.screen(taskListScreen);
+    const watching = w.startup.subscription(todoPeer.tasks);
     const look = w.user.look(list);
     const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     const asking = adding.request(calendarPeer.nextBusinessDay);
@@ -1393,9 +1393,9 @@ scenarioOfScreens("types", {
     // @ts-expect-error a client line reaches its receiver directly; no message is delivered
     w.net.deliver(adding);
     // @ts-expect-error only a request can fail
-    w.net.fail(adding.event(todoPeer.taskAdded));
+    w.net.refuse(adding.event(todoPeer.taskAdded));
     // @ts-expect-error a look line carries no message
-    w.net.inFlight(look);
+    w.net.leaveInFlight(look);
     // @ts-expect-error created() is written only in a running peer's message
     w.client.send(todoPeer.completeTask, { taskId: created() });
     // @ts-expect-error an external peer's values are its own, never created()

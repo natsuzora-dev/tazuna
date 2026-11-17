@@ -9,7 +9,7 @@ import { created } from "../../service/state.ts";
 import type { Structure } from "../../spec/structure.generated.ts";
 import { encodedGivenRecords, start } from "../given.ts";
 import type { Assignment, StepOrder, World } from "../network.ts";
-import { simulate, walk } from "../run.ts";
+import { execute, simulate } from "../run.ts";
 import { snapshotLines } from "../trace.ts";
 import { instrumented, Listener } from "./listener.ts";
 import { newProcessing } from "./processing.ts";
@@ -53,13 +53,13 @@ function made(
 export const simulateSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
   made(spec, sc, simulate, stepOrders);
 
-/** Runs the lines of the scenario on the spec's services as explore does (walk), with the handles of `assignments`. */
-export const walkSpec = (
+/** Runs the lines of the scenario on the spec's services as explore does (execute), with the handles of `assignments`. */
+export const executeSpec = (
   spec: Spec,
   sc: Scenario,
   stepOrders: readonly StepOrder[] = [],
   assignments: readonly Assignment[] = [],
-): Made => made(spec, sc, walk, stepOrders, assignments);
+): Made => made(spec, sc, execute, stepOrders, assignments);
 
 /** Each running service's trace as its snapshot holds it. */
 export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, readonly TraceLine[]> =>

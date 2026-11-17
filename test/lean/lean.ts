@@ -215,7 +215,7 @@ export class Lean {
     return message["mismatch"] as VerifyViolation | null;
   }
 
-  /** Lean's stepOrderChanges of the scenario walked from its begin: each search, what it ran, and what it found. */
+  /** Lean's stepOrderChanges of the scenario executed from its startup: each search, what it ran, and what it found. */
   stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): readonly Searched[] {
     const result = this.exchange(
       { type: "stepOrderChanges", structure: spec.structure, scenario },
@@ -247,12 +247,12 @@ export class Lean {
     };
   }
 
-  /** Simulates the scenario, or with `walk` runs its lines as explore does and returns what each service enables. */
+  /** Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables. */
   simulate(
     spec: Spec,
     scenario: Scenario,
     functions: Answering,
-    walk = false,
+    execute = false,
     stepOrders: readonly StepOrder[] = [],
   ): Message {
     const { type, ...result } = this.exchange(
@@ -260,7 +260,7 @@ export class Lean {
         type: "simulate",
         structure: spec.structure,
         scenario,
-        ...(walk ? { walk } : {}),
+        ...(execute ? { execute } : {}),
         ...(stepOrders.length > 0 ? { stepOrders } : {}),
       },
       "simulated",

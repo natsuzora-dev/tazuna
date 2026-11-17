@@ -8,13 +8,13 @@ export const showAll = scenario(
   {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } },
     when: (w) => {
-      const openSub = w.begin.subscription(todo.tasks);
+      const openSub = w.startup.subscription(todo.tasks);
       const openReached = w.net.deliver(openSub);
-      w.net.inFlight(openReached.answer(openReached));
-      const showing = w.user.operate(w.begin.screen(listScreen), "showAll");
-      w.net.inFlight(showing.end(openSub));
+      w.net.leaveInFlight(openReached.answer(openReached));
+      const showing = w.user.operate(w.startup.screen(listScreen), "showAll");
+      w.net.leaveInFlight(showing.end(openSub));
       const allReached = w.net.deliver(showing.subscription(todo.tasks));
-      w.net.inFlight(allReached.answer(allReached));
+      w.net.leaveInFlight(allReached.answer(allReached));
       return { openSub, showing };
     },
     then: ({ openSub, showing }) => [requested(showing, [endOf(openSub), subscription(todo.tasks, { filter: "all" })])],

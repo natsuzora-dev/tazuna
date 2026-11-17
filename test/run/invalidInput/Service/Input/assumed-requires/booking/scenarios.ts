@@ -7,13 +7,13 @@ export const acceptBookingLater = scenario(
   {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.book));
-      w.net.deliver(w.peer.calendar.answer(w.begin.request(calendar.book), { result: "accepted" }));
+      w.net.deliver(w.startup.request(calendar.book));
+      w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), { result: "accepted" }));
       w.net.deliver(
         w.peer.calendar.emit(
           calendar.booked,
           { day: "2026-10-26T00:00:00Z" },
-          { resultOf: w.begin.request(calendar.book) },
+          { resultOf: w.startup.request(calendar.book) },
         ),
       );
     },
@@ -26,9 +26,9 @@ export const rejectBookingAtStartOfDay = scenario(
   {
     given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
     when: (w) => {
-      w.net.deliver(w.begin.request(calendar.book));
+      w.net.deliver(w.startup.request(calendar.book));
       w.net.deliver(
-        w.peer.calendar.answer(w.begin.request(calendar.book), {
+        w.peer.calendar.answer(w.startup.request(calendar.book), {
           result: "rejected",
           rejection: { kind: "requires", reason: "startOfDay" },
         }),

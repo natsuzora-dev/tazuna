@@ -5,9 +5,9 @@ import { scenario, shelfScreen } from "./shelf.ts";
 export const answerUnsorted = scenario("Answer the items out of n order; test reports answerOutputSchema", {
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { catalog: external(catalog) } },
   when: (w) => {
-    w.net.deliver(w.begin.request(catalog.numbers));
+    w.net.deliver(w.startup.request(catalog.numbers));
     w.net.deliver(
-      w.peer.catalog.answer(w.begin.request(catalog.numbers), {
+      w.peer.catalog.answer(w.startup.request(catalog.numbers), {
         result: "fulfilled",
         output: {
           items: [
@@ -24,7 +24,7 @@ export const answerUnsorted = scenario("Answer the items out of n order; test re
 export const pickTwice = scenario("Pick the name a twice; test reports controlPayloadSchema", {
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { catalog: external(catalog) } },
   when: (w) => {
-    w.user.operate(w.begin.screen(shelfScreen), "pick", { names: ["a", "a"] });
+    w.user.operate(w.startup.screen(shelfScreen), "pick", { names: ["a", "a"] });
   },
   then: () => [],
 });
