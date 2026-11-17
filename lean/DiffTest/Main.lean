@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Names
-import Tazuna.Observe.ChoiceDependent
+import Tazuna.Explore.StepOrders
 import Tazuna.Sim.Run
 
 /-!
@@ -14,7 +14,7 @@ that Lean serves for the reads that TS made then are the same now: a TS reply de
 values.
 -/
 
-open Tazuna Tazuna.Data Tazuna.Semantics Tazuna.Observe Tazuna.Json
+open Tazuna Tazuna.Data Tazuna.Semantics Tazuna.Observe Tazuna.Explore Tazuna.Json
 
 structure Log where
   parts : List RecordPart := []
