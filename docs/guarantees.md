@@ -1,6 +1,5 @@
 # Guarantees
 
-This page states what a passing `check`, `test`, or `verify` tells you, which side fixes a violation, which reports cover only some cases, and the assumptions that the results depend on.
 Lean definitions state what a spec means, and Lean theorems prove properties of that meaning.
 tazuna guarantees only what the Lean theorems prove.
 
@@ -14,12 +13,25 @@ It receives requests (commands, queries, and subscriptions), events from other s
 It sends answers, events, and requests of its own.
 The sequence of these messages, each with its time, is the service's *trace*.
 
-A *scenario* is a sequence of inputs to one service.
+A *scenario* of a service, the *own* service, has three parts:
+
+- *Given* arranges the start: the start time, the records of the own service, and every other service that the own service exchanges messages with, each as a *running peer* (`run`), an *external peer* (`external`), or a skipped peer (`skip`).
+- *When* places *lines* in order.
+  Each line is one act of an actor: the client or a peer sends, the user operates a screen, the network delivers a message, the clock advances, or the host restarts the own service.
+  A line returns a *handle*, through which later lines and Then name the line and what it caused.
+- *Then* states what the own service did on the lines of When.
+
+The own service and its running peers are the *participants* of one *simulation*.
+They share one clock, and a message between two of them stays *in flight* until a network line delivers, redelivers, loses, or fails it.
+Messages travel on *channels*: a request, its answers, its end, and the events that name it as their `resultOf` share the request's channel, and an event without `resultOf` travels on the channel of its sender and receiver.
+The simulation is deterministic: the scenario writes every choice that nobody's code makes, such as which message arrives next, when the time advances, and which of two deadlines due at the same time fires first.
+
+The trace of the own service is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 tazuna has three tools that report violations:
 
 - `check` reads the spec and reports its violations without running it.
-- `test` runs every scenario and compares its trace with the scenario's *snapshot*, the trace saved from an earlier run.
-- `verify` compares the traces that an implementation records for the scenarios with the snapshots.
+- `test` simulates every scenario and compares each participant's trace with its snapshot.
+- `verify` compares the traces that `drive` from `@natsuzora-dev/tazuna/verify` makes of an implementation with the snapshots.
 
 A *violation* is a problem that a tool reports.
 Each violation has a kind, such as `Fault.failedEnsures`.
@@ -32,48 +44,29 @@ A run stops at a violation of a *halting* kind, because the behavior after that 
 A tool *passes* when it reports no violation.
 
 - When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
-- When `test` passes, `check` passes, and each scenario's trace equals its snapshot.
-- When `test` and `verify` both pass with the same spec and snapshots, the trace that the implementation records for each scenario matches its snapshot, and so does the trace that each peer's implementation records for the inputs derived from the scenario.
+- When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each participant's trace equals its snapshot.
+- When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot, for the own service and for each running peer that has an implementation.
 
-When, in addition, the [assumptions](#assumptions) hold, the implementation sends the messages that the spec defines for the inputs of each scenario.
-tazuna guarantees nothing about inputs that no scenario contains.
+When, in addition, the [assumptions](#assumptions) hold, the implementation sends the messages that the spec defines for the lines of each scenario.
+tazuna guarantees nothing about lines that no scenario contains.
 
-### When a scenario talks to another service
+### When a scenario simulates
 
-A scenario's *peer* is another service of the spec, not an external one, that the scenario sends a request to, emits an event to, receives an event from, or names in `given`, `elsewhere`, or `from`.
-`test` runs the peer's spec on the inputs that it derives from the scenario: the state that the scenario names in `given`, then the scenario's requests to the peer, the scenario's events that the peer receives, and the scenario's answers to the requests that it takes `from` the peer, at their send times, with the scenario's `elsewhere` inputs at their places.
-A request that a mock answers as `unavailable` never reaches the peer, and an answer to a subscription that the peer has ended reaches it as a late answer to that subscription, as it would from the network.
-A request of the peer to the scenario's service that the scenario does not take `from` the peer gets no answer.
-Values compare in the form that `verify` compares, up to renamings: the peer receives the keys that the scenario's service creates renamed, a line may name a key that the peer creates by any string, one to one, a request `from` the peer has the scenario's id in place of the id that the peer's run gives it, and the peer receives each such string or id of a later line as the key or request that it names.
+Lean defines the simulation in `lean/Tazuna/Sim`, and `Sim.Report` holds what it reports about a scenario.
+When `test` reports no `Report` violation, the scenario stated everything that happened between the participants:
 
-Each answer, event, or request that the scenario takes from the peer must come from the peer's run by the time the scenario takes it and before the peer takes an input that arrives after it, so a scenario cannot take, even at the same time, what the peer produces only for the scenario's later lines.
-`test` reports under `InvalidInput` an answer that the run does not give the request at the same place (`unproducibleAnswer`, or `unansweredRequest` for an answer the run never gives), a received event that the run does not emit, or does not emit as the result of the request that the event names as its `resultOf` (`unproducibleEvent`), a request `from` the peer that the run does not send (`unproducibleRequest`), a comparison that uses up its 100000 tries pairing the elements of two bags (`peerSearchLimit`), and a run that halts (`haltedPeer`).
-Of a run that does not halt, `test` also reports each `InvalidInput` violation, such as an `ambiguousMock` of a given state or an `unwaitedRequest` for an answer to a request that the peer never sent, at the line that caused it: the scenario for its given state, the `elsewhere` line, or the scenario's input whose processing wrote what the peer took.
+- every message between two participants reached its receiver by a line of When, or the scenario names it as lost, failed, or in flight at the end (`Report.leftInFlight`);
+- a message never overtook an earlier one on its channel (`Report.overtaking`);
+- each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered (`Report.awaitingAnswer`);
+- the clock only advanced (`Report.notLater`);
+- the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>` (`Report.writtenKey`).
 
-When `test` reports none of these violations, the scenario's run and the peer's run form one execution on a network where, with values and ids compared as above:
-
-- each request of the scenario to the peer that no mock answers as `unavailable` reaches the peer once, not before the scenario sends it, and so does the end of its subscription;
-- each event of the scenario's service that the peer receives is one that the scenario emits, not before it emits it;
-- each request that the scenario takes `from` the peer is one that the peer's run sends, at or before the time the scenario takes it, and the scenario's answers to it that reach the peer arrive at most once each and in the order the scenario sends them;
-- each answer of the peer that the scenario takes is an answer that the peer's run sends to that request, at or before the time the scenario takes it, and the answers to one request arrive at most once each and in the order the peer sends them;
-- each event of the peer that the scenario receives is an event that the peer's run emits at or before that time; an event may be delayed, lost, delivered more than once, or overtaken;
-- the peer sends each line that the scenario takes before it receives any line that the scenario sends at or after taking it.
-
-Lean proves this as `network_realizes` for spec runs, given that the peer's run writes one input line for each derived input, in order, which it does not prove.
-The theorem covers only a peer's run whose every request to the scenario's service is one that the scenario takes `from` the peer, which `test` does not check, and only given states and `elsewhere` inputs that give the peer no event of the scenario's service and no answer to a request to it, which `check` reports as `Malformed.ownMessageToPeer`.
-So each scenario covers its service and one peer at a time; a peer's own peers are not part of the execution.
-Lean does not prove that the two implementations together produce this execution: `verify` relates each implementation trace to its own snapshot, and joining the two rests on the Opaque values and Reproducible implementations assumptions.
+No Lean theorem states properties of the simulation yet.
 
 ### When a trace matches a snapshot
 
-A trace *matches* a snapshot when both have the same inputs and the outputs between two consecutive inputs pair up one to one.
-Paired outputs have equal type, target, time, and value.
-The pairing keeps exactly the orders that the snapshot states.
-
-`verify` compares the IDs and keys that the implementation chooses up to a one-to-one renaming.
-A key that the spec creates is renamed from the output that creates it; before that output, `verify` compares it as written.
-`verify` compares the IDs of the requests that the implementation sends only through the answers that name them.
-When a line of a trace is malformed, `verify` reports it and compares nothing after it.
+`drive` controls only the implementation's world, the start, the clock, and the messages it receives, so the implementation creates its keys and request ids in its own way; `src/verify/harness.ts` states how.
+A trace *matches* a snapshot when its `in` lines equal the snapshot's exactly and the `out` lines after each pair up one to one, with each value that the snapshot creates bound to one implementation value over the whole comparison (`compare_oneToOne`); `lean/Tazuna/Verify/Compare.lean` defines the comparison.
 
 ## Who fixes a violation
 
@@ -87,16 +80,14 @@ The following table names the side at fault for each group.
 | `NonCanonical` | `check` | The spec. |
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
-| `InvalidInput` | `test` | The scenario: an input that the environment could not give, including an answer of an external service that breaks the contract that the spec assumes of it, and an answer, event, or request of another service of the spec that the other service's run does not give. |
+| `Report` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold. |
+| `InvalidInput` | `test` | The scenario: a message that no sender could give the participant, including an external peer's answer that breaks the contract that the spec assumes of it. |
 | `Fault` | `test` | The spec. |
 | `OrderDependent` | `test` | The spec. |
 | `ChoiceDependent` | `test` | The spec. |
 | `Uncovered` | `test --coverage` | The scenarios. |
-| `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's run. |
-| `Uncomparable` | `test`, `verify` | The recorder or replay whose trace inputs differ from the scenario's, or, for `test`, the snapshot that has no scenario. |
-
-An implementation's *recorder* writes the messages that the implementation receives and sends as a trace.
-A *replay* gives the implementation the inputs of a scenario.
+| `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's simulation. |
+| `Uncomparable` | `test`, `verify` | The trace whose `in` lines differ from the snapshot's or that pairs with it in more than one way, or, for `test`, the snapshot that has no scenario. |
 
 Precedent: Design by Contract (Bertrand Meyer), where a precondition binds the caller and a postcondition binds the callee.
 
@@ -106,15 +97,18 @@ A *detection* is a report that does not cover every case.
 When a detection reports a problem, the problem is real.
 When a detection reports nothing, the problem can still exist.
 
-`test` explores paths that append inputs to each scenario.
+`test` explores paths that append moves to each scenario.
+A move is one act that faces the own service, with the network lines it needs.
 An explored path uses values from the scenarios and new IDs, and it neither resends a command nor redelivers an event.
-The detections are:
 
-- Violations that `test` finds on explored paths.
-- `Restricted`.
-- `OrderDependent` and `ChoiceDependent`.
-- `InvalidInput`.
-- `Uncovered`.
+| Detection | What it leaves out |
+|---|---|
+| Violations that `test` finds on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
+| `Restricted` | A clock, random source, or locale that a spec function reaches by another name than the ones that `check` looks for in the spec's source. |
+| `OrderDependent` | Orders of a `Bag` other than the written one and its reverse. |
+| `ChoiceDependent` | Step orders beyond the `ChoiceDependent.searchLimit` of one processing. |
+| `InvalidInput` | An external peer's answer is checked only against the requires that read the input alone and the ensures that read no records. |
+| `Uncovered` | Parts that only paths longer than `--depth` reach. |
 
 ## Assumptions
 
@@ -123,132 +117,127 @@ tazuna detects breaks of each assumption only partly or not at all.
 
 - **Runtime.** The TypeScript runtime returns the same traces and violations as the Lean definitions.
   The runtime and the Lean definitions are compared only on tazuna's own example specs and traces, not on yours.
-  For `test`, the comparison covers the example scenarios and the paths that append up to two inputs to them.
+  For `test`, the comparison covers the example scenarios and the paths that append up to two moves to them.
   For `check` and `verify`, it covers the example specs and traces.
 - **Spec functions.** Spec functions are deterministic: they read no clock, random source, or mutable global state, and receive the current time as an argument.
 - **Types.** Each value in spec code has the type that the code declares.
   A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
-  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, the keys that one call creates up to a renaming.
-- **Recorder.** The recorder writes only messages that the implementation received or sent, with the values that the implementation used, and it writes the time of each message correctly.
-  It gives a message that has no ID of the implementation, such as an answer, an ID of its own, and it writes as an event's `resultOf` the request that the implementation was processing when it emitted the event, and no request otherwise.
-  An input line therefore carries the implementation's IDs and keys, not the snapshot's.
-  `verify` reports a message that the recorder leaves out.
+  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, each key that a call creates by its entity alone.
+- **Adapter.** The adapter that `drive` drives the implementation through reports only messages that the implementation received or sent, with the values that the implementation used, and it controls the implementation's whole world: the implementation reads the time only from the clock that `advanceTo` moves, and receives messages only through the adapter.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
-  `verify` detects a break of this assumption only on the traces that the recorder writes.
-- **Opaque values.** An implementation treats the IDs and keys that it did not create as opaque: renaming them one to one in its inputs renames them the same way in its outputs and changes nothing else.
-  `verify` compares IDs and keys only up to a renaming, and a peer receives the keys of the scenario's service renamed, so a trace stands for every renaming of it.
-- **Reproducible implementations.** One recorded run represents the implementation: given the inputs of a recorded trace, the implementation sends the messages of that trace.
-  The trace that a peer's implementation records for the derived inputs therefore stands for what it does when the scenario's service sends them.
+  `verify` detects a break of this assumption only on the traces of external services in its folder.
+- **Opaque values.** An implementation treats the IDs and keys that it did not create as opaque: replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
+  A running peer's implementation receives the values of another implementation, while its snapshot holds the values of the simulation, so its trace stands for what it does with either.
+- **Reproducible implementations.** One recorded run represents the implementation: given the same world, the implementation sends the messages of that trace.
+  `verify` relates each implementation's trace to its own snapshot, so that two implementations together produce the simulated execution rests on this assumption and the previous one.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
 
 ## Proven properties
 
-Each section lists properties that hold for every spec.
+Each section lists properties that hold for every spec, each with the theorems in `lean/Tazuna/Thm` that prove it.
 
 Machines and screens are statecharts, called *charts*.
 A running chart is an *instance*.
 A map state has one *copy* of its child states for each key of its items.
 
-### Observable behavior
+### Checks
 
-- A spec defines behavior by traces alone.
-  The records and instances of a service are internal, so an implementation can store its state in any form.
-- When `check` passes, each contract lists only the members of its own service.
-- When `check` passes, a chart sends queries only to other services.
-
-Precedent: I/O automata (Nancy Lynch and Mark Tuttle), whose external behavior is the sequence of input and output actions.
+- `check` passes the contracts only when each contract lists only the members of its own service (`members_of_own_service`).
+- `check` passes the charts only when no chart sends a query to its own service (`queries_of_other_services`).
+- `check` passes the automations only when no chain of automations leads back to its start (`no_automation_returns`).
+- `check` passes the charts only when no unguarded `always` transition can reach its own source again (`unguarded_always_does_not_return`).
+- `check` passes the commands only when each command emits only events of its own service (`commands_emit_own_events`, `accepted_command_emits_own_events`).
 
 ### Data validity
 
-- Before sending, the service normalizes the payload of each event that a command emits and the output of each query answer with the declared schema.
-- An accepted command emits only the events that the command lists in its `emits`.
-  When `check` passes, these are events of the command's own service.
-- When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`.
+- Before sending, the service normalizes the payload of each event that a command emits and the output of each query answer with the declared schema (`decide_payloads_sorted_before_normalize`, `resolve_output_sorted_before_normalize`).
+- An accepted command emits only events that its decide returned, all listed in its `emits`; an unlisted event halts the run (`accepted_emits_decided`, `unlisted_emitted_event_halts`).
+- When the input of a command or query does not fit its schema, the service rejects it with `invalid-input` (`command_invalid_input_rejected`, `query_invalid_input_rejected`).
+- A request to a spec service is never rejected with `invalid-input` unless its definition declares it: the sender checks the input first (`rejectionKinds_internal`).
 
 Precedent: "Parse, don't validate" (Alexis King), where a value is checked once at the boundary and trusted inside.
 
 ### Statecharts
 
-- Entering a compound state enters its initial child.
-- A transition exits states from the innermost and enters states from the outermost.
-- In each atomic state, at most one transition runs for one event.
-- When a transition of a state and a transition of its ancestor are both enabled, the transition of the state runs.
-- A transition to an ancestor exits the ancestor.
-- A transition that reenters its source exits the source first, and a transition that does not reenter keeps it.
-- An event that enables no transition changes nothing.
-- A stopped instance processes no event.
-- An event without a key reaches every copy of a map state.
-- When the copies of a map state have distinct keys, an event with a key reaches at most one copy.
+- Entering a compound state enters its initial child (`enters_initial`).
+- A transition exits states from the innermost and enters states from the outermost (`microstep_exits_in_exit_order`, `microstep_enters_in_entry_order`).
+- In each atomic state, at most one transition runs for one event (`select_one_per_leaf`, `always_one_per_atomic`).
+- When a transition of a state and a transition of its ancestor are both enabled, the transition of the state runs (`descendant_replaces_ancestor`, `leaf_selects_innermost`).
+- A transition to an ancestor exits the ancestor (`ancestor_target_exits`).
+- A transition to a descendant of its source exits the source when it reenters, and keeps it otherwise (`reenter_true_exits`, `reenter_false_not_exited`).
+- An event that enables no transition changes nothing (`untaken_operation_changes_nothing`).
+- A stopped instance processes no event (`stopped_machine_takes_no_event`).
+- An event without a key reaches every copy of a map state (`keyless_payload_reaches_all`).
+- When the copies of a map state have distinct keys, an event with a key reaches at most one copy (`keyed_payload_reaches_at_most_one`).
 
 Precedent: SCXML (W3C), whose algorithm fixes the entry and exit order and the conflict resolution of transitions.
 
 ### Requests and deadlines of a state
 
-- A deadline fires only while its state is active.
-- Leaving a state makes its awaited requests and queued commands stale.
-- An answer to a stale request changes nothing.
-- A state that is exited before it sends its requests sends nothing.
-- Stopping an instance cancels the deadlines and requests of its active states.
+- A deadline fires only while its state is active (`fires_only_in_active_state`).
+- Leaving a state makes its awaited requests and queued commands stale (`leave_makes_requests_stale`, `leave_makes_queued_stale`).
+- An answer to a stale request only ends the wait for it (`stale_answer_ignored`, `stale_command_answer_ignored`).
+- A state that is exited before it sends its requests sends nothing (`exited_state_sends_nothing`).
+- Stopping an instance cancels the deadlines and requests of its active states (`endWith_cancels_deadlines_and_requests`).
 
 Precedent: SCXML (W3C), which cancels an invoked service when the state that invoked it is exited.
 
 ### Subscriptions and screens
 
-- The service sends a new answer to a subscription only when the answer changes.
-- The service sends no answer to an ended subscription.
-- Opening a screen creates one child instance of the opened screen.
-- An operation reaches a screen only when no modal screen that was opened later is still open.
-- A non-modal child screen leaves its parent operable.
+- The service sends a new answer to a subscription only when the answer changes (`changed_answer_sent`, `unchanged_answer_not_sent`).
+- The service sends no answer to an ended subscription (`ended_subscription_not_answered`).
+- Opening a screen creates one child instance of the opened screen (`entering_opens_one_child`).
+- An operation reaches a screen only when no modal screen that was opened later is still open (`modal_child_covers`).
+- A non-modal child screen leaves its parent operable (`nonmodal_child_lets_parent`).
 
 Precedent: the modal dialog of the WAI-ARIA Authoring Practices (W3C), which makes the content outside the dialog inert.
 
 ### Time
 
-- The current time is an input.
-- Each input carries the time at which it arrives.
-- When the time of an input goes back, `test` reports it under `InvalidInput`.
-- A deadline fires when the input time reaches it.
+- Processing a message never changes the current time; only a clock line advances it (`drain_keeps_now`).
+- Every line that processing a message writes carries the current time (`message_outputs_at_its_time`).
+- A deadline due by the time that the clock advances to fires as a message of its own, at its time (`deadline_is_own_message`, `deadline_message_at_its_time`).
+- Of deadlines due at the same time, the next entry of the clock line's `order` chooses the one that fires (`chooseDeadline_named`), and a tie that no entry decides is reported instead of decided (`chooseDeadline_required`).
 
 Precedent: deterministic simulation testing (FoundationDB), where the simulator supplies the clock.
 
 ### Processing and completion
 
-- A service processes one message to completion before it takes the next one.
-- A command's postconditions and the entity invariants hold for the records after the command ends.
-- A rejected command writes no record and emits no event.
-- An accepted command writes its records before any reaction to its events runs.
-- The processing of one message ends within the limits that tazuna sets, or halts with the `Fault` of the exceeded limit.
+- A command takes exactly one message to completion (`send_is_one_message`).
+- A failed postcondition or invariant is reported as a `Fault` of the command after which it fails (`failed_ensures_blames_command`, `entity_invariant_reported_iff`, `service_invariant_reported_iff`).
+- A rejected command writes no record and emits no event (`rejected_command_changes_nothing`).
+- An accepted command writes its records before any reaction to its events runs (`accepted_command_writes_then_queues_reactions`, `reaction_reads_current_records`).
+- Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit (`drain_at_work_limit`, `settle_halts_at_round_limit`, `exitOne_at_depth_limit`, `fireDue_at_deadline_limit`).
 
 Precedent: the run-to-completion step of UML state machines (OMG).
 
 ### Ordering and determinism
 
-- The result of a spec depends only on its inputs and on the orders that the spec states.
-- Spec functions receive the records of an entity as a `Bag`, which has no index, iterator, or order.
-- Spec functions also receive each value of a bag or set schema as a `Bag`, and each value of a `sortedBy` schema as runs of `Bag`s in key order, wherever the value comes from: an input, payload, output, context, held value, or shown answer.
-- The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON, whatever order the spec built them in.
-- The events that `decide` returns keep their order, except the events of a `Bag` in the result, which have no order among them; a snapshot does not order their lines.
-  When two events of one `Bag` write one record, `test` reports `Fault.sameRecordInBag`, so the records do not depend on the order.
-- Deadlines due at the same time fire in a default order, and the exploration of `test` also tries the other orders.
+- Spec functions read the keys of an entity in one order, whatever order the records were written in (`keys_perm`).
+- The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON, whatever order the spec built them in (`bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order`).
+- Two lines of one group of the events that `decide` returns have no order between them, so a snapshot does not order them (`group_lines_unordered`).
 
 Precedent: CHESS (Madanlal Musuvathi and others), which makes each scheduling choice an input to a run.
 
 ### Identity
 
-- No two records of a keyed entity share a key.
-- A reference from one record to another resolves to an existing record.
-- When a reference does not resolve, `test` reports it under `Fault`.
-- When a command arrives again with the same ID and the same input, the service answers it with the first answer and does not run it again.
-- The service rejects a command that reuses an ID with a different input.
-- When an event arrives again with the same ID, the service does not process it again.
-- When an event arrives again with the same ID and a changed payload, `test` reports it under `InvalidInput`.
-- The service answers a repeated query again, because a query has no identity.
+- Each input keeps the keys of a keyed entity distinct (`send_keysDistinct`, `message_keysDistinct`).
+- When a reference does not resolve, `test` reports it under `Fault` (`dangling_ref_reported_iff`).
+- When a command arrives again with the same ID and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`, `resent_command_ignores_decide`).
+- The service rejects a command that reuses an ID with a different input (`reused_id_rejected`).
+- When an event arrives again with the same ID, the service does not process it again (`redelivered_event_not_processed`).
+- The service answers a repeated query again, because a query has no identity (`query_processed_again`).
 
 Precedent: the `Idempotency-Key` HTTP header (IETF).
 
 ### Restart
 
-- After a restart, a service keeps its records, its command answers, its delivered events, and its created keys.
-- A restart discards the instances, deadlines, awaited requests, and subscriptions of the service.
+- After a restart, a service keeps its records, its command answers, its delivered events, and its created keys, and discards its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
+- A restart reads nothing of the part of the state that it discards (`restart_forgets`).
 
 Precedent: the Restart action of the Raft TLA+ spec (Diego Ongaro).
+
+### Comparison
+
+- A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
+- The binding of a trace comparison is one-to-one, and every pair that any step bound stays in it (`compare_oneToOne`, `compareGroups_extends`).

@@ -1,6 +1,5 @@
 # Writing specs
 
-This page states the rules for writing a spec and the design of the language behind them.
 The rules are not guarantees; [guarantees.md](guarantees.md) states what tazuna guarantees.
 
 ## Use the one canonical form for each meaning
@@ -24,7 +23,7 @@ Precedent: checked exceptions (Java).
 ## State every order that matters
 
 A result must not depend on an order or a choice that nobody controls.
-When more than one order can happen, state the order in the spec, or let an input choose it.
+When more than one order can happen, state the order in the spec, or let a scenario line choose it.
 The records of an entity have no order: spec functions receive them as a `Bag`, and its callbacks see one record at a time.
 Find one record with `get(key)`, or with `filter(...).only()` when another field identifies it.
 A result that needs an order goes through `sortedBy` with a number or time key, which groups the records with equal keys into runs that have no order inside.
@@ -34,28 +33,48 @@ Keep a callback from changing a variable outside it, through which it sees the o
 
 Precedent: CHESS, as in [guarantees.md](guarantees.md#ordering-and-determinism).
 
-## Refer to an earlier line by a name, not by a count
+## Write a scenario as Given, When, and Then
 
-A scenario line refers to a fact of an earlier line only by a name that a line binds or by its content, never by a position or a count, because a count changes whenever a line is added before it.
-createKey stands for a key that the implementation or its UI makes, such as a UUID, which no caller knows in advance.
-When a later line uses a key that an input's processing creates, name the key on that input with `keys`, by entity and in creation order: after `send(addTitle, { title: "Buy bread" }, { keys: { Task: ["T-bread"] } })`, createKey returns `T-bread` for the first `Task` key that processing the input creates.
-A key that a deadline or the service's begin creates while the time moves to an input's takes its name from the `at` line that moves it, as in `at("2026-10-25T10:00:00+09:00", { keys: { Note: ["N-hourly"] } })`, and a key that the reaction to a mock's answer creates from the mock's `keys`, as in `mock(planner, [calendar.nextDay, answer], { keys: { Task: ["T-next"] } })`.
-Never write a counted key such as `Task-2`: `check` reports it under `Illegal.countedKey`, and a name given twice or used before its line under `Illegal.keyNamedTwice` and `Illegal.keyUsedBeforeNamed`; `test` reports a name that createKey does not return under `InvalidInput.unusedKeys`.
-A mock chooses the request that it answers by content: `mock(planner, [calendar.nextDay, answer, { input: { from: "2026-10-25T11:00:00+09:00" } }])` answers the waiting request whose input has that `from`, whatever its other fields.
-When the requests that a mock may answer have different inputs, `test` reports `InvalidInput.ambiguousMock` instead of choosing by the order of sending; of requests with equal inputs, which a trace cannot tell apart, the mock answers the longest-waiting.
-An event names the mock whose request it results from, as in `receive(taskAdded, payload, { resultOf: added })`, and an unsubscribe names the subscribe input that opened its subscription, as in `const watching = subscribe(tasks, {})` and later `unsubscribe(watching)`.
-A line names only an input of its own run, placed once before it and from the same sender (`Illegal.namedInputPlacedTwice`, `Illegal.namedInputUnplaced`): the scenario's inputs to its service form one run, a peer's given state with the scenario's `elsewhere` inputs to that peer another, and a subscription that a `from` line opens ends only by a `from` line of the same peer.
-Give an input an `id` only where the id itself is the point, such as an event delivered again or a command sent again.
+This scenario is abridged from [samples/todo/spec/todo/scenarios.ts](../samples/todo/spec/todo/scenarios.ts):
+
+```ts
+export const completeTwice = scenario("Complete a task twice; todo rejects the second completeTask", {
+  given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [], Settings: { shouldRemind: true } }, peers },
+  when: (w) => {
+    const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.net.deliver(add.request(calendar.nextBusinessDay));
+    w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), day("2026-10-26")));
+    const first = w.client.send(completeTask, { taskId: "task-1" });
+    const second = w.client.send(completeTask, { taskId: "task-1" });
+    return { first, second };
+  },
+  then: ({ first, second }) => [answered(first, accepted), answered(second, requires("notCompleted"))],
+});
+```
+
+Write every record that a running service starts from: nothing defaults, and a single entity needs its record.
+List in `peers` every service that the own service exchanges messages with, as `run(contract, records)`, `external(contract)`, or `skip(contract, because)`.
+Repeat lines with a plain TypeScript function, such as a function that adds a task and delivers the calendar's answer.
+
+Precedent: Given-When-Then (Behavior-Driven Development).
+
+## Write every delivery
+
+A message between two participants arrives only by a line that the scenario writes: `w.net.deliver(message)`, `redeliver`, `lose`, or `fail`, or `w.net.inFlight(message)` for a message that is still undelivered at the end.
+An external peer answers only a request that reached it, and a request that reached it needs its answer or `leaveUnanswered`.
+A message never overtakes an earlier one on its channel; to deliver the later one, lose or fail the earlier one first.
+Of deadlines of one service due at the same time, the clock line names the order, as in `w.clock.at(time, { order: [deadline(chart, state, name)] })`.
+
+Precedent: model checkers such as Stateright, which model the network as a set of messages that each step delivers.
+
+## Refer to an earlier line through its handle
+
+A line refers to a fact of an earlier line only through the handle that the line returned and the content it picks, never by a position or a count, because a count changes whenever a line is added before it.
+When a handle matches more than one fact, pick by content, as in `add.request(calendar.nextBusinessDay, { input: { from: "2026-10-25" } })`.
+Never write a key that a participant creates: read it through a handle, such as the `output` of the answer that holds it, and write `created()` in a running peer's message where its run creates the key.
+Send a request again with `w.client.resend(line)`, and a new input under the id of an earlier line with `w.client.send(command, input, { sameIdAs: line })`.
 
 Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.
-
-## Prepare the other services that a scenario mocks
-
-`test` checks a scenario's mocks of another service of the spec against that service's run ([guarantees.md](guarantees.md#when-a-scenario-talks-to-another-service)), so write the inputs that the other service needs.
-Write each start state of a service as inputs to it under `states` in its contract, with `keys` on the inputs whose keys the scenario uses, and name one per service in the scenario's `given`, such as `scenario(description, inputs, { given: { todo: todo.states.milkDueTomorrow } })`; a service that `given` does not name starts empty.
-Write an input that the other service takes from someone else, such as the command whose event the scenario receives, as `elsewhere(todo, send(todo.addTask, input))` at its place among the scenario's inputs; the scenario's own service skips it.
-Write a request that the other service sends to the scenario's service as `from(notifier, send(markSeen, input))` at its place among the scenario's inputs, naming the other service by its contract, which may be empty; only such requests get answers in the other service's run.
-Repeat such inputs with a plain TypeScript function rather than a new option.
 
 ## Reach every part with a scenario
 
@@ -66,7 +85,7 @@ A part that no run reaches has no behavior that tazuna can compare.
 
 ### Reject wrong forms early
 
-tazuna rejects a wrong form with the earliest tool that can detect it, in this order: the TypeScript type checker, `check`, `test`, and `verify`.
+tazuna rejects a wrong form with the earliest tool that can detect it, in this order: the TypeScript type checker, `check`, the simulation of each scenario in `test`, the exploration in `test`, and `verify`.
 A wrong form that an earlier tool reports is cheaper to fix.
 
 Precedent: "make illegal states unrepresentable" (Yaron Minsky).
