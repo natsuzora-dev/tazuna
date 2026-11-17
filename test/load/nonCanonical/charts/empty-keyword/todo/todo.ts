@@ -20,7 +20,7 @@ export const reminderWithoutEmptyKeywords = machine({
   description: "Wait an hour after each added task",
   receives: { taskAdded },
   initial: "idle",
-  states: { idle: {}, waiting: { after: ["hour"] } },
+  states: { idle: {}, waiting: {} },
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "waiting" }] } },
@@ -32,7 +32,7 @@ export const reminder = machine({
   description: "Wait an hour after each added task, writing guard and after as {}",
   receives: { taskAdded },
   initial: "idle",
-  states: { idle: {}, waiting: { after: ["hour"] } },
+  states: { idle: {}, waiting: {} },
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ guard: {}, target: "waiting" }] }, after: {} },

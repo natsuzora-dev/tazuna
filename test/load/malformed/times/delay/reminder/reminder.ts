@@ -11,7 +11,7 @@ export const reminderConstants = constants(z.object({ remindAfter: duration, nud
 export const reminder = machine({
   description: "Remind a day after it starts, and nudge half a millisecond after that",
   initial: "waiting",
-  states: { waiting: { after: ["day"] }, reminding: { after: ["nudge"] }, done: {} },
+  states: { waiting: {}, reminding: {}, done: {} },
 }).chart({
   states: {
     waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: "reminding" }] } } },

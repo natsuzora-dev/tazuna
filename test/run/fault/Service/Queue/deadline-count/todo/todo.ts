@@ -5,7 +5,7 @@ export const { machine, scenario } = service({ name: "todo", description: "Keep 
 export const ticker = machine({
   description: "Tick every minute",
   initial: "ticking",
-  states: { ticking: { after: ["minute"] } },
+  states: { ticking: {} },
 }).chart({
   states: {
     ticking: { after: { minute: { delay: { minutes: 1 }, onFired: [{ target: "ticking", reenter: true }] } } },

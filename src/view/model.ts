@@ -88,7 +88,7 @@ function chartView(name: string, chart: ChartStructure): StateView {
     id: transitionId(transitionRef(t)),
     trigger: trigger(chart, t),
   });
-  const tree = ({ children, activities, transitions, treeDeadlines, ...state }: StateStructure): StateView => ({
+  const tree = ({ children, activities, transitions, ...state }: StateStructure): StateView => ({
     ...state,
     activities: activities.map(activityView),
     transitions: transitions.map(transitionView),
@@ -105,7 +105,6 @@ function chartView(name: string, chart: ChartStructure): StateView {
     activities: [],
     transitions: chart.on,
     deadlines: [],
-    treeDeadlines: [],
   });
 }
 

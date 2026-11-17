@@ -7,7 +7,7 @@ export const reminder = machine({
   commands: { remind },
   context: { restarted: z.boolean().default(false) },
   initial: "idle",
-  states: { idle: {}, active: { initial: "waiting", states: { waiting: { after: ["hour"] } } }, reminding: {} },
+  states: { idle: {}, active: { initial: "waiting", states: { waiting: {} } }, reminding: {} },
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "active" }] } },

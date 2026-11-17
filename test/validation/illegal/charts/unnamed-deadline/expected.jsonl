@@ -1,1 +1,0 @@
-{"kind":"Illegal.unnamedDeadline","definition":{"service":"timer","name":"ringing"},"data":{"state":"waiting","deadline":"late"},"location":{"file":"timer/timer.ts","line":7}}

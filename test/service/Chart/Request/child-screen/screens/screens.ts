@@ -34,7 +34,7 @@ export const homeScreen = screen({
     countAll: { label: "Count all" },
   },
   initial: "open",
-  states: { open: { initial: "home", states: { home: {}, listing: { after: ["minute"] }, helping: {} } } },
+  states: { open: { initial: "home", states: { home: {}, listing: {}, helping: {} } } },
 }).chart({
   offers: { openList: any, openHelp: any, countAll: any },
   states: {

@@ -63,8 +63,6 @@ const state = z.object({
   transitions: z.array(transition),
   /** The names of the deadlines that the body writes under `after`. */
   deadlines: z.array(z.string()),
-  /** The deadline names that the chart's tree lists in the state's `after`, which a clock line's order uses. */
-  treeDeadlines: z.array(z.string()),
 });
 
 const chartFields = z.object({

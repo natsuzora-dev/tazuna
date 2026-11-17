@@ -76,13 +76,13 @@ export const booking = machine({
 export const morning = machine({
   description: "Wait an hour after todo begins",
   initial: "waiting",
-  states: { waiting: { after: ["hour"] }, done: {} },
+  states: { waiting: {}, done: {} },
 }).chart({ states: { waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "done" }] } } } } });
 
 export const evening = machine({
   description: "Wait an hour after todo begins, as morning does",
   initial: "waiting",
-  states: { waiting: { after: ["hour"] }, done: {} },
+  states: { waiting: {}, done: {} },
 }).chart({ states: { waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "done" }] } } } } });
 
 export const listScreen = screen({

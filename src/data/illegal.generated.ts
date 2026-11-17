@@ -41,18 +41,6 @@ export type Illegal =
         readonly control: string;
       };
     }
-  /**
-   * The body of `state` writes under `after` the deadline `deadline`, which the chart's tree does not list in the state's
-   * `after`; a clock line's order names a deadline by the tree's names.
-   */
-  | {
-      readonly kind: "Illegal.unnamedDeadline";
-      readonly definition: DefinitionRef;
-      readonly data: {
-        readonly state: string;
-        readonly deadline: string;
-      };
-    }
   /** `statePath` leads from the state of an unguarded always transition back to that state. */
   | {
       readonly kind: "Illegal.alwaysCycle";
@@ -95,7 +83,6 @@ export const illegalKinds = [
   "Illegal.missingParent",
   "Illegal.ownQuery",
   "Illegal.unlistedControl",
-  "Illegal.unnamedDeadline",
   "Illegal.alwaysCycle",
   "Illegal.foreignEvent",
   "Illegal.indexReason",

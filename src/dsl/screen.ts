@@ -27,10 +27,8 @@ import type {
 } from "./machine.ts";
 import {
   assemble,
-  type ChartDeadlines,
   type CheckTree,
   type CopyKey,
-  type DeadlinesIn,
   type ErrorIf,
   type Flat,
   type KindOf,
@@ -168,8 +166,7 @@ type ScreenBehavior<
     ? ScreenRequest<S["names"], S["context"], B, Sh, Cs, Ss>
     : CopyRequest<S["names"], S["context"], B, Cs>) &
     StateOffers<Ps, B>,
-  CopyKey<F, K>,
-  DeadlinesIn<F, K>
+  CopyKey<F, K>
 >;
 /**
  * The payloads that the user can choose for a control: `[{}]` offers a control without payload fields, `[]` offers
@@ -215,7 +212,7 @@ interface ScreenSetup<
         > &
           SomeKey<K>;
       } & NoInfer<RowsWritten<F, K>>,
-  ): Screen<I, O, ScreenControls<Ps>, ChartDeadlines<F>>;
+  ): Screen<I, O, ScreenControls<Ps>>;
 }
 
 export type ScreenDefiner<Es extends Entities> = <

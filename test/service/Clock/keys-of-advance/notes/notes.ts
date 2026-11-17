@@ -36,7 +36,7 @@ export const hourly = machine({
   description: "Add the hourly note an hour after the service begins",
   commands: { addNote },
   initial: "waiting",
-  states: { waiting: { after: ["hour"] }, noting: {}, done: {} },
+  states: { waiting: {}, noting: {}, done: {} },
 }).chart({
   states: {
     waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "noting" }] } } },

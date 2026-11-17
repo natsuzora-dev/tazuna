@@ -31,14 +31,6 @@ def unlistedControls (s : Structure) : List Illegal :=
     | some c => (c.controls.filter fun (k, _) => !c.offers.any (·.1 == k)).map fun (k, _) => .unlistedControl d.ref k
     | none => []
 
-def unnamedDeadlines (s : Structure) : List Illegal :=
-  s.definitions.flatMap fun d =>
-    match d.chart? with
-    | some c =>
-      c.states.flatMap fun st =>
-        (st.deadlines.filter (!st.treeDeadlines.contains ·)).map fun dl => .unnamedDeadline d.ref st.name dl
-    | none => []
-
 /--
 The states whose always transitions are re-evaluated after `t`, in document order. For a history target, every state
 that it may restore counts as entered: its targets without a record, and every child that a record may hold. A map
@@ -182,7 +174,6 @@ def cyclePath (c : Chart) : Option (List String) :=
 def alwaysCycles (s : Structure) : List Illegal :=
   s.definitions.filterMap fun d => d.chart?.bind fun c => (cyclePath c).map (.alwaysCycle d.ref)
 
-def check (s : Structure) : List Illegal :=
-  missingParents s ++ ownQueries s ++ unlistedControls s ++ unnamedDeadlines s ++ alwaysCycles s
+def check (s : Structure) : List Illegal := missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s
 
 end Tazuna.Validation.Charts

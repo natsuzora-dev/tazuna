@@ -12,7 +12,7 @@ export const reminder = machine({
       type: "map",
       key: { taskId: ref(Task) },
       initial: "waiting",
-      states: { waiting: { after: ["reminderTime"], held: { remindAt: datetime } }, recording: {} },
+      states: { waiting: { held: { remindAt: datetime } }, recording: {} },
     },
   },
 }).chart({

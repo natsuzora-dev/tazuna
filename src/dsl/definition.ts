@@ -259,8 +259,6 @@ export interface ChartSpec {
   readonly screens?: Readonly<Record<string, AnyScreen>>;
   /** The shapes of the values that each state holds, per state name. */
   readonly held?: Readonly<Record<string, Shape>>;
-  /** The deadline names that the tree lists in each state's `after`, per state name. */
-  readonly deadlineNames?: Readonly<Record<string, readonly string[]>>;
   /** The expressions of the values that each state holds, per state name. */
   readonly holds?: Readonly<Record<string, Readonly<Record<string, (args: unknown) => unknown>>>>;
   readonly initial: string;
@@ -283,19 +281,12 @@ export type Owned<N extends string> = { readonly [ownerOf]?: N };
 /** The name of the service that owns the definition `D`, or never when `D` does not hold it. */
 export type OwnerOf<D> = D extends { readonly [ownerOf]?: infer N } ? (unknown extends N ? never : N) : never;
 
-declare const deadlinesOf: unique symbol;
-
-/** The deadline names of a chart's states, by state name; see `deadline` of the scenario DSL. */
-export type Deadlines = { readonly [state: string]: string };
-
-/** A chart; `Dl` holds, as a type only, the names of its deadlines. */
-interface Chart<Dl extends Deadlines = Deadlines> extends ChartSpec {
+interface Chart extends ChartSpec {
   readonly service: ServiceDefinition;
   readonly description: string;
-  readonly [deadlinesOf]?: Dl;
 }
 
-export interface Machine<Dl extends Deadlines = Deadlines> extends Chart<Dl> {
+export interface Machine extends Chart {
   readonly kind: "machine";
 }
 
@@ -318,12 +309,8 @@ export type AnyControl = Control<any>;
 
 type Controls = Readonly<Record<string, AnyControl>>;
 
-export interface Screen<
-  I extends Shape = Shape,
-  O extends Shape = Shape,
-  Cs extends Controls = Controls,
-  Dl extends Deadlines = Deadlines,
-> extends Chart<Dl> {
+export interface Screen<I extends Shape = Shape, O extends Shape = Shape, Cs extends Controls = Controls>
+  extends Chart {
   readonly kind: "screen";
   readonly input: I;
   readonly output: O;

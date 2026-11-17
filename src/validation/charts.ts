@@ -35,24 +35,6 @@ function unlistedControls(structure: Structure): Illegal[] {
   );
 }
 
-function unnamedDeadlines(structure: Structure): Illegal[] {
-  return structure.definitions.flatMap((d) =>
-    d.kind !== "machine" && d.kind !== "screen"
-      ? []
-      : d.states.flatMap((state) =>
-          state.deadlines
-            .filter((deadline) => !state.treeDeadlines.includes(deadline))
-            .map(
-              (deadline): Illegal => ({
-                kind: "Illegal.unnamedDeadline",
-                definition: { service: d.service, name: d.name },
-                data: { state: state.name, deadline },
-              }),
-            ),
-        ),
-  );
-}
-
 function ownQueries(structure: Structure): Illegal[] {
   return structure.definitions.flatMap((d) =>
     d.kind !== "machine" && d.kind !== "screen"
@@ -178,7 +160,6 @@ export function check(structure: Structure): Illegal[] {
     ...missingParents(structure),
     ...ownQueries(structure),
     ...unlistedControls(structure),
-    ...unnamedDeadlines(structure),
     ...alwaysCycles(structure),
   ];
 }
