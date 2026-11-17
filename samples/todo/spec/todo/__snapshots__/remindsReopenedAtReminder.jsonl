@@ -13,7 +13,7 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"reopenTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskReopenedRecorded#1","name":"taskReopenedRecorded","payload":{"id":"task-1","completedAt":null,"remindAt":"2026-10-25T15:00:00Z"},"resultOf":"reopenTask#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskReopened#1","name":"taskReopened","payload":{"taskId":"task-1"},"resultOf":"reopenTask#1","after":["taskReopenedRecorded#1"]}
-{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null},"after":["answer#4","taskReopenedRecorded#1","taskReopened#1"]}
-{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["answer#4","taskReopenedRecorded#1","taskReopened#1","reminderTimeReachedRecorded#1"]}
-{"time":"2026-10-25T15:00:00Z","dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"Buy milk"},"after":["answer#4","taskReopenedRecorded#1","taskReopened#1"]}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null}}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderTimeReachedRecorded#1"]}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"Buy milk"}}
 {"time":"2026-10-25T15:00:00Z","dir":"in","type":"time","id":"time#1"}

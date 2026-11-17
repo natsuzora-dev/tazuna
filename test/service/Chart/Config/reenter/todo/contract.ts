@@ -1,3 +1,3 @@
-import { addTask, contract, reminded } from "./todo.ts";
+import { addTask, contract } from "./todo.ts";
 
-export const todo = contract({ addTask, reminded });
+export const todo = contract({ addTask });

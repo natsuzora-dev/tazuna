@@ -28,25 +28,37 @@ def leadsTo (s : State) (earlier later : Nat) : Bool :=
     | none => false
 termination_by later
 
-def isEvent (l : Line) : Bool :=
+/--
+The channel that an `out` line travels on, seen from its sender (Sim's Message.sameChannel, whose receiver a trace line
+does not name): a request and its end travel to the request's receiver on the request's own channel, the answers to a
+received request travel back to its sender, and events travel to their receivers on the channel of their `resultOf`,
+or on the sender's channel when they name none. A line that no sender writes `out` travels on none.
+-/
+inductive Channel where
+  | request (id : String)
+  | answers (request : String)
+  | events (resultOf : Option String)
+deriving DecidableEq, Repr
+
+def channelOf (l : Line) : Option Channel :=
   match l.body with
-  | .event _ _ _ => true
-  | _ => false
+  | .command .. | .query .. | .subscribe .. => some (.request l.id)
+  | .unsubscribe to => some (.request to)
+  | .answer to _ => some (.answers to)
+  | .event _ _ resultOf => some (.events resultOf)
+  | .time | .restart | .operation .. => none
 
 /--
-The causes that the notes record. `events` holds the step, first line and line count of each group of event lines
-that a step wrote. `deadlines` holds the message number and time of each deadline message.
+The causes that the notes record: the step, first line and line count of each group of event lines that a step wrote.
 -/
 structure Causes where
   events : Array (Nat × Nat × Nat) := #[]
-  deadlines : Array (Nat × Time) := #[]
 deriving Repr, Inhabited
 
 def Causes.notice (c : Causes) : Note → Causes
   | .events step start groups =>
     { c with events := (groups.foldl (fun (events, start) n => (events.push (step, start, n), start + n))
         (c.events, start)).1 }
-  | .deadline message time => { c with deadlines := c.deadlines.push (message, time) }
   | .read .. | .transitionPart _ | .microstepEnds _ | .stepBegins .. | .stepEnds | .settlesAround _ | .readStates _ | .wroteState ..
   | .wroteCopies .. | .wroteShown .. => c
 
@@ -55,29 +67,20 @@ def lineSteps (s : State) (c : Causes) : Array (Option (Nat × Nat)) :=
   c.events.zipIdx.foldl (init := Array.replicate s.lines.size none) fun steps ((step, start, count), group) =>
     (List.range' start count).foldl (fun steps i => steps.setIfInBounds i (some (step, group))) steps
 
-/-- For each message, numbered from 1, the deadline time if it is a deadline message. -/
-def messages (s : State) (c : Causes) : List (Option Time) :=
-  (List.range s.messageCount).map fun k => (c.deadlines.find? (·.1 == k + 1)).map (·.2)
-
-/-- The raceScope of message `k`. Consecutive deadline messages at the same time share a raceScope. -/
-def raceScopeOf (messages : List (Option Time)) (k : Nat) : Nat :=
-  ((messages.take k).foldl (fun (acc : Nat × Option Time) d =>
-    (if d.isSome && d == acc.2 then acc.1 else acc.1 + 1, d)) (0, none)).1
-
-/-- Whether line `a` must precede line `b`. Only event lines are ordered, because an implementation keeps order only
-within the events that a service emits, and two lines of one group are not, because decide gives them no order.
-Precedents: Kafka (order within a partition) and HTTP/2 (independent streams).
+/--
+Whether line `a` must precede line `b`: they travel on one channel, whose messages keep their order, and are not two
+lines of one group of events, because decide gives those no order. Lines on different channels keep no order, as
+messages on different connections do not. Precedents: Kafka (order within a partition), HTTP/2 (independent streams),
+and Mazurkiewicz traces (independent actions commute).
 -/
-def ordered (s : State) (lineSteps : Array (Option (Nat × Nat))) (messages : List (Option Time)) (a b : Nat) : Bool :=
-  match s.lines[a]?, s.lines[b]?, lineSteps[a]?, lineSteps[b]? with
-  | some la, some lb, some (some (sa, ga)), some (some (sb, gb)) =>
-    isEvent la && isEvent lb && ga != gb &&
-      match s.steps[sa]?, s.steps[sb]? with
-      | some ia, some ib =>
-        if raceScopeOf messages ia.message != raceScopeOf messages ib.message then ia.message < ib.message
-        else leadsTo s sa sb
-      | _, _ => false
-  | _, _, _, _ => false
+def ordered (s : State) (lineSteps : Array (Option (Nat × Nat))) (a b : Nat) : Bool :=
+  match s.lines[a]?, s.lines[b]? with
+  | some la, some lb =>
+    (channelOf la).isSome && channelOf la == channelOf lb &&
+      match lineSteps[a]?, lineSteps[b]? with
+      | some (some (_, ga)), some (some (_, gb)) => ga != gb
+      | _, _ => true
+  | _, _ => false
 
 /-- The `out` lines of the window that contains line `i`. -/
 def window (s : State) (i : Nat) : List Nat :=
@@ -86,19 +89,13 @@ def window (s : State) (i : Nat) : List Nat :=
   let after := (indexed.drop i).takeWhile (·.1.dir == .out)
   (before.reverse ++ after).map (·.2)
 
-/--
-The ids of the earlier lines in the same window that must precede line `i`: event lines ordered before it, and lines
-at a different time.
--/
-def after (s : State) (lineSteps : Array (Option (Nat × Nat))) (messages : List (Option Time)) (i : Nat) :
-    List String :=
+/-- The ids of the earlier lines in the same window that must precede line `i` (ordered). -/
+def after (s : State) (lineSteps : Array (Option (Nat × Nat))) (i : Nat) : List String :=
   match s.lines[i]? with
   | none => []
   | some line =>
     if line.dir == .in then [] else
-    ((window s i).filter fun a =>
-      a < i && (ordered s lineSteps messages a i || (s.lines[a]?.map (·.time != line.time)).getD false)).filterMap
-      fun a => s.lines[a]?.map (·.id)
+    ((window s i).filter fun a => a < i && ordered s lineSteps a i).filterMap fun a => s.lines[a]?.map (·.id)
 
 /--
 The strings of a line body in which createKey values are searched. Rejection kinds are excluded, since they can never
@@ -125,8 +122,7 @@ def createdAt (s : State) (i : Nat) : List String :=
 
 def trace (s : State) (c : Causes) : List (Line × List String × List String) :=
   let lineSteps := lineSteps s c
-  let messages := messages s c
-  s.lines.toList.zipIdx.map fun (line, i) => (line, after s lineSteps messages i, createdAt s i)
+  s.lines.toList.zipIdx.map fun (line, i) => (line, after s lineSteps i, createdAt s i)
 
 /-- The trace line of `line` as a snapshot holds it, with its `after` and `created`. -/
 def traceLineOf (line : Line) (after created : List String) : TraceLine :=

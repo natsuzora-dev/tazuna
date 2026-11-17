@@ -31,9 +31,9 @@ values that the implementation chose in its own way are open.
   (sameUses), since then every route gives the implementation the same inputs.
 - The `out` lines after an `in` line, or before the first, are that input's group. A group's snapshot lines, in file
   order, each pair with any unpaired trace line of the group that compares equal under a binding of the set, at the same
-  time and after the lines that its `after` names, keeping every way. The order of deadlines due at one time is no
-  exception: test reports ChoiceDependent when another order of a tie changes the result, so a spec without that report
-  fixes none.
+  time and after the lines that its `after` names, keeping every way. `after` names the earlier lines on the line's
+  channel (Observe.ordered), so a group keeps each channel's order and no order across channels. test compares two
+  orders of a processing alike (ChoiceDependent), so a spec without that report fixes each channel's order.
 - A snapshot line that pairs in no way pairs by place (type and name, or the answered request under the first way) to
   report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
   unexpected. The set keeps the ways that leave the same trace lines unpaired. Paired lines compare their time and the

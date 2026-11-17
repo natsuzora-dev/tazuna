@@ -1,3 +1,3 @@
-import { addTask, contract, reminded } from "./planner.ts";
+import { addTask, contract } from "./planner.ts";
 
-export const planner = contract({ addTask, reminded });
+export const planner = contract({ addTask });

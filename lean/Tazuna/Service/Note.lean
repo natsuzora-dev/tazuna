@@ -75,8 +75,6 @@ deriving DecidableEq, Repr, Inhabited
 inductive Note where
   /-- The event lines that step `step` wrote from line `start`, in groups of the lengths `groups`. -/
   | events (step start : Nat) (groups : List Nat)
-  /-- The start of message `message` as the deadline message for time `time`. -/
-  | deadline (message : Nat) (time : Time)
   /-- The record parts that `definition` read without asking Functions. -/
   | read (definition : Syntax.Ref) (parts : List RecordPart)
   | stepBegins (step : Nat) (name : StepName) (startedResource : Option String)

@@ -24,6 +24,7 @@ A *scenario* of a service, the *own* service, has three parts:
 The own service and its running peers are the *participants* of one *simulation*.
 They share one clock, and a message between two of them stays *in flight* until a network line delivers, redelivers, loses, or fails it.
 Messages travel on *channels*: a request, its answers, its end, and the events that name it as their `resultOf` share the request's channel, and an event without `resultOf` travels on the channel of its sender and receiver.
+Messages on one channel keep their order, and messages on different channels keep none.
 The simulation is deterministic: the scenario writes every choice that nobody's code makes, such as which message arrives next and when the time advances.
 Deadlines of one service due at the same time are no such choice: they tie inside the service, `test` runs them in every order, and it reports `ChoiceDependent` when the order changes the result.
 Nor is which of equal requests of one processing each handle of `requests` names: nothing outside tells them apart, so `test` runs every assignment of the handles and reports `ChoiceDependent` when one changes the result.
@@ -73,6 +74,9 @@ The [simulation section](#simulation) of the proven properties lists what Lean p
 
 `drive` controls only the implementation's world, the start, the clock, and the messages it receives, so the implementation creates its keys and request ids in its own way; `src/verify/harness.ts` states how.
 A trace *matches* a snapshot when its `in` lines equal the snapshot's exactly and the `out` lines after each pair up one to one, under a binding of each value that the snapshot creates to one implementation value over the whole comparison.
+The `out` lines after one `in` line keep the order of the snapshot on each channel and no order across channels; a trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel (`ordered_same_channel`).
+The lines of one group of events that `decide` returns have no order, even on one channel.
+`test` compares the outcomes of two orders or assignments the same way, together with the records, so a spec without a `ChoiceDependent` report fixes the order that `verify` asks of each channel.
 `verify` carries the set of every binding that agrees with the lines compared so far: each line keeps the bindings under which it compares equal, a line that would keep none is reported, and bindings that no line tells apart all stay, since each of them is fine.
 So the counts in a bag decide a binding (the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`), and keys that only a later line tells apart wait for it.
 Every binding of the set is one-to-one within each domain, the request ids and the keys of each entity (`compare_oneToOne`), so an implementation that reuses an existing request id or key of an entity for a new one differs, while one that uses a string of an input, such as an idempotency key, as a new key does not.
@@ -240,7 +244,7 @@ Precedent: the run-to-completion step of UML state machines (OMG).
 
 - Spec functions read the keys of an entity in one order, whatever order the records were written in (`keys_perm`).
 - The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON, whatever order the spec built them in (`bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order`).
-- Two lines of one group of the events that `decide` returns have no order between them, so a snapshot does not order them (`group_lines_unordered`).
+- A snapshot orders two `out` lines of one window only when they travel on one channel (`ordered_same_channel`), and never two lines of one group of the events that `decide` returns (`group_lines_unordered`).
 
 Precedent: CHESS (Madanlal Musuvathi and others), which makes each scheduling choice an input to a run.
 

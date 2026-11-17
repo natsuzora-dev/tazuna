@@ -21,7 +21,6 @@ export const sameAnswers = scenario(
       w.net.deliver(second);
       w.net.deliver(w.peer.calendar.answer(first, monday));
       w.net.deliver(w.peer.calendar.answer(second, monday));
-      w.clock.at("2026-10-25T11:00:00Z");
     },
     then: () => [],
   },
@@ -38,7 +37,6 @@ export const differentAnswers = scenario(
       w.net.deliver(second);
       w.net.deliver(w.peer.calendar.answer(first, monday));
       w.net.deliver(w.peer.calendar.answer(second, tuesday));
-      w.clock.at("2026-10-25T11:00:00Z");
     },
     then: () => [],
   },

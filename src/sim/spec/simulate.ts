@@ -71,8 +71,6 @@ export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, rea
         service,
         snapshotLines(
           s.lines,
-          s.steps,
-          s.messageCount,
           causes,
           created(s).map(([, key]) => key),
         ),

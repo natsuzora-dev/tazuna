@@ -50,9 +50,6 @@ export class Listener implements Note, Evaluations {
   events(step: number, start: number, groups: readonly number[]): void {
     this.collected.events(step, start, groups);
   }
-  deadline(message: number, time: Temporal.Instant): void {
-    this.collected.deadline(message, time);
-  }
   stepBegins(step: number, name: StepName, startedResource: string | undefined): void {
     this.collected.stepBegins(step, name, startedResource);
   }

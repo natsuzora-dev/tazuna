@@ -10,6 +10,6 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"remindersChanged#1","name":"remindersChanged","payload":{"shouldRemind":false},"resultOf":"changeReminders#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"reminderSettings#1","name":"reminderSettings","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":false}}}
-{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null},"after":["answer#4"]}
-{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["answer#4","reminderTimeReachedRecorded#1"]}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null}}
+{"time":"2026-10-25T15:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderTimeReachedRecorded#1"]}
 {"time":"2026-10-25T15:00:00Z","dir":"in","type":"time","id":"time#1"}

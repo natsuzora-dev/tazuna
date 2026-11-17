@@ -1,12 +1,12 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addNote#1","name":"addNote","input":{"noteId":"N-first","label":"first"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addNote#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"noteAdded#1","name":"noteAdded","payload":{"id":"N-first","label":"first"},"resultOf":"addNote#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#2","name":"noteAdded","payload":{"id":"notes/Note-1","label":"hourly"},"after":["answer#1","noteAdded#1"],"created":["notes/Note-1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#2","name":"noteAdded","payload":{"id":"notes/Note-1","label":"hourly"},"created":["notes/Note-1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#3","name":"noteAdded","payload":{"id":"notes/Note-2","label":"task-1"},"after":["taskAdded#1"],"created":["notes/Note-2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"noteAdded#3","name":"noteAdded","payload":{"id":"notes/Note-2","label":"task-1"},"created":["notes/Note-2"]}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"noteByLabel#1","name":"noteByLabel","input":{"label":"hourly"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"noteByLabel#1","answer":{"result":"fulfilled","output":{"noteId":"notes/Note-1"}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"noteByLabel#2","name":"noteByLabel","input":{"label":"task-1"}}

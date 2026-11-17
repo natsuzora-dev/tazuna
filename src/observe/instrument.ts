@@ -119,13 +119,12 @@ const reportedKey = (v: OrderDependent): string => JSON.stringify([v.kind, v.def
 
 /**
  * Lean's Collect: the values each step reads and writes, the context fields each part of the open microstep reads and
- * assigns, the causes that order the trace's event lines, and the OrderDependent violations. The values come through
+ * assigns, the groups of the trace's event lines, and the OrderDependent violations. The values come through
  * `read` and `write` from the TS listener, which turns the notes into values because the evaluation cache hears them
  * too.
  */
 export class Collect
-  implements
-    Pick<Note, "events" | "deadline" | "stepBegins" | "stepEnds" | "settlesAround" | "transitionPart" | "microstepEnds">
+  implements Pick<Note, "events" | "stepBegins" | "stepEnds" | "settlesAround" | "transitionPart" | "microstepEnds">
 {
   /** The definitions already reported by orderAudit, as JSON. */
   private readonly reportedOrder = new Set<string>();
@@ -140,7 +139,7 @@ export class Collect
   readonly violations: (OrderDependent & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */
   private readonly reported = new Set<string>();
-  readonly causes: Causes = { events: [], deadlines: [] };
+  readonly causes: Causes = { events: [] };
 
   /**
    * Returns a copy for the next input. Between inputs, no step and no microstep is open, and a closed step's access
@@ -153,7 +152,6 @@ export class Collect
     copy.violations.push(...this.violations);
     for (const key of this.reported) copy.reported.add(key);
     copy.causes.events.push(...this.causes.events);
-    copy.causes.deadlines.push(...this.causes.deadlines);
     return copy;
   }
 
@@ -207,10 +205,6 @@ export class Collect
       this.causes.events.push([step, first, count]);
       first += count;
     }
-  }
-
-  deadline(message: number, time: Temporal.Instant): void {
-    this.causes.deadlines.push([message, time]);
   }
 
   stepBegins(step: number, name: StepName, startedResource: string | undefined): void {

@@ -29,7 +29,7 @@ export const setDue = command({
 
 export const dueSetter = machine({
   description:
-    "Ask calendar for the next business day in each copy of a task, with the same input for every task, and set the task's due an hour later",
+    "Ask calendar for the next business day in each copy of a task, with the same input for every task, and set the task's due to it",
   queries: { nextBusinessDay: calendar.nextBusinessDay },
   commands: { setDue },
   initial: "rows",
@@ -39,7 +39,7 @@ export const dueSetter = machine({
       key: { taskId: ref(Task) },
       context: { day: datetime.nullable().default(null) },
       initial: "asking",
-      states: { asking: {}, waiting: {}, setting: { held: { day: datetime } }, done: {} },
+      states: { asking: {}, setting: { held: { day: datetime } }, done: {} },
     },
   },
 }).chart({
@@ -49,11 +49,10 @@ export const dueSetter = machine({
       calls: {
         nextBusinessDay: {
           input: ({ now }) => ({ from: now }),
-          onFulfilled: [{ target: "waiting", assign: { day: ({ output }) => output.day } }],
+          onFulfilled: [{ target: "setting", assign: { day: ({ output }) => output.day } }],
         },
       },
     },
-    waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "setting" }] } } },
     setting: {
       holds: { day: ({ context }) => context.day },
       sends: {

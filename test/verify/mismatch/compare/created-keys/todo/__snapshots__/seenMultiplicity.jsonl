@@ -1,11 +1,11 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#1","name":"seen","payload":{"id":"todo/Seen-1","taskId":"task-1"},"after":["taskAdded#1"],"created":["todo/Seen-1"]}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#1","name":"seen","payload":{"id":"todo/Seen-1","taskId":"task-1"},"created":["todo/Seen-1"]}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2"},"resultOf":"addTask#2"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#2","name":"seen","payload":{"id":"todo/Seen-2","taskId":"task-2"},"after":["taskAdded#2"],"created":["todo/Seen-2"]}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"seen#2","name":"seen","payload":{"id":"todo/Seen-2","taskId":"task-2"},"created":["todo/Seen-2"]}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"seenTwice#1","name":"seenTwice","input":{}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"seenTwice#1","answer":{"result":"fulfilled","output":{"repeated":["todo/Seen-1","todo/Seen-1","todo/Seen-2"]}}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"seenIds#1","name":"seenIds","input":{}}

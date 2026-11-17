@@ -1,4 +1,4 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"other"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"other"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{"by":"running"},"after":["taskAdded#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{"by":"running"}}

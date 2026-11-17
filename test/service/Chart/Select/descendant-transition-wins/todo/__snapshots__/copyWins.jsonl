@@ -1,8 +1,8 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"pickTask#1","name":"pickTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"pickTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskPicked#1","name":"taskPicked","payload":{"taskId":"task-1"},"resultOf":"pickTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{"by":"task-1"},"after":["taskPicked#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{"by":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"pickTask#2","name":"pickTask","input":{"taskId":"task-2"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"pickTask#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskPicked#2","name":"taskPicked","payload":{"taskId":"task-2"},"resultOf":"pickTask#2"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminded#2","name":"reminded","payload":{"by":"task-2"},"after":["taskPicked#2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminded#2","name":"reminded","payload":{"by":"task-2"}}

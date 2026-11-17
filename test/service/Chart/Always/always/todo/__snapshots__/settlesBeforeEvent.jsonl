@@ -1,4 +1,4 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"signal#1","name":"signal","input":{"signalId":"signal-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"signal#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"signalled#1","name":"signalled","payload":{"id":"signal-1"},"resultOf":"signal#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{},"after":["signalled#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{}}

@@ -4,7 +4,7 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"dustRoom#1","name":"dustRoom","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"dustRoom#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"roomDusted#1","name":"roomDusted","payload":{},"resultOf":"dustRoom#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"celebrated#1","name":"celebrated","payload":{},"after":["roomDusted#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"celebrated#1","name":"celebrated","payload":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"buyMilk#2","name":"buyMilk","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"buyMilk#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"milkBought#2","name":"milkBought","payload":{},"resultOf":"buyMilk#2"}

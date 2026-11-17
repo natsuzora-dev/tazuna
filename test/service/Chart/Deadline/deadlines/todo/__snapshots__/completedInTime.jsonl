@@ -9,5 +9,5 @@
 {"time":"2026-10-25T03:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2"}}
 {"time":"2026-10-25T03:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"addTask#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T03:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"task-2"},"resultOf":"addTask#2"}
-{"time":"2026-10-25T04:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{},"after":["answer#3","taskAdded#2"]}
+{"time":"2026-10-25T04:00:00Z","dir":"out","type":"event","id":"reminded#1","name":"reminded","payload":{}}
 {"time":"2026-10-25T04:30:00Z","dir":"in","type":"time","id":"time#3"}

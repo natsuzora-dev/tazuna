@@ -11,6 +11,6 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"task-1","dueAt":"2026-10-27T09:00:00Z"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"changeDue#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"id":"task-1","dueAt":"2026-10-27T09:00:00Z","remindAt":"2026-10-27T09:00:00Z","reminderDecision":"decided"},"resultOf":"changeDue#1"}
-{"time":"2026-10-27T09:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null},"after":["answer#4","dueChanged#1"]}
-{"time":"2026-10-27T09:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["answer#4","dueChanged#1","reminderTimeReachedRecorded#1"]}
+{"time":"2026-10-27T09:00:00Z","dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null}}
+{"time":"2026-10-27T09:00:00Z","dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderTimeReachedRecorded#1"]}
 {"time":"2026-10-27T09:00:00Z","dir":"in","type":"time","id":"time#1"}

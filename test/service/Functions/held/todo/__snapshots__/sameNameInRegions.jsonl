@@ -1,6 +1,6 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"openLabels#1","name":"openLabels","input":{}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"openLabels#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"labelsOpened#1","name":"labelsOpened","payload":{},"resultOf":"openLabels#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#1","name":"notified","payload":{"text":"left"},"after":["labelsOpened#1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#2","name":"notified","payload":{"text":"right"},"after":["labelsOpened#1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#3","name":"notified","payload":{"text":"Closed left"},"after":["labelsOpened#1","notified#1","notified#2"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#1","name":"notified","payload":{"text":"left"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#2","name":"notified","payload":{"text":"right"},"after":["notified#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"notified#3","name":"notified","payload":{"text":"Closed left"},"after":["notified#1","notified#2"]}
