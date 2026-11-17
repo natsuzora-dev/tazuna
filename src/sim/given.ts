@@ -1,7 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Report } from "../data/report.generated.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
-import { canonicalJson, type Fields } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
 import { ref, type Service, uniqueOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
@@ -77,11 +77,23 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
   };
 }
 
-/** Lean's givenRecords. */
-function givenRecords(sc: Scenario, service: string): readonly GivenRecord[] {
+/** Lean's writtenRecords. */
+function writtenRecords(sc: Scenario, service: string): readonly GivenRecord[] {
   if (service === sc.service) return sc.given.records;
   const peer = peersOf(sc).find((p) => p.service === service);
   return peer?.role === "run" ? peer.records : [];
+}
+
+/** Lean's recordBefore, as a comparator. */
+function byEntityAndKey(a: GivenRecord, b: GivenRecord): number {
+  if (a.entity !== b.entity) return byCodePoint(a.entity, b.entity);
+  if (a.key === undefined || b.key === undefined) return (a.key === undefined ? 0 : 1) - (b.key === undefined ? 0 : 1);
+  return byCodePoint(a.key, b.key);
+}
+
+/** Lean's givenRecords: a stable sort, as Lean's mergeSort. */
+function givenRecords(sc: Scenario, service: string): readonly GivenRecord[] {
+  return [...writtenRecords(sc, service)].sort(byEntityAndKey);
 }
 
 /** Lean's Row of a Given record, with the row that the TS records hold. */

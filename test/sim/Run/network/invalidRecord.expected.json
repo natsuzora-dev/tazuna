@@ -19,6 +19,15 @@
       "definition": null,
       "data": {
         "service": "todo",
+        "entity": "Note",
+        "key": null
+      }
+    },
+    {
+      "kind": "Report.invalidRecord",
+      "definition": null,
+      "data": {
+        "service": "todo",
         "entity": "Settings",
         "key": null
       }
@@ -29,15 +38,6 @@
       "data": {
         "service": "todo",
         "entity": "Task",
-        "key": null
-      }
-    },
-    {
-      "kind": "Report.invalidRecord",
-      "definition": null,
-      "data": {
-        "service": "todo",
-        "entity": "Note",
         "key": null
       }
     }

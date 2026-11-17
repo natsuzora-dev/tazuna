@@ -52,12 +52,29 @@ def World.start (j : Syntax.Structure) (sc : Scenario) : Except String World := 
   let now := sc.given.start.time
   pure { now, roles, services, states := running.map fun s => (s, { now, keyOwner := some s }) }
 
-/-- The records that Given writes for the running service `service`. -/
-def givenRecords (sc : Scenario) (service : String) : List GivenRecord :=
+/-- The records that Given writes for the running service `service`, in written order. -/
+def writtenRecords (sc : Scenario) (service : String) : List GivenRecord :=
   if service == sc.service then sc.given.records
   else match (peersOf sc).lookup service with
     | some (.run records) => records
     | _ => []
+
+/-- Whether the key `a` comes before `b`: none first, then in code-point order. -/
+def keyBefore : Option String → Option String → Bool
+  | none, _ => true
+  | some _, none => false
+  | some x, some y => decide (x ≤ y)
+
+/-- Whether the Given record `a` comes before `b`: by entity in code-point order, then by key. -/
+def recordBefore (a b : GivenRecord) : Bool :=
+  if a.entity = b.entity then keyBefore a.key b.key else decide (a.entity ≤ b.entity)
+
+/--
+The records that Given writes for the running service `service`, ordered by recordBefore: Given writes the
+records of an entity as a bag, so the order they are written in reaches nothing.
+-/
+def givenRecords (sc : Scenario) (service : String) : List GivenRecord :=
+  (writtenRecords sc service).mergeSort recordBefore
 
 variable {m : Type → Type} [Monad m]
 
@@ -96,11 +113,10 @@ service listed as one, a peer of the static peer list left out, and for each run
 records, a single entity without a record, and else failing invariants.
 -/
 def World.given (w : World) (j : Syntax.Structure) (fsOf : String → Functions m) (sc : Scenario) : m World := do
-  let repeated := (sc.given.peers.zipIdx.filter fun (p, k) =>
-    p.service == sc.service || (sc.given.peers.take k).any (·.service == p.service)).map fun (p, _) =>
-      Report.repeatedPeer p.service
-  let unlisted := ((staticPeers j sc.service).filter fun s => !sc.given.peers.any (·.service == s)).map
-    Report.unlistedPeer
+  let listed := sc.given.peers.map (·.service)
+  let repeated := (listed.zipIdx.filter fun (p, k) => p == sc.service || (listed.take k).contains p).map fun (p, _) =>
+    Report.repeatedPeer p
+  let unlisted := ((staticPeers j sc.service).filter fun s => !listed.contains s).map Report.unlistedPeer
   let w := (repeated ++ unlisted).foldl World.note w
   w.services.foldlM (init := w) fun w (service, st) => do
     let fs := fsOf service
