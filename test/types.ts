@@ -40,6 +40,7 @@ import {
   endOf,
   entity,
   external,
+  externalService,
   type KindOf,
   type RecordsOf,
   type RowOf,
@@ -1305,6 +1306,12 @@ screen({
   resolve: ({ active }) => ({ isClosed: active.closed }),
   states: { list: { on: { close: [{ target: "closed" }] } } },
 });
+
+// A service name holds none of the characters that separate the parts of generated names (reservedNameCharacter).
+// @ts-expect-error a trace name would read todo.tasks as the service todo
+service({ name: "todo.tasks", description: "" });
+// @ts-expect-error a created key would read a/b as two parts
+externalService({ name: "a/b", description: "" });
 
 // Given keys each peer by its service's name, and the own service is no peer.
 scenarioOfScreens("types", {

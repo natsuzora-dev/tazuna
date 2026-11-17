@@ -32,7 +32,7 @@ import {
 } from "./event.ts";
 import { type MachineDefiner, machineDefiner } from "./machine.ts";
 import { type ScreenDefiner, screenDefiner } from "./screen.ts";
-import type { IsUnion } from "./tree.ts";
+import type { ErrorIf, IsUnion } from "./tree.ts";
 
 type Input<I extends Shape> = Row<I>;
 type Bound<B> = { readonly [K in keyof B]: NonNullable<B[K]> };
@@ -225,14 +225,27 @@ interface ExternalDefiners<N extends string> {
 }
 
 /**
+ * The characters that tazuna's generated names put between parts (`<service>.<name>`, `<service>/<Entity>-<n>`,
+ * `<name>#<n>`, `<owner>@<map>[<key>]`), which a service or scenario name does not contain
+ * (Malformed.reservedNameCharacter).
+ */
+export const reservedNameCharacters = [".", "/", "#", "@", "[", "]"] as const;
+type ReservedIn<N extends string> = ErrorIf<
+  "reservedNameCharacter",
+  N & `${string}${(typeof reservedNameCharacters)[number]}${string}`
+>;
+
+/**
  * Defines an external service (for example an OS calendar): the spec states only `requires` and `ensures` of its
  * answers and events, never how they are made.
  */
-export function externalService<const N extends string>(definition: {
-  /** The service's name, which names it in contracts, scenarios, constants and traces. */
-  name: N;
-  description: string;
-}): ExternalDefiners<N> {
+export function externalService<const N extends string>(
+  definition: {
+    /** The service's name, which names it in contracts, scenarios, constants and traces. */
+    name: N;
+    description: string;
+  } & ReservedIn<N>,
+): ExternalDefiners<N> {
   const owner = serviceDefinition({ name: definition.name, description: definition.description, entities: {} }, true);
   const command = (d: CommandOptions) => commandOf(owner, d, undefined);
   const query = (d: QueryOptions) => queryOf(owner, d, undefined);
@@ -247,14 +260,16 @@ export function service<
   const N extends string,
   const Es extends Entities = Record<never, never>,
   const Iv extends string = never,
->(definition: {
-  /** The service's name, which names it in contracts, scenarios, constants and traces. */
-  name: N;
-  description: string;
-  entities?: Es & SomeKey<keyof Es>;
-  /** The conditions over all records (Fault.failedServiceInvariant). */
-  invariants?: Named<Iv, { records: Records<Es> }>;
-}): Definers<Es, N> {
+>(
+  definition: {
+    /** The service's name, which names it in contracts, scenarios, constants and traces. */
+    name: N;
+    description: string;
+    entities?: Es & SomeKey<keyof Es>;
+    /** The conditions over all records (Fault.failedServiceInvariant). */
+    invariants?: Named<Iv, { records: Records<Es> }>;
+  } & ReservedIn<N>,
+): Definers<Es, N> {
   return definers(
     serviceDefinition(
       definition as { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },

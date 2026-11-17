@@ -21,7 +21,7 @@ import type { DefinitionStructure } from "../syntax/structure.ts";
 import { opaqueCollections } from "./collections.ts";
 import { defaultSchemas } from "./defaults.ts";
 import type { Found } from "./found.ts";
-import { duplicateNames, type NamedExport } from "./names.ts";
+import { duplicateNames, type NamedExport, reservedNames } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
 import { unexportedDefinitions } from "./references.ts";
 import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
@@ -228,6 +228,7 @@ export async function loadSpec(root: string): Promise<Spec> {
       ...duplicateNames(namedExports),
       ...owned.malformed,
       ...unknownServices,
+      ...reservedNames([...[...services].map(([name, { place }]) => ({ name, place })), ...defined]),
       ...unexportedDefinitions(definitions, services, contracts, constants, exported),
       ...inexactDelays(charts({ definitions, structure })),
       ...opaque,

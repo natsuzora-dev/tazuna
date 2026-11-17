@@ -26,6 +26,7 @@ To list the commands and their options, run `npx tazuna --help`.
 ## Spec folder layout
 
 The `name` that a `service()` or `externalService()` call writes is the service's name, and it alone tells which service a definition, contract, scenario, or `constants()` call belongs to: a definition belongs to the service of the definer that made it, and a `constants()` call names its service as its first argument.
+A service or scenario name contains none of `.`, `/`, `#`, `@`, `[`, and `]`, which separate the parts of the names that tazuna makes, such as `todo.addTask` and `todo/Task-1` (`Malformed.reservedNameCharacter`).
 Folders are free, and the samples keep one folder per service, named after it, such as `spec/todo/` for the `todo` service.
 The snapshots of a service's scenarios are in `<service name>/__snapshots__/` under the spec folder.
 

@@ -1,5 +1,6 @@
 import type { Malformed } from "../data/malformed.ts";
 import type { Place } from "../dsl/definition.ts";
+import { reservedNameCharacters } from "../dsl/service.ts";
 import type { Found } from "./found.ts";
 
 export interface NamedExport {
@@ -38,6 +39,21 @@ export function duplicateNames(exports: readonly NamedExport[]): Found<Malformed
           {
             violation: { kind: "Malformed.alias", definition: null, data: { name: first.name, alias: e.name } },
             place: e.place,
+          },
+        ];
+  });
+}
+
+/** Returns a reservedNameCharacter violation for each service or scenario name with a character in reservedNameCharacters. */
+export function reservedNames(named: readonly { readonly name: string; readonly place: Place }[]): Found<Malformed>[] {
+  return named.flatMap(({ name, place }): Found<Malformed>[] => {
+    const character = reservedNameCharacters.find((c) => name.includes(c));
+    return character === undefined
+      ? []
+      : [
+          {
+            violation: { kind: "Malformed.reservedNameCharacter", definition: null, data: { name, character } },
+            place,
           },
         ];
   });
