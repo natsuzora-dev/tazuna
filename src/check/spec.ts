@@ -21,16 +21,16 @@ declare const checked: unique symbol;
 /** A spec in which checkSpec found no violation. Only checkSpec makes one. */
 export type CheckedSpec = Spec & { readonly [checked]: true };
 
-/**
- * The result of checkSpec: the checked spec, or why there is none. `noTsconfig`, `noTypescript`, `unfinished`, and
- * `unloadable` (a spec file threw when imported) are usage errors; `typeErrors` holds tsc's output.
- */
-export type SpecCheck =
-  | Exclude<TypeCheck, { readonly kind: "ran" }>
-  | { readonly kind: "typeErrors"; readonly output: string }
+/** Why checkSpec returned no checked spec. All but `typeErrors` and `violations` are usage errors. */
+export type SpecFailure =
+  | { readonly kind: "noTsconfig" }
+  | { readonly kind: "noTypescript" }
+  | { readonly kind: "unfinished"; readonly reason: string }
   | { readonly kind: "unloadable"; readonly reason: string }
-  | { readonly kind: "violations"; readonly files: number; readonly violations: readonly ReportedViolation[] }
-  | { readonly kind: "checked"; readonly spec: CheckedSpec };
+  | { readonly kind: "typeErrors"; readonly output: string }
+  | { readonly kind: "violations"; readonly files: number; readonly violations: readonly ReportedViolation[] };
+
+export type SpecCheck = SpecFailure | { readonly kind: "checked"; readonly spec: CheckedSpec };
 
 const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<NonCanonical | Restricted>[] }[] = [
   binds,
@@ -60,7 +60,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
 }
 
 /** Returns the header lines of Node's error and the first stack frame outside node: internals. */
-export function reason(error: unknown): string {
+function reason(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const lines = (error.stack ?? error.message).split("\n");
   const frames = lines.findIndex((line) => line.startsWith("    at "));
@@ -69,7 +69,25 @@ export function reason(error: unknown): string {
   return [...lines.slice(0, frames), ...(own === undefined ? [] : [own])].join("\n");
 }
 
-function unlistedFiles(spec: Spec, typeChecked: Extract<TypeCheck, { readonly kind: "ran" }>): Found<Malformed>[] {
+/** Returns the text of `failure`, naming the spec folder `folder`; a violation is one JSON line. */
+export function failureText(failure: SpecFailure, folder: string): string {
+  switch (failure.kind) {
+    case "noTsconfig":
+      return `no tsconfig.json at or above ${folder}`;
+    case "noTypescript":
+      return `cannot resolve typescript from ${folder}`;
+    case "unfinished":
+      return `tsc did not finish: ${failure.reason}`;
+    case "unloadable":
+      return `cannot load ${folder}: ${failure.reason.replace(/\s+/g, " ").trim()}`;
+    case "typeErrors":
+      return failure.output.trimEnd();
+    case "violations":
+      return failure.violations.map((v) => JSON.stringify(v)).join("\n");
+  }
+}
+
+function unlistedFiles(spec: Spec, typeChecked: Extract<TypeCheck, { readonly kind: "passed" }>): Found<Malformed>[] {
   const tsconfig = relative(spec.root, typeChecked.tsconfig).split(sep).join("/");
   return spec.sources
     .filter((s) => !typeChecked.includes(join(spec.root, s.file)))
@@ -79,18 +97,9 @@ function unlistedFiles(spec: Spec, typeChecked: Extract<TypeCheck, { readonly ki
     }));
 }
 
-/**
- * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
- * it, as a compiler compiles before it runs. When loading finds a Malformed violation, the structure (Illegal) goes
- * unchecked.
- */
-export async function checkSpec(
-  root: string,
-  typeChecker: (root: string) => TypeCheck = (r) => typeCheck(r, process.cwd()),
-): Promise<SpecCheck> {
-  const typeChecked = typeChecker(root);
-  if (typeChecked.kind !== "ran") return typeChecked;
-  if (!typeChecked.passed) return { kind: "typeErrors", output: typeChecked.output };
+/** checkSpec after `typeChecked`, the type check of `root`. */
+export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promise<SpecCheck> {
+  if (typeChecked.kind !== "passed") return typeChecked;
   let loaded: Awaited<ReturnType<typeof loadSpec>>;
   try {
     loaded = await loadSpec(root);
@@ -111,3 +120,10 @@ export async function checkSpec(
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
   return { kind: "violations", files: spec.sources.length, violations };
 }
+
+/**
+ * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
+ * it, as a compiler compiles before it runs. When loading finds a Malformed violation, the structure (Illegal) goes
+ * unchecked.
+ */
+export const checkSpec = (root: string): Promise<SpecCheck> => checkSpecWith(root, typeCheck(root, process.cwd()));

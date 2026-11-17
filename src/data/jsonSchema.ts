@@ -4,6 +4,28 @@ import type { Shape } from "./values.ts";
 
 export type JsonSchema = Readonly<Record<string, unknown>>;
 
+/** The Zod types whose values JSON cannot hold, after Zod's toJSONSchema; a `transform` has no way back to JSON. */
+export const unrepresentableTypes = [
+  "bigint",
+  "symbol",
+  "undefined",
+  "void",
+  "nan",
+  "date",
+  "map",
+  "set",
+  "transform",
+  "custom",
+  "promise",
+  "function",
+  "file",
+] as const;
+
+export type UnrepresentableType = (typeof unrepresentableTypes)[number];
+
+export const unrepresentableType = (schema: z.ZodType): UnrepresentableType | undefined =>
+  unrepresentableTypes.find((type) => type === schema.def.type);
+
 export const jsonSchema = (schema: z.ZodType): JsonSchema =>
   z.toJSONSchema(schema, {
     io: "input",

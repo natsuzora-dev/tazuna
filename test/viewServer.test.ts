@@ -44,9 +44,9 @@ async function withCopy(body: (copy: string, viewer: string) => Promise<void>): 
 test("The view server reloads the spec in a child process when a spec file changes and notifies /events, keeps the old model.json and notifies the reason when loading fails, and recovers when loading succeeds", async () => {
   await withCopy(async (copy, viewer) => {
     const data = join(copy, "todo/data.ts");
-    const loaded = await loadViewModel(copy, "copy");
+    const loaded = await loadViewModel(copy, "copy", process.cwd());
     assert.ok("model" in loaded);
-    const server = await serveViewer({ root: copy, path: "copy", loaded }, 0, viewer);
+    const server = await serveViewer({ root: copy, path: "copy", cwd: process.cwd(), model: loaded.model }, 0, viewer);
     try {
       const task = async () => {
         const model = (await (await fetch(`${server.url}model.json`)).json()) as ViewModel;
@@ -81,34 +81,12 @@ test("The view server reloads the spec in a child process when a spec file chang
   });
 });
 
-test("The view server starts even when loading the spec fails at startup, returns 404 for model.json and notifies the reason on /events until loading succeeds, and then returns model.json", async () => {
-  await withCopy(async (copy, viewer) => {
-    const data = join(copy, "todo/data.ts");
-    const original = readFileSync(data, "utf8");
-    appendFileSync(data, "const broken = ;\n");
-    const loaded = await loadViewModel(copy, "copy");
-    assert.ok("error" in loaded);
-    const server = await serveViewer({ root: copy, path: "copy", loaded }, 0, viewer);
-    try {
-      assert.equal((await fetch(`${server.url}model.json`)).status, 404);
-      const watching = await listen(server.url);
-      assert.deepEqual((await watching.next()).value, { type: "error", message: loaded.error });
-
-      writeFileSync(data, original);
-      assert.deepEqual((await watching.next()).value, { type: "model" });
-      const model = (await (await fetch(`${server.url}model.json`)).json()) as ViewModel;
-      assert.ok(model.services.some((s) => s.name === "todo"));
-    } finally {
-      server.close();
-    }
-  });
-});
-
 test("The view server answers 400 to a request whose path is no URL path, such as //, and keeps serving", async () => {
   mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
   const viewer = mkdtempSync(join(import.meta.dirname, ".fixtures", "viewer-"));
   writeFileSync(join(viewer, "index.html"), "");
-  const server = await serveViewer({ root: viewer, path: "viewer", loaded: { error: "unloaded" } }, 0, viewer);
+  const model = { spec: "viewer", services: [], scenarios: [] };
+  const server = await serveViewer({ root: viewer, path: "viewer", cwd: process.cwd(), model }, 0, viewer);
   try {
     const status = await new Promise<number | undefined>((resolve, reject) =>
       get(new URL(server.url), { path: "//" }, (response) => {

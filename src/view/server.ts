@@ -3,7 +3,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize } from "node:path";
 import { type Loaded, loadViewModel } from "./load.ts";
-import type { ViewEvent } from "./types.ts";
+import type { ViewEvent, ViewModel } from "./types.ts";
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".html": "text/html; charset=utf-8",
@@ -18,16 +18,16 @@ const isWatched = (file: string) => file.endsWith(".ts") || /(?:^|[\\/])__snapsh
 const settleMs = 100;
 
 /**
- * Serves the viewer and reloads the spec on every .ts or snapshot change. A failed load keeps the last model.json (404
- * before the first).
+ * Serves the viewer of `model` and reloads the spec on every .ts or snapshot change. A failed load keeps the last
+ * model.json.
  */
 export async function serveViewer(
-  spec: { readonly root: string; readonly path: string; readonly loaded: Loaded },
+  spec: { readonly root: string; readonly path: string; readonly cwd: string; readonly model: ViewModel },
   port: number,
   folder: string,
 ): Promise<{ readonly url: string; readonly closed: Promise<void>; readonly close: () => void }> {
-  let body = "model" in spec.loaded ? JSON.stringify(spec.loaded.model) : null;
-  let error = "error" in spec.loaded ? spec.loaded.error : null;
+  let body = JSON.stringify(spec.model);
+  let error: string | null = null;
   const clients = new Set<ServerResponse>();
   const send = (response: ServerResponse, event: ViewEvent) => response.write(`data: ${JSON.stringify(event)}\n\n`);
   const apply = (loaded: Loaded) => {
@@ -51,7 +51,7 @@ export async function serveViewer(
     loading = true;
     do {
       again = false;
-      apply(await loadViewModel(spec.root, spec.path));
+      apply(await loadViewModel(spec.root, spec.path, spec.cwd));
     } while (again);
     loading = false;
   };
@@ -68,10 +68,6 @@ export async function serveViewer(
       return;
     }
     if (url.pathname === "/model.json") {
-      if (body === null) {
-        response.writeHead(404).end();
-        return;
-      }
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" }).end(body);
       return;
     }

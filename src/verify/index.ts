@@ -10,7 +10,7 @@ import { type Found, readSnapshotViolations, violationsAt } from "./lines.ts";
 import { pairingViolation, pairTraces, traceFolderOf } from "./pairing.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
-export { type CheckedSpec, checkSpec, type SpecCheck } from "../check/spec.ts";
+export { type CheckedSpec, checkSpec, failureText, type SpecCheck } from "../check/spec.ts";
 export type { GivenRecord } from "../data/scenario.generated.ts";
 export {
   type Adapter,

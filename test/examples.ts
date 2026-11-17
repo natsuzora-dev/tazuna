@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { type CheckedSpec, checkSpec } from "../src/check/spec.ts";
+import { type CheckedSpec, checkSpecWith, failureText } from "../src/check/spec.ts";
 import type { TypeCheck } from "../src/check/typeCheck.ts";
 import type { ViolationError } from "../src/data/violation.ts";
 
@@ -26,15 +26,14 @@ export const depth = 2;
 export const isServiceFolder = (dir: string): boolean => readdirSync(dir).some((name) => name.endsWith(".ts"));
 
 /** A passed type check whose program includes every file, which the examples take in place of running tsc. */
-export const typeChecked: TypeCheck = { kind: "ran", passed: true, output: "", tsconfig: "", includes: () => true };
+export const typeChecked: TypeCheck = { kind: "passed", tsconfig: "", includes: () => true };
 
 /** Checks the spec of the example `root` with typeChecked, and throws unless it is checked. */
 export async function checkedRoot(root: string): Promise<CheckedSpec> {
-  const result = await checkSpec(root, () => typeChecked);
+  const result = await checkSpecWith(root, typeChecked);
   if (result.kind === "checked") return result.spec;
   const name = relative(join(import.meta.dirname, ".."), root);
-  const kinds = result.kind === "violations" ? result.violations.map((p) => p.kind).join(", ") : result.kind;
-  throw new Error(`${name} is not checked: ${kinds}`);
+  throw new Error(`${name} is not checked:\n${failureText(result, name)}`);
 }
 
 /** Returns the examples test/<folder>/<group>/<target>/<example> of `group`, or of every group without it. */

@@ -11,13 +11,8 @@ export type TypeCheck =
   | { readonly kind: "noTsconfig" }
   | { readonly kind: "noTypescript" }
   | { readonly kind: "unfinished"; readonly reason: string }
-  | {
-      readonly kind: "ran";
-      readonly passed: boolean;
-      readonly output: string;
-      readonly tsconfig: string;
-      readonly includes: (file: string) => boolean;
-    };
+  | { readonly kind: "typeErrors"; readonly output: string }
+  | { readonly kind: "passed"; readonly tsconfig: string; readonly includes: (file: string) => boolean };
 
 function nearestTsconfig(folder: string): string | undefined {
   const tsconfig = join(folder, "tsconfig.json");
@@ -51,12 +46,7 @@ export function typeCheck(specRoot: string, cwd: string): TypeCheck {
   // --listFiles writes each file of the program as a line of its own: an absolute path that exists.
   const lines = (result.stdout + result.stderr).split(/\r?\n/);
   const isListed = (line: string) => isAbsolute(line) && existsSync(line);
+  if (result.status !== 0) return { kind: "typeErrors", output: lines.filter((line) => !isListed(line)).join("\n") };
   const files = new Set(lines.filter(isListed));
-  return {
-    kind: "ran",
-    passed: result.status === 0,
-    output: lines.filter((line) => !isListed(line)).join("\n"),
-    tsconfig,
-    includes: (file) => files.has(file) || files.has(realpathSync(file)),
-  };
+  return { kind: "passed", tsconfig, includes: (file) => files.has(file) || files.has(realpathSync(file)) };
 }

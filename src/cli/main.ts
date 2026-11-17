@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { checkSpec } from "../check/spec.ts";
+import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import { verifyTraces } from "../verify/index.ts";
@@ -178,32 +178,26 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   if (command === "view" && !isViewerBuilt(folder)) return misused("viewer not built. Run npm run build -w tazuna");
   const traces = resolve(io.cwd, traceFolder ?? "");
   if (command === "verify" && !isFolder(traces)) return misused(`no such folder ${traceFolder}`);
-  const result = await checkSpec(resolve(io.cwd, root), (r) => (io.typeCheck ?? typeCheck)(r, io.cwd));
-  switch (result.kind) {
-    case "noTsconfig":
-      return misused(`no tsconfig.json at or above ${root}`);
-    case "noTypescript":
-      return misused(`cannot resolve typescript from ${root}`);
-    case "unfinished":
-      return misused(`tsc did not finish: ${result.reason}`);
-    case "unloadable":
-      return misused(`cannot load ${root}: ${result.reason.replace(/\s+/g, " ").trim()}`);
-    case "typeErrors":
-      io.error(result.output.trimEnd());
-      return 1;
-    case "violations":
-      return report(io, resolve(io.cwd, root), result.violations, `Checked ${count(result.files, "file")}`);
+  const specRoot = resolve(io.cwd, root);
+  const result = await checkSpecWith(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd));
+  if (result.kind === "typeErrors") {
+    io.error(failureText(result, root));
+    return 1;
+  }
+  if (result.kind !== "violations" && result.kind !== "checked") return misused(failureText(result, root));
+  if (result.kind === "violations" || command === "check") {
+    const files = result.kind === "violations" ? result.files : result.spec.sources.length;
+    const violations = result.kind === "violations" ? result.violations : [];
+    return report(io, specRoot, violations, `Checked ${count(files, "file")}`);
   }
   const { spec } = result;
   if (command === "view") {
-    const server = await viewSpec(spec, root, port, folder);
+    const server = await viewSpec(spec, root, io.cwd, port, folder);
     if (server === undefined) return misused(`port ${port} in use`);
     io.log(`Serving the viewer at ${server.url}`);
     await server.closed;
     return 0;
   }
-  const checked = `Checked ${count(spec.sources.length, "file")}`;
-  if (command === "check") return report(io, spec.root, [], checked);
   if (command === "test") {
     const depth = Number(givenDepth);
     const tested = testSpec(spec, { update: options.has("--update"), depth });

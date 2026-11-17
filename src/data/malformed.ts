@@ -1,5 +1,6 @@
 import type { Collection } from "./collections.ts";
 import type { DefinitionRef } from "./definitionRef.ts";
+import type { UnrepresentableType } from "./jsonSchema.ts";
 
 type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
   readonly kind: `Malformed.${Name}`;
@@ -65,11 +66,11 @@ export type Malformed =
       null,
       { readonly name: string; readonly path: readonly string[]; readonly collection: Collection["kind"] }
     >
-  | Of<"unrepresentableSchema", DefinitionRef, { readonly path: readonly string[]; readonly type: string }>
+  | Of<"unrepresentableSchema", DefinitionRef, { readonly path: readonly string[]; readonly type: UnrepresentableType }>
   | Of<
       "unrepresentableSchema",
       null,
-      { readonly name: string; readonly path: readonly string[]; readonly type: string }
+      { readonly name: string; readonly path: readonly string[]; readonly type: UnrepresentableType }
     >
   | Of<"defaultSchema", DefinitionRef, Readonly<Record<string, never>>>
   | Of<"defaultSchema", DefinitionRef, { readonly map: string }>

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 export const { event, contract } = service({ name: "todo", description: "Keep the tasks" });
 
+const box = z.object({ size: z.bigint() });
+
 export const taskAdded = event({
   payload: {
     at: datetime,
@@ -14,6 +16,9 @@ export const taskAdded = event({
     length: z.string().transform((s) => s.length),
     trimmed: z.string().pipe(z.string().trim()),
     seen: z.date(),
+    ids: z.set(z.bigint()),
+    first: box,
+    second: box,
   },
 });
 

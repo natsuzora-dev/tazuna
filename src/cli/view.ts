@@ -9,10 +9,11 @@ export const viewerFolder = join(import.meta.dirname, "../../dist/viewer");
 export const isViewerBuilt = (folder: string): boolean => existsSync(join(folder, "index.html"));
 
 /** Serves the viewer of the spec named `path` on `port`; undefined when the port is in use. */
-export async function viewSpec(spec: CheckedSpec, path: string, port: number, folder: string) {
-  const loaded = { model: viewModel(spec, path) };
-  return serveViewer({ root: spec.root, path, loaded }, port, folder).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "EADDRINUSE") return undefined;
-    throw error;
-  });
+export async function viewSpec(spec: CheckedSpec, path: string, cwd: string, port: number, folder: string) {
+  return serveViewer({ root: spec.root, path, cwd, model: viewModel(spec, path) }, port, folder).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") return undefined;
+      throw error;
+    },
+  );
 }

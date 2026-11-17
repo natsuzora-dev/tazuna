@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { checkSpec } from "@natsuzora-dev/tazuna/verify";
+import { checkSpec, failureText } from "@natsuzora-dev/tazuna/verify";
 
 const checked = await checkSpec(join(import.meta.dirname, "../../../spec"));
-if (checked.kind !== "checked") throw new Error(`the spec does not pass tazuna check: ${JSON.stringify(checked)}`);
+if (checked.kind !== "checked") throw new Error(failureText(checked, "spec"));
 export const spec = checked.spec;

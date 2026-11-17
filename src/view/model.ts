@@ -34,17 +34,9 @@ import type {
   ViewModel,
 } from "./types.ts";
 
-/**
- * Returns the JSON Schema of `schema`. A schema whose default function throws is {}, as in the loaded structure, where
- * check reports Malformed.defaultSchema.
- */
 function schemaOf(schema: z.ZodType): JsonSchema {
-  try {
-    const { $schema: _, ...converted } = jsonSchema(schema);
-    return converted;
-  } catch {
-    return {};
-  }
+  const { $schema: _, ...converted } = jsonSchema(schema);
+  return converted;
 }
 
 function toJson(spec: Spec, value: unknown): Json {
