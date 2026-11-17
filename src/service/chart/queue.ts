@@ -1,8 +1,8 @@
 import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import { canonicalJson, type Fields } from "../../data/values.ts";
+import { canonicalJson, type Fields, type Json } from "../../data/values.ts";
 import type { Automation, Service } from "../basic.ts";
-import type { Emit } from "../message.ts";
+import type { Emitted } from "../message.ts";
 import { type Instance, type Requester, type Run, report, type State } from "../state.ts";
 import type { Activity } from "./basic.ts";
 
@@ -21,7 +21,7 @@ export interface Sent {
 
 /** Work for the internal queue. `cause` is the step that caused the work. */
 export type Work =
-  | { readonly kind: "reaction"; readonly automation: Automation; readonly event: Emit; readonly cause: number }
+  | { readonly kind: "reaction"; readonly automation: Automation; readonly event: Emitted; readonly cause: number }
   | { readonly kind: "answered"; readonly sent: Sent; readonly answer: Answer; readonly cause: number }
   /** A machine or screen starts in its initial state. A screen that `opens` opened has the opening step as cause. */
   | { readonly kind: "start"; readonly machine: string; readonly cause: number | undefined }
@@ -29,7 +29,7 @@ export type Work =
   | {
       readonly kind: "receive";
       readonly machine: string;
-      readonly received: readonly { readonly key: string; readonly payload: unknown }[];
+      readonly received: readonly { readonly key: string; readonly payload: unknown; readonly encoded: Json }[];
       readonly cause: number;
     }
   | { readonly kind: "onDone"; readonly machine: string; readonly cause: number }
@@ -125,13 +125,15 @@ export interface Processing extends Run {
  * transitions even without an event.
  */
 function machineWork(
-  emits: readonly Emit[],
+  emits: readonly Emitted[],
   recordsChanged: boolean,
   cause: number,
   instance: Instance,
 ): Work | undefined {
   const received = emits.flatMap((e) =>
-    instance.chart.receives.filter(([, event]) => event === e.event).map(([key]) => ({ key, payload: e.payload })),
+    instance.chart.receives
+      .filter(([, event]) => event === e.event)
+      .map(([key]) => ({ key, payload: e.payload, encoded: e.encoded })),
   );
   if (instance.closed || (received.length === 0 && !recordsChanged)) return undefined;
   return { kind: "receive", machine: instance.resource, received, cause };
@@ -141,7 +143,7 @@ function machineWork(
 export function reactions(
   st: Service,
   s: State,
-  emits: readonly Emit[],
+  emits: readonly Emitted[],
   recordsChanged: boolean,
   cause: number,
 ): Work[] {
@@ -156,6 +158,6 @@ export function reactions(
 }
 
 /** Returns the work that a command's events cause. Writing an event counts as a record change. */
-export function commandWork(st: Service, s: State, emits: readonly Emit[], cause: number): Work[] {
+export function commandWork(st: Service, s: State, emits: readonly Emitted[], cause: number): Work[] {
   return emits.length === 0 ? [] : reactions(st, s, emits, true, cause);
 }

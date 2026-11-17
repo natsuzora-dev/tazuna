@@ -23,7 +23,7 @@ ancestor's. Of two active states in parallel regions that show one slot, the lat
 -/
 def appliedShows (i : Instance) : List (String × Activity) :=
   let shows := (i.chart.states.filter (i.isIn ·.name)).flatMap fun cs =>
-    (cs.activities.filter (·.keyword == "shows")).map (cs.name, ·)
+    (cs.activities.filter (·.isShows)).map (cs.name, ·)
   shows.filter fun (n, a) => !shows.any fun (d, b) => b.key == a.key && d != n && i.chart.tree.isDescendant d n
 
 def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Instance) :
@@ -44,12 +44,13 @@ def State.endShowStep (wanted : List Wanted) (owner : String) (s : State) (p : P
   let s := s.endSubscription p
   if (inputOf wanted slot).isNone then s.setShown owner slot .null else s
 
-def State.subscribeStep (opened : List Pending) (owner : String) (s : State) (w : Wanted) : State :=
+/-- `service` is the subscribing service, from which the subscribe line names the query. -/
+def State.subscribeStep (service : String) (opened : List Pending) (owner : String) (s : State) (w : Wanted) : State :=
   if opened.any (fun p => p.requester.slot? == some w.slot && p.input == w.input) then s else
-  s.await (.subscribe w.activity.target w.input) (.slot owner w.slot) w.activity w.input
+  s.await (.subscribe (w.activity.ref.traceName service) w.input) (.slot owner w.slot) w.activity w.input
 
-def State.syncShows (s : State) (owner : String) (wanted : List Wanted) : State :=
-  wanted.foldl (State.subscribeStep (s.openShows owner) owner)
+def State.syncShows (s : State) (service owner : String) (wanted : List Wanted) : State :=
+  wanted.foldl (State.subscribeStep service (s.openShows owner) owner)
     ((s.openShows owner).foldl (State.endShowStep wanted owner) s)
 
 def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : String) : m State := do
@@ -59,7 +60,7 @@ def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : Str
     if i.closed then pure s else
     match ← wantedShows st fs s i with
     | .error fault => pure (s.report (.fault fault))
-    | .ok wanted => pure (s.syncShows owner wanted)
+    | .ok wanted => pure (s.syncShows st.service owner wanted)
 
 def refreshScreens [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.resource) s

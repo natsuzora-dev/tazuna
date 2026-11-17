@@ -2,7 +2,7 @@ import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
-import { ref, refOf } from "../basic.ts";
+import { ref, refOf, traceNameOf } from "../basic.ts";
 import { processCommand } from "../command.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { limits } from "../limits.ts";
@@ -26,13 +26,14 @@ import {
   type Requester,
   rejectedInput,
   report,
+  requesterState,
   sender,
   senderOf,
   takeQueued,
   who,
 } from "../state.ts";
 import { settle, settled } from "./always.ts";
-import { type Activity, activityRef, type Transition, transitionsAt } from "./basic.ts";
+import { type Activity, answerTrigger, isOwn, type Transition, transitionsAt } from "./basic.ts";
 import { enter, microstep } from "./microstep.ts";
 import { commandWork, type Processing, type Ready, take, type Work } from "./queue.ts";
 import { sendEntered } from "./request.ts";
@@ -41,12 +42,18 @@ import { choose, leavesOf, reaches, select } from "./select.ts";
 function workName(r: Processing, work: Work): StepName {
   switch (work.kind) {
     case "reaction":
-      return { kind: "reaction", automation: ref(r.st, work.automation.name) };
+      return {
+        kind: "reaction",
+        automation: ref(r.st, work.automation.name),
+        event: refOf(r.st, work.event.event),
+        payload: work.event.encoded,
+      };
     case "answered":
       return {
         kind: "answer",
-        command: refOf(r.st, work.sent.activity.target),
+        command: work.sent.activity.target,
         sender: who(r.state, r.st, sender(work.sent.requester)),
+        state: requesterState(work.sent.requester),
       };
     case "start":
       return { kind: "start", who: who(r.state, r.st, work.machine) };
@@ -56,12 +63,12 @@ function workName(r: Processing, work: Work): StepName {
         : {
             kind: "receive",
             who: who(r.state, r.st, work.machine),
-            keys: work.received.map((received) => received.key),
+            received: work.received.map(({ key, encoded }) => ({ key, payload: encoded })),
           };
     case "onDone":
       return { kind: "onDone", who: who(r.state, r.st, work.machine) };
     case "opensDone":
-      return { kind: "opensDone", who: who(r.state, r.st, work.machine), key: work.key };
+      return { kind: "opensDone", who: who(r.state, r.st, work.machine), state: work.state, key: work.key };
   }
 }
 
@@ -69,7 +76,12 @@ function workName(r: Processing, work: Work): StepName {
 function readyName(r: Processing, ready: Ready): StepName {
   if (ready.kind === "work") return workName(r, ready.work);
   const { activity, requester } = ready.sent;
-  return { kind: "command", command: refOf(r.st, activity.target), sender: who(r.state, r.st, sender(requester)) };
+  return {
+    kind: "command",
+    command: activity.target,
+    sender: who(r.state, r.st, sender(requester)),
+    state: requesterState(requester),
+  };
 }
 
 function startedResource(work: Work): string | undefined {
@@ -94,19 +106,21 @@ function handle(r: Processing, name: string, state: string, a: Activity, answer:
   if (instance === undefined) return;
   r.note.readStates([[name, state]]);
   if (instance.closed || !instance.entered.has(state)) return;
-  const at = (outcome: string) => transitionsAt(instance.chart, state, [a.keyword, a.key, outcome]);
-  const success = a.keyword === "calls" ? "onFulfilled" : "onAccepted";
+  const on = (rejected: boolean) => {
+    const trigger = answerTrigger(a, rejected);
+    return trigger === undefined ? [] : transitionsAt(instance.chart, state, trigger);
+  };
   if (answer.result === "rejected")
-    applyCompletion(r, instance, at("onRejected"), { rejection: { kind: answer.rejection.kind } }, step);
-  else applyCompletion(r, instance, at(success), answer.output === undefined ? {} : { output: answer.output }, step);
+    applyCompletion(r, instance, on(true), { rejection: { kind: answer.rejection.kind } }, step);
+  else applyCompletion(r, instance, on(false), answer.output === undefined ? {} : { output: answer.output }, step);
 }
 
 export function dispatch(r: Processing, name: string, key: string, payload: unknown, step: number): void {
   const instance = machine(r.state, name);
   if (instance === undefined || instance.closed) return;
   const extra = { payload };
-  const leaves = leavesOf(r, instance, (copy) => reaches(r, copy, payload), ["on", key]);
-  const chosen = select(r, instance, ["on", key], extra, leaves);
+  const leaves = leavesOf(r, instance, (copy) => reaches(r, copy, payload), { type: "on", key });
+  const chosen = select(r, instance, { type: "on", key }, extra, leaves);
   if (chosen.length === 0) return;
   microstep(r, instance, chosen, extra, step);
 }
@@ -128,7 +142,7 @@ function done(r: Processing, name: string, n: string, step: number): void {
   if (instance === undefined) return;
   r.note.readStates([[instance.resource, n]]);
   if (instance.closed || !instance.entered.has(n)) return;
-  applyCompletion(r, instance, transitionsAt(instance.chart, n, ["onDone"]), {}, step);
+  applyCompletion(r, instance, transitionsAt(instance.chart, n, { type: "onDone" }), {}, step);
 }
 
 /** Takes the onDone transitions of the finished states, including the states that finish during this work. */
@@ -226,18 +240,19 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (input === undefined) return;
       const activity = automation.sends;
       const requester: Requester = { kind: "automation", automation: automation.name };
-      if (activity.own)
+      if (isOwn(activity, r.st.service))
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });
       else {
-        awaitAnswer(r.state, { dir: "out", type: "command", name: activity.target, input }, requester, activity);
-        r.note.reached({ kind: "request", definition: activityRef(activity), data: {} });
+        const name = traceNameOf(r.st, activity.target);
+        awaitAnswer(r.state, { dir: "out", type: "command", name, input }, requester, activity);
+        r.note.reached({ kind: "request", definition: activity.target, data: {} });
       }
       return;
     }
     case "answered": {
       const { sent, answer } = work;
       const live = sent.serial === undefined || takeQueued(r.state, sent.serial);
-      const fault = rejectedInput(r, activityRef(sent.activity), sent.requester, sent.input, answer);
+      const fault = rejectedInput(r, sent.activity.target, sent.requester, sent.input, answer);
       if (fault !== undefined) {
         report(r.state, fault);
         return;
@@ -260,7 +275,7 @@ function workBody(r: Processing, work: Work, step: number): void {
       r.note.readStates([[work.machine, state]]);
       const instance = machine(r.state, work.machine);
       if (!live || instance === undefined) return;
-      applyCompletion(r, instance, transitionsAt(instance.chart, state, ["opens", key, "onDone"]), { output }, step);
+      applyCompletion(r, instance, transitionsAt(instance.chart, state, { type: "opens", key }), { output }, step);
       return;
     }
   }
@@ -316,7 +331,7 @@ export function drain(r: Processing): void {
     const { step, exceeded } = newCommandStep(s, c.cause, ref(r.st, senderOf(s, c.requester)));
     if (exceeded !== undefined) report(r.state, exceeded);
     inStep(r, step, readyName(r, next), undefined, () => {
-      const { answer, emits } = processCommand(r, c.activity.target, c.input, undefined, step);
+      const { answer, emits } = processCommand(r, traceNameOf(r.st, c.activity.target), c.input, undefined, step);
       queue.tasks.push(...commandWork(r.st, s, emits, step), {
         kind: "answered",
         sent: c,

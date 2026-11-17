@@ -43,8 +43,8 @@ export function enabled(r: Processing): Enabled {
         .map(({ screen, control, payloads }) => ({ screen, control, payloads: payloads ?? "any" })),
       awaiting: r.state.pending.map((p) => ({
         id: p.id,
-        name: p.activity.name,
-        target: p.activity.service,
+        name: p.activity.target.name,
+        target: p.activity.target.service,
         sender: senderOf(r.state, p.requester),
       })),
       ...(next === undefined ? {} : { nextDeadline: next.toString() }),

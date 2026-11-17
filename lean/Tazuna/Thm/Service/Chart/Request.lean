@@ -42,10 +42,10 @@ theorem keeps_activate (step : Nat) (name state : String) (a : Activity) :
     Keeps (activate fs st step name state a) := by
   unfold activate
   split
-  · exact keeps_openScreen step name state a
-  · split
-    · intro r; rfl
-    · exact keeps_request step name state a
+  · exact keeps_openScreen step name state _
+  · intro r; rfl
+  · exact keeps_request step name state _
+  · exact keeps_request step name state _
 
 theorem growsBy_request (step : Nat) (name state : String) (a : Activity) : GrowsBy (request fs st step name state a) := by
   unfold request
@@ -72,10 +72,10 @@ theorem growsBy_activate (step : Nat) (name state : String) (a : Activity) :
     GrowsBy (activate fs st step name state a) := by
   unfold activate
   split
-  · exact (sameLines_openScreen step name state a).grows
-  · split
-    · intro r; exact Grows.refl _
-    · exact growsBy_request step name state a
+  · exact (sameLines_openScreen step name state _).grows
+  · intro r; exact Grows.refl _
+  · exact growsBy_request step name state _
+  · exact growsBy_request step name state _
 
 theorem keeps_activateEntered (e : String × String × Nat) : Keeps (activateEntered fs st e) := by
   unfold activateEntered
@@ -112,19 +112,19 @@ theorem exited_state_sends_nothing (e : String × String × Nat) (r : Processing
   · rfl
   · simp [hi, hn]
 
-theorem activate_opens (step : Nat) (name state : String) (a : Activity) (hk : a.keyword = "opens") :
-    activate fs st step name state a = openScreen fs st step name state a := by
-  simp [activate, hk]
+theorem activate_opens (step : Nat) (name state key : String) (target : Spec.Ref) (modal : Bool) :
+    activate fs st step name state (.opens key target modal) = openScreen fs st step name state (.opens key target modal) :=
+  rfl
 
 theorem entering_opens_one_child (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
     (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
-    (hi : r.state.machine? name = some i) (hc : st.chart? a.name = some c)
+    (hi : r.state.machine? name = some i) (hc : st.chart? a.ref.name = some c)
     (raw : Value) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (raw, keys))
     (hq : fs.parse (.input c.name) raw = .ok (some given))
     (hr : firstFalse (fs.inputRequirement c.name · given) (st.requirementsOf c.name).requires = .ok none)
     (hx : fs.initialContext c.name given = .ok context) :
     ∃ child : Instance, (openScreen fs st step name state a r).1.machines = r.state.machines ++ [child] ∧
-      child.chart = c ∧ child.opener = some { parent := name, state, key := a.key, modal := a.modal } ∧
+      child.chart = c ∧ child.opener = some { parent := name, state, key := a.key, modal := a.isModal } ∧
       (openScreen fs st step name state a r).1.stack = r.state.stack ++ [child.resource] ∧
       (openScreen fs st step name state a r).2.tasks = r.queue.tasks ++ [.start child.resource (some step)] := by
   simp only [openScreen, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
@@ -133,11 +133,10 @@ theorem entering_opens_one_child (step : Nat) (name state : String) (a : Activit
 
 theorem requests_wait_in_send_order (step : Nat) (name state : String) (a : Activity) (r : Processing) (i : Instance)
     (input : Value) (keys : List String) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
-    (ho : a.own = false) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (input, keys)) :
+    (ho : a.isOwn st.service = false) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (input, keys)) :
     ∃ p, (request fs st step name state a r).1.pending = r.state.pending ++ [p] ∧ p.activity = a ∧ p.requester = .state name state ∧
       p.input = input ∧ p.turn = r.state.turn ∧ (request fs st step name state a r).1.turn = r.state.turn + 1 := by
-  refine ⟨{ id := ((r.state.createKeys keys).write .out none (if a.keyword == "calls" then LineBody.query a.target input
-                  else .command a.target input)).2,
+  refine ⟨{ id := ((r.state.createKeys keys).write .out none (a.requestLine (st.traceNameOf a.ref) input)).2,
              activity := a, requester := .state name state, input := input, turn := r.state.turn }, ?_, rfl, rfl, rfl, rfl, ?_⟩
   · simp only [request, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
       hp, ho]
@@ -187,10 +186,10 @@ theorem addsFor_activate (step : Nat) (name state : String) (a : Activity) :
     AddsFor name state (activate fs st step name state a) := by
   unfold activate
   split
-  · exact addsFor_openScreen step name state a
-  · split
-    · intro r; exact ⟨fun _ h h' => absurd h h', fun _ h h' => absurd h h'⟩
-    · exact addsFor_request step name state a
+  · exact addsFor_openScreen step name state _
+  · intro r; exact ⟨fun _ h h' => absurd h h', fun _ h h' => absurd h h'⟩
+  · exact addsFor_request step name state _
+  · exact addsFor_request step name state _
 
 theorem addsFor_foldlM {α : Type} {name state : String} {g : α → Processing → Id Processing}
     (h : ∀ x, AddsFor name state (g x)) (xs : List α) :
@@ -333,10 +332,10 @@ theorem keepsEntered_activate (step : Nat) (name state : String) (a : Activity) 
     KeepsEntered (activate fs st step name state a) := by
   unfold activate
   split
-  · exact keepsEntered_openScreen step name state a
-  · split
-    · intro r; exact EnteredFrom.refl _
-    · exact keepsEntered_request step name state a
+  · exact keepsEntered_openScreen step name state _
+  · intro r; exact EnteredFrom.refl _
+  · exact keepsEntered_request step name state _
+  · exact keepsEntered_request step name state _
 
 theorem keepsEntered_activateEntered (e : String × String × Nat) : KeepsEntered (activateEntered fs st e) := by
   intro r

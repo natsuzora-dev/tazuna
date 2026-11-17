@@ -6,12 +6,12 @@ namespace Tazuna.Service
 open Tazuna.Data Tazuna.Spec
 
 /--
-A transition of a chart. `source` is the declaring state, or `none` for the machine's own `on`. `source`, `keys`, and
-`index` locate the guard and assign that Functions evaluates.
+A transition of a chart. `source` is the declaring state, or `none` for the machine's own `on`. `source`, `trigger`,
+and `index` locate the guard and assign that Functions evaluates.
 -/
 structure Transition where
   source : Option String
-  keys : List String
+  trigger : Trigger
   index : Nat
   target : Option String
   /-- Whether the transition has a guard. An unguarded transition holds without asking Functions. -/
@@ -19,27 +19,48 @@ structure Transition where
   reenter : Bool
 deriving DecidableEq, Repr, Inhabited
 
-def Transition.ref (t : Transition) : TransitionRef := { state := t.source, keys := t.keys, index := t.index }
+def Transition.ref (t : Transition) : TransitionRef := { state := t.source, trigger := t.trigger, index := t.index }
 
 /--
-An activity of a state. `target` is the trace name, as seen from the service, of the receiving definition (the opened
-screen for opens), and `service` and `name` identify that definition. calls and sends send a request on each entry,
-opens opens a child screen, and shows is a query subscribed while the screen is open. `own` is whether the activity is
-an own-service command, which the internal queue processes without trace lines; requests to other services write a
-request line and await an answer.
+An activity of a state and the definition that it names. calls and sends send a request on each entry, opens opens a
+child screen, and shows is a query subscribed while the screen is open.
 -/
-structure Activity where
-  keyword : String
-  key : String
-  target : String
-  service : String
-  name : String
-  own : Bool
-  /-- Whether the opened screen blocks operations on other screens while it is open. -/
-  modal : Bool := false
+inductive Activity where
+  | calls (key : String) (target : Ref)
+  | sends (key : String) (target : Ref)
+  | shows (key : String) (target : Ref)
+  /-- `modal` is whether the opened screen blocks operations on other screens while it is open. -/
+  | opens (key : String) (target : Ref) (modal : Bool)
 deriving DecidableEq, Repr, Inhabited
 
-def Activity.ref (a : Activity) : Ref := { service := a.service, name := a.name }
+def Activity.key : Activity → String
+  | .calls key _ | .sends key _ | .shows key _ | .opens key _ _ => key
+
+def Activity.ref : Activity → Ref
+  | .calls _ r | .sends _ r | .shows _ r | .opens _ r _ => r
+
+/--
+Whether the activity is an own-service command of `service`, which the internal queue processes without trace lines;
+requests to other services write a request line and await an answer.
+-/
+def Activity.isOwn (service : String) : Activity → Bool
+  | .sends _ r => r.service == service
+  | _ => false
+
+/-- Whether the activity opens a screen that blocks operations on other screens while it is open. -/
+def Activity.isModal : Activity → Bool
+  | .opens _ _ modal => modal
+  | _ => false
+
+def Activity.isShows : Activity → Bool
+  | .shows .. => true
+  | _ => false
+
+/-- The trigger of the transitions that take an answer to a calls or sends, rejected or not. -/
+def Activity.answerTrigger? (rejected : Bool) : Activity → Option Trigger
+  | .calls key _ => some (.calls key (if rejected then .onRejected else .onFulfilled))
+  | .sends key _ => some (.sends key (if rejected then .onRejected else .onAccepted))
+  | .shows .. | .opens .. => none
 
 /-- A control of a screen. `hasPayload` is whether its payload schema has fields. -/
 structure Control where
@@ -96,10 +117,10 @@ def state? (n : String) : Option ChartState := c.states.find? (·.name == n)
 
 def tree : Tree := { states := c.states.map (·.shape), shaped := stateTree_of_chartTree c.shaped }
 
-def transitionsAt (source : Option String) (keys : List String) : List Transition :=
+def transitionsAt (source : Option String) (trigger : Spec.Trigger) : List Transition :=
   match source with
-  | none => c.on.filter (·.keys == keys)
-  | some n => (((c.state? n).map (·.transitions)).getD []).filter (·.keys == keys)
+  | none => c.on.filter (·.trigger == trigger)
+  | some n => (((c.state? n).map (·.transitions)).getD []).filter (·.trigger == trigger)
 
 theorem find?_shape (n : String) : c.tree.state? n = (c.state? n).map (·.shape) := by
   simp only [Tree.state?, tree, state?, List.find?_map]
@@ -108,7 +129,7 @@ theorem find?_shape (n : String) : c.tree.state? n = (c.state? n).map (·.shape)
 end Chart
 
 def Transition.ofSpec (t : Spec.Transition) : Transition :=
-  { source := t.source, keys := t.keys, index := t.index, target := t.target, guarded := t.guarded,
+  { source := t.source, trigger := t.trigger, index := t.index, target := t.target, guarded := t.guarded,
     reenter := t.reenters }
 
 theorem Transition.targets_ofSpec (ts : List Spec.Transition) :
@@ -116,18 +137,12 @@ theorem Transition.targets_ofSpec (ts : List Spec.Transition) :
   simp only [List.filterMap_map]
   rfl
 
-/-- The executable form of an activity. Only a sends to the activity's own service is `own`. -/
-def Activity.ofSpec (service : String) : Spec.Activity → Except String Activity
-  | .calls key (some r) =>
-    pure { keyword := "calls", key, target := r.traceName service, service := r.service, name := r.name, own := false }
-  | .sends key (some r) =>
-    pure { keyword := "sends", key, target := r.traceName service, service := r.service, name := r.name,
-           own := r.service == service }
-  | .shows key (some r) =>
-    pure { keyword := "shows", key, target := r.traceName service, service := r.service, name := r.name, own := false }
-  | .opens key (some r) modal =>
-    pure { keyword := "opens", key, target := r.traceName service, service := r.service, name := r.name, own := false,
-           modal }
+/-- The executable form of an activity. -/
+def Activity.ofSpec : Spec.Activity → Except String Activity
+  | .calls key (some r) => pure (.calls key r)
+  | .sends key (some r) => pure (.sends key r)
+  | .shows key (some r) => pure (.shows key r)
+  | .opens key (some r) modal => pure (.opens key r modal)
   | .calls key none | .sends key none | .shows key none | .opens key none _ =>
     throw s!"the activity {key}, which names no definition, is outside the Lean model"
 
@@ -136,7 +151,7 @@ def Chart.ofSpec (c : Spec.Chart) (service name : String) (order : Nat) (screen 
     Except String Chart := do
   let toState (st : Spec.State) : Except String ChartState := do
     pure { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
-           children := st.children, activities := ← st.activities.mapM (Activity.ofSpec service),
+           children := st.children, activities := ← st.activities.mapM Activity.ofSpec,
            transitions := st.transitions.map Transition.ofSpec, offers := st.offers }
   let ⟨states, shaped⟩ ← match h : c.states.mapM toState with
     | .error e => (throw e : Except String _)

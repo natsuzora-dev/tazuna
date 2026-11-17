@@ -182,6 +182,10 @@ export type Requester =
   | { readonly kind: "slot"; readonly machine: string; readonly slot: string }
   | { readonly kind: "automation"; readonly automation: string };
 
+/** The state that sent the request, none for a shows slot or an automation. */
+export const requesterState = (requester: Requester): string | null =>
+  requester.kind === "state" ? requester.state : null;
+
 export const machineOf = (requester: Requester): string | undefined =>
   requester.kind === "automation" ? undefined : requester.machine;
 

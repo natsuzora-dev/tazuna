@@ -1,4 +1,5 @@
 import type { DefinitionRef } from "../../data/definitionRef.ts";
+import { sameTrigger, type Trigger } from "../../data/transitionRef.ts";
 import {
   type ActivityStructure,
   type ChartStructure,
@@ -9,12 +10,12 @@ import {
 } from "../../spec/structure.ts";
 
 /**
- * A transition of a chart. `source` is the declaring state, or null for the chart's own `on`. `source`, `keys`, and
+ * A transition of a chart. `source` is the declaring state, or null for the chart's own `on`. `source`, `trigger`, and
  * `index` locate the guard and assign that Functions evaluates. An unguarded transition holds without asking Functions.
  */
 export interface Transition {
   readonly source: string | null;
-  readonly keys: readonly string[];
+  readonly trigger: Trigger;
   readonly index: number;
   readonly target: string | null;
   readonly guarded: boolean;
@@ -22,22 +23,23 @@ export interface Transition {
 }
 
 /**
- * A request that a state sends or a screen that it opens. `target` is the trace name, as seen from the service, of the
- * receiving definition (the opened screen for opens), and `service` and `name` identify it. `own` marks an own-service
- * command, which the internal queue processes without trace lines. `modal` marks an opened screen that blocks
+ * An activity of a state and the definition that it names. calls and sends send a request on each entry, opens opens a
+ * child screen, and shows is a query subscribed while the screen is open. `modal` marks an opened screen that blocks
  * operations on other screens while it is open.
  */
-export interface Activity {
-  readonly keyword: "calls" | "sends" | "shows" | "opens";
-  readonly key: string;
-  readonly target: string;
-  readonly service: string;
-  readonly name: string;
-  readonly own: boolean;
-  readonly modal: boolean;
-}
+export type Activity =
+  | { readonly keyword: "calls" | "sends" | "shows"; readonly key: string; readonly target: DefinitionRef }
+  | { readonly keyword: "opens"; readonly key: string; readonly target: DefinitionRef; readonly modal: boolean };
 
-export const activityRef = (a: Activity): DefinitionRef => ({ service: a.service, name: a.name });
+/** Whether `a` is an own-service command of `service`, which the internal queue processes without trace lines. */
+export const isOwn = (a: Activity, service: string): boolean => a.keyword === "sends" && a.target.service === service;
+
+/** The trigger of the transitions that take an answer to a calls or sends, rejected or not. */
+export function answerTrigger(a: Activity, rejected: boolean): Trigger | undefined {
+  if (a.keyword === "calls") return { type: "calls", key: a.key, outcome: rejected ? "onRejected" : "onFulfilled" };
+  if (a.keyword === "sends") return { type: "sends", key: a.key, outcome: rejected ? "onRejected" : "onAccepted" };
+  return undefined;
+}
 
 interface Control {
   readonly name: string;
@@ -75,17 +77,16 @@ export interface Chart {
   readonly controls: readonly Control[];
 }
 
-const sameKeys = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((key, i) => key === b[i]);
-
-export function transitionsAt(c: Chart, source: string | null, keys: readonly string[]): readonly Transition[] {
-  return (source === null ? c.on : (c.states.get(source)?.transitions ?? [])).filter((t) => sameKeys(t.keys, keys));
+export function transitionsAt(c: Chart, source: string | null, trigger: Trigger): readonly Transition[] {
+  return (source === null ? c.on : (c.states.get(source)?.transitions ?? [])).filter((t) =>
+    sameTrigger(t.trigger, trigger),
+  );
 }
 
 function transitionOf(t: TransitionStructure): Transition {
   return {
     source: t.source,
-    keys: t.keys,
+    trigger: t.trigger,
     index: t.index,
     target: t.target,
     guarded: t.guards.length > 0,
@@ -94,19 +95,13 @@ function transitionOf(t: TransitionStructure): Transition {
 }
 
 /** Returns the activity of `a`, or none when it names no definition. */
-function activityOf(service: string, a: ActivityStructure): Activity[] {
-  const r = a.definition;
-  if (r === null) return [];
+function activityOf(a: ActivityStructure): Activity[] {
+  const target = a.definition;
+  if (target === null) return [];
   return [
-    {
-      keyword: a.keyword,
-      key: a.name,
-      target: traceNameOfRef(r, service),
-      service: r.service,
-      name: r.name,
-      own: a.keyword === "sends" && r.service === service,
-      modal: a.keyword === "opens" && a.modal,
-    },
+    a.keyword === "opens"
+      ? { keyword: a.keyword, key: a.name, target, modal: a.modal }
+      : { keyword: a.keyword, key: a.name, target },
   ];
 }
 
@@ -125,7 +120,7 @@ export function executableChart(c: ChartStructure, service: string, order: numbe
           parent: st.parent,
           kind: st.kind,
           initial: st.initial,
-          activities: st.activities.flatMap((a) => activityOf(service, a)),
+          activities: st.activities.flatMap(activityOf),
           transitions: st.transitions.map(transitionOf),
           offers: st.offers,
         },

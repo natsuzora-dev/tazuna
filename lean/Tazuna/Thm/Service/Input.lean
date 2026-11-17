@@ -293,7 +293,7 @@ theorem invalid_input_answer_faults_sender (p : Pending) (reason : Option String
 /-- An event whose resultOf names a request that cannot have the event as its result halts the run with that report. -/
 theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Spec.Ref) (a : Answer)
     (hp : s.answerTo? k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
-    ∃ event requestId target m, s₁ = s.halt (resultOfFinding event requestId target m).toViolation := by
+    ∃ event requestId target m, s₁ = s.halt (resultOfFinding event requestId target m) := by
   unfold resultRequest at hq
   split at hq
   · repeat' split at hq
@@ -318,7 +318,7 @@ theorem refused_operation_reported (screen control : String) (payload : Value) (
       (if ctl.hasPayload then some payload else none))).1 screen control decoded = .ok (.error r)) :
     let s₁ :=
       (s.write .in none (.operation s!"{screen}.{control}" (if ctl.hasPayload then some payload else none))).1
-    operate st fs s screen control payload = s₁.halt (r.finding st screen control decoded).toViolation := by
+    operate st fs s screen control payload = s₁.halt (r.finding st screen control decoded) := by
   simp only [operate, hc, hctl, id_bind, hp, ha]
   cases r <;> simp [State.report, Finding.halts, InvalidInput.halts, Refusal.finding]
 

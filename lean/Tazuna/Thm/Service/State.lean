@@ -39,9 +39,9 @@ def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
 @[simp] theorem newMessage_commandAnswers :
     s.newMessage.commandAnswers = s.commandAnswers := rfl
 
-@[simp] theorem halt_commandAnswers (v : Violation) : (s.halt v).commandAnswers = s.commandAnswers := rfl
+@[simp] theorem halt_commandAnswers (v : Finding) : (s.halt v).commandAnswers = s.commandAnswers := rfl
 
-@[simp] theorem violate_commandAnswers (v : Violation) : (s.violate v).commandAnswers = s.commandAnswers := rfl
+@[simp] theorem violate_commandAnswers (v : Finding) : (s.violate v).commandAnswers = s.commandAnswers := rfl
 
 @[simp] theorem report_fixed (f : Finding) : (s.report f).fixed = s.fixed := by
   unfold State.report; split <;> rfl
@@ -63,8 +63,8 @@ def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
   unfold State.report; split <;> rfl
 
 theorem report_eq (f : Finding) :
-    s.report f = { s with halted := if f.halts then some f.toViolation else s.halted,
-                          violations := if f.halts then s.violations else s.violations ++ [f.toViolation] } := by
+    s.report f = { s with halted := if f.halts then some f else s.halted,
+                          violations := if f.halts then s.violations else s.violations ++ [f] } := by
   unfold State.report State.halt State.violate
   split <;> rfl
 
@@ -86,7 +86,7 @@ theorem report_eq (f : Finding) :
 @[simp] theorem report_answers (f : Finding) : (s.report f).answers = s.answers := by
   simp [report_eq, State.answers]
 
-theorem report_halted (f : Finding) (h : f.halts = true) : (s.report f).halted = some f.toViolation := by
+theorem report_halted (f : Finding) (h : f.halts = true) : (s.report f).halted = some f := by
   simp [State.report, h, State.halt]
 
 theorem reportAll_cons (t : State) (f : Fault) (fs : List Fault) :
@@ -128,7 +128,7 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 
 theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false) (t : State) :
     (t.reportAll fs).halted = t.halted ∧
-      (t.halted = none → (t.reportAll fs).violations = t.violations ++ fs.map fun f => (Finding.fault f).toViolation) := by
+      (t.halted = none → (t.reportAll fs).violations = t.violations ++ fs.map fun f => (Finding.fault f)) := by
   induction fs generalizing t with
   | nil => simp [State.reportAll]
   | cons f fs ih =>
@@ -139,10 +139,10 @@ theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false
       simp only [Option.isSome_some, ↓reduceIte, reduceCtorEq, false_implies, and_true]
       exact (ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) t).1.trans hh
     | none =>
-      have hrep : t.report (.fault f) = t.violate (Finding.fault f).toViolation := by
+      have hrep : t.report (.fault f) = t.violate (Finding.fault f) := by
         simp [State.report, hr]
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, hrep, forall_const]
-      have := ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) (t.violate (Finding.fault f).toViolation)
+      have := ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) (t.violate (Finding.fault f))
       refine ⟨this.1.trans hh, ?_⟩
       rw [this.2 hh]
       simp [State.violate]

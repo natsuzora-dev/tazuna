@@ -75,6 +75,7 @@ derive_wire Violation
 inductive Finding where
   | fault (fault : Fault)
   | invalidInput (invalid : InvalidInput)
+deriving Repr
 
 def Finding.halts : Finding → Bool
   | .fault f => f.halts

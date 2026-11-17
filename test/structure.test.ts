@@ -53,14 +53,14 @@ test("parallelBetween returns the parallel state that holds the two states in di
 
 test("A transition has the state it is written in, the key and index in its transition array, its target, and its guard names, and a state has its activities", async () => {
   const line = (t: ChartStructure["on"][number]) =>
-    `from ${t.source ?? "root"} at ${t.keys.join(".")}[${t.index}] to ${t.target ?? "-"} guards ${t.guards.join(",") || "-"}${t.reenter === null ? "" : ` reenter ${t.reenter}`}`;
+    `from ${t.source ?? "root"} at ${JSON.stringify(t.trigger)}[${t.index}] to ${t.target ?? "-"} guards ${t.guards.join(",") || "-"}${t.reenter === null ? "" : ` reenter ${t.reenter}`}`;
   assert.deepEqual([...homeScreen.on, ...homeScreen.states.flatMap((s) => s.transitions)].map(line), [
-    "from open at on.countAll[0] to - guards -",
-    "from home at on.openList[0] to listing guards -",
-    "from home at on.openHelp[0] to helping guards -",
-    "from listing at after.minute.onFired[0] to home guards -",
-    "from listing at opens.taskList.onDone[0] to home guards -",
-    "from helping at opens.help.onDone[0] to home guards -",
+    'from open at {"type":"on","key":"countAll"}[0] to - guards -',
+    'from home at {"type":"on","key":"openList"}[0] to listing guards -',
+    'from home at {"type":"on","key":"openHelp"}[0] to helping guards -',
+    'from listing at {"type":"after","deadline":"minute"}[0] to home guards -',
+    'from listing at {"type":"opens","key":"taskList"}[0] to home guards -',
+    'from helping at {"type":"opens","key":"help"}[0] to home guards -',
   ]);
   assert.deepEqual(stateNamed(homeScreen, "helping")?.activities, [
     { keyword: "opens", name: "help", definition: { service: "screens", name: "helpPanel" }, modal: false },

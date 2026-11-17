@@ -55,14 +55,14 @@ take.
 -/
 def Execution.refused (w : Execution) (service : String) : Bool :=
   match (w.world.state service).halted with
-  | some v => v.kind == "InvalidInput.unreadyStep" || v.kind == "InvalidInput.unusedStepOrder"
-  | none => false
+  | some (.invalidInput (.unreadyStep ..)) | some (.invalidInput (.unusedStepOrder _)) => true
+  | _ => false
 
 /-- What the relation compares of the execution for the running service `st`. -/
 def Execution.outcome (w : Execution) (st : Service) : Explore.Outcome :=
   let s := w.world.state st.service
   let lines := (Sim.trace s (w.collect st.service).causes).map fun (line, after, created) => Sim.traceLineOf line after created
-  Outcome.of st s.halted lines s.records (w.world.states.flatMap fun (q, x) =>
+  Outcome.of st (s.halted.map (·.toViolation)) lines s.records (w.world.states.flatMap fun (q, x) =>
     x.created.map fun (entity, key) => (key, s!"{q}/{entity}"))
 
 /-- The verdict of the search on one step order: refused (Execution.refused), or the violation found, if any. -/

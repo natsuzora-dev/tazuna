@@ -2,6 +2,7 @@ import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, sorted } from "../../src/data/collections.ts";
 import type { Answer } from "../../src/data/trace.generated.ts";
+import type { Trigger } from "../../src/data/transitionRef.ts";
 import {
   canonicalJson,
   encode as encodeArrays,
@@ -317,10 +318,11 @@ export class RunFunctions implements Answering {
   }
 
   /** Returns the extra of the transition at `keys`, with its payload or output decoded. */
-  private extraOf(machine: string, keys: readonly string[], extra: Fields): Fields | Failed {
+  private extraOf(machine: string, trigger: Trigger | undefined, extra: Fields): Fields | Failed {
     const { named, ref } = this.functions.chartOf(machine);
     const chart = named.definition;
-    const [keyword, key = ""] = keys;
+    const keyword = trigger?.type;
+    const key = trigger !== undefined && "key" in trigger ? trigger.key : "";
     if ("payload" in extra) {
       const schema: Schema =
         chart.controls?.[key] === undefined
@@ -514,7 +516,7 @@ export class RunFunctions implements Answering {
       case "guard": {
         const t = message["transition"] as TransitionStructure;
         return this.scoped(message, (scope, access) =>
-          this.replied(this.extraOf(scope.machine, t.keys, message["extra"] as Fields), (extra) =>
+          this.replied(this.extraOf(scope.machine, t.trigger, message["extra"] as Fields), (extra) =>
             this.replied(this.functions.guard(scope, this.records, transitionRef(t), extra, access), (passes) => ({
               passes,
             })),
@@ -527,10 +529,10 @@ export class RunFunctions implements Answering {
           | { readonly kind: "entry" | "exit"; readonly state: string };
         const assignment: Assignment =
           at.kind === "transition" ? { kind: "transition", transition: transitionRef(at.transition) } : at;
-        const transitionKeys = at.kind === "transition" ? at.transition.keys : [];
+        const trigger = at.kind === "transition" ? at.transition.trigger : undefined;
         const keys = keysOf(message["keys"]);
         return this.scoped(message, (scope, access) =>
-          this.replied(this.extraOf(scope.machine, transitionKeys, message["extra"] as Fields), (extra) =>
+          this.replied(this.extraOf(scope.machine, trigger, message["extra"] as Fields), (extra) =>
             this.replied(
               this.functions.assign(scope, this.records, assignment, extra, keys, access),
               ({ context, copyContext, created }) => {

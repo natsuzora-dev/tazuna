@@ -4,7 +4,7 @@ import type { Fields } from "../data/values.ts";
 import { type Located, withExtra } from "../data/violation.ts";
 import { ref, type Service, schemaOwner, uniqueOf } from "./basic.ts";
 import { Failed, issueViolation } from "./functions.ts";
-import type { Emit } from "./message.ts";
+import type { Emitted } from "./message.ts";
 import { type Records, type Row, recordSource } from "./records.ts";
 import type { Run } from "./state.ts";
 
@@ -84,7 +84,7 @@ function apply(r: Run, { emit: emitted, encoded }: Encoded, written: Written): v
 
 /** An emitted event with its payload as encoded. */
 export interface Encoded {
-  readonly emit: Emit;
+  readonly emit: Emitted;
   readonly encoded: Fields;
 }
 

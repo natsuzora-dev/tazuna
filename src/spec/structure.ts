@@ -1,6 +1,6 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Answer, RejectionKind } from "../data/trace.generated.ts";
-import type { TransitionRef } from "../data/transitionRef.ts";
+import type { TransitionRef, Trigger } from "../data/transitionRef.ts";
 import type { Structure } from "./structure.generated.ts";
 
 export type DefinitionStructure = Structure["definitions"][number];
@@ -38,15 +38,15 @@ export function refOfTraceName(service: string, traceName: string): DefinitionRe
 }
 
 export const isAnswerTransition = (t: TransitionStructure): boolean =>
-  t.keys[0] === "calls" || t.keys[0] === "sends" || t.keys[0] === "opens";
+  t.trigger.type === "calls" || t.trigger.type === "sends" || t.trigger.type === "opens";
 
 export const transitionRef = (t: {
   readonly source: string | null;
-  readonly keys: readonly string[];
+  readonly trigger: Trigger;
   readonly index: number;
 }): TransitionRef => ({
   state: t.source,
-  keys: t.keys,
+  trigger: t.trigger,
   index: t.index,
 });
 

@@ -59,7 +59,7 @@ function pickedJson(definition: DefinitionView, pick: ChartPick): Inspected {
     return {
       kind: "transition",
       name: transitionText(pick.transition),
-      ...at([...statePath(pick.state), ...pick.transition.keys, pick.transition.index]),
+      ...at([...statePath(pick.state), ...pick.transition.path, pick.transition.index]),
     };
   return { kind: "state", name: pick.state.name, ...at(statePath(pick.state)) };
 }

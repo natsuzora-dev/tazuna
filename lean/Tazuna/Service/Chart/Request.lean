@@ -15,6 +15,12 @@ def initialContextOf [Monad m] (fs : Functions m) (st : Service) (chart : String
   | .error e => pure (.error (issueViolation st definition e fun _ => .initialContextSchema definition))
   | .ok context => pure (.ok context)
 
+/-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`. -/
+def Activity.requestLine (a : Activity) (target : String) (input : Value) : LineBody :=
+  match a with
+  | .calls .. => .query target input
+  | _ => .command target input
+
 section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
@@ -25,18 +31,17 @@ def request (st : Service) (step : Nat) (name state : String) (a : Activity) : P
     | .error e => pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e)))
     | .ok (input, keys) =>
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
-      if a.own then
+      if a.isOwn st.service then
         let (s, serial) := r.state.startQueued name state
         let sent : Sent := { order := i.chart.order, requester := .state name state, activity := a, serial := some serial,
                              input, cause := step }
         pure ⟨s, { r.queue with round := r.queue.round ++ [sent] }⟩
       else
-        let body := if a.keyword == "calls" then LineBody.query a.target input else .command a.target input
-        pure ⟨r.state.await body (.state name state) a input, r.queue⟩
+        pure ⟨r.state.await (a.requestLine (st.traceNameOf a.ref) input) (.state name state) a input, r.queue⟩
 
 def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
-    match st.chart? a.name with
+    match st.chart? a.ref.name with
     | none => pure r
     | some c =>
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
@@ -58,7 +63,7 @@ def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) 
         let resource := if opened == 0 then c.name else s!"{c.name}({opened + 1})"
         let child : Instance :=
           { chart := c, resource, context, input, shown := c.slots.map (·, .null),
-            opener := some { parent := name, state, key := a.key, modal := a.modal } }
+            opener := some { parent := name, state, key := a.key, modal := a.isModal } }
         pure ⟨{ r.state with machines := r.state.machines ++ [child], stack := r.state.stack ++ [resource] },
           { r.queue with tasks := r.queue.tasks ++ [.start resource (some step)] }⟩
 
@@ -67,9 +72,10 @@ The processing after state `state` starts activity `a`. `shows` does nothing her
 evaluation.
 -/
 def activate (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
-  if a.keyword == "opens" then openScreen fs st step name state a
-  else if a.keyword == "shows" then pure
-  else request fs st step name state a
+  match a with
+  | .opens .. => openScreen fs st step name state a
+  | .shows .. => pure
+  | .calls .. | .sends .. => request fs st step name state a
 
 /--
 The processing after the activities of entered state `e` start. Sending the activities is a new step, caused by the step

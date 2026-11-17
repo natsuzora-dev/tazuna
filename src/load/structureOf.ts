@@ -140,11 +140,11 @@ function structureOfChart(
 ): Omit<ChartStructure, "kind" | "service" | "name"> {
   const states: StateStructure[] = [];
   const transitions = (node: StateSpec, source: string | null) =>
-    transitionArrays(node).flatMap(({ keys, transitions }) =>
+    transitionArrays(node).flatMap(({ trigger, transitions }) =>
       transitions.map(
         (t, index): TransitionStructure => ({
           source,
-          keys: [...keys],
+          trigger,
           index,
           target: t.target ?? null,
           guards: Object.keys(t.guard ?? {}),

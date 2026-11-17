@@ -12,7 +12,13 @@ export function fire(r: Processing, due: Deadline, step: number): void {
   const instance = machine(r.state, due.machine);
   if (!waiting || instance === undefined) return;
   if (instance.closed || !instance.entered.has(due.state)) return;
-  applyCompletion(r, instance, transitionsAt(instance.chart, due.state, ["after", due.name, "onFired"]), {}, step);
+  applyCompletion(
+    r,
+    instance,
+    transitionsAt(instance.chart, due.state, { type: "after", deadline: due.name }),
+    {},
+    step,
+  );
 }
 
 const hasTime = (t: Deadline): t is Deadline & { time: Temporal.Instant } => t.time !== undefined;
@@ -32,6 +38,7 @@ export function earliestDeadline(
 export const deadlineStep = (r: Processing, t: Deadline): StepName => ({
   kind: "deadline",
   who: who(r.state, r.st, t.machine),
+  state: t.state,
   name: t.name,
 });
 

@@ -37,7 +37,7 @@ const states = (spec: Spec): Found<NonCanonical>[] =>
         const written = stateAt(chart, state.path)[a.keyword]?.[a.name]?.onRejected !== undefined;
         if (arrives === written) return [];
         const definition = { service: named.service, name: named.name };
-        const data = { state: state.name, keys: [a.keyword, a.name, "onRejected"] };
+        const data = { state: state.name, trigger: { type: a.keyword, key: a.name, outcome: "onRejected" } as const };
         return [{ violation: { kind: kindOf(arrives), definition, data }, place: named.place }];
       }),
     ),

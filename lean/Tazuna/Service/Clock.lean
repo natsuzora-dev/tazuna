@@ -16,7 +16,7 @@ def fire (st : Service) (step : Nat) (t : Deadline) (r : Processing) : m Process
   if !waiting then pure ⟨s, r.queue⟩ else
   withMachine t.machine (fun i r =>
     if i.closed || !i.isIn t.state then pure r
-    else applyCompletion fs st step t.machine (i.chart.transitionsAt (some t.state) ["after", t.name, "onFired"]) .none r)
+    else applyCompletion fs st step t.machine (i.chart.transitionsAt (some t.state) (.after t.name)) .none r)
     ⟨s, r.queue⟩
 
 end
@@ -32,7 +32,7 @@ def earliestDeadline (deadlines : List Deadline) (to : Time) : Option Deadline :
       | some b => if time < b.time.getD time then some t else some b) none
 
 /-- The name of the step in which deadline `t` fires. -/
-def State.deadlineStep (s : State) (st : Service) (t : Deadline) : StepName := .deadline (s.who st t.machine) t.name
+def State.deadlineStep (s : State) (st : Service) (t : Deadline) : StepName := .deadline (s.who st t.machine) t.state t.name
 
 /--
 The deadline that fires among `due`, the deadlines due at the earliest time in entry order, whose first is `first`, and

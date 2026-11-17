@@ -7,6 +7,7 @@ import type { MalformedLine } from "../data/trace.ts";
 import { parseSnapshotFile, snapshotPath } from "../data/traceFile.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Json, Shape } from "../data/values.ts";
+import { pathOfTrigger } from "../dsl/chart.ts";
 import type { Named } from "../dsl/definition.ts";
 import { type AnyEntity, refTarget } from "../dsl/entity.ts";
 import { type Spec, structured } from "../load/load.ts";
@@ -14,7 +15,6 @@ import {
   type ActivityStructure,
   type ChartStructure,
   type DefinitionStructure,
-  isAnswerTransition,
   type StateStructure,
   stateNamed,
   type TransitionStructure,
@@ -63,16 +63,22 @@ const activityKind = (keyword: string): ActivityView["kind"] =>
 const activityView = (a: ActivityStructure): ActivityView => ({ ...a, kind: activityKind(a.keyword) });
 
 function trigger(chart: ChartStructure, t: TransitionStructure): Trigger {
-  const [keyword = "", name = "", answer = ""] = t.keys;
-  if (isAnswerTransition(t)) return { type: "answer", keyword, name, answer, kind: activityKind(keyword) };
-  if (keyword === "on") return { type: Object.hasOwn(chart.controls, name) ? "control" : "event", name };
-  if (keyword === "after") return { type: "after", deadline: name };
-  if (keyword === "always") return { type: "always" };
-  return { type: "onDone" };
+  const tr = t.trigger;
+  switch (tr.type) {
+    case "on":
+      return { type: Object.hasOwn(chart.controls, tr.key) ? "control" : "event", name: tr.key };
+    case "calls":
+    case "sends":
+      return { type: "answer", keyword: tr.type, name: tr.key, answer: tr.outcome, kind: activityKind(tr.type) };
+    case "opens":
+      return { type: "answer", keyword: "opens", name: tr.key, answer: "onDone", kind: "screen" };
+    default:
+      return tr;
+  }
 }
 
-function transitionId({ state, keys, index }: TransitionRef): string {
-  return `${keys.join(".")}[${index}] in ${state ?? "root"}`;
+function transitionId({ state, trigger, index }: TransitionRef): string {
+  return `${pathOfTrigger(trigger).join(".")}[${index}] in ${state ?? "root"}`;
 }
 
 function chartView(name: string, chart: ChartStructure): StateView {
@@ -80,6 +86,7 @@ function chartView(name: string, chart: ChartStructure): StateView {
     ...t,
     id: transitionId(transitionRef(t)),
     trigger: trigger(chart, t),
+    path: pathOfTrigger(t.trigger),
   });
   const tree = ({ children, activities, transitions, ...state }: StateStructure): StateView => ({
     ...state,

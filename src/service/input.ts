@@ -1,6 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
+import type { Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import {
   type AssumptionMismatch,
@@ -12,9 +13,9 @@ import {
   requiresOf,
   resultOfMismatch,
 } from "../spec/structure.ts";
-import { ref, refOf, type Service } from "./basic.ts";
+import { ref, refOf, type Service, traceNameOf } from "./basic.ts";
 import { settled } from "./chart/always.ts";
-import { activityRef, type Chart } from "./chart/basic.ts";
+import type { Chart } from "./chart/basic.ts";
 import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
@@ -22,7 +23,7 @@ import { processCommand } from "./command.ts";
 import { firstFalse } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
-import type { Emit } from "./message.ts";
+import type { Emitted } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
@@ -101,7 +102,7 @@ function resultRequest(r: Processing, name: string, handle: string): string | un
       definition: null,
       data: { event, requestId: handle },
     });
-  const target = activityRef(outgoing.activity);
+  const target = outgoing.activity.target;
   const mismatch = resultOfMismatch(r.st.structure, target, outgoing.answer.result === "accepted", event);
   if (mismatch === undefined) return handle;
   return report(r.state, {
@@ -115,8 +116,13 @@ function resultRequest(r: Processing, name: string, handle: string): string | un
 export function checkResults(r: Run): void {
   for (const [requestId, { activity, accepted }] of r.state.outgoing) {
     if (accepted === undefined) continue;
-    const target = activityRef(activity);
-    const failed = r.functions.resultEnsures(activity.target, accepted.input, accepted.output, accepted.events);
+    const target = activity.target;
+    const failed = r.functions.resultEnsures(
+      traceNameOf(r.st, activity.target),
+      accepted.input,
+      accepted.output,
+      accepted.events,
+    );
     if (failed instanceof Failed) halt(issueViolation(target, failed));
     if (failed !== undefined)
       report(r.state, {
@@ -183,7 +189,7 @@ export function receive(
     ...(request === undefined ? {} : { resultOf: request }),
   });
   s.deliveries.add(id);
-  const e: Emit = { event: name, payload: decoded };
+  const e: Emitted = { event: name, payload: decoded, encoded: parsed.encoded as Json };
   if (request !== undefined) s.outgoing.get(request)?.accepted?.events.push(e);
   newMessage(s);
   const step = newStep(s, undefined);
@@ -225,7 +231,7 @@ interface AnswerCheck {
 
 /** Lean's decodedAnswer: the answer decoded, or why its rejection kind or output does not match the target. */
 function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["checked"] {
-  const target = activityRef(p.activity);
+  const target = p.activity.target;
   const structure = r.st.structure;
   if (answer.result === "rejected") {
     const { rejection } = answer;
@@ -251,7 +257,7 @@ function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["
 
 /** Lean's specAnswer: the check of an answer from a spec service, which parsed the input itself. */
 function specAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
-  const fault = rejectedInput(r, activityRef(p.activity), p.requester, p.input, answer);
+  const fault = rejectedInput(r, p.activity.target, p.requester, p.input, answer);
   return { checked: fault === undefined ? decodedAnswer(r, p, answer) : { violation: fault } };
 }
 
@@ -261,8 +267,8 @@ function specAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
  * records; a command's ensures waits for the end of the run, when all its result events arrived.
  */
 function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
-  const target = activityRef(p.activity);
-  const name = p.activity.target;
+  const target = p.activity.target;
+  const name = traceNameOf(r.st, target);
   const parsed = r.functions.parse({ kind: "input", definition: target }, p.input);
   if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
   if ("error" in parsed) return { checked: { violation: inputFault(r, target, p.requester, parsed.error) } };
@@ -286,7 +292,7 @@ function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
 /** Lean's answerRequest. */
 function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answer): void {
   const s = r.state;
-  const { assumption, checked, accepted } = isAssumed(r.st.structure, activityRef(p.activity))
+  const { assumption, checked, accepted } = isAssumed(r.st.structure, p.activity.target)
     ? assumedAnswer(r, p, answer)
     : specAnswer(r, p, answer);
   if (assumption !== undefined) report(s, assumption);

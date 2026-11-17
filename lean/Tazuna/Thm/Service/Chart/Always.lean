@@ -82,11 +82,11 @@ theorem settle_halts_at_round_limit (step : Nat) (owner : String) (r : Processin
     (chosen : List (String × Transition)) (hh : r.state.halted = none) (hi : r.state.machine? owner = some i)
     (hc : i.closed = false) (hs : (syncCopies fs st step owner r).1.state.halted = none)
     (ho : (syncCopies fs st step owner r).1.state.machine? owner = some o)
-    (ht : select fs st (syncCopies fs st step owner r).1.state o ["always"] .none
+    (ht : select fs st (syncCopies fs st step owner r).1.state o .always .none
       (leavesOf (syncCopies fs st step owner r).1.state o o.copyResources) = .ok chosen)
     (hn : chosen ≠ [] ∨ (syncCopies fs st step owner r).2 = true) :
     settleFrom fs st step owner 0 r =
-      ⟨(syncCopies fs st step owner r).1.state.halt (Finding.fault (.exceededAlwaysRounds (st.ref o.chart.name) Limit.alwaysRounds.max)).toViolation,
+      ⟨(syncCopies fs st step owner r).1.state.halt (Finding.fault (.exceededAlwaysRounds (st.ref o.chart.name) Limit.alwaysRounds.max)),
         (syncCopies fs st step owner r).1.queue⟩ := by
   have hm : (chosen.isEmpty && !(syncCopies fs st step owner r).2) = false := by
     rcases hn with hn | hn
@@ -101,7 +101,7 @@ theorem settle_halts_at_round_limit (step : Nat) (owner : String) (r : Processin
 def StableIfOpen (fs : Functions Id) (st : Service) (step : Nat) (owner : String) (R : Processing) (o : Instance) : Prop :=
   R.state.halted = none → R.state.machine? owner = some o → o.closed = false →
     syncCopies fs st step owner R = (R, false) ∧
-      select fs st R.state o ["always"] .none (leavesOf R.state o o.copyResources) = .ok []
+      select fs st R.state o .always .none (leavesOf R.state o o.copyResources) = .ok []
 
 theorem alwaysRound_stable (step : Nat) (owner : String) (o : Instance)
     (next : Instance → List (String × Transition) → Processing → Id Processing)
@@ -144,7 +144,7 @@ theorem settle_result_stable (step : Nat) (owner : String) (roundsLeft : Nat) (r
     (hh : (settleFrom fs st step owner roundsLeft r).state.halted = none)
     (ho : (settleFrom fs st step owner roundsLeft r).state.machine? owner = some o) (hc : o.closed = false) :
     syncCopies fs st step owner (settleFrom fs st step owner roundsLeft r) = (settleFrom fs st step owner roundsLeft r, false) ∧
-      select fs st (settleFrom fs st step owner roundsLeft r).state o ["always"] .none
+      select fs st (settleFrom fs st step owner roundsLeft r).state o .always .none
         (leavesOf (settleFrom fs st step owner roundsLeft r).state o o.copyResources) = .ok [] := by
   revert hh ho hc
   show StableIfOpen fs st step owner _ o
@@ -236,13 +236,13 @@ theorem always_step_independent (a b : Nat) (owner : String) (f : Processing →
   exact ⟨rfl, rfl⟩
 
 theorem always_one_per_atomic (s : State) (o : Instance) (chosen : List (String × Transition))
-    (h : select fs st s o ["always"] .none (leavesOf s o o.copyResources) = .ok chosen) :
+    (h : select fs st s o .always .none (leavesOf s o o.copyResources) = .ok chosen) :
     ∃ f : String × Transition → String × Option String,
       (∀ c ∈ chosen, f c ∈ leavesOf s o o.copyResources ∧ ((f c).2 = none ∨ ∃ n, (f c).2 = some n ∧
         ((f c).1 = o.resource ∧ n ∈ o.chart.tree.leaves o.active ∨
           ∃ ci, s.machine? (f c).1 = some ci ∧ n ∈ ci.chart.tree.leaves ci.active))) ∧
       ∀ c₁ ∈ chosen, ∀ c₂ ∈ chosen, f c₁ = f c₂ → c₁ = c₂ := by
-  obtain ⟨f, hf, hinj⟩ := Tazuna.Thm.Service.Chart.Select.select_one_per_leaf s o ["always"] .none _ chosen h
+  obtain ⟨f, hf, hinj⟩ := Tazuna.Thm.Service.Chart.Select.select_one_per_leaf s o .always .none _ chosen h
   exact ⟨f, fun c hc => ⟨hf c hc,
     Tazuna.Thm.Service.Chart.Select.leavesOf_atomic s o _ (f c) (hf c hc)⟩, hinj⟩
 

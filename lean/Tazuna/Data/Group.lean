@@ -35,7 +35,8 @@ def objectOf (names : List String) : CommandElabM Term := do
 /--
 `derive_group T` defines `T.kind`, `"<last component of T>.<constructor>"`; `T.definition`, the constructor's argument
 `definition`, or null when it has none; `T.place`, its arguments named in `placeNames`, keyed by name; `T.data`, its
-other arguments keyed by name; and `T.toValue`, `{kind, definition, ...place, data}`.
+other arguments keyed by name; `T.line?`, its argument `line`, if any; and `T.toValue`,
+`{kind, definition, ...place, data}`.
 -/
 elab "derive_group " t:ident : command => do
   let group ← liftCoreM (realizeGlobalConstNoOverloadWithInfo t)
@@ -48,6 +49,9 @@ elab "derive_group " t:ident : command => do
   let placeAlts ← ctors.toArray.mapM fun ctor => do
     let names := (← groupFields ctor).place.map (·.1)
     matchAlt ctor names (← fieldsOf names)
+  let lineAlts ← ctors.toArray.mapM fun ctor => do
+    if (← groupFields ctor).place.any (·.1 == "line") then matchAlt ctor ["line"] (← `(some $(mkIdent `line)))
+    else matchAlt ctor [] (← `(none))
   let dataAlts ← ctors.toArray.mapM fun ctor => do
     let names := (← groupFields ctor).data.map (·.1)
     matchAlt ctor names (← objectOf names)
@@ -59,6 +63,7 @@ elab "derive_group " t:ident : command => do
   elabCommand (← `(def $definition : $(mkIdent group) → Value := fun $definitionAlts:matchAlt*))
   elabCommand (← `(def $place : $(mkIdent group) → List (String × Value) := fun $placeAlts:matchAlt*))
   elabCommand (← `(def $data : $(mkIdent group) → Value := fun $dataAlts:matchAlt*))
+  elabCommand (← `(def $(mkIdent (root ++ `line?)) : $(mkIdent group) → Option Nat := fun $lineAlts:matchAlt*))
   elabCommand (← `(def $(mkIdent (root ++ `toValue)) (v : $(mkIdent group)) : Value :=
     .obj ([("kind", .str ($kind v)), ("definition", $definition v)] ++ $place v ++ [("data", $data v)])))
 

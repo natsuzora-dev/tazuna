@@ -53,7 +53,8 @@ test("Lean and TS refuse a step order that names a step no processing takes, as 
     for (const { definition } of spec.scenarios) {
       const sc = definition.scenario;
       for (const [index, line] of sc.lines.entries()) {
-        const order = [{ kind: "reaction", automation: { service: sc.service, name: "noSuchAutomation" } } as const];
+        const automation = { service: sc.service, name: "noSuchAutomation" };
+        const order = [{ kind: "reaction", automation, event: automation, payload: {} } as const];
         const stepOrders = [{ origin: { type: "line", index } as const, service: sc.service, order }];
         const ts = outcomeOf(simulateSpec(spec, sc, stepOrders));
         const fromLean = lean.simulate(spec, sc, new SimFunctions(spec, (part) => lean.read(part)), false, stepOrders);

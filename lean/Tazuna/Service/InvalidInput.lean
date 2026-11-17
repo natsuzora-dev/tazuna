@@ -50,6 +50,7 @@ inductive InvalidInput where
   | unusedStepOrder (entries : List StepName)
   /-- The event input names as its resultOf the request `requestId`, whose answer the service has not taken. -/
   | resultOfUnansweredRequest (event : Spec.Ref) (requestId : String)
+deriving Repr
 
 local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 

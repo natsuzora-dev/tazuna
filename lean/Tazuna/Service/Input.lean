@@ -83,7 +83,7 @@ def checkResults [Monad m] (st : Service) (fs : Functions m) (s : State) : m Sta
     match o.accepted with
     | none => return s
     | some a =>
-    match ← fs.resultEnsures o.activity.target a.input a.output a.events with
+    match ← fs.resultEnsures (st.traceNameOf o.activity.ref) a.input a.output a.events with
     | .error issue => return s.report (.fault (issueViolation st o.activity.ref issue))
     | .ok (some c) => return s.report (.invalidInput (.failedAssumedEnsures o.id o.activity.ref c))
     | .ok none => return s
@@ -154,8 +154,8 @@ def decodedOutput [Monad m] (st : Service) (fs : Functions m) (a : Activity) (an
   match answer with
   | .rejected _ => return .ok (some answer)
   | .accepted none => return .ok none
-  | .accepted (some output) => return (← fs.parse (.output a.target) output).map (·.map (.accepted ∘ some))
-  | .fulfilled output => return (← fs.parse (.output a.target) output).map (·.map .fulfilled)
+  | .accepted (some output) => return (← fs.parse (.output (st.traceNameOf a.ref)) output).map (·.map (.accepted ∘ some))
+  | .fulfilled output => return (← fs.parse (.output (st.traceNameOf a.ref)) output).map (·.map .fulfilled)
 
 /-- The answer to the request `p` decoded, or why its rejection kind or output does not match the target. -/
 def decodedAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
@@ -193,11 +193,11 @@ command's ensures waits for the end of the run, when all its result events arriv
 def assumedAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
     m (Except Issue AnswerCheck) := do
   let target := p.activity.ref
-  match ← fs.parse (.input p.activity.target) p.input with
+  match ← fs.parse (.input (st.traceNameOf target)) p.input with
   | .error e => return .error e
   | .ok none => return .ok { decoded := .error (.fault (s.inputFault st target p.requester)) }
   | .ok (some input) =>
-  match ← firstFalse (fs.inputRequirement p.activity.target · input) (st.«structure».requiresOf target) with
+  match ← firstFalse (fs.inputRequirement (st.traceNameOf target) · input) (st.«structure».requiresOf target) with
   | .error e => return .error e
   | .ok failedRequires =>
   let broken := brokenAssumption p.id target answer failedRequires
@@ -207,10 +207,10 @@ def assumedAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : P
   | .ok (.ok decoded) =>
     if decoded matches .rejected _ || failedRequires.isSome then
       return .ok { assumption := broken none, decoded := .ok decoded }
-    if p.activity.keyword == "sends" then
+    if p.activity matches .sends .. then
       return .ok { assumption := broken none, decoded := .ok decoded,
                    accepted := some { input, output := decoded.output? } }
-    match ← fs.resultEnsures p.activity.target input decoded.output? [] with
+    match ← fs.resultEnsures (st.traceNameOf target) input decoded.output? [] with
     | .error e => return .error e
     | .ok failedEnsures => return .ok { assumption := broken failedEnsures, decoded := .ok decoded }
 

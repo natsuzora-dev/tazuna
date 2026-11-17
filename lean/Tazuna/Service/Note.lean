@@ -34,17 +34,30 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Who
 
+/-- An event that a machine receives: the key of its `receives` and the event's payload. -/
+structure Received where
+  key : String
+  payload : Value
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Received
+
+/--
+A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
+that definition, so that two steps with equal names are interchangeable. `state` of a command or answer is the sending
+state (none for an automation).
+-/
 inductive StepName where
   | start (who : Who)
-  | receive (who : Who) (keys : List String)
+  | receive (who : Who) (received : List Received)
   | always (who : Who)
   | onDone (who : Who)
-  | opensDone (who : Who) (key : String)
+  | opensDone (who : Who) (state key : String)
   | activities (who : Who) (state : String)
-  | deadline (who : Who) (name : String)
-  | reaction (automation : Spec.Ref)
-  | command (command : Spec.Ref) (sender : Who)
-  | answer (command : Spec.Ref) (sender : Who)
+  | deadline (who : Who) (state name : String)
+  | reaction (automation event : Spec.Ref) (payload : Value)
+  | command (command : Spec.Ref) (sender : Who) (state : Option String)
+  | answer (command : Spec.Ref) (sender : Who) (state : Option String)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
@@ -54,9 +67,9 @@ def StepName.isDeadline : StepName → Bool
   | _ => false
 
 def StepName.definition : StepName → Spec.Ref
-  | .start w | .receive w _ | .always w | .onDone w | .opensDone w _ | .activities w _ | .deadline w _ => w.chart
-  | .reaction a => a
-  | .command _ sender | .answer _ sender => sender.chart
+  | .start w | .receive w _ | .always w | .onDone w | .opensDone w _ _ | .activities w _ | .deadline w _ _ => w.chart
+  | .reaction a _ _ => a
+  | .command _ sender _ | .answer _ sender _ => sender.chart
 
 structure RegionPair where
   first : Nat

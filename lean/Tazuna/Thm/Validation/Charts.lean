@@ -98,7 +98,7 @@ theorem queries_of_other_services (s : Structure) :
 
 /-- Whether taking an always transition from `y` re-evaluates always transitions in `z`. -/
 def Succ (c : Chart) (y z : String) : Prop :=
-  ∃ st ∈ c.states, st.name = y ∧ ∃ t ∈ st.transitions, t.keys = ["always"] ∧ z ∈ lands c st.name t
+  ∃ st ∈ c.states, st.name = y ∧ ∃ t ∈ st.transitions, t.trigger = .always ∧ z ∈ lands c st.name t
 
 inductive Reaches (c : Chart) (start : List String) : String → Prop
   | base {x : String} : x ∈ start → Reaches c start x
@@ -322,7 +322,7 @@ theorem searchFrom_cycle (c : Chart) (e : Edge) (predecessors : List (String × 
     predecessors h
 
 theorem cyclePath_returns (c : Chart) (path : List String) (h : cyclePath c = some path) :
-    ∃ st ∈ c.states, ∃ t ∈ st.transitions, t.keys = ["always"] ∧ t.guarded = false ∧
+    ∃ st ∈ c.states, ∃ t ∈ st.transitions, t.trigger = .always ∧ t.guarded = false ∧
       Reaches c (lands c st.name t) st.name := by
   simp only [cyclePath] at h
   obtain ⟨e, he, hsome⟩ := List.exists_of_findSome?_eq_some h
@@ -339,7 +339,7 @@ theorem cyclePath_returns (c : Chart) (path : List String) (h : cyclePath c = so
 theorem unguarded_always_does_not_return (s : Structure) :
     alwaysCycles s = [] ↔
       ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states, ∀ t ∈ st.transitions,
-        t.keys = ["always"] → t.guarded = false → ¬ Reaches c (lands c st.name t) st.name := by
+        t.trigger = .always → t.guarded = false → ¬ Reaches c (lands c st.name t) st.name := by
   constructor
   · intro halways d hd c hc st hst t ht ha hg
     have hnone := List.filterMap_eq_nil_iff.mp halways d hd

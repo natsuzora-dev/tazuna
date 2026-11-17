@@ -29,7 +29,7 @@ structure Automation where
   order : Nat
   /-- The trace name of the received event (`todo.taskAdded` for another service's event). -/
   receives : String
-  /-- The command that the automation sends; `sends.own` is whether the command belongs to the automation's service. -/
+  /-- The command that the automation sends, a `sends` activity. -/
   sends : Activity
 deriving DecidableEq, Repr, Inhabited
 
@@ -96,6 +96,9 @@ def schemaOf (st : Service) (schema : Schema) : Value := (st.schemas.lookup sche
 def chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
 
 def ref (st : Service) (name : String) : Spec.Ref := { service := st.service, name }
+
+/-- The trace name of `r` as seen from the service. -/
+def traceNameOf (st : Service) (r : Spec.Ref) : String := r.traceName st.service
 
 /-- The ref that a trace name, as seen from the service, spells, without looking the definition up. -/
 def refOf (st : Service) (traceName : String) : Spec.Ref := Spec.Ref.ofTraceName st.service traceName
@@ -167,15 +170,14 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
       schemas := schemas ++ [(.input name, input)] ++ (output.map fun o => [(.output name, o)]).getD []
       requirements := requirements ++ [(name, { requires := conditions })]
     | .automation (some receives) (some command) _ _ =>
-      let sends := { keyword := "sends", key := name, target := command.traceName service, service := command.service,
-                     name := command.name, own := command.service == service }
+      let sends := Activity.sends name command
       automations := automations ++ [{ name, order, receives := receives.traceName service, sends }]
       if command.service != service then
         if let some input := j.definitions.findSome? fun d =>
             match d.body with
             | .command _ input .. => if d.ref == command then some input else none
             | _ => none then
-          schemas := schemas ++ [(.input sends.target, input)]
+          schemas := schemas ++ [(.input (command.traceName service), input)]
     | .automation .. => throw s!"the automation {name} has no event or command"
     | .machine _ => pure ()
     | .screen c =>

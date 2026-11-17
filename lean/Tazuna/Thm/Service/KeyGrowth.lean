@@ -240,9 +240,9 @@ theorem keysBy_activate (step : Nat) (name state : String) (a : Activity) :
   unfold activate
   split
   · exact keysBy_openScreen _ _ _ _
-  · split
-    · intro r; exact .refl _
-    · exact keysBy_request _ _ _ _
+  · intro r; exact .refl _
+  · exact keysBy_request _ _ _ _
+  · exact keysBy_request _ _ _ _
 
 theorem keysBy_activateEntered (e : String × String × Nat) : KeysBy (activateEntered fs st e) := by
   apply keysBy_withMachine
@@ -353,8 +353,8 @@ theorem keysBy_settled (step : Nat) (name : Option String) {f : Processing → I
     simp only [settled, settleAround, id_bind, note_id]
     exact (keysBy_settleFrom _ _ _ r).trans ((keysBy_unlessHalted hf _).trans (keysBy_settleFrom _ _ _ _))
 
-theorem keeps_syncShows (s : State) (owner : String) (wanted : List Wanted) :
-    KeepsKeys s (s.syncShows owner wanted) := by
+theorem keeps_syncShows (s : State) (service owner : String) (wanted : List Wanted) :
+    KeepsKeys s (s.syncShows service owner wanted) := by
   unfold State.syncShows
   refine KeepsKeys.trans (keeps_foldl _ (fun t p => ?_) _ s) (keeps_foldl _ (fun t w => ?_) _ _)
   · unfold State.endShowStep; repeat' split
@@ -365,7 +365,7 @@ theorem keeps_syncShows (s : State) (owner : String) (wanted : List Wanted) :
 theorem keeps_refresh (s : State) (owner : String) : KeepsKeys s (refresh st fs s owner) := by
   simp only [refresh, id_bind]
   repeat' split
-  all_goals first | exact .refl _ | exact keeps_syncShows _ _ _ | keys_leaf
+  all_goals first | exact .refl _ | exact keeps_syncShows _ _ _ _ | keys_leaf
 
 theorem keeps_refreshScreens (s : State) : KeepsKeys s (refreshScreens st fs s) :=
   keeps_foldlM _ (fun t i => by split; exact .refl _; exact keeps_refresh _ _) _ _

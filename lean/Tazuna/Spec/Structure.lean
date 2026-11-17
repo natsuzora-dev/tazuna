@@ -14,10 +14,38 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Ref
 
-/-- A chart's transition at `index` of the array at `keys` in state `state` (none for the chart's own `on`). -/
+inductive CallOutcome where
+  | onFulfilled
+  | onRejected
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire CallOutcome
+
+inductive SendOutcome where
+  | onAccepted
+  | onRejected
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire SendOutcome
+
+/-- What fires a transition array: the key that the chart writes the array under, typed per keyword. -/
+inductive Trigger where
+  | on (key : String)
+  | after (deadline : String)
+  | always
+  | onDone
+  | calls (key : String) (outcome : CallOutcome)
+  | sends (key : String) (outcome : SendOutcome)
+  /-- The `onDone` of an `opens`, taken when the opened screen closes. -/
+  | opens (key : String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Trigger tag "type"
+
+/-- A chart's transition at `index` of the array on `trigger` in state `state` (none for the chart's own `on`). -/
 structure TransitionRef where
   state : Option String
-  keys : List String
+  trigger : Trigger
   index : Nat
 deriving DecidableEq, Repr, Inhabited
 
@@ -53,8 +81,7 @@ derive_wire Activity tag "keyword"
 structure Transition where
   /-- The source state, or null for the chart's own `on`. -/
   source : Option String
-  /-- The key path to the transition array, for example `["on", "add"]` or `["after", deadline, "onFired"]`. -/
-  keys : List String
+  trigger : Trigger
   index : Nat
   target : Option String
   guards : List String

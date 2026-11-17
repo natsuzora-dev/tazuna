@@ -23,7 +23,7 @@ def alwaysRound (st : Service) (step : Nat) (owner : String)
     match r.state.machine? owner with
     | none => pure r
     | some o =>
-      match ← select fs st r.state o ["always"] .none (leavesOf r.state o o.copyResources) with
+      match ← select fs st r.state o .always .none (leavesOf r.state o o.copyResources) with
       | .error fault => pure (r.report (.fault fault))
       | .ok chosen => if chosen.isEmpty && !changed then pure r else next o chosen r
 

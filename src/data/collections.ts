@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
-import { schemaNode } from "./schemaNode.ts";
+import { fieldSchema, schemaNode } from "./schemaNode.ts";
 import {
   byCodePoint,
   canonicalJson,
@@ -119,10 +119,10 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [
-          k,
-          Object.hasOwn(node.shape, k) ? sorted(node.shape[k] as z.ZodType, v) : v,
-        ]),
+        Object.entries(value).map(([k, v]) => {
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : sorted(field, v)];
+        }),
       );
     case "union":
       for (const option of node.options) {
@@ -220,10 +220,10 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [
-          k,
-          Object.hasOwn(node.shape, k) ? bagged(node.shape[k] as z.ZodType, v) : v,
-        ]),
+        Object.entries(value).map(([k, v]) => {
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : bagged(field, v)];
+        }),
       );
     case "union": {
       const option = node.options.find((o) => z.safeEncode(o, value as never).success);

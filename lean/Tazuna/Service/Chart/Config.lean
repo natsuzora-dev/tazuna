@@ -10,6 +10,6 @@ def Chart.exitsOf (c : Chart) (entered : List String) (t : Transition) : List St
   | some target => c.tree.exitSet entered t.source target t.reenter
 
 def Chart.slots (c : Chart) : List String :=
-  c.states.foldl (fun acc st => (st.activities.filter (·.keyword == "shows")).foldl (fun acc a => addName acc a.key) acc) []
+  c.states.foldl (fun acc st => (st.activities.filter (·.isShows)).foldl (fun acc a => addName acc a.key) acc) []
 
 end Tazuna.Service

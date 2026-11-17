@@ -20,10 +20,8 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def successAnswer (a : Activity) : String := if a.keyword == "calls" then "onFulfilled" else "onAccepted"
-
 def handlingStateReads (i : Instance) (key : String) (leaves : List (String × Option String)) : List (String × String) :=
-  let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.name) ["on", key]).isEmpty).map (·.name)
+  let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.name) (.on key)).isEmpty).map (·.name)
   let holders := i.resource :: dedupe ((leaves.map (·.1)).filter (· != i.resource))
   holders.flatMap fun h => handling.map (h, ·)
 
@@ -32,17 +30,17 @@ def mapStateReads (i : Instance) : List (String × String) :=
   (i.active.filter (tree.kindOf · == some .map)).map (i.resource, ·)
 
 def State.workName (s : State) (st : Service) : Work → StepName
-  | .reaction a _ _ => .reaction (st.ref a.name)
-  | .answered c _ _ => .answer (st.refOf c.activity.target) (s.who st c.requester.sender)
+  | .reaction a e _ => .reaction (st.ref a.name) (st.refOf e.event) e.payload
+  | .answered c _ _ => .answer c.activity.ref (s.who st c.requester.sender) c.requester.state?
   | .start name _ => .start (s.who st name)
   | .receive name [] _ => .always (s.who st name)
-  | .receive name received _ => .receive (s.who st name) (received.map (·.1))
+  | .receive name received _ => .receive (s.who st name) (received.map fun (key, payload) => { key, payload })
   | .onDone name _ => .onDone (s.who st name)
-  | .opensDone name _ key _ _ _ => .opensDone (s.who st name) key
+  | .opensDone name state key _ _ _ => .opensDone (s.who st name) state key
 
 def State.readyName (s : State) (st : Service) : Ready → StepName
   | .work w => s.workName st w
-  | .command c => .command (st.refOf c.activity.target) (s.who st c.requester.sender)
+  | .command c => .command c.activity.ref (s.who st c.requester.sender) c.requester.state?
 
 def Work.cause : Work → Option Nat
   | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
@@ -69,16 +67,12 @@ def handle (st : Service) (step : Nat) (name state : String) (a : Activity) (ans
   withMachine name fun i r => do
     MonadNote.note (.readStates [(name, state)])
     if i.closed || !i.isIn state then pure r else
+    let on (rejected : Bool) := ((a.answerTrigger? rejected).map (i.chart.transitionsAt (some state))).getD []
     match answer with
-    | .rejected rejection =>
-      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, "onRejected"])
-        (.rejection rejection) r
+    | .rejected rejection => applyCompletion fs st step name (on true) (.rejection rejection) r
     | .accepted output =>
-      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, successAnswer a])
-        (match output with | some o => .output o | none => .none) r
-    | .fulfilled output =>
-      applyCompletion fs st step name (i.chart.transitionsAt (some state) [a.keyword, a.key, successAnswer a])
-        (.output output) r
+      applyCompletion fs st step name (on false) (match output with | some o => .output o | none => .none) r
+    | .fulfilled output => applyCompletion fs st step name (on false) (.output output) r
 
 def dispatch (st : Service) (step : Nat) (name key : String) (payload : Value) (r : Processing) : m Processing :=
   match r.state.machine? name with
@@ -90,7 +84,7 @@ def dispatch (st : Service) (step : Nat) (name key : String) (payload : Value) (
     | .ok leaves =>
     let reads := handlingStateReads i key leaves ++ mapStateReads i
     MonadNote.note (.readStates reads)
-    match ← select fs st r.state i ["on", key] (.payload payload) leaves with
+    match ← select fs st r.state i (.on key) (.payload payload) leaves with
     | .error fault => pure (r.report (.fault fault))
     -- An event that no transition takes is discarded, as in SCXML.
     | .ok [] => pure r
@@ -104,7 +98,7 @@ def done (st : Service) (step : Nat) (name n : String) : Processing → m Proces
   withMachine name fun i r => do
     MonadNote.note (.readStates [(name, n)])
     if i.closed || !i.isIn n then pure r
-    else applyCompletion fs st step name (i.chart.transitionsAt (some n) ["onDone"]) .none r
+    else applyCompletion fs st step name (i.chart.transitionsAt (some n) .onDone) .none r
 
 /--
 The processing of the onDone selections of instance `name`. States that finish during the work are handled by the same
@@ -185,10 +179,10 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     match reacted with
     | none => pure ⟨s, q⟩
     | some input =>
-        if a.sends.own then
+        if a.sends.isOwn st.service then
           pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
                                                     serial := none, input, cause := step }] }⟩
-        else pure ⟨s.await (.command a.sends.target input) (.automation a.name) a.sends input, q⟩
+        else pure ⟨s.await (.command (st.traceNameOf a.sends.ref) input) (.automation a.name) a.sends input, q⟩
   | .answered c answer _, ⟨s, q⟩ =>
     let (s, live) := match c.serial with
       | some serial => s.takeQueued serial
@@ -204,7 +198,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     MonadNote.note (.readStates [(name, state)])
     if !live then pure ⟨s, q⟩ else
     withMachine name (fun i r =>
-      applyCompletion fs st step name (i.chart.transitionsAt (some state) ["opens", key, "onDone"]) (.output output) r)
+      applyCompletion fs st step name (i.chart.transitionsAt (some state) (.opens key)) (.output output) r)
       ⟨s, q⟩
 
 def runWork [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (q : Queue) (step : Nat) (w : Work) :
@@ -251,7 +245,7 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
       | some exceeded => pure (s.report (.fault exceeded))
       | none =>
         MonadNote.note (.stepBegins step (s.readyName st (.command c)) none)
-        let pc ← processCommand st fs s c.activity.target c.input none step
+        let pc ← processCommand st fs s (st.traceNameOf c.activity.ref) c.input none step
         MonadNote.note .stepEnds
         drain st fs fuel pc.1
           { rest with tasks := rest.tasks ++ commandWork st pc.1 pc.2.2 step ++ [.answered c pc.2.1 step] }

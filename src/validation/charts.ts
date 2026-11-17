@@ -76,7 +76,7 @@ interface Edge {
 function edges(chart: ChartStructure): Edge[] {
   return chart.states.flatMap((state) =>
     state.transitions
-      .filter((t) => t.keys.length === 1 && t.keys[0] === "always")
+      .filter((t) => t.trigger.type === "always")
       .map((t) => ({ from: state.name, lands: lands(chart, state.name, t), guarded: t.guards.length > 0 })),
   );
 }

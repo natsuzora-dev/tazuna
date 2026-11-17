@@ -1,7 +1,7 @@
 import { haltingFaultKinds } from "../data/fault.generated.ts";
 import { haltingInvalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
-import type { Fields } from "../data/values.ts";
+import type { Fields, Json } from "../data/values.ts";
 import type { Kind } from "../data/violation.ts";
 
 /** Lean's RejectionKind.byCaller. */
@@ -25,4 +25,9 @@ export const halts = (kind: Kind): boolean => halting.has(kind);
 export interface Emit {
   readonly event: string;
   readonly payload: Fields;
+}
+
+/** An emitted event that a service took, with `encoded`, the payload as Lean's Emit holds it, which names its steps. */
+export interface Emitted extends Emit {
+  readonly encoded: Json;
 }

@@ -763,7 +763,7 @@ theorem exit_leaves_state (name n : String) (r : Processing) (hh : (exitOne fs s
       exact Absent.of_machine?_none hi n
 
 theorem exitOne_at_depth_limit (name n : String) (r : Processing) :
-    exitOne fs st 0 name n r = ⟨r.state.halt (Finding.fault (.exceededExitDepth Limit.exitDepth.max)).toViolation, r.queue⟩ := by
+    exitOne fs st 0 name n r = ⟨r.state.halt (Finding.fault (.exceededExitDepth Limit.exitDepth.max)), r.queue⟩ := by
   simp [exitOne, Processing.report, State.report, Fault.halts]
 
 end Tazuna.Thm.Service.Chart.Exit

@@ -70,7 +70,7 @@ theorem Value.field?_lt {v : Value} {k : String} {x : Value} (h : v.field? k = s
 
 /--
 The value with each array sorted as its schema says. The recursion follows the schema (anyOf options, items,
-properties), so it terminates.
+properties, additionalProperties), so it terminates.
 -/
 def sortCollections (schema v : Value) : Value :=
   match _ha : schema.field? "anyOf" with
@@ -89,12 +89,19 @@ def sortCollections (schema v : Value) : Value :=
       | _, some (.bool true), _ | _, _, some (.bool true) => .arr (sortCanonical items)
       | _, _, _ => .arr items
     | .obj fields =>
-      match _hp : schema.field? "properties" with
-      | some properties =>
-        .obj (fields.map fun (k, x) => (k, match _hk : properties.field? k with
+      .obj (fields.map fun (k, x) => (k,
+        match _hp : schema.field? "properties" with
+        | some properties =>
+          match _hk : properties.field? k with
           | some p => sortCollections p x
+          | none =>
+            match _hc : schema.field? "additionalProperties" with
+            | some c => sortCollections c x
+            | none => x
+        | none =>
+          match _hc : schema.field? "additionalProperties" with
+          | some c => sortCollections c x
           | none => x))
-      | none => .obj fields
     | v => v
 termination_by sizeOf schema
 decreasing_by
@@ -104,5 +111,7 @@ decreasing_by
     omega
   · exact Value.field?_lt (Option.mem_def.mp _hi)
   · exact Nat.lt_trans (Value.field?_lt _hk) (Value.field?_lt _hp)
+  · exact Value.field?_lt _hc
+  · exact Value.field?_lt _hc
 
 end Tazuna.Data

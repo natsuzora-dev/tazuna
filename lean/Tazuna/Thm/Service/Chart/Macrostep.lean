@@ -257,7 +257,7 @@ theorem stopped_machine_takes_no_event (step : Nat) (name key : String) (payload
 theorem dispatch_takes_one_microstep (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
     (leaves : List (String × Option String)) (chosen : List (String × Transition)) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : i.closed = false) (hl : eventLeaves fs st r.state i payload = .ok leaves)
-    (hs : select fs st r.state i ["on", key] (.payload payload) leaves = .ok chosen) (hn : chosen ≠ []) :
+    (hs : select fs st r.state i (.on key) (.payload payload) leaves = .ok chosen) (hn : chosen ≠ []) :
     dispatch fs st step name key payload r = microstep fs st step name chosen (.payload payload) r := by
   unfold dispatch
   cases chosen with
@@ -279,7 +279,7 @@ theorem answer_after_exit_ignored (step : Nat) (name state : String) (a : Activi
 theorem untaken_operation_changes_nothing (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
     (leaves : List (String × Option String)) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
     (hl : eventLeaves fs st r.state i payload = .ok leaves)
-    (hs : select fs st r.state i ["on", key] (.payload payload) leaves = .ok []) :
+    (hs : select fs st r.state i (.on key) (.payload payload) leaves = .ok []) :
     dispatch fs st step name key payload r = r := by
   unfold dispatch
   simp only [hi, Processing.halted, hh, Option.isSome_none, Bool.false_or]
@@ -480,7 +480,7 @@ theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c
     (hr : (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).2 = none) :
     drain st fs (fuel + 1) s q =
       let (s₁, step) := (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).1
-      let r := processCommand st fs s₁ c.activity.target c.input none step
+      let r := processCommand st fs s₁ (st.traceNameOf c.activity.ref) c.input none step
       drain st fs fuel r.1
         { tasks := commandWork st r.1 r.2.2 step ++ [.answered c r.2.1 step], round := [], commands := cs,
           entered := q.entered } := by
@@ -532,16 +532,16 @@ theorem drain_halts_on_command_runaway (fuel : Nat) (q : Queue) (c : Sent) (cs :
     (hh : s.halted = none) (ho : s.stepOrder = []) (ht : q.tasks = []) (hc : q.commands ++ sortSent q.round = c :: cs)
     (hr : (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).2 = some exceeded) :
     drain st fs (fuel + 1) s q =
-      (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).1.1.halt (Finding.fault exceeded).toViolation := by
+      (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).1.1.halt (Finding.fault exceeded) := by
   have hx := newCommandStep_exceeded_halts _ _ _ hr
   cases s; subst ho
   simp_all [drain, Queue.take, State.report]
 
 theorem drain_at_work_limit (q : Queue) (hh : s.halted = none) :
     drain st fs 0 s q =
-      if !q.isEmpty then s.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)).toViolation else
+      if !q.isEmpty then s.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)) else
       let s₁ := refreshScreens st fs s
-      if s₁.halted.isNone && !(shownChanged s s₁).isEmpty then s₁.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)).toViolation else s₁ := by
+      if s₁.halted.isNone && !(shownChanged s s₁).isEmpty then s₁.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)) else s₁ := by
   simp only [drain, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind, State.report]
   rfl
 
@@ -549,7 +549,7 @@ theorem doneWork_at_selection_limit (step : Nat) (name : String) (r : Processing
     (hi : r.state.machine? name = some i) :
     doneWork fs st step name 0 r =
       match i.awaitingOnDone with
-      | some (_ :: _) => ⟨r.state.halt (Finding.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)).toViolation, r.queue⟩
+      | some (_ :: _) => ⟨r.state.halt (Finding.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)), r.queue⟩
       | _ => ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩ := by
   simp only [doneWork, hi]
   rcases h : i.awaitingOnDone with _ | _ | ⟨_, _⟩ <;> simp [Processing.report, State.report, Fault.halts]
@@ -558,7 +558,7 @@ theorem shows_rejection_reported (name slot : String) (answer : Answer) (r : Pro
     (showAnswer st name slot answer r).state.violations = r.state.violations ++
       (match answer with
        | .rejected rj =>
-         if RejectionKind.byCaller rj.kind then [(Finding.fault (.rejectedShows (st.ref (r.state.chartName name)) slot rj)).toViolation]
+         if RejectionKind.byCaller rj.kind then [(Finding.fault (.rejectedShows (st.ref (r.state.chartName name)) slot rj))]
          else []
        | _ => []) ∧
       (showAnswer st name slot answer r).state.halted = r.state.halted := by

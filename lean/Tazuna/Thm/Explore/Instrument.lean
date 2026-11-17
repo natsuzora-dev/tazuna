@@ -252,11 +252,11 @@ theorem eventLeaves_agrees (s : State) (top : Instance) (payload : Value) :
     Agrees (eventLeaves fsI st s top payload) (eventLeaves fs st s top payload) := by
   unfold eventLeaves; agree [reachedCopies_agrees h]
 
-theorem pick_agrees (s : State) (top : Instance) (trigger : List String) (extra : Extra) (l : String × Option String) :
+theorem pick_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra) (l : String × Option String) :
     Agrees (pick fsI st s top trigger extra l) (pick fs st s top trigger extra l) := by
   unfold pick; agree [firstLevel_agrees h]
 
-theorem select_agrees (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (String × Option String)) :
     Agrees (select fsI st s top trigger extra leaves) (select fs st s top trigger extra leaves) := by
   unfold select; agree [pick_agrees h]
@@ -690,7 +690,7 @@ theorem separate_values_report_nothing (c : Collect) (check : RegionCheck)
   · rfl
   · rw [he]; rfl
 
-theorem dependent_candidate (st : Service) (s : State) (c : Collect) (stopped : Option Violation) (i j n k : Nat)
+theorem dependent_candidate (st : Service) (s : State) (c : Collect) (stopped : Option Finding) (i j n k : Nat)
     (a b : StepAccess) (hs : (s.halted <|> stopped) = none) (ha : c.steps[n]? = some (i, a))
     (hb : ((j, b), k) ∈ c.steps.toList.zipIdx.drop (n + 1))
     (hm : tiedDeadlines s i j = true ∨ (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message)))
@@ -704,7 +704,7 @@ theorem dependent_candidate (st : Service) (s : State) (c : Collect) (stopped : 
   · simpa using ha
   · rcases hm with hm | hm <;> simp [hm, hl, hc, hn, ho]
 
-theorem candidate_unordered (st : Service) (s : State) (c : Collect) (stopped : Option Violation) (i j : Nat)
+theorem candidate_unordered (st : Service) (s : State) (c : Collect) (stopped : Option Finding) (i j : Nat)
     (h : (i, j) ∈ candidates st s c stopped) :
     (s.halted <|> stopped) = none ∧ ∃ a b, (i, a) ∈ c.steps ∧ (j, b) ∈ c.steps ∧
       leadsTo s i j = false ∧ a.name ≠ b.name ∧ a.commutes b = false ∧

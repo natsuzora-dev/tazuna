@@ -79,6 +79,9 @@ export const ref = (st: Service, name: string): DefinitionRef => ({ service: st.
 /** Returns the ref of a trace name as seen from the service, without looking the definition up. */
 export const refOf = (st: Service, traceName: string): DefinitionRef => refOfTraceName(st.service, traceName);
 
+/** The trace name of `r` as seen from the service. */
+export const traceNameOf = (st: Service, r: DefinitionRef): string => traceNameOfRef(r, st.service);
+
 export function schemaOwner(schema: Schema): DefinitionRef {
   switch (schema.kind) {
     case "input":
@@ -163,15 +166,7 @@ export function serviceOf(structure: Structure, service: string): Service {
       case "automation": {
         const { receives, command } = d;
         if (receives === null || command === null) break;
-        const sends: Activity = {
-          keyword: "sends",
-          key: name,
-          target: traceNameOfRef(command, service),
-          service: command.service,
-          name: command.name,
-          own: command.service === service,
-          modal: false,
-        };
+        const sends: Activity = { keyword: "sends", key: name, target: command };
         automations.push({ name, order, receives: traceNameOfRef(receives, service), sends });
         break;
       }

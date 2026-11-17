@@ -198,7 +198,7 @@ theorem syncMap_halts_on_duplicate_key (step : Nat) (owner map : String) (r : Pr
     (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys)
     (hd : firstDuplicate (·.2) (sortItemKeys keys) = some k) :
     syncMap fs st step owner r map =
-      (⟨r.state.halt (Finding.fault (.duplicateItemKey (st.ref o.chart.name) map k.1)).toViolation, r.queue⟩, true) := by
+      (⟨r.state.halt (Finding.fault (.duplicateItemKey (st.ref o.chart.name) map k.1)), r.queue⟩, true) := by
   simp [syncMap, Processing.halted, hh, ho, hi, hd, Processing.report, State.report, Fault.halts]
 
 theorem syncMap_copyKeys_are_item_keys (step : Nat) (owner map : String) (r : Processing) (o' : Instance)

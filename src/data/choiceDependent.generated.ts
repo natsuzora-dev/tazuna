@@ -14,6 +14,17 @@ export type Who = {
   readonly copy: Copy | null;
 };
 
+/** An event that a machine receives: the key of its `receives` and the event's payload. */
+export type Received = {
+  readonly key: string;
+  readonly payload: Json;
+};
+
+/**
+ * A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
+ * that definition, so that two steps with equal names are interchangeable. `state` of a command or answer is the sending
+ * state (none for an automation).
+ */
 export type StepName =
   | {
       readonly kind: "start";
@@ -22,7 +33,7 @@ export type StepName =
   | {
       readonly kind: "receive";
       readonly who: Who;
-      readonly keys: readonly string[];
+      readonly received: readonly Received[];
     }
   | {
       readonly kind: "always";
@@ -35,6 +46,7 @@ export type StepName =
   | {
       readonly kind: "opensDone";
       readonly who: Who;
+      readonly state: string;
       readonly key: string;
     }
   | {
@@ -45,21 +57,26 @@ export type StepName =
   | {
       readonly kind: "deadline";
       readonly who: Who;
+      readonly state: string;
       readonly name: string;
     }
   | {
       readonly kind: "reaction";
       readonly automation: DefinitionRef;
+      readonly event: DefinitionRef;
+      readonly payload: Json;
     }
   | {
       readonly kind: "command";
       readonly command: DefinitionRef;
       readonly sender: Who;
+      readonly state: string | null;
     }
   | {
       readonly kind: "answer";
       readonly command: DefinitionRef;
       readonly sender: Who;
+      readonly state: string | null;
     };
 
 /**

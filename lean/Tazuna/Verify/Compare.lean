@@ -336,14 +336,8 @@ def valueDomains (snapshot : List (Option Line)) : String → String :=
   fun s => if requests.contains s then "request" else (keys.lookup s).getD ""
 /-- The line that orders a finding in a report. -/
 def Finding.line : Finding → Nat
-  | .mismatch m =>
-    match m.place.lookup "line" with
-    | some (.num n) => n.mantissa.toNat
-    | _ => 0
-  | .uncomparable u =>
-    match u.place.lookup "line" with
-    | some (.num n) => n.mantissa.toNat
-    | _ => 0
+  | .mismatch m => m.line?.getD 0
+  | .uncomparable u => u.line?.getD 0
 
 def differentInput (b : Binding) (s t : Numbered) : Finding :=
   .uncomparable (.differentInput t.index s.index (Bindings.substitute b.strings (lineValue s.line)) (lineValue t.line))

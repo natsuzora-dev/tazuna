@@ -1,13 +1,13 @@
 import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
-import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, type Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import { emitsOf, named, traceNameOfRef } from "../spec/structure.ts";
 import { ref, refOf, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { applyAll, type Encoded, integrityViolations, writtenRecord } from "./integrity.ts";
-import type { Emit } from "./message.ts";
+import type { Emit, Emitted } from "./message.ts";
 import { recordSource } from "./records.ts";
 import { halt, type Run, report, reportAll, write } from "./state.ts";
 
@@ -43,7 +43,7 @@ export function processCommand(
   encoded: unknown,
   id: string | undefined,
   step: number,
-): { readonly answer: Answer; readonly emits: readonly Emit[] } {
+): { readonly answer: Answer; readonly emits: readonly Emitted[] } {
   const s = r.state;
   const definition = ref(r.st, name);
   r.note.reached({ kind: "request", definition, data: {} });
@@ -94,7 +94,8 @@ export function processCommand(
         s,
         withExtra({ kind: "Fault.emittedPayloadSchema", definition, data: { event } }, { error: payload.error }),
       );
-    return { emit: { event: e.event, payload: payload.value }, encoded: payload.encoded as Fields };
+    const encoded = payload.encoded as Fields;
+    return { emit: { event: e.event, payload: payload.value, encoded: encoded as Json }, encoded };
   });
   const groups = orderedGroups(decided, normalized);
   const twice = twiceWritten(r.st, groups);

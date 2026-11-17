@@ -81,6 +81,11 @@ def Requester.machine? : Requester → Option String
   | .state m _ | .slot m _ => some m
   | .automation _ => none
 
+/-- The state that sent the request, none for a shows slot or an automation. -/
+def Requester.state? : Requester → Option String
+  | .state _ n => some n
+  | _ => none
+
 def Requester.slot? : Requester → Option String
   | .slot _ k => some k
   | _ => none
@@ -198,9 +203,9 @@ structure State extends Durable, Process where
   steps : Array StepInfo := #[]
   /-- The number of messages begun; messages are numbered from 1. -/
   messageCount : Nat := 0
-  violations : List Violation := []
-  /-- The halting violation; after it, no input changes the state. -/
-  halted : Option Violation := none
+  violations : List Finding := []
+  /-- The halting finding; after it, no input changes the state. -/
+  halted : Option Finding := none
 deriving Repr, Inhabited
 
 /-- The outgoing requests that an answer arrived to. -/
@@ -277,14 +282,14 @@ def State.newCommandStep (s : State) (cause : Nat) (sender : Spec.Ref) : (State 
 
 def failedEnsures (st : Service) (name c : String) : Fault := .failedEnsures (st.ref name) c
 
-def State.violate (s : State) (v : Violation) : State :=
-  { s with violations := s.violations ++ [v] }
+def State.violate (s : State) (f : Finding) : State :=
+  { s with violations := s.violations ++ [f] }
 
-def State.halt (s : State) (v : Violation) : State :=
-  { s with halted := some v }
+def State.halt (s : State) (f : Finding) : State :=
+  { s with halted := some f }
 
 def State.report (s : State) (f : Finding) : State :=
-  if f.halts then s.halt f.toViolation else s.violate f.toViolation
+  if f.halts then s.halt f else s.violate f
 
 def State.reportAll (s : State) (faults : List Fault) : State :=
   faults.foldl (fun s fault => if s.halted.isSome then s else s.report (.fault fault)) s

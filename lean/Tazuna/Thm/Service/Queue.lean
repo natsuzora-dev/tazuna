@@ -55,7 +55,7 @@ theorem checkInvariants_lines : (checkInvariants st fs s).lines = s.lines := rep
 theorem failed_chart_invariant_reported (i : Instance) (c : String) (hh : s.halted = none) (hi : i ∈ s.machines)
     (hc : i.closed = false) (ha : InvariantsAnswer fs s)
     (hf : fs.chartInvariant (s.scopeOf i none) s.records = .ok (some c)) :
-    (Finding.fault (.failedChartInvariant (st.ref i.chart.name) c)).toViolation ∈
+    (Finding.fault (.failedChartInvariant (st.ref i.chart.name) c)) ∈
       (checkInvariants st fs s).violations := by
   show _ ∈ (s.reportAll (invariantViolations st fs s).run).violations
   rw [(reportAll_not_halts _ (invariantViolations_not_halts ha) s).2 hh]
@@ -245,7 +245,7 @@ theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
 
 theorem fireDue_at_deadline_limit (to : Time) (tie : Option Time) :
     fireDue st fs to 0 tie s =
-      if s.halted.isNone && (earliestDeadline s.deadlines to).isSome then s.halt (Finding.fault (.exceededDueDeadlines Limit.dueDeadlines.max)).toViolation else s := by
+      if s.halted.isNone && (earliestDeadline s.deadlines to).isSome then s.halt (Finding.fault (.exceededDueDeadlines Limit.dueDeadlines.max)) else s := by
   simp only [fireDue, id_pure, State.report]
   rfl
 

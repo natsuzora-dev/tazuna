@@ -67,9 +67,14 @@ export interface StateView extends Omit<StateStructure, "children" | "activities
 /** An activity whose `kind` is what it requests or opens. */
 export type ActivityView = ActivityStructure & { readonly kind: "query" | "command" | "screen" };
 
-export type TransitionView = TransitionStructure & { readonly id: string; readonly trigger: Trigger };
+/** A transition. `path` is the keys under which its state writes its transition array. */
+export type TransitionView = Omit<TransitionStructure, "trigger"> & {
+  readonly id: string;
+  readonly trigger: Trigger;
+  readonly path: readonly string[];
+};
 
-/** What the keys of a transition name. A key of `on` is a control when the chart has a control of that name. */
+/** What fires a transition, as the viewer labels it. An `on` key is a control when the chart has a control of that name. */
 export type Trigger =
   | { readonly type: "event"; readonly name: string }
   | { readonly type: "control"; readonly name: string }

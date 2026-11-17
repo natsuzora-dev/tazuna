@@ -1,4 +1,4 @@
-{"kind":"NonCanonical.reenterOnRoot","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":null,"keys":["on","taskAdded"],"index":0}},"location":{"file":"todo/todo.ts","line":33}}
-{"kind":"NonCanonical.reenterOutsideSource","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":"idle","keys":["on","taskAdded"],"index":0}},"location":{"file":"todo/todo.ts","line":33}}
-{"kind":"NonCanonical.missingReenter","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":"busy","keys":["on","taskAdded"],"index":0}},"location":{"file":"todo/todo.ts","line":33}}
-{"kind":"NonCanonical.reenterOutsideSource","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":"first","keys":["on","taskAdded"],"index":0}},"location":{"file":"todo/todo.ts","line":33}}
+{"kind":"NonCanonical.reenterOnRoot","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":null,"trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"todo/todo.ts","line":33}}
+{"kind":"NonCanonical.reenterOutsideSource","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":"idle","trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"todo/todo.ts","line":33}}
+{"kind":"NonCanonical.missingReenter","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":"busy","trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"todo/todo.ts","line":33}}
+{"kind":"NonCanonical.reenterOutsideSource","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":"first","trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"todo/todo.ts","line":33}}

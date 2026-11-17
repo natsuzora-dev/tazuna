@@ -518,7 +518,7 @@ the search. A run that halted (in the semantic run, or `stopped` from enabled) s
 none. Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
 orders to run.
 -/
-def candidates (st : Service) (s : State) (c : Collect) (stopped : Option Violation) : List (Nat × Nat) :=
+def candidates (st : Service) (s : State) (c : Collect) (stopped : Option Finding) : List (Nat × Nat) :=
   if (s.halted <|> stopped).isSome then [] else
   let fps := footprints st s c
   c.steps.toList.zipIdx.flatMap fun ((i, a), n) =>
@@ -532,8 +532,8 @@ def candidates (st : Service) (s : State) (c : Collect) (stopped : Option Violat
 The violations that a run reports: the semantic violations, the collected violations, and then the halting violation
 (from the semantic run, or `stopped` from enabled).
 -/
-def reportedViolations (s : State) (c : Collect) (stopped : Option Violation) : List Violation :=
-  s.violations ++ c.violations ++ (s.halted <|> stopped).toList
+def reportedViolations (s : State) (c : Collect) (stopped : Option Finding) : List Violation :=
+  s.violations.map (·.toViolation) ++ c.violations ++ ((s.halted <|> stopped).map (·.toViolation)).toList
 
 end
 

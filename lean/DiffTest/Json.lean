@@ -137,7 +137,7 @@ def Issue.decode (v : Value) : Except String Issue := do
   | other => throw s!"unknown issue kind {other}"
 
 def Transition.toValue (t : Transition) : Value :=
-  .obj [("source", (t.source.map .str).getD .null), ("keys", .arr (t.keys.map .str)), ("index", .num t.index)]
+  .obj [("source", (t.source.map .str).getD .null), ("trigger", ToValue.toValue t.trigger), ("index", .num t.index)]
 
 def Scope.toValue (s : Scope) : Value :=
   .obj [("machine", .str s.machine), ("state", (s.state.map .str).getD .null), ("context", s.context),
@@ -157,7 +157,12 @@ def Extra.toValue : Extra → Value
   | .rejection r => .obj [("rejection", .obj [("kind", ToValue.toValue r.kind)])]
 
 def Activity.toValue (a : Activity) : Value :=
-  .obj [("keyword", .str a.keyword), ("key", .str a.key), ("target", .str a.target)]
+  let keyword := match a with
+    | .calls .. => "calls"
+    | .sends .. => "sends"
+    | .shows .. => "shows"
+    | .opens .. => "opens"
+  .obj [("keyword", .str keyword), ("key", .str a.key)]
 
 def Emit.decode (v : Value) : Except String Emit := do
   pure { event := ← stringField v "event", payload := ← field v "payload" }

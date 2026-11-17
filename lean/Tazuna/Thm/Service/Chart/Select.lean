@@ -136,7 +136,7 @@ theorem removeConflicts_sublist (s : State) (c : Chart) (enabled : List (String 
       · exact (List.filter_sublist.trans h).append (List.Sublist.refl _)
   simpa using key enabled [] [] List.Sublist.slnil
 
-theorem select_follows_leaves (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+theorem select_follows_leaves (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (String × Option String)) (chosen : List (String × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     chosen.Sublist (leaves.filterMap fun l =>
@@ -200,7 +200,7 @@ theorem select_follows_leaves (s : State) (top : Instance) (trigger : List Strin
     cases h
     exact (removeConflicts_sublist s _ e).trans (by simpa using key leaves [] _ (by intro e he; cases he; simp) e hfound)
 
-theorem select_picked_by_leaf (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+theorem select_picked_by_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (String × Option String)) (chosen : List (String × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     ∀ c ∈ chosen, ∃ l ∈ leaves, pick fs st s top trigger extra l = .ok (some c) := by
@@ -245,7 +245,7 @@ theorem firstLevel_error_halts (s : State) (extra : Extra) (levels : List (Insta
     · cases h
     · exact ih h
 
-theorem select_error_halts (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+theorem select_error_halts (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (String × Option String)) (v : Fault)
     (h : select fs st s top trigger extra leaves = .error v) : v.halts = true := by
   have key : ∀ (xs : List (String × Option String)) (acc : Except Fault (List (String × Transition))),
@@ -330,7 +330,7 @@ theorem leavesOf_atomic (s : State) (top : Instance) (reached : List String) :
       simp only [this, Bool.false_eq_true, ↓reduceIte] at ha
       exact Or.inr (copyLeaves_any s reached h n ha)
 
-theorem select_one_per_leaf (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+theorem select_one_per_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (String × Option String)) (chosen : List (String × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     ∃ f : String × Transition → String × Option String,

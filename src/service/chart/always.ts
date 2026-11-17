@@ -26,7 +26,7 @@ export function settle(r: Processing, name: string, step: number): void {
         chosen = select(
           r,
           owner,
-          ["always"],
+          { type: "always" },
           {},
           leavesOf(r, owner, () => true),
         );
@@ -35,7 +35,9 @@ export function settle(r: Processing, name: string, step: number): void {
       // set triggers re-evaluation.
       const states = [owner, ...copiesOf(r.state, owner)].flatMap((holder) =>
         [...owner.chart.states.values()]
-          .filter((state) => transitionsAt(owner.chart, state.name, ["always"]).length > 0 || state.kind === "map")
+          .filter(
+            (state) => transitionsAt(owner.chart, state.name, { type: "always" }).length > 0 || state.kind === "map",
+          )
           .map((state) => stateValueName(holder.resource, state.name)),
       );
       // After a transition the evaluation stays stale, so only one that chose nothing is remembered.

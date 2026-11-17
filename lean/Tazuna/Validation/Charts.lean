@@ -61,7 +61,7 @@ structure Edge where
 
 def edges (c : Chart) : List Edge :=
   c.states.flatMap fun st =>
-    (st.transitions.filter (·.keys == ["always"])).map fun t =>
+    (st.transitions.filter (·.trigger == .always)).map fun t =>
       { «from» := st.name, lands := lands c st.name t, guarded := t.guarded }
 
 /-- The BFS queue, and the predecessor of each found state. -/

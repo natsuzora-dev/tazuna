@@ -46,8 +46,10 @@ export function schemasIn(value: unknown, path: readonly string[], stop?: (schem
       if (stop?.(value) === true) return;
       const inside = new Set(ancestors).add(value);
       const node = schemaNode(value);
-      if (node.type === "object") for (const [key, v] of Object.entries(node.shape)) visit(v, [...path, key], inside);
-      else for (const child of childSchemas(value)) visit(child, path, inside);
+      if (node.type === "object") {
+        for (const [key, v] of Object.entries(node.shape)) visit(v, [...path, key], inside);
+        if (node.catchall !== undefined) visit(node.catchall, path, inside);
+      } else for (const child of childSchemas(value)) visit(child, path, inside);
       return;
     }
     if (seen.has(value)) return;

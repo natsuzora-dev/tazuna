@@ -93,7 +93,7 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     if (!chart || !state) return;
     const t: TransitionStructure = {
       source: state.name,
-      keys: ["always"],
+      trigger: { type: "always" },
       index: state.transitions.length,
       target: pick([null, ...targetsFrom(chart, state.name)], c) ?? null,
       guards: c % 3 === 0 ? ["g"] : [],

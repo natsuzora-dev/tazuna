@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { collectionOf } from "./collections.ts";
-import { schemaNode } from "./schemaNode.ts";
+import { fieldSchema, schemaNode } from "./schemaNode.ts";
 import type { Answer } from "./trace.generated.ts";
 import { canonicalJson, objectOf, type Shape } from "./values.ts";
 
@@ -108,10 +108,10 @@ function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefi
     case "object":
       if (!value || typeof value !== "object") return value;
       return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [
-          k,
-          Object.hasOwn(node.shape, k) ? bagged(node.shape[k] as z.ZodType, v, refEntity) : v,
-        ]),
+        Object.entries(value).map(([k, v]) => {
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : bagged(field, v, refEntity)];
+        }),
       );
     case "union": {
       const option = node.options.find((o) => tolerant(o).safeParse(value).success);

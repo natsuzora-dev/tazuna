@@ -1,3 +1,4 @@
+import type { Trigger } from "../../data/transitionRef.ts";
 import type { Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
@@ -78,12 +79,7 @@ function removeConflicts(s: State, c: Chart, enabled: readonly Chosen[]): Chosen
   return kept;
 }
 
-export function leavesOf(
-  r: Run,
-  instance: Instance,
-  reached: (copy: Instance) => boolean,
-  trigger?: readonly string[],
-): Leaf[] {
+export function leavesOf(r: Run, instance: Instance, reached: (copy: Instance) => boolean, trigger?: Trigger): Leaf[] {
   const chart = instance.chart;
   const states = [...chart.states.values()];
   const reaching = new Map(
@@ -120,14 +116,8 @@ export function leavesOf(
   return found.length === 0 ? [{ holder: instance, leaf: undefined }] : found;
 }
 
-/** SCXML selectTransitions and selectEventlessTransitions. `trigger` is `["on", key]` or `["always"]`. */
-export function select(
-  r: Run,
-  instance: Instance,
-  trigger: readonly string[],
-  extra: Fields,
-  leaves: readonly Leaf[],
-): Chosen[] {
+/** SCXML selectTransitions and selectEventlessTransitions. `trigger` is an `on` or `always` trigger. */
+export function select(r: Run, instance: Instance, trigger: Trigger, extra: Fields, leaves: readonly Leaf[]): Chosen[] {
   const chart = instance.chart;
   const enabled: Chosen[] = [];
   for (const { holder, leaf } of leaves) {

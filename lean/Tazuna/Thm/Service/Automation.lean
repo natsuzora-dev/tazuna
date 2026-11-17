@@ -19,7 +19,7 @@ theorem automationAnswer_lines (a : String) (answer : Answer) (t : State) :
 theorem rejected_automation_command_reported (a : String) (r : Rejection) (t : State)
     (h : RejectionKind.byCaller r.kind) :
     automationAnswer st a (.rejected r) t =
-      t.violate (Finding.fault (.rejectedAutomationCommand (st.ref a) r)).toViolation := by
+      t.violate (Finding.fault (.rejectedAutomationCommand (st.ref a) r)) := by
   simp [automationAnswer, h, State.report, Fault.halts]
 
 end Tazuna.Thm.Service.Automation

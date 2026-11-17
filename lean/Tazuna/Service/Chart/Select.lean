@@ -97,7 +97,7 @@ def eventLeaves (st : Service) (s : State) (top : Instance) (payload : Value) :
 The levels from the leaf to the root, each with its transitions on `trigger`. For a copy's leaf, the owner `top` chooses
 at the levels of the map state and its ancestors.
 -/
-def levelsOf (top holder : Instance) (trigger : List String) (leaf : Option String) : List (Instance × List Transition) :=
+def levelsOf (top holder : Instance) (trigger : Spec.Trigger) (leaf : Option String) : List (Instance × List Transition) :=
   let path := match leaf with
     | none => []
     | some n => top.chart.tree.pathOf n
@@ -105,9 +105,9 @@ def levelsOf (top holder : Instance) (trigger : List String) (leaf : Option Stri
   [(top, top.chart.transitionsAt none trigger)]
 
 /--
-The first transition on `trigger` (`["on", key]` or `["always"]`) whose guard holds, walking from the leaf to the root.
+The first transition on `trigger` (`.on key` or `.always`) whose guard holds, walking from the leaf to the root.
 -/
-def pick (st : Service) (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+def pick (st : Service) (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (l : String × Option String) : m (Except Fault (Option (String × Transition))) :=
   match s.machine? l.1 with
   | none => pure (.ok none)
@@ -117,7 +117,7 @@ def pick (st : Service) (s : State) (top : Instance) (trigger : List String) (ex
 The transitions that the leaves select, without conflicts (SCXML selectTransitions and selectEventlessTransitions).
 As in SCXML, a parallel state handles an event if any region selects a transition.
 -/
-def select (st : Service) (s : State) (top : Instance) (trigger : List String) (extra : Extra)
+def select (st : Service) (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (String × Option String)) :
     m (Except Fault (List (String × Transition))) := do
   let found ← leaves.foldlM (init := (.ok [] : Except Fault (List (String × Transition))))

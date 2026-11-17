@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "./definitionRef.ts";
-import type { TransitionRef } from "./transitionRef.ts";
+import type { TransitionRef, Trigger } from "./transitionRef.ts";
 
 type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
   readonly kind: `NonCanonical.${Name}`;
@@ -7,8 +7,8 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
   readonly data: Data;
 };
 
-/** The place of the `onRejected` of a state's request: the state, and the keys that lead to it from the state. */
-type OnRejectedAt = { readonly state: string; readonly keys: readonly string[] };
+/** The place of the `onRejected` of a state's request: the state, and the trigger of that `onRejected`. */
+type OnRejectedAt = { readonly state: string; readonly trigger: Trigger };
 
 /**
  * A form that changes no meaning but is not the one canonical way to write that meaning. `missingOnRejected` and

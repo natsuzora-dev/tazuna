@@ -1,6 +1,6 @@
 import type { Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
-import { ref, requirementsOf, type Service } from "../basic.ts";
+import { ref, requirementsOf, type Service, traceNameOf } from "../basic.ts";
 import { firstFalse } from "../contract.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -23,7 +23,7 @@ import {
   startQueued,
   who,
 } from "../state.ts";
-import { type Activity, activityRef, type Chart } from "./basic.ts";
+import { type Activity, type Chart, isOwn } from "./basic.ts";
 import { slots } from "./config.ts";
 import type { Processing } from "./queue.ts";
 
@@ -63,7 +63,7 @@ export function newInstance(
 
 function request(r: Processing, instance: Instance, state: string, a: Activity, step: number): void {
   const definition = ref(r.st, instance.chart.name);
-  const target = activityRef(a);
+  const target = a.target;
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
@@ -71,7 +71,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   createKeys(r.state, given.created);
   const input = given.written;
   const requester: Requester = { kind: "state", machine: instance.resource, state };
-  if (a.own) {
+  if (isOwn(a, r.st.service)) {
     r.queue.round.push({
       order: instance.chart.order,
       requester,
@@ -83,12 +83,12 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
     return;
   }
   const type = a.keyword === "calls" ? "query" : "command";
-  awaitAnswer(r.state, { dir: "out", type, name: a.target, input }, requester, a);
+  awaitAnswer(r.state, { dir: "out", type, name: traceNameOf(r.st, a.target), input }, requester, a);
   r.note.reached({ kind: "request", definition: target, data: {} });
 }
 
 function openScreen(r: Processing, step: number, instance: Instance, state: string, a: Activity): void {
-  const child = r.st.charts.get(a.name);
+  const child = r.st.charts.get(a.target.name);
   if (child === undefined) return;
   const definition = ref(r.st, instance.chart.name);
   const screen = ref(r.st, child.name);
@@ -110,7 +110,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
     report(r.state, { kind: "Fault.failedRequires", definition, data: { screen, condition } });
   const context = initialContextOf(r, child.name, input);
   const s = r.state;
-  const opener = { parent: instance.resource, state, key: a.key, modal: a.modal };
+  const opener = { parent: instance.resource, state, key: a.key, modal: a.keyword === "opens" && a.modal };
   const opened = [...s.machines.values()].filter((i) => i.chart.name === child.name).length;
   const resource = opened === 0 ? child.name : `${child.name}(${opened + 1})`;
   const created = newInstance(r.st, child, resource, { input, context }, opener);
