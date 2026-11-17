@@ -146,37 +146,42 @@ def Values.bind (v : Values) (b : Binding) (s t : String) : Matches b :=
 mutual
 
 /-- The bindings under which snapshot value `s` compares equal with implementation value `t`, extending `b`. -/
-partial def matchValue (v : Values) (b : Binding) : CValue → CValue → Matches b
+def matchValue (v : Values) (b : Binding) : CValue → CValue → Matches b
   | .leaf (.str s), .leaf (.str t) | .ref _ s, .ref _ t => v.bind b s t
   | .leaf x, .leaf y => some (if x == y then [⟨b, .refl b⟩] else [])
   | .arr xs, .arr ys | .runs xs, .runs ys => matchList v b xs ys
   | .obj fs, .obj gs => if sameKeys fs gs then matchFields v b fs gs else some []
   | .bag xs, .bag ys => if xs.length == ys.length then matchBag v b xs ys else some []
   | _, _ => some []
+termination_by s _ => sizeOf s
 
-partial def matchList (v : Values) (b : Binding) : List CValue → List CValue → Matches b
+def matchList (v : Values) (b : Binding) : List CValue → List CValue → Matches b
   | [], [] => some [⟨b, .refl b⟩]
   | x :: xs, y :: ys => (matchValue v b x y).andThen fun c => matchList v c xs ys
   | _, _ => some []
+termination_by xs _ => sizeOf xs
 
-partial def matchFields (v : Values) (b : Binding) :
+def matchFields (v : Values) (b : Binding) :
     List (String × CValue) → List (String × CValue) → Matches b
   | [], _ => some [⟨b, .refl b⟩]
   | (k, x) :: fs, gs =>
     match gs.lookup k with
     | some y => (matchValue v b x y).andThen fun c => matchFields v c fs gs
     | none => some []
+termination_by fs _ => sizeOf fs
 
 /-- Each element of `xs`, in order, pairs with each unpaired element of `ys` that it compares equal with. -/
-partial def matchBag (v : Values) (b : Binding) (xs ys : List CValue) : Matches b := do
+def matchBag (v : Values) (b : Binding) (xs ys : List CValue) : Matches b := do
   let same (p q : From b × List Nat) : Bool := p.1.same q.1 && sameSet p.2 q.2
-  let step (states : List (From b × List Nat)) (x : CValue) : Option (List (From b × List Nat)) :=
+  let step (states : List (From b × List Nat)) (x : { x // x ∈ xs }) : Option (List (From b × List Nat)) :=
     expand same states fun (c, used) => do
       let next ← ((ys.zipIdx.filter fun (_, j) => !used.contains j).mapM fun (y, j) =>
-        (matchValue v c.val x y).map fun ds => (lift c.property ds).map ((·, used ++ [j])))
+        (matchValue v c.val x.1 y).map fun ds => (lift c.property ds).map ((·, used ++ [j])))
       pure next.flatten
-  let paired ← xs.foldlM step [(⟨b, .refl b⟩, [])]
+  let paired ← xs.attach.foldlM step [(⟨b, .refl b⟩, [])]
   limited From.same (paired.map (·.1))
+termination_by sizeOf xs
+decreasing_by exact List.sizeOf_lt_of_mem x.2
 
 end
 

@@ -235,6 +235,7 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - The service rejects a command that reuses an id with a different input (`reused_id_rejected`).
 - When an event arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`).
 - The service answers a repeated query again, because a query has no identity (`query_processed_again`).
+- Equality up to a renaming of created keys, by which `test` compares two runs, is an equivalence. Every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain, as `test`'s bindings do.
 
 ### Restart
 
