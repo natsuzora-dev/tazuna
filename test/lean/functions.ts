@@ -1,5 +1,5 @@
 import { enumerations, reversedBags } from "../../src/data/bag.ts";
-import { Bag, comparable as comparableValue, Runs } from "../../src/data/canonical.ts";
+import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, sorted } from "../../src/data/collections.ts";
 import type { Answer } from "../../src/data/trace.generated.ts";
 import {
@@ -31,6 +31,7 @@ import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
 import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/syntax/structure.ts";
+import { refEntityOf } from "../../src/verify/compare.ts";
 import type { Message } from "./lean.ts";
 
 /** Encodes a value as spec code receives it, whose bags, sets and sortedBy arrays are Bags and Runs. */
@@ -96,6 +97,7 @@ export interface Answering {
 
 /** Tags each value with its shape for Lean. Objects become [name, value] pairs to keep their key order. */
 export function tagged(value: unknown): unknown {
+  if (value instanceof Ref) return { ref: [value.entity, value.value] };
   if (value instanceof Bag) return { bag: value.items.map(tagged) };
   if (value instanceof Runs) return { runs: value.runs.map(tagged) };
   if (Array.isArray(value)) return { arr: value.map(tagged) };
@@ -134,7 +136,7 @@ export class VerifyFunctions implements Answering {
             ?.payload;
       }
     })();
-    return { type: "compared", value: tagged(comparableValue(shape, message["value"])) };
+    return { type: "compared", value: tagged(comparableValue(shape, message["value"], refEntityOf(this.spec))) };
   }
 }
 

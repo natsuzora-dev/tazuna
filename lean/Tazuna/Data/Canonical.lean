@@ -28,10 +28,12 @@ macro "lex_decreasing" : tactic =>
 
 /--
 A value as verify compares it. `bag` is an array compared without element order. `runs` is a sortedBy array as runs
-of elements with equal keys, each a bag. `leaf` is null, a boolean, a number or a string.
+of elements with equal keys, each a bag. `leaf` is null, a boolean, a number or a string. `ref` is a string whose schema
+is a key reference to `entity` (a `ref` of the DSL), with the entity's service.
 -/
 inductive CValue where
   | leaf (v : Value)
+  | ref (entity value : String)
   | arr (elements : List CValue)
   | obj (fields : List (String × CValue))
   | bag (elements : List CValue)
@@ -56,6 +58,7 @@ mutual
 /-- The value that TS `JSON.stringify` writes: bag and runs become arrays of their elements. -/
 def CValue.flatten : CValue → Value
   | .leaf v => v
+  | .ref _ s => .str s
   | .arr xs => .arr (CValue.flattenList xs)
   | .obj fs => .obj (CValue.flattenFields fs)
   | .bag xs => .arr (CValue.flattenList xs)
@@ -86,6 +89,7 @@ are sorted by text. Two texts are equal exactly when the values differ only in f
 -/
 def CValue.key : CValue → String
   | .leaf v => v.canonical
+  | .ref _ s => (Value.str s).canonical
   | .arr xs => arrayText (CValue.keyList xs)
   | .obj fs => objectText (CValue.keyFields fs)
   | .bag xs => arrayText (sortStrings (CValue.keyList xs))
@@ -111,6 +115,7 @@ mutual
 def CValue.mapStrings (f : String → String) : CValue → CValue
   | .leaf (.str s) => .leaf (.str (f s))
   | .leaf v => .leaf v
+  | .ref e s => .ref e (f s)
   | .arr xs => .arr (CValue.mapStringsList f xs)
   | .obj fs => .obj (CValue.mapStringsFields f fs)
   | .bag xs => .bag (CValue.mapStringsList f xs)
@@ -126,72 +131,12 @@ def CValue.mapStringsFields (f : String → String) : List (String × CValue) �
 
 end
 
-/-- Whether the value is a JS array or plain object. Bag and Runs are not plain. -/
-def CValue.isPlain : CValue → Bool
-  | .arr _ | .obj _ => true
-  | _ => false
-
-/-- Whether JS `typeof v === "object" && v !== null` holds. -/
-def CValue.isObject : CValue → Bool
-  | .leaf _ => false
-  | _ => true
-
-/-- The JS `Object.keys` of the value, with array indices as strings. -/
-def CValue.keys : CValue → List String
-  | .arr xs => (List.range xs.length).map toString
-  | .obj fs => fs.map (·.1)
-  | _ => []
-
-/-- The JS `v[k]`, with arrays indexed by strings. -/
-def CValue.at? : CValue → String → Option CValue
-  | .arr xs, k => k.toNat?.bind (xs[·]?)
-  | .obj fs, k => (fs.find? (·.1 == k)).map (·.2)
-  | _, _ => none
-
-/-- The keys of `s`, then the keys only in `t` (JS `new Set([...Object.keys(s), ...Object.keys(t)])`). -/
-def unionKeys (s t : CValue) : List String :=
-  s.keys ++ (t.keys.filter fun k => !s.keys.contains k)
-
-theorem at?_sizeOf {c v : CValue} {k : String} (h : c.at? k = some v) : sizeOf v < sizeOf c := by
-  cases c with
-  | arr xs =>
-    simp only [CValue.at?] at h
-    cases hk : k.toNat? with
-    | none => simp [hk] at h
-    | some n =>
-      simp only [hk, Option.bind_some] at h
-      have hm := List.mem_of_getElem? h
-      have := List.sizeOf_lt_of_mem hm
-      simp only [CValue.arr.sizeOf_spec, gt_iff_lt]; omega
-  | obj fs =>
-    simp only [CValue.at?, Option.map_eq_some_iff] at h
-    obtain ⟨⟨k', v'⟩, hf, rfl⟩ := h
-    have hm := List.mem_of_find?_eq_some hf
-    have := List.sizeOf_lt_of_mem hm
-    simp only [Prod.mk.sizeOf_spec, CValue.obj.sizeOf_spec, gt_iff_lt] at this ⊢; omega
-  | leaf _ | bag _ | runs _ => simp [CValue.at?] at h
-
-/--
-Whether `s` equals `t` as TS `plainEqual(s, t)` decides. Plain values compare key by key. Other values
-compare by equality for leaves, or by canonicalJson when both are objects. `none` is undefined.
--/
-def plainEqual (s t : Option CValue) : Bool :=
-  match s, t with
-  | none, none => true
-  | some s, some t =>
-    if s.isPlain && t.isPlain then
-      (unionKeys s t).attach.all fun ⟨k, _⟩ =>
-        match hs : s.at? k with
-        | some sv =>
-          have := at?_sizeOf hs
-          plainEqual (some sv) (t.at? k)
-        | none => (t.at? k).isNone
-    else
-      match s, t with
-      | .leaf a, .leaf b => a == b
-      | a, b => a.isObject && b.isObject && a.flatten.canonical == b.flatten.canonical
-  | _, _ => false
-termination_by (s.map sizeOf).getD 0
-decreasing_by simp_wf; omega
+/-- The strings that the value holds where its schema is a key reference, each with the entity. -/
+def CValue.keyRefs : CValue → List (String × String)
+  | .ref e s => [(s, e)]
+  | .leaf _ => []
+  | .arr xs | .bag xs | .runs xs => xs.attach.flatMap fun ⟨x, _⟩ => x.keyRefs
+  | .obj fs => fs.attach.flatMap fun ⟨p, _⟩ => p.2.keyRefs
+decreasing_by all_goals nested_decreasing
 
 end Tazuna.Data

@@ -434,17 +434,18 @@ describe("Content comparison", () => {
     );
   });
 
+  const seenIds = (id: string): Line => ({ time: at, dir: "in", type: "query", id, name: "seenIds", input: {} });
+  const answer = (id: string, to: string, ids: string[], listed: string[], more: Line = {}): Line => ({
+    time: at,
+    dir: "out",
+    type: "answer",
+    id,
+    to,
+    answer: { result: "fulfilled", output: { repeated: [], none: [], ids, listed } },
+    ...more,
+  });
+
   test("TS and Lean keep the keys of a bag that one group creates open until a later group names one key", () => {
-    const seenIds = (id: string): Line => ({ time: at, dir: "in", type: "query", id, name: "seenIds", input: {} });
-    const answer = (id: string, to: string, ids: string[], listed: string[], more: Line = {}): Line => ({
-      time: at,
-      dir: "out",
-      type: "answer",
-      id,
-      to,
-      answer: { result: "fulfilled", output: { repeated: [], none: [], ids, listed } },
-      ...more,
-    });
     const created = caseOf("compare/created-keys", "todo", [
       seenIds("seenIds#1"),
       answer("answer#1", "seenIds#1", ["Seen-1", "Seen-2"], [], { created: ["Seen-1", "Seen-2"] }),
@@ -462,17 +463,38 @@ describe("Content comparison", () => {
     assert.deepEqual([bindings.get("Seen-1"), bindings.get("Seen-2")], ["y", "x"]);
   });
 
-  test("TS and Lean report an implementation that gives a created key the value of an existing key", () => {
+  test("TS and Lean report an implementation that gives a created key the value of an existing key of its entity", () => {
+    const created = caseOf("compare/created-keys", "todo", [
+      seenIds("seenIds#1"),
+      answer("answer#1", "seenIds#1", ["Seen-1"], [], { created: ["Seen-1"] }),
+      seenIds("seenIds#2"),
+      answer("answer#2", "seenIds#2", ["Seen-1", "Seen-2"], ["Seen-2"], { created: ["Seen-2"] }),
+    ]);
+    const trace = [
+      seenIds("seenIds#1"),
+      answer("a1", "seenIds#1", ["x"], []),
+      seenIds("seenIds#2"),
+      answer("a2", "seenIds#2", ["x", "x"], ["x"]),
+    ];
+    assert.ok(violationCountOfBoth(created, trace, "reused key") > 0);
+    const found = verifyLines(created.spec, created.service, created.snapshot, parseFileLines(trace)).found;
+    assert.deepEqual(
+      found.map((f) => f.kind),
+      ["Mismatch.output"],
+    );
+  });
+
+  test("TS and Lean accept a created key whose value is a string of another domain: another entity's key or a request id", () => {
     const snapshot = specs.get(join(verifyRoot, "mismatch/compare/created-keys"));
     assert.ok(snapshot !== undefined);
     const seenOnce = bases.find((b) => b.spec === snapshot && b.name === "seenOnce");
     assert.ok(seenOnce !== undefined);
-    const trace = JSON.parse(
-      JSON.stringify(seenOnce.snapshot.filter((l) => l !== undefined)).replaceAll("todo/Seen-1", "task-1"),
-    ) as Line[];
-    const found = verifyLines(seenOnce.spec, seenOnce.service, seenOnce.snapshot, parseFileLines(trace)).found;
-    assert.ok(violationCountOfBoth(seenOnce, trace, "reused key") > 0);
-    assert.ok(found.every((f) => f.kind === "Mismatch.output"));
+    for (const value of ["task-1", "addTask#1"]) {
+      const trace = JSON.parse(
+        JSON.stringify(seenOnce.snapshot.filter((l) => l !== undefined)).replaceAll("todo/Seen-1", value),
+      ) as Line[];
+      assert.equal(violationCountOfBoth(seenOnce, trace, value), 0, value);
+    }
   });
 
   test("TS and Lean pair equal lines of one group by their time and by their after order", () => {
@@ -499,6 +521,51 @@ describe("Content comparison", () => {
         "after",
       ),
       0,
+    );
+  });
+
+  test("TS and Lean report an answer to one of equal requests as ambiguous when the snapshot answers them differently", () => {
+    const dayAnswer = (to: string, day: string, n = to): Line => ({
+      time: at,
+      dir: "in",
+      type: "answer",
+      id: `answer:${n}`,
+      to,
+      answer: { result: "fulfilled", output: { day } },
+    });
+    const snapshotOf = (second: string) =>
+      caseOf("compare/order", "todo", [
+        addTask("addTask#1", 1),
+        nextDay("calendar.nextDay#1"),
+        nextDay("calendar.nextDay#2"),
+        dayAnswer("calendar.nextDay#1", "2026-10-26T00:00:00Z"),
+        dayAnswer("calendar.nextDay#2", second),
+      ]);
+    const trace = (second: string) => [
+      addTask("addTask#1", 1),
+      nextDay("r1"),
+      nextDay("r2"),
+      dayAnswer("r1", "2026-10-26T00:00:00Z", "calendar.nextDay#1"),
+      dayAnswer("r2", second, "calendar.nextDay#2"),
+    ];
+    assert.equal(violationCountOfBoth(snapshotOf("2026-10-26T00:00:00Z"), trace("2026-10-26T00:00:00Z"), "alike"), 0);
+    const differently = snapshotOf("2026-10-27T00:00:00Z");
+    assert.ok(violationCountOfBoth(differently, trace("2026-10-27T00:00:00Z"), "differently") > 0);
+    const { found } = verifyLines(
+      differently.spec,
+      "todo",
+      differently.snapshot,
+      parseFileLines(trace("2026-10-27T00:00:00Z")),
+    );
+    assert.deepEqual(
+      found.map((f) => [f.kind, f.line, f.data]),
+      [
+        [
+          "Uncomparable.ambiguous",
+          4,
+          { subject: { type: "answer", to: "calendar.nextDay#1" }, snapshotLine: 4, candidates: [2, 3] },
+        ],
+      ],
     );
   });
 

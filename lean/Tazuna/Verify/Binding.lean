@@ -1,6 +1,8 @@
 /-!
 The binding of snapshot values to implementation values that verify builds while it compares.
 
+- Each value comes with its domain (Bound): the entity whose key it is, `request` for a request id, or "" for any other
+  string. Values of different domains never meet in one slot, so the binding is one-to-one within each domain.
 - A slot holds snapshot values and as many implementation values. A slot of one value on each side binds the two. A
   larger slot says that each of its snapshot values stands for one of its implementation values, which one is not known
   yet (a group whose lines compare equal under every choice).
@@ -10,12 +12,15 @@ The binding of snapshot values to implementation values that verify builds while
 
 namespace Tazuna.Verify
 
+/-- A value with its domain: the domain first, then the value. -/
+abbrev Bound := String × String
+
 /-- Snapshot values and the implementation values that they stand for, in some order. -/
-abbrev Slot := List String × List String
+abbrev Slot := List Bound × List Bound
 
-def domainOf (slots : List Slot) : List String := slots.flatMap (·.1)
+def domainOf (slots : List Slot) : List Bound := slots.flatMap (·.1)
 
-def imageOf (slots : List Slot) : List String := slots.flatMap (·.2)
+def imageOf (slots : List Slot) : List Bound := slots.flatMap (·.2)
 
 /-- No value is in two slots, on either side, and each slot holds as many values on each side. -/
 def Valid (slots : List Slot) : Prop :=
@@ -56,13 +61,13 @@ theorem Binding.Extends.trans {a b c : Binding} (hab : a.Extends b) (hbc : b.Ext
 def Binding.empty : Binding := ⟨[], by simp [Valid, domainOf, imageOf]⟩
 
 /-- The pairs of the binding, choosing in each slot by position. -/
-def Binding.pairs (b : Binding) : List (String × String) := b.slots.flatMap fun k => k.1.zip k.2
+def Binding.pairs (b : Binding) : List (Bound × Bound) := b.slots.flatMap fun k => k.1.zip k.2
 
 /--
 The slots with snapshot value `s`, which a slot holds, standing for `t`: `t` must be in that slot. A larger slot splits
 into the pair and the rest.
 -/
-def resolveIn (s t : String) : List Slot → Option (List Slot)
+def resolveIn (s t : Bound) : List Slot → Option (List Slot)
   | [] => none
   | k :: ks =>
     if s ∈ k.1 then
@@ -71,7 +76,7 @@ def resolveIn (s t : String) : List Slot → Option (List Slot)
       else none
     else (resolveIn s t ks).map (k :: ·)
 
-theorem resolveIn_spec {s t : String} : ∀ {slots slots' : List Slot}, resolveIn s t slots = some slots' →
+theorem resolveIn_spec {s t : Bound} : ∀ {slots slots' : List Slot}, resolveIn s t slots = some slots' →
     (domainOf slots').Perm (domainOf slots) ∧ (imageOf slots').Perm (imageOf slots) ∧
       ((∀ k ∈ slots, k.1.length = k.2.length) → ∀ k ∈ slots', k.1.length = k.2.length) ∧ Refines slots slots'
   | [], _, h => by simp [resolveIn] at h
@@ -128,7 +133,7 @@ theorem resolveIn_spec {s t : String} : ∀ {slots slots' : List Slot}, resolveI
         · obtain ⟨k', hk', h1, h2, h3⟩ := hrf x hx u hu
           exact ⟨k', List.mem_cons_of_mem _ hk', h1, h2, h3⟩
 
-theorem valid_append {slots : List Slot} {s t : String} (h : Valid slots) (hs : s ∉ domainOf slots)
+theorem valid_append {slots : List Slot} {s t : Bound} (h : Valid slots) (hs : s ∉ domainOf slots)
     (ht : t ∉ imageOf slots) : Valid (slots ++ [([s], [t])]) := by
   obtain ⟨hd, hi, hl⟩ := h
   refine ⟨?_, ?_, ?_⟩
@@ -148,19 +153,21 @@ theorem refines_append (slots extra : List Slot) : Refines slots (slots ++ extra
   fun k hk _ hs => ⟨k, List.mem_append_left _ hk, hs, fun _ h => h, fun _ h => h⟩
 
 /--
-The binding with snapshot string `s` standing for implementation string `t`. A bound `s` must stand for `t`, and an `s`
-in a larger slot binds to a `t` of that slot. Any other `s` binds when it is fresh or equals `t`, unless `t` already
-stands for a value.
+The binding with snapshot value `s` standing for implementation value `t` of the same domain. A bound `s` must stand
+for `t`, and an `s` in a larger slot binds to a `t` of that slot. Any other `s` binds when it is `fresh` or equals `t`,
+unless `t` already stands for a value of the domain; a value of domain "" that equals `t` and is not fresh compares
+equal without entering the binding, so it never keeps a fresh value from binding.
 -/
-def Binding.bindString (fresh : List String) (b : Binding) (s t : String) : Option { b' : Binding // b.Extends b' } :=
+def Binding.bindString (fresh : Bool) (b : Binding) (s t : Bound) : Option { b' : Binding // b.Extends b' } :=
   if hs : s ∈ domainOf b.slots then
     match h : resolveIn s t b.slots with
     | some slots' =>
       let r := resolveIn_spec h
       some ⟨⟨slots', r.1.nodup_iff.mpr b.valid.1, r.2.1.nodup_iff.mpr b.valid.2.1, r.2.2.1 b.valid.2.2⟩, r.2.2.2⟩
     | none => none
+  else if !fresh && s == t && s.1 == "" then some ⟨b, .refl b⟩
   else if ht : t ∉ imageOf b.slots then
-    if fresh.contains s || s == t then
+    if fresh || s == t then
       some ⟨⟨b.slots ++ [([s], [t])], valid_append b.valid hs ht⟩, refines_append _ _⟩
     else none
   else none
@@ -199,8 +206,8 @@ theorem eq_of_map_nodup {α β : Type} {f : α → β} : ∀ {l : List α}, (l.m
     · exact absurd e (h.1 p hp)
     · exact eq_of_map_nodup h.2 hp hq e
 
-/-- No string of the pairs is bound to two strings, and no two strings to one. -/
-def OneToOne (bs : List (String × String)) : Prop := ∀ p ∈ bs, ∀ q ∈ bs, (p.1 = q.1 ↔ p.2 = q.2)
+/-- No value of the pairs is bound to two values, and no two values to one. -/
+def OneToOne {α : Type} (bs : List (α × α)) : Prop := ∀ p ∈ bs, ∀ q ∈ bs, (p.1 = q.1 ↔ p.2 = q.2)
 
 theorem Binding.pairs_oneToOne (b : Binding) : OneToOne b.pairs := by
   obtain ⟨hd, hi, hl⟩ := b.valid

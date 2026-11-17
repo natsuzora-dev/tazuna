@@ -45,7 +45,8 @@ function required<F>(receive: F | undefined, type: string): F {
  * quiet. A value of the snapshot that the implementation stands for in its own way (a key it created, the id of a
  * request it sent) is substituted to the implementation's value by the bindings that verify's comparison makes of the
  * trace so far, so an answer reaches the request that the implementation sent; where the binding keeps several values
- * open, it chooses by position. Once that comparison finds the trace uncomparable, the harness gives no more lines.
+ * open, it chooses by position, and the comparison reports the line as ambiguous when another choice could give the
+ * implementation different inputs. Once that comparison finds the trace uncomparable, the harness gives no more lines.
  */
 export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
   const runner = run.runner ?? run.service;

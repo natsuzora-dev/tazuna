@@ -190,6 +190,7 @@ runs).
 partial def CValue.decode (v : Value) : Except String CValue := do
   match v with
   | .obj [("leaf", x)] => pure (.leaf x)
+  | .obj [("ref", .arr [.str e, .str x])] => pure (.ref e x)
   | .obj [("arr", xs)] => pure (.arr (← (← asList xs).mapM CValue.decode))
   | .obj [("bag", xs)] => pure (.bag (← (← asList xs).mapM CValue.decode))
   | .obj [("runs", xs)] => pure (.runs (← (← asList xs).mapM CValue.decode))

@@ -67,6 +67,22 @@ export class Runs {
   }
 }
 
+/** Lean's CValue.ref: a string whose schema is a key reference to `entity`. */
+export class Ref {
+  readonly entity: string;
+  readonly value: string;
+  constructor(entity: string, value: string) {
+    this.entity = entity;
+    this.value = value;
+  }
+  toJSON(): string {
+    return this.value;
+  }
+}
+
+/** Names the entity that a key-reference schema refers to, or returns undefined for any other schema. */
+export type RefEntity = (schema: z.ZodType) => string | undefined;
+
 function runsOf(items: readonly unknown[], key: string): Runs {
   const keyOf = (item: unknown) => JSON.stringify((item as Record<string, unknown> | null)?.[key]);
   const runs: unknown[][] = [];
@@ -77,12 +93,14 @@ function runsOf(items: readonly unknown[], key: string): Runs {
   return new Runs(runs.map((r) => new Bag(r)));
 }
 
-function bagged(schema: z.ZodType, value: unknown): unknown {
+function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefined): unknown {
+  const entity = typeof value === "string" ? refEntity?.(schema) : undefined;
+  if (entity !== undefined) return new Ref(entity, value as string);
   const node = schemaNode(schema);
   switch (node.type) {
     case "array": {
       if (!Array.isArray(value)) return value;
-      const items = value.map((v) => bagged(node.element, v));
+      const items = value.map((v) => bagged(node.element, v, refEntity));
       const collection = collectionOf(schema);
       if (collection === undefined) return items;
       return collection.kind === "sortedBy" ? runsOf(items, collection.key) : new Bag(items);
@@ -92,17 +110,17 @@ function bagged(schema: z.ZodType, value: unknown): unknown {
       return Object.fromEntries(
         Object.entries(value).map(([k, v]) => [
           k,
-          Object.hasOwn(node.shape, k) ? bagged(node.shape[k] as z.ZodType, v) : v,
+          Object.hasOwn(node.shape, k) ? bagged(node.shape[k] as z.ZodType, v, refEntity) : v,
         ]),
       );
     case "union": {
       const option = node.options.find((o) => tolerant(o).safeParse(value).success);
-      return option === undefined ? value : bagged(option, value);
+      return option === undefined ? value : bagged(option, value, refEntity);
     }
     case "opaque":
       return value;
     default:
-      return value == null ? value : bagged(node.inner, value);
+      return value == null ? value : bagged(node.inner, value, refEntity);
   }
 }
 
@@ -112,6 +130,7 @@ const byText = (a: unknown, b: unknown) => {
 };
 
 export function orderFree(value: unknown): unknown {
+  if (value instanceof Ref) return value.value;
   if (value instanceof Bag) return value.items.map(orderFree).toSorted(byText);
   if (value instanceof Runs) return value.runs.flatMap((r) => orderFree(r) as unknown[]);
   if (Array.isArray(value)) return value.map(orderFree);
@@ -120,12 +139,13 @@ export function orderFree(value: unknown): unknown {
   return value;
 }
 
-export const comparable = (shape: Shape | undefined, value: unknown): unknown =>
-  shape === undefined ? value : bagged(objectOf(shape), canonical(shape, value, { tolerant: true }));
+/** The value read by `shape`, with its bags, runs and, when `refEntity` names entities, key references wrapped. */
+export const comparable = (shape: Shape | undefined, value: unknown, refEntity?: RefEntity): unknown =>
+  shape === undefined ? value : bagged(objectOf(shape), canonical(shape, value, { tolerant: true }), refEntity);
 
-export const comparableAnswer = (answer: Answer, output: Shape | undefined): Answer =>
+export const comparableAnswer = (answer: Answer, output: Shape | undefined, refEntity?: RefEntity): Answer =>
   answer.result === "rejected"
     ? { result: answer.result, rejection: { kind: answer.rejection.kind } }
     : answer.output === undefined
       ? answer
-      : { ...answer, output: comparable(output, answer.output) };
+      : { ...answer, output: comparable(output, answer.output, refEntity) };
