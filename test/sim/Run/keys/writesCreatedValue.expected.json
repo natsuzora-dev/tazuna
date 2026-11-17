@@ -164,9 +164,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.writtenKey",
+    "kind": "InvalidScenario.writtenKey",
     "definition": null,
     "data": {
       "scenarioLine": 9,

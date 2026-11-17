@@ -3,7 +3,7 @@ import type { Fault } from "../data/fault.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Fields } from "../data/values.ts";
-import { type Located, type ProblemError, withExtra } from "../data/violation.ts";
+import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { type Schema, schemaOwner } from "./basic.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource, Row } from "./records.ts";
@@ -22,9 +22,9 @@ export type Issue =
 /** A question's Issue, with what only TS reports: the thrown value or the Zod issues. */
 export class Failed {
   readonly issue: Issue;
-  readonly error: ProblemError | undefined;
+  readonly error: ViolationError | undefined;
 
-  constructor(issue: Issue, error?: ProblemError) {
+  constructor(issue: Issue, error?: ViolationError) {
     this.issue = issue;
     this.error = error;
   }
@@ -138,7 +138,7 @@ export function givenKeys(keys: Keys, created: readonly string[]): [string, stri
 export type DeadlineTime = { readonly kind: "delay"; readonly ms: number } | { readonly kind: "atExpression" };
 
 /** A checked value, decoded for spec functions and encoded as written, or why it does not match its schema. */
-export type Checked = { readonly value: Fields; readonly encoded: unknown } | { readonly error: ProblemError };
+export type Checked = { readonly value: Fields; readonly encoded: unknown } | { readonly error: ViolationError };
 
 /**
  * Lean's Functions, the TS side of the questions in the same order. Definitions are named by trace name as seen from

@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Report } from "../data/report.generated.ts";
+import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
@@ -10,10 +10,10 @@ import { refOfTraceName } from "../spec/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
 import { nameIn } from "./participant.ts";
 
-/** A report that a line's handle cannot resolve, which the line reports in place of taking place. */
+/** A violation that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
-  readonly report: Report;
-  constructor(report: Report) {
+  readonly report: InvalidScenario;
+  constructor(report: InvalidScenario) {
     super(report.kind);
     this.report = report;
   }
@@ -24,7 +24,7 @@ type Part = ValueRef["part"];
 /** The JSON that Lean's ToValue writes of a scenario value, which is JSON already. */
 export const json = (v: unknown): Json => v as Json;
 
-function reported(report: Report): never {
+function reported(report: InvalidScenario): never {
   throw new Reported(report);
 }
 
@@ -117,14 +117,18 @@ const eventOf = (m: Message): DefinitionRef | undefined =>
 export const sentBy = (w: World, line: number): Sent | undefined => w.sent.find((s) => s.line === line);
 
 const unresolved = (i: number, fact: Fact): never =>
-  reported({ kind: "Report.unresolvedReference", definition: null, data: { scenarioLine: i, fact: json(fact) } });
+  reported({
+    kind: "InvalidScenario.unresolvedReference",
+    definition: null,
+    data: { scenarioLine: i, fact: json(fact) },
+  });
 
 /** Lean's World.only. */
 function only(w: World, i: number, fact: Fact, found: readonly number[]): number {
   if (found.length === 1) return found[0] as number;
   if (found.length === 0) return unresolved(i, fact);
   return reported({
-    kind: "Report.ambiguousReference",
+    kind: "InvalidScenario.ambiguousReference",
     definition: null,
     data: {
       scenarioLine: i,
@@ -154,7 +158,7 @@ export function requestsOf(w: World, i: number, fact: Fact): number[] {
   });
   if (!found.every(([, c]) => c === found[0]?.[1]))
     return reported({
-      kind: "Report.ambiguousReference",
+      kind: "InvalidScenario.ambiguousReference",
       definition: null,
       data: {
         scenarioLine: i,
@@ -265,7 +269,7 @@ export function screenOf(w: World, i: number, fact: Fact): Opened {
   if (found.length === 1) return found[0] as Opened;
   if (found.length === 0) return unresolved(i, fact);
   return reported({
-    kind: "Report.ambiguousReference",
+    kind: "InvalidScenario.ambiguousReference",
     definition: null,
     data: { scenarioLine: i, fact, candidates: found.map((s) => s.resource) },
   });
@@ -297,7 +301,7 @@ const outputOf = (a: Answer | undefined): unknown =>
 /** Lean's World.partOf. */
 function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
   const missing = (): never =>
-    reported({ kind: "Report.missingOutput", definition: null, data: { scenarioLine: i, fact: json(fact) } });
+    reported({ kind: "InvalidScenario.missingOutput", definition: null, data: { scenarioLine: i, fact: json(fact) } });
   const present = (v: unknown) => (v === undefined ? missing() : v);
   const viaMessage = () => {
     const m = w.messages[messageOf(w, i, fact)];
@@ -327,7 +331,7 @@ function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
     if (given.length === 1) return present(outputOf(given[0]));
     if (given.length === 0) return unresolved(i, fact);
     return reported({
-      kind: "Report.ambiguousReference",
+      kind: "InvalidScenario.ambiguousReference",
       definition: null,
       data: { scenarioLine: i, fact: json(fact), candidates: given.map(json) },
     });
@@ -341,7 +345,7 @@ function observed(w: World, i: number, r: ValueRef): unknown {
   const x = valueAt(v, r.path);
   if (x === undefined)
     return reported({
-      kind: "Report.missingField",
+      kind: "InvalidScenario.missingField",
       definition: null,
       data: { scenarioLine: i, path: r.path, value: json(v) },
     });

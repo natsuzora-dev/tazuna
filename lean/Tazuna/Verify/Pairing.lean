@@ -49,17 +49,17 @@ structure TracePairing where
   compare : List (String × String)
   /-- The traces of external services, which verify checks against their contracts. -/
   contract : List (String × String)
-  problems : List (At × Uncomparable)
+  violations : List (At × Uncomparable)
 
 /-- The pairing of one service's traces. An external service pairs every trace name with its contract. -/
 def servicePairing (scenarios : List Scenario) (folders : List Folder) : String × Bool → TracePairing
   | (service, external) =>
     let p := pair (if external then [] else comparedNames scenarios service) (entriesIn folders service)
     let unknownEntries := p.unknown.map fun e => unknownTraceEntry (.entry (some service) e)
-    if external then { compare := [], contract := p.extra.map ((service, ·)), problems := unknownEntries }
+    if external then { compare := [], contract := p.extra.map ((service, ·)), violations := unknownEntries }
     else
       { compare := p.paired.map ((service, ·)), contract := []
-        problems := unknownEntries ++
+        violations := unknownEntries ++
           (pair (scenarioNames scenarios service) (entriesIn folders service)).extra.map (fun n =>
             (.entry (some service) (n ++ ".jsonl"), .unknownScenario { service, name := n })) ++
             p.missing.map fun n => (.snapshotEntry service (n ++ ".jsonl"), .missingTrace { service, name := n }) }
@@ -71,8 +71,8 @@ def pairTraces (services : List (String × Bool)) (scenarios : List Scenario) (o
     (folders : List Folder) : TracePairing :=
   { compare := services.flatMap fun s => (servicePairing scenarios folders s).compare
     contract := services.flatMap fun s => (servicePairing scenarios folders s).contract
-    problems := others.map (fun e => unknownTraceEntry (.entry none e)) ++
+    violations := others.map (fun e => unknownTraceEntry (.entry none e)) ++
       (folders.filter fun f => (services.lookup f.service).isNone).flatMap unknownServiceViolations ++
-      services.flatMap fun s => (servicePairing scenarios folders s).problems }
+      services.flatMap fun s => (servicePairing scenarios folders s).violations }
 
 end Tazuna.Verify

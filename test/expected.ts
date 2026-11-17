@@ -3,20 +3,19 @@ import { readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { type TestContext, test } from "node:test";
 import { main } from "../src/cli/main.ts";
-import type { Problem } from "../src/data/problem.ts";
-import type { Group } from "../src/data/violation.ts";
+import type { Group, ReportedViolation } from "../src/data/violation.ts";
 import { depth, maskedStack } from "./examples.ts";
 
 export const expected = "expected.jsonl";
 
-const summaryOnly = /^(Checked|Tested|Verified) [^\n]*\. (No problems found|\d+ problems?)\.$/;
+const summaryOnly = /^(Checked|Tested|Verified) [^\n]*\. (No violations found|\d+ violations?)\.$/;
 
 export async function recordsOf(example: string, runs: readonly (readonly string[])[]): Promise<readonly string[]> {
   const logged: string[] = [];
   for (const args of runs)
     await main(args, {
       cwd: example,
-      log: (line) => logged.push(JSON.stringify(maskedStack(JSON.parse(line) as Problem))),
+      log: (line) => logged.push(JSON.stringify(maskedStack(JSON.parse(line) as ReportedViolation))),
       error: (line) => assert.match(line, summaryOnly, `tazuna ${args.join(" ")}`),
       typeCheck: () => ({ kind: "ran", passed: true, output: "" }),
     });

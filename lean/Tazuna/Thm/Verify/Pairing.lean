@@ -95,7 +95,7 @@ theorem unknownServiceViolations_nil (f : Folder) : unknownServiceViolations f =
   · intro h; simp [h]
 
 theorem servicePairing_nil (scenarios : List Scenario) (folders : List Folder) (s : String) (b : Bool) :
-    (servicePairing scenarios folders (s, b)).problems = [] ↔
+    (servicePairing scenarios folders (s, b)).violations = [] ↔
       (∀ e ∈ entriesIn folders s, (fileName e).isSome) ∧
         (b = false →
           (∀ e ∈ entriesIn folders s, ∀ n, fileName e = some n → n ∈ scenarioNames scenarios s) ∧
@@ -107,9 +107,9 @@ theorem servicePairing_nil (scenarios : List Scenario) (folders : List Folder) (
 
 theorem pairTraces_nil (services : List (String × Bool)) (scenarios : List Scenario) (others : List String)
     (folders : List Folder) :
-    (pairTraces services scenarios others folders).problems = [] ↔
+    (pairTraces services scenarios others folders).violations = [] ↔
       others = [] ∧ (∀ f ∈ folders, services.lookup f.service = none → f.entries = []) ∧
-        ∀ p ∈ services, (servicePairing scenarios folders p).problems = [] := by
+        ∀ p ∈ services, (servicePairing scenarios folders p).violations = [] := by
   unfold pairTraces
   simp only [List.append_eq_nil_iff, List.map_eq_nil_iff, List.flatMap_eq_nil_iff, List.mem_filter,
     Option.isNone_iff_eq_none, unknownServiceViolations_nil, and_imp, and_assoc]
@@ -118,7 +118,7 @@ theorem pairTraces_nil (services : List (String × Bool)) (scenarios : List Scen
 theorem no_violation_iff (services : List (String × Bool)) (scenarios : List Scenario) (others : List String)
     (folders : List Folder) (uniqueServices : (services.map (·.1)).Nodup)
     (uniqueFolders : (folders.map (·.service)).Nodup) :
-    (pairTraces services scenarios others folders).problems = [] ↔
+    (pairTraces services scenarios others folders).violations = [] ↔
       others = [] ∧ (∀ f ∈ folders, ∀ e ∈ f.entries, Paired services scenarios f.service e) ∧
         ∀ s ∈ scenarios, s.compared = true → services.lookup s.service = some false →
           ∃ f ∈ folders, f.service = s.service ∧ ∃ e ∈ f.entries, fileName e = some s.name := by

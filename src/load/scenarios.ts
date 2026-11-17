@@ -8,7 +8,7 @@ import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
-import { instant, type LoweringProblem, lower } from "../scenario/lower.ts";
+import { instant, type LoweringViolation, lower } from "../scenario/lower.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 
@@ -57,7 +57,7 @@ function writtenKey(
 
 /**
  * The Given records of a service as data, each as written, with its key when its entity is keyed; the simulation checks
- * them (Report.invalidRecord).
+ * them (InvalidScenario.invalidRecord).
  */
 function givenRecords(entities: Readonly<Record<string, AnyEntity>>, records: unknown): GivenRecord[] {
   return Object.entries((records ?? {}) as Record<string, unknown>).flatMap(([entity, written]): GivenRecord[] => {
@@ -70,7 +70,7 @@ function givenRecords(entities: Readonly<Record<string, AnyEntity>>, records: un
   });
 }
 
-function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Malformed {
+function loweringMalformed(scenario: DefinitionRef, p: LoweringViolation): Malformed {
   switch (p.kind) {
     case "unnamed":
       return {
@@ -88,8 +88,8 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Malform
   }
 }
 
-/** The line of When that a lowering problem is at, when it is at one. */
-const lineOf = (p: LoweringProblem): number | undefined =>
+/** The line of When that a lowering violation is at, when it is at one. */
+const lineOf = (p: LoweringViolation): number | undefined =>
   p.kind === "unparsableTime" || p.kind === "misusedObserved" ? p.line : undefined;
 
 export function loadScenarios(
@@ -103,7 +103,7 @@ export function loadScenarios(
   const scenarios = written.map((named): Named<LoadedScenario> => {
     const { service: own, place, definition } = named;
     const ref = { service: own, name: named.name };
-    const report = (problem: Malformed, at: Place = place) => malformed.push({ violation: problem, place: at });
+    const report = (violation: Malformed, at: Place = place) => malformed.push({ violation: violation, place: at });
     const entitiesOf = (service: string) => services.get(service)?.definition.entities ?? {};
     const peers: PeerEntry[] = Object.entries(definition.given.peers).flatMap(([key, entry]): PeerEntry[] => {
       const owner = contractService(entry.contract);
@@ -138,7 +138,7 @@ export function loadScenarios(
           linePlaces[i] ?? place,
         );
     });
-    for (const p of lowered.problems) {
+    for (const p of lowered.violations) {
       const line = lineOf(p);
       report(loweringMalformed(ref, p), (line === undefined ? undefined : linePlaces[line]) ?? place);
     }

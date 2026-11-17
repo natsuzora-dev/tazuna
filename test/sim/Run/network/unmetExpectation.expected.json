@@ -256,9 +256,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.unmetExpectation",
+      "kind": "InvalidScenario.unmetExpectation",
       "definition": null,
       "data": {
         "expectation": 0,

@@ -78,9 +78,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.unlistedService",
+    "kind": "InvalidScenario.unlistedService",
     "definition": null,
     "data": {
       "scenarioLine": 0,

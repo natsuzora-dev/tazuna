@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Report } from "../data/report.generated.ts";
+import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { byCodePoint, canonicalJson } from "../data/values.ts";
@@ -202,14 +202,14 @@ function checkWritten(
   written: readonly Template[],
   picks: readonly Template[],
   allowed: boolean,
-): Report | undefined {
+): InvalidScenario | undefined {
   if (picks.some(hasCreated) || (!allowed && written.some(hasCreated)))
-    return { kind: "Report.misplacedCreated", definition: null, data: { scenarioLine: line } };
+    return { kind: "InvalidScenario.misplacedCreated", definition: null, data: { scenarioLine: line } };
   for (const t of [...written, ...picks]) {
     const found = writtenKey(w, t.value);
     if (found !== undefined)
       return {
-        kind: "Report.writtenKey",
+        kind: "InvalidScenario.writtenKey",
         definition: null,
         data: { scenarioLine: line, key: found[0], entity: found[1] },
       };
@@ -253,7 +253,7 @@ function clientRequest(
     const s = sentBy(w, sameIdAs);
     if (s === undefined)
       reportedHere({
-        kind: "Report.unresolvedReference",
+        kind: "InvalidScenario.unresolvedReference",
         definition: null,
         data: { scenarioLine: i, fact: { type: "line", index: sameIdAs } },
       });
@@ -272,7 +272,11 @@ const carry = (w: World, i: number, k: number): void => {
 /** Lean's World.stated. */
 function stated(w: World, i: number, m: Message): void {
   if (!running(w.roles.get(m.receiver))) {
-    reportTo(w, { kind: "Report.wrongRole", definition: null, data: { scenarioLine: i, service: m.receiver } });
+    reportTo(w, {
+      kind: "InvalidScenario.wrongRole",
+      definition: null,
+      data: { scenarioLine: i, service: m.receiver },
+    });
     return;
   }
   w.messages.push(m);
@@ -320,9 +324,13 @@ function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => bo
   );
   if (oldest.length === 1) return oldest[0] as number;
   if (oldest.length === 0)
-    return reportedHere({ kind: "Report.unpairedPeerLine", definition: null, data: { scenarioLine: i, peer } });
+    return reportedHere({
+      kind: "InvalidScenario.unpairedPeerLine",
+      definition: null,
+      data: { scenarioLine: i, peer },
+    });
   return reportedHere({
-    kind: "Report.ambiguousPeerLine",
+    kind: "InvalidScenario.ambiguousPeerLine",
     definition: null,
     data: { scenarioLine: i, peer, candidates: oldest.map((k) => describe(w.messages[k] as Message)) },
   });
@@ -352,7 +360,7 @@ function deliverInOrder(w: World, i: number, k: number): void {
   const earlier = w.messages.slice(0, k).find((n) => n.status === "inFlight" && sameChannel(n, m));
   if (earlier !== undefined)
     reportedHere({
-      kind: "Report.overtaking",
+      kind: "InvalidScenario.overtaking",
       definition: null,
       data: { scenarioLine: i, message: describe(m), earlier: describe(earlier) },
     });
@@ -363,7 +371,7 @@ function deliverInOrder(w: World, i: number, k: number): void {
 function requestId(w: World, i: number, peer: string, fact: Fact): string {
   const unreceived = (): never =>
     reportedHere({
-      kind: "Report.unreceivedRequest",
+      kind: "InvalidScenario.unreceivedRequest",
       definition: null,
       data: { scenarioLine: i, peer, fact: json(fact) },
     });
@@ -371,7 +379,7 @@ function requestId(w: World, i: number, peer: string, fact: Fact): string {
     const s = sentBy(w, fact.index);
     if (s === undefined)
       return reportedHere({
-        kind: "Report.unresolvedReference",
+        kind: "InvalidScenario.unresolvedReference",
         definition: null,
         data: { scenarioLine: i, fact: json(fact) },
       });
@@ -409,14 +417,22 @@ function fireTo(time: Temporal.Instant): (r: Processing) => void {
 }
 
 function wrongRole(i: number, service: string): never {
-  return reportedHere({ kind: "Report.wrongRole", definition: null, data: { scenarioLine: i, service } });
+  return reportedHere({ kind: "InvalidScenario.wrongRole", definition: null, data: { scenarioLine: i, service } });
 }
 
 const notInFlight = (i: number, m: Message): never =>
-  reportedHere({ kind: "Report.notInFlight", definition: null, data: { scenarioLine: i, message: describe(m) } });
+  reportedHere({
+    kind: "InvalidScenario.notInFlight",
+    definition: null,
+    data: { scenarioLine: i, message: describe(m) },
+  });
 
 const notDelivered = (i: number, m: Message): never =>
-  reportedHere({ kind: "Report.notDelivered", definition: null, data: { scenarioLine: i, message: describe(m) } });
+  reportedHere({
+    kind: "InvalidScenario.notDelivered",
+    definition: null,
+    data: { scenarioLine: i, message: describe(m) },
+  });
 
 /** Lean's World.answered. */
 const answered = (w: World, sender: string, to: string): boolean =>
@@ -459,7 +475,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         const s = sentBy(w, l.subscription);
         if (s === undefined)
           return reportedHere({
-            kind: "Report.unresolvedReference",
+            kind: "InvalidScenario.unresolvedReference",
             definition: null,
             data: { scenarioLine: i, fact: { type: "line", index: l.subscription } },
           });
@@ -493,7 +509,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const original = lines[l.line];
       if (original?.type !== "request" || original.peer !== undefined)
         return reportedHere({
-          kind: "Report.unresolvedReference",
+          kind: "InvalidScenario.unresolvedReference",
           definition: null,
           data: { scenarioLine: i, fact: { type: "line", index: l.line } },
         });
@@ -507,7 +523,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const top = s === undefined ? undefined : topOf(s, o.chart);
       if (top?.kind === "ok" && top.instance.resource !== o.resource)
         return reportedHere({
-          kind: "Report.unoperableScreen",
+          kind: "InvalidScenario.unoperableScreen",
           definition: null,
           data: { scenarioLine: i, screen: o.resource },
         });
@@ -523,7 +539,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const m = w.messages[k] as Message;
       if (m.receiver !== l.peer)
         return reportedHere({
-          kind: "Report.unresolvedReference",
+          kind: "InvalidScenario.unresolvedReference",
           definition: null,
           data: { scenarioLine: i, fact: json(l.request) },
         });
@@ -533,7 +549,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         if (m.status !== "delivered") return notDelivered(i, m);
         if (answered(w, l.peer, to) && m.body.type !== "subscribe")
           return reportedHere({
-            kind: "Report.repeatedAnswer",
+            kind: "InvalidScenario.repeatedAnswer",
             definition: null,
             data: { scenarioLine: i, message: describe(m) },
           });
@@ -541,7 +557,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         const a = answerOfValue(v);
         if (a === undefined)
           return reportedHere({
-            kind: "Report.malformedValue",
+            kind: "InvalidScenario.malformedValue",
             definition: null,
             data: { scenarioLine: i, value: json(v) },
           });
@@ -568,7 +584,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         );
         if (j < 0)
           return reportedHere({
-            kind: "Report.unpairedPeerLine",
+            kind: "InvalidScenario.unpairedPeerLine",
             definition: null,
             data: { scenarioLine: i, peer: l.peer },
           });
@@ -582,7 +598,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         const expected = comparedAnswerValue(r, peerTarget, markCreated(l.answer, v));
         if (canonicalJson(expected) !== canonicalJson(shown))
           reportTo(w, {
-            kind: "Report.differentPeerAnswer",
+            kind: "InvalidScenario.differentPeerAnswer",
             definition: null,
             data: { scenarioLine: i, expected: json(expected), actual: json(shown) },
           });
@@ -610,7 +626,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         );
         if (receivers.length === 0)
           return reportedHere({
-            kind: "Report.unreceivedEvent",
+            kind: "InvalidScenario.unreceivedEvent",
             definition: null,
             data: { scenarioLine: i, event: l.event },
           });
@@ -644,7 +660,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       if (m.status !== "delivered") return notDelivered(i, m);
       if (answered(w, l.peer, receivedId(m.sender, m.id)) && m.body.type !== "subscribe")
         return reportedHere({
-          kind: "Report.repeatedAnswer",
+          kind: "InvalidScenario.repeatedAnswer",
           definition: null,
           data: { scenarioLine: i, message: describe(m) },
         });
@@ -677,7 +693,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       if (m.status !== "inFlight") return notInFlight(i, m);
       if (!isRequest(m.body))
         return reportedHere({
-          kind: "Report.unfailable",
+          kind: "InvalidScenario.unfailable",
           definition: null,
           data: { scenarioLine: i, message: describe(m) },
         });
@@ -700,7 +716,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const k = messageOf(w, i, l.message);
       if (w.inFlight.some(([, j]) => j === k))
         return reportedHere({
-          kind: "Report.repeatedInFlight",
+          kind: "InvalidScenario.repeatedInFlight",
           definition: null,
           data: { scenarioLine: i, message: describe(w.messages[k] as Message) },
         });
@@ -711,7 +727,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const time = Temporal.Instant.from(l.time);
       if (Temporal.Instant.compare(time, w.now) <= 0)
         return reportedHere({
-          kind: "Report.notLater",
+          kind: "InvalidScenario.notLater",
           definition: null,
           data: { scenarioLine: i, at: time.toString(), now: w.now.toString() },
         });
@@ -738,7 +754,7 @@ function line(w: World, own: string, lines: readonly Line[], i: number, l: Line)
 }
 
 /** What a look line found for an offered expectation: whether the screen offers it, or the report of its payload. */
-type Found = readonly [number, { readonly offers: boolean } | { readonly report: Report }];
+type Found = readonly [number, { readonly offers: boolean } | { readonly report: InvalidScenario }];
 
 /** Lean's World.found. */
 function found(w: World, expectations: readonly Expectation[], i: number, l: Line): Found[] {
@@ -793,11 +809,11 @@ function answerOfValue(v: unknown): Answer | undefined {
 function checkEnd(w: World): void {
   w.messages.forEach((m, k) => {
     if (m.status === "inFlight" && !w.inFlight.some(([, j]) => j === k))
-      reportTo(w, { kind: "Report.leftInFlight", definition: null, data: { message: describe(m) } });
+      reportTo(w, { kind: "InvalidScenario.leftInFlight", definition: null, data: { message: describe(m) } });
   });
   for (const [i, k] of w.inFlight)
     if (w.messages[k]?.status !== "inFlight")
-      reportTo(w, { kind: "Report.unusedInFlight", definition: null, data: { scenarioLine: i } });
+      reportTo(w, { kind: "InvalidScenario.unusedInFlight", definition: null, data: { scenarioLine: i } });
   for (const m of w.messages)
     if (
       m.status === "delivered" &&
@@ -805,7 +821,7 @@ function checkEnd(w: World): void {
       isRequest(m.body) &&
       !answered(w, m.receiver, receivedId(m.sender, m.id))
     )
-      reportTo(w, { kind: "Report.awaitingAnswer", definition: null, data: { message: describe(m) } });
+      reportTo(w, { kind: "InvalidScenario.awaitingAnswer", definition: null, data: { message: describe(m) } });
 }
 
 /** Lean's bag. */
@@ -829,7 +845,7 @@ function compared(
       const s = sentBy(w, e.line);
       if (s === undefined)
         return reportedHere({
-          kind: "Report.unresolvedReference",
+          kind: "InvalidScenario.unresolvedReference",
           definition: null,
           data: { scenarioLine: e.line, fact: { type: "line", index: e.line } },
         });
@@ -877,7 +893,7 @@ function compared(
     case "offered": {
       if (lines[e.look]?.type !== "look")
         return reportedHere({
-          kind: "Report.notLook",
+          kind: "InvalidScenario.notALook",
           definition: null,
           data: { expectation: k, scenarioLine: e.look },
         });
@@ -909,7 +925,7 @@ function expect(
       const [expected, actual] = both;
       if (canonicalJson(expected) !== canonicalJson(actual))
         noteTo(w, {
-          kind: "Report.unmetExpectation",
+          kind: "InvalidScenario.unmetExpectation",
           definition: null,
           data: { expectation: k, expected: json(expected), actual: json(actual) },
         });
@@ -938,7 +954,7 @@ function walkLines(w: World, sc: Scenario, looked?: Found[]): void {
 /** Lean's walk. */
 export function walk(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
-  if (w.reports.length > 0) return w;
+  if (w.violations.length > 0) return w;
   walkLines(w, sc);
   return w;
 }
@@ -946,7 +962,7 @@ export function walk(structure: Structure, w: World, sc: Scenario): World {
 /** Lean's simulate. */
 export function simulate(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
-  if (w.reports.length > 0) return w;
+  if (w.violations.length > 0) return w;
   const looked: Found[] = [];
   walkLines(w, sc, looked);
   if (stopped(w)) return w;

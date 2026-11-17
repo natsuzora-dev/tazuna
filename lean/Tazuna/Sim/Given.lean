@@ -86,33 +86,33 @@ def World.writtenKey? (w : World) (v : Value) : Option (String × Spec.Ref) :=
 variable {m : Type → Type} [Monad m]
 
 /--
-Given's records of `service` as rows, each parsed by its entity's schema, with the reports of those that are invalid,
+Given's records of `service` as rows, each parsed by its entity's schema, with a violation for each that is invalid,
 write a created key that `written` finds, or clash with an earlier one, which no row holds.
 -/
 def givenRows (st : Service) (fs : Functions m) (written : Value → Option (String × Spec.Ref)) (service : String)
-    (records : List GivenRecord) : m (Records × List Report) :=
-  records.foldlM (init := ([], [])) fun (rows, reports) g => do
-    let invalid := (rows, reports ++ [Report.invalidRecord service g.entity g.key])
+    (records : List GivenRecord) : m (Records × List InvalidScenario) :=
+  records.foldlM (init := ([], [])) fun (rows, found) g => do
+    let invalid := (rows, found ++ [InvalidScenario.invalidRecord service g.entity g.key])
     if !st.entities.contains g.entity || st.singles.contains g.entity != g.key.isNone then return invalid
     if let some (key, e) := written (.arr ((g.key.map Value.str).toList ++ [g.value])) then
-      return (rows, reports ++ [.writtenGivenKey service g.entity g.key key e])
+      return (rows, found ++ [.writtenGivenKey service g.entity g.key key e])
     match ← fs.parse (.record g.entity) g.value with
     | .ok (some value) =>
       let row : Row := { entity := g.entity, key := g.key, value }
-      if rows.any (clash st · row) then return (rows, reports ++ [.duplicateRecord service g.entity g.key])
-      pure (rows ++ [row], reports)
+      if rows.any (clash st · row) then return (rows, found ++ [.duplicateRecord service g.entity g.key])
+      pure (rows ++ [row], found)
     | _ => pure invalid
 
-/-- The reports of the entity invariants of each row and of the service invariants that fail on `rows`. -/
-def givenInvariants (fs : Functions m) (service : String) (rows : Records) : m (List Report) := do
+/-- The violations of the entity invariants of each row and of the service invariants that fail on `rows`. -/
+def givenInvariants (fs : Functions m) (service : String) (rows : Records) : m (List InvalidScenario) := do
   let each ← rows.mapM fun r => do
     pure (match ← fs.invariant r.entity r.value with
       | .ok none => []
-      | .ok (some c) => [Report.brokenGivenInvariant service (some r.entity) r.key (some c)]
+      | .ok (some c) => [InvalidScenario.brokenGivenInvariant service (some r.entity) r.key (some c)]
       | .error _ => [.brokenGivenInvariant service (some r.entity) r.key none])
   let whole := match ← fs.serviceInvariant rows with
     | .ok none => []
-    | .ok (some c) => [Report.brokenGivenInvariant service none none (some c)]
+    | .ok (some c) => [InvalidScenario.brokenGivenInvariant service none none (some c)]
     | .error _ => [.brokenGivenInvariant service none none none]
   pure (each.flatten ++ whole)
 
@@ -124,16 +124,16 @@ records, records that write a created key, a single entity without a record, and
 def World.given (w : World) (j : Spec.Structure) (fsOf : String → Functions m) (sc : Scenario) : m World := do
   let listed := sc.given.peers.map (·.service)
   let repeated := (listed.zipIdx.filter fun (p, k) => p == sc.service || (listed.take k).contains p).map fun (p, _) =>
-    Report.repeatedPeer p
-  let unlisted := ((staticPeers j sc.service).filter fun s => !listed.contains s).map Report.unlistedPeer
+    InvalidScenario.repeatedPeer p
+  let unlisted := ((staticPeers j sc.service).filter fun s => !listed.contains s).map InvalidScenario.unlistedPeer
   let w := (repeated ++ unlisted).foldl World.note w
   w.services.foldlM (init := w) fun w (service, st) => do
     let fs := fsOf service
     let records := givenRecords sc service
-    let (rows, reports) ← givenRows st fs w.writtenKey? service records
-    let missing := (st.singles.filter fun e => !records.any (·.entity == e)).map (Report.missingRecord service ·)
-    let broken ← if reports.isEmpty && missing.isEmpty then givenInvariants fs service rows else pure []
-    let w := (reports ++ missing ++ broken).foldl World.note w
+    let (rows, invalid) ← givenRows st fs w.writtenKey? service records
+    let missing := (st.singles.filter fun e => !records.any (·.entity == e)).map (InvalidScenario.missingRecord service ·)
+    let broken ← if invalid.isEmpty && missing.isEmpty then givenInvariants fs service rows else pure []
+    let w := (invalid ++ missing ++ broken).foldl World.note w
     pure { w with states := w.states.map fun (q, s) =>
       if q == service then (q, { s with records := rows }) else (q, s) }
 

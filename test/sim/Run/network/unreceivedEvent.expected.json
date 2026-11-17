@@ -13,9 +13,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.unreceivedEvent",
+    "kind": "InvalidScenario.unreceivedEvent",
     "definition": null,
     "data": {
       "scenarioLine": 0,

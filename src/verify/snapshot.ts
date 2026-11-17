@@ -2,21 +2,21 @@ import { relative } from "node:path";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import { entriesOf, pair } from "../data/pairing.ts";
-import type { Problem } from "../data/problem.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { jsonLine } from "../data/trace.ts";
 import { parseSnapshotFile, peerSnapshotName, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
+import type { ReportedViolation } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
-import { problemsAt, readSnapshotProblems } from "./lines.ts";
+import { readSnapshotViolations, violationsAt } from "./lines.ts";
 import {
   comparedNames,
   entriesIn,
   type Folder,
-  type PairingProblem,
   type PairingScenario,
-  problem,
+  type PairingViolation,
   scenarioNames,
+  unpaired,
 } from "./pairing.ts";
 
 type LineMismatch = Extract<Mismatch, { readonly kind: "Mismatch.line" }>;
@@ -54,7 +54,7 @@ export function compareSnapshot(
 interface SnapshotPairing {
   /** The compared scenarios that have a snapshot. */
   readonly compare: readonly DefinitionRef[];
-  readonly problems: readonly PairingProblem[];
+  readonly violations: readonly PairingViolation[];
 }
 
 function snapshotPairing(
@@ -66,21 +66,21 @@ function snapshotPairing(
   const { paired, missing, unknown } = pair(comparedNames(scenarios, service), entries);
   return {
     compare: paired.map((name) => ({ service, name })),
-    problems: [
+    violations: [
       ...missing.map((name) =>
-        problem(
+        unpaired(
           { scenario: { service, name } },
           { kind: "Uncomparable.missingSnapshot", definition: null, scenario: { service, name }, data: {} },
         ),
       ),
       ...unknown.map((entry) =>
-        problem(
+        unpaired(
           { service, snapshotEntry: entry },
           { kind: "Uncomparable.unknownSnapshotEntry", definition: null, data: {} },
         ),
       ),
       ...pair(scenarioNames(scenarios, service), entries).extra.map((name) =>
-        problem(
+        unpaired(
           { service, snapshotEntry: `${name}.jsonl` },
           { kind: "Uncomparable.obsoleteSnapshot", definition: null, data: {} },
         ),
@@ -99,7 +99,7 @@ export function pairSnapshots(
   folders: readonly Folder[],
 ): SnapshotPairing {
   const pairings = services.map((service) => snapshotPairing(scenarios, folders, service));
-  return { compare: pairings.flatMap((p) => p.compare), problems: pairings.flatMap((p) => p.problems) };
+  return { compare: pairings.flatMap((p) => p.compare), violations: pairings.flatMap((p) => p.violations) };
 }
 
 /** Returns the services of the spec, and the entries of their snapshot folders. */
@@ -141,13 +141,17 @@ export function hasSnapshot(spec: Spec, runs: readonly DefinitionRef[]): (run: D
   return (run) => compare.some((s) => sameRef(s, run));
 }
 
-export function snapshotProblems(spec: Spec, scenario: DefinitionRef, lines: readonly TraceLine[]): Problem[] {
+export function snapshotViolations(
+  spec: Spec,
+  scenario: DefinitionRef,
+  lines: readonly TraceLine[],
+): ReportedViolation[] {
   const path = snapshotPath(spec, scenario);
   const file = relative(spec.root, path);
-  const snapshot = readSnapshotProblems(path);
-  if (snapshot.problems.length > 0) return problemsAt(file, snapshot.problems, scenario);
+  const snapshot = readSnapshotViolations(path);
+  if (snapshot.violations.length > 0) return violationsAt(file, snapshot.violations, scenario);
   const mismatch = compareSnapshot(snapshot.values, lines.map(jsonLine));
-  return mismatch === undefined ? [] : problemsAt(file, [mismatch], scenario);
+  return mismatch === undefined ? [] : violationsAt(file, [mismatch], scenario);
 }
 
 /**

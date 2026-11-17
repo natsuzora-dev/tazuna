@@ -14,7 +14,7 @@ import { loadSpec, type Spec } from "../src/load/load.ts";
 import { simulateSpec, snapshotsOf } from "../src/sim/spec/simulate.ts";
 import { verifyLines } from "../src/verify/compare.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
-import { readSnapshotProblems, unknownAfters } from "../src/verify/lines.ts";
+import { readSnapshotViolations, unknownAfters } from "../src/verify/lines.ts";
 import {
   type Folder,
   type PairingScenario,
@@ -80,14 +80,14 @@ const snapshots = [...specs].flatMap(([root, spec]) =>
       service: s.runner,
       name: s.name,
       label: `${relative(import.meta.dirname, root)}/${s.service}/${s.name}`,
-      read: readSnapshotProblems(snapshotPath(spec, s)),
+      read: readSnapshotViolations(snapshotPath(spec, s)),
     })),
 );
 
 /** The snapshots that verify compares. */
-const bases = snapshots.filter((s) => s.read.problems.length === 0).map((s) => ({ ...s, snapshot: s.read.lines }));
+const bases = snapshots.filter((s) => s.read.violations.length === 0).map((s) => ({ ...s, snapshot: s.read.lines }));
 
-const readable = snapshots.filter((s) => !s.read.problems.some((p) => p.kind === "Uncomparable.lineSchema"));
+const readable = snapshots.filter((s) => !s.read.violations.some((p) => p.kind === "Uncomparable.lineSchema"));
 
 function aftersOfBoth(snapshot: readonly (TraceLine | undefined)[], at: string): number {
   const ts = unknownAfters(snapshot).map(value);
@@ -288,8 +288,8 @@ describe("Content comparison", () => {
       const name = basename(file, ".jsonl");
       if (!spec.services.has(service) || spec.services.get(service)?.definition.external === true) continue;
       if (!snapshotOf(spec, { service, name })) continue;
-      const snapshot = readSnapshotProblems(snapshotPath(spec, { service, name }));
-      if (snapshot.problems.length > 0) continue;
+      const snapshot = readSnapshotViolations(snapshotPath(spec, { service, name }));
+      if (snapshot.violations.length > 0) continue;
       test(`${relative(verifyRoot, file)}: TS and Lean find the same comparison violations`, () => {
         violationCountOfBoth({ spec, service, snapshot: snapshot.lines }, readTrace(file), file);
       });
@@ -298,7 +298,7 @@ describe("Content comparison", () => {
 
   test("The snapshots that verify does not compare are those of the examples with an unreadable line or an after that names no line", () => {
     assert.deepEqual(
-      snapshots.filter((s) => s.read.problems.length > 0).map((s) => s.label),
+      snapshots.filter((s) => s.read.violations.length > 0).map((s) => s.label),
       [
         "verify/uncomparable/lines/unknown-after/todo/addOneUnknownAfter",
         "verify/uncomparable/snapshot/line-schema/todo/addOneCut",
@@ -780,10 +780,10 @@ describe("External service trace check", () => {
 
 function pairBoth(spec: Spec, scenarios: readonly PairingScenario[], folder: TraceFolder, at: string): number {
   const services = spec.structure.services.map(({ name, external }) => ({ name, external }));
-  const { compare, contract, problems } = pairTraces(services, scenarios, folder);
+  const { compare, contract, violations } = pairTraces(services, scenarios, folder);
   const fromLean = lean.pair({ services, scenarios, others: folder.others, folders: folder.folders });
-  assert.deepEqual(fromLean, JSON.parse(JSON.stringify({ compare, contract, findings: problems })), at);
-  return problems.length;
+  assert.deepEqual(fromLean, JSON.parse(JSON.stringify({ compare, contract, findings: violations })), at);
+  return violations.length;
 }
 
 const withSnapshots = (spec: Spec): PairingScenario[] =>
@@ -857,13 +857,13 @@ function pairSnapshotsBoth(
   folders: readonly Folder[],
   at: string,
 ): number {
-  const { compare, problems } = pairSnapshots(services, scenarios, folders);
+  const { compare, violations } = pairSnapshots(services, scenarios, folders);
   assert.deepEqual(
     lean.pairSnapshots({ services, scenarios, folders }),
-    JSON.parse(JSON.stringify({ compare, findings: problems })),
+    JSON.parse(JSON.stringify({ compare, findings: violations })),
     at,
   );
-  return problems.length;
+  return violations.length;
 }
 
 describe("Pairing scenarios with snapshot files", () => {

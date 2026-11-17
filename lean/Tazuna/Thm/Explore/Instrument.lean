@@ -591,7 +591,7 @@ theorem reversed_result_reported {ε α : Type} (definition : Spec.Ref) (functio
     (again : Id (Except ε α)) (same : α → α → Bool) (c : Collect) (ha : again = .ok answer) :
     ((orderAudit definition function original again same).run c).2 =
       if definition ∈ c.reportedOrder ∨ same original answer then c
-      else c.reportOrder definition (OrderDependent.reversedResult definition function).toViolation := by
+      else c.reportOrder definition (BagOrderDependent.reversedResult definition function).toViolation := by
   by_cases hm : definition ∈ c.reportedOrder
   · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
   · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
@@ -603,7 +603,7 @@ theorem reversed_exception_reported {ε α : Type} (definition : Spec.Ref) (func
     (again : Id (Except ε α)) (same : α → α → Bool) (e : ε) (c : Collect) (ha : again = .error e) :
     ((orderAudit definition function original again same).run c).2 =
       if definition ∈ c.reportedOrder then c
-      else c.reportOrder definition (OrderDependent.reversedException definition function).toViolation := by
+      else c.reportOrder definition (BagOrderDependent.reversedException definition function).toViolation := by
   by_cases hm : definition ∈ c.reportedOrder
   · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
   · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
@@ -623,8 +623,8 @@ theorem report_adds (c : Collect) (w : Violation) : w ∈ (c.report w).violation
   · assumption
   · exact List.mem_append_right _ (List.mem_singleton_self _)
 
-theorem foldl_report (f : OrderDependent → Violation) :
-    ∀ (rs : List OrderDependent) (c : Collect), (∀ v ∈ c.violations, v ∈ (rs.foldl (fun c r => c.report (f r)) c).violations) ∧
+theorem foldl_report (f : BagOrderDependent → Violation) :
+    ∀ (rs : List BagOrderDependent) (c : Collect), (∀ v ∈ c.violations, v ∈ (rs.foldl (fun c r => c.report (f r)) c).violations) ∧
       ∀ r ∈ rs, f r ∈ (rs.foldl (fun c r => c.report (f r)) c).violations
   | [], _ => ⟨fun _ h => h, fun _ h => absurd h List.not_mem_nil⟩
   | r :: rs, c => by
@@ -634,7 +634,7 @@ theorem foldl_report (f : OrderDependent → Violation) :
     · exact hk _ (report_adds c _)
     · exact ha x hx
 
-theorem finding_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (r : OrderDependent)
+theorem finding_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (r : BagOrderDependent)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (hr : r ∈ regionFindings check.chart c.accessOf p) :
     r.toViolation ∈ (c.checkRegions check).violations := by
   simp only [Collect.checkRegions, hc]
@@ -643,7 +643,7 @@ theorem finding_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (r
 theorem both_writes_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : String × String)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (ha : v ∈ (c.accessOf p.first).writes)
     (hb : v ∈ (c.accessOf p.second).writes) :
-    (OrderDependent.bothAssign check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
+    (BagOrderDependent.bothAssign check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
       (c.checkRegions check).violations := by
   refine finding_reported c check p _ hc hp ?_
   unfold regionFindings
@@ -652,7 +652,7 @@ theorem both_writes_reported (c : Collect) (check : RegionCheck) (p : RegionPair
 theorem second_writes_first_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : String × String)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (hb : v ∈ (c.accessOf p.second).writes)
     (ha : v ∉ (c.accessOf p.first).writes) (hr : v ∈ (c.accessOf p.first).reads) :
-    (OrderDependent.assignRead check.chart p.state p.secondRef p.firstRef v.2).toViolation ∈
+    (BagOrderDependent.assignRead check.chart p.state p.secondRef p.firstRef v.2).toViolation ∈
       (c.checkRegions check).violations := by
   refine finding_reported c check p _ hc hp ?_
   unfold regionFindings
@@ -661,7 +661,7 @@ theorem second_writes_first_reads_reported (c : Collect) (check : RegionCheck) (
 theorem first_writes_second_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : String × String)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (ha : v ∈ (c.accessOf p.first).writes)
     (hb : v ∉ (c.accessOf p.second).writes) (hr : v ∈ (c.accessOf p.second).reads) :
-    (OrderDependent.assignRead check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
+    (BagOrderDependent.assignRead check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
       (c.checkRegions check).violations := by
   refine finding_reported c check p _ hc hp ?_
   unfold regionFindings

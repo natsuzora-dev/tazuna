@@ -13,9 +13,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.brokenGivenInvariant",
+      "kind": "InvalidScenario.brokenGivenInvariant",
       "definition": null,
       "data": {
         "service": "todo",

@@ -188,9 +188,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.ambiguousPeerLine",
+    "kind": "InvalidScenario.ambiguousPeerLine",
     "definition": null,
     "data": {
       "scenarioLine": 6,

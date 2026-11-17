@@ -11,11 +11,11 @@ What the simulation of a scenario reports about the scenario. `scenarioLine` is 
 named by its sender, its receiver, the sender's id of it, and its origin: the line, or the begin, whose processing sent
 it.
 
-Given is checked first, and each of its reports is given; after any of them, nothing begins. A report of a line of When
+Given is checked first, and each of its violations is given; after any of them, nothing begins. A violation of a line of When
 stops the simulation, unless `halts` says otherwise, since later lines may depend on what the line did. An expectation
 of Then never stops the others: each is evaluated, and what it reports belongs to it alone.
 -/
-inductive Report where
+inductive InvalidScenario where
   /-- Given lists `service` as a peer more than once, or lists the own service as a peer. -/
   | repeatedPeer (service : String)
   /--
@@ -114,14 +114,14 @@ inductive Report where
   /-- The external peer received the request `message`, and no line answers it or leaves it unanswered. -/
   | awaitingAnswer (message : Value)
   /-- The offered expectation `expectation` names the line `scenarioLine`, which is no look line. -/
-  | notLook (expectation scenarioLine : Nat)
+  | notALook (expectation scenarioLine : Nat)
   /-- The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`. -/
   | unmetExpectation (expectation : Nat) (expected actual : Value)
 deriving Repr, Inhabited
 
 local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 
-derive_group Report
+derive_group InvalidScenario
 
 /--
 Whether the report stops the simulation, which a line's report does when the scenario as written describes no run, or
@@ -129,12 +129,12 @@ not one run, from that line on: the line names what does not exist, or several t
 time that cannot occur at that point (a malformed answer, a second answer, an overtaking delivery, an earlier time);
 states again what an earlier line stated; or writes what only the run decides (a created key, `created()` out of
 place). differentPeerAnswer
-compares a message that did occur, so it stops nothing; the reports of Given end the simulation before any line, and
+compares a message that did occur, so it stops nothing; the violations of Given end the simulation before any line, and
 those of the end and of Then come after every line.
 -/
-def Report.halts : Report → Bool
+def InvalidScenario.halts : InvalidScenario → Bool
   | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight .. | .awaitingAnswer .. | .unmetExpectation ..
-  | .notLook .. => false
+  | .notALook .. => false
   | .repeatedPeer .. | .unlistedPeer .. | .invalidRecord .. | .duplicateRecord .. | .brokenGivenInvariant .. => false
   | .missingRecord .. | .writtenGivenKey .. => false
   | _ => true

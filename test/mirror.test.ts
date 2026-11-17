@@ -26,12 +26,12 @@ test("The .ts paths under src/service are the .lean paths under lean/Tazuna/Serv
   );
 });
 
-test("The .ts paths under src/sim outside src/sim/spec, which runs the spec's JS functions, are the .lean paths under lean/Tazuna/Sim with a lowercase first letter, except Report.lean, which generates TS types in src/data", () => {
+test("The .ts paths under src/sim outside src/sim/spec, which runs the spec's JS functions, are the .lean paths under lean/Tazuna/Sim with a lowercase first letter, except InvalidScenario.lean, which generates TS types in src/data", () => {
   assert.deepEqual(
     new Set(tsPaths("sim").filter((path) => !path.startsWith("spec/"))),
     new Set(
       leanModulePaths("Sim")
-        .filter((path) => path !== "Report")
+        .filter((path) => path !== "InvalidScenario")
         .map(lowerFirst),
     ),
   );

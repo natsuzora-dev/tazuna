@@ -21,9 +21,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.unresolvedReference",
+      "kind": "InvalidScenario.unresolvedReference",
       "definition": null,
       "data": {
         "scenarioLine": 0,

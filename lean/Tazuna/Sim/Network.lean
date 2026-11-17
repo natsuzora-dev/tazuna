@@ -1,6 +1,6 @@
 import Tazuna.Scenario.Given
 import Tazuna.Sim.Participant
-import Tazuna.Sim.Report
+import Tazuna.Sim.InvalidScenario
 
 /-!
 The world of a simulation: the running services, each with its state, and the network, a list of messages that each
@@ -105,8 +105,8 @@ structure World where
   inFlight : List (Nat × Nat) := []
   /-- The number of messages of each definition that each external peer sent, by `<peer>.<name>`: their ids count. -/
   counts : List (String × Nat) := []
-  reports : List Report := []
-  halted : Option Report := none
+  violations : List InvalidScenario := []
+  halted : Option InvalidScenario := none
   /--
   The steps that the internal queue of `service` takes first while `origin` is processed, as State.stepOrder: the
   order of steps that test's search runs, which no line writes.
@@ -127,11 +127,11 @@ def World.role (w : World) (service : String) : Option Role := w.roles.lookup se
 /-- Whether no later line takes place: the simulation or a running service halted. -/
 def World.stopped (w : World) : Bool := w.halted.isSome || w.states.any (·.2.halted.isSome)
 
-def World.report (w : World) (r : Report) : World :=
-  if r.halts then { w with halted := some r } else { w with reports := w.reports ++ [r] }
+def World.report (w : World) (r : InvalidScenario) : World :=
+  if r.halts then { w with halted := some r } else { w with violations := w.violations ++ [r] }
 
 /-- The world with `r`, which stops nothing: a report of Given or of an expectation of Then. -/
-def World.note (w : World) (r : Report) : World := { w with reports := w.reports ++ [r] }
+def World.note (w : World) (r : InvalidScenario) : World := { w with violations := w.violations ++ [r] }
 
 def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
   { w with messages := w.messages.modify k fun m => { m with status } }

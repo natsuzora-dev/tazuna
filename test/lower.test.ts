@@ -33,12 +33,12 @@ function lowered(when: (w: When<typeof peers>) => unknown, then: (lines: never) 
     when,
     then: then as never,
   }) as ScenarioDefinition;
-  const { lines, expectations, problems } = lower(
+  const { lines, expectations, violations } = lower(
     definition,
     (d) => refs.get(d),
     (c) => services.get(c),
   );
-  return { lines, expectations, problems };
+  return { lines, expectations, violations };
 }
 
 const begin = { type: "begin" } as const;
@@ -198,17 +198,17 @@ for (const [use, misuse] of [
   ["unknownField", (o: Record<string, unknown>) => (o["task"] as { map: unknown }).map],
   ["presence", (o: Record<string, unknown>) => "task" in o],
 ] as const)
-  test(`An observed value used as ${use} is a problem of the line that uses it, not an error`, () => {
-    const { problems } = lowered((w) => {
+  test(`An observed value used as ${use} is a violation of the line that uses it, not an error`, () => {
+    const { violations } = lowered((w) => {
       const asking = w.client.call(todo.taskDetail, { taskId: "task-1" });
       w.client.send(todo.addTask, { taskId: "task-2", title: misuse(asking.output as never) as never });
     });
-    assert.equal(problems.length, 1);
-    assert.equal(problems[0]?.kind, "misusedObserved");
-    assert.equal(problems[0]?.kind === "misusedObserved" ? problems[0].use : undefined, use);
+    assert.equal(violations.length, 1);
+    assert.equal(violations[0]?.kind, "misusedObserved");
+    assert.equal(violations[0]?.kind === "misusedObserved" ? violations[0].use : undefined, use);
   });
 
-test("The handles of requests name the same requests by their place, and a spread of them is a problem", () => {
+test("The handles of requests name the same requests by their place, and a spread of them is a violation", () => {
   const named = lowered((w) => {
     const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     const [, second] = adding.requests(calendar.nextBusinessDay);
@@ -229,30 +229,30 @@ test("The handles of requests name the same requests by their place, and a sprea
     for (const request of [...adding.requests(calendar.nextBusinessDay)]) w.net.deliver(request);
   });
   assert.deepEqual(
-    spread.problems.map((p) => (p.kind === "misusedObserved" ? [p.use, p.path] : p.kind)),
+    spread.violations.map((p) => (p.kind === "misusedObserved" ? [p.use, p.path] : p.kind)),
     [["spread", []]],
   );
 });
 
-test("A position read in a bag of an observed value is a problem, and one in a sequence is a hole", () => {
-  const { problems } = lowered((w) => {
+test("A position read in a bag of an observed value is a violation, and one in a sequence is a hole", () => {
+  const { violations } = lowered((w) => {
     const listed = w.client.call(todo.tasks, { filter: "all" });
     w.client.send(todo.completeTask, {
       taskId: (listed.output.tasks as never as { taskId: string }[])[0]?.taskId as never,
     });
   });
   assert.deepEqual(
-    problems.map((p) => (p.kind === "misusedObserved" ? [p.use, p.path] : p.kind)),
+    violations.map((p) => (p.kind === "misusedObserved" ? [p.use, p.path] : p.kind)),
     [["position", ["tasks"]]],
   );
 });
 
-test("A line placed after When returned, and a definition the spec does not name, are problems", () => {
+test("A line placed after When returned, and a definition the spec does not name, are violations", () => {
   const after = lowered((w) => ({ w }), (({ w }: { w: When<typeof peers> }) => {
     w.host.restart();
     return [];
   }) as never);
-  assert.deepEqual(after.problems, [{ kind: "lineAfterWhen" }]);
+  assert.deepEqual(after.violations, [{ kind: "lineAfterWhen" }]);
   const unnamed = lowered((w) => w.client.send({ kind: "command" } as never, {} as never));
-  assert.deepEqual(unnamed.problems, [{ kind: "unnamed", path: ["lines", 0] }]);
+  assert.deepEqual(unnamed.violations, [{ kind: "unnamed", path: ["lines", 0] }]);
 });

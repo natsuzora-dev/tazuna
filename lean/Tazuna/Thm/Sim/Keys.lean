@@ -46,7 +46,7 @@ theorem KeepsWorld.trans {a b c : World} (h₁ : KeepsWorld a b) (h₂ : KeepsWo
 theorem keepsWorld_states {w w' w'' : World} (h : KeepsWorld w w') (hs : w''.states = w'.states) : KeepsWorld w w'' :=
   fun p => by unfold World.state; rw [hs]; exact h p
 
-theorem keepsWorld_report {w w' : World} (h : KeepsWorld w w') (r : Report) : KeepsWorld w (w'.report r) :=
+theorem keepsWorld_report {w w' : World} (h : KeepsWorld w w') (r : InvalidScenario) : KeepsWorld w (w'.report r) :=
   keepsWorld_states h (by unfold World.report; split <;> rfl)
 
 theorem keepsWorld_post {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
@@ -192,13 +192,13 @@ theorem keepsWorld_stated {w w' : World} (h : KeepsWorld w w') (i : Nat) (msg : 
 theorem keepsWorld_nextId {w w' : World} (h : KeepsWorld w w') (peer name : String) :
     KeepsWorld w (w'.nextId peer name).1 := keepsWorld_states h rfl
 
-theorem keepsWorld_resolving {α : Type} {w w' : World} (h : KeepsWorld w w') (r : ExceptT Report Id α)
+theorem keepsWorld_resolving {α : Type} {w w' : World} (h : KeepsWorld w w') (r : ExceptT InvalidScenario Id α)
     (k : α → Id World) (hk : ∀ a, KeepsWorld w (k a)) : KeepsWorld w (w'.resolving r k) := by
   unfold World.resolving; simp only [bind]; split
   · exact keepsWorld_report h _
   · exact hk _
 
-theorem keepsWorld_attempt {α : Type} {w w' : World} (h : KeepsWorld w w') (r : Except Report α)
+theorem keepsWorld_attempt {α : Type} {w w' : World} (h : KeepsWorld w w') (r : Except InvalidScenario α)
     (k : α → Id World) (hk : ∀ a, KeepsWorld w (k a)) : KeepsWorld w (w'.attempt r k) := by
   unfold World.attempt; split
   · exact keepsWorld_report h _
@@ -331,7 +331,7 @@ theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : Keep
   unfold World.given
   simp only [bind, pure]
   rw [foldlM_id]
-  have hn : ∀ (rs : List Report) (v : World), (rs.foldl World.note v).states = v.states := by
+  have hn : ∀ (rs : List InvalidScenario) (v : World), (rs.foldl World.note v).states = v.states := by
     intro rs; induction rs with
     | nil => intro v; rfl
     | cons r rs ih => intro v; simp only [List.foldl_cons]; rw [ih]; rfl

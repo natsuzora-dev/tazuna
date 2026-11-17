@@ -2,7 +2,7 @@ import { normalizedRow } from "../data/collections.ts";
 import { sameRef } from "../data/definitionRef.ts";
 import type { Malformed } from "../data/malformed.ts";
 import { objectOf, type Shape } from "../data/values.ts";
-import { type ProblemError, thrown, zodError } from "../data/violation.ts";
+import { thrown, type ViolationError, zodError } from "../data/violation.ts";
 import { chartOf, stateAt } from "../dsl/chart.ts";
 import type { Definition, Named } from "../dsl/definition.ts";
 import type { Structure } from "../spec/structure.generated.ts";
@@ -14,7 +14,7 @@ import type { ThrownDefault } from "./structureOf.ts";
  * Returns the error of the shape's defaults against the shape: Zod's issues, or what a default function or a refinement
  * threw. Zod does not validate default values itself.
  */
-function defaultsError(shape: Shape): ProblemError | undefined {
+function defaultsError(shape: Shape): ViolationError | undefined {
   try {
     const parsed = objectOf(shape).safeParse({});
     if (!parsed.success) return zodError(parsed.error.issues);

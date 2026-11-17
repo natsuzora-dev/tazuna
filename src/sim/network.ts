@@ -1,6 +1,6 @@
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import { haltingReportKinds, type Report } from "../data/report.generated.ts";
+import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { contentOf } from "../data/trace.ts";
@@ -93,8 +93,8 @@ export interface World {
   readonly inFlight: (readonly [number, number])[];
   /** Lean's World.counts. */
   readonly counts: Map<string, number>;
-  readonly reports: Report[];
-  halted: Report | undefined;
+  readonly violations: InvalidScenario[];
+  halted: InvalidScenario | undefined;
   /** Lean's World.stepOrders. */
   stepOrders: readonly StepOrder[];
   /** Lean's World.assignments. */
@@ -107,17 +107,17 @@ export const stateOf = (w: World, service: string): State | undefined => w.parti
 export const stopped = (w: World): boolean =>
   w.halted !== undefined || [...w.participants.values()].some((p) => p.halted !== undefined);
 
-const halting: ReadonlySet<string> = new Set(haltingReportKinds);
+const halting: ReadonlySet<string> = new Set(haltingInvalidScenarioKinds);
 
 /** Lean's World.report. */
-export function reportTo(w: World, r: Report): void {
+export function reportTo(w: World, r: InvalidScenario): void {
   if (halting.has(r.kind)) w.halted = r;
-  else w.reports.push(r);
+  else w.violations.push(r);
 }
 
 /** Lean's World.note: a report of Given or of an expectation of Then, which stops nothing. */
-export function noteTo(w: World, r: Report): void {
-  w.reports.push(r);
+export function noteTo(w: World, r: InvalidScenario): void {
+  w.violations.push(r);
 }
 
 /** Lean's screensOf. */
@@ -137,7 +137,7 @@ function post(w: World, o: Origin, sender: string, receiver: string, l: TraceLin
   const role = w.roles.get(receiver);
   if (role === undefined) {
     reportTo(w, {
-      kind: "Report.unlistedService",
+      kind: "InvalidScenario.unlistedService",
       definition: null,
       data: { scenarioLine: o.type === "line" ? o.index : null, service: receiver },
     });
@@ -222,7 +222,11 @@ function checkComputed(w: World, service: string, sent: readonly TraceLine[], re
   if (w.halted !== undefined) return;
   const found = computedKey(w, sent, records);
   if (found !== undefined)
-    reportTo(w, { kind: "Report.computedKey", definition: null, data: { service, key: found[0], entity: found[1] } });
+    reportTo(w, {
+      kind: "InvalidScenario.computedKey",
+      definition: null,
+      data: { service, key: found[0], entity: found[1] },
+    });
 }
 
 /** Lean's World.act. */

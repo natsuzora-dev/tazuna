@@ -1,9 +1,9 @@
 import { join, relative } from "node:path";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { type Entry, entriesOf, pair } from "../data/pairing.ts";
-import { type Problem, toProblem } from "../data/problem.ts";
 import { snapshotEntryPath } from "../data/traceFile.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
+import { type ReportedViolation, toReported } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
 
 /** The subfolder `service` of the trace folder, or the snapshot folder of `service`. */
@@ -37,7 +37,7 @@ export type At =
   | { readonly service: string; readonly snapshotEntry: string }
   | { readonly scenario: DefinitionRef };
 
-export interface PairingProblem {
+export interface PairingViolation {
   readonly at: At;
   readonly violation: Uncomparable;
 }
@@ -47,7 +47,7 @@ interface TracePairing {
   readonly compare: readonly DefinitionRef[];
   /** The traces of external services, which verify checks against their contracts. */
   readonly contract: readonly DefinitionRef[];
-  readonly problems: readonly PairingProblem[];
+  readonly violations: readonly PairingViolation[];
 }
 
 export type PairingScenario = DefinitionRef & {
@@ -58,10 +58,10 @@ export type PairingScenario = DefinitionRef & {
   readonly compared: boolean;
 };
 
-export const problem = (at: At, violation: Uncomparable): PairingProblem => ({ at, violation });
+export const unpaired = (at: At, violation: Uncomparable): PairingViolation => ({ at, violation });
 
 const unknownTraceEntry = (at: At) =>
-  problem(at, { kind: "Uncomparable.unknownTraceEntry", definition: null, data: {} });
+  unpaired(at, { kind: "Uncomparable.unknownTraceEntry", definition: null, data: {} });
 
 export const entriesIn = (folders: readonly Folder[], service: string): readonly Entry[] =>
   folders.find((f) => f.service === service)?.entries ?? [];
@@ -73,11 +73,11 @@ export const comparedNames = (scenarios: readonly PairingScenario[], service: st
   scenarios.filter((s) => s.service === service && s.compared).map((s) => s.name);
 
 /** Returns the violations of the subfolder of a service that is not a service of the spec. */
-function unknownServiceViolations({ service, entries }: Folder): PairingProblem[] {
+function unknownServiceViolations({ service, entries }: Folder): PairingViolation[] {
   const { extra, unknown } = pair([], entries);
   return [
     ...extra.map((name) =>
-      problem(
+      unpaired(
         { service, entry: `${name}.jsonl` },
         { kind: "Uncomparable.unknownService", definition: null, data: { service } },
       ),
@@ -97,20 +97,20 @@ function servicePairing(
   const entries = entriesIn(folders, service);
   const { paired, missing, extra, unknown } = pair(external ? [] : comparedNames(scenarios, service), entries);
   const unknownEntries = unknown.map((entry) => unknownTraceEntry({ service, entry }));
-  if (external) return { compare: [], contract: extra.map((name) => ({ service, name })), problems: unknownEntries };
+  if (external) return { compare: [], contract: extra.map((name) => ({ service, name })), violations: unknownEntries };
   return {
     compare: paired.map((name) => ({ service, name })),
     contract: [],
-    problems: [
+    violations: [
       ...unknownEntries,
       ...pair(scenarioNames(scenarios, service), entries).extra.map((name) =>
-        problem(
+        unpaired(
           { service, entry: `${name}.jsonl` },
           { kind: "Uncomparable.unknownScenario", definition: null, scenario: { service, name }, data: {} },
         ),
       ),
       ...missing.map((name) =>
-        problem(
+        unpaired(
           { service, snapshotEntry: `${name}.jsonl` },
           { kind: "Uncomparable.missingTrace", definition: null, scenario: { service, name }, data: {} },
         ),
@@ -131,10 +131,10 @@ export function pairTraces(
   return {
     compare: pairings.flatMap((p) => p.compare),
     contract: pairings.flatMap((p) => p.contract),
-    problems: [
+    violations: [
       ...others.map((entry) => unknownTraceEntry({ entry })),
       ...folders.filter((f) => !services.some((s) => s.name === f.service)).flatMap(unknownServiceViolations),
-      ...pairings.flatMap((p) => p.problems),
+      ...pairings.flatMap((p) => p.violations),
     ],
   };
 }
@@ -143,14 +143,14 @@ export function pairTraces(
  * Returns the violation of a pairing at its place. `traces` is the trace folder, which holds the places of trace folder
  * entries.
  */
-export function pairingProblem(spec: Spec, { at, violation }: PairingProblem, traces?: string): Problem {
+export function pairingViolation(spec: Spec, { at, violation }: PairingViolation, traces?: string): ReportedViolation {
   if ("scenario" in at) {
     const scenario = spec.scenarios.find((s) => sameRef(s, at.scenario));
     if (scenario === undefined) throw new Error(`no scenario ${at.scenario.service}.${at.scenario.name}`);
-    return toProblem(violation, scenario.place);
+    return toReported(violation, scenario.place);
   }
-  if ("snapshotEntry" in at) return toProblem(violation, { file: relative(spec.root, snapshotEntryPath(spec, at)) });
+  if ("snapshotEntry" in at) return toReported(violation, { file: relative(spec.root, snapshotEntryPath(spec, at)) });
   if (traces === undefined) throw new Error(`the trace folder entry ${at.entry} has no trace folder`);
   const path = join(traces, at.service ?? "", at.entry);
-  return toProblem(violation, { file: relative(spec.root, path) });
+  return toReported(violation, { file: relative(spec.root, path) });
 }

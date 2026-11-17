@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { testSpec } from "../src/cli/test.ts";
 import { sameRef } from "../src/data/definitionRef.ts";
-import type { Problem } from "../src/data/problem.ts";
 import { snapshotPath } from "../src/data/traceFile.ts";
+import type { ReportedViolation } from "../src/data/violation.ts";
 import { loadSpec } from "../src/load/load.ts";
 
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
@@ -26,7 +26,7 @@ test("test writes no snapshot, and test --update rewrites snapshots without comp
   const unknown = entries.filter((e) => !isSnapshot(e)).map((e) => `todo/__snapshots__/${e.name}`);
   assert.notDeepEqual(obsolete, []);
   assert.notDeepEqual(unknown, []);
-  const unknownEntries = (problems: readonly Problem[]) => problems.map((p) => [p.kind, p.location.file]);
+  const unknownEntries = (violations: readonly ReportedViolation[]) => violations.map((p) => [p.kind, p.location.file]);
   const reported = unknown.map((path) => ["Uncomparable.unknownSnapshotEntry", path]);
   const [scenario] = spec.scenarios;
   assert.ok(scenario !== undefined);
@@ -34,17 +34,17 @@ test("test writes no snapshot, and test --update rewrites snapshots without comp
   const compared = testSpec(spec, { update: false, depth: 0 });
   assert.deepEqual(compared.written, []);
   assert.ok(
-    compared.problems.some((p) => p.kind === "Uncomparable.missingSnapshot" && sameRef(p.scenario ?? null, scenario)),
+    compared.violations.some((p) => p.kind === "Uncomparable.missingSnapshot" && sameRef(p.scenario ?? null, scenario)),
   );
   assert.ok(!existsSync(snapshotPath(spec, scenario)));
   const updated = testSpec(spec, { update: true, depth: 0 });
-  assert.deepEqual(unknownEntries(updated.problems).toSorted(), reported.toSorted());
+  assert.deepEqual(unknownEntries(updated.violations).toSorted(), reported.toSorted());
   assert.deepEqual(
     updated.removed.toSorted(),
     obsolete.map((f) => join(snapshots, f)),
   );
   assert.deepEqual(
-    unknownEntries(testSpec(spec, { update: false, depth: 0 }).problems).toSorted(),
+    unknownEntries(testSpec(spec, { update: false, depth: 0 }).violations).toSorted(),
     reported.toSorted(),
   );
 });

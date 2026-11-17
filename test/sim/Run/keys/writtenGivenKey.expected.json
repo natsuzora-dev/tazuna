@@ -13,9 +13,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.writtenGivenKey",
+      "kind": "InvalidScenario.writtenGivenKey",
       "definition": null,
       "data": {
         "service": "notes",

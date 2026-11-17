@@ -78,9 +78,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.unreceivedRequest",
+    "kind": "InvalidScenario.unreceivedRequest",
     "definition": null,
     "data": {
       "scenarioLine": 1,

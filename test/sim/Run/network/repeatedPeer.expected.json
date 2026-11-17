@@ -13,16 +13,16 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.repeatedPeer",
+      "kind": "InvalidScenario.repeatedPeer",
       "definition": null,
       "data": {
         "service": "notifier"
       }
     },
     {
-      "kind": "Report.repeatedPeer",
+      "kind": "InvalidScenario.repeatedPeer",
       "definition": null,
       "data": {
         "service": "todo"

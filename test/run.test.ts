@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { test } from "node:test";
+import { bagOrderDependentKinds } from "../src/data/bagOrderDependent.generated.ts";
 import { choiceDependentKinds } from "../src/data/choiceDependent.generated.ts";
 import { faultKinds } from "../src/data/fault.generated.ts";
 import { invalidInputKinds } from "../src/data/invalidInput.generated.ts";
-import { orderDependentKinds } from "../src/data/orderDependent.generated.ts";
 import {
   folders,
   isServiceFolder,
@@ -25,13 +25,13 @@ const tests = import.meta.dirname;
  * The kinds of each group. Its examples are in test/run/<group with a lowercase first letter>/<path>/<example>, where
  * <path> is the path, relative to lean/Tazuna, of the one Lean file that reports the violations of the example's
  * scenarios: the Service file that calls State.report, Processing.report or State.reportAll, or the Explore file
- * that builds the OrderDependent or ChoiceDependent violations. An example without violations is in the
+ * that builds the BagOrderDependent or ChoiceDependent violations. An example without violations is in the
  * same folder as the example that it counters.
  */
 const groups: Readonly<Record<string, readonly string[]>> = {
   InvalidInput: invalidInputKinds,
   Fault: faultKinds,
-  OrderDependent: orderDependentKinds,
+  BagOrderDependent: bagOrderDependentKinds,
   ChoiceDependent: choiceDependentKinds,
 };
 
@@ -62,7 +62,7 @@ const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string
     because: "the fault halts the scenario at its last line, and the stepOrder of its first line is still reported",
   },
   "choiceDependent/Explore/ChoiceDependent/identical-requests": {
-    kinds: ["Report.leftInFlight", "Report.unresolvedReference"],
+    kinds: ["InvalidScenario.leftInFlight", "InvalidScenario.unresolvedReference"],
     because:
       "each handle of requests needs a line of its own, and a handle beyond the requests sent names nothing, beside the assignments that the example searches",
   },

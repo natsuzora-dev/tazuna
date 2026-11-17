@@ -78,9 +78,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.awaitingAnswer",
+      "kind": "InvalidScenario.awaitingAnswer",
       "definition": null,
       "data": {
         "message": {

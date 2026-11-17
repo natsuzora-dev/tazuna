@@ -41,7 +41,7 @@ theorem compareSnapshot_reordered (snapshot : List (Option Value)) (run : List V
   exact h.canonical_eq
 
 theorem pairSnapshots_nil_iff (services : List String) (scenarios : List Scenario) (folders : List Folder) :
-    (pairSnapshots services scenarios folders).problems = [] ↔
+    (pairSnapshots services scenarios folders).violations = [] ↔
       ∀ s ∈ services,
         (∀ e ∈ entriesIn folders s, ∃ sc ∈ scenarios, sc.service = s ∧ fileName e = some sc.name) ∧
           ∀ sc ∈ scenarios, sc.service = s → sc.compared = true →

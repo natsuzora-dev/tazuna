@@ -36,7 +36,7 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  *   running peer's answer writes `created()`. The report is at the line, or at the scenario for Given.
  * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
  * - `misusedObserved`: the line `input` of the scenario uses the observed value at the field `path` of a handle in the
- *   way `use` (LoweringProblem's ObservedUse) instead of placing it whole in a value; the value exists only when the
+ *   way `use` (LoweringViolation's ObservedUse) instead of placing it whole in a value; the value exists only when the
  *   scenario runs.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.

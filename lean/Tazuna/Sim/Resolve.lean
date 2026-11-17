@@ -33,7 +33,7 @@ def setValueAt (v x : Value) : List String → Value
 
 variable {m : Type → Type} [Monad m]
 
-local instance {α : Type} : Inhabited (ExceptT Report m α) := ⟨throw default⟩
+local instance {α : Type} : Inhabited (ExceptT InvalidScenario m α) := ⟨throw default⟩
 
 /-- `v` as the simulation compares it for `schema` (Functions.unordered), or as it is when it does not match it. -/
 def comparedOr (fs : Functions m) (schema : Schema) (v : Value) : m Value := do
@@ -81,18 +81,18 @@ def World.schemaOf? (w : World) (msg : Message) : Option (String × Schema) :=
 def World.sentBy (w : World) (line : Nat) : Option Sent := w.sent.find? (·.line == line)
 
 /-- The only one of `found`, or the report of none or several for the handle `fact` of line `i`. -/
-def World.only (w : World) (i : Nat) (fact : Fact) : List Nat → Except Report Nat
+def World.only (w : World) (i : Nat) (fact : Fact) : List Nat → Except InvalidScenario Nat
   | [k] => .ok k
   | [] => .error (.unresolvedReference i (ToValue.toValue fact))
   | ks => .error (.ambiguousReference i (ToValue.toValue fact) (ks.filterMap (w.messages[·]?) |>.map (·.describe)))
 
-def ofExcept {α : Type} : Except Report α → ExceptT Report m α
+def ofExcept {α : Type} : Except InvalidScenario α → ExceptT InvalidScenario m α
   | .ok a => pure a
   | .error e => throw e
 
 /-- The screen instance that the handle `fact` of line `i` names. -/
-def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except Report Opened :=
-  let unresolved : Except Report Opened := .error (.unresolvedReference i (ToValue.toValue fact))
+def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except InvalidScenario Opened :=
+  let unresolved : Except InvalidScenario Opened := .error (.unresolvedReference i (ToValue.toValue fact))
   match fact with
   | .screen o ref =>
     match w.opened.filter fun s => s.origin == o && s.service == ref.service && s.chart == ref.name with
@@ -125,10 +125,10 @@ compared with the message's as the schema of its sender compares them. The handl
 equal as that schema compares them: the scenario cannot tell them apart, so which handle names which is no line's.
 -/
 partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
-    ExceptT Report m Nat := do
+    ExceptT InvalidScenario m Nat := do
   let indexed := w.messages.toList.zipIdx
   let matching (p : Message → Bool) := indexed.filterMap fun (msg, k) => if p msg then some k else none
-  let picked (p : Message → Bool) (pick : Option Template) : ExceptT Report m (List Nat) := do
+  let picked (p : Message → Bool) (pick : Option Template) : ExceptT InvalidScenario m (List Nat) := do
     let pick ← pick.mapM (w.fill fsOf i)
     let found ← indexed.filterM fun (msg, _) => do
       if !p msg then return false
@@ -171,7 +171,7 @@ The messages, in sending order, of the group of the handle `fact` of `requests` 
 with the same fields names, which must be equal as the schema of their sender compares them.
 -/
 partial def World.requestsOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
-    ExceptT Report m (List Nat) := do
+    ExceptT InvalidScenario m (List Nat) := do
   let .requests o kind target input _ := fact | throw (.unresolvedReference i (ToValue.toValue fact))
   let pick ← input.mapM (w.fill fsOf i)
   let found ← w.messages.toList.zipIdx.filterMapM fun (msg, k) => do
@@ -193,12 +193,12 @@ one answer that the receiver of the line's request gave to it while the answer's
 each answer of a subscription by the line that caused it; of an answer that a line states, its output.
 -/
 partial def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) (part : Part) :
-    ExceptT Report m Value := do
-  let missing : ExceptT Report m Value := throw (.missingOutput i (ToValue.toValue fact))
-  let present : Option Value → ExceptT Report m Value
+    ExceptT InvalidScenario m Value := do
+  let missing : ExceptT InvalidScenario m Value := throw (.missingOutput i (ToValue.toValue fact))
+  let present : Option Value → ExceptT InvalidScenario m Value
     | some v => pure v
     | none => missing
-  let viaMessage : ExceptT Report m Value := do
+  let viaMessage : ExceptT InvalidScenario m Value := do
     let k ← w.messageOf fsOf i fact
     let some msg := w.messages[k]? | missing
     match msg.body, part with
@@ -229,7 +229,7 @@ partial def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (
   | _, _ => viaMessage
 
 partial def World.observed (w : World) (fsOf : String → Functions m) (i : Nat) (r : ValueRef) :
-    ExceptT Report m Value := do
+    ExceptT InvalidScenario m Value := do
   let v ← w.partOf fsOf i r.fact r.part
   match valueAt? v r.path with
   | some x => pure x
@@ -237,7 +237,7 @@ partial def World.observed (w : World) (fsOf : String → Functions m) (i : Nat)
 
 /-- The template's value with each referenced hole filled; a created hole keeps the written value. -/
 partial def World.fill (w : World) (fsOf : String → Functions m) (i : Nat) (t : Template) :
-    ExceptT Report m Value :=
+    ExceptT InvalidScenario m Value :=
   t.holes.foldlM (init := t.value) fun v h =>
     match h.fill with
     | .ref r => do pure (setValueAt v (← w.observed fsOf i r) h.path)

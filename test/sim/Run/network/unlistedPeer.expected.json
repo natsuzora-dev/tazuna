@@ -13,9 +13,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.unlistedPeer",
+      "kind": "InvalidScenario.unlistedPeer",
       "definition": null,
       "data": {
         "service": "calendar"

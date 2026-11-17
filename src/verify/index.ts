@@ -1,13 +1,13 @@
 import { join, relative } from "node:path";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import type { Problem } from "../data/problem.ts";
 import { parseFileLines } from "../data/trace.ts";
 import { readTrace, snapshotPath } from "../data/traceFile.ts";
+import type { ReportedViolation } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
 import { compareTrace } from "./compare.ts";
 import { verifyExternal } from "./external.ts";
-import { type Found, problemsAt, readSnapshotProblems } from "./lines.ts";
-import { pairingProblem, pairTraces, traceFolderOf } from "./pairing.ts";
+import { type Found, readSnapshotViolations, violationsAt } from "./lines.ts";
+import { pairingViolation, pairTraces, traceFolderOf } from "./pairing.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
 export type { GivenRecord } from "../data/scenario.generated.ts";
@@ -33,7 +33,7 @@ export { drive, lineIds, type Run } from "./harness.ts";
  * have no trace. A trace line's violation is at its line. A violation of the snapshot, a line that the trace line
  * schema cannot read or an unknown after, is at the snapshot line, and then the trace is not compared.
  */
-export function verifyTraces(spec: Spec, folder: string): { traces: number; problems: Problem[] } {
+export function verifyTraces(spec: Spec, folder: string): { traces: number; violations: ReportedViolation[] } {
   const runs = snapshotRuns(spec);
   const snapshotted = hasSnapshot(spec, runs);
   const pairing = pairTraces(
@@ -44,17 +44,20 @@ export function verifyTraces(spec: Spec, folder: string): { traces: number; prob
   const runnerOf = (t: DefinitionRef) => (runs.find((r) => sameRef(r, t)) as SnapshotRun).runner;
   const traceFile = (t: DefinitionRef) => join(folder, t.service, `${t.name}.jsonl`);
   const atLines = (path: string, found: readonly Found[], scenario?: DefinitionRef) =>
-    problemsAt(relative(spec.root, path), found, scenario);
+    violationsAt(relative(spec.root, path), found, scenario);
   const compared = pairing.compare.flatMap((t) => {
-    const snapshot = readSnapshotProblems(snapshotPath(spec, t));
-    if (snapshot.problems.length > 0) return atLines(snapshotPath(spec, t), snapshot.problems, t);
+    const snapshot = readSnapshotViolations(snapshotPath(spec, t));
+    if (snapshot.violations.length > 0) return atLines(snapshotPath(spec, t), snapshot.violations, t);
     return atLines(traceFile(t), compareTrace(spec, runnerOf(t), snapshot.lines, readTrace(traceFile(t))).found, t);
   });
   const checked = pairing.contract.flatMap((t) =>
     atLines(traceFile(t), verifyExternal(spec, t.service, parseFileLines(readTrace(traceFile(t))))),
   );
-  const unpaired = pairing.problems.map((p) => pairingProblem(spec, p, folder));
-  return { traces: pairing.compare.length + pairing.contract.length, problems: [...compared, ...checked, ...unpaired] };
+  const unpaired = pairing.violations.map((p) => pairingViolation(spec, p, folder));
+  return {
+    traces: pairing.compare.length + pairing.contract.length,
+    violations: [...compared, ...checked, ...unpaired],
+  };
 }
 
 /**

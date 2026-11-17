@@ -91,9 +91,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.leftInFlight",
+      "kind": "InvalidScenario.leftInFlight",
       "definition": null,
       "data": {
         "message": {
@@ -108,7 +108,7 @@
       }
     },
     {
-      "kind": "Report.leftInFlight",
+      "kind": "InvalidScenario.leftInFlight",
       "definition": null,
       "data": {
         "message": {

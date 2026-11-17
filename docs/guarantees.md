@@ -38,12 +38,12 @@ tazuna has three tools that report violations:
 - `test` simulates every scenario and compares each participant's trace with its snapshot.
 - `verify` compares the traces that `drive` from `@natsuzora-dev/tazuna/verify` makes of an implementation with the snapshots.
 
-A *violation* is a problem that a tool reports.
+A *violation* is what a tool reports: a rule of the spec, the scenario, or the implementation that does not hold.
 Each violation has a kind, such as `Fault.failedEnsures`.
 The part of the kind before the dot is the violation's *group*.
 A kind's name and data, with its doc comment where they do not suffice, state what the kind means.
 A run stops at a violation of a *halting* kind, because the behavior after that violation is undefined.
-A line halts when the scenario as written describes no run, or not one run, from that line on: its input is one that no sender could give, it states a cause that did not occur (such as an event whose `resultOf` names a request that cannot have that event as its result), the order written for it does not fit the run, or the line names what does not exist or writes what only the run decides (`halts` in `lean/Tazuna/Service/InvalidInput.lean` and `lean/Tazuna/Sim/Report.lean`).
+A line halts when the scenario as written describes no run, or not one run, from that line on: its input is one that no sender could give, it states a cause that did not occur (such as an event whose `resultOf` names a request that cannot have that event as its result), the order written for it does not fit the run, or the line names what does not exist or writes what only the run decides (`halts` in `lean/Tazuna/Service/InvalidInput.lean` and `lean/Tazuna/Sim/InvalidScenario.lean`).
 
 ## What a passing tool means
 
@@ -58,18 +58,18 @@ tazuna guarantees nothing about lines that no scenario contains.
 
 ### When a scenario simulates
 
-Lean defines the simulation in `lean/Tazuna/Sim`, and `Sim.Report` holds what it reports about a scenario.
-When `test` reports no `Report` violation, the scenario stated everything that happened between the participants:
+Lean defines the simulation in `lean/Tazuna/Sim`, and `Sim.InvalidScenario` holds what it reports about a scenario.
+When `test` reports no `InvalidScenario` violation, the scenario stated everything that happened between the participants:
 
-- every message between two participants reached its receiver by a line of When, or the scenario names it as lost, failed, or in flight at the end (`Report.leftInFlight`);
-- a message never overtook an earlier one on its channel (`Report.overtaking`);
-- each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered, not both (`Report.awaitingAnswer`, `Report.repeatedAnswer`);
-- an event's `resultOf` names a request that its emitter received (`Report.unreceivedRequest`), and the receiver took that request's answer before the event (`InvalidInput.resultOfUnansweredRequest`);
-- each handle named one fact, and the handles of `requests` named equal requests (`Report.unresolvedReference`, `Report.ambiguousReference`);
-- each message that the scenario names as in flight at the end, it names once (`Report.repeatedInFlight`);
-- the clock only advanced (`Report.notLater`);
-- the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>`, in a line or in a Given record (`Report.writtenKey`, `Report.writtenGivenKey`);
-- no spec computed a string of that form that no participant created, in a record or an `out` line (`Report.computedKey`).
+- every message between two participants reached its receiver by a line of When, or the scenario names it as lost, failed, or in flight at the end (`InvalidScenario.leftInFlight`);
+- a message never overtook an earlier one on its channel (`InvalidScenario.overtaking`);
+- each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered, not both (`InvalidScenario.awaitingAnswer`, `InvalidScenario.repeatedAnswer`);
+- an event's `resultOf` names a request that its emitter received (`InvalidScenario.unreceivedRequest`), and the receiver took that request's answer before the event (`InvalidInput.resultOfUnansweredRequest`);
+- each handle named one fact, and the handles of `requests` named equal requests (`InvalidScenario.unresolvedReference`, `InvalidScenario.ambiguousReference`);
+- each message that the scenario names as in flight at the end, it names once (`InvalidScenario.repeatedInFlight`);
+- the clock only advanced (`InvalidScenario.notLater`);
+- the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>`, in a line or in a Given record (`InvalidScenario.writtenKey`, `InvalidScenario.writtenGivenKey`);
+- no spec computed a string of that form that no participant created, in a record or an `out` line (`InvalidScenario.computedKey`).
 
 The [simulation section](#simulation) of the proven properties lists what Lean proves about these rules.
 
@@ -101,10 +101,10 @@ The following table names the side at fault for each group.
 | `NonCanonical` | `check` | The spec. |
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
-| `Report` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold. |
+| `InvalidScenario` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold. |
 | `InvalidInput` | `test` | The scenario: a message that no sender could give the participant, including an external peer's answer that breaks the contract that the spec assumes of it. |
 | `Fault` | `test` | The spec. |
-| `OrderDependent` | `test` | The spec. |
+| `BagOrderDependent` | `test` | The spec. |
 | `ChoiceDependent` | `test` | The spec. |
 | `Uncovered` | `test --coverage` | The scenarios. |
 | `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's simulation. |
@@ -115,8 +115,8 @@ Precedent: Design by Contract (Bertrand Meyer), where a precondition binds the c
 ## Detections
 
 A *detection* is a report that does not cover every case.
-When a detection reports a problem, the problem is real.
-When a detection reports nothing, the problem can still exist.
+When a detection reports a violation, the violation is real.
+When a detection reports nothing, the violation can still exist.
 
 `test` explores paths that append moves to each scenario.
 A move is one act that faces the own service, with the network lines it needs.
@@ -126,7 +126,7 @@ An explored path uses values from the scenarios and new IDs, and it neither rese
 |---|---|
 | Violations that `test` finds on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by another name than the ones that `check` looks for in the spec's source. |
-| `OrderDependent` | Orders of a `Bag` other than the written one and its reverse. |
+| `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse. |
 | `ChoiceDependent` | Orders of steps and of tied deadlines beyond the `ChoiceDependent.searchLimit` of one processing, assignments of the handles of `requests` beyond it in one scenario, and a difference in outputs that `verify` cannot compare with themselves, as when equal requests get different answers; the records are still compared. |
 | `InvalidInput` | An external peer's answer is checked only against the requires that read the input alone and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
@@ -143,7 +143,7 @@ tazuna detects breaks of each assumption only partly or not at all.
 - **Spec functions.** Spec functions are deterministic: they read no clock, random source, or mutable global state, and receive the current time as an argument.
 - **Types.** Each value in spec code has the type that the code declares.
   A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
-  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers up to a renaming of the keys that the call creates.
+  `test` detects a dependence on the order of a `Bag` only partly, as `BagOrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers up to a renaming of the keys that the call creates.
 - **Adapter.** The adapter that `drive` drives the implementation through reports only messages that the implementation received or sent, with the values that the implementation used, and it controls the implementation's whole world: the implementation reads the time only from the clock that `advanceTo` moves, and receives messages only through the adapter.
   Its `settled` resolves only when the implementation has no work left that it can do before it gets a message or the clock moves; `drive` gives the next `in` line then, so an output that the implementation would still send lands in the group of a later input and compares as a mismatch.
   An adapter that can only wait for that, such as one that drives a browser, bounds the wait and rejects with `Unsettled` when the bound passes.

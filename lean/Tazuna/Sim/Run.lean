@@ -14,12 +14,12 @@ open Tazuna.Scenario (Fact Origin Template RequestType Expectation GivenRecord P
 
 variable {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m]
 
-def World.attempt {α : Type} (w : World) (r : Except Report α) (k : α → m World) : m World :=
+def World.attempt {α : Type} (w : World) (r : Except InvalidScenario α) (k : α → m World) : m World :=
   match r with
   | .error e => pure (w.report e)
   | .ok a => k a
 
-def World.resolving {α : Type} (w : World) (r : ExceptT Report m α) (k : α → m World) : m World := do
+def World.resolving {α : Type} (w : World) (r : ExceptT InvalidScenario m α) (k : α → m World) : m World := do
   match ← r.run with
   | .error e => pure (w.report e)
   | .ok a => k a
@@ -41,7 +41,7 @@ def comparedAnswerValue (fs : Functions m) (target : String) (v : Value) : m Val
 What the values that a line or an expectation of `line` writes report: `created()` that is not `allowed` at the top or
 that a pick writes, or a created key written as a literal.
 -/
-def World.checkWritten (w : World) (line : Nat) (written picks : List Template) (allowed : Bool) : Option Report :=
+def World.checkWritten (w : World) (line : Nat) (written picks : List Template) (allowed : Bool) : Option InvalidScenario :=
   if picks.any (·.created) || (!allowed && written.any (·.created)) then some (.misplacedCreated line)
   else ((written ++ picks).findSome? fun t => w.writtenKey? t.value).map fun (key, e) => .writtenKey line key e
 
@@ -111,7 +111,7 @@ The message in flight from the running peer `peer` that the line `i` states, amo
 earlier line stated: of each channel the oldest, which FIFO delivers first; the only such one, or the report of none or
 of several channels.
 -/
-def World.peerMessage (w : World) (i : Nat) (peer : String) (fits : Message → m Bool) : m (Except Report Nat) := do
+def World.peerMessage (w : World) (i : Nat) (peer : String) (fits : Message → m Bool) : m (Except InvalidScenario Nat) := do
   let found ← w.messages.toList.zipIdx.filterM fun (msg, k) =>
     if msg.status == .inFlight && msg.sender == peer && !w.carried.any (·.2 == k) then fits msg else pure false
   let oldest := found.filter fun (msg, k) => !found.any fun (n, j) => j < k && n.sameChannel msg
@@ -150,7 +150,7 @@ def World.deliverInOrder (w : World) (fsOf : String → Functions m) (i k : Nat)
 The id by which `peer` names the request that the handle `fact` of line `i` names, which a line delivered to `peer`.
 -/
 def World.requestId (w : World) (fsOf : String → Functions m) (i : Nat) (peer : String) (fact : Fact) :
-    ExceptT Report m String :=
+    ExceptT InvalidScenario m String :=
   match fact with
   | .line j =>
     match w.sentBy j with
@@ -284,7 +284,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
             pure (w.carry i j)
       | _ => pure (w.report (.wrongRole i peer))
   | .emit peer event payload resultOf => do
-    let resultId : ExceptT Report m (Option String) := match resultOf with
+    let resultId : ExceptT InvalidScenario m (Option String) := match resultOf with
       | none => pure none
       | some f => some <$> w.requestId fsOf i peer f
     w.resolving resultId fun resultId =>
@@ -378,7 +378,7 @@ offers the control with the payload at that point, or the report of the payload.
 payload that reports stops nothing.
 -/
 def World.found (w : World) (fsOf : String → Functions m) (expectations : List Expectation) (i : Nat) :
-    Scenario.Line → m (List (Nat × Except Report Bool))
+    Scenario.Line → m (List (Nat × Except InvalidScenario Bool))
   | .look screen =>
     match w.screenOf i screen with
     | .error _ => pure []
@@ -417,15 +417,15 @@ def bag (vs : List Value) : List Value := vs.mergeSort fun a b => decide (a.cano
 
 /-- The actual and expected values of the expectation `e`, which Then compares, with what the look lines `found`. -/
 def World.compared (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
-    (found : List (Nat × Except Report Bool)) (k : Nat) (e : Expectation) :
-    ExceptT Report m (Option (Value × Value)) := do
+    (found : List (Nat × Except InvalidScenario Bool)) (k : Nat) (e : Expectation) :
+    ExceptT InvalidScenario m (Option (Value × Value)) := do
   let some st := w.services.lookup own | return none
   let fs := fsOf own
-  let comparedOr (fs : Functions m) (schema : Schema) (v : Value) : ExceptT Report m Value :=
+  let comparedOr (fs : Functions m) (schema : Schema) (v : Value) : ExceptT InvalidScenario m Value :=
     ExceptT.lift (comparedOr fs schema v)
-  let comparedAnswer (fs : Functions m) (target : String) (a : Answer) : ExceptT Report m Value :=
+  let comparedAnswer (fs : Functions m) (target : String) (a : Answer) : ExceptT InvalidScenario m Value :=
     ExceptT.lift (comparedAnswer fs target a)
-  let comparedAnswerValue (fs : Functions m) (target : String) (v : Value) : ExceptT Report m Value :=
+  let comparedAnswerValue (fs : Functions m) (target : String) (v : Value) : ExceptT InvalidScenario m Value :=
     ExceptT.lift (comparedAnswerValue fs target v)
   match e with
   | .answered line answers =>
@@ -476,14 +476,14 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       | some (.ok offers) => pure (some (.bool offered, .bool offers))
       | some (.error r) => throw r
       | none => pure none
-    | _ => throw (.notLook k look)
+    | _ => throw (.notALook k look)
 
 /--
 The world with each expectation of Then compared, unless the values it writes report; what one reports never stops the
 others.
 -/
 def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
-    (expectations : List Expectation) (found : List (Nat × Except Report Bool)) : m World :=
+    (expectations : List Expectation) (found : List (Nat × Except InvalidScenario Bool)) : m World :=
   expectations.zipIdx.foldlM (init := w) fun w (e, k) => do
     if let some r := w.checkWritten e.line e.written e.picks false then return w.note r
     match ← (w.compared fsOf own lines found k e).run with
@@ -500,8 +500,8 @@ def World.step (w : World) (fsOf : String → Functions m) (sc : Scenario) (l : 
 The world after the line `l` at `i`, as `step` leaves it, with what the line found for Then added to `found`: Then
 reads the world before the line, and the line does not read Then.
 -/
-def World.stepFinding (fsOf : String → Functions m) (sc : Scenario) (wf : World × List (Nat × Except Report Bool))
-    (l : Scenario.Line) (i : Nat) : m (World × List (Nat × Except Report Bool)) := do
+def World.stepFinding (fsOf : String → Functions m) (sc : Scenario) (wf : World × List (Nat × Except InvalidScenario Bool))
+    (l : Scenario.Line) (i : Nat) : m (World × List (Nat × Except InvalidScenario Bool)) := do
   let (w, found) := wf
   if w.stopped then return (w, found)
   let more ← w.found fsOf sc.expectations i l
@@ -522,7 +522,7 @@ and Then: explore appends lines to a scenario this way, so what the appended lin
 -/
 def walk (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
-  if !w.reports.isEmpty then return w
+  if !w.violations.isEmpty then return w
   w.walk fsOf sc
 
 /--
@@ -531,7 +531,7 @@ checked and the records placed, every running service begins, the lines take pla
 -/
 def simulate (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
-  if !w.reports.isEmpty then return w
+  if !w.violations.isEmpty then return w
   let w ← w.beginAll fsOf
   let wf ← sc.lines.zipIdx.foldlM (init := (w, [])) fun wf (l, i) => World.stepFinding fsOf sc wf l i
   if wf.1.stopped then return wf.1

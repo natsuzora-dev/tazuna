@@ -2,12 +2,12 @@ import Lean.Elab.Term
 import Tazuna.Data.Names
 import Tazuna.Data.Trace
 import Tazuna.Explore.ChoiceDependent
-import Tazuna.Explore.OrderDependent
+import Tazuna.Explore.BagOrderDependent
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
 import Tazuna.Spec.Structure
 import Tazuna.Scenario.Given
-import Tazuna.Sim.Report
+import Tazuna.Sim.InvalidScenario
 import Tazuna.Validation.Illegal
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
@@ -330,8 +330,8 @@ def files : List (String × String) :=
    ("data/uncomparable.generated.ts", typescript% Tazuna.Verify.Uncomparable),
    ("data/invalidInput.generated.ts", typescript% Tazuna.Service.InvalidInput ++
       halting "InvalidInput" (((samples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
-   ("data/report.generated.ts", typescript% Tazuna.Sim.Report ++
-      halting "Report" (((samples% Tazuna.Sim.Report).filter (·.halts)).map (·.kind))),
+   ("data/invalidScenario.generated.ts", typescript% Tazuna.Sim.InvalidScenario ++
+      halting "InvalidScenario" (((samples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind))),
    ("data/scenario.generated.ts",
     zod% Tazuna.Scenario Tazuna.Spec.Ref Tazuna.Scenario.Origin
       Tazuna.Scenario.Fact Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
@@ -340,7 +340,7 @@ def files : List (String × String) :=
       Tazuna.Scenario.Given),
    ("data/fault.generated.ts", typescript% Tazuna.Service.Fault ++
       halting "Fault" (((samples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
-   ("data/orderDependent.generated.ts", typescript% Tazuna.Explore.OrderDependent),
+   ("data/bagOrderDependent.generated.ts", typescript% Tazuna.Explore.BagOrderDependent),
    ("data/choiceDependent.generated.ts",
     typescript% Tazuna.Explore.ChoiceDependent Tazuna.Service.Copy Tazuna.Service.Who Tazuna.Service.StepName
       Tazuna.Explore.Difference Tazuna.Explore.Assigned),

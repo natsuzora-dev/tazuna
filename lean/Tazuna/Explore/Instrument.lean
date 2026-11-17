@@ -1,5 +1,5 @@
 import Tazuna.Service.Restart
-import Tazuna.Explore.OrderDependent
+import Tazuna.Explore.BagOrderDependent
 import Tazuna.Sim.Trace
 import Tazuna.Data.Binding
 
@@ -108,7 +108,7 @@ structure TransitionAccess where
   writes : List (String × String) := []
 deriving Repr, Inhabited
 
-def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List OrderDependent :=
+def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List BagOrderDependent :=
   let a := access p.first
   let b := access p.second
   (b.writes.filterMap fun v =>
@@ -279,12 +279,12 @@ def observe {α : Type} (x : m α) (f : α → StateT Collect m Unit) : StateT C
   f r
   pure r
 
-def reportOrder (definition : Spec.Ref) (found : OrderDependent) : StateT Collect m Unit :=
+def reportOrder (definition : Spec.Ref) (found : BagOrderDependent) : StateT Collect m Unit :=
   modify (·.reportOrder definition found.toViolation)
 
 /--
 Takes the answer of `again`, the question `function` asked again of `ifs.reversed`, and reports
-OrderDependent.reversedException when an Issue stops it, or OrderDependent.reversedResult when `same` tells it apart
+BagOrderDependent.reversedException when an Issue stops it, or BagOrderDependent.reversedResult when `same` tells it apart
 from `original`. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
 answer that depends on the order only as the reversal keeps it, such as on the middle of three values, is not reported.
 -/

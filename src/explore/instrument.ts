@@ -1,13 +1,13 @@
 import { bagValues, enumerations } from "../data/bag.ts";
+import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { emptyBinding, matchValue } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { OrderDependent } from "../data/orderDependent.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
-import { type Located, type ProblemError, withExtra } from "../data/violation.ts";
+import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import {
   type Access,
@@ -68,20 +68,20 @@ function regionFindings(
   chart: DefinitionRef,
   access: (part: number) => TransitionAccess,
   p: RegionPair,
-): OrderDependent[] {
+): BagOrderDependent[] {
   const [a, b] = [access(p.first), access(p.second)];
   const { state, firstRef, secondRef } = p;
-  const assignRead = (writer: TransitionRef, reader: TransitionRef, field: string): OrderDependent => ({
-    kind: "OrderDependent.assignRead",
+  const assignRead = (writer: TransitionRef, reader: TransitionRef, field: string): BagOrderDependent => ({
+    kind: "BagOrderDependent.assignRead",
     definition: chart,
     data: { state, writer, reader, field },
   });
   return [
-    ...[...b.writes].flatMap(([v, field]): OrderDependent[] => {
+    ...[...b.writes].flatMap(([v, field]): BagOrderDependent[] => {
       if (a.writes.has(v))
         return [
           {
-            kind: "OrderDependent.bothAssign",
+            kind: "BagOrderDependent.bothAssign",
             definition: chart,
             data: { state, firstTransition: firstRef, secondTransition: secondRef, field },
           },
@@ -125,11 +125,11 @@ function tiedDeadlines(steps: readonly StepInfo[], i: number, j: number): boolea
   return a !== undefined && b !== undefined && a.equals(b);
 }
 
-const reportedKey = (v: OrderDependent): string => JSON.stringify([v.kind, v.definition, v.data]);
+const reportedKey = (v: BagOrderDependent): string => JSON.stringify([v.kind, v.definition, v.data]);
 
 /**
  * Lean's Collect: the values each step reads and writes, the context fields each part of the open microstep reads and
- * assigns, the groups of the trace's event lines, and the OrderDependent violations. The values come through
+ * assigns, the groups of the trace's event lines, and the BagOrderDependent violations. The values come through
  * `read` and `write` from the TS listener, which turns the notes into values because the evaluation cache hears them
  * too.
  */
@@ -146,7 +146,7 @@ export class Collect
   private readonly steps = new Map<number, StepAccess>();
   /** The access of the step open outermost, which began last of `steps`. */
   private outermost: StepAccess | undefined;
-  readonly violations: (OrderDependent & Located)[] = [];
+  readonly violations: (BagOrderDependent & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */
   private readonly reported = new Set<string>();
   readonly causes: Causes = { events: [] };
@@ -169,7 +169,7 @@ export class Collect
     return this.reportedOrder.has(JSON.stringify(definition));
   }
 
-  reportOrder(definition: DefinitionRef, v: OrderDependent & Located): void {
+  reportOrder(definition: DefinitionRef, v: BagOrderDependent & Located): void {
     this.reportedOrder.add(JSON.stringify(definition));
     this.reported.add(reportedKey(v));
     this.violations.push(v);
@@ -202,7 +202,7 @@ export class Collect
     };
   }
 
-  private report(v: OrderDependent): void {
+  private report(v: BagOrderDependent): void {
     const key = reportedKey(v);
     if (this.reported.has(key)) return;
     this.reported.add(key);
@@ -406,12 +406,12 @@ export class InstrumentedFunctions implements Functions {
     if (reversed instanceof Failed)
       this.c.reportOrder(
         definition,
-        withExtra({ kind: "OrderDependent.reversedException", definition, data }, { error: reversed.error }),
+        withExtra({ kind: "BagOrderDependent.reversedException", definition, data }, { error: reversed.error }),
       );
     else if (
       !(typeof compared === "function" ? compared(answered) === compared(reversed) : compared.same(answered, reversed))
     )
-      this.c.reportOrder(definition, { kind: "OrderDependent.reversedResult", definition, data });
+      this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
     return answered;
   }
 
@@ -441,10 +441,10 @@ export class InstrumentedFunctions implements Functions {
     const original = this.fs.comparable(name, { result: "fulfilled", output: checked.encoded });
     if (original instanceof Failed) return;
     const data = { function: "resolve" };
-    const exception = (error: ProblemError | undefined) =>
+    const exception = (error: ViolationError | undefined) =>
       this.c.reportOrder(
         definition,
-        withExtra({ kind: "OrderDependent.reversedException", definition, data }, { error }),
+        withExtra({ kind: "BagOrderDependent.reversedException", definition, data }, { error }),
       );
     const reversed = this.ifs.reversed((fs) => fs.resolve(name, input, records, now));
     if (reversed instanceof Failed) return exception(reversed.error);
@@ -453,7 +453,7 @@ export class InstrumentedFunctions implements Functions {
     const reordered = this.fs.comparable(name, { result: "fulfilled", output: normalized.encoded });
     if (reordered instanceof Failed) return exception(reordered.error);
     if (canonicalJson(original) !== canonicalJson(reordered))
-      this.c.reportOrder(definition, { kind: "OrderDependent.reversedResult", definition, data });
+      this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
   }
 
   parse(schema: Schema, value: unknown) {

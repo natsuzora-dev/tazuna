@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import type { Problem } from "../data/problem.ts";
+import type { ReportedViolation } from "../data/violation.ts";
 import { loadSpec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
 import { check } from "./check.ts";
@@ -94,11 +94,11 @@ const help = [
   `A violation after which the spec's behavior is undefined, or a scenario line that cannot take place, stops the run:
 test neither writes nor compares that scenario's snapshot. test --update leaves an existing snapshot of that scenario
 as it is, and verify still compares traces with it. test and verify compare nothing with a snapshot that has a line
-that the trace line schema cannot read or an after field that names no earlier out line of its window. verify
-compares no line of a trace after an input line that differs from the snapshot's. Unless such an input line stops the
-comparison first, verify stops at the first line of a trace that the trace line schema cannot read and reports that
-line: it compares no line after the last input line before that line, and checks no line of an external service's
-trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.
+that the trace line schema cannot read or an after field that names no earlier out line since the input line before
+it. verify compares no line of a trace after an input line that differs from the snapshot's. Unless such an input line
+stops the comparison first, verify stops at the first line of a trace that the trace line schema cannot read and
+reports that line: it compares no line after the last input line before that line, and checks no line of an external
+service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.
 
 <spec> is the folder whose .ts files hold the spec, in any subfolders. check and test first run tsc --noEmit, from the typescript
 package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files,
@@ -116,14 +116,14 @@ const isFolder = (path: string) => statSync(path, { throwIfNoEntry: false })?.is
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-function record(io: Io, specRoot: string, r: Problem): string {
+function record(io: Io, specRoot: string, r: ReportedViolation): string {
   return JSON.stringify({ ...r, location: { ...r.location, file: relative(io.cwd, join(specRoot, r.location.file)) } });
 }
 
-function report(io: Io, specRoot: string, problems: readonly Problem[], done: string): number {
-  for (const p of problems) io.log(record(io, specRoot, p));
-  io.error(`${done}. ${problems.length === 0 ? "No problems found" : count(problems.length, "problem")}.`);
-  return problems.length === 0 ? 0 : 1;
+function report(io: Io, specRoot: string, violations: readonly ReportedViolation[], done: string): number {
+  for (const p of violations) io.log(record(io, specRoot, p));
+  io.error(`${done}. ${violations.length === 0 ? "No violations found" : count(violations.length, "violation")}.`);
+  return violations.length === 0 ? 0 : 1;
 }
 
 export async function main(args: readonly string[], io: Io): Promise<number> {
@@ -193,12 +193,12 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     const result = testSpec(spec, { update: options.has("--update"), depth });
     for (const written of result.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
     for (const removed of result.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
-    const problems = [...(options.has("--coverage") ? uncoveredOf(spec, result.reached) : []), ...result.problems];
+    const violations = [...(options.has("--coverage") ? uncoveredOf(spec, result.reached) : []), ...result.violations];
     const paths = `the paths that append up to ${count(depth, "input")}`;
-    return report(io, spec.root, problems, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
+    return report(io, spec.root, violations, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
   }
   const traces = resolve(io.cwd, traceFolder ?? "");
   if (!isFolder(traces)) return misused(`no such folder ${traceFolder}`);
   const result = verifyTraces(spec, traces);
-  return report(io, spec.root, result.problems, `Verified ${count(result.traces, "trace")}`);
+  return report(io, spec.root, result.violations, `Verified ${count(result.traces, "trace")}`);
 }

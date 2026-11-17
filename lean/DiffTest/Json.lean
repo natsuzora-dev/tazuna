@@ -232,8 +232,8 @@ def Folder.decode (f : Value) : Except String Verify.Folder := do
 def refValues (l : List (String × String)) : Value :=
   .arr (l.map fun (service, name) => .obj [("service", .str service), ("name", .str name)])
 
-def pairingFindings (problems : List (Verify.At × Verify.Uncomparable)) : Value :=
-  .arr (problems.map fun (place, u) => .obj [("at", place.toValue), ("violation", u.toValue)])
+def pairingFindings (violations : List (Verify.At × Verify.Uncomparable)) : Value :=
+  .arr (violations.map fun (place, u) => .obj [("at", place.toValue), ("violation", u.toValue)])
 
 /--
 The reply to request `pair`, which takes the services, the scenarios, and the trace folders, and returns the compared
@@ -247,7 +247,7 @@ def pair (request : Value) : Except String Value := do
   let folders ← (← asList (← field request "folders")).mapM Folder.decode
   let found := Verify.pairTraces services scenarios others folders
   pure (.obj [("type", .str "paired"), ("compare", refValues found.compare), ("contract", refValues found.contract),
-    ("findings", pairingFindings found.problems)])
+    ("findings", pairingFindings found.violations)])
 
 /--
 The reply to request `pairSnapshots`, which takes the services, the scenarios, and the snapshot folder of each service,
@@ -259,7 +259,7 @@ def pairSnapshots (request : Value) : Except String Value := do
   let folders ← (← asList (← field request "folders")).mapM Folder.decode
   let found := Verify.pairSnapshots services scenarios folders
   pure (.obj [("type", .str "pairedSnapshots"), ("compare", refValues found.compare),
-    ("findings", pairingFindings found.problems)])
+    ("findings", pairingFindings found.violations)])
 
 /--
 The reply to request `compareSnapshot`, which takes the snapshot lines (null for a blank line) and the run lines, and

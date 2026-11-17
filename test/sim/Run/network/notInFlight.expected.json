@@ -120,9 +120,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.notInFlight",
+    "kind": "InvalidScenario.notInFlight",
     "definition": null,
     "data": {
       "scenarioLine": 5,

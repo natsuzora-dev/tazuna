@@ -397,8 +397,8 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
     pure (Value.obj (fields ++ enabled))).run acting
   pure (.obj [("type", .str "simulated"),
     ("participants", .arr participants),
-    ("reports", .arr (w.reports.map Sim.Report.toValue)),
-    ("halted", (w.halted.map Sim.Report.toValue).getD .null)])
+    ("violations", .arr (w.violations.map Sim.InvalidScenario.toValue)),
+    ("halted", (w.halted.map Sim.InvalidScenario.toValue).getD .null)])
 
 /-- The JSON of a search, as TS writes it. -/
 def searchValue (r : Searched) : Value :=

@@ -23,13 +23,13 @@ def compareSnapshot (snapshot : List (Option Value)) (run : List Value) : Option
 structure SnapshotPairing where
   /-- The compared scenarios that have a snapshot. -/
   compare : List (String × String)
-  problems : List (At × Uncomparable)
+  violations : List (At × Uncomparable)
 
 def snapshotPairing (scenarios : List Scenario) (folders : List Folder) (service : String) : SnapshotPairing :=
   let entries := entriesIn folders service
   let p := pair (comparedNames scenarios service) entries
   { compare := p.paired.map ((service, ·))
-    problems :=
+    violations :=
       p.missing.map (fun n => (.scenario service n, .missingSnapshot { service, name := n })) ++
         p.unknown.map (fun e => (.snapshotEntry service e, .unknownSnapshotEntry)) ++
         (pair (scenarioNames scenarios service) entries).extra.map fun n =>
@@ -41,6 +41,6 @@ compared nor reported.
 -/
 def pairSnapshots (services : List String) (scenarios : List Scenario) (folders : List Folder) : SnapshotPairing :=
   let pairings := services.map (snapshotPairing scenarios folders)
-  { compare := pairings.flatMap (·.compare), problems := pairings.flatMap (·.problems) }
+  { compare := pairings.flatMap (·.compare), violations := pairings.flatMap (·.violations) }
 
 end Tazuna.Verify

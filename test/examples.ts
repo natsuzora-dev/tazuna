@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { check } from "../src/cli/check.ts";
-import type { ProblemError } from "../src/data/violation.ts";
+import type { ViolationError } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 
 export const serviceRoot = join(import.meta.dirname, "service");
@@ -73,7 +73,7 @@ export const runExamples = (): string[] => [
  * Replaces the stack of the error with a placeholder, because a stack changes with any edit of src and with the caller
  * of the run.
  */
-export function maskedStack<T extends { readonly error?: ProblemError }>(value: T): T {
+export function maskedStack<T extends { readonly error?: ViolationError }>(value: T): T {
   const { error } = value;
   return error !== undefined && "stack" in error ? { ...value, error: { ...error, stack: "<stack>" } } : value;
 }

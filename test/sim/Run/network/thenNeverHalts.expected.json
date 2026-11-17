@@ -256,9 +256,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.unresolvedReference",
+      "kind": "InvalidScenario.unresolvedReference",
       "definition": null,
       "data": {
         "scenarioLine": 4,
@@ -269,7 +269,7 @@
       }
     },
     {
-      "kind": "Report.unmetExpectation",
+      "kind": "InvalidScenario.unmetExpectation",
       "definition": null,
       "data": {
         "expectation": 1,

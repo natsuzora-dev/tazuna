@@ -279,7 +279,7 @@ const halted = (w: World): boolean =>
  * and no InvalidInput violation of a participant. explore discards the others.
  */
 const givable = (parent: Walked, child: Walked): boolean =>
-  child.world.reports.length === parent.world.reports.length &&
+  child.world.violations.length === parent.world.violations.length &&
   (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
 
@@ -332,7 +332,7 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   const paths: (readonly Line[])[] = [];
   const reached = new Coverage();
   coverageOf(base, reached);
-  if (halted(base.world) || base.world.reports.length > 0) return { found, paths, reached };
+  if (halted(base.world) || base.world.violations.length > 0) return { found, paths, reached };
   const enabledAfter = enabledLines(spec, sc, seen, bounds.valuesPerPayload);
   const children = new Map<Walked, Map<Move, Walked>>();
   const next = (path: readonly Move[], walked: Walked): Move[] => {

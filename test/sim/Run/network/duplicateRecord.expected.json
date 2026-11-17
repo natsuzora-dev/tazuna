@@ -13,9 +13,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.duplicateRecord",
+      "kind": "InvalidScenario.duplicateRecord",
       "definition": null,
       "data": {
         "service": "todo",

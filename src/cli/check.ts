@@ -1,10 +1,10 @@
 import type { Illegal } from "../data/illegal.generated.ts";
 import type { Malformed } from "../data/malformed.ts";
 import type { NonCanonical } from "../data/nonCanonical.ts";
-import type { Problem } from "../data/problem.ts";
 import type { Restricted } from "../data/restricted.ts";
+import type { ReportedViolation } from "../data/violation.ts";
 import type { Place } from "../dsl/definition.ts";
-import { comparePlaces, type Found, placeOf, problemOfFound } from "../load/found.ts";
+import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import * as binds from "../load/nonCanonical/binds.ts";
 import * as charts from "../load/nonCanonical/charts.ts";
@@ -41,7 +41,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
   }
 }
 
-export function check(spec: Spec): Problem[] {
+export function check(spec: Spec): ReportedViolation[] {
   const loading = [...spec.malformed, ...syntaxChecks.flatMap((c) => c.check(spec))];
   const found: Found<Malformed | NonCanonical | Restricted | Illegal>[] =
     spec.malformed.length > 0
@@ -50,5 +50,5 @@ export function check(spec: Spec): Problem[] {
           ...loading,
           ...validate(spec.structure).map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
         ];
-  return found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(problemOfFound);
+  return found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
 }

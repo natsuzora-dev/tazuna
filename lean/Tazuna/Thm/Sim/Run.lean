@@ -9,7 +9,7 @@ open Tazuna.Thm.Data.Basic
 variable {fsOf : String → Functions Id}
 
 /-- `w'` is `w` with reports added after its own: no state, message, or halt differs. -/
-def Reported (w w' : World) : Prop := ∃ rs, w' = { w with reports := w.reports ++ rs }
+def Reported (w w' : World) : Prop := ∃ rs, w' = { w with violations := w.violations ++ rs }
 
 theorem reported_refl (w : World) : Reported w w := ⟨[], by simp⟩
 
@@ -18,10 +18,10 @@ theorem reported_trans {w₁ w₂ w₃ : World} (h₁ : Reported w₁ w₂) (h�
   obtain ⟨qs, rfl⟩ := h₂
   exact ⟨rs ++ qs, by simp⟩
 
-theorem reported_note {w w' : World} (h : Reported w w') (r : Report) : Reported w (w'.note r) :=
+theorem reported_note {w w' : World} (h : Reported w w') (r : InvalidScenario) : Reported w (w'.note r) :=
   reported_trans h ⟨[r], rfl⟩
 
-theorem reported_report {w w' : World} (h : Reported w w') (r : Report) (hr : r.halts = false) :
+theorem reported_report {w w' : World} (h : Reported w w') (r : InvalidScenario) (hr : r.halts = false) :
     Reported w (w'.report r) := by
   unfold World.report
   simp only [hr, Bool.false_eq_true, ite_false]
@@ -37,7 +37,7 @@ theorem checkEnd_reported (w : World) : Reported w w.checkEnd := by
       (repeat' split) <;> first | exact h | (apply reported_report h; rfl)
 
 theorem expect_reported (w : World) (own : String) (lines : List Scenario.Line)
-    (expectations : List Scenario.Expectation) (found : List (Nat × Except Report Bool)) :
+    (expectations : List Scenario.Expectation) (found : List (Nat × Except InvalidScenario Bool)) :
     Reported w (w.expect fsOf own lines expectations found) := by
   unfold World.expect
   rw [foldlM_id]
@@ -52,13 +52,13 @@ theorem expect_reported (w : World) (own : String) (lines : List Scenario.Line)
       · exact h
       · exact reported_note h _
 
-theorem stepFinding_fst (sc : Scenario) (w : World) (found : List (Nat × Except Report Bool)) (l : Scenario.Line)
+theorem stepFinding_fst (sc : Scenario) (w : World) (found : List (Nat × Except InvalidScenario Bool)) (l : Scenario.Line)
     (i : Nat) : (World.stepFinding (m := Id) fsOf sc (w, found) l i).1 = w.step fsOf sc l i := by
   unfold World.stepFinding World.step
   by_cases h : w.stopped = true <;> simp [h, bind, pure]
 
 theorem foldlM_stepFinding_fst (sc : Scenario) (xs : List (Scenario.Line × Nat)) (w : World)
-    (found : List (Nat × Except Report Bool)) :
+    (found : List (Nat × Except InvalidScenario Bool)) :
     (xs.foldlM (m := Id) (fun wf (l, i) => World.stepFinding fsOf sc wf l i) (w, found)).1 =
       xs.foldlM (m := Id) (fun w (l, i) => w.step fsOf sc l i) w := by
   induction xs generalizing w found with
@@ -94,7 +94,7 @@ theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario) :
     · exact reported_refl _
     · exact reported_trans (checkEnd_reported _) (expect_reported _ _ _ _ _)
 
-theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (found : List (Nat × Except Report Bool)) :
+theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (found : List (Nat × Except InvalidScenario Bool)) :
     w.expect fsOf own lines [] found = w := rfl
 
 /--
@@ -118,7 +118,7 @@ theorem then_only_reports (j : Spec.Structure) (start : World) (sc : Scenario) :
       exact expect_reported _ _ _ _ _
 
 /-- A report that halts stops the simulation. -/
-theorem halting_report_stops (w : World) (r : Report) (hr : r.halts = true) : (w.report r).stopped = true := by
+theorem halting_report_stops (w : World) (r : InvalidScenario) (hr : r.halts = true) : (w.report r).stopped = true := by
   simp [World.report, World.stopped, hr]
 
 theorem foldlM_step_stopped (sc : Scenario) (xs : List (Scenario.Line × Nat)) (w : World) (h : w.stopped = true) :
@@ -148,7 +148,7 @@ theorem keeps_refl (w : World) : KeepsInFlight e w w := fun _ _ _ h _ => h
 theorem keeps_messages {w w' w'' : World} (h : KeepsInFlight e w w') (hm : w''.messages = w'.messages) :
     KeepsInFlight e w w'' := fun k msg hk hw hs => by rw [hm]; exact h k msg hk hw hs
 
-theorem keeps_report {w w' : World} (h : KeepsInFlight e w w') (r : Report) : KeepsInFlight e w (w'.report r) :=
+theorem keeps_report {w w' : World} (h : KeepsInFlight e w w') (r : InvalidScenario) : KeepsInFlight e w (w'.report r) :=
   keeps_messages h (by unfold World.report; split <;> rfl)
 
 theorem keeps_push {w w' : World} (h : KeepsInFlight e w w') (msg : Message) :
@@ -232,7 +232,7 @@ theorem keeps_stated {w w' : World} (h : KeepsInFlight e w w') (i : Nat) (msg : 
   · exact keeps_report h _
   · exact keeps_carry (keeps_push h _) _ _
 
-theorem keeps_resolving {α : Type} {w w' : World} (h : KeepsInFlight e w w') (r : ExceptT Report Id α)
+theorem keeps_resolving {α : Type} {w w' : World} (h : KeepsInFlight e w w') (r : ExceptT InvalidScenario Id α)
     (k : α → Id World) (hk : ∀ a, KeepsInFlight e w (k a)) : KeepsInFlight e w (w'.resolving r k) := by
   unfold World.resolving
   simp only [bind]
@@ -240,7 +240,7 @@ theorem keeps_resolving {α : Type} {w w' : World} (h : KeepsInFlight e w w') (r
   · exact keeps_report h _
   · exact hk _
 
-theorem keeps_attempt {α : Type} {w w' : World} (h : KeepsInFlight e w w') (r : Except Report α)
+theorem keeps_attempt {α : Type} {w w' : World} (h : KeepsInFlight e w w') (r : Except InvalidScenario α)
     (k : α → Id World) (hk : ∀ a, KeepsInFlight e w (k a)) : KeepsInFlight e w (w'.attempt r k) := by
   unfold World.attempt
   split
@@ -320,7 +320,7 @@ theorem keeps_absent {w w' : World} {n : Nat} (h : KeepsInFlight (fun j => e j �
   h k msg (fun hk' => hk'.elim hk fun hkn => by rw [hkn, hn] at hm; cases hm) hm hs
 
 theorem checkWritten_halts {w : World} {i : Nat} {written picks : List Scenario.Template} {allowed : Bool}
-    {r : Report} (h : w.checkWritten i written picks allowed = some r) : r.halts = true := by
+    {r : InvalidScenario} (h : w.checkWritten i written picks allowed = some r) : r.halts = true := by
   unfold World.checkWritten at h
   split at h
   · cases h; rfl
@@ -420,7 +420,7 @@ def SameStates (w w' : World) : Prop := w'.states = w.states
 
 theorem same_refl (w : World) : SameStates w w := rfl
 
-theorem same_report {w w' : World} (h : SameStates w w') (r : Report) : SameStates w (w'.report r) := by
+theorem same_report {w w' : World} (h : SameStates w w') (r : InvalidScenario) : SameStates w (w'.report r) := by
   unfold SameStates World.report; split <;> exact h
 
 theorem same_carry {w w' : World} (h : SameStates w w') (i k : Nat) : SameStates w (w'.carry i k) := h
@@ -438,13 +438,13 @@ theorem same_nextId {w w' : World} (h : SameStates w w') (peer name : String) : 
 theorem same_inFlight_iff {w w' : World} (inFlight : List (Nat × Nat)) :
     SameStates w { w' with inFlight } ↔ SameStates w w' := Iff.rfl
 
-theorem same_resolving {α : Type} {w w' : World} (h : SameStates w w') (r : ExceptT Report Id α)
+theorem same_resolving {α : Type} {w w' : World} (h : SameStates w w') (r : ExceptT InvalidScenario Id α)
     (k : α → Id World) (hk : ∀ a, SameStates w (k a)) : SameStates w (w'.resolving r k) := by
   unfold World.resolving; simp only [bind]; split
   · exact same_report h _
   · exact hk _
 
-theorem same_attempt {α : Type} {w w' : World} (h : SameStates w w') (r : Except Report α)
+theorem same_attempt {α : Type} {w w' : World} (h : SameStates w w') (r : Except InvalidScenario α)
     (k : α → Id World) (hk : ∀ a, SameStates w (k a)) : SameStates w (w'.attempt r k) := by
   unfold World.attempt; split
   · exact same_report h _

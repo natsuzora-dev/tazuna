@@ -1,19 +1,19 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import { type Problem, toProblem } from "../data/problem.ts";
-import type { Placed, ProblemError, ViolationValue } from "../data/violation.ts";
+import type { Placed, ViolationError, ViolationValue } from "../data/violation.ts";
+import { type ReportedViolation, toReported } from "../data/violation.ts";
 import type { Definition, Named, Place } from "../dsl/definition.ts";
 
 export interface Found<V> {
   readonly violation: V;
   readonly place: Place;
-  readonly error?: ProblemError;
+  readonly error?: ViolationError;
 }
 
 export const comparePlaces = (x: Place, y: Place): number =>
   x.file.localeCompare(y.file) || x.line - y.line || x.column - y.column;
 
-export const problemOfFound = ({ violation, place, error }: Found<ViolationValue & Placed>): Problem =>
-  toProblem({ ...violation, ...(error === undefined ? {} : { error }) }, place);
+export const reportedOfFound = ({ violation, place, error }: Found<ViolationValue & Placed>): ReportedViolation =>
+  toReported({ ...violation, ...(error === undefined ? {} : { error }) }, place);
 
 export function placeOf(
   spec: { readonly definitions: readonly Named<Definition>[] },

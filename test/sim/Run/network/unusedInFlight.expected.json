@@ -256,9 +256,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.unusedInFlight",
+      "kind": "InvalidScenario.unusedInFlight",
       "definition": null,
       "data": {
         "scenarioLine": 16

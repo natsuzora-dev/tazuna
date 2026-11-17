@@ -13,9 +13,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.invalidRecord",
+      "kind": "InvalidScenario.invalidRecord",
       "definition": null,
       "data": {
         "service": "todo",
@@ -24,7 +24,7 @@
       }
     },
     {
-      "kind": "Report.invalidRecord",
+      "kind": "InvalidScenario.invalidRecord",
       "definition": null,
       "data": {
         "service": "todo",
@@ -33,7 +33,7 @@
       }
     },
     {
-      "kind": "Report.invalidRecord",
+      "kind": "InvalidScenario.invalidRecord",
       "definition": null,
       "data": {
         "service": "todo",

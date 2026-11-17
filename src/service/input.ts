@@ -1,7 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import { type ProblemError, withExtra } from "../data/violation.ts";
+import { type ViolationError, withExtra } from "../data/violation.ts";
 import {
   type AssumptionMismatch,
   assumptionMismatch,
@@ -232,7 +232,7 @@ interface AnswerCheck {
   /** The assumption that the answer breaks, reported without halting. */
   readonly assumption: Assumption | undefined;
   /** The answer to write, or the reason that it is malformed. */
-  readonly written: Written | { readonly malformed: Malformed; readonly error?: ProblemError };
+  readonly written: Written | { readonly malformed: Malformed; readonly error?: ViolationError };
   /** An external command's acceptance, recorded to check its result events later. */
   readonly recorded?: Accepted;
 }
@@ -244,7 +244,7 @@ function writtenAnswer(
   r: Processing,
   a: Activity,
   answer: Answer,
-): Written | { readonly error: ProblemError } | Failed {
+): Written | { readonly error: ViolationError } | Failed {
   const target = activityRef(a);
   if (!hasOutput(r.st.structure, target) || answer.result === "rejected") return { written: answer, decoded: answer };
   const parsed = r.functions.parse({ kind: "output", definition: target }, answer.output);

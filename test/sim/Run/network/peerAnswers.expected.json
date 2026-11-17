@@ -206,9 +206,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.differentPeerAnswer",
+      "kind": "InvalidScenario.differentPeerAnswer",
       "definition": null,
       "data": {
         "scenarioLine": 10,

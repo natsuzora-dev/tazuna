@@ -91,9 +91,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.missingOutput",
+    "kind": "InvalidScenario.missingOutput",
     "definition": null,
     "data": {
       "scenarioLine": 4,

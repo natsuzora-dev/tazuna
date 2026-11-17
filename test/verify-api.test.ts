@@ -37,7 +37,7 @@ test("verifyTraces reports snapshot lines that do not fit the schema as violatio
   const text = readFileSync(snapshot, "utf8").split("\n");
   writeFileSync(snapshot, [...text.slice(0, 2), "{", ...text.slice(2)].join("\n"));
   assert.deepEqual(
-    verifyTraces(broken, traces).problems.map((p) => [p.location, p.kind]),
+    verifyTraces(broken, traces).violations.map((p) => [p.location, p.kind]),
     [[{ file: "shop/__snapshots__/refundCreatedCharge.jsonl", line: 3 }, "Uncomparable.lineSchema"]],
   );
 });
@@ -63,7 +63,7 @@ test("verifyTraces compares an external service trace under any name with the co
       { time, dir: "out", type: "answer", id: "answer#1", to: "q1", answer: { result: "fulfilled", output: { day } } },
     ];
     writeFileSync(join(traces, "calendar", `${name}.jsonl`), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
-    return verifyTraces(spec, traces).problems.map((p) => p.kind);
+    return verifyTraces(spec, traces).violations.map((p) => p.kind);
   };
   assert.deepEqual(kinds("nextDay", monday.add({ hours: 24 })), []);
   assert.deepEqual(kinds("sameDay", monday), ["Mismatch.failedAssumedEnsures"]);
@@ -124,7 +124,7 @@ const verifyDriven = async (name: string, adapter: Adapter) => {
   mkdirSync(join(traces, "shop"), { recursive: true });
   const trace = await drive(shop, refund, adapter);
   writeFileSync(join(traces, "shop/refundCreatedCharge.jsonl"), trace.map((l) => `${JSON.stringify(l)}\n`).join(""));
-  return { trace, kinds: verifyTraces(shop, traces).problems.map((p) => p.kind) };
+  return { trace, kinds: verifyTraces(shop, traces).violations.map((p) => p.kind) };
 };
 
 test("drive gives the implementation the snapshot's inputs and answers the requests it sends under its own ids", async () => {

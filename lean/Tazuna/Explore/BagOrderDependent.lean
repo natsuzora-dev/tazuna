@@ -6,13 +6,13 @@ namespace Tazuna.Explore
 open Tazuna.Data Tazuna.Service
 
 /--
-A result, found while the run evaluates, that depends on an order the spec does not fix. No OrderDependent violation
+A result, found while the run evaluates, that depends on an order the spec does not fix. No BagOrderDependent violation
 halts the run. In reversedException and reversedResult, orderAudit asked the question `function` of Functions again,
 with every Bag visiting its values in reverse order, and `definition` is the definition whose code answers it: the
 command, query, automation, entity, or chart. In bothAssign and assignRead, it is the chart of the conflicting
 transitions.
 -/
-inductive OrderDependent where
+inductive BagOrderDependent where
   /-- An Issue stopped the second answer, or the check of a query's output or its comparable value. -/
   | reversedException (definition : Spec.Ref) (function : String)
   /-- The second answer differs from the first. -/
@@ -22,9 +22,9 @@ inductive OrderDependent where
   | assignRead (definition : Spec.Ref) (state : String) (writer reader : Spec.TransitionRef) (field : String)
 deriving DecidableEq, Repr, Inhabited
 
-derive_group OrderDependent
+derive_group BagOrderDependent
 
-def OrderDependent.toViolation (m : OrderDependent) : Violation :=
+def BagOrderDependent.toViolation (m : BagOrderDependent) : Violation :=
   { kind := m.kind, definition := m.definition, data := m.data }
 
 end Tazuna.Explore

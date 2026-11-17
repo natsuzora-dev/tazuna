@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import { reportKinds } from "../src/data/report.generated.ts";
+import { invalidScenarioKinds } from "../src/data/invalidScenario.generated.ts";
 import { scenario } from "../src/data/scenario.generated.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { outcomeOf, simulateSpec } from "../src/sim/spec/simulate.ts";
@@ -20,7 +20,7 @@ const tests = import.meta.dirname;
 const examples = simExamples();
 
 const unexemplified: Readonly<Record<string, string>> = {
-  "Report.unoperableScreen":
+  "InvalidScenario.unoperableScreen":
     "Two open instances of one screen chart need a screen that opens it twice; the simulation's example spec has one root screen",
 };
 
@@ -58,7 +58,7 @@ for (const { root, scenarios } of examples) {
       const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));
       const outcome = outcomeOf(simulateSpec(spec, sc));
       outcomes.set(`${root}/${name}`, [
-        ...outcome.reports.map((r) => r.kind),
+        ...outcome.violations.map((r) => r.kind),
         ...(outcome.halted === null ? [] : [outcome.halted.kind]),
       ]);
       t.assert.fileSnapshot(outcome, join(root, `${name}${outcomeSuffix}`), {
@@ -67,20 +67,20 @@ for (const { root, scenarios } of examples) {
     });
 }
 
-test("Each Report kind except the unexemplified ones is in the expected outcome of some scenario under test/sim, and no unexemplified kind is", () => {
+test("Each InvalidScenario kind except the unexemplified ones is in the expected outcome of some scenario under test/sim, and no unexemplified kind is", () => {
   const reported = new Set(
     examples.flatMap(({ root, scenarios }) =>
       scenarios.flatMap((name) => {
         const outcome = JSON.parse(readFileSync(join(root, `${name}${outcomeSuffix}`), "utf8")) as {
-          readonly reports: readonly { readonly kind: string }[];
+          readonly violations: readonly { readonly kind: string }[];
           readonly halted: { readonly kind: string } | null;
         };
-        return [...outcome.reports.map((r) => r.kind), ...(outcome.halted === null ? [] : [outcome.halted.kind])];
+        return [...outcome.violations.map((r) => r.kind), ...(outcome.halted === null ? [] : [outcome.halted.kind])];
       }),
     ),
   );
   assert.deepEqual(
-    reportKinds.filter((kind) => !(kind in unexemplified) && !reported.has(kind)),
+    invalidScenarioKinds.filter((kind) => !(kind in unexemplified) && !reported.has(kind)),
     [],
   );
   assert.deepEqual(

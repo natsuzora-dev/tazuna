@@ -151,12 +151,12 @@ test("check writes one JSON line per violation to stdout and the count, or that 
     violating.out.map((line) => (JSON.parse(line) as { readonly kind: string }).kind),
     ["Illegal.foreignEvent"],
   );
-  assert.deepEqual(violating.err, [`Checked ${sourcesOf(violatingFolder).length} files. 1 problem.`]);
+  assert.deepEqual(violating.err, [`Checked ${sourcesOf(violatingFolder).length} files. 1 violation.`]);
   const cleanFolder = "test/service/Chart/Always/always";
   const clean = await run("check", cleanFolder);
   assert.equal(clean.code, 0);
   assert.deepEqual(clean.out, []);
-  assert.deepEqual(clean.err, [`Checked ${sourcesOf(cleanFolder).length} files. No problems found.`]);
+  assert.deepEqual(clean.err, [`Checked ${sourcesOf(cleanFolder).length} files. No violations found.`]);
 });
 
 test("test writes the same violation lines and count as check and runs no scenario when check reports violations", async () => {

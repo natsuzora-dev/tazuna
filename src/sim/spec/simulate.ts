@@ -1,4 +1,4 @@
-import type { Report } from "../../data/report.generated.ts";
+import type { InvalidScenario } from "../../data/invalidScenario.generated.ts";
 import type { GivenRecord, Scenario } from "../../data/scenario.generated.ts";
 import type { TraceLine } from "../../data/trace.generated.ts";
 import type { Violation } from "../../data/violation.ts";
@@ -100,8 +100,8 @@ function participantCandidates({ world, listeners }: Made, service: string): (re
 }
 
 /**
- * What a simulation shows: each running service's trace, violations and candidates, and the reports and halting
- * report.
+ * What a simulation shows: each running service's trace, violations and candidates, and the InvalidScenario
+ * violations and the halting one.
  */
 export interface Outcome {
   readonly participants: readonly {
@@ -110,8 +110,8 @@ export interface Outcome {
     readonly violations: readonly Pick<Violation, "kind" | "definition" | "data">[];
     readonly candidates: readonly (readonly [number, number])[];
   }[];
-  readonly reports: readonly Report[];
-  readonly halted: Report | null;
+  readonly violations: readonly InvalidScenario[];
+  readonly halted: InvalidScenario | null;
 }
 
 const violationValue = ({ kind, definition, data }: Violation) => ({ kind, definition, data });
@@ -123,6 +123,6 @@ export const outcomeOf = (m: Made): Outcome => ({
     violations: participantViolations(m, service).map(violationValue),
     candidates: participantCandidates(m, service),
   })),
-  reports: m.world.reports,
+  violations: m.world.violations,
   halted: m.world.halted ?? null,
 });

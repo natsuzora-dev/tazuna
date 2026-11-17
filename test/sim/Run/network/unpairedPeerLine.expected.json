@@ -120,9 +120,9 @@
       "candidates": []
     }
   ],
-  "reports": [],
+  "violations": [],
   "halted": {
-    "kind": "Report.unpairedPeerLine",
+    "kind": "InvalidScenario.unpairedPeerLine",
     "definition": null,
     "data": {
       "scenarioLine": 5,

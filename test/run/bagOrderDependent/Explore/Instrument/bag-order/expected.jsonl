@@ -1,0 +1,3 @@
+{"kind":"BagOrderDependent.reversedResult","definition":{"service":"tasks","name":"tracker"},"data":{"function":"assign"},"location":{"file":"tasks/tasks.ts","line":54},"scenario":{"service":"tasks","name":"addTwoAndRank"}}
+{"kind":"BagOrderDependent.reversedResult","definition":{"service":"tasks","name":"rankTasks"},"data":{"function":"decide"},"location":{"file":"tasks/tasks.ts","line":38},"scenario":{"service":"tasks","name":"addTwoAndRank"}}
+{"kind":"BagOrderDependent.reversedResult","definition":{"service":"tasks","name":"checkFirst"},"data":{"function":"requirement"},"location":{"file":"tasks/tasks.ts","line":43},"scenario":{"service":"tasks","name":"addTwoAndRank"}}

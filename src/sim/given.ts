@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Report } from "../data/report.generated.ts";
+import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, stringsOf } from "../data/values.ts";
 import { ref, type Service, uniqueOf } from "../service/basic.ts";
@@ -71,7 +71,7 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     carried: [],
     inFlight: [],
     counts: new Map(),
-    reports: [],
+    violations: [],
     halted: undefined,
     stepOrders: [],
     assignments: [],
@@ -133,20 +133,20 @@ function givenRows(
   written: Written,
   service: string,
   records: readonly GivenRecord[],
-): { readonly rows: GivenRow[]; readonly reports: Report[] } {
+): { readonly rows: GivenRow[]; readonly violations: InvalidScenario[] } {
   const rows: GivenRow[] = [];
-  const reports: Report[] = [];
+  const violations: InvalidScenario[] = [];
   for (const g of records) {
     const data = { service, entity: g.entity, key: g.key ?? null };
-    const invalid = () => reports.push({ kind: "Report.invalidRecord", definition: null, data });
+    const invalid = () => violations.push({ kind: "InvalidScenario.invalidRecord", definition: null, data });
     if (!r.st.entities.includes(g.entity) || r.st.singles.includes(g.entity) !== (g.key === undefined)) {
       invalid();
       continue;
     }
     const found = written([...(g.key === undefined ? [] : [g.key]), g.value]);
     if (found !== undefined) {
-      reports.push({
-        kind: "Report.writtenGivenKey",
+      violations.push({
+        kind: "InvalidScenario.writtenGivenKey",
         definition: null,
         data: { ...data, written: found[0], created: found[1] },
       });
@@ -163,16 +163,16 @@ function givenRows(
       row: { value: checked.value, encoded: checked.encoded as Fields },
     };
     if (rows.some((earlier) => clash(r.st, earlier, row)))
-      reports.push({ kind: "Report.duplicateRecord", definition: null, data });
+      violations.push({ kind: "InvalidScenario.duplicateRecord", definition: null, data });
     else rows.push(row);
   }
-  return { rows, reports };
+  return { rows, violations };
 }
 
 /** Lean's givenInvariants: `r` holds the rows as its records. */
-function givenInvariants(r: Processing, service: string, rows: readonly GivenRow[]): Report[] {
-  const broken = (entity: string | null, key: string | null, invariant: string | null): Report => ({
-    kind: "Report.brokenGivenInvariant",
+function givenInvariants(r: Processing, service: string, rows: readonly GivenRow[]): InvalidScenario[] {
+  const broken = (entity: string | null, key: string | null, invariant: string | null): InvalidScenario => ({
+    kind: "InvalidScenario.brokenGivenInvariant",
     definition: null,
     data: { service, entity, key, invariant },
   });
@@ -206,26 +206,26 @@ export function given(w: World, structure: Structure, sc: Scenario): void {
   const peers = sc.given.peers;
   peers.forEach((p, k) => {
     if (p.service === sc.service || peers.slice(0, k).some((q) => q.service === p.service))
-      noteTo(w, { kind: "Report.repeatedPeer", definition: null, data: { service: p.service } });
+      noteTo(w, { kind: "InvalidScenario.repeatedPeer", definition: null, data: { service: p.service } });
   });
   for (const service of staticPeers(structure, sc.service))
     if (!peers.some((p) => p.service === service))
-      noteTo(w, { kind: "Report.unlistedPeer", definition: null, data: { service } });
+      noteTo(w, { kind: "InvalidScenario.unlistedPeer", definition: null, data: { service } });
   for (const [service, { processing: r }] of w.participants) {
     const written = givenRecords(sc, service);
-    const { rows, reports } = givenRows(r, (v) => writtenKey(w, v), service, written);
+    const { rows, violations } = givenRows(r, (v) => writtenKey(w, v), service, written);
     const { records } = r.state;
     for (const row of rows)
       if (row.key === undefined) records.singles.set(row.entity, row.row);
       else records.keyed.get(row.entity)?.set(row.key, row.row);
-    const missing: Report[] = r.st.singles
+    const missing: InvalidScenario[] = r.st.singles
       .filter((e) => !written.some((g) => g.entity === e))
       .map((entity) => ({
-        kind: "Report.missingRecord",
+        kind: "InvalidScenario.missingRecord",
         definition: null,
         data: { service, entity },
       }));
-    const broken = reports.length === 0 && missing.length === 0 ? givenInvariants(r, service, rows) : [];
-    for (const report of [...reports, ...missing, ...broken]) noteTo(w, report);
+    const broken = violations.length === 0 && missing.length === 0 ? givenInvariants(r, service, rows) : [];
+    for (const violation of [...violations, ...missing, ...broken]) noteTo(w, violation);
   }
 }

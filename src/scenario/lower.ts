@@ -54,7 +54,7 @@ export type ObservedUse =
   | "position";
 
 /** Why the lines of a scenario cannot be read as data. */
-export type LoweringProblem =
+export type LoweringViolation =
   /** The value at `path` of the line or expectation is no definition that the spec names. */
   | { readonly kind: "unnamed"; readonly path: readonly (string | number)[] }
   /** A line was placed after When returned. */
@@ -73,7 +73,7 @@ export interface Lowered {
   readonly lines: readonly DataLine[];
   readonly expectations: readonly DataExpectation[];
   readonly stacks: readonly (string | undefined)[];
-  readonly problems: readonly LoweringProblem[];
+  readonly violations: readonly LoweringViolation[];
 }
 
 export function instant(time: string): string | undefined {
@@ -206,7 +206,7 @@ export function lower(
 ): Lowered {
   const lines: DataLine[] = [];
   const stacks: (string | undefined)[] = [];
-  const problems: LoweringProblem[] = [];
+  const violations: LoweringViolation[] = [];
   let closed = false;
   const named = (d: unknown, path: readonly (string | number)[]): DefinitionRef => {
     const ref = refOf(d);
@@ -430,7 +430,7 @@ export function lower(
     clock: {
       at: (time: string) => {
         const t = instant(time);
-        if (t === undefined) problems.push({ kind: "unparsableTime", line: lines.length });
+        if (t === undefined) violations.push({ kind: "unparsableTime", line: lines.length });
         return processing({ type: "at", time: t ?? time });
       },
     },
@@ -479,11 +479,11 @@ export function lower(
       expectations.push(lowerExpectation(e, k));
     });
   } catch (error) {
-    if (error instanceof Unnamed) problems.push({ kind: "unnamed", path: error.path });
-    else if (error instanceof LineAfterWhen) problems.push({ kind: "lineAfterWhen" });
+    if (error instanceof Unnamed) violations.push({ kind: "unnamed", path: error.path });
+    else if (error instanceof LineAfterWhen) violations.push({ kind: "lineAfterWhen" });
     else if (error instanceof Misused)
-      problems.push({ kind: "misusedObserved", line: lines.length, use: error.use, path: error.path });
+      violations.push({ kind: "misusedObserved", line: lines.length, use: error.use, path: error.path });
     else throw error;
   }
-  return { lines, expectations, stacks, problems };
+  return { lines, expectations, stacks, violations };
 }

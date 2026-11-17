@@ -196,7 +196,7 @@ function assumptionFinding(line: number, request: RequestRef, m: AssumptionMisma
  */
 export function verifyExternal(spec: Spec, service: string, trace: readonly FileLine[]): Found[] {
   const { found, resolved } = checkExternal(spec, service, trace);
-  const problems: Found[] = [...found];
+  const violations: Found[] = [...found];
   const results = new Map<string, Accepted>();
   const accept = (target: AnyCommand, request: RequestRef, decoded: Omit<Accepted["results"], "events">) => {
     const accepted = { target, request, results: { ...decoded, events: [] } };
@@ -222,10 +222,10 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
             ? undefined
             : assumedEnsures(definition, definition.kind === "command" ? accept(definition, ref, decoded) : decoded);
         const broken = assumptionMismatch(answer, failedRequires, failedEnsures);
-        if (broken !== undefined) problems.push(assumptionFinding(line, ref, broken));
+        if (broken !== undefined) violations.push(assumptionFinding(line, ref, broken));
       }
       if (out?.success === false)
-        problems.push({
+        violations.push({
           kind: "Mismatch.answerOutputSchema",
           definition: null,
           line,
@@ -236,7 +236,7 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
     }
     const parsed = parseKnown(objectOf(r.event.payload), r.line.payload);
     if (!parsed.success) {
-      problems.push({
+      violations.push({
         kind: "Mismatch.eventPayloadSchema",
         definition: null,
         line,
@@ -250,7 +250,7 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
     accepted.results.events.push(emit(r.event, parsed.data as never));
     const failed = assumedEnsures(accepted.target, accepted.results);
     if (failed !== undefined)
-      problems.push(assumptionFinding(line, accepted.request, { kind: "failedAssumedEnsures", condition: failed }));
+      violations.push(assumptionFinding(line, accepted.request, { kind: "failedAssumedEnsures", condition: failed }));
   });
-  return problems.sort(byLine);
+  return violations.sort(byLine);
 }

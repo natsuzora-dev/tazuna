@@ -256,9 +256,9 @@
       "candidates": []
     }
   ],
-  "reports": [
+  "violations": [
     {
-      "kind": "Report.notLook",
+      "kind": "InvalidScenario.notALook",
       "definition": null,
       "data": {
         "expectation": 0,

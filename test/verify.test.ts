@@ -34,7 +34,7 @@ testEveryKind(groupExamples("verify"), [...mismatchKinds, ...uncomparableKinds])
 
 const snapshotChecks = Object.values(groups).map((group) => `${group}.`);
 
-test("tazuna test, exploration included, finds no problem in the spec of each verify example besides its snapshot comparisons", async () => {
+test("tazuna test, exploration included, finds no violation in the spec of each verify example besides its snapshot comparisons", async () => {
   const verified = Object.keys(groups).flatMap((folder) =>
     Object.entries(commands)
       .filter(([, args]) => args === verify)
