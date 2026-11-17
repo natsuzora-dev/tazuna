@@ -28,32 +28,32 @@ inductive Work where
   /--
   The start of a machine or screen in its initial state. A screen that `opens` opened has the opening step as `cause`.
   -/
-  | start (machine : String) (cause : Option Nat)
+  | start (machine : InstanceId) (cause : Option Nat)
   /--
   An evaluation of a machine. `received` holds the key and payload of each matching `receives`, and is empty when only
   records changed.
   -/
-  | receive (machine : String) (received : List (String × Value)) (cause : Nat)
-  | onDone (machine : String) (cause : Nat)
+  | receive (machine : InstanceId) (received : List (String × Value)) (cause : Nat)
+  | onDone (machine : InstanceId) (cause : Nat)
   /-- The close in a final state of a screen that `opens` opened; the opener takes the `onDone` of its `opens`. -/
-  | opensDone (machine state key : String) (output : Value) (serial : Nat) (cause : Nat)
+  | opensDone (machine : InstanceId) (state key : String) (output : Value) (serial : Nat) (cause : Nat)
 deriving Repr, Inhabited
 
 /--
 The pending work of one message. `entered` holds each state with calls, sends, shows, or opens that the message entered,
-as instance resource, state, and entering step.
+as instance, state, and entering step.
 -/
 structure Queue where
   tasks : List Work := []
   round : List Sent := []
   commands : List Sent := []
-  entered : List (String × String × Nat) := []
+  entered : List (InstanceId × String × Nat) := []
 deriving Repr, Inhabited
 
 def Queue.isEmpty (q : Queue) : Bool :=
   q.tasks.isEmpty && q.round.isEmpty && q.commands.isEmpty && q.entered.isEmpty
 
-def Queue.enter (q : Queue) (name n : String) (step : Nat) : Queue :=
+def Queue.enter (q : Queue) (name : InstanceId) (n : String) (step : Nat) : Queue :=
   { q with entered := q.entered.filter (fun e => !(e.1 == name && e.2.1 == n)) ++ [(name, n, step)] }
 
 /-- The commands sorted by the rank of their sender definition; commands of equal rank keep their sending order. -/
@@ -120,7 +120,7 @@ def Processing.report (r : Processing) (f : Finding) : Processing :=
 def unlessHalted [Monad m] (f : Processing → m Processing) (r : Processing) : m Processing :=
   if r.halted then pure r else f r
 
-def withMachine [Monad m] (name : String) (f : Instance → Processing → m Processing) (r : Processing) : m Processing :=
+def withMachine [Monad m] (name : InstanceId) (f : Instance → Processing → m Processing) (r : Processing) : m Processing :=
   if r.halted then pure r else
   match r.state.machine? name with
   | some i => f i r
@@ -129,7 +129,7 @@ def withMachine [Monad m] (name : String) (f : Instance → Processing → m Pro
 /-- The evaluation work of instance `i`. A record change alone also causes it, since always guards may read records. -/
 def machineWork (emits : List Emit) (recordsChanged : Bool) (cause : Nat) (i : Instance) : Option Work :=
   let received := emits.flatMap fun e => (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)
-  if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.resource received cause)
+  if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.id received cause)
 
 /--
 The work that the events `emits` cause. Copies get no work, since they move with their owner's evaluation.

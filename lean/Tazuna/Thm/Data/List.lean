@@ -4,19 +4,19 @@ namespace Tazuna.Thm.Data.List
 
 open Tazuna.Data
 
-theorem mem_addName_self (acc : List String) (n : String) : n ∈ addName acc n := by
+theorem mem_addName_self {α : Type} [DecidableEq α] (acc : List α) (n : α) : n ∈ addName acc n := by
   unfold addName
   split
   · assumption
   · simp
 
-theorem mem_addName_of_mem {acc : List String} {x : String} (n : String) (h : x ∈ acc) : x ∈ addName acc n := by
+theorem mem_addName_of_mem {α : Type} [DecidableEq α] {acc : List α} {x : α} (n : α) (h : x ∈ acc) : x ∈ addName acc n := by
   unfold addName
   split
   · exact h
   · exact List.mem_append_left _ h
 
-theorem mem_addName {acc : List String} {x n : String} (h : x ∈ addName acc n) : x ∈ acc ∨ x = n := by
+theorem mem_addName {α : Type} [DecidableEq α] {acc : List α} {x n : α} (h : x ∈ addName acc n) : x ∈ acc ∨ x = n := by
   unfold addName at h
   split at h
   · exact Or.inl h

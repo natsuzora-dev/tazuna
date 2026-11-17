@@ -1,11 +1,11 @@
 import { byCodePoint, plain } from "../../data/values.ts";
 import { ref } from "../basic.ts";
 import { Failed, type Functions, issueViolation } from "../functions.ts";
+import { copyId } from "../instance.ts";
 import { limits } from "../limits.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   copyKeysOf,
-  copyName,
   halt,
   type Instance,
   inStep,
@@ -21,14 +21,14 @@ import { enter } from "./microstep.ts";
 import type { Processing } from "./queue.ts";
 
 /**
- * Starts a copy. The new copy replaces a closed copy with the same resource and, as in Lean's list, comes last in
+ * Starts a copy. The new copy replaces a closed copy with the same id and, as in Lean's list, comes last in
  * `copies`.
  */
 function startCopy(r: Processing, owner: Instance, map: string, key: unknown, encodedKey: string, step: number): void {
-  const resource = copyName(owner.resource, map, encodedKey);
+  const id = copyId(owner.id, map, encodedKey);
   const fields = {
     chart: owner.chart,
-    resource,
+    id,
     context: r.functions.copyContext(owner.chart.name, map),
     input: owner.input,
     entered: new Map(),
@@ -36,15 +36,15 @@ function startCopy(r: Processing, owner: Instance, map: string, key: unknown, en
     closed: false,
     awaitingOnDone: undefined,
     shown: new Map(),
-    copyOf: { owner: owner.resource, map, key, encodedKey },
+    copyOf: { map, key },
     copyKeys: new Map(),
   };
   const copy: Instance = { ...fields, who: instanceWho(fields, r.st) };
-  r.state.copies.delete(resource);
-  r.state.copies.set(resource, copy);
+  r.state.copies.delete(id);
+  r.state.copies.set(id, copy);
   const copyStep = newStep(r.state, step, { nested: true });
   const initial = owner.chart.states.get(map)?.initial;
-  inStep(r, copyStep, { kind: "start", who: who(r.state, r.st, resource) }, resource, () => {
+  inStep(r, copyStep, { kind: "start", who: who(r.state, r.st, id) }, id, () => {
     if (initial !== null && initial !== undefined) enter(r, copy, [initial], copyStep);
   });
 }
@@ -55,11 +55,11 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
   let changed = false;
   for (const map of [...owner.entered.keys()]) {
     const part = `items of ${map}`;
-    if (owner.chart.states.get(map)?.kind !== "map" || evaluations.replayIfFresh(owner.resource, part)) continue;
+    if (owner.chart.states.get(map)?.kind !== "map" || evaluations.replayIfFresh(owner.id, part)) continue;
     const definition = ref(r.st, owner.chart.name);
     let checked: ReturnType<Functions["items"]> = [];
     const reads = evaluations.track(() => {
-      r.note.readStates([[owner.resource, map]]);
+      r.note.readStates([[owner.id, map]]);
       const scope = scopeOf(r.state, owner, map);
       checked = r.functions.items(scope, new LazyRecordSource(r.state.records, r.note), new NoteAccess(r, scope));
     });
@@ -75,12 +75,12 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
     const itemKeys = keys.map((k) => k.encodedKey);
     const same = current.length === itemKeys.length && itemKeys.every((k, i) => current[i] === k);
     // The copy set is part of being in the map state; this write does not make the items evaluation stale.
-    if (!same) r.note.wroteCopies(owner.resource, map);
-    evaluations.remember(owner.resource, part, reads, reads);
+    if (!same) r.note.wroteCopies(owner.id, map);
+    evaluations.remember(owner.id, part, reads, reads);
     if (same) continue;
     changed = true;
     for (const k of current.toReversed())
-      if (!itemKeys.includes(k)) endWith(r, copyName(owner.resource, map, k), limits.exitDepth);
+      if (!itemKeys.includes(k)) endWith(r, copyId(owner.id, map, k), limits.exitDepth);
     for (const { key, encodedKey } of keys)
       if (!current.includes(encodedKey)) startCopy(r, owner, map, key, encodedKey, step);
     owner.copyKeys.set(map, itemKeys);

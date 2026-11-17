@@ -28,6 +28,7 @@ import {
   type NextKeys,
   type Scope,
 } from "../../src/service/functions.ts";
+import { topId } from "../../src/service/instance.ts";
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
@@ -305,8 +306,8 @@ export class RunFunctions implements Answering {
     if (input instanceof Failed) return input;
     return {
       machine: lean.machine,
-      resource: lean.machine,
-      owner: lean.machine,
+      resource: topId(lean.machine),
+      owner: topId(lean.machine),
       state: lean.state,
       context,
       copy,

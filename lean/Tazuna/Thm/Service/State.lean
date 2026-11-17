@@ -6,7 +6,6 @@ import Tazuna.Thm.Service.Functions
 namespace Tazuna.Thm.Service.State
 
 open Tazuna.Data Tazuna.Service
-open Tazuna.Spec (plainName)
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Functions
 
 variable {st : Service} {fs : Functions Id} {s : State}
@@ -147,76 +146,59 @@ theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false
       rw [this.2 hh]
       simp [State.violate]
 
-@[simp] theorem setMachine_commandAnswers (name : String) (f : Instance → Instance) :
+@[simp] theorem setMachine_commandAnswers (name : InstanceId) (f : Instance → Instance) :
     (s.setMachine name f).commandAnswers = s.commandAnswers := rfl
 
 @[simp] theorem answer_commandAnswers (to : Option String) (a : Answer) :
     (s.answer to a).commandAnswers = s.commandAnswers := by
   cases to <;> rfl
 
-theorem find_setMachine (l : List Instance) (c : String) (f : Instance → Instance) (hf : ∀ i, (f i).resource = i.resource) :
-    (l.map fun i => if i.resource == c then f i else i).find? (·.resource == c) = (l.find? (·.resource == c)).map f := by
+theorem find_setMachine (l : List Instance) (c : InstanceId) (f : Instance → Instance) (hf : ∀ i, (f i).id = i.id) :
+    (l.map fun i => if i.id == c then f i else i).find? (·.id == c) = (l.find? (·.id == c)).map f := by
   induction l with
   | nil => rfl
   | cons x xs ih =>
     rw [List.map_cons, List.find?_cons, List.find?_cons]
-    by_cases hx : x.resource = c
+    by_cases hx : x.id = c
     · simp [hx, hf]
-    · have hb : (x.resource == c) = false := by simp [hx]
+    · have hb : (x.id == c) = false := by simp [hx]
       simp only [hb, Bool.false_eq_true, ↓reduceIte, ih]
 
-theorem machine?_setMachine (c : String) (f : Instance → Instance) (hf : ∀ i, (f i).resource = i.resource) :
+theorem machine?_setMachine (c : InstanceId) (f : Instance → Instance) (hf : ∀ i, (f i).id = i.id) :
     (s.setMachine c f).machine? c = (s.machine? c).map f := by
   simp only [State.machine?, State.setMachine, ← List.map_append]
   exact find_setMachine _ c f hf
 
-theorem copyName_ne (owner map key : String) : copyName owner map key ≠ owner := by
+theorem copyOf_ne (i : InstanceId) (map key : String) : i.copyOf map key ≠ i := by
   intro h
-  have := congrArg String.length h
-  simp only [copyName, toString, String.length_append] at this
-  have : "[".length = 1 := by decide
+  have := congrArg sizeOf h
+  simp only [InstanceId.copyOf, InstanceId.copy.sizeOf_spec] at this
   omega
 
-theorem append_cons_inj_of_not_mem (c : Char) : ∀ (a a' b b' : List Char), c ∉ a → c ∉ a' →
-    a ++ c :: b = a' ++ c :: b' → a = a' ∧ b = b'
-  | [], [], _, _, _, _, h => by simpa using h
-  | [], y :: _, _, _, _, h', h => by
-    simp only [List.nil_append, List.cons_append, List.cons.injEq] at h
-    exact absurd (h.1 ▸ List.mem_cons_self) h'
-  | x :: _, [], _, _, h, _, e => by
-    simp only [List.nil_append, List.cons_append, List.cons.injEq] at e
-    exact absurd (e.1 ▸ List.mem_cons_self) h
-  | x :: xs, y :: ys, b, b', h, h', e => by
-    simp only [List.cons_append, List.cons.injEq] at e
-    obtain ⟨rfl, e⟩ := e
-    obtain ⟨rfl, rfl⟩ := append_cons_inj_of_not_mem c xs ys b b' (fun m => h (List.mem_cons_of_mem _ m))
-      (fun m => h' (List.mem_cons_of_mem _ m)) e
-    exact ⟨rfl, rfl⟩
-
 theorem documentOrder_owner (i : Instance) :
-    i.documentOrder.filter (·.1 == i.resource) = i.chart.states.map fun cs => (i.resource, cs.name) := by
+    i.documentOrder.filter (·.1 == i.id) = i.chart.states.map fun cs => (i.id, cs.name) := by
   unfold Instance.documentOrder
   generalize i.chart.states = l
   induction l with
   | nil => rfl
   | cons cs rest ih =>
     rw [List.flatMap_cons, List.filter_append, ih, List.filter_cons]
-    have hb : ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (copyName i.resource cs.name k, ·)).filter
-        (·.1 == i.resource) = [] := by
+    have hb : ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)).filter
+        (·.1 == i.id) = [] := by
       rw [List.filter_eq_nil_iff]
       intro a ha
       obtain ⟨k, -, ha⟩ := List.mem_flatMap.mp ha
       obtain ⟨d, -, rfl⟩ := List.mem_map.mp ha
-      simpa using copyName_ne i.resource cs.name k
+      simpa using copyOf_ne i.id cs.name k
     simp [hb]
 
 theorem documentOrder_at_map (i : Instance) (cs : ChartState) (hcs : cs ∈ i.chart.states) :
     ∃ pre post, i.documentOrder =
-      pre ++ (i.resource, cs.name) ::
-        ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (copyName i.resource cs.name k, ·)) ++ post := by
+      pre ++ (i.id, cs.name) ::
+        ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)) ++ post := by
   obtain ⟨A, B, hAB⟩ := List.append_of_mem hcs
   let f := fun cs : ChartState =>
-    (i.resource, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (copyName i.resource cs.name k, ·)
+    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)
   refine ⟨A.flatMap f, B.flatMap f, ?_⟩
   unfold Instance.documentOrder
   rw [hAB, List.flatMap_append, List.flatMap_cons]
@@ -401,7 +383,7 @@ theorem AddsOnly.trans {P : Line → Prop} {a b c : State} (h₁ : AddsOnly P a 
   · exact p₁ l h
   · exact p₂ l h
 
-def isOpenShow (owner : String) (p : Pending) : Bool := p.requester.machine? == some owner && p.requester.slot?.isSome && !p.stale
+def isOpenShow (owner : InstanceId) (p : Pending) : Bool := p.requester.machine? == some owner && p.requester.slot?.isSome && !p.stale
 
 theorem nodup_map_inj (l : List Pending) (h : (l.map (·.id)).Nodup) {p q : Pending} (hp : p ∈ l) (hq : q ∈ l)
     (he : p.id = q.id) : p = q := by

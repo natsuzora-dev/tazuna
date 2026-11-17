@@ -8,7 +8,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem addDeadlines_fixed (name n : String) (ds : List (String × DeadlineTime)) :
+theorem addDeadlines_fixed (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
     (addDeadlines name n ds s).fixed = s.fixed := by
   unfold addDeadlines
   induction ds generalizing s with
@@ -33,7 +33,7 @@ theorem rearm_fixed : (rearm st fs s).fixed = s.fixed := by
         · simp [report_eq, State.fixed]
         · rfl
 
-theorem addDeadlines_lines (name n : String) (ds : List (String × DeadlineTime)) :
+theorem addDeadlines_lines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
     (addDeadlines name n ds s).lines = s.lines := by
   unfold addDeadlines
   induction ds generalizing s with
@@ -58,21 +58,21 @@ theorem rearm_lines : (rearm st fs s).lines = s.lines := by
         · simp
         · rfl
 
-theorem addDeadlines_now (name n : String) (ds : List (String × DeadlineTime)) (s : State) :
+theorem addDeadlines_now (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
     (addDeadlines name n ds s).now = s.now := by
   unfold addDeadlines
   induction ds generalizing s with
   | nil => rfl
   | cons d ds ih => exact ih _
 
-theorem mem_addDeadlines_of_mem (name n : String) (ds : List (String × DeadlineTime)) (s : State) (t : Deadline)
+theorem mem_addDeadlines_of_mem (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) (t : Deadline)
     (ht : t ∈ s.deadlines) : t ∈ (addDeadlines name n ds s).deadlines := by
   unfold addDeadlines
   induction ds generalizing s with
   | nil => exact ht
   | cons d ds ih => exact ih _ (List.mem_append_left _ ht)
 
-theorem entry_restarts_deadline (name n : String) (ds : List (String × DeadlineTime)) (s : State) (d : String)
+theorem entry_restarts_deadline (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) (d : String)
     (delay : Time) (hd : (d, .delay delay) ∈ ds) :
     ∃ t ∈ (addDeadlines name n ds s).deadlines,
       t.machine = name ∧ t.state = n ∧ t.name = d ∧ t.time = some (s.now + delay) := by
@@ -87,7 +87,7 @@ theorem entry_restarts_deadline (name n : String) (ds : List (String × Deadline
     · obtain ⟨t, ht, h⟩ := ih _ hd
       exact ⟨t, ht, by simpa [addDeadlines_now] using h⟩
 
-theorem delay_counts_from_entry (name n : String) (ds : List (String × DeadlineTime)) (d : String) (delay : Time)
+theorem delay_counts_from_entry (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (d : String) (delay : Time)
     (hd : (d, .delay delay) ∈ ds) :
     ∃ t ∈ (addDeadlines name n ds s).deadlines,
       t.machine = name ∧ t.state = n ∧ t.name = d ∧ t.time = some (s.now + delay) :=

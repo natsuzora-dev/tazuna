@@ -2,30 +2,25 @@ import Tazuna.Service.Functions
 import Tazuna.Service.Idempotency
 import Tazuna.Service.Chart.Config
 import Tazuna.Service.Note
+import Tazuna.Service.Instance
 
 namespace Tazuna.Service
 
 open Tazuna.Data
 
-/-- The opener of a screen. `parent` is the resource of the instance that opened the screen. -/
+/-- The opener of a screen: the instance `parent` that opened it. -/
 structure Opener where
-  parent : String
+  parent : InstanceId
   state : String
   key : String
   modal : Bool
 deriving DecidableEq, Repr, Inhabited
 
-/--
-The origin of a copy. `owner` is the resource of the owner instance, and `encodedKey` is the canonicalJson of `key`.
--/
+/-- The item key of a copy of map state `map`; the owner and the canonical key are in the copy's id. -/
 structure CopyOf where
-  owner : String
   map : String
   key : Value
-  encodedKey : String
 deriving DecidableEq, Repr, Inhabited
-
-def copyName (owner map key : String) : String := s!"{owner}@{map}[{key}]"
 
 /--
 An instance of a machine or screen. A machine, or a screen that no other screen opens, has one instance per definition;
@@ -33,7 +28,7 @@ An instance of a machine or screen. A machine, or a screen that no other screen 
 -/
 structure Instance where
   chart : Chart
-  resource : String
+  id : InstanceId
   context : Value
   input : Value := .obj []
   /-- The active states and their entry times, in entry order. -/
@@ -58,7 +53,7 @@ structure Deadline where
   time : Option Time
   fromAt : Bool := false
   order : Nat
-  machine : String
+  machine : InstanceId
   state : String
   name : String
 deriving DecidableEq, Repr, Inhabited
@@ -66,18 +61,13 @@ deriving DecidableEq, Repr, Inhabited
 
 inductive Requester where
   /-- The machine `machine`, which sent the request on entering `state`. -/
-  | state (machine state : String)
+  | state (machine : InstanceId) (state : String)
   /-- The screen `machine`, which subscribed the query of shows slot `slot`; answers keep coming until it ends. -/
-  | slot (machine slot : String)
+  | slot (machine : InstanceId) (slot : String)
   | automation (name : String)
 deriving DecidableEq, Repr, Inhabited
 
-/-- The instance or automation that sent the request. -/
-def Requester.sender : Requester → String
-  | .state m _ | .slot m _ => m
-  | .automation a => a
-
-def Requester.machine? : Requester → Option String
+def Requester.machine? : Requester → Option InstanceId
   | .state m _ | .slot m _ => some m
   | .automation _ => none
 
@@ -112,7 +102,7 @@ starting state was exited.
 -/
 structure Queued where
   serial : Nat
-  machine : String
+  machine : InstanceId
   state : String
   stale : Bool := false
 deriving DecidableEq, Repr, Inhabited
@@ -180,8 +170,8 @@ structure Process where
   /-- The machine and screen instances in creation order. -/
   machines : List Instance := []
   copies : List Instance := []
-  /-- The open screen resources in opening order. -/
-  stack : List String := []
+  /-- The open screens in opening order. -/
+  stack : List InstanceId := []
   deadlines : List Deadline := []
   /-- The pending requests in sending order. -/
   pending : List Pending := []
@@ -304,30 +294,29 @@ def State.answer (s : State) (to : Option String) (answer : Answer) : State :=
 def State.emitAll (s : State) (resultOf : Option String) (emits : List Emit) : State :=
   emits.foldl (fun s e => (s.write .out none (.event e.event e.payload resultOf)).1) s
 
-def State.machine? (s : State) (name : String) : Option Instance :=
-  (s.machines ++ s.copies).find? (·.resource == name)
+def State.machine? (s : State) (id : InstanceId) : Option Instance :=
+  (s.machines ++ s.copies).find? (·.id == id)
 
-def State.chartName (s : State) (name : String) : String := ((s.machine? name).map (·.chart.name)).getD name
-
-def State.senderOf (s : State) : Requester → String
-  | .state m _ | .slot m _ => s.chartName m
+/-- The definition that sent the request: the chart of the sending instance, or the automation. -/
+def Requester.sender : Requester → String
+  | .state m _ | .slot m _ => m.chart
   | .automation a => a
 
 /-- The fault of `requester`, whose input to `target` the input schema of `target` does not take. -/
-def State.inputFault (st : Service) (s : State) (target : Spec.Ref) (requester : Requester) : Fault :=
-  .inputSchema (st.ref (s.senderOf requester)) target
+def Requester.inputFault (requester : Requester) (st : Service) (target : Spec.Ref) : Fault :=
+  .inputSchema (st.ref requester.sender) target
 
 /--
 The fault of `requester` when the receiver rejected its input to `target` as invalid. Only the receiver parses a
 message, so the sender wrote an input that the receiver's schema does not take.
 -/
-def State.rejectedInput? (st : Service) (s : State) (target : Spec.Ref) (requester : Requester) : Answer → Option Fault
-  | .rejected { kind := .invalidInput, .. } => some (s.inputFault st target requester)
+def Requester.rejectedInput? (requester : Requester) (st : Service) (target : Spec.Ref) : Answer → Option Fault
+  | .rejected { kind := .invalidInput, .. } => some (requester.inputFault st target)
   | _ => none
 
-def State.setMachine (s : State) (name : String) (f : Instance → Instance) : State :=
-  { s with machines := s.machines.map (fun i => if i.resource == name then f i else i),
-           copies := s.copies.map (fun i => if i.resource == name then f i else i) }
+def State.setMachine (s : State) (id : InstanceId) (f : Instance → Instance) : State :=
+  { s with machines := s.machines.map (fun i => if i.id == id then f i else i),
+           copies := s.copies.map (fun i => if i.id == id then f i else i) }
 
 def Instance.isIn (i : Instance) (n : String) : Bool := i.entered.any (·.1 == n)
 
@@ -341,49 +330,49 @@ def Instance.depth (i : Instance) : Nat :=
 
 def Instance.copyKeysOf (i : Instance) (map : String) : List String := (i.copyKeys.lookup map).getD []
 
-def Instance.copyResources (i : Instance) : List String := i.copyKeys.flatMap fun c => c.2.map (copyName i.resource c.1)
+def Instance.copyIds (i : Instance) : List InstanceId := i.copyKeys.flatMap fun c => c.2.map (i.id.copyOf c.1)
 
-def Instance.documentOrder (i : Instance) : List (String × String) :=
+def Instance.documentOrder (i : Instance) : List (InstanceId × String) :=
   let tree := i.chart.tree
   i.chart.states.flatMap fun cs =>
-    (i.resource, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (copyName i.resource cs.name k, ·)
+    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)
 
 def Instance.who (i : Instance) (st : Service) : Who :=
-  { chart := st.ref i.chart.name, copy := i.copyOf.map fun c => { map := c.map, itemKey := c.key } }
+  { chart := st.ref i.chart.name, serial := i.id.serial,
+    copy := i.copyOf.map fun c => { map := c.map, itemKey := c.key } }
 
-def State.who (s : State) (st : Service) (resource : String) : Who :=
-  match s.machine? resource with
+def State.who (s : State) (st : Service) (id : InstanceId) : Who :=
+  match s.machine? id with
   | some i => i.who st
-  | none => { chart := st.ref resource }
+  | none => { chart := st.ref id.chart, serial := id.serial }
+
+def State.requesterWho (s : State) (st : Service) : Requester → Who
+  | .state m _ | .slot m _ => s.who st m
+  | .automation a => { chart := st.ref a }
 
 /-- The scope of instance `i` at `state`. A copy's expressions also read the owner's context, shown, and input. -/
 def State.scopeOf (s : State) (i : Instance) (state : Option String) : Scope :=
-  match i.copyOf.bind fun c => (s.machine? c.owner).map (c, ·) with
+  match i.copyOf.bind fun c => (s.machine? i.id.owner).map (c, ·) with
   | some (c, o) =>
-    { machine := i.chart.name, resource := i.resource, owner := o.resource, state, context := o.context,
+    { resource := i.id, owner := o.id, state, context := o.context,
       copy := some { map := c.map, key := c.key, context := i.context }, active := i.active ++ o.active,
       shown := o.shown, input := o.input, now := s.now }
   | none =>
-    { machine := i.chart.name, resource := i.resource, owner := i.resource, state, context := i.context, active := i.active,
+    { resource := i.id, owner := i.id, state, context := i.context, active := i.active,
       shown := i.shown, input := i.input, now := s.now }
 
-def State.ownerOf (s : State) (name : String) : String :=
-  match (s.machine? name).bind (·.copyOf) with
-  | some c => c.owner
-  | none => name
-
 def State.running (s : State) : List Instance :=
-  s.machines.flatMap fun i => i :: i.copyResources.filterMap fun c => s.copies.find? (·.resource == c)
+  s.machines.flatMap fun i => i :: i.copyIds.filterMap fun c => s.copies.find? (·.id == c)
 
 /--
 The state with slot `slot` of `owner` shown as `value`. Copies read the owner's `shown`, so it is written to the owner.
 -/
-def State.setShown (s : State) (owner slot : String) (value : Value) : State :=
+def State.setShown (s : State) (owner : InstanceId) (slot : String) (value : Value) : State :=
   s.setMachine owner fun i => { i with shown := i.shown.map fun (k, v) => if k == slot then (k, value) else (k, v) }
 
-def State.removeFromStack (s : State) (name : String) : State := { s with stack := s.stack.filter (· != name) }
+def State.removeFromStack (s : State) (id : InstanceId) : State := { s with stack := s.stack.filter (· != id) }
 
-def State.startQueued (s : State) (machine state : String) : State × Nat :=
+def State.startQueued (s : State) (machine : InstanceId) (state : String) : State × Nat :=
   ({ s with serial := s.serial + 1, queued := s.queued ++ [{ serial := s.serial, machine, state }] }, s.serial)
 
 /-- The state without the Queued `serial`, and whether it is not stale. -/

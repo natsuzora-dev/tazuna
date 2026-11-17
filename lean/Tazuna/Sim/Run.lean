@@ -167,9 +167,9 @@ def World.requestId (w : World) (fsOf : String → Functions m) (i : Nat) (peer 
 
 def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (control : String) (payload : Value) :
     m Bool := do
-  match ← fs.parse (.control o.chart control) payload with
+  match ← fs.parse (.control o.id.chart control) payload with
   | .ok (some decoded) =>
-    match ← acceptsOperation fs st s o.resource control decoded with
+    match ← acceptsOperation fs st s o.id control decoded with
     | .ok (.ok _) => pure true
     | _ => pure false
   | _ => pure false
@@ -242,7 +242,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
     w.attempt (w.screenOf i screen) fun o => do
       if w.role o.service != some .own then return w.report (.wrongRole i o.service)
       w.resolving (w.fill fsOf i payload) fun v =>
-        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.resource control v
+        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.id control v
   | .look screen =>
     w.attempt (w.screenOf i screen) fun o =>
       pure (if (w.services.lookup o.service).isNone then w.report (.wrongRole i o.service) else w)

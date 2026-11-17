@@ -226,10 +226,9 @@ interface ExternalDefiners<N extends string> {
 
 /**
  * The characters that tazuna's generated names put between parts (`<service>.<name>`, `<service>/<Entity>-<n>`,
- * `<name>#<n>`, `<owner>@<map>[<key>]`), which a service or scenario name does not contain
- * (Malformed.reservedNameCharacter).
+ * `<sender>/<id>`, `<name>#<n>`), which a service or scenario name does not contain (Malformed.reservedNameCharacter).
  */
-export const reservedNameCharacters = [".", "/", "#", "@", "[", "]"] as const;
+export const reservedNameCharacters = [".", "/", "#"] as const;
 type ReservedIn<N extends string> = ErrorIf<
   "reservedNameCharacter",
   N & `${string}${(typeof reservedNameCharacters)[number]}${string}`

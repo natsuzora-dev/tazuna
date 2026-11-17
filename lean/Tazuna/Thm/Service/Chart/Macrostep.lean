@@ -11,33 +11,33 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Ch
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem settled_some (step : Nat) (name : String) (f : Processing → Id Processing) (r : Processing) :
-    settled fs st step (some name) f r = settleAround fs st step (r.state.ownerOf name) f r := rfl
+theorem settled_some (step : Nat) (name : InstanceId) (f : Processing → Id Processing) (r : Processing) :
+    settled fs st step (some name) f r = settleAround fs st step (name.owner) f r := rfl
 
 theorem records_change_settles (s : State) (emits : List Emit) (cause : Nat) (i : Instance) (hm : i ∈ s.machines)
     (hc : i.closed = false) :
-    ∃ received, Work.receive i.resource received cause ∈ reactions st s emits true cause := by
+    ∃ received, Work.receive i.id received cause ∈ reactions st s emits true cause := by
   refine ⟨emits.flatMap fun e => (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload),
     List.mem_append_left _ (List.mem_filterMap.mpr ⟨i, hm, ?_⟩)⟩
   simp [machineWork, hc]
 
-theorem keeps_settle (step : Nat) (name : String) : Keeps (settle fs st step name) :=
+theorem keeps_settle (step : Nat) (name : InstanceId) : Keeps (settle fs st step name) :=
   fun r => settleFrom_fixed step _ _ r
 
-theorem keeps_settleAround (step : Nat) (owner : String) {f : Processing → Id Processing} (hf : Keeps f) :
+theorem keeps_settleAround (step : Nat) (owner : InstanceId) {f : Processing → Id Processing} (hf : Keeps f) :
     Keeps (settleAround fs st step owner f) := by
   intro r
   simp only [settleAround, id_bind]
   rw [settleFrom_fixed, keeps_unlessHalted hf, settleFrom_fixed]
 
-theorem keeps_settled (step : Nat) (name : Option String) {f : Processing → Id Processing} (hf : Keeps f) :
+theorem keeps_settled (step : Nat) (name : Option InstanceId) {f : Processing → Id Processing} (hf : Keeps f) :
     Keeps (settled fs st step name f) := by
   intro r
   cases name with
   | none => exact hf r
   | some n => rw [settled_some]; exact keeps_settleAround step _ hf r
 
-theorem keeps_applyCompletion (step : Nat) (name : String) (ts : List Transition) (extra : Extra) :
+theorem keeps_applyCompletion (step : Nat) (name : InstanceId) (ts : List Transition) (extra : Extra) :
     Keeps (applyCompletion fs st step name ts extra) := by
   unfold applyCompletion
   apply keeps_withMachine
@@ -48,7 +48,7 @@ theorem keeps_applyCompletion (step : Nat) (name : String) (ts : List Transition
   · rfl
   · exact keeps_microstep step name _ _ r
 
-theorem keeps_handle (step : Nat) (name state : String) (a : Activity) (answer : Answer) :
+theorem keeps_handle (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) :
     Keeps (handle fs st step name state a answer) := by
   unfold handle
   apply keeps_withMachine
@@ -57,7 +57,7 @@ theorem keeps_handle (step : Nat) (name state : String) (a : Activity) (answer :
   · rfl
   · split <;> exact keeps_applyCompletion _ _ _ _ r
 
-theorem keeps_dispatch (step : Nat) (name key : String) (payload : Value) :
+theorem keeps_dispatch (step : Nat) (name : InstanceId) (key : String) (payload : Value) :
     Keeps (dispatch fs st step name key payload) := by
   intro r
   unfold dispatch
@@ -73,12 +73,12 @@ theorem keeps_dispatch (step : Nat) (name key : String) (payload : Value) :
         · rfl
         · exact keeps_microstep step name _ _ r
 
-theorem keeps_receiveWork (step : Nat) (name : String) (received : List (String × Value)) :
+theorem keeps_receiveWork (step : Nat) (name : InstanceId) (received : List (String × Value)) :
     Keeps (receiveWork fs st step name received) :=
   foldlM_keeps (g := fun (x : String × Value) r => dispatch fs st step name x.1 x.2 (settle fs st step name r))
     (fun x r => (keeps_dispatch step name x.1 x.2 _).trans (keeps_settle step name r)) received
 
-theorem keeps_done (step : Nat) (name n : String) : Keeps (done fs st step name n) := by
+theorem keeps_done (step : Nat) (name : InstanceId) (n : String) : Keeps (done fs st step name n) := by
   unfold done
   apply keeps_withMachine
   intro i r
@@ -86,7 +86,7 @@ theorem keeps_done (step : Nat) (name n : String) : Keeps (done fs st step name 
   · rfl
   · exact keeps_applyCompletion _ _ _ _ r
 
-theorem keeps_doneWork (step : Nat) (name : String) (fuel : Nat) : Keeps (doneWork fs st step name fuel) := by
+theorem keeps_doneWork (step : Nat) (name : InstanceId) (fuel : Nat) : Keeps (doneWork fs st step name fuel) := by
   induction fuel with
   | zero => intro r; rw [doneWork]; repeat' split
             all_goals rfl
@@ -103,14 +103,14 @@ theorem keeps_doneWork (step : Nat) (name : String) (fuel : Nat) : Keeps (doneWo
           rfl
         · rfl
 
-theorem keeps_startWork (step : Nat) (name : String) : Keeps (startWork fs st step name) := by
+theorem keeps_startWork (step : Nat) (name : InstanceId) : Keeps (startWork fs st step name) := by
   unfold startWork
   apply keeps_withMachine
   intro i r
   try simp only [id_bind]
   rw [keeps_unlessHalted (keeps_settle step name), keeps_enter]
 
-theorem showAnswer_fixed (name slot : String) (answer : Answer) (r : Processing) :
+theorem showAnswer_fixed (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
     (showAnswer st name slot answer r).state.fixed = r.state.fixed := by
   unfold showAnswer
   repeat' split
@@ -138,24 +138,24 @@ theorem keeps_deliverAnswer (step : Nat) (p : Pending) (answer : Answer) :
   · exact ha
   · exact (keeps_answerTo _ _ _ _ _).trans ha
 
-theorem growsBy_settle (step : Nat) (name : String) : GrowsBy (settle fs st step name) :=
+theorem growsBy_settle (step : Nat) (name : InstanceId) : GrowsBy (settle fs st step name) :=
   fun r => settleFrom_grows step _ _ r
 
-theorem growsBy_settleAround (step : Nat) (owner : String) {f : Processing → Id Processing} (hf : GrowsBy f)
+theorem growsBy_settleAround (step : Nat) (owner : InstanceId) {f : Processing → Id Processing} (hf : GrowsBy f)
     (hk : Keeps f) : GrowsBy (settleAround fs st step owner f) := by
   intro r
   simp only [settleAround, id_bind]
   exact (settleFrom_grows step owner _ r).trans (congrArg Fixed.now (settleFrom_fixed step owner _ r))
     ((growsBy_unlessHalted hf _).trans ((keeps_unlessHalted hk).now _) (settleFrom_grows step owner _ _))
 
-theorem growsBy_settled (step : Nat) (name : Option String) {f : Processing → Id Processing} (hf : GrowsBy f)
+theorem growsBy_settled (step : Nat) (name : Option InstanceId) {f : Processing → Id Processing} (hf : GrowsBy f)
     (hk : Keeps f) : GrowsBy (settled fs st step name f) := by
   intro r
   cases name with
   | none => exact hf r
   | some n => rw [settled_some]; exact growsBy_settleAround step _ hf hk r
 
-theorem growsBy_applyCompletion (step : Nat) (name : String) (ts : List Transition) (extra : Extra) :
+theorem growsBy_applyCompletion (step : Nat) (name : InstanceId) (ts : List Transition) (extra : Extra) :
     GrowsBy (applyCompletion fs st step name ts extra) := by
   unfold applyCompletion
   apply growsBy_withMachine
@@ -166,7 +166,7 @@ theorem growsBy_applyCompletion (step : Nat) (name : String) (ts : List Transiti
   · exact Grows.refl _
   · exact growsBy_microstep step name _ _ r
 
-theorem growsBy_handle (step : Nat) (name state : String) (a : Activity) (answer : Answer) :
+theorem growsBy_handle (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) :
     GrowsBy (handle fs st step name state a answer) := by
   unfold handle
   apply growsBy_withMachine
@@ -175,7 +175,7 @@ theorem growsBy_handle (step : Nat) (name state : String) (a : Activity) (answer
   · exact Grows.refl _
   · split <;> exact growsBy_applyCompletion _ _ _ _ r
 
-theorem growsBy_dispatch (step : Nat) (name key : String) (payload : Value) :
+theorem growsBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payload : Value) :
     GrowsBy (dispatch fs st step name key payload) := by
   intro r
   unfold dispatch
@@ -191,13 +191,13 @@ theorem growsBy_dispatch (step : Nat) (name key : String) (payload : Value) :
         · exact Grows.refl _
         · exact growsBy_microstep step name _ _ r
 
-theorem growsBy_receiveWork (step : Nat) (name : String) (received : List (String × Value)) :
+theorem growsBy_receiveWork (step : Nat) (name : InstanceId) (received : List (String × Value)) :
     GrowsBy (receiveWork fs st step name received) :=
   foldlM_grows (g := fun (x : String × Value) r => dispatch fs st step name x.1 x.2 (settle fs st step name r))
     (fun x r => Grows.comp (growsBy_settle step name) (keeps_settle step name) (growsBy_dispatch step name x.1 x.2) r)
     (fun x r => (keeps_dispatch step name x.1 x.2 _).trans (keeps_settle step name r)) received
 
-theorem growsBy_done (step : Nat) (name n : String) : GrowsBy (done fs st step name n) := by
+theorem growsBy_done (step : Nat) (name : InstanceId) (n : String) : GrowsBy (done fs st step name n) := by
   unfold done
   apply growsBy_withMachine
   intro i r
@@ -205,7 +205,7 @@ theorem growsBy_done (step : Nat) (name n : String) : GrowsBy (done fs st step n
   · exact Grows.refl _
   · exact growsBy_applyCompletion _ _ _ _ r
 
-theorem growsBy_doneWork (step : Nat) (name : String) (fuel : Nat) : GrowsBy (doneWork fs st step name fuel) := by
+theorem growsBy_doneWork (step : Nat) (name : InstanceId) (fuel : Nat) : GrowsBy (doneWork fs st step name fuel) := by
   induction fuel with
   | zero => intro r; rw [doneWork]; repeat' split
             all_goals exact Grows.of_lines rfl
@@ -223,7 +223,7 @@ theorem growsBy_doneWork (step : Nat) (name : String) (fuel : Nat) : GrowsBy (do
               ((keeps_done step name _).now _ |>.trans ((keeps_settle step name).now r)) (ih _)) rfl rfl
         · exact Grows.refl _
 
-theorem growsBy_startWork (step : Nat) (name : String) : GrowsBy (startWork fs st step name) := by
+theorem growsBy_startWork (step : Nat) (name : InstanceId) : GrowsBy (startWork fs st step name) := by
   unfold startWork
   apply growsBy_withMachine
   intro i r
@@ -231,7 +231,7 @@ theorem growsBy_startWork (step : Nat) (name : String) : GrowsBy (startWork fs s
   exact (growsBy_enter step name _ r).trans ((keeps_enter step name _).now r)
     (growsBy_unlessHalted (growsBy_settle step name) _)
 
-theorem showAnswer_grows (name slot : String) (answer : Answer) (r : Processing) :
+theorem showAnswer_grows (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
     Grows r.state (showAnswer st name slot answer r).state := by
   refine Grows.of_lines ?_
   unfold showAnswer
@@ -249,13 +249,13 @@ theorem growsBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requeste
     all_goals exact showAnswer_grows _ _ _ _
   | automation n => exact Grows.of_lines (automationAnswer_lines _ _ _)
 
-theorem stopped_machine_takes_no_event (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
+theorem stopped_machine_takes_no_event (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
     (hi : r.state.machine? name = some i) (hc : i.closed = true) :
     dispatch fs st step name key payload r = r := by
   simp [dispatch, hi, hc]
 
-theorem dispatch_takes_one_microstep (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
-    (leaves : List (String × Option String)) (chosen : List (String × Transition)) (hh : r.state.halted = none)
+theorem dispatch_takes_one_microstep (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
+    (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition)) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : i.closed = false) (hl : eventLeaves fs st r.state i payload = .ok leaves)
     (hs : select fs st r.state i (.on key) (.payload payload) leaves = .ok chosen) (hn : chosen ≠ []) :
     dispatch fs st step name key payload r = microstep fs st step name chosen (.payload payload) r := by
@@ -268,7 +268,7 @@ theorem dispatch_takes_one_microstep (step : Nat) (name key : String) (payload :
     simp only
     rw [hs]
 
-theorem answer_after_exit_ignored (step : Nat) (name state : String) (a : Activity) (answer : Answer) (r : Processing)
+theorem answer_after_exit_ignored (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) (r : Processing)
     (i : Instance) (hi : r.state.machine? name = some i) (hn : i.isIn state = false) :
     handle fs st step name state a answer r = r := by
   unfold handle withMachine
@@ -276,8 +276,8 @@ theorem answer_after_exit_ignored (step : Nat) (name state : String) (a : Activi
   · rfl
   · simp [hi, hn]
 
-theorem untaken_operation_changes_nothing (step : Nat) (name key : String) (payload : Value) (r : Processing) (i : Instance)
-    (leaves : List (String × Option String)) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
+theorem untaken_operation_changes_nothing (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
+    (leaves : List (InstanceId × Option String)) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
     (hl : eventLeaves fs st r.state i payload = .ok leaves)
     (hs : select fs st r.state i (.on key) (.payload payload) leaves = .ok []) :
     dispatch fs st step name key payload r = r := by
@@ -340,26 +340,26 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
 theorem runWork_fixed (q : Queue) (step : Nat) (w : Work) : (runWork st fs s q step w).1.fixed = s.fixed :=
   keeps_settled step _ (keeps_workBody step w) ⟨s, q⟩
 
-theorem keeps_settleScreen (name : String) : Keeps (settleScreen st fs name) := by
+theorem keeps_settleScreen (name : InstanceId) : Keeps (settleScreen st fs name) := by
   intro r
   unfold settleScreen
   split
   · rfl
   · exact keeps_settle _ name _
 
-theorem growsBy_settleScreen (name : String) : GrowsBy (settleScreen st fs name) := by
+theorem growsBy_settleScreen (name : InstanceId) : GrowsBy (settleScreen st fs name) := by
   intro r
   unfold settleScreen
   split
   · exact Grows.refl _
   · exact Grows.after (growsBy_settle _ name) rfl rfl
 
-theorem settleScreens_fixed (screens : List String) (q : Queue) :
+theorem settleScreens_fixed (screens : List InstanceId) (q : Queue) :
     (screens.foldlM (fun r name => settleScreen st fs name r) (⟨refreshScreens st fs s, q⟩ : Processing)).1.fixed =
       s.fixed :=
   (foldlM_keeps (fun n => keeps_settleScreen n) _ _).trans refreshScreens_fixed
 
-theorem settleScreens_grows (screens : List String) (q : Queue) :
+theorem settleScreens_grows (screens : List InstanceId) (q : Queue) :
     Grows s (screens.foldlM (fun r name => settleScreen st fs name r) (⟨refreshScreens st fs s, q⟩ : Processing)).1 :=
   refreshScreens_grows.trans (congrArg Fixed.now refreshScreens_fixed)
     (foldlM_grows (fun n => growsBy_settleScreen n) (fun n => keeps_settleScreen n) _ _)
@@ -442,27 +442,27 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
       | exact ih _ (hr (settleScreens_fixed _ _))
       | exact ih _ (processCommand_keysDistinct _ _ _ _ h)
 
-/-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (inputFault). -/
+/-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (Requester.inputFault). -/
 theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : Sent) (serial cause : Nat)
     (answer : Answer) (sent : Queued) (hc : c.serial = some serial) (hq : s.queued.find? (·.serial == serial) = some sent)
     (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
   rcases answer with _ | _ | ⟨kind, reason⟩
-  · simp [workBody, State.takeQueued, State.rejectedInput?, hc, hq, hs]
-  · simp [workBody, State.takeQueued, State.rejectedInput?, hc, hq, hs]
+  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
+  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
   · cases kind
     · exact absurd rfl (ha reason)
-    all_goals simp [workBody, State.takeQueued, State.rejectedInput?, hc, hq, hs]
+    all_goals simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
 
-/-- A spec service's invalid-input answer to an own-service command is the sender's fault (State.inputFault). -/
+/-- A spec service's invalid-input answer to an own-service command is the sender's fault (Requester.inputFault). -/
 theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step : Nat) (c : Sent) (cause : Nat)
     (reason : Option String) :
     workBody st fs step (.answered c (.rejected { kind := .invalidInput, reason }) cause) ⟨s, q⟩ =
       let t := match c.serial with
         | some serial => (s.takeQueued serial).1
         | none => s
-      ⟨t.report (.fault (t.inputFault st c.activity.ref c.requester)), q⟩ := by
-  cases h : c.serial <;> simp [workBody, State.rejectedInput?, h]
+      ⟨t.report (.fault (c.requester.inputFault st c.activity.ref)), q⟩ := by
+  cases h : c.serial <;> simp [workBody, Requester.rejectedInput?, h]
 
 /-- Without `stepOrder` entries, the queue takes its first task. -/
 theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)
@@ -477,9 +477,9 @@ theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Wor
 /-- Without `stepOrder` entries or tasks, the queue takes the first command, with the round joined. -/
 theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c : Sent) (cs : List Sent)
     (hh : s.halted = none) (ho : s.stepOrder = []) (ht : q.tasks = []) (hc : q.commands ++ sortSent q.round = c :: cs)
-    (hr : (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).2 = none) :
+    (hr : (s.newCommandStep c.cause (st.ref c.requester.sender)).2 = none) :
     drain st fs (fuel + 1) s q =
-      let (s₁, step) := (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).1
+      let (s₁, step) := (s.newCommandStep c.cause (st.ref c.requester.sender)).1
       let r := processCommand st fs s₁ (st.traceNameOf c.activity.ref) c.input none step
       drain st fs fuel r.1
         { tasks := commandWork st r.1 r.2.2 step ++ [.answered c r.2.1 step], round := [], commands := cs,
@@ -530,9 +530,9 @@ theorem newCommandStep_exceeded_halts (cause : Nat) (sender : Spec.Ref) (exceede
 
 theorem drain_halts_on_command_runaway (fuel : Nat) (q : Queue) (c : Sent) (cs : List Sent) (exceeded : Fault)
     (hh : s.halted = none) (ho : s.stepOrder = []) (ht : q.tasks = []) (hc : q.commands ++ sortSent q.round = c :: cs)
-    (hr : (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).2 = some exceeded) :
+    (hr : (s.newCommandStep c.cause (st.ref c.requester.sender)).2 = some exceeded) :
     drain st fs (fuel + 1) s q =
-      (s.newCommandStep c.cause (st.ref (s.senderOf c.requester))).1.1.halt (Finding.fault exceeded) := by
+      (s.newCommandStep c.cause (st.ref c.requester.sender)).1.1.halt (Finding.fault exceeded) := by
   have hx := newCommandStep_exceeded_halts _ _ _ hr
   cases s; subst ho
   simp_all [drain, Queue.take, State.report]
@@ -545,7 +545,7 @@ theorem drain_at_work_limit (q : Queue) (hh : s.halted = none) :
   simp only [drain, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind, State.report]
   rfl
 
-theorem doneWork_at_selection_limit (step : Nat) (name : String) (r : Processing) (i : Instance)
+theorem doneWork_at_selection_limit (step : Nat) (name : InstanceId) (r : Processing) (i : Instance)
     (hi : r.state.machine? name = some i) :
     doneWork fs st step name 0 r =
       match i.awaitingOnDone with
@@ -554,11 +554,11 @@ theorem doneWork_at_selection_limit (step : Nat) (name : String) (r : Processing
   simp only [doneWork, hi]
   rcases h : i.awaitingOnDone with _ | _ | ⟨_, _⟩ <;> simp [Processing.report, State.report, Fault.halts]
 
-theorem shows_rejection_reported (name slot : String) (answer : Answer) (r : Processing) :
+theorem shows_rejection_reported (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
     (showAnswer st name slot answer r).state.violations = r.state.violations ++
       (match answer with
        | .rejected rj =>
-         if RejectionKind.byCaller rj.kind then [(Finding.fault (.rejectedShows (st.ref (r.state.chartName name)) slot rj))]
+         if RejectionKind.byCaller rj.kind then [(Finding.fault (.rejectedShows (st.ref name.chart) slot rj))]
          else []
        | _ => []) ∧
       (showAnswer st name slot answer r).state.halted = r.state.halted := by

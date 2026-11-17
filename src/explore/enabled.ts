@@ -1,6 +1,7 @@
 import type { Processing } from "../service/chart/queue.ts";
+import type { InstanceId } from "../service/instance.ts";
 import { operationsOf } from "../service/screen/operable.ts";
-import { type State, senderOf } from "../service/state.ts";
+import { type State, sender } from "../service/state.ts";
 
 /**
  * What a run accepts next: the operations of the open screens, the requests that await answers, and the next deadline.
@@ -10,7 +11,7 @@ export interface Enabled {
   readonly operations: readonly {
     readonly screen: string;
     /** The open screen instance. */
-    readonly resource: string;
+    readonly id: InstanceId;
     readonly control: string;
     /**
      * The payloads encoded as in the trace, or "any" when no offers apply and every payload that matches the schema is
@@ -41,13 +42,13 @@ export function enabled(r: Processing): Enabled {
     const next = nextDeadline(r.state);
     return {
       operations: [...new Set(r.state.stack)]
-        .flatMap((resource) => operationsOf(r, resource))
-        .map(({ screen, resource, control, payloads }) => ({ screen, resource, control, payloads: payloads ?? "any" })),
+        .flatMap((id) => operationsOf(r, id))
+        .map(({ screen, id, control, payloads }) => ({ screen, id, control, payloads: payloads ?? "any" })),
       awaiting: r.state.pending.map((p) => ({
         id: p.id,
         name: p.activity.target.name,
         target: p.activity.target.service,
-        sender: senderOf(r.state, p.requester),
+        sender: sender(p.requester),
       })),
       ...(next === undefined ? {} : { nextDeadline: next.toString() }),
     };

@@ -25,7 +25,7 @@ section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
-def request (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
+def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
     match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
     | .error e => pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e)))
@@ -39,7 +39,7 @@ def request (st : Service) (step : Nat) (name state : String) (a : Activity) : P
       else
         pure ⟨r.state.await (a.requestLine (st.traceNameOf a.ref) input) (.state name state) a input, r.queue⟩
 
-def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
+def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
     match st.chart? a.ref.name with
     | none => pure r
@@ -59,19 +59,18 @@ def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) 
       match ← initialContextOf fs st c.name input with
       | .error fault => pure (r.report (.fault fault))
       | .ok context =>
-        let opened := (r.state.machines.filter (·.chart.name == c.name)).length
-        let resource := if opened == 0 then c.name else s!"{c.name}({opened + 1})"
+        let id := InstanceId.top c.name (r.state.machines.filter (·.chart.name == c.name)).length
         let child : Instance :=
-          { chart := c, resource, context, input, shown := c.slots.map (·, .null),
+          { chart := c, id, context, input, shown := c.slots.map (·, .null),
             opener := some { parent := name, state, key := a.key, modal := a.isModal } }
-        pure ⟨{ r.state with machines := r.state.machines ++ [child], stack := r.state.stack ++ [resource] },
-          { r.queue with tasks := r.queue.tasks ++ [.start resource (some step)] }⟩
+        pure ⟨{ r.state with machines := r.state.machines ++ [child], stack := r.state.stack ++ [id] },
+          { r.queue with tasks := r.queue.tasks ++ [.start id (some step)] }⟩
 
 /--
 The processing after state `state` starts activity `a`. `shows` does nothing here, since it subscribes after
 evaluation.
 -/
-def activate (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
+def activate (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   match a with
   | .opens .. => openScreen fs st step name state a
   | .shows .. => pure
@@ -81,7 +80,7 @@ def activate (st : Service) (step : Nat) (name state : String) (a : Activity) : 
 The processing after the activities of entered state `e` start. Sending the activities is a new step, caused by the step
 that entered the state and ordered after all earlier steps of the message.
 -/
-def activateEntered (st : Service) (e : String × String × Nat) : Processing → m Processing :=
+def activateEntered (st : Service) (e : InstanceId × String × Nat) : Processing → m Processing :=
   withMachine e.1 fun i r =>
     if i.closed || !i.isIn e.2.1 then pure r else
     match i.chart.state? e.2.1 with
@@ -97,8 +96,8 @@ def activateEntered (st : Service) (e : String × String × Nat) : Processing �
 The entered states in send order: owners in the order that their entry records remain (re-entering moves a record to
 the end), and within an owner, document order including copies.
 -/
-def sendOrder (s : State) (entered : List (String × String × Nat)) : List (String × String × Nat) :=
-  (dedupe (entered.map (s.ownerOf ·.1))).flatMap fun owner =>
+def sendOrder (s : State) (entered : List (InstanceId × String × Nat)) : List (InstanceId × String × Nat) :=
+  (dedupe (entered.map (·.1.owner))).flatMap fun owner =>
     match s.machine? owner with
     | none => []
     | some o => o.documentOrder.filterMap fun (h, n) => entered.find? fun e => e.1 == h && e.2.1 == n

@@ -9,8 +9,10 @@ export type Copy = {
   readonly itemKey: Json;
 };
 
+/** The instance or copy that a step runs in; `serial` tells apart the instances of one screen (InstanceId). */
 export type Who = {
   readonly chart: DefinitionRef;
+  readonly serial: number;
   readonly copy: Copy | null;
 };
 

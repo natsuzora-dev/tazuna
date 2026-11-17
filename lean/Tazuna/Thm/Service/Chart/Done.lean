@@ -8,13 +8,13 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Char
 
 variable {fs : Functions Id}
 
-theorem enterFinal_fixed (step : Nat) (name parent : String) (r : Processing) :
+theorem enterFinal_fixed (step : Nat) (name : InstanceId) (parent : String) (r : Processing) :
     (enterFinal step name parent r).1.fixed = r.state.fixed := by
   unfold enterFinal
   repeat' split
   all_goals rfl
 
-theorem keeps_closeFinal (st : Service) (step : Nat) (name : String) : Keeps (closeFinal fs st step name) := by
+theorem keeps_closeFinal (st : Service) (step : Nat) (name : InstanceId) : Keeps (closeFinal fs st step name) := by
   unfold closeFinal
   apply keeps_withMachine
   intro i r
@@ -25,12 +25,12 @@ theorem keeps_closeFinal (st : Service) (step : Nat) (name : String) : Keeps (cl
   · repeat' split
     all_goals exact (hc _).trans (reportAll_fixed (s := r.state) _)
 
-theorem enterFinal_lines (step : Nat) (name parent : String) (r : Processing) : (enterFinal step name parent r).1.lines = r.state.lines := by
+theorem enterFinal_lines (step : Nat) (name : InstanceId) (parent : String) (r : Processing) : (enterFinal step name parent r).1.lines = r.state.lines := by
   unfold enterFinal
   repeat' split
   all_goals rfl
 
-theorem growsBy_closeFinal (st : Service) (step : Nat) (name : String) : GrowsBy (closeFinal fs st step name) := by
+theorem growsBy_closeFinal (st : Service) (step : Nat) (name : InstanceId) : GrowsBy (closeFinal fs st step name) := by
   unfold closeFinal
   apply growsBy_withMachine
   intro i r

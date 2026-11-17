@@ -130,7 +130,7 @@ theorem receive_keysDistinct (name : String) (id : Option String) (raw : Value) 
       · exact (withResultOf_records (st := st) (s := s) _ _).symm ▸ h
       · exact deliver_keysDistinct _ _ _ _ _ ((withResultOf_records (st := st) (s := s) _ _).symm ▸ h)
 
-theorem operate_keysDistinct (screen control : String) (payload : Value)
+theorem operate_keysDistinct (screen : InstanceId) (control : String) (payload : Value)
     (h : KeysDistinct s.records) : KeysDistinct (operate st fs s screen control payload).records := by
   unfold operate
   simp only [id_bind]
@@ -181,7 +181,7 @@ theorem foldl_startInstance_halted (cs : List Chart) (t : State) (h : t.halted.i
 
 theorem startInstances_one_per_definition (h : (startInstances st fs s).halted = none) :
     ∃ new, (startInstances st fs s).machines = s.machines ++ new ∧ new.map (·.chart) = st.starting ∧
-      ∀ i ∈ new, i.resource = i.chart.name ∧ i.opener = none ∧ i.copyOf = none := by
+      ∀ i ∈ new, i.id = .top i.chart.name 0 ∧ i.opener = none ∧ i.copyOf = none := by
   unfold startInstances at h ⊢
   rw [foldlM_id] at h ⊢
   generalize st.starting = cs at h ⊢
@@ -208,11 +208,11 @@ theorem startInstances_one_per_definition (h : (startInstances st fs s).halted =
 
 theorem begin_starts_each (h : s.started = false) :
     begin st fs s = message st fs (startInstances st fs (startRecords st fs { s with started := true }.newMessage))
-      { tasks := st.starting.map (.start ·.name none) } := by
+      { tasks := st.starting.map fun c => .start (.top c.name 0) none } := by
   simp [begin, h]
 
 theorem begin_starts_starting_without_parent (h : s.started = false) :
-    ∃ t, begin st fs s = message st fs t { tasks := st.starting.map (.start ·.name none) } ∧
+    ∃ t, begin st fs s = message st fs t { tasks := st.starting.map fun c => .start (.top c.name 0) none } ∧
       (t.halted = none → ∃ new, t.machines = (startRecords st fs { s with started := true }.newMessage).machines ++ new ∧
         new.map (·.chart) = st.starting ∧ ∀ i ∈ new, i.opener = none) :=
   ⟨_, begin_starts_each h, fun hh => (startInstances_one_per_definition hh).imp fun _ ⟨h₁, h₂, h₃⟩ =>
@@ -242,8 +242,8 @@ theorem brokenAssumption_finding (requestId : String) (target : Spec.Ref) (answe
   exact ⟨by cases m <;> rfl, m, rfl⟩
 
 theorem rejectedInput?_some (target : Spec.Ref) (q : Requester) (answer : Answer) (f : Fault)
-    (h : s.rejectedInput? st target q answer = some f) : f = s.inputFault st target q := by
-  unfold State.rejectedInput? at h; split at h <;> simp_all
+    (h : q.rejectedInput? st target answer = some f) : f = q.inputFault st target := by
+  unfold Requester.rejectedInput? at h; split at h <;> simp_all
 
 theorem decodedAnswer_findings (p : Pending) (answer : Answer) (r : Finding)
     (h : decodedAnswer st fs p answer = .ok (.error r)) :
@@ -259,10 +259,10 @@ theorem decodedAnswer_findings (p : Pending) (answer : Answer) (r : Finding)
   all_goals exact ⟨rfl, by simp⟩
 
 theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCheck)
-    (h : checkAnswer st fs s p answer = .ok checked) :
+    (h : checkAnswer st fs p answer = .ok checked) :
     (∀ r, checked.assumption = some r → r.halts = false ∧ ∃ m, r = assumptionFinding p.id p.activity.ref m) ∧
       ∀ r, checked.decoded = .error r →
-        r = .fault (s.inputFault st p.activity.ref p.requester) ∨ r.halts = true ∧
+        r = .fault (p.requester.inputFault st p.activity.ref) ∨ r.halts = true ∧
         ((∃ rejection, r = .invalidInput (.unlistedRejectionKind p.id p.activity.ref rejection)) ∨
           (∃ rejection, r = .invalidInput (.unlistedRejectionReason p.id p.activity.ref rejection)) ∨
           r = .invalidInput (.answerOutputSchema p.id p.activity.ref)) := by
@@ -277,7 +277,7 @@ theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCh
     | exact brokenAssumption_finding _ _ _ _ _ _ (by simpa using hr)
     | (simp only [Except.error.injEq] at hr; subst hr; exact Or.inl rfl)
     | (simp only [Except.error.injEq] at hr; subst hr
-       exact Or.inl (congrArg Finding.fault (rejectedInput?_some _ _ _ _ ‹State.rejectedInput? _ _ _ _ _ = some _›)))
+       exact Or.inl (congrArg Finding.fault (rejectedInput?_some _ _ _ _ ‹Requester.rejectedInput? _ _ _ _ = some _›)))
     | (simp only [Except.error.injEq] at hr; subst hr; exact Or.inr (decodedAnswer_findings _ _ _ ‹_›))
 
 /--
@@ -286,9 +286,9 @@ a message, so the sender wrote an input that the receiver's schema does not take
 -/
 theorem invalid_input_answer_faults_sender (p : Pending) (reason : Option String)
     (ha : st.«structure».isAssumed p.activity.ref = false) :
-    checkAnswer st fs s p (.rejected { kind := .invalidInput, reason }) =
-      .ok { decoded := .error (.fault (s.inputFault st p.activity.ref p.requester)) } := by
-  simp [checkAnswer, specAnswer, State.rejectedInput?, ha]
+    checkAnswer st fs p (.rejected { kind := .invalidInput, reason }) =
+      .ok { decoded := .error (.fault (p.requester.inputFault st p.activity.ref)) } := by
+  simp [checkAnswer, specAnswer, Requester.rejectedInput?, ha]
 
 /-- An event whose resultOf names a request that cannot have the event as its result halts the run with that report. -/
 theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Spec.Ref) (a : Answer)
@@ -310,15 +310,15 @@ theorem unanswered_result_halts (name k : String) (hn : s.answerTo? k = none) :
       (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) k)), none) := by
   simp [resultRequest, hn]
 
-theorem refused_operation_reported (resource control : String) (payload : Value) (c : Chart)
-    (ctl : Control) (decoded : Value) (r : Refusal) (hc : st.chart? (s.chartName resource) = some c)
+theorem refused_operation_reported (resource : InstanceId) (control : String) (payload : Value) (c : Chart)
+    (ctl : Control) (decoded : Value) (r : Refusal) (hc : st.chart? resource.chart = some c)
     (hctl : c.controls.find? (·.name == control) = some ctl)
-    (hp : fs.parse (.control (s.chartName resource) control) payload = .ok (some decoded))
-    (ha : acceptsOperation fs st (s.write .in none (.operation (s.chartName resource) control (s.nthOpen resource)
+    (hp : fs.parse (.control resource.chart control) payload = .ok (some decoded))
+    (ha : acceptsOperation fs st (s.write .in none (.operation resource.chart control (s.nthOpen resource)
       (if ctl.hasPayload then some payload else none))).1 resource control decoded = .ok (.error r)) :
-    let s₁ := (s.write .in none (.operation (s.chartName resource) control (s.nthOpen resource)
+    let s₁ := (s.write .in none (.operation resource.chart control (s.nthOpen resource)
       (if ctl.hasPayload then some payload else none))).1
-    operate st fs s resource control payload = s₁.halt (r.finding st (s.chartName resource) control decoded) := by
+    operate st fs s resource control payload = s₁.halt (r.finding st resource.chart control decoded) := by
   simp only [operate, hc, hctl, id_bind, hp, ha]
   cases r <;> simp [State.report, Finding.halts, InvalidInput.halts, Refusal.finding]
 

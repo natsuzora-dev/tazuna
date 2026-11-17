@@ -15,7 +15,7 @@ export function enterFinal(r: Processing, instance: Instance, parent: string, st
     return;
   }
   instance.awaitingOnDone = finishing;
-  r.queue.tasks.push({ kind: "onDone", machine: instance.resource, cause: step });
+  r.queue.tasks.push({ kind: "onDone", machine: instance.id, cause: step });
 }
 
 /** Closes a screen that entered its root final state, and queues its opener's onDone work. */
@@ -27,7 +27,7 @@ export function closeFinal(r: Processing, instance: Instance, step: number): voi
     halt(issueViolation(definition, closed, () => ({ kind: "Fault.screenOutputSchema", definition, data: {} })));
   const { output, failed } = closed;
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
-  endWith(r, instance.resource, limits.exitDepth);
+  endWith(r, instance.id, limits.exitDepth);
   const opener = instance.opener;
   if (opener === undefined) return;
   r.queue.tasks.push({

@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { CheckedSpec } from "../check/spec.ts";
 import { type JsonSchema, jsonSchema } from "../data/jsonSchema.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
-import type { MalformedLine } from "../data/trace.ts";
+import { type MalformedLine, senderOf } from "../data/trace.ts";
 import { parseSnapshotFile, snapshotPath } from "../data/traceFile.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Json, Shape } from "../data/values.ts";
@@ -147,12 +147,6 @@ function entityView(spec: Spec, entity: AnyEntity, structure: EntityStructure): 
       };
     }),
   };
-}
-
-/** The service that sent the message with id `id` in a simulation, which names it `<sender>/<id>` (Sim.receivedId). */
-function senderOf(id: string): string | undefined {
-  const parts = id.split("/");
-  return parts.length === 2 ? parts[0] : undefined;
 }
 
 /**

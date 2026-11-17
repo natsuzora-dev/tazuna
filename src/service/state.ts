@@ -16,11 +16,12 @@ import {
   type Functions,
   givenKeys,
   type Holder,
-  holderResource,
+  holderId,
   type Keys,
   type Scope,
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
+import { chartOf, copyId, type InstanceId, ownerId, serialOf } from "./instance.ts";
 import { limits } from "./limits.ts";
 import { type Emit, type Halting, halts } from "./message.ts";
 import type { Note } from "./note.ts";
@@ -28,7 +29,7 @@ import type { Records, Row } from "./records.ts";
 
 /**
  * TS only: the evaluation cache, which hears reads and writes through the note. An evaluation of `part` of the instance
- * `resource` (its always transitions, or the items of a map state) is fresh while none of the names it read has been
+ * `id` (its always transitions, or the items of a map state) is fresh while none of the names it read has been
  * written since.
  */
 export interface Evaluations {
@@ -36,13 +37,13 @@ export interface Evaluations {
    * Returns whether the evaluation is fresh; when it is, the evaluations being tracked and the note hear its reads
    * again.
    */
-  replayIfFresh(resource: string, part: string): boolean;
+  replayIfFresh(id: InstanceId, part: string): boolean;
   /** Returns the names that `f` reads, in first-read order. */
   track(f: () => void): string[];
   /**
    * Stores an evaluation whose `reads` are heard again while it is fresh; a write to any of `watched` makes it stale.
    */
-  remember(resource: string, part: string, reads: readonly string[], watched: readonly string[]): void;
+  remember(id: InstanceId, part: string, reads: readonly string[], watched: readonly string[]): void;
   /** Runs `f` so that neither the evaluations being tracked nor the note hear its reads. */
   quietly<T>(f: () => T): T;
 }
@@ -72,19 +73,19 @@ export class NoteAccess implements Access {
   }
 
   context(holder: Holder, field: string): void {
-    this.r.note.readContext(holderResource(this.scope, holder), field);
+    this.r.note.readContext(holderId(this.scope, holder), field);
   }
 
   active(holder: Holder, state: string): void {
-    this.r.note.readStates([[holderResource(this.scope, holder), state]]);
+    this.r.note.readStates([[holderId(this.scope, holder), state]]);
   }
 
   assigned(holder: Holder, field: string): void {
-    this.r.note.wroteContext(holderResource(this.scope, holder), field);
+    this.r.note.wroteContext(holderId(this.scope, holder), field);
   }
 
   shown(slot: string): void {
-    this.r.note.readShown(holderResource(this.scope, "owner"), slot);
+    this.r.note.readShown(holderId(this.scope, "owner"), slot);
   }
 
   now(): void {
@@ -93,14 +94,8 @@ export class NoteAccess implements Access {
 }
 
 /** Runs `work` and tells the instrumentation that step `step` begins and ends. */
-export function inStep(
-  r: Run,
-  step: number,
-  name: StepName,
-  startedResource: string | undefined,
-  work: () => void,
-): void {
-  r.note.stepBegins(step, name, startedResource);
+export function inStep(r: Run, step: number, name: StepName, started: InstanceId | undefined, work: () => void): void {
+  r.note.stepBegins(step, name, started);
   try {
     work();
   } finally {
@@ -108,19 +103,13 @@ export function inStep(
   }
 }
 
-export function copyName(owner: string, map: string, key: string): string {
-  return `${owner}@${map}[${key}]`;
-}
-
 /**
  * An instance of a machine or screen, or a copy of a map state. A machine, or a screen that no other screen opens, has
- * one instance per definition; `opens` creates an instance each time it opens a screen. `resource` is the read and
- * write name of the instance or copy: resource.field for a context field, resource@s for being in state s, and
- * resource:slot for a shows slot.
+ * one instance per definition; `opens` creates an instance each time it opens a screen.
  */
 export interface Instance {
   readonly chart: Chart;
-  readonly resource: string;
+  readonly id: InstanceId;
   context: Fields;
   readonly input: Fields;
   /** The active states and their entry times, in entry order. */
@@ -135,21 +124,17 @@ export interface Instance {
   awaitingOnDone: readonly string[] | undefined;
   /** For each shows slot, the output of the last fulfilled answer, or null before any. */
   readonly shown: Map<string, unknown>;
-  /** The instance that opened this screen; `parent` is its resource. */
+  /** The instance that opened this screen. */
   readonly opener?: {
-    readonly parent: string;
+    readonly parent: InstanceId;
     readonly state: string;
     readonly key: string;
     readonly modal: boolean;
   };
-  /**
-   * The map state of this copy; `owner` is the owner instance's resource, and `encodedKey` is canonicalJson of `key`.
-   */
+  /** The map state of this copy and its item key; the owner and the canonical key are in the id. */
   readonly copyOf?: {
-    readonly owner: string;
     readonly map: string;
     readonly key: unknown;
-    readonly encodedKey: string;
   };
   /** For each map state, the encoded keys of its copies, in item order. */
   readonly copyKeys: Map<string, readonly string[]>;
@@ -167,7 +152,7 @@ export interface Chosen {
 export interface Deadline {
   time: Temporal.Instant | undefined;
   readonly fromAt: boolean;
-  readonly machine: string;
+  readonly machine: InstanceId;
   readonly state: string;
   readonly name: string;
 }
@@ -178,15 +163,15 @@ export interface Deadline {
  * the subscription ends.
  */
 export type Requester =
-  | { readonly kind: "state"; readonly machine: string; readonly state: string }
-  | { readonly kind: "slot"; readonly machine: string; readonly slot: string }
+  | { readonly kind: "state"; readonly machine: InstanceId; readonly state: string }
+  | { readonly kind: "slot"; readonly machine: InstanceId; readonly slot: string }
   | { readonly kind: "automation"; readonly automation: string };
 
 /** The state that sent the request, none for a shows slot or an automation. */
 export const requesterState = (requester: Requester): string | null =>
   requester.kind === "state" ? requester.state : null;
 
-export const machineOf = (requester: Requester): string | undefined =>
+export const machineOf = (requester: Requester): InstanceId | undefined =>
   requester.kind === "automation" ? undefined : requester.machine;
 
 /**
@@ -210,7 +195,7 @@ export interface Pending {
  */
 interface Queued {
   readonly serial: number;
-  readonly machine: string;
+  readonly machine: InstanceId;
   readonly state: string;
   stale: boolean;
 }
@@ -261,10 +246,10 @@ interface Process {
   /** Whether service processing has started, which happens at the first input and at each restart. */
   started: boolean;
   /** The machine and screen instances, in creation order. */
-  readonly machines: Map<string, Instance>;
-  readonly copies: Map<string, Instance>;
-  /** The resources of the open screens, in opening order. */
-  readonly stack: string[];
+  readonly machines: Map<InstanceId, Instance>;
+  readonly copies: Map<InstanceId, Instance>;
+  /** The open screens, in opening order. */
+  readonly stack: InstanceId[];
   /** The deadlines in entry order, which is also the order of the due deadlines. */
   readonly deadlines: Deadline[];
   /** The pending requests, in sending order. */
@@ -280,7 +265,7 @@ interface Process {
  * - Lean's `deadlineCount` and Deadline's `order` have no field: a Deadline is found by identity. `halted` has none:
  *   report throws Halt, and the run stops there.
  * - `lineCounts` is TS only: it counts `lines` per id name.
- * - `machines` and `copies` are maps by resource, in the order of Lean's lists.
+ * - `machines` and `copies` are maps by id, in the order of Lean's lists.
  * - Records, command answers, deliveries and outgoing requests are maps; `subscriptions` is the class that verify also
  *   uses.
  */
@@ -480,9 +465,8 @@ export function reportAll(s: State, faults: readonly (Fault & Located)[]): void 
   for (const f of faults) report(s, f);
 }
 
-/** Returns the instance or copy whose resource is `resource`. */
-export function machine(s: State, resource: string): Instance | undefined {
-  return s.machines.get(resource) ?? s.copies.get(resource);
+export function machine(s: State, id: InstanceId): Instance | undefined {
+  return s.machines.get(id) ?? s.copies.get(id);
 }
 
 /**
@@ -491,12 +475,12 @@ export function machine(s: State, resource: string): Instance | undefined {
  */
 export function scopeOf(s: State, instance: Instance, state: string | null): Scope {
   const copy = instance.copyOf;
-  const owner = copy === undefined ? undefined : machine(s, copy.owner);
+  const owner = copy === undefined ? undefined : machine(s, ownerId(instance.id));
   if (copy !== undefined && owner !== undefined)
     return {
       machine: instance.chart.name,
-      resource: instance.resource,
-      owner: owner.resource,
+      resource: instance.id,
+      owner: owner.id,
       state,
       context: owner.context,
       copy: { map: copy.map, key: copy.key, context: instance.context },
@@ -507,8 +491,8 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
     };
   return {
     machine: instance.chart.name,
-    resource: instance.resource,
-    owner: instance.resource,
+    resource: instance.id,
+    owner: instance.id,
     state,
     context: instance.context,
     copy: undefined,
@@ -520,17 +504,12 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
 }
 
 /**
- * Lean's State.nthOpen: which of the open instances of the screen of `resource`, in opening order, it is, when more
+ * Lean's State.nthOpen: which of the open instances of the screen of `id`, in opening order, it is, when more
  * than one is open.
  */
-export function nthOpen(s: State, resource: string): number | undefined {
-  const screen = chartName(s, resource);
-  const open = s.stack.filter((r) => chartName(s, r) === screen);
-  return open.length > 1 ? open.indexOf(resource) : undefined;
-}
-
-export function chartName(s: State, name: string): string {
-  return machine(s, name)?.chart.name ?? name;
+export function nthOpen(s: State, id: InstanceId): number | undefined {
+  const open = s.stack.filter((r) => chartOf(r) === chartOf(id));
+  return open.length > 1 ? open.indexOf(id) : undefined;
 }
 
 /**
@@ -545,7 +524,7 @@ export function inputFault(
 ): Finding {
   const fault: Fault = {
     kind: "Fault.inputSchema",
-    definition: ref(r.st, senderOf(r.state, requester)),
+    definition: ref(r.st, sender(requester)),
     data: { target },
   };
   return error === undefined ? fault : withExtra(fault, { error });
@@ -567,13 +546,9 @@ export function rejectedInput(
   return inputFault(r, target, requester, parsed instanceof Failed || !("error" in parsed) ? undefined : parsed.error);
 }
 
-/** Returns the instance or automation that sent the request. */
+/** Returns the definition that sent the request: the chart of the sending instance, or the automation. */
 export function sender(requester: Requester): string {
-  return requester.kind === "automation" ? requester.automation : requester.machine;
-}
-
-export function senderOf(s: State, requester: Requester): string {
-  return requester.kind === "automation" ? requester.automation : chartName(s, requester.machine);
+  return requester.kind === "automation" ? requester.automation : chartOf(requester.machine);
 }
 
 /**
@@ -589,10 +564,10 @@ export function copyKeysOf(instance: Instance, map: string): readonly string[] {
   return instance.copyKeys.get(map) ?? [];
 }
 
-/** Returns the copies of Lean's copyResources. */
+/** Returns the copies of Lean's copyIds. */
 export function copiesOf(s: State, instance: Instance): Instance[] {
   return [...instance.copyKeys].flatMap(([map, keys]) =>
-    keys.flatMap((k) => machine(s, copyName(instance.resource, map, k)) ?? []),
+    keys.flatMap((k) => machine(s, copyId(instance.id, map, k)) ?? []),
   );
 }
 
@@ -601,40 +576,44 @@ export function documentOrder(s: State, instance: Instance): { holder: Instance;
   return tree.states.flatMap(({ name: n }) => [
     { holder: instance, n },
     ...copyKeysOf(instance, n).flatMap((k) => {
-      const holder = machine(s, copyName(instance.resource, n, k));
+      const holder = machine(s, copyId(instance.id, n, k));
       return holder === undefined ? [] : descendants(tree, n).map((d) => ({ holder, n: d }));
     }),
   ]);
 }
 
-export function instanceWho(instance: Pick<Instance, "chart" | "copyOf">, st: Service): Who {
+export function instanceWho(instance: Pick<Instance, "chart" | "id" | "copyOf">, st: Service): Who {
   const copy = instance.copyOf;
   return {
     chart: ref(st, instance.chart.name),
+    serial: serialOf(instance.id),
     copy: copy === undefined ? null : { map: copy.map, itemKey: plain(copy.key) },
   };
 }
 
-/** Returns the who of `resource`. Each instance and copy keeps its instanceWho. */
-export function who(s: State, st: Service, resource: string): Who {
-  return machine(s, resource)?.who ?? { chart: ref(st, resource), copy: null };
+/** Returns the who of `id`. Each instance and copy keeps its instanceWho. */
+export function who(s: State, st: Service, id: InstanceId): Who {
+  return machine(s, id)?.who ?? { chart: ref(st, chartOf(id)), serial: serialOf(id), copy: null };
 }
 
-export function ownerOf(s: State, resource: string): string {
-  return machine(s, resource)?.copyOf?.owner ?? resource;
+/** Lean's State.requesterWho. */
+export function requesterWho(s: State, st: Service, requester: Requester): Who {
+  return requester.kind === "automation"
+    ? { chart: ref(st, requester.automation), serial: 0, copy: null }
+    : who(s, st, requester.machine);
 }
 
 export function* running(s: State): Generator<Instance> {
   for (const instance of s.machines.values()) yield* [instance, ...copiesOf(s, instance)];
 }
 
-export function removeFromStack(s: State, resource: string): void {
-  const index = s.stack.indexOf(resource);
+export function removeFromStack(s: State, id: InstanceId): void {
+  const index = s.stack.indexOf(id);
   if (index >= 0) s.stack.splice(index, 1);
 }
 
 /** Returns the serial of the new Queued. */
-export function startQueued(s: State, machine: string, state: string): number {
+export function startQueued(s: State, machine: InstanceId, state: string): number {
   const serial = s.serial;
   s.serial += 1;
   s.queued.push({ serial, machine, state, stale: false });

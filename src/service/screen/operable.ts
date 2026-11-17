@@ -4,18 +4,10 @@ import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { reaches } from "../chart/select.ts";
 import { Failed, issueViolation } from "../functions.ts";
+import type { InstanceId } from "../instance.ts";
+import { copyId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
-import {
-  copyName,
-  documentOrder,
-  halt,
-  type Instance,
-  machine,
-  NoteAccess,
-  type Run,
-  type State,
-  scopeOf,
-} from "../state.ts";
+import { documentOrder, halt, type Instance, machine, NoteAccess, type Run, type State, scopeOf } from "../state.ts";
 
 /**
  * An operation that the screen instance `resource` of chart `screen` accepts. When `payloads` is undefined, it accepts
@@ -23,7 +15,7 @@ import {
  */
 export interface Operation {
   readonly screen: string;
-  readonly resource: string;
+  readonly id: InstanceId;
   readonly control: string;
   readonly payloads: readonly unknown[] | undefined;
 }
@@ -34,7 +26,7 @@ export interface Operation {
  */
 function acceptingInstance(
   s: State,
-  resource: string,
+  resource: InstanceId,
 ):
   | { readonly kind: "notOpen" }
   | { readonly kind: "covered"; readonly child: Instance }
@@ -78,7 +70,7 @@ function offered(
         (b) =>
           b.state !== a.state &&
           isDescendant(chart.tree, b.state, a.state) &&
-          (b.holder.resource === a.holder.resource || a.holder.resource === top.resource),
+          (b.holder.id === a.holder.id || a.holder.id === top.id),
       ),
   );
   const own = chart.offers[key];
@@ -110,7 +102,7 @@ function offered(
  */
 export function accepting(
   r: Run,
-  resource: string,
+  resource: InstanceId,
   key: string,
   payload: { readonly value: Fields; readonly encoded: unknown },
 ):
@@ -135,7 +127,7 @@ export function accepting(
  * any of them is "any", every payload that matches the schema is accepted (`[{}]` without payload fields); otherwise,
  * only the offered payloads that are accepted are listed.
  */
-export function operationsOf(r: Run, resource: string): Operation[] {
+export function operationsOf(r: Run, resource: InstanceId): Operation[] {
   const found = acceptingInstance(r.state, resource);
   if (found.kind !== "ok") return [];
   const top = found.instance;
@@ -143,7 +135,7 @@ export function operationsOf(r: Run, resource: string): Operation[] {
   const copies = [...top.copyKeys].flatMap(([map, keys]) =>
     top.entered.has(map)
       ? keys.flatMap((k) => {
-          const copy = machine(r.state, copyName(top.resource, map, k))?.copyOf;
+          const copy = machine(r.state, copyId(top.id, map, k))?.copyOf;
           return copy === undefined ? [] : [copy.key as Fields];
         })
       : [],
@@ -151,13 +143,13 @@ export function operationsOf(r: Run, resource: string): Operation[] {
   return top.chart.controls.flatMap(({ name: key, hasPayload }): Operation[] => {
     const applied = [{}, ...copies].map((reach) => offered(r, top, key, reach));
     if (applied.flat().some(({ offered }) => offered === "any"))
-      return [{ screen, resource, control: key, payloads: hasPayload ? undefined : [{}] }];
+      return [{ screen, id: resource, control: key, payloads: hasPayload ? undefined : [{}] }];
     const listed = new Map<string, Payload>();
     for (const { offered } of applied.flat())
       if (offered !== "any") for (const o of offered) listed.set(JSON.stringify(o.encoded), o);
     const payloads = [...listed.values()]
       .filter((o) => copies.length === 0 || "top" in accepting(r, resource, key, o))
       .map((o) => o.encoded);
-    return payloads.length === 0 ? [] : [{ screen, resource, control: key, payloads }];
+    return payloads.length === 0 ? [] : [{ screen, id: resource, control: key, payloads }];
   });
 }

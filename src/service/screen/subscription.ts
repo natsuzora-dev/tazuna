@@ -5,6 +5,7 @@ import type { Activity } from "../chart/basic.ts";
 import { openShows, stateEndSubscription } from "../chart/exit.ts";
 import type { Processing } from "../chart/queue.ts";
 import { Failed, issueViolation } from "../functions.ts";
+import type { InstanceId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import { awaitAnswer, halt, type Instance, NoteAccess, scopeOf } from "../state.ts";
 
@@ -36,13 +37,13 @@ function refresh(r: Processing, instance: Instance): boolean {
     if (input instanceof Failed) return halt(issueViolation(definition, input));
     wanted.set(slot, { activity, input, text: JSON.stringify(input) });
   }
-  const open = openShows(r.state, instance.resource);
+  const open = openShows(r.state, instance.id);
   for (const p of open) {
     const { slot } = p.requester;
     if (wanted.get(slot)?.text === JSON.stringify(p.input)) continue;
     stateEndSubscription(r, p);
     if (!wanted.has(slot)) {
-      r.note.wroteShown(instance.resource, slot);
+      r.note.wroteShown(instance.id, slot);
       shownChanged ||= instance.shown.get(slot) !== null;
       instance.shown.set(slot, null);
     }
@@ -52,7 +53,7 @@ function refresh(r: Processing, instance: Instance): boolean {
     awaitAnswer(
       r.state,
       { dir: "out", type: "subscribe", name: traceNameOf(r.st, activity.target), input },
-      { kind: "slot", machine: instance.resource, slot },
+      { kind: "slot", machine: instance.id, slot },
       activity,
     );
     r.note.reached({ kind: "request", definition: activity.target, data: {} });
@@ -60,9 +61,9 @@ function refresh(r: Processing, instance: Instance): boolean {
   return shownChanged;
 }
 
-/** Returns the resources of the screens whose shown values changed. */
-export function refreshScreens(r: Processing): string[] {
+/** Returns the screens whose shown values changed. */
+export function refreshScreens(r: Processing): InstanceId[] {
   return [...r.state.machines.values()]
     .filter((instance) => instance.chart.screen && refresh(r, instance))
-    .map((instance) => instance.resource);
+    .map((instance) => instance.id);
 }

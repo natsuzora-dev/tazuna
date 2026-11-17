@@ -1,21 +1,17 @@
 import { reversedBags } from "../../data/bag.ts";
 import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Obligation } from "../../data/uncovered.ts";
-import {
-  type Collect,
-  contextKey,
-  InstrumentedFunctions,
-  type InstrumentFunctions,
-  shownKey,
-} from "../../explore/instrument.ts";
+import { type Collect, InstrumentedFunctions, type InstrumentFunctions } from "../../explore/instrument.ts";
 import type { Spec } from "../../load/load.ts";
-import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../../service/note.ts";
+import type { InstanceId } from "../../service/instance.ts";
+import { type Note, type RecordPart, type RegionCheck, type ValueKey, valueName } from "../../service/note.ts";
 import type { Evaluations } from "../../service/state.ts";
+
 import { Cache } from "./cache.ts";
 import { Coverage } from "./coverage.ts";
 import { SpecFunctions } from "./functions.ts";
 
-/** The evaluation cache's name for the time, which no value's key can be. */
+/** The evaluation cache's name for the time, which no valueName can be. */
 const now = "@now";
 
 /**
@@ -37,39 +33,40 @@ export class Listener implements Note, Evaluations {
   }
 
   /** Records a read of `key`. Inside `quietly` no read counts, so the callers skip building the key. */
-  private read(key: string): void {
-    this.cache.read(key);
-    this.collected.read(key);
+  private read(key: ValueKey): void {
+    const name = valueName(key);
+    this.cache.read(name);
+    this.collected.read(name);
   }
 
-  private write(key: string, keyWrite: boolean): void {
-    this.cache.wrote(key);
+  private write(key: ValueKey, keyWrite: boolean): void {
+    this.cache.wrote(valueName(key));
     this.collected.write(key, keyWrite);
   }
 
   events(step: number, start: number, groups: readonly number[]): void {
     this.collected.events(step, start, groups);
   }
-  stepBegins(step: number, name: StepName, startedResource: string | undefined): void {
-    this.collected.stepBegins(step, name, startedResource);
+  stepBegins(step: number, name: StepName, started: InstanceId | undefined): void {
+    this.collected.stepBegins(step, name, started);
   }
   stepEnds(): void {
     this.collected.stepEnds();
   }
-  settlesAround(owner: string): void {
+  settlesAround(owner: InstanceId): void {
     this.collected.settlesAround(owner);
   }
-  readStates(states: readonly (readonly [string, string])[]): void {
-    if (!this.cache.quiet) for (const [resource, state] of states) this.read(stateValueName(resource, state));
+  readStates(states: readonly (readonly [InstanceId, string])[]): void {
+    if (!this.cache.quiet) for (const [id, state] of states) this.read({ kind: "state", id, state });
   }
-  wroteState(resource: string, state: string): void {
-    this.write(stateValueName(resource, state), false);
+  wroteState(id: InstanceId, state: string): void {
+    this.write({ kind: "state", id, state }, false);
   }
-  wroteCopies(resource: string, map: string): void {
-    this.write(stateValueName(resource, map), false);
+  wroteCopies(id: InstanceId, map: string): void {
+    this.write({ kind: "state", id, state: map }, false);
   }
-  wroteShown(resource: string, slot: string): void {
-    this.write(shownKey(resource, slot), false);
+  wroteShown(id: InstanceId, slot: string): void {
+    this.write({ kind: "shown", id, slot }, false);
   }
   transitionPart(part: number): void {
     this.collected.transitionPart(part);
@@ -84,19 +81,19 @@ export class Listener implements Note, Evaluations {
     this.collected.afterMessageEnds();
   }
   readRecord(part: RecordPart): void {
-    if (!this.cache.quiet) this.read(recordPartName(part));
+    if (!this.cache.quiet) this.read({ kind: "record", part });
   }
   wroteRecord(part: RecordPart, keyWrite: boolean): void {
-    this.write(recordPartName(part), keyWrite);
+    this.write({ kind: "record", part }, keyWrite);
   }
-  readContext(resource: string, field: string): void {
-    if (!this.cache.quiet) this.read(contextKey(resource, field));
+  readContext(id: InstanceId, field: string): void {
+    if (!this.cache.quiet) this.read({ kind: "context", id, field });
   }
-  wroteContext(resource: string, field: string): void {
-    this.write(contextKey(resource, field), false);
+  wroteContext(id: InstanceId, field: string): void {
+    this.write({ kind: "context", id, field }, false);
   }
-  readShown(resource: string, slot: string): void {
-    if (!this.cache.quiet) this.read(shownKey(resource, slot));
+  readShown(id: InstanceId, slot: string): void {
+    if (!this.cache.quiet) this.read({ kind: "shown", id, slot });
   }
   readNow(): void {
     if (!this.cache.quiet) this.cache.read(now);
@@ -109,21 +106,21 @@ export class Listener implements Note, Evaluations {
     this.coverage.reach(obligation);
   }
 
-  replayIfFresh(resource: string, part: string): boolean {
-    const reads = this.cache.freshReads(resource, part);
+  replayIfFresh(id: InstanceId, part: string): boolean {
+    const reads = this.cache.freshReads(id, part);
     if (reads === undefined) return false;
     if (!this.cache.quiet)
-      for (const key of reads) {
-        if (key === now) this.readNow();
-        else this.read(key);
+      for (const name of reads) {
+        this.cache.read(name);
+        if (name !== now) this.collected.read(name);
       }
     return true;
   }
   track(f: () => void): string[] {
     return this.cache.track(f);
   }
-  remember(resource: string, part: string, reads: readonly string[], watched: readonly string[]): void {
-    this.cache.remember(resource, part, reads, watched);
+  remember(id: InstanceId, part: string, reads: readonly string[], watched: readonly string[]): void {
+    this.cache.remember(id, part, reads, watched);
   }
   quietly<T>(f: () => T): T {
     return this.cache.quietly(f);

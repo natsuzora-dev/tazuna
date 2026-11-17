@@ -40,12 +40,6 @@ inductive Channel where
   | events (resultOf : Option String)
 deriving DecidableEq, Repr
 
-def Channel.key : Channel → String
-  | .request id => s!"request {id}"
-  | .answers to => s!"answers {to}"
-  | .events (some resultOf) => s!"events {resultOf}"
-  | .events none => "events"
-
 def channelOf (l : Line) : Option Channel :=
   match l.body with
   | .command .. | .query .. | .subscribe .. => some (.request l.id)

@@ -5,6 +5,7 @@ import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { type Schema, schemaOwner } from "./basic.ts";
+import type { InstanceId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource, Row } from "./records.ts";
 
@@ -77,8 +78,8 @@ export interface CopyScope {
  */
 export interface Scope {
   readonly machine: string;
-  readonly resource: string;
-  readonly owner: string;
+  readonly resource: InstanceId;
+  readonly owner: InstanceId;
   readonly state: string | null;
   readonly context: Fields;
   readonly copy: CopyScope | undefined;
@@ -93,7 +94,7 @@ export interface Scope {
  */
 export type Holder = "owner" | "copy";
 
-export function holderResource(scope: Scope, holder: Holder): string {
+export function holderId(scope: Scope, holder: Holder): InstanceId {
   return holder === "copy" ? scope.resource : scope.owner;
 }
 

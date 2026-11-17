@@ -1,11 +1,12 @@
 import { ref } from "../basic.ts";
 import { type DeadlineTime, Failed, issueViolation } from "../functions.ts";
+import type { InstanceId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import { type Deadline, halt, machine, NoteAccess, type Run, type State, scopeOf } from "../state.ts";
 
 export function addDeadlines(
   s: State,
-  resource: string,
+  resource: InstanceId,
   state: string,
   deadlines: readonly (readonly [string, DeadlineTime])[],
 ): void {

@@ -198,7 +198,7 @@ export function enabledLines(
             .filter((t) => Temporal.Instant.compare(t, w.now) >= 0)
             .map((t): Line => ({ type: "at", time: t.toString() }));
     const operations = next.operations.flatMap((o) => {
-      const opened = w.opened.find((s) => s.service === own && s.resource === o.resource);
+      const opened = w.opened.find((s) => s.service === own && s.id === o.id);
       const screen = spec.definitions.find(
         (d) => d.service === own && d.name === o.screen && d.definition.kind === "screen",
       );

@@ -1,20 +1,8 @@
 import type { TraceLine } from "../data/trace.generated.ts";
+import { receivedId, sentId } from "../data/trace.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { answerIn, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
 import { refOfTraceName, traceNameOfRef } from "../spec/structure.ts";
-
-/** Lean's receivedId. */
-export const receivedId = (sender: string, id: string): string => `${sender}/${id}`;
-
-/** Lean's sentId?. */
-const sentId = (service: string, id: string): string | undefined =>
-  id.startsWith(`${service}/`) ? id.slice(service.length + 1) : undefined;
-
-/** Lean's senderOf?. */
-export function senderOf(id: string): string | undefined {
-  const parts = id.split("/");
-  return parts.length === 2 ? parts[0] : undefined;
-}
 
 /** Lean's nameIn. */
 export const nameIn = (sender: string, receiver: string, name: string): string =>

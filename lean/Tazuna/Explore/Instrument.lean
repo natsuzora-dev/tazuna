@@ -13,22 +13,26 @@ namespace Tazuna.Explore
 
 open Tazuna.Data Tazuna.Service Tazuna.Sim
 
-/-- The name of a context field, unique across the kinds of value, as RecordPart.name names record parts. -/
-def contextKey (resource field : String) : String := s!"context:{resource}.{field}"
-
-/-- The name of being in a state, which also names the copy set of a map state. -/
-def stateKey (resource state : String) : String := s!"state:{resource}@{state}"
-
-def shownKey (resource slot : String) : String := s!"shown:{resource}:{slot}"
+/--
+A value that steps read and write. Being in a state also stands for the copy set of a map state, and a channel for the
+order of the lines on it.
+-/
+inductive ValueKey where
+  | record (part : RecordPart)
+  | context (id : InstanceId) (field : String)
+  | state (id : InstanceId) (state : String)
+  | shown (id : InstanceId) (slot : String)
+  | channel (c : Channel)
+deriving DecidableEq, Repr, Inhabited
 
 /--
-The values that a step reads and writes, by name. `keyWrites` holds the key sets of entities, which creating or
-deleting a record writes.
+The values that a step reads and writes. `keyWrites` holds the key sets of entities, which creating or deleting a record
+writes.
 -/
 structure Footprint where
-  reads : List String := []
-  writes : List String := []
-  keyWrites : List String := []
+  reads : List ValueKey := []
+  writes : List ValueKey := []
+  keyWrites : List ValueKey := []
 deriving Repr, Inhabited
 
 def Footprint.union (a b : Footprint) : Footprint :=
@@ -46,8 +50,8 @@ def RecordAccess.union (a b : RecordAccess) : RecordAccess :=
     keyWrites := b.keyWrites.foldl addNew a.keyWrites }
 
 def RecordAccess.values (a : RecordAccess) : Footprint :=
-  { reads := (a.reads.map (·.name)).foldl addNew [], writes := (a.writes.map (·.name)).foldl addNew [],
-    keyWrites := a.keyWrites.map fun entity => (RecordPart.keys entity).name }
+  { reads := (a.reads.map .record).foldl addNew [], writes := (a.writes.map .record).foldl addNew [],
+    keyWrites := a.keyWrites.map fun entity => .record (.keys entity) }
 
 def uniqueReads (st : Service) (records : Records) (entity : String) (key : Option String) : List RecordPart :=
   match records.find? (fun r => r.entity == entity && r.key == key) with
@@ -83,7 +87,7 @@ inductive Holder where
   | copy
 deriving DecidableEq, Repr, Inhabited
 
-def Holder.resource (scope : Scope) : Holder → String
+def Holder.id (scope : Scope) : Holder → InstanceId
   | .owner => scope.owner
   | .copy => scope.resource
 
@@ -95,17 +99,17 @@ structure Access where
   shown : List String := []
 deriving DecidableEq, Repr, Inhabited
 
-def Access.valueOf (scope : Scope) : Holder × String → String × String
-  | (holder, field) => (holder.resource scope, field)
+def Access.valueOf (scope : Scope) : Holder × String → InstanceId × String
+  | (holder, field) => (holder.id scope, field)
 
-def Access.reads (a : Access) (scope : Scope) : List (String × String) := a.context.map (Access.valueOf scope)
+def Access.reads (a : Access) (scope : Scope) : List (InstanceId × String) := a.context.map (Access.valueOf scope)
 
-def Access.writes (a : Access) (scope : Scope) : List (String × String) := a.assigned.map (Access.valueOf scope)
+def Access.writes (a : Access) (scope : Scope) : List (InstanceId × String) := a.assigned.map (Access.valueOf scope)
 
 
 structure TransitionAccess where
-  reads : List (String × String) := []
-  writes : List (String × String) := []
+  reads : List (InstanceId × String) := []
+  writes : List (InstanceId × String) := []
 deriving Repr, Inhabited
 
 def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List BagOrderDependent :=
@@ -120,7 +124,7 @@ def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : R
 /-- A step's access. `access` holds the values that the step and the steps open within it read and wrote. -/
 structure StepAccess where
   name : StepName
-  settledOwner : Option String := none
+  settledOwner : Option InstanceId := none
   access : Footprint := {}
 deriving Repr, Inhabited
 
@@ -145,7 +149,7 @@ structure Collect where
   transition : Option Nat := none
   transitions : List (Nat × TransitionAccess) := []
   /-- For each step that began and has not ended, innermost first, the instance or copy that it starts. -/
-  openSteps : List (Option String) := []
+  openSteps : List (Option InstanceId) := []
   /-- The step number and access of each step that began while no step was open, in the order they began. -/
   steps : Array (Nat × StepAccess) := #[]
   /-- The message whose afterMessage runs, while it runs. -/
@@ -186,13 +190,12 @@ def Collect.modifyOutermost (c : Collect) (f : StepAccess → StepAccess) : Coll
   if c.openSteps.isEmpty then c else { c with steps := c.steps.modify (c.steps.size - 1) fun (k, a) => (k, f a) }
 
 /--
-Whether the value belongs to an instance or copy that one of the steps `openSteps` starts, or to its copies. Writes to
-these values never overlap other steps.
+Whether the value is a context field or state of an instance or copy that one of the steps `openSteps` starts, or of
+its copies. Writes to these values never overlap other steps.
 -/
-def startedValue (openSteps : List (Option String)) (key : String) : Bool :=
-  openSteps.any fun
-    | some r => key.startsWith s!"context:{r}." || key.startsWith s!"context:{r}@" || key.startsWith s!"state:{r}@"
-    | none => false
+def startedValue (openSteps : List (Option InstanceId)) : ValueKey → Bool
+  | .context i _ | .state i _ => openSteps.any (·.any i.within)
+  | _ => false
 
 /--
 `c` with `f` added to the outermost open step, or, while no step is open, to the afterMessage that runs. Other accesses
@@ -212,12 +215,12 @@ def Collect.stepAccess (c : Collect) (f : Footprint) : Collect :=
 def Collect.callAccess (c : Collect) (scope : Option Scope) (parts : List RecordPart) (a : Access) : Collect :=
   let values : Footprint := match scope with
     | some scope =>
-      let held (h : Holder) := h.resource scope
-      { reads := a.context.map (fun (h, f) => contextKey (held h) f) ++
-          a.active.map (fun (h, n) => stateKey (held h) n) ++ a.shown.map (shownKey (held .owner)),
-        writes := a.assigned.map fun (h, f) => contextKey (held h) f }
+      let held (h : Holder) := h.id scope
+      { reads := a.context.map (fun (h, f) => .context (held h) f) ++
+          a.active.map (fun (h, n) => .state (held h) n) ++ a.shown.map (.shown (held .owner)),
+        writes := a.assigned.map fun (h, f) => .context (held h) f }
     | none => {}
-  let c := c.stepAccess (({ reads := parts.map (·.name) } : Footprint).union values)
+  let c := c.stepAccess (({ reads := parts.map .record } : Footprint).union values)
   match scope with
   | some scope => c.addAccess scope a
   | none => c
@@ -233,15 +236,15 @@ def Collect.checkRegions (c : Collect) (check : RegionCheck) : Collect :=
 instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
   note n := modify fun c =>
     match n with
-    | .read _ parts => c.stepAccess { reads := parts.map (·.name) }
-    | .stepBegins step name startedResource =>
-      { c with openSteps := startedResource :: c.openSteps,
+    | .read _ parts => c.stepAccess { reads := parts.map .record }
+    | .stepBegins step name started =>
+      { c with openSteps := started :: c.openSteps,
                steps := if c.openSteps.isEmpty then c.steps.push (step, { name }) else c.steps }
     | .stepEnds => { c with openSteps := c.openSteps.tail }
     | .settlesAround owner => c.modifyOutermost ({ · with settledOwner := some owner })
-    | .readStates states => c.stepAccess { reads := states.map fun (r, n) => stateKey r n }
-    | .wroteState r n | .wroteCopies r n => c.stepAccess { writes := [stateKey r n] }
-    | .wroteShown r slot => c.stepAccess { writes := [shownKey r slot] }
+    | .readStates states => c.stepAccess { reads := states.map fun (r, n) => .state r n }
+    | .wroteState r n | .wroteCopies r n => c.stepAccess { writes := [.state r n] }
+    | .wroteShown r slot => c.stepAccess { writes := [.shown r slot] }
     | .transitionPart k => { c with transition := some k }
     | .microstepEnds check => c.checkRegions check
     | .afterMessageBegins message => { c with afterMessage := some message }
@@ -474,7 +477,7 @@ def comparedEvent (st : Service) (l : Line) : Bool :=
 The channels that the compared event lines of a run write, each with the step of `c.steps` that wrote it: the last that
 began at or before the line's writer, since nested steps are spans of their outer step.
 -/
-def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × String) :=
+def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × Channel) :=
   let ls := lineSteps s c.causes
   let tops := c.steps.toList.map (·.1)
   s.lines.toList.zipIdx.filterMap fun (l, i) =>
@@ -482,7 +485,7 @@ def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × String
     | some (some (w, _)) =>
       if l.dir == .out && comparedEvent st l then
         match (tops.filter (· ≤ w)).getLast?, channelOf l with
-        | some t, some ch => some (t, ch.key)
+        | some t, some ch => some (t, ch)
         | _, _ => none
       else none
     | _ => none
@@ -495,7 +498,7 @@ count too; any other step stands for itself. Each channel that those steps wrote
 channel keeps its order (Sim.ordered). Keys that the steps create are not in it, since test compares outcomes up to a
 renaming of created keys.
 -/
-def involved (s : State) (c : Collect) (channels : List (Nat × String)) (n : Nat) (a : StepAccess) : Footprint :=
+def involved (s : State) (c : Collect) (channels : List (Nat × Channel)) (n : Nat) (a : StepAccess) : Footprint :=
   let message := s.steps[n]?.map (·.message)
   let (steps, after) := if (s.steps[n]?.bind (·.tie)).isSome then
       (c.steps.toList.filter fun (k, _) => s.steps[k]?.map (·.message) == message,
@@ -503,7 +506,7 @@ def involved (s : State) (c : Collect) (channels : List (Nat × String)) (n : Na
     else ([(n, a)], {})
   let numbers := steps.map (·.1)
   steps.foldl (fun f (_, x) => f.union x.access)
-    (after.union { writes := (channels.filter fun (t, _) => numbers.contains t).map (·.2) })
+    (after.union { writes := (channels.filter fun (t, _) => numbers.contains t).map (.channel ·.2) })
 
 /-- The footprint (involved) of each step of `c.steps`, by position. -/
 def footprints (st : Service) (s : State) (c : Collect) : Array Footprint :=

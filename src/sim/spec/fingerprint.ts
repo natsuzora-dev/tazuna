@@ -1,13 +1,14 @@
 import { canonicalJson } from "../../data/values.ts";
 import type { Processing } from "../../service/chart/queue.ts";
-import { copyName, type Instance, keyCounts, machine, type Requester } from "../../service/state.ts";
+import { copyId } from "../../service/instance.ts";
+import { type Instance, keyCounts, machine, type Requester } from "../../service/state.ts";
 
 const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) => (a < b ? -1 : 1);
 
 function instanceFingerprint(instance: Instance): unknown {
   const { opener } = instance;
   return {
-    resource: instance.resource,
+    id: instance.id,
     entered: [...instance.entered].map(([state, at]) => [state, at.toString()]),
     context: instance.context,
     input: instance.input,
@@ -64,7 +65,7 @@ function requestsFingerprint(r: Processing): unknown {
  * write counts of values, which only decide whether a cached evaluation is reused. The sets of violations already
  * reported are left out too: they only stop a run from reporting a violation twice. The outgoing requests are compared as a
  * set. The copies of a map state follow their owner, in the order of their keys; a closed copy that no map state lists
- * is left out, since the run reads from it only what its resource names (owner, map and key) and that it is closed. The
+ * is left out, since the run reads from it only what its id names (owner, map and key) and that it is closed. The
  * deadlines stay in entry order, which is the order of the due deadlines.
  */
 export function fingerprint(r: Processing): string {
@@ -88,7 +89,7 @@ export function fingerprint(r: Processing): string {
       [...instance.copyKeys].map(([map, keys]) => [
         map,
         keys.flatMap((k) => {
-          const copy = machine(s, copyName(instance.resource, map, k));
+          const copy = machine(s, copyId(instance.id, map, k));
           return copy === undefined ? [] : [instanceFingerprint(copy)];
         }),
       ]),

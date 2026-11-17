@@ -30,7 +30,7 @@ theorem keeps_unlessHalted {f : Processing → Id Processing} (h : Keeps f) : Ke
   · rfl
   · exact h r
 
-theorem keeps_withMachine {name : String} {f : Instance → Processing → Id Processing} (h : ∀ i, Keeps (f i)) :
+theorem keeps_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, Keeps (f i)) :
     Keeps (withMachine name f) := by
   intro r
   unfold withMachine
@@ -91,7 +91,7 @@ theorem growsBy_unlessHalted {f : Processing → Id Processing} (h : GrowsBy f) 
   · exact Grows.refl _
   · exact h r
 
-theorem growsBy_withMachine {name : String} {f : Instance → Processing → Id Processing} (h : ∀ i, GrowsBy (f i)) :
+theorem growsBy_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, GrowsBy (f i)) :
     GrowsBy (withMachine name f) := by
   intro r
   unfold withMachine
@@ -101,7 +101,7 @@ theorem growsBy_withMachine {name : String} {f : Instance → Processing → Id 
     · exact h _ r
     · exact Grows.refl _
 
-theorem sameLines_withMachine {name : String} {f : Instance → Processing → Id Processing} (h : ∀ i, SameLines (f i)) :
+theorem sameLines_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, SameLines (f i)) :
     SameLines (withMachine name f) := by
   intro r
   unfold withMachine
@@ -142,7 +142,7 @@ theorem deadlinesShrink_unlessHalted {f : Processing → Id Processing} (h : Dea
   · exact ht
   · exact h r t ht
 
-theorem deadlinesShrink_withMachine {name : String} {f : Instance → Processing → Id Processing} (h : ∀ i, DeadlinesShrink (f i)) :
+theorem deadlinesShrink_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, DeadlinesShrink (f i)) :
     DeadlinesShrink (withMachine name f) := by
   intro r t ht
   unfold withMachine at ht
@@ -204,7 +204,7 @@ theorem pendingMapped_unlessHalted {f : Processing → Id Processing} (h : Pendi
   · exact PendingMapped.of_eq (fun _ => rfl) r
   · exact h r
 
-theorem pendingMapped_withMachine {name : String} {f : Instance → Processing → Id Processing}
+theorem pendingMapped_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing}
     (h : ∀ i, PendingMapped (f i)) : PendingMapped (withMachine name f) := by
   intro r
   unfold withMachine
@@ -224,7 +224,7 @@ theorem foldlM_pendingMapped {α : Type} {g : α → Processing → Id Processin
     exact (h x).comp ih r
 
 def MachinesKept (f : Processing → Id Processing) : Prop :=
-  ∀ r, (f r).1.machines.map (·.resource) = r.state.machines.map (·.resource)
+  ∀ r, (f r).1.machines.map (·.id) = r.state.machines.map (·.id)
 
 theorem machinesKept_unlessHalted {f : Processing → Id Processing} (h : MachinesKept f) :
     MachinesKept (unlessHalted f) := by
@@ -234,7 +234,7 @@ theorem machinesKept_unlessHalted {f : Processing → Id Processing} (h : Machin
   · rfl
   · exact h r
 
-theorem machinesKept_withMachine {name : String} {f : Instance → Processing → Id Processing}
+theorem machinesKept_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing}
     (h : ∀ i, MachinesKept (f i)) : MachinesKept (withMachine name f) := by
   intro r
   unfold withMachine
@@ -245,7 +245,7 @@ theorem machinesKept_withMachine {name : String} {f : Instance → Processing �
     · rfl
 
 theorem foldlM_machinesKept {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, MachinesKept (g x)) (xs : List α)
-    (r : Processing) : (xs.foldlM (fun r x => g x r) r).1.machines.map (·.resource) = r.state.machines.map (·.resource) := by
+    (r : Processing) : (xs.foldlM (fun r x => g x r) r).1.machines.map (·.id) = r.state.machines.map (·.id) := by
   rw [foldlM_id]
   induction xs generalizing r with
   | nil => rfl
@@ -253,8 +253,8 @@ theorem foldlM_machinesKept {α : Type} {g : α → Processing → Id Processing
     simp only [List.foldl_cons]
     exact (ih _).trans (h x r)
 
-theorem setMachine_resources (s : State) (name : String) (f : Instance → Instance) (hf : ∀ i, (f i).resource = i.resource) :
-    (s.setMachine name f).machines.map (·.resource) = s.machines.map (·.resource) := by
+theorem setMachine_resources (s : State) (name : InstanceId) (f : Instance → Instance) (hf : ∀ i, (f i).id = i.id) :
+    (s.setMachine name f).machines.map (·.id) = s.machines.map (·.id) := by
   simp only [State.setMachine, List.map_map]
   congr 1
   funext i

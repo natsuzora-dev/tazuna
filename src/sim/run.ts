@@ -2,11 +2,13 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
+import { receivedId } from "../data/trace.ts";
 import { byCodePoint, canonicalJson } from "../data/values.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { begin, call, checkResults, endSubscription, operate, send, subscribe } from "../service/input.ts";
+import { chartOf } from "../service/instance.ts";
 import { publish } from "../service/query.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
@@ -29,7 +31,6 @@ import {
   stopped,
   type World,
 } from "./network.ts";
-import { receivedId } from "./receive.ts";
 import {
   answersOf,
   fill,
@@ -393,10 +394,10 @@ function requestId(w: World, i: number, peer: string, fact: Fact): string {
 
 /** Lean's offeredAt. */
 function offeredAt(r: Processing, o: Opened, control: string, payload: unknown): boolean {
-  const parsed = r.functions.parse({ kind: "control", screen: ref(r.st, o.chart), control }, payload);
+  const parsed = r.functions.parse({ kind: "control", screen: ref(r.st, chartOf(o.id)), control }, payload);
   if (parsed instanceof Failed || "error" in parsed) return false;
   try {
-    return "top" in accepting(r, o.resource, control, parsed);
+    return "top" in accepting(r, o.id, control, parsed);
   } catch (error) {
     if (error instanceof Halt) return false;
     throw error;
@@ -520,7 +521,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const o = screenOf(w, i, l.screen);
       if (w.roles.get(o.service) !== "own") return wrongRole(i, o.service);
       const v = fill(w, i, l.payload);
-      return act(w, origin, o.service, (r) => operate(r, o.resource, l.control, v));
+      return act(w, origin, o.service, (r) => operate(r, o.id, l.control, v));
     }
     case "look": {
       const o = screenOf(w, i, l.screen);

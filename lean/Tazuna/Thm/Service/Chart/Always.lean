@@ -9,7 +9,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.
 
 variable {st : Service} {fs : Functions Id}
 
-theorem alwaysRound_fixed (step : Nat) (owner : String) (next : Instance → List (String × Transition) → Processing → Id Processing)
+theorem alwaysRound_fixed (step : Nat) (owner : InstanceId) (next : Instance → List (InstanceId × Transition) → Processing → Id Processing)
     (h : ∀ o c r, (next o c r).1.fixed = r.state.fixed) (r : Processing) :
     (alwaysRound fs st step owner next r).1.fixed = r.state.fixed := by
   have hs := syncCopies_fixed (fs := fs) (st := st) step owner r
@@ -31,7 +31,7 @@ theorem alwaysRound_fixed (step : Nat) (owner : String) (next : Instance → Lis
               · exact hs
               · exact (h _ _ _).trans hs
 
-theorem alwaysRound_grows (step : Nat) (owner : String) (next : Instance → List (String × Transition) → Processing → Id Processing)
+theorem alwaysRound_grows (step : Nat) (owner : InstanceId) (next : Instance → List (InstanceId × Transition) → Processing → Id Processing)
     (h : ∀ o c r, Grows r.state (next o c r).1) (r : Processing) :
     Grows r.state (alwaysRound fs st step owner next r).1 := by
   have hs := syncCopies_grows (fs := fs) (st := st) step owner r
@@ -54,7 +54,7 @@ theorem alwaysRound_grows (step : Nat) (owner : String) (next : Instance → Lis
               · exact hs
               · exact hs.trans hn (h _ _ _)
 
-theorem settleFrom_fixed (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) :
+theorem settleFrom_fixed (step : Nat) (owner : InstanceId) (roundsLeft : Nat) (r : Processing) :
     (settleFrom fs st step owner roundsLeft r).1.fixed = r.state.fixed := by
   induction roundsLeft generalizing r with
   | zero => rw [settleFrom]; apply alwaysRound_fixed; intro _ _ _; rfl
@@ -66,7 +66,7 @@ theorem settleFrom_fixed (step : Nat) (owner : String) (roundsLeft : Nat) (r : P
     · exact ih _
     · rw [ih, keeps_microstep]
 
-theorem settleFrom_grows (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) :
+theorem settleFrom_grows (step : Nat) (owner : InstanceId) (roundsLeft : Nat) (r : Processing) :
     Grows r.state (settleFrom fs st step owner roundsLeft r).1 := by
   induction roundsLeft generalizing r with
   | zero => rw [settleFrom]; apply alwaysRound_grows; intro _ _ _; exact Grows.of_lines rfl
@@ -78,12 +78,12 @@ theorem settleFrom_grows (step : Nat) (owner : String) (roundsLeft : Nat) (r : P
     · exact ih _
     · exact (growsBy_microstep step _ _ _ r).trans ((keeps_microstep step _ _ _).now r) (ih _)
 
-theorem settle_halts_at_round_limit (step : Nat) (owner : String) (r : Processing) (i o : Instance)
-    (chosen : List (String × Transition)) (hh : r.state.halted = none) (hi : r.state.machine? owner = some i)
+theorem settle_halts_at_round_limit (step : Nat) (owner : InstanceId) (r : Processing) (i o : Instance)
+    (chosen : List (InstanceId × Transition)) (hh : r.state.halted = none) (hi : r.state.machine? owner = some i)
     (hc : i.closed = false) (hs : (syncCopies fs st step owner r).1.state.halted = none)
     (ho : (syncCopies fs st step owner r).1.state.machine? owner = some o)
     (ht : select fs st (syncCopies fs st step owner r).1.state o .always .none
-      (leavesOf (syncCopies fs st step owner r).1.state o o.copyResources) = .ok chosen)
+      (leavesOf (syncCopies fs st step owner r).1.state o o.copyIds) = .ok chosen)
     (hn : chosen ≠ [] ∨ (syncCopies fs st step owner r).2 = true) :
     settleFrom fs st step owner 0 r =
       ⟨(syncCopies fs st step owner r).1.state.halt (Finding.fault (.exceededAlwaysRounds (st.ref o.chart.name) Limit.alwaysRounds.max)),
@@ -98,13 +98,13 @@ theorem settle_halts_at_round_limit (step : Nat) (owner : String) (r : Processin
     ↓reduceIte, id_bind]
   simp [Processing.report, State.report, Fault.halts]
 
-def StableIfOpen (fs : Functions Id) (st : Service) (step : Nat) (owner : String) (R : Processing) (o : Instance) : Prop :=
+def StableIfOpen (fs : Functions Id) (st : Service) (step : Nat) (owner : InstanceId) (R : Processing) (o : Instance) : Prop :=
   R.state.halted = none → R.state.machine? owner = some o → o.closed = false →
     syncCopies fs st step owner R = (R, false) ∧
-      select fs st R.state o .always .none (leavesOf R.state o o.copyResources) = .ok []
+      select fs st R.state o .always .none (leavesOf R.state o o.copyIds) = .ok []
 
-theorem alwaysRound_stable (step : Nat) (owner : String) (o : Instance)
-    (next : Instance → List (String × Transition) → Processing → Id Processing)
+theorem alwaysRound_stable (step : Nat) (owner : InstanceId) (o : Instance)
+    (next : Instance → List (InstanceId × Transition) → Processing → Id Processing)
     (hnext : ∀ o' c r', StableIfOpen fs st step owner (next o' c r') o) (r : Processing) :
     StableIfOpen fs st step owner (alwaysRound fs st step owner next r) o := by
   intro hh ho hc
@@ -140,12 +140,12 @@ theorem alwaysRound_stable (step : Nat) (owner : String) (o : Instance)
                 exact Prod.ext hu he.2
               · subst hR; exact hnext _ _ _ hh ho hc
 
-theorem settle_result_stable (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) (o : Instance)
+theorem settle_result_stable (step : Nat) (owner : InstanceId) (roundsLeft : Nat) (r : Processing) (o : Instance)
     (hh : (settleFrom fs st step owner roundsLeft r).state.halted = none)
     (ho : (settleFrom fs st step owner roundsLeft r).state.machine? owner = some o) (hc : o.closed = false) :
     syncCopies fs st step owner (settleFrom fs st step owner roundsLeft r) = (settleFrom fs st step owner roundsLeft r, false) ∧
       select fs st (settleFrom fs st step owner roundsLeft r).state o .always .none
-        (leavesOf (settleFrom fs st step owner roundsLeft r).state o o.copyResources) = .ok [] := by
+        (leavesOf (settleFrom fs st step owner roundsLeft r).state o o.copyIds) = .ok [] := by
   revert hh ho hc
   show StableIfOpen fs st step owner _ o
   induction roundsLeft generalizing r with
@@ -160,7 +160,7 @@ theorem settle_result_stable (step : Nat) (owner : String) (roundsLeft : Nat) (r
       · exact ih _
       · exact ih _) r
 
-theorem syncMap_unchanged_any_step (a b : Nat) (owner : String) (r : Processing) (map : String)
+theorem syncMap_unchanged_any_step (a b : Nat) (owner : InstanceId) (r : Processing) (map : String)
     (h : (syncMap fs st a owner r map).2 = false) : syncMap fs st b owner r map = (r, false) := by
   by_cases hr : r.halted = true
   · simp [syncMap, hr]
@@ -192,7 +192,7 @@ theorem foldl_unchanged_any_step {α : Type} (g k : Processing → α → Proces
     rw [hk r x h0]
     exact ih r h
 
-theorem syncCopies_unchanged_any_step (a b : Nat) (owner : String) (r : Processing)
+theorem syncCopies_unchanged_any_step (a b : Nat) (owner : InstanceId) (r : Processing)
     (h : (syncCopies fs st a owner r).2 = false) : syncCopies fs st b owner r = (r, false) := by
   unfold syncCopies at h ⊢
   split at h
@@ -201,7 +201,7 @@ theorem syncCopies_unchanged_any_step (a b : Nat) (owner : String) (r : Processi
     exact foldl_unchanged_any_step (fun r map => syncMap fs st a owner r map) (fun r map => syncMap fs st b owner r map)
       (fun r map => syncMap_unchanged a owner r map) (fun r map => syncMap_unchanged_any_step a b owner r map) _ r h
 
-theorem settleFrom_idem (a b : Nat) (owner : String) (k k' : Nat) (r : Processing) :
+theorem settleFrom_idem (a b : Nat) (owner : InstanceId) (k k' : Nat) (r : Processing) :
     settleFrom fs st b owner k' (settleFrom fs st a owner k r) = settleFrom fs st a owner k r := by
   generalize hR : settleFrom fs st a owner k r = R
   have key : ∀ next, alwaysRound fs st b owner next R = R := by
@@ -225,7 +225,7 @@ theorem settleFrom_idem (a b : Nat) (owner : String) (k k' : Nat) (r : Processin
 theorem unlessHalted_pure (r : Processing) : unlessHalted (pure : Processing → Id Processing) r = r := by
   unfold unlessHalted; split <;> rfl
 
-theorem always_step_independent (a b : Nat) (owner : String) (f : Processing → Id Processing) (r : Processing) :
+theorem always_step_independent (a b : Nat) (owner : InstanceId) (f : Processing → Id Processing) (r : Processing) :
     let H k := settleFrom fs st b owner Limit.alwaysRounds.max
       (unlessHalted f (settleFrom fs st k owner Limit.alwaysRounds.max r))
     settleAround fs st b owner f (settleAround fs st a owner pure r) = H a ∧
@@ -235,11 +235,11 @@ theorem always_step_independent (a b : Nat) (owner : String) (f : Processing →
   rw [settleFrom_idem, settleFrom_idem, settleFrom_idem, settleFrom_idem]
   exact ⟨rfl, rfl⟩
 
-theorem always_one_per_atomic (s : State) (o : Instance) (chosen : List (String × Transition))
-    (h : select fs st s o .always .none (leavesOf s o o.copyResources) = .ok chosen) :
-    ∃ f : String × Transition → String × Option String,
-      (∀ c ∈ chosen, f c ∈ leavesOf s o o.copyResources ∧ ((f c).2 = none ∨ ∃ n, (f c).2 = some n ∧
-        ((f c).1 = o.resource ∧ n ∈ o.chart.tree.leaves o.active ∨
+theorem always_one_per_atomic (s : State) (o : Instance) (chosen : List (InstanceId × Transition))
+    (h : select fs st s o .always .none (leavesOf s o o.copyIds) = .ok chosen) :
+    ∃ f : InstanceId × Transition → InstanceId × Option String,
+      (∀ c ∈ chosen, f c ∈ leavesOf s o o.copyIds ∧ ((f c).2 = none ∨ ∃ n, (f c).2 = some n ∧
+        ((f c).1 = o.id ∧ n ∈ o.chart.tree.leaves o.active ∨
           ∃ ci, s.machine? (f c).1 = some ci ∧ n ∈ ci.chart.tree.leaves ci.active))) ∧
       ∀ c₁ ∈ chosen, ∀ c₂ ∈ chosen, f c₁ = f c₂ → c₁ = c₂ := by
   obtain ⟨f, hf, hinj⟩ := Tazuna.Thm.Service.Chart.Select.select_one_per_leaf s o .always .none _ chosen h

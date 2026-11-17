@@ -96,9 +96,13 @@ def obj (fields : List (String × Option Value)) : Value :=
 
 def lineValue (line : Line) (after created : List String) : Value := ToValue.toValue (Sim.traceLineOf line after created)
 
+def InstanceId.toValue : InstanceId → Value
+  | .top chart serial => .obj [("kind", .str "top"), ("chart", .str chart), ("serial", .num serial)]
+  | .copy owner map key => .obj [("kind", .str "copy"), ("owner", InstanceId.toValue owner), ("map", .str map), ("key", .str key)]
+
 def Enabled.toValue (e : Enabled) : Value :=
   obj [("operations", some (.arr (e.operations.map fun o => .obj [("screen", .str o.screen),
-          ("resource", .str o.resource), ("control", .str o.control), ("payloads", (o.payloads.map .arr).getD (.str "any"))]))),
+          ("id", InstanceId.toValue o.id), ("control", .str o.control), ("payloads", (o.payloads.map .arr).getD (.str "any"))]))),
        ("awaiting", some (.arr (e.awaiting.map fun a => .obj [("id", .str a.id), ("name", .str a.name),
           ("target", .str a.target), ("sender", .str a.sender)]))),
        ("nextDeadline", e.nextDeadline.map (.str ∘ renderTime))]

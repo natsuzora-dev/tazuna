@@ -70,12 +70,11 @@ structure Span where
   stepsTo : Nat
 deriving Repr, Inhabited
 
-/-- The screen instance `resource` of chart `chart` of `service` that opened while `origin` was processed. -/
+/-- The screen instance `id` of `service` that opened while `origin` was processed. -/
 structure Opened where
   origin : Origin
   service : String
-  chart : String
-  resource : String
+  id : Service.InstanceId
 deriving Repr, Inhabited
 
 /--
@@ -136,8 +135,7 @@ def World.note (w : World) (r : InvalidScenario) : World := { w with violations 
 def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
   { w with messages := w.messages.modify k fun m => { m with status } }
 
-def screensOf (s : State) : List (String × String) :=
-  (s.machines.filter (·.chart.screen)).map fun i => (i.chart.name, i.resource)
+def screensOf (s : State) : List InstanceId := (s.machines.filter (·.chart.screen)).map (·.id)
 
 /-- The service that the request `id` of the lines `lines` went to. -/
 def targetOf (service : String) (lines : Array Line) (id : String) : Option String :=
@@ -243,8 +241,8 @@ def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : 
     let order := (w.stepOrders.find? fun (o', q, _) => o' == o && q == service).map (·.2.2)
     let t ← MonadActing.acting service (f st (fsOf service) { s with stepOrder := order.getD [] })
     let t := if order.isSome then checkStepOrder t else t
-    let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun (chart, resource) =>
-      { origin := o, service, chart, resource : Opened }
+    let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun id =>
+      { origin := o, service, id : Opened }
     let span : Span := { origin := o, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
                       spans := w.spans ++ [span], opened := w.opened ++ opened,

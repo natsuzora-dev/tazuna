@@ -10,7 +10,7 @@ section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
-def enterFinal (step : Nat) (name parent : String) (r : Processing) : Processing :=
+def enterFinal (step : Nat) (name : InstanceId) (parent : String) (r : Processing) : Processing :=
   match r.state.machine? name with
   | none => r
   | some i =>
@@ -21,7 +21,7 @@ def enterFinal (step : Nat) (name parent : String) (r : Processing) : Processing
       ⟨r.state.setMachine name fun i => { i with awaitingOnDone := some finished },
        { r.queue with tasks := r.queue.tasks ++ [.onDone name step] }⟩
 
-def closeFinal (st : Service) (step : Nat) (name : String) : Processing → m Processing :=
+def closeFinal (st : Service) (step : Nat) (name : InstanceId) : Processing → m Processing :=
   withMachine name fun i r => do
     match ← fs.close (r.state.scopeOf i none) r.state.records with
     | .error e =>

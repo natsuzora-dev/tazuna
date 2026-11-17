@@ -95,10 +95,11 @@ def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except InvalidScenario 
   let unresolved : Except InvalidScenario Opened := .error (.unresolvedReference i (ToValue.toValue fact))
   match fact with
   | .screen o ref =>
-    match w.opened.filter fun s => s.origin == o && s.service == ref.service && s.chart == ref.name with
+    match w.opened.filter fun s => s.origin == o && s.service == ref.service && s.id.chart == ref.name with
     | [s] => .ok s
     | [] => unresolved
-    | found => .error (.ambiguousReference i (ToValue.toValue fact) (found.map fun s => .str s.resource))
+    | found => .error (.ambiguousReference i (ToValue.toValue fact)
+        (found.map fun s => .obj [("chart", .str s.id.chart), ("serial", .num s.id.serial)]))
   | _ => unresolved
 
 /-- The lines that `service` wrote while `origin` was processed. -/

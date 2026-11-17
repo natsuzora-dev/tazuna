@@ -2,6 +2,7 @@ import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import { canonicalJson, type Fields, type Json } from "../../data/values.ts";
 import type { Automation, Service } from "../basic.ts";
+import type { InstanceId } from "../instance.ts";
 import type { Emitted } from "../message.ts";
 import { type Instance, type Requester, type Run, report, type State } from "../state.ts";
 import type { Activity } from "./basic.ts";
@@ -24,19 +25,19 @@ export type Work =
   | { readonly kind: "reaction"; readonly automation: Automation; readonly event: Emitted; readonly cause: number }
   | { readonly kind: "answered"; readonly sent: Sent; readonly answer: Answer; readonly cause: number }
   /** A machine or screen starts in its initial state. A screen that `opens` opened has the opening step as cause. */
-  | { readonly kind: "start"; readonly machine: string; readonly cause: number | undefined }
+  | { readonly kind: "start"; readonly machine: InstanceId; readonly cause: number | undefined }
   /** `received` holds each receives key and payload, and is empty when only records changed. */
   | {
       readonly kind: "receive";
-      readonly machine: string;
+      readonly machine: InstanceId;
       readonly received: readonly { readonly key: string; readonly payload: unknown; readonly encoded: Json }[];
       readonly cause: number;
     }
-  | { readonly kind: "onDone"; readonly machine: string; readonly cause: number }
+  | { readonly kind: "onDone"; readonly machine: InstanceId; readonly cause: number }
   /** A screen that `opens` opened closed in a final state, so the opener takes the opens onDone. */
   | {
       readonly kind: "opensDone";
-      readonly machine: string;
+      readonly machine: InstanceId;
       readonly state: string;
       readonly key: string;
       readonly output: Fields;
@@ -52,14 +53,14 @@ export interface Queue {
   readonly tasks: Work[];
   readonly round: Sent[];
   readonly commands: Sent[];
-  readonly entered: { readonly machine: string; readonly state: string; readonly step: number }[];
+  readonly entered: { readonly machine: InstanceId; readonly state: string; readonly step: number }[];
 }
 
 export function newQueue(): Queue {
   return { tasks: [], round: [], commands: [], entered: [] };
 }
 
-export function enter(q: Queue, machine: string, state: string, step: number): void {
+export function enter(q: Queue, machine: InstanceId, state: string, step: number): void {
   const at = q.entered.findIndex((e) => e.machine === machine && e.state === state);
   if (at >= 0) q.entered.splice(at, 1);
   q.entered.push({ machine, state, step });
@@ -136,7 +137,7 @@ function machineWork(
       .map(([key]) => ({ key, payload: e.payload, encoded: e.encoded })),
   );
   if (instance.closed || (received.length === 0 && !recordsChanged)) return undefined;
-  return { kind: "receive", machine: instance.resource, received, cause };
+  return { kind: "receive", machine: instance.id, received, cause };
 }
 
 /** Returns the work that `emits` cause. Copies get no work; they move with their owner's evaluation. */

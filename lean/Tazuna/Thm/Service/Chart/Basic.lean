@@ -5,7 +5,7 @@ import Tazuna.Thm.Spec.Shape
 namespace Tazuna.Thm.Service.Chart.Basic
 
 open Tazuna.Data Tazuna.Service
-open Tazuna.Spec (chartTree plainName stateTree)
+open Tazuna.Spec (chartTree stateTree)
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Spec.Shape
 
 theorem tree_names (c : Chart) : c.tree.states.map (·.name) = c.states.map (·.name) := by

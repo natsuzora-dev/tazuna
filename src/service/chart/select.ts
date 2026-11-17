@@ -4,12 +4,12 @@ import { transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, issueViolation } from "../functions.ts";
-import { stateValueName } from "../note.ts";
+import { copyId, type InstanceId } from "../instance.ts";
+import { valueName } from "../note.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   type Chosen,
   copyKeysOf,
-  copyName,
   depth,
   documentOrder,
   halt,
@@ -51,16 +51,17 @@ export function reaches(r: Run, copy: Instance, payload: unknown): boolean {
   const map = copy.copyOf?.map as string;
   const key = r.functions.copyKey(copy.chart.name, map, payload);
   if (key instanceof Failed) return halt(issueViolation(ref(r.st, copy.chart.name), key));
-  return key === undefined || key === copy.copyOf?.encodedKey;
+  return key === undefined || (copy.id.kind === "copy" && key === copy.id.key);
 }
 
 function exitKeys(s: State, c: Chosen): Set<string> {
   const keys = new Set<string>();
   for (const n of exitsOf(c.instance, c.t)) {
-    keys.add(stateValueName(c.instance.resource, n));
+    keys.add(valueName({ kind: "state", id: c.instance.id, state: n }));
     for (const k of copyKeysOf(c.instance, n)) {
-      const copy = copyName(c.instance.resource, n, k);
-      for (const m of machine(s, copy)?.entered.keys() ?? []) keys.add(stateValueName(copy, m));
+      const copy = copyId(c.instance.id, n, k);
+      for (const m of machine(s, copy)?.entered.keys() ?? [])
+        keys.add(valueName({ kind: "state", id: copy, state: m }));
     }
   }
   return keys;
@@ -86,7 +87,7 @@ export function leavesOf(r: Run, instance: Instance, reached: (copy: Instance) =
     [...instance.copyKeys].map(([map, keys]) => [
       map,
       keys.flatMap((k) => {
-        const copy = machine(r.state, copyName(instance.resource, map, k));
+        const copy = machine(r.state, copyId(instance.id, map, k));
         return copy !== undefined && reached(copy) ? [copy] : [];
       }),
     ]),
@@ -95,11 +96,11 @@ export function leavesOf(r: Run, instance: Instance, reached: (copy: Instance) =
     const handling = states.filter((st) => transitionsAt(chart, st.name, trigger).length > 0).map((st) => st.name);
     r.note.readStates([
       ...[instance, ...[...reaching.values()].flat()].flatMap((holder) =>
-        handling.map((n): [string, string] => [holder.resource, n]),
+        handling.map((n): [InstanceId, string] => [holder.id, n]),
       ),
       ...states
         .filter((state) => instance.entered.has(state.name) && state.kind === "map")
-        .map((state): [string, string] => [instance.resource, state.name]),
+        .map((state): [InstanceId, string] => [instance.id, state.name]),
     ]);
   }
   const leavesOfHolder = new Map(
@@ -131,7 +132,7 @@ export function select(r: Run, instance: Instance, trigger: Trigger, extra: Fiel
     levels.push({ by: instance, source: null, on: transitionsAt(chart, null, trigger) });
     for (const level of levels) {
       if (level.on.length === 0) continue;
-      if (level.source !== null) r.note.readStates([[level.by.resource, level.source]]);
+      if (level.source !== null) r.note.readStates([[level.by.id, level.source]]);
       const found = choose(r, level.by, level.on, extra);
       if (found === undefined) continue;
       if (!enabled.some((c) => c.instance === level.by && c.t === found))

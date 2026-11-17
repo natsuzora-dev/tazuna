@@ -3,6 +3,7 @@ import { withExtra } from "../../data/violation.ts";
 import { ref, requirementsOf, type Service, traceNameOf } from "../basic.ts";
 import { firstFalse } from "../contract.ts";
 import { Failed, issueViolation } from "../functions.ts";
+import { type InstanceId, ownerId, topId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   awaitAnswer,
@@ -16,7 +17,6 @@ import {
   NoteAccess,
   newStep,
   nextKeys,
-  ownerOf,
   type Requester,
   report,
   scopeOf,
@@ -41,13 +41,13 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
 export function newInstance(
   st: Service,
   chart: Chart,
-  resource: string,
+  id: InstanceId,
   { input, context }: { readonly input: Fields; readonly context: Fields },
   opener: Instance["opener"],
 ): Instance {
   const fields = {
     chart,
-    resource,
+    id,
     context,
     input,
     entered: new Map(),
@@ -70,13 +70,13 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   if (given instanceof Failed) halt(issueViolation(definition, given));
   createKeys(r.state, given.created);
   const input = given.written;
-  const requester: Requester = { kind: "state", machine: instance.resource, state };
+  const requester: Requester = { kind: "state", machine: instance.id, state };
   if (isOwn(a, r.st.service)) {
     r.queue.round.push({
       order: instance.chart.order,
       requester,
       activity: a,
-      serial: startQueued(r.state, instance.resource, state),
+      serial: startQueued(r.state, instance.id, state),
       input,
       cause: step,
     });
@@ -110,13 +110,12 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
     report(r.state, { kind: "Fault.failedRequires", definition, data: { screen, condition } });
   const context = initialContextOf(r, child.name, input);
   const s = r.state;
-  const opener = { parent: instance.resource, state, key: a.key, modal: a.keyword === "opens" && a.modal };
-  const opened = [...s.machines.values()].filter((i) => i.chart.name === child.name).length;
-  const resource = opened === 0 ? child.name : `${child.name}(${opened + 1})`;
-  const created = newInstance(r.st, child, resource, { input, context }, opener);
-  s.machines.set(created.resource, created);
-  s.stack.push(created.resource);
-  r.queue.tasks.push({ kind: "start", machine: created.resource, cause: step });
+  const opener = { parent: instance.id, state, key: a.key, modal: a.keyword === "opens" && a.modal };
+  const serial = [...s.machines.values()].filter((i) => i.chart.name === child.name).length;
+  const created = newInstance(r.st, child, topId(child.name, serial), { input, context }, opener);
+  s.machines.set(created.id, created);
+  s.stack.push(created.id);
+  r.queue.tasks.push({ kind: "start", machine: created.id, cause: step });
 }
 
 /** Sends the requests and opens the screens of state `name`; a `shows` subscribes after evaluation. */
@@ -130,14 +129,14 @@ function activate(r: Processing, instance: Instance, name: string, step: number)
 /** SCXML statesToInvoke. */
 export function sendEntered(r: Processing): void {
   const entered = r.queue.entered.splice(0);
-  for (const owner of new Set(entered.map((e) => ownerOf(r.state, e.machine)))) {
+  for (const owner of new Set(entered.map((e) => ownerId(e.machine)))) {
     const instance = machine(r.state, owner);
     if (instance === undefined) continue;
     for (const { holder, n } of documentOrder(r.state, instance)) {
-      const e = entered.find((e) => e.machine === holder.resource && e.state === n);
+      const e = entered.find((e) => e.machine === holder.id && e.state === n);
       if (e === undefined || holder.closed || !holder.entered.has(n)) continue;
       const step = newStep(r.state, e.step, { barrier: true });
-      inStep(r, step, { kind: "activities", who: who(r.state, r.st, holder.resource), state: n }, undefined, () =>
+      inStep(r, step, { kind: "activities", who: who(r.state, r.st, holder.id), state: n }, undefined, () =>
         activate(r, holder, n, step),
       );
     }

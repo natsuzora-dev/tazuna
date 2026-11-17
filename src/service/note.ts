@@ -2,6 +2,7 @@ import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Obligation } from "../data/uncovered.ts";
+import { type InstanceId, instanceName } from "./instance.ts";
 
 /**
  * A part of the records: the entity's key set when there is no key and no field, the record's existence when there is
@@ -13,15 +14,31 @@ export interface RecordPart {
   readonly field?: string;
 }
 
-/** Returns the key of the record part. Keys of different kinds of value differ in their first word. */
-export function recordPartName({ entity, key, field }: RecordPart): string {
-  if (field !== undefined) return `field:${entity}${key === undefined ? "" : `#${key}`}.${field}`;
-  return key === undefined ? `keys:${entity}` : `record:${entity}#${key}`;
-}
+/**
+ * Lean's ValueKey (Explore/Instrument.lean): a value that steps read and write. Being in a state also stands for the copy set of a map state, and
+ * a channel for the order of the lines on it.
+ */
+export type ValueKey =
+  | { readonly kind: "record"; readonly part: RecordPart }
+  | { readonly kind: "context"; readonly id: InstanceId; readonly field: string }
+  | { readonly kind: "state"; readonly id: InstanceId; readonly state: string }
+  | { readonly kind: "shown"; readonly id: InstanceId; readonly slot: string }
+  | { readonly kind: "channel"; readonly channel: string };
 
-/** Returns the key of being in state `state` of the instance or copy whose resource is `holder`. */
-export function stateValueName(holder: string, state: string): string {
-  return `state:${holder}@${state}`;
+/** The one string form of a key, which the footprints' sets and the evaluation cache hold. It is a JSON array. */
+export function valueName(k: ValueKey): string {
+  switch (k.kind) {
+    case "record":
+      return JSON.stringify(["record", k.part.entity, k.part.key ?? null, k.part.field ?? null]);
+    case "context":
+      return `["context",${instanceName(k.id)},${JSON.stringify(k.field)}]`;
+    case "state":
+      return `["state",${instanceName(k.id)},${JSON.stringify(k.state)}]`;
+    case "shown":
+      return `["shown",${instanceName(k.id)},${JSON.stringify(k.slot)}]`;
+    case "channel":
+      return JSON.stringify(["channel", k.channel]);
+  }
 }
 
 export function stepNameDefinition(name: StepName): DefinitionRef {
@@ -67,17 +84,17 @@ export interface RegionCheck {
 export interface Note {
   /** Reports that step `step` wrote event lines from line `start` in groups of the lengths `groups`. */
   events(step: number, start: number, groups: readonly number[]): void;
-  stepBegins(step: number, name: StepName, startedResource: string | undefined): void;
+  stepBegins(step: number, name: StepName, started: InstanceId | undefined): void;
   stepEnds(): void;
   /**
    * Reports that the open step evaluates the always transitions of `owner` and its copies before and after its work.
    */
-  settlesAround(owner: string): void;
-  /** Reports that the open step read whether instances or copies, given by resource, are in states. */
-  readStates(states: readonly (readonly [string, string])[]): void;
-  wroteState(resource: string, state: string): void;
-  wroteCopies(resource: string, map: string): void;
-  wroteShown(resource: string, slot: string): void;
+  settlesAround(owner: InstanceId): void;
+  /** Reports that the open step read whether instances or copies are in states. */
+  readStates(states: readonly (readonly [InstanceId, string])[]): void;
+  wroteState(id: InstanceId, state: string): void;
+  wroteCopies(id: InstanceId, map: string): void;
+  wroteShown(id: InstanceId, slot: string): void;
   transitionPart(part: number): void;
   microstepEnds(check: RegionCheck): void;
   /** Reports the start of the checks and subscription answers after message `message`, which no step runs. */
@@ -86,9 +103,9 @@ export interface Note {
   readRecord(part: RecordPart): void;
   /** Reports a write of `part`. `keyWrite` is true when a created or deleted record writes the entity's key set. */
   wroteRecord(part: RecordPart, keyWrite: boolean): void;
-  readContext(resource: string, field: string): void;
-  wroteContext(resource: string, field: string): void;
-  readShown(resource: string, slot: string): void;
+  readContext(id: InstanceId, field: string): void;
+  wroteContext(id: InstanceId, field: string): void;
+  readShown(id: InstanceId, slot: string): void;
   readNow(): void;
   wroteNow(): void;
   reached(obligation: Obligation): void;

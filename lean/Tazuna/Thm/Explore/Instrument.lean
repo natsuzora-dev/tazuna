@@ -141,15 +141,15 @@ theorem unlessHalted_agrees {f : Processing → StateT C Id Processing} {g : Pro
   unfold unlessHalted; agree [hf]
 
 omit [MonadNote (StateT C Id)] in
-theorem withMachine_agrees {name : String} {f : Instance → Processing → StateT C Id Processing}
+theorem withMachine_agrees {name : InstanceId} {f : Instance → Processing → StateT C Id Processing}
     {g : Instance → Processing → Id Processing} (hf : ∀ i r, Agrees (f i r) (g i r)) (r : Processing) :
     Agrees (withMachine name f r) (withMachine name g r) := by
   unfold withMachine; agree [hf]
 
 omit [MonadNote (StateT C Id)] in
-theorem endWith_agrees {e : String → String → Processing → StateT C Id Processing}
-    {e' : String → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))
-    (c : String) (r : Processing) : Agrees (endWith e c r) (endWith e' c r) := by
+theorem endWith_agrees {e : InstanceId → String → Processing → StateT C Id Processing}
+    {e' : InstanceId → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))
+    (c : InstanceId) (r : Processing) : Agrees (endWith e c r) (endWith e' c r) := by
   unfold endWith; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, he]
 
 section
@@ -157,17 +157,17 @@ variable (h : FunctionsAgree fsI fs)
 include h
 
 omit [MonadNote (StateT C Id)] in
-theorem runAssign_agrees (name : String) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
+theorem runAssign_agrees (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
     Agrees (runAssign fsI st name a scope extra r) (runAssign fs st name a scope extra r) := by
   unfold runAssign; refine withMachine_agrees (fun i r => ?_) r; agree [h.assign]
 
-theorem leaveWith_agrees {e : String → String → Processing → StateT C Id Processing}
-    {e' : String → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))
-    (name n : String) (r : Processing) :
+theorem leaveWith_agrees {e : InstanceId → String → Processing → StateT C Id Processing}
+    {e' : InstanceId → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))
+    (name : InstanceId) (n : String) (r : Processing) :
     Agrees (leaveWith fsI st e name n r) (leaveWith fs st e' name n r) := by
   unfold leaveWith; agree [runAssign_agrees h, unlessHalted_agrees, endWith_agrees he]
 
-theorem exitOne_agrees (fuel : Nat) (name n : String) (r : Processing) :
+theorem exitOne_agrees (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (exitOne fsI st fuel name n r) (exitOne fs st fuel name n r) := by
   induction fuel generalizing name n r with
   | zero => exact Agrees.pure _
@@ -175,7 +175,7 @@ theorem exitOne_agrees (fuel : Nat) (name n : String) (r : Processing) :
     unfold exitOne; refine withMachine_agrees (fun i r => ?_) r
     agree [unlessHalted_agrees, endWith_agrees ih, leaveWith_agrees h ih]
 
-theorem closeFinal_agrees (step : Nat) (name : String) (r : Processing) :
+theorem closeFinal_agrees (step : Nat) (name : InstanceId) (r : Processing) :
     Agrees (closeFinal fsI st step name r) (closeFinal fs st step name r) := by
   unfold closeFinal; refine withMachine_agrees (fun i r => ?_) r
   agree [h.close, endWith_agrees (exitOne_agrees h _)]
@@ -185,7 +185,7 @@ theorem rearm_agrees (s : State) : Agrees (rearm st fsI s) (rearm st fs s) := by
   unfold rearm; agree [h.deadlineAt]
 
 omit [MonadNote (StateT C Id)] in
-theorem request_agrees (step : Nat) (name state : String) (a : Activity) (r : Processing) :
+theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (request fsI st step name state a r) (request fs st step name state a r) := by
   unfold request; refine withMachine_agrees (fun i r => ?_) r; agree [h.input]
 
@@ -195,32 +195,32 @@ theorem initialContextOf_agrees (chart : String) (input : Value) :
   unfold initialContextOf; agree [h.initialContext]
 
 omit [MonadNote (StateT C Id)] in
-theorem openScreen_agrees (step : Nat) (name state : String) (a : Activity) (r : Processing) :
+theorem openScreen_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
   unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem activate_agrees (step : Nat) (name state : String) (a : Activity) (r : Processing) :
+theorem activate_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (activate fsI st step name state a r) (activate fs st step name state a r) := by
   unfold activate; agree [openScreen_agrees h, request_agrees h]
 
-theorem activateEntered_agrees (e : String × String × Nat) (r : Processing) :
+theorem activateEntered_agrees (e : InstanceId × String × Nat) (r : Processing) :
     Agrees (activateEntered fsI st e r) (activateEntered fs st e r) := by
   unfold activateEntered; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, activate_agrees h]
 
 theorem sendEntered_agrees (r : Processing) : Agrees (sendEntered fsI st r) (sendEntered fs st r) := by
   unfold sendEntered; agree [activateEntered_agrees h]
 
-theorem enterOne_agrees (step : Nat) (name n : String) (r : Processing) :
+theorem enterOne_agrees (step : Nat) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (enterOne fsI st step name n r) (enterOne fs st step name n r) := by
   unfold enterOne; refine withMachine_agrees (fun i r => ?_) r
   agree [runAssign_agrees h, closeFinal_agrees h, endWith_agrees (exitOne_agrees h _), h.deadlines]
 
-theorem enter_agrees (step : Nat) (name : String) (targets : List String) (r : Processing) :
+theorem enter_agrees (step : Nat) (name : InstanceId) (targets : List String) (r : Processing) :
     Agrees (enter fsI st step name targets r) (enter fs st step name targets r) := by
   unfold enter; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, enterOne_agrees h]
 
-theorem microstep_agrees (step : Nat) (name : String) (chosen : List (String × Transition)) (extra : Extra) (r : Processing) :
+theorem microstep_agrees (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) (r : Processing) :
     Agrees (microstep fsI st step name chosen extra r) (microstep fs st step name chosen extra r) := by
   unfold microstep; refine withMachine_agrees (fun i r => ?_) r
   agree [note_agrees, runAssign_agrees h, unlessHalted_agrees, exitOne_agrees h, enterOne_agrees h]
@@ -252,38 +252,38 @@ theorem eventLeaves_agrees (s : State) (top : Instance) (payload : Value) :
     Agrees (eventLeaves fsI st s top payload) (eventLeaves fs st s top payload) := by
   unfold eventLeaves; agree [reachedCopies_agrees h]
 
-theorem pick_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra) (l : String × Option String) :
+theorem pick_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra) (l : InstanceId × Option String) :
     Agrees (pick fsI st s top trigger extra l) (pick fs st s top trigger extra l) := by
   unfold pick; agree [firstLevel_agrees h]
 
 theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (String × Option String)) :
+    (leaves : List (InstanceId × Option String)) :
     Agrees (select fsI st s top trigger extra leaves) (select fs st s top trigger extra leaves) := by
   unfold select; agree [pick_agrees h]
 
-theorem startCopy_agrees (step : Nat) (owner map : String) (key : Value) (encodedKey : String) (r : Processing) :
+theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key : Value) (encodedKey : String) (r : Processing) :
     Agrees (startCopy fsI st step owner map key encodedKey r) (startCopy fs st step owner map key encodedKey r) := by
   unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.copyContext, enter_agrees h]
 
-theorem exitLeftCopy_agrees (owner map : String) (itemKeys : List String) (r : Processing) (k : String) :
+theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
     Agrees (exitLeftCopy fsI st owner map itemKeys r k) (exitLeftCopy fs st owner map itemKeys r k) := by
   unfold exitLeftCopy; agree [unlessHalted_agrees, endWith_agrees (exitOne_agrees h _)]
 
-theorem syncMap_agrees (step : Nat) (owner : String) (r : Processing) (map : String) :
+theorem syncMap_agrees (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     Agrees (syncMap fsI st step owner r map) (syncMap fs st step owner r map) := by
   unfold syncMap; agree [h.items, exitLeftCopy_agrees h, unlessHalted_agrees, startCopy_agrees h]
 
-theorem syncCopies_agrees (step : Nat) (owner : String) (r : Processing) :
+theorem syncCopies_agrees (step : Nat) (owner : InstanceId) (r : Processing) :
     Agrees (syncCopies fsI st step owner r) (syncCopies fs st step owner r) := by
   unfold syncCopies; agree [syncMap_agrees h]
 
-theorem alwaysRound_agrees (step : Nat) (owner : String)
-    {k : Instance → List (String × Transition) → Processing → StateT C Id Processing}
-    {k' : Instance → List (String × Transition) → Processing → Id Processing} (hk : ∀ o c r, Agrees (k o c r) (k' o c r))
+theorem alwaysRound_agrees (step : Nat) (owner : InstanceId)
+    {k : Instance → List (InstanceId × Transition) → Processing → StateT C Id Processing}
+    {k' : Instance → List (InstanceId × Transition) → Processing → Id Processing} (hk : ∀ o c r, Agrees (k o c r) (k' o c r))
     (r : Processing) : Agrees (alwaysRound fsI st step owner k r) (alwaysRound fs st step owner k' r) := by
   unfold alwaysRound; agree [syncCopies_agrees h, select_agrees h, hk]
 
-theorem settleFrom_agrees (step : Nat) (owner : String) (roundsLeft : Nat) (r : Processing) :
+theorem settleFrom_agrees (step : Nat) (owner : InstanceId) (roundsLeft : Nat) (r : Processing) :
     Agrees (settleFrom fsI st step owner roundsLeft r) (settleFrom fs st step owner roundsLeft r) := by
   induction roundsLeft generalizing r with
   | zero => unfold settleFrom; exact alwaysRound_agrees h step owner (fun _ _ _ => Agrees.pure _) r
@@ -291,51 +291,51 @@ theorem settleFrom_agrees (step : Nat) (owner : String) (roundsLeft : Nat) (r : 
     unfold settleFrom
     exact alwaysRound_agrees h step owner (fun _ _ r => by agree [microstep_agrees h, ih]) r
 
-theorem settle_agrees (step : Nat) (name : String) (r : Processing) :
+theorem settle_agrees (step : Nat) (name : InstanceId) (r : Processing) :
     Agrees (settle fsI st step name r) (settle fs st step name r) := by
   unfold settle; exact settleFrom_agrees h step _ _ r
 
-theorem settleAround_agrees (step : Nat) (owner : String) {f : Processing → StateT C Id Processing}
+theorem settleAround_agrees (step : Nat) (owner : InstanceId) {f : Processing → StateT C Id Processing}
     {g : Processing → Id Processing} (hf : ∀ r, Agrees (f r) (g r)) (r : Processing) :
     Agrees (settleAround fsI st step owner f r) (settleAround fs st step owner g r) := by
   unfold settleAround; agree [settleFrom_agrees h, unlessHalted_agrees hf]
 
-theorem settled_agrees (step : Nat) (name : Option String) {f : Processing → StateT C Id Processing}
+theorem settled_agrees (step : Nat) (name : Option InstanceId) {f : Processing → StateT C Id Processing}
     {g : Processing → Id Processing} (hf : ∀ r, Agrees (f r) (g r)) (r : Processing) :
     Agrees (settled fsI st step name f r) (settled fs st step name g r) := by
   cases name with
   | none => exact hf r
   | some n => unfold settled; agree [note_agrees, settleAround_agrees h step _ hf]
 
-theorem applyCompletion_agrees (step : Nat) (name : String) (ts : List Transition) (extra : Extra) (r : Processing) :
+theorem applyCompletion_agrees (step : Nat) (name : InstanceId) (ts : List Transition) (extra : Extra) (r : Processing) :
     Agrees (applyCompletion fsI st step name ts extra r) (applyCompletion fs st step name ts extra r) := by
   unfold applyCompletion; refine withMachine_agrees (fun i r => ?_) r
   agree [choose_agrees h, microstep_agrees h]
 
-theorem handle_agrees (step : Nat) (name state : String) (a : Activity) (answer : Answer) (r : Processing) :
+theorem handle_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) (r : Processing) :
     Agrees (handle fsI st step name state a answer r) (handle fs st step name state a answer r) := by
   unfold handle; refine withMachine_agrees (fun i r => ?_) r; agree [applyCompletion_agrees h]
 
-theorem dispatch_agrees (step : Nat) (name key : String) (payload : Value) (r : Processing) :
+theorem dispatch_agrees (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) :
     Agrees (dispatch fsI st step name key payload r) (dispatch fs st step name key payload r) := by
   unfold dispatch
   agree [eventLeaves_agrees h, select_agrees h, microstep_agrees h]
 
-theorem receiveWork_agrees (step : Nat) (name : String) (received : List (String × Value)) (r : Processing) :
+theorem receiveWork_agrees (step : Nat) (name : InstanceId) (received : List (String × Value)) (r : Processing) :
     Agrees (receiveWork fsI st step name received r) (receiveWork fs st step name received r) := by
   unfold receiveWork; agree [dispatch_agrees h, settle_agrees h]
 
-theorem done_agrees (step : Nat) (name n : String) (r : Processing) :
+theorem done_agrees (step : Nat) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (done fsI st step name n r) (done fs st step name n r) := by
   unfold done; refine withMachine_agrees (fun i r => ?_) r; agree [applyCompletion_agrees h]
 
-theorem doneWork_agrees (step : Nat) (name : String) (fuel : Nat) (r : Processing) :
+theorem doneWork_agrees (step : Nat) (name : InstanceId) (fuel : Nat) (r : Processing) :
     Agrees (doneWork fsI st step name fuel r) (doneWork fs st step name fuel r) := by
   induction fuel generalizing r with
   | zero => unfold doneWork; agree []
   | succ fuel ih => unfold doneWork; agree [settle_agrees h, done_agrees h, ih]
 
-theorem startWork_agrees (step : Nat) (name : String) (r : Processing) :
+theorem startWork_agrees (step : Nat) (name : InstanceId) (r : Processing) :
     Agrees (startWork fsI st step name r) (startWork fs st step name r) := by
   unfold startWork; refine withMachine_agrees (fun i r => ?_) r; agree [enter_agrees h, unlessHalted_agrees, settle_agrees h]
 
@@ -381,7 +381,7 @@ theorem wantedShows_agrees (s : State) (i : Instance) : Agrees (wantedShows st f
   unfold wantedShows; agree [h.showInput]
 
 omit [MonadNote (StateT C Id)] in
-theorem refresh_agrees (s : State) (owner : String) : Agrees (refresh st fsI s owner) (refresh st fs s owner) := by
+theorem refresh_agrees (s : State) (owner : InstanceId) : Agrees (refresh st fsI s owner) (refresh st fs s owner) := by
   unfold refresh; agree [wantedShows_agrees h]
 
 omit [MonadNote (StateT C Id)] in
@@ -399,7 +399,7 @@ theorem offered_agrees (s : State) (top : Instance) (control : String) (payload 
   unfold offered; agree [offeringStates_agrees h, h.offers]
 
 omit [MonadNote (StateT C Id)] in
-theorem acceptsOperation_agrees (s : State) (screen control : String) (payload : Value) :
+theorem acceptsOperation_agrees (s : State) (screen : InstanceId) (control : String) (payload : Value) :
     Agrees (acceptsOperation fsI st s screen control payload) (acceptsOperation fs st s screen control payload) := by
   unfold acceptsOperation; agree [offered_agrees h]
 
@@ -464,7 +464,7 @@ theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Op
     Agrees (processCommand st fsI s name raw id step) (processCommand st fs s name raw id step) := by
   unfold processCommand; agree [evaluate_agrees h, note_agrees]
 
-theorem settleScreen_agrees (name : String) (r : Processing) :
+theorem settleScreen_agrees (name : InstanceId) (r : Processing) :
     Agrees (settleScreen st fsI name r) (settleScreen st fs name r) := by
   unfold settleScreen; agree [note_agrees, settle_agrees h]
 
@@ -531,8 +531,8 @@ theorem decodedAnswer_agrees (p : Pending) (answer : Answer) :
   agree [decodedOutput_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem checkAnswer_agrees (s : State) (p : Pending) (answer : Answer) :
-    Agrees (checkAnswer st fsI s p answer) (checkAnswer st fs s p answer) := by
+theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
+    Agrees (checkAnswer st fsI p answer) (checkAnswer st fs p answer) := by
   unfold checkAnswer assumedAnswer specAnswer
   dsimp only
   agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), decodedAnswer_agrees h, h.resultEnsures]
@@ -549,7 +549,7 @@ theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startR
 theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
   unfold begin startInstances; agree [startRecords_agrees h, startInstance_agrees h, message_agrees h]
 
-theorem operate_agrees (s : State) (screen control : String) (payload : Value) :
+theorem operate_agrees (s : State) (screen : InstanceId) (control : String) (payload : Value) :
     Agrees (operate st fsI s screen control payload) (operate st fs s screen control payload) := by
   unfold operate
   dsimp only
@@ -644,7 +644,7 @@ theorem finding_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (r
   simp only [Collect.checkRegions, hc]
   exact (foldl_report _ _ c).2 r (List.mem_flatMap.mpr ⟨p, hp, hr⟩)
 
-theorem both_writes_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : String × String)
+theorem both_writes_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : InstanceId × String)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (ha : v ∈ (c.accessOf p.first).writes)
     (hb : v ∈ (c.accessOf p.second).writes) :
     (BagOrderDependent.bothAssign check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
@@ -653,7 +653,7 @@ theorem both_writes_reported (c : Collect) (check : RegionCheck) (p : RegionPair
   unfold regionFindings
   exact List.mem_append_left _ (List.mem_filterMap.mpr ⟨v, hb, by simp [ha]⟩)
 
-theorem second_writes_first_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : String × String)
+theorem second_writes_first_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : InstanceId × String)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (hb : v ∈ (c.accessOf p.second).writes)
     (ha : v ∉ (c.accessOf p.first).writes) (hr : v ∈ (c.accessOf p.first).reads) :
     (BagOrderDependent.assignRead check.chart p.state p.secondRef p.firstRef v.2).toViolation ∈
@@ -662,7 +662,7 @@ theorem second_writes_first_reads_reported (c : Collect) (check : RegionCheck) (
   unfold regionFindings
   exact List.mem_append_left _ (List.mem_filterMap.mpr ⟨v, hb, by simp [ha, hr]⟩)
 
-theorem first_writes_second_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : String × String)
+theorem first_writes_second_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : InstanceId × String)
     (hc : check.halted = false) (hp : p ∈ check.pairs) (ha : v ∈ (c.accessOf p.first).writes)
     (hb : v ∉ (c.accessOf p.second).writes) (hr : v ∈ (c.accessOf p.second).reads) :
     (BagOrderDependent.assignRead check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈

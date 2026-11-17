@@ -3,9 +3,9 @@ namespace Tazuna.Data
 /-- `acc` with `x` at the end, unless `acc` already contains an element `==` to `x`. -/
 def addNew {α : Type} [BEq α] (acc : List α) (x : α) : List α := if acc.contains x then acc else acc ++ [x]
 
-def addName (acc : List String) (n : String) : List String := if n ∈ acc then acc else acc ++ [n]
+def addName {α : Type} [DecidableEq α] (acc : List α) (n : α) : List α := if n ∈ acc then acc else acc ++ [n]
 
-def dedupe (names : List String) : List String := names.foldl addName []
+def dedupe {α : Type} [DecidableEq α] (names : List α) : List α := names.foldl addName []
 
 /-- The first element whose key is in `seen` or is the key of an earlier element. -/
 def firstDuplicateFrom {α β : Type} [DecidableEq β] (key : α → β) (seen : List β) : List α → Option α

@@ -1,5 +1,6 @@
 import Tazuna.Service.Records
 import Tazuna.Service.Basic
+import Tazuna.Service.Instance
 
 /-!
 Functions answers what the semantics cannot evaluate: schema validation and spec functions. Theorems take `m = Id` and
@@ -55,9 +56,8 @@ context of the instance (the owner's for a copy). `shown` holds the answer of ea
 the screen's input.
 -/
 structure Scope where
-  machine : String
-  resource : String
-  owner : String
+  resource : InstanceId
+  owner : InstanceId
   state : Option String
   context : Value
   copy : Option CopyScope := none
@@ -66,6 +66,8 @@ structure Scope where
   input : Value := .obj []
   now : Time
 deriving DecidableEq, Repr, Inhabited
+
+def Scope.machine (s : Scope) : String := s.resource.chart
 
 inductive Assignment where
   | transition (t : Transition)

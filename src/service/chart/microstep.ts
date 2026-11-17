@@ -49,18 +49,18 @@ function regionPairs(instance: Instance, chosen: readonly Chosen[]): RegionPair[
 function enterOne(r: Processing, instance: Instance, name: string, step: number): void {
   const state = instance.chart.states.get(name);
   if (state === undefined) return;
-  r.note.wroteState(instance.resource, name);
+  r.note.wroteState(instance.id, name);
   instance.entered.set(name, r.state.now);
   r.note.reached({ kind: "state", definition: ref(r.st, instance.chart.name), data: { state: name } });
   runAssign(r, instance, { kind: "entry", state: name }, {}, name);
   if (state.kind === "final") {
     if (state.parent !== null) enterFinal(r, instance, state.parent, step);
     else if (instance.chart.screen) closeFinal(r, instance, step);
-    else endWith(r, instance.resource, limits.exitDepth);
+    else endWith(r, instance.id, limits.exitDepth);
     return;
   }
-  addDeadlines(r.state, instance.resource, name, r.functions.deadlines(instance.chart.name, name));
-  if (state.activities.length > 0) enterQueue(r.queue, instance.resource, name, step);
+  addDeadlines(r.state, instance.id, name, r.functions.deadlines(instance.chart.name, name));
+  if (state.activities.length > 0) enterQueue(r.queue, instance.id, name, step);
 }
 
 /** SCXML enterStates. */

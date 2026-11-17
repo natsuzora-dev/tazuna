@@ -6,7 +6,7 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def addDeadlines (name n : String) (deadlines : List (String × DeadlineTime)) (s : State) : State :=
+def addDeadlines (name : InstanceId) (n : String) (deadlines : List (String × DeadlineTime)) (s : State) : State :=
   deadlines.foldl (fun s (deadline, d) =>
     { s with deadlineCount := s.deadlineCount + 1,
              deadlines := s.deadlines ++

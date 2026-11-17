@@ -11,7 +11,7 @@ def State.endSubscription (s : State) (p : Pending) : State :=
   let s : State := { s with pending := s.pending.map fun q => if q.id == p.id then { q with stale := true } else q }
   (s.write .out none (.unsubscribe p.id)).1
 
-def State.openShows (s : State) (owner : String) : List Pending :=
+def State.openShows (s : State) (owner : InstanceId) : List Pending :=
   s.pending.filter fun p => p.requester.machine? == some owner && p.requester.slot?.isSome && !p.stale
 
 def setLastChildren (table : List (String × List String)) (n : String) (children : List String) :
@@ -33,7 +33,7 @@ section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
-def runAssign (st : Service) (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     Processing → m Processing :=
   withMachine name fun i r => do
     match ← fs.assign (r.state.scopeOf i scope) r.state.records a extra r.state.nextKeys with
@@ -44,8 +44,8 @@ def runAssign (st : Service) (name : String) (a : Assignment) (scope : Option St
     | .ok (context, copyContext, keys) =>
       let s := r.state.createKeys keys
       match i.copyOf with
-      | some c =>
-        pure ⟨(s.setMachine c.owner fun o => { o with context }).setMachine name fun i =>
+      | some _ =>
+        pure ⟨(s.setMachine name.owner fun o => { o with context }).setMachine name fun i =>
           { i with context := copyContext.getD i.context }, r.queue⟩
       | none => pure ⟨s.setMachine name fun i => { i with context }, r.queue⟩
 
@@ -54,28 +54,28 @@ The processing after instance `c` exits every active state in exitOrder and then
 closed instance stays in State, so an assign of a transition chosen by a copy that closed in the same microstep reads
 the copy's values at exit.
 -/
-def endWith (exit : String → String → Processing → m Processing) (c : String) : Processing → m Processing :=
+def endWith (exit : InstanceId → String → Processing → m Processing) (c : InstanceId) : Processing → m Processing :=
   withMachine c fun ci r => do
     let r ← (ci.chart.tree.exitOrder ci.active).foldlM (fun r n => unlessHalted (exit c n) r) r
     if r.halted then pure r else
     let s := r.state.setMachine c fun i => { i with closed := true }
     pure ⟨((s.openShows c).foldl (fun s p => s.endSubscription p) s).removeFromStack c, r.queue⟩
 
-def leaveMark (name n : String) (p : Pending) : Pending :=
+def leaveMark (name : InstanceId) (n : String) (p : Pending) : Pending :=
   if p.requester = .state name n then { p with stale := true } else p
 
-def State.leaveState (s : State) (name n : String) : State :=
+def State.leaveState (s : State) (name : InstanceId) (n : String) : State :=
   let s := s.setMachine name fun i => { i with entered := i.entered.filter (·.1 != n) }
   { s with
     deadlines := s.deadlines.filter (fun t => !(t.machine == name && t.state == n)),
     pending := s.pending.map (leaveMark name n),
     queued := s.queued.map (fun q => if q.machine == name && q.state == n then { q with stale := true } else q) }
 
-def State.childrenOf (s : State) (name n : String) : List String :=
+def State.childrenOf (s : State) (name : InstanceId) (n : String) : List InstanceId :=
   (s.machines.filter fun (c : Instance) => !c.closed && c.opener.any fun o => o.parent == name && o.state == n).map
-    (·.resource)
+    (·.id)
 
-def leaveWith (st : Service) (exit : String → String → Processing → m Processing) (name n : String)
+def leaveWith (st : Service) (exit : InstanceId → String → Processing → m Processing) (name : InstanceId) (n : String)
     (r : Processing) : m Processing := do
   let r ← runAssign fs st name (.exit n) (some n) .none r
   if r.halted then pure r else
@@ -87,13 +87,13 @@ def leaveWith (st : Service) (exit : String → String → Processing → m Proc
 The processing after instance `name` exits state `n`, after the copies of `n`. The fuel is the remaining nesting depth
 of exits.
 -/
-def exitOne (st : Service) : Nat → String → String → Processing → m Processing
+def exitOne (st : Service) : Nat → InstanceId → String → Processing → m Processing
   | 0, _, _, r => pure (r.report (.fault (.exceededExitDepth Limit.exitDepth.max)))
   | fuel + 1, name, n, r =>
     withMachine name (fun i r => do
       let r : Processing ←
         (i.copyKeysOf n).reverse.foldlM
-          (fun r k => unlessHalted (endWith (exitOne st fuel) (copyName i.resource n k)) r) r
+          (fun r k => unlessHalted (endWith (exitOne st fuel) (i.id.copyOf n k)) r) r
       if r.halted then pure r else
       leaveWith fs st (exitOne st fuel) name n
         ⟨r.state.setMachine name fun i => { i with copyKeys := i.copyKeys.filter (·.1 != n) }, r.queue⟩) r

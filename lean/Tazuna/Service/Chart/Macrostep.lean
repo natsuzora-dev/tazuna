@@ -20,18 +20,18 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def handlingStateReads (i : Instance) (key : String) (leaves : List (String × Option String)) : List (String × String) :=
+def handlingStateReads (i : Instance) (key : String) (leaves : List (InstanceId × Option String)) : List (InstanceId × String) :=
   let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.name) (.on key)).isEmpty).map (·.name)
-  let holders := i.resource :: dedupe ((leaves.map (·.1)).filter (· != i.resource))
+  let holders := i.id :: dedupe ((leaves.map (·.1)).filter (· != i.id))
   holders.flatMap fun h => handling.map (h, ·)
 
-def mapStateReads (i : Instance) : List (String × String) :=
+def mapStateReads (i : Instance) : List (InstanceId × String) :=
   let tree := i.chart.tree
-  (i.active.filter (tree.kindOf · == some .map)).map (i.resource, ·)
+  (i.active.filter (tree.kindOf · == some .map)).map (i.id, ·)
 
 def State.workName (s : State) (st : Service) : Work → StepName
   | .reaction a e _ => .reaction (st.ref a.name) (st.refOf e.event) e.payload
-  | .answered c _ _ => .answer c.activity.ref (s.who st c.requester.sender) c.requester.state?
+  | .answered c _ _ => .answer c.activity.ref (s.requesterWho st c.requester) c.requester.state?
   | .start name _ => .start (s.who st name)
   | .receive name [] _ => .always (s.who st name)
   | .receive name received _ => .receive (s.who st name) (received.map fun (key, payload) => { key, payload })
@@ -40,14 +40,14 @@ def State.workName (s : State) (st : Service) : Work → StepName
 
 def State.readyName (s : State) (st : Service) : Ready → StepName
   | .work w => s.workName st w
-  | .command c => .command c.activity.ref (s.who st c.requester.sender) c.requester.state?
+  | .command c => .command c.activity.ref (s.requesterWho st c.requester) c.requester.state?
 
 def Work.cause : Work → Option Nat
   | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
     some cause
   | .start _ cause => cause
 
-def Work.startedResource : Work → Option String
+def Work.started : Work → Option InstanceId
   | .start name _ => some name
   | _ => none
 
@@ -55,7 +55,7 @@ section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
-def applyCompletion (st : Service) (step : Nat) (name : String) (ts : List Transition) (extra : Extra) :
+def applyCompletion (st : Service) (step : Nat) (name : InstanceId) (ts : List Transition) (extra : Extra) :
     Processing → m Processing :=
   withMachine name fun i r => do
     match ← choose fs st r.state i extra ts with
@@ -63,7 +63,7 @@ def applyCompletion (st : Service) (step : Nat) (name : String) (ts : List Trans
     | .ok none => pure r
     | .ok (some t) => microstep fs st step name [(name, t)] extra r
 
-def handle (st : Service) (step : Nat) (name state : String) (a : Activity) (answer : Answer) : Processing → m Processing :=
+def handle (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) : Processing → m Processing :=
   withMachine name fun i r => do
     MonadNote.note (.readStates [(name, state)])
     if i.closed || !i.isIn state then pure r else
@@ -74,7 +74,7 @@ def handle (st : Service) (step : Nat) (name state : String) (a : Activity) (ans
       applyCompletion fs st step name (on false) (match output with | some o => .output o | none => .none) r
     | .fulfilled output => applyCompletion fs st step name (on false) (.output output) r
 
-def dispatch (st : Service) (step : Nat) (name key : String) (payload : Value) (r : Processing) : m Processing :=
+def dispatch (st : Service) (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) : m Processing :=
   match r.state.machine? name with
   | none => pure r
   | some i =>
@@ -90,11 +90,11 @@ def dispatch (st : Service) (step : Nat) (name key : String) (payload : Value) (
     | .ok [] => pure r
     | .ok chosen => microstep fs st step name chosen (.payload payload) r
 
-def receiveWork (st : Service) (step : Nat) (name : String) (received : List (String × Value)) (r : Processing) :
+def receiveWork (st : Service) (step : Nat) (name : InstanceId) (received : List (String × Value)) (r : Processing) :
     m Processing :=
   received.foldlM (fun r (key, payload) => do dispatch fs st step name key payload (← settle fs st step name r)) r
 
-def done (st : Service) (step : Nat) (name n : String) : Processing → m Processing :=
+def done (st : Service) (step : Nat) (name : InstanceId) (n : String) : Processing → m Processing :=
   withMachine name fun i r => do
     MonadNote.note (.readStates [(name, n)])
     if i.closed || !i.isIn n then pure r
@@ -104,7 +104,7 @@ def done (st : Service) (step : Nat) (name n : String) : Processing → m Proces
 The processing of the onDone selections of instance `name`. States that finish during the work are handled by the same
 work.
 -/
-def doneWork (st : Service) (step : Nat) (name : String) : Nat → Processing → m Processing
+def doneWork (st : Service) (step : Nat) (name : InstanceId) : Nat → Processing → m Processing
   | 0, r =>
     match r.state.machine? name with
     | some i =>
@@ -124,7 +124,7 @@ def doneWork (st : Service) (step : Nat) (name : String) : Nat → Processing �
         doneWork st step name fuel (← done fs st step name n r)
       | _ => pure ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩
 
-def startWork (st : Service) (step : Nat) (name : String) : Processing → m Processing :=
+def startWork (st : Service) (step : Nat) (name : InstanceId) : Processing → m Processing :=
   withMachine name fun i r => do
     let r ← enter fs st step name [i.chart.initial] r
     unlessHalted (settle fs st step name) r
@@ -136,11 +136,11 @@ stale-if-error (RFC 5861) serves the last good response while the origin fails. 
 unlike `sends` and automations, because a slot has no transition to choose, so keeping the value is the only behavior
 that an `onRejected` could name.
 -/
-def showAnswer (st : Service) (name slot : String) (answer : Answer) (r : Processing) : Processing :=
+def showAnswer (st : Service) (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) : Processing :=
   let s := match answer with
     | .rejected rejection =>
       if RejectionKind.byCaller rejection.kind then
-        r.state.report (.fault (.rejectedShows (st.ref (r.state.chartName name)) slot rejection))
+        r.state.report (.fault (.rejectedShows (st.ref name.chart) slot rejection))
       else r.state
     | _ => r.state
   let s := match answer with
@@ -163,7 +163,7 @@ def deliverAnswer (st : Service) (step : Nat) (p : Pending) (answer : Answer) (r
 
 end
 
-def Work.settledMachine? : Work → Option String
+def Work.settledMachine? : Work → Option InstanceId
   | .receive name _ _ | .onDone name _ | .opensDone name _ _ _ _ _ => some name
   | .answered c _ _ => c.requester.machine?
   | .start _ _ | .reaction _ _ _ => none
@@ -187,7 +187,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     let (s, live) := match c.serial with
       | some serial => s.takeQueued serial
       | none => (s, true)
-    match s.rejectedInput? st c.activity.ref c.requester answer with
+    match c.requester.rejectedInput? st c.activity.ref answer with
     | some fault => pure ⟨s.report (.fault fault), q⟩
     | none => if live then answerTo fs st step c.activity answer c.requester ⟨s, q⟩ else pure ⟨s, q⟩
   | .start name _, r => startWork fs st step name r
@@ -205,15 +205,15 @@ def runWork [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     m Processing :=
   settled fs st step w.settledMachine? (workBody st fs step w) ⟨s, q⟩
 
-def shownChanged (before after : State) : List String :=
-  (after.machines.filter fun i => (before.machine? i.resource).any (·.shown != i.shown)).map (·.resource)
+def shownChanged (before after : State) : List InstanceId :=
+  (after.machines.filter fun i => (before.machine? i.id).any (·.shown != i.shown)).map (·.id)
 
 /--
 The processing after a step that settles screen `name` once its `shown` changed. The step only evaluates always
 transitions, like the step after a record change, and is a barrier, like the step that sends activities. Reconciling
 subscriptions that change `shown` is not a step, so the step has no cause.
 -/
-def settleScreen [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : String) (r : Processing) :
+def settleScreen [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : InstanceId) (r : Processing) :
     m Processing :=
   if r.halted then pure r else do
   let (s, step) := r.state.newStep none (barrier := true)
@@ -235,12 +235,12 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
     | .error invalid => pure (s.report (.invalidInput invalid))
     | .ok (some (.work w, rest, stepOrder)) => do
       let (s, step) := { s with stepOrder }.newStep w.cause
-      MonadNote.note (.stepBegins step (s.workName st w) w.startedResource)
+      MonadNote.note (.stepBegins step (s.workName st w) w.started)
       let r ← runWork st fs s rest step w
       MonadNote.note .stepEnds
       drain st fs fuel r.state r.queue
     | .ok (some (.command c, rest, stepOrder)) => do
-      let ((s, step), runaway) := { s with stepOrder }.newCommandStep c.cause (st.ref (s.senderOf c.requester))
+      let ((s, step), runaway) := { s with stepOrder }.newCommandStep c.cause (st.ref c.requester.sender)
       match runaway with
       | some exceeded => pure (s.report (.fault exceeded))
       | none =>

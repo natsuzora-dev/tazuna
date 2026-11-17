@@ -23,12 +23,12 @@ import { processCommand } from "./command.ts";
 import { firstFalse } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
+import { chartOf, type InstanceId, topId } from "./instance.ts";
 import type { Emitted } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
 import {
-  chartName,
   type Finding,
   halt,
   inputFault,
@@ -335,9 +335,15 @@ export function answerIn(r: Processing, id: string, to: string, a: Answer): void
 
 function startInstance(r: Processing, c: Chart): void {
   const s = r.state;
-  const instance = newInstance(r.st, c, c.name, { input: {}, context: initialContextOf(r, c.name, {}) }, undefined);
-  s.machines.set(instance.resource, instance);
-  if (c.screen) s.stack.push(instance.resource);
+  const instance = newInstance(
+    r.st,
+    c,
+    topId(c.name),
+    { input: {}, context: initialContextOf(r, c.name, {}) },
+    undefined,
+  );
+  s.machines.set(instance.id, instance);
+  if (c.screen) s.stack.push(instance.id);
 }
 
 /** Returns the charts that start when the service begins; a screen that another screen opens does not. */
@@ -359,13 +365,13 @@ export function begin(r: Processing): void {
   newMessage(s);
   startRecords(r);
   startInstances(r);
-  r.queue.tasks.push(...starting(r.st).map((c): Work => ({ kind: "start", machine: c.name, cause: undefined })));
+  r.queue.tasks.push(...starting(r.st).map((c): Work => ({ kind: "start", machine: topId(c.name), cause: undefined })));
   message(r);
 }
 
 /** Lean's operate: an operation on the screen instance `resource`. */
-export function operate(r: Processing, resource: string, key: string, payload: unknown): void {
-  const screen = chartName(r.state, resource);
+export function operate(r: Processing, resource: InstanceId, key: string, payload: unknown): void {
+  const screen = chartOf(resource);
   const { decoded, found } = writeOperation(r, resource, screen, key, payload);
   const data = { screen: ref(r.st, screen), control: key };
   const top =
@@ -387,14 +393,14 @@ export function operate(r: Processing, resource: string, key: string, payload: u
   const s = r.state;
   newMessage(s);
   const step = newStep(s, undefined);
-  settled(r, top.resource, step, () => dispatch(r, top.resource, key, decoded, step));
+  settled(r, top.id, step, () => dispatch(r, top.id, key, decoded, step));
   message(r);
 }
 
 /**
  * Writes the operation line and reads its payload; returns undefined for a name that is not a control of the screen.
  */
-function writeOperation(r: Processing, resource: string, screen: string, key: string, payload: unknown) {
+function writeOperation(r: Processing, resource: InstanceId, screen: string, key: string, payload: unknown) {
   const chart = r.st.charts.get(screen);
   if (chart === undefined) return unownedTarget(r, screen);
   const definition = ref(r.st, screen);

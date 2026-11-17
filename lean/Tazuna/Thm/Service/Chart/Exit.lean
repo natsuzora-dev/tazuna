@@ -9,7 +9,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Sta
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem keeps_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+theorem keeps_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     Keeps (runAssign fs st name a scope extra) := by
   unfold runAssign
   apply keeps_withMachine
@@ -19,8 +19,8 @@ theorem keeps_runAssign (name : String) (a : Assignment) (scope : Option String)
   · simp [Processing.report, report_eq, State.fixed]
   · split <;> rfl
 
-theorem keeps_endWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, Keeps (exit c n))
-    (c : String) : Keeps (endWith exit c) := by
+theorem keeps_endWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, Keeps (exit c n))
+    (c : InstanceId) : Keeps (endWith exit c) := by
   unfold endWith
   apply keeps_withMachine
   intro ci r
@@ -30,8 +30,8 @@ theorem keeps_endWith {exit : String → String → Processing → Id Processing
   · exact hf
   · exact (foldl_fixed (fun t p => State.endSubscription t p) (fun t p => rfl) _ _).trans hf
 
-theorem keeps_leaveWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, Keeps (exit c n))
-    (name n : String) : Keeps (leaveWith fs st exit name n) := by
+theorem keeps_leaveWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, Keeps (exit c n))
+    (name : InstanceId) (n : String) : Keeps (leaveWith fs st exit name n) := by
   intro r
   unfold leaveWith
   simp only [id_bind]
@@ -40,7 +40,7 @@ theorem keeps_leaveWith {exit : String → String → Processing → Id Processi
   · exact keeps_runAssign name _ _ _ r
   · exact (hc _ _).trans (keeps_runAssign name _ _ _ r)
 
-theorem keeps_exitOne (fuel : Nat) (name n : String) : Keeps (exitOne fs st fuel name n) := by
+theorem keeps_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Keeps (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => intro r; rfl
   | succ fuel ih =>
@@ -48,13 +48,13 @@ theorem keeps_exitOne (fuel : Nat) (name n : String) : Keeps (exitOne fs st fuel
     rw [exitOne]
     refine keeps_withMachine (fun i r => ?_) r
     simp only [id_bind]
-    have h1 := foldlM_keeps (fun c => keeps_unlessHalted (keeps_endWith (fun c n => ih c n) (copyName i.resource n c)))
+    have h1 := foldlM_keeps (fun c => keeps_unlessHalted (keeps_endWith (fun c n => ih c n) (i.id.copyOf n c)))
       (i.copyKeysOf n).reverse r
     split
     · exact h1
     · exact (keeps_leaveWith (fun c n => ih c n) name n _).trans h1
 
-theorem sameLines_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+theorem sameLines_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     SameLines (runAssign fs st name a scope extra) := by
   unfold runAssign
   apply sameLines_withMachine
@@ -67,8 +67,8 @@ theorem sameLines_runAssign (name : String) (a : Assignment) (scope : Option Str
 theorem endSubscription_grows (p : Pending) : Grows s (s.endSubscription p) :=
   ⟨#[_], Array.push_eq_append, by simp⟩
 
-theorem growsBy_endWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, GrowsBy (exit c n))
-    (hk : ∀ c n, Keeps (exit c n)) (c : String) : GrowsBy (endWith exit c) := by
+theorem growsBy_endWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, GrowsBy (exit c n))
+    (hk : ∀ c n, Keeps (exit c n)) (c : InstanceId) : GrowsBy (endWith exit c) := by
   unfold endWith
   apply growsBy_withMachine
   intro ci r
@@ -81,8 +81,8 @@ theorem growsBy_endWith {exit : String → String → Processing → Id Processi
   · exact hg.trans hn (foldl_grows (fun t p => State.endSubscription t p)
       (fun t p => endSubscription_grows _) (fun t p => rfl) _ _)
 
-theorem growsBy_leaveWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, GrowsBy (exit c n))
-    (hk : ∀ c n, Keeps (exit c n)) (name n : String) : GrowsBy (leaveWith fs st exit name n) := by
+theorem growsBy_leaveWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, GrowsBy (exit c n))
+    (hk : ∀ c n, Keeps (exit c n)) (name : InstanceId) (n : String) : GrowsBy (leaveWith fs st exit name n) := by
   intro r
   unfold leaveWith
   simp only [id_bind]
@@ -94,7 +94,7 @@ theorem growsBy_leaveWith {exit : String → String → Processing → Id Proces
   · exact Grows.of_lines ga
   · exact (Grows.of_lines ga).trans na ((gc _ _).bridge (by rfl) (by rfl))
 
-theorem growsBy_exitOne (fuel : Nat) (name n : String) : GrowsBy (exitOne fs st fuel name n) := by
+theorem growsBy_exitOne (fuel : Nat) (name : InstanceId) (n : String) : GrowsBy (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => intro r; exact Grows.refl _
   | succ fuel ih =>
@@ -103,9 +103,9 @@ theorem growsBy_exitOne (fuel : Nat) (name n : String) : GrowsBy (exitOne fs st 
     refine growsBy_withMachine (fun i r => ?_) r
     simp only [id_bind]
     have hk : ∀ c n, Keeps (exitOne fs st fuel c n) := fun c n => keeps_exitOne fuel c n
-    have g1 := foldlM_grows (fun c => growsBy_unlessHalted (growsBy_endWith (fun c n => ih c n) hk (copyName i.resource n c)))
-      (fun c => keeps_unlessHalted (keeps_endWith hk (copyName i.resource n c))) (i.copyKeysOf n).reverse r
-    have n1 := foldlM_now (fun c => keeps_unlessHalted (keeps_endWith hk (copyName i.resource n c))) (i.copyKeysOf n).reverse r
+    have g1 := foldlM_grows (fun c => growsBy_unlessHalted (growsBy_endWith (fun c n => ih c n) hk (i.id.copyOf n c)))
+      (fun c => keeps_unlessHalted (keeps_endWith hk (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
+    have n1 := foldlM_now (fun c => keeps_unlessHalted (keeps_endWith hk (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
     split
     · exact g1
     · exact g1.trans n1 ((growsBy_leaveWith (fun c n => ih c n) hk name n _).bridge (by rfl) (by rfl))
@@ -128,7 +128,7 @@ theorem foldl_endSubscription_pending (ps : List Pending) (s : State) :
       · simp [h, h']
       · simp [h, h', Ne.symm h]
 
-theorem end_all_shows (s : State) (owner : String) :
+theorem end_all_shows (s : State) (owner : InstanceId) :
     (((s.openShows owner).foldl (fun s p => s.endSubscription p) s).openShows owner) = [] := by
   unfold State.openShows
   rw [foldl_endSubscription_pending]
@@ -144,7 +144,7 @@ theorem end_all_shows (s : State) (owner : String) :
     · simp [ha]
     · simpa [ha] using hm
 
-theorem end_ends_shows_and_unstacks (exit : String → String → Processing → Id Processing) (c : String) (r : Processing)
+theorem end_ends_shows_and_unstacks (exit : InstanceId → String → Processing → Id Processing) (c : InstanceId) (r : Processing)
     (ci : Instance) (hh : r.state.halted = none) (hi : r.state.machine? c = some ci)
     (hn : (endWith exit c r).1.halted = none) :
     (endWith exit c r).1.openShows c = [] ∧ c ∉ (endWith exit c r).1.stack := by
@@ -170,7 +170,7 @@ theorem end_ends_shows_and_unstacks (exit : String → String → Processing →
   | nil => rfl
   | cons p ps ih => exact ih _
 
-theorem endWith_exits_then_closes (exit : String → String → Processing → Id Processing) (c : String) (r : Processing)
+theorem endWith_exits_then_closes (exit : InstanceId → String → Processing → Id Processing) (c : InstanceId) (r : Processing)
     (ci : Instance) (hh : r.state.halted = none) (hi : r.state.machine? c = some ci) :
     endWith exit c r =
       let exited := (ci.chart.tree.exitOrder ci.active).foldlM (m := Id) (fun r n => unlessHalted (exit c n) r) r
@@ -180,7 +180,7 @@ theorem endWith_exits_then_closes (exit : String → String → Processing → I
   simp only [endWith, withMachine, Processing.halted, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, hi, id_bind]
   rfl
 
-theorem runAssign_deadlines (name : String) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
+theorem runAssign_deadlines (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
     (runAssign fs st name a scope extra r).1.deadlines = r.state.deadlines := by
   unfold runAssign withMachine
   split
@@ -192,8 +192,8 @@ theorem runAssign_deadlines (name : String) (a : Assignment) (scope : Option Str
       · split <;> rfl
     · rfl
 
-theorem deadlinesShrink_endWith {exit : String → String → Processing → Id Processing}
-    (h : ∀ c n, DeadlinesShrink (exit c n)) (c : String) : DeadlinesShrink (endWith exit c) := by
+theorem deadlinesShrink_endWith {exit : InstanceId → String → Processing → Id Processing}
+    (h : ∀ c n, DeadlinesShrink (exit c n)) (c : InstanceId) : DeadlinesShrink (endWith exit c) := by
   apply deadlinesShrink_withMachine
   intro ci r t ht
   simp only [id_bind] at ht
@@ -210,8 +210,8 @@ theorem deadlinesShrink_endWith {exit : String → String → Processing → Id 
     simp only [id_pure, State.removeFromStack, this] at ht
     exact hf t ht
 
-theorem leave_removes_deadlines {exit : String → String → Processing → Id Processing} (h : ∀ c n, DeadlinesShrink (exit c n))
-    (name n : String) (r : Processing) (hh : (leaveWith fs st exit name n r).1.halted = none) :
+theorem leave_removes_deadlines {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, DeadlinesShrink (exit c n))
+    (name : InstanceId) (n : String) (r : Processing) (hh : (leaveWith fs st exit name n r).1.halted = none) :
     ∀ t ∈ (leaveWith fs st exit name n r).1.deadlines, ¬(t.machine = name ∧ t.state = n) := by
   have hc := foldlM_deadlinesShrink (fun c => deadlinesShrink_unlessHalted (deadlinesShrink_endWith h c))
   have key : ∀ (ts : List Deadline), ∀ t ∈ List.filter (fun (t : Deadline) => !(t.machine == name && t.state == n)) ts,
@@ -230,8 +230,8 @@ theorem leave_removes_deadlines {exit : String → String → Processing → Id 
     intro t ht
     exact key _ t (hc _ _ t ht)
 
-theorem deadlinesShrink_leaveWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, DeadlinesShrink (exit c n))
-    (name n : String) : DeadlinesShrink (leaveWith fs st exit name n) := by
+theorem deadlinesShrink_leaveWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, DeadlinesShrink (exit c n))
+    (name : InstanceId) (n : String) : DeadlinesShrink (leaveWith fs st exit name n) := by
   intro r t ht
   have hc := foldlM_deadlinesShrink (fun c => deadlinesShrink_unlessHalted (deadlinesShrink_endWith h c))
   unfold leaveWith at ht
@@ -242,7 +242,7 @@ theorem deadlinesShrink_leaveWith {exit : String → String → Processing → I
     simp only [State.setMachine, runAssign_deadlines] at this
     exact this
 
-theorem deadlinesShrink_exitOne (fuel : Nat) (name n : String) : DeadlinesShrink (exitOne fs st fuel name n) := by
+theorem deadlinesShrink_exitOne (fuel : Nat) (name : InstanceId) (n : String) : DeadlinesShrink (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => intro r t ht; exact ht
   | succ fuel ih =>
@@ -251,14 +251,14 @@ theorem deadlinesShrink_exitOne (fuel : Nat) (name n : String) : DeadlinesShrink
     refine deadlinesShrink_withMachine (fun i r t ht => ?_) r
     simp only [id_bind] at ht
     have h1 := foldlM_deadlinesShrink (fun c => deadlinesShrink_unlessHalted
-      (deadlinesShrink_endWith (fun c n => ih c n) (copyName i.resource n c))) (i.copyKeysOf n).reverse r
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (copyName i.resource n k)) r) r = X at ht h1
+      (deadlinesShrink_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at ht h1
     split at ht
     · exact h1 t ht
     · have h2 := deadlinesShrink_leaveWith (fun c n => ih c n) name n _ t ht
       exact h1 t h2
 
-theorem exit_cancels_deadlines (name n : String) (r : Processing) (i : Instance)
+theorem exit_cancels_deadlines (name : InstanceId) (n : String) (r : Processing) (i : Instance)
     (hi : r.state.machine? name = some i) (hh : (exitOne fs st Limit.exitDepth.max name n r).1.halted = none) :
     ∀ t ∈ (exitOne fs st Limit.exitDepth.max name n r).1.deadlines, ¬(t.machine = name ∧ t.state = n) := by
   rw [show Limit.exitDepth.max = 99 + 1 from rfl, exitOne] at hh ⊢
@@ -278,7 +278,7 @@ theorem exit_cancels_deadlines (name n : String) (r : Processing) (i : Instance)
       simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
       exact leave_removes_deadlines (fun c n => deadlinesShrink_exitOne 99 c n) name n _ hh
 
-theorem runAssign_pending (name : String) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
+theorem runAssign_pending (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
     (runAssign fs st name a scope extra r).1.pending = r.state.pending := by
   unfold runAssign withMachine
   split
@@ -290,7 +290,7 @@ theorem runAssign_pending (name : String) (a : Assignment) (scope : Option Strin
       · split <;> rfl
     · rfl
 
-theorem leaveMark_marked (name n : String) (q : Pending) : Marked q (leaveMark name n q) := by
+theorem leaveMark_marked (name : InstanceId) (n : String) (q : Pending) : Marked q (leaveMark name n q) := by
   unfold leaveMark
   split
   · exact ⟨rfl, rfl, fun _ => rfl⟩
@@ -304,12 +304,12 @@ theorem foldl_endSubscription_mapped (ps : List Pending) (s : State) :
   · exact ⟨rfl, rfl, fun _ => rfl⟩
   · exact Marked.refl q
 
-theorem pendingMapped_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+theorem pendingMapped_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     PendingMapped (runAssign fs st name a scope extra) :=
   PendingMapped.of_eq (runAssign_pending name a scope extra)
 
-theorem pendingMapped_endWith {exit : String → String → Processing → Id Processing}
-    (h : ∀ c n, PendingMapped (exit c n)) (c : String) : PendingMapped (endWith exit c) := by
+theorem pendingMapped_endWith {exit : InstanceId → String → Processing → Id Processing}
+    (h : ∀ c n, PendingMapped (exit c n)) (c : InstanceId) : PendingMapped (endWith exit c) := by
   apply pendingMapped_withMachine
   intro ci r
   simp only [id_bind]
@@ -322,8 +322,8 @@ theorem pendingMapped_endWith {exit : String → String → Processing → Id Pr
     rw [eb]
     simp only [State.setMachine, ea, List.map_map]
 
-theorem pendingMapped_leaveWith {exit : String → String → Processing → Id Processing}
-    (h : ∀ c n, PendingMapped (exit c n)) (name n : String) : PendingMapped (leaveWith fs st exit name n) := by
+theorem pendingMapped_leaveWith {exit : InstanceId → String → Processing → Id Processing}
+    (h : ∀ c n, PendingMapped (exit c n)) (name : InstanceId) (n : String) : PendingMapped (leaveWith fs st exit name n) := by
   intro r
   unfold leaveWith
   simp only [id_bind]
@@ -336,7 +336,7 @@ theorem pendingMapped_leaveWith {exit : String → String → Processing → Id 
     rw [eb]
     simp only [State.leaveState, State.setMachine, ea, List.map_map]
 
-theorem pendingMapped_exitOne (fuel : Nat) (name n : String) : PendingMapped (exitOne fs st fuel name n) := by
+theorem pendingMapped_exitOne (fuel : Nat) (name : InstanceId) (n : String) : PendingMapped (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => exact PendingMapped.of_eq (fun _ => rfl)
   | succ fuel ih =>
@@ -345,9 +345,9 @@ theorem pendingMapped_exitOne (fuel : Nat) (name n : String) : PendingMapped (ex
     refine pendingMapped_withMachine (fun i r => ?_) r
     simp only [id_bind]
     obtain ⟨a, ha, ea⟩ := foldlM_pendingMapped (fun c => pendingMapped_unlessHalted
-      (pendingMapped_endWith (fun c n => ih c n) (copyName i.resource n c))) (i.copyKeysOf n).reverse r
+      (pendingMapped_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
     dsimp only at ea
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (copyName i.resource n k)) r) r = X at ea ⊢
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at ea ⊢
     split
     · exact ⟨a, ha, ea⟩
     · obtain ⟨b, hb, eb⟩ := pendingMapped_leaveWith (st := st) (fs := fs) (fun c n => ih c n) name n
@@ -356,7 +356,7 @@ theorem pendingMapped_exitOne (fuel : Nat) (name n : String) : PendingMapped (ex
       rw [eb]
       simp only [State.setMachine, ea, List.map_map]
 
-theorem leave_makes_requests_stale (fuel : Nat) (name n : String) (r : Processing) (p : Pending)
+theorem leave_makes_requests_stale (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) (p : Pending)
     (hp : p ∈ r.state.pending) (hr : p.requester = .state name n)
     (ha : (runAssign fs st name (.exit n) (some n) .none r).1.halted = none) :
     ∃ p' ∈ (leaveWith fs st (exitOne fs st fuel) name n r).1.pending, p'.id = p.id ∧ p'.stale = true := by
@@ -379,7 +379,7 @@ theorem leave_makes_requests_stale (fuel : Nat) (name n : String) (r : Processin
   | nil => rfl
   | cons p ps ih => exact ih _
 
-theorem machinesKept_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+theorem machinesKept_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     MachinesKept (runAssign fs st name a scope extra) := by
   unfold runAssign
   apply machinesKept_withMachine
@@ -395,8 +395,8 @@ theorem machinesKept_runAssign (name : String) (a : Assignment) (scope : Option 
       rw [setMachine_resources _ _ _ (by intro _; rfl)]
       rfl
 
-theorem machinesKept_endWith {exit : String → String → Processing → Id Processing}
-    (h : ∀ c n, MachinesKept (exit c n)) (c : String) : MachinesKept (endWith exit c) := by
+theorem machinesKept_endWith {exit : InstanceId → String → Processing → Id Processing}
+    (h : ∀ c n, MachinesKept (exit c n)) (c : InstanceId) : MachinesKept (endWith exit c) := by
   apply machinesKept_withMachine
   intro ci r
   simp only [id_bind]
@@ -407,8 +407,8 @@ theorem machinesKept_endWith {exit : String → String → Processing → Id Pro
     rw [setMachine_resources _ _ _ (by intro _; rfl)]
     exact hf
 
-theorem machinesKept_leaveWith {exit : String → String → Processing → Id Processing}
-    (h : ∀ c n, MachinesKept (exit c n)) (name n : String) : MachinesKept (leaveWith fs st exit name n) := by
+theorem machinesKept_leaveWith {exit : InstanceId → String → Processing → Id Processing}
+    (h : ∀ c n, MachinesKept (exit c n)) (name : InstanceId) (n : String) : MachinesKept (leaveWith fs st exit name n) := by
   intro r
   unfold leaveWith
   simp only [id_bind]
@@ -421,7 +421,7 @@ theorem machinesKept_leaveWith {exit : String → String → Processing → Id P
     rw [setMachine_resources _ _ _ (by intro _; rfl)]
     exact ha
 
-theorem machinesKept_exitOne (fuel : Nat) (name n : String) : MachinesKept (exitOne fs st fuel name n) := by
+theorem machinesKept_exitOne (fuel : Nat) (name : InstanceId) (n : String) : MachinesKept (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => intro r; rfl
   | succ fuel ih =>
@@ -430,8 +430,8 @@ theorem machinesKept_exitOne (fuel : Nat) (name n : String) : MachinesKept (exit
     refine machinesKept_withMachine (fun i r => ?_) r
     simp only [id_bind]
     have h1 := foldlM_machinesKept (fun c => machinesKept_unlessHalted
-      (machinesKept_endWith (fun c n => ih c n) (copyName i.resource n c))) (i.copyKeysOf n).reverse r
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (copyName i.resource n k)) r) r = X at h1 ⊢
+      (machinesKept_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at h1 ⊢
     split
     · exact h1
     · refine (machinesKept_leaveWith (st := st) (fs := fs) (fun c n => ih c n) name n _).trans ?_
@@ -439,7 +439,7 @@ theorem machinesKept_exitOne (fuel : Nat) (name n : String) : MachinesKept (exit
       rw [setMachine_resources _ _ _ (by intro _; rfl)]
       exact h1
 
-theorem exit_stales_requests (name n : String) (r : Processing) (i : Instance) (hi : r.state.machine? name = some i)
+theorem exit_stales_requests (name : InstanceId) (n : String) (r : Processing) (i : Instance) (hi : r.state.machine? name = some i)
     (hh : (exitOne fs st Limit.exitDepth.max name n r).1.halted = none) :
     ∀ p ∈ (exitOne fs st Limit.exitDepth.max name n r).1.pending, p.requester = .state name n → p.stale = true := by
   rw [show Limit.exitDepth.max = 99 + 1 from rfl, exitOne] at hh ⊢
@@ -457,7 +457,7 @@ theorem exit_stales_requests (name n : String) (r : Processing) (i : Instance) (
       simp [Processing.halted, hh, -List.foldlM_reverse] at hx
     · rename_i hx
       simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
-      generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (copyName i.resource n k)) r) r = X at hh ⊢
+      generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (i.id.copyOf n k)) r) r = X at hh ⊢
       unfold leaveWith at hh ⊢
       simp only [id_bind] at hh ⊢
       split at hh
@@ -483,16 +483,16 @@ theorem unlessHalted_foldlM_halted {α : Type} (g : α → Processing → Id Pro
     simp only [List.foldlM_cons, id_bind, unlessHalted, hr, ↓reduceIte]
     exact ih
 
-theorem machine?_isSome_of_mem (s : State) (c : String) (hm : c ∈ s.machines.map (·.resource)) :
+theorem machine?_isSome_of_mem (s : State) (c : InstanceId) (hm : c ∈ s.machines.map (·.id)) :
     ∃ i, s.machine? c = some i := by
   obtain ⟨j, hj, rfl⟩ := List.mem_map.mp hm
-  cases h : s.machine? j.resource with
+  cases h : s.machine? j.id with
   | none =>
     simp only [State.machine?, List.find?_eq_none] at h
     exact absurd (by simp) (h j (List.mem_append_left _ hj))
   | some i => exact ⟨i, rfl⟩
 
-theorem exits_cancel (c : String) (ns : List String) (r : Processing) (hm : c ∈ r.state.machines.map (·.resource))
+theorem exits_cancel (c : InstanceId) (ns : List String) (r : Processing) (hm : c ∈ r.state.machines.map (·.id))
     (hn : (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st Limit.exitDepth.max c n) r) r).halted = false) :
     (∀ t ∈ (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st Limit.exitDepth.max c n) r) r).state.deadlines,
       t.machine = c → t.state ∉ ns) ∧
@@ -513,7 +513,7 @@ theorem exits_cancel (c : String) (ns : List String) (r : Processing) (hm : c �
     have hstep : unlessHalted (exitOne fs st Limit.exitDepth.max c x) r = exitOne fs st Limit.exitDepth.max c x r := by
       simp [unlessHalted, hr0]
     rw [hstep] at hr1 hn ⊢
-    have hm1 : c ∈ (exitOne fs st Limit.exitDepth.max c x r).1.machines.map (·.resource) := by
+    have hm1 : c ∈ (exitOne fs st Limit.exitDepth.max c x r).1.machines.map (·.id) := by
       rw [machinesKept_exitOne]; exact hm
     obtain ⟨i, hi⟩ := machine?_isSome_of_mem r.state c hm
     have hh1 : (exitOne fs st Limit.exitDepth.max c x r).1.halted = none := by
@@ -532,8 +532,8 @@ theorem exits_cancel (c : String) (ns : List String) (r : Processing) (hm : c �
         exact mq.2.2 (exit_stales_requests c _ r i hi hh1 q hq (mq.2.1 ▸ hpm))
       · exact ihp p hp hps hpm hx
 
-theorem endWith_cancels_deadlines_and_requests (c : String) (r : Processing) (ci : Instance) (hh : r.state.halted = none)
-    (hi : r.state.machine? c = some ci) (hm : c ∈ r.state.machines.map (·.resource))
+theorem endWith_cancels_deadlines_and_requests (c : InstanceId) (r : Processing) (ci : Instance) (hh : r.state.halted = none)
+    (hi : r.state.machine? c = some ci) (hm : c ∈ r.state.machines.map (·.id))
     (hn : (endWith (exitOne fs st Limit.exitDepth.max) c r).1.halted = none)
     (ht : ∀ t ∈ r.state.deadlines, t.machine = c → t.state ∈ ci.chart.tree.exitOrder ci.active)
     (hp : ∀ p ∈ r.state.pending, ∀ n, p.requester = .state c n → p.stale = false → n ∈ ci.chart.tree.exitOrder ci.active) :
@@ -589,7 +589,7 @@ theorem endWith_cancels_deadlines_and_requests (c : String) (r : Processing) (ci
             exact cP q hq' n hreq (hp o ho n hor hos)
         | automation a => simp [hreq, Requester.machine?] at hqm
 
-theorem leave_makes_queued_stale (s : State) (name n : String) :
+theorem leave_makes_queued_stale (s : State) (name : InstanceId) (n : String) :
     ∀ q ∈ (s.leaveState name n).queued, q.machine = name → q.state = n → q.stale = true := by
   intro q hq hm hs
   simp only [State.leaveState, List.mem_map] at hq
@@ -599,33 +599,33 @@ theorem leave_makes_queued_stale (s : State) (name n : String) :
   · simp only [h, Bool.false_eq_true, ↓reduceIte] at hm hs ⊢
     simp [hm, hs] at h
 
-def Absent (s : State) (name n : String) : Prop := ∀ i ∈ s.machines ++ s.copies, i.resource = name → n ∉ i.active
+def Absent (s : State) (name : InstanceId) (n : String) : Prop := ∀ i ∈ s.machines ++ s.copies, i.id = name → n ∉ i.active
 
 def KeepsAbsent (f : Processing → Id Processing) : Prop := ∀ r name n, Absent r.state name n → Absent (f r).1 name n
 
-theorem Absent.of_eq {s s' : State} (hm : s'.machines = s.machines) (hc : s'.copies = s.copies) {name n : String}
+theorem Absent.of_eq {s s' : State} (hm : s'.machines = s.machines) (hc : s'.copies = s.copies) {name : InstanceId} {n : String}
     (h : Absent s name n) : Absent s' name n := by
   unfold Absent; rw [hm, hc]; exact h
 
-theorem Absent.setMachine {s : State} (c : String) (g : Instance → Instance) (hr : ∀ i, (g i).resource = i.resource)
-    (ha : ∀ i, ∀ x ∈ (g i).active, x ∈ i.active) {name n : String} (h : Absent s name n) :
+theorem Absent.setMachine {s : State} (c : InstanceId) (g : Instance → Instance) (hr : ∀ i, (g i).id = i.id)
+    (ha : ∀ i, ∀ x ∈ (g i).active, x ∈ i.active) {name : InstanceId} {n : String} (h : Absent s name n) :
     Absent (s.setMachine c g) name n := by
   intro i' hi' hn
   simp only [State.setMachine, ← List.map_append, List.mem_map] at hi'
   obtain ⟨i, hi, rfl⟩ := hi'
-  by_cases hc : (i.resource == c) = true
+  by_cases hc : (i.id == c) = true
   · simp only [hc, ↓reduceIte] at hn ⊢
     rw [hr] at hn
     exact fun hx => h i hi hn (ha i n hx)
   · simp only [hc, Bool.false_eq_true, ↓reduceIte] at hn ⊢
     exact h i hi hn
 
-theorem Absent.of_machine?_none {s : State} {name : String} (h : s.machine? name = none) (n : String) : Absent s name n := by
+theorem Absent.of_machine?_none {s : State} {name : InstanceId} (h : s.machine? name = none) (n : String) : Absent s name n := by
   intro i hi hn
   simp only [State.machine?, List.find?_eq_none] at h
   exact absurd (by simp [hn]) (h i hi)
 
-theorem Absent.machine? {s : State} {name n : String} (h : Absent s name n) {i : Instance} (hi : s.machine? name = some i) :
+theorem Absent.machine? {s : State} {name : InstanceId} {n : String} (h : Absent s name n) {i : Instance} (hi : s.machine? name = some i) :
     n ∉ i.active :=
   h i (List.mem_of_find?_eq_some hi) (by simpa using List.find?_some hi)
 
@@ -636,7 +636,7 @@ theorem keepsAbsent_unlessHalted {f : Processing → Id Processing} (h : KeepsAb
   · exact ha
   · exact h r name n ha
 
-theorem keepsAbsent_withMachine {c : String} {f : Instance → Processing → Id Processing} (h : ∀ i, KeepsAbsent (f i)) :
+theorem keepsAbsent_withMachine {c : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, KeepsAbsent (f i)) :
     KeepsAbsent (withMachine c f) := by
   intro r name n ha
   unfold withMachine
@@ -652,7 +652,7 @@ theorem keepsAbsent_foldlM {α : Type} {g : α → Processing → Id Processing}
   | nil => intro r name n ha; exact ha
   | cons x xs ih => intro r name n ha; exact ih (g x r) name n (h x r name n ha)
 
-theorem keepsAbsent_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+theorem keepsAbsent_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     KeepsAbsent (runAssign fs st name a scope extra) := by
   unfold runAssign
   refine keepsAbsent_withMachine fun i r name' n ha => ?_
@@ -674,8 +674,8 @@ theorem keepsAbsent_runAssign (name : String) (a : Assignment) (scope : Option S
       · exact h
       exact ha.of_eq rfl rfl
 
-theorem keepsAbsent_endWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, KeepsAbsent (exit c n))
-    (c : String) : KeepsAbsent (endWith exit c) := by
+theorem keepsAbsent_endWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, KeepsAbsent (exit c n))
+    (c : InstanceId) : KeepsAbsent (endWith exit c) := by
   refine keepsAbsent_withMachine fun ci r name n ha => ?_
   simp only [id_bind]
   have hf := keepsAbsent_foldlM (fun n => keepsAbsent_unlessHalted (h c n)) (ci.chart.tree.exitOrder ci.active) r name n ha
@@ -686,15 +686,15 @@ theorem keepsAbsent_endWith {exit : String → String → Processing → Id Proc
     · simp [State.removeFromStack]
     · simp [State.removeFromStack]
 
-theorem keepsAbsent_leaveState {s : State} {name n name' n' : String} (h : Absent s name' n') :
+theorem keepsAbsent_leaveState {s : State} {name : InstanceId} {name' : InstanceId} {n n' : String} (h : Absent s name' n') :
     Absent (s.leaveState name n) name' n' :=
   Absent.of_eq rfl rfl
     (h.setMachine name (fun i => { i with entered := i.entered.filter (·.1 != n) }) (fun _ => rfl) fun i x hx => by
       simp only [Instance.active] at hx ⊢
       exact (List.filter_sublist.map _).subset hx)
 
-theorem keepsAbsent_leaveWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, KeepsAbsent (exit c n))
-    (name n : String) : KeepsAbsent (leaveWith fs st exit name n) := by
+theorem keepsAbsent_leaveWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, KeepsAbsent (exit c n))
+    (name : InstanceId) (n : String) : KeepsAbsent (leaveWith fs st exit name n) := by
   intro r name' n' ha
   unfold leaveWith
   simp only [id_bind]
@@ -704,7 +704,7 @@ theorem keepsAbsent_leaveWith {exit : String → String → Processing → Id Pr
   · exact keepsAbsent_foldlM (fun c => keepsAbsent_unlessHalted (keepsAbsent_endWith h c)) _ _ name' n'
       (keepsAbsent_leaveState h1)
 
-theorem keepsAbsent_exitOne (fuel : Nat) (name n : String) : KeepsAbsent (exitOne fs st fuel name n) := by
+theorem keepsAbsent_exitOne (fuel : Nat) (name : InstanceId) (n : String) : KeepsAbsent (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => intro r name' n' ha; exact ha.of_eq rfl rfl
   | succ fuel ih =>
@@ -713,16 +713,16 @@ theorem keepsAbsent_exitOne (fuel : Nat) (name n : String) : KeepsAbsent (exitOn
     refine keepsAbsent_withMachine (fun i r name' n' ha => ?_) r name' n' ha
     simp only [id_bind]
     have h1 := keepsAbsent_foldlM (fun c => keepsAbsent_unlessHalted
-      (keepsAbsent_endWith (fun c n => ih c n) (copyName i.resource n c))) (i.copyKeysOf n).reverse r name' n' ha
+      (keepsAbsent_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r name' n' ha
     dsimp only at h1
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (copyName i.resource n k)) r) r = X at h1 ⊢
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at h1 ⊢
     split
     · exact h1
     · exact keepsAbsent_leaveWith (fun c n => ih c n) name n _ name' n'
         (h1.setMachine name (fun i => { i with copyKeys := i.copyKeys.filter (·.1 != n) }) (fun _ => rfl)
           (fun _ _ h => h))
 
-theorem exit_leaves_state (name n : String) (r : Processing) (hh : (exitOne fs st Limit.exitDepth.max name n r).1.halted = none) :
+theorem exit_leaves_state (name : InstanceId) (n : String) (r : Processing) (hh : (exitOne fs st Limit.exitDepth.max name n r).1.halted = none) :
     Absent (exitOne fs st Limit.exitDepth.max name n r).1 name n := by
   rw [show Limit.exitDepth.max = 99 + 1 from rfl, exitOne] at hh ⊢
   unfold withMachine at hh ⊢
@@ -741,7 +741,7 @@ theorem exit_leaves_state (name n : String) (r : Processing) (hh : (exitOne fs s
         simp [Processing.halted, hh, -List.foldlM_reverse] at hx
       · rename_i hx
         simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
-        generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (copyName i.resource n k)) r) r = X at hh ⊢
+        generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (i.id.copyOf n k)) r) r = X at hh ⊢
         unfold leaveWith at hh ⊢
         simp only [id_bind] at hh ⊢
         split
@@ -762,7 +762,7 @@ theorem exit_leaves_state (name n : String) (r : Processing) (hh : (exitOne fs s
     · rename_i hi
       exact Absent.of_machine?_none hi n
 
-theorem exitOne_at_depth_limit (name n : String) (r : Processing) :
+theorem exitOne_at_depth_limit (name : InstanceId) (n : String) (r : Processing) :
     exitOne fs st 0 name n r = ⟨r.state.halt (Finding.fault (.exceededExitDepth Limit.exitDepth.max)), r.queue⟩ := by
   simp [exitOne, Processing.report, State.report, Fault.halts]
 

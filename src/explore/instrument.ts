@@ -16,26 +16,22 @@ import {
   type Functions,
   givenKeys,
   type Holder,
-  holderResource,
+  holderId,
   type Keys,
   type Scope,
 } from "../service/functions.ts";
+import { type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
-import type { Note, RegionCheck, RegionPair } from "../service/note.ts";
+import { type Note, type RegionCheck, type RegionPair, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
 import { type Causes, channelOf, leadsTo, lineSteps } from "../sim/trace.ts";
 import { contractsListing, named } from "../spec/structure.ts";
 
-/** Lean's contextKey: the name of a context field, unique across the kinds of value, as recordPartName names parts. */
-export const contextKey = (resource: string, field: string): string => `context:${resource}.${field}`;
-
-export const shownKey = (resource: string, slot: string): string => `shown:${resource}:${slot}`;
-
 /**
- * The values that a step reads and writes, each by its name. `keyWrites` holds the key sets of entities that a created
- * or deleted record writes.
+ * The values that a step reads and writes, each by its valueName. `keyWrites` holds the key sets of entities that a
+ * created or deleted record writes.
  */
 interface Footprint {
   readonly reads: Set<string>;
@@ -57,7 +53,7 @@ function overlaps(a: Footprint, b: Footprint): boolean {
   );
 }
 
-/** The context fields that one transition part reads and assigns, keyed by their resource and field. */
+/** The context fields that one transition part reads and assigns, by valueName. */
 interface TransitionAccess {
   readonly reads: Set<string>;
   /** The field of each key. */
@@ -100,7 +96,16 @@ function regionFindings(
  */
 interface StepAccess extends Footprint {
   readonly name: StepName;
-  settledOwner: string | undefined;
+  settledOwner: InstanceId | undefined;
+}
+
+/**
+ * Lean's startedValue: whether the key is a context field or state of an instance or copy that one of `started` starts,
+ * or of its copies.
+ */
+function startedValue(started: readonly (InstanceId | undefined)[], k: ValueKey): boolean {
+  if (k.kind !== "context" && k.kind !== "state") return false;
+  return started.some((r) => r !== undefined && within(k.id, r));
 }
 
 /** Returns whether always_step_independent proves that the pair commutes. */
@@ -152,7 +157,7 @@ export class Collect
   private transition: number | undefined;
   private readonly transitions = new Map<number, TransitionAccess>();
   /** For each step that began and has not ended, outermost first, the instance or copy that it starts. */
-  private readonly openSteps: (string | undefined)[] = [];
+  private readonly openSteps: (InstanceId | undefined)[] = [];
   /** The access of each step that began while no step was open, by step number, in the order they began. */
   private readonly steps = new Map<number, StepAccess>();
   /** The access of the step open outermost, which began last of `steps`. */
@@ -201,7 +206,7 @@ export class Collect
     if (part === undefined) return access;
     const into = this.accessOf(part);
     this.transitions.set(part, into);
-    const key = (holder: Holder, field: string) => JSON.stringify([holderResource(scope, holder), field]);
+    const key = (holder: Holder, field: string) => valueName({ kind: "context", id: holderId(scope, holder), field });
     return {
       context: (holder, field) => {
         into.reads.add(key(holder, field));
@@ -233,12 +238,12 @@ export class Collect
     }
   }
 
-  stepBegins(step: number, name: StepName, startedResource: string | undefined): void {
+  stepBegins(step: number, name: StepName, started: InstanceId | undefined): void {
     if (this.openSteps.length === 0) {
       this.outermost = { name, settledOwner: undefined, reads: new Set(), writes: new Set(), keyWrites: new Set() };
       this.steps.set(step, this.outermost);
     }
-    this.openSteps.push(startedResource);
+    this.openSteps.push(started);
   }
 
   stepEnds(): void {
@@ -246,7 +251,7 @@ export class Collect
     if (this.openSteps.length === 0) this.outermost = undefined;
   }
 
-  settlesAround(owner: string): void {
+  settlesAround(owner: InstanceId): void {
     if (this.outermost !== undefined) this.outermost.settledOwner = owner;
   }
 
@@ -280,23 +285,18 @@ export class Collect
     return after;
   }
 
-  read(key: string): void {
-    this.accessing()?.reads.add(key);
+  read(name: string): void {
+    this.accessing()?.reads.add(name);
   }
 
   /**
    * Adds a write to the outermost open step, or to the afterMessage that runs. Writes to the instance or copy that an
    * open step starts, or to its copies, never overlap other steps.
    */
-  write(key: string, keyWrite: boolean): void {
-    const started = (resource: string | undefined) =>
-      resource !== undefined &&
-      (key.startsWith(`context:${resource}.`) ||
-        key.startsWith(`context:${resource}@`) ||
-        key.startsWith(`state:${resource}@`));
-    if (this.openSteps.some(started)) return;
+  write(key: ValueKey, keyWrite: boolean): void {
+    if (startedValue(this.openSteps, key)) return;
     const access = this.accessing();
-    if (access !== undefined) (keyWrite ? access.keyWrites : access.writes).add(key);
+    if (access !== undefined) (keyWrite ? access.keyWrites : access.writes).add(valueName(key));
   }
 
   /** Returns the name of each step from step `from` on that began while no step was open, in the order they began. */
@@ -327,7 +327,9 @@ export class Collect
     const numbers = new Set(steps.map(([k]) => k));
     const f: Footprint = {
       reads: new Set(),
-      writes: new Set(channels.filter(([t]) => numbers.has(t)).map(([, c]) => c)),
+      writes: new Set(
+        channels.filter(([t]) => numbers.has(t)).map(([, channel]) => valueName({ kind: "channel", channel })),
+      ),
       keyWrites: new Set(),
     };
     const after = tied && message !== undefined ? this.afters.get(message) : undefined;

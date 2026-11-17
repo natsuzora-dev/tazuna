@@ -12,10 +12,10 @@ variable {st : Service} {fs : Functions Id} {s : State}
 
 theorem leaf_selects_innermost (s : State) (extra : Extra) (i : Instance) (ts : List Transition)
     (rest : List (Instance × List Transition)) (t : Transition) (h : choose fs st s i extra ts = .ok (some t)) :
-    firstLevel fs st s extra ((i, ts) :: rest) = .ok (some (i.resource, t)) := by
+    firstLevel fs st s extra ((i, ts) :: rest) = .ok (some (i.id, t)) := by
   simp [firstLevel, h]
 
-theorem descendant_replaces_ancestor (s : State) (c : Chart) (a d : String × Transition) (x : String × String)
+theorem descendant_replaces_ancestor (s : State) (c : Chart) (a d : InstanceId × Transition) (x : InstanceId × String)
     (hxa : x ∈ s.exitKeys a) (hxd : x ∈ s.exitKeys d) (hin : c.tree.isInside d.2.source a.2.source = true) :
     s.removeConflicts c [a, d] = [d] := by
   simp only [State.removeConflicts, List.any_filter, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq, Prod.exists,
@@ -26,7 +26,7 @@ theorem descendant_replaces_ancestor (s : State) (c : Chart) (a d : String × Tr
       Decidable.not_not, forall_eq, true_and]
   exact ⟨x.1, x.2, hxa, hxd⟩
 
-theorem ancestor_after_descendant_dropped (s : State) (c : Chart) (a d : String × Transition) (x : String × String)
+theorem ancestor_after_descendant_dropped (s : State) (c : Chart) (a d : InstanceId × Transition) (x : InstanceId × String)
     (hxa : x ∈ s.exitKeys a) (hxd : x ∈ s.exitKeys d) (hout : c.tree.isInside a.2.source d.2.source = false) :
     s.removeConflicts c [d, a] = [d] := by
   simp only [State.removeConflicts, List.any_filter, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq, Prod.exists,
@@ -38,8 +38,8 @@ theorem ancestor_after_descendant_dropped (s : State) (c : Chart) (a d : String 
   exact absurd hxa (h x.1 x.2 hxd)
 
 theorem ancestor_only_without_descendant (s : State) (extra : Extra) (levels : List (Instance × List Transition))
-    (h' : String) (t : Transition) (h : firstLevel fs st s extra levels = .ok (some (h', t))) :
-    ∃ k : Nat, (∃ i ts, levels[k]? = some (i, ts) ∧ i.resource = h' ∧ choose fs st s i extra ts = .ok (some t)) ∧
+    (h' : InstanceId) (t : Transition) (h : firstLevel fs st s extra levels = .ok (some (h', t))) :
+    ∃ k : Nat, (∃ i ts, levels[k]? = some (i, ts) ∧ i.id = h' ∧ choose fs st s i extra ts = .ok (some t)) ∧
       ∀ j < k, ∀ i ts, levels[j]? = some (i, ts) → choose fs st s i extra ts = .ok none := by
   induction levels with
   | nil =>
@@ -71,15 +71,11 @@ theorem ancestor_only_without_descendant (s : State) (extra : Extra) (levels : L
 theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k : String)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) =
-      cs.filter (fun c => c.copyOf.any (·.encodedKey == k)) := by
+      cs.filter (fun c => c.id.key? == some k) := by
   refine List.filter_congr (fun c hc => ?_)
   obtain ⟨hn, co, hco, hm⟩ := hcs c hc
-  simp only [reaches, hco, id_bind, hn, hm, hk, Option.any_some, id_pure]
-  by_cases e : k = co.encodedKey
-  · subst e; simp
-  · have e1 : (k == co.encodedKey) = false := by simpa using e
-    have e2 : (co.encodedKey == k) = false := by simpa using Ne.symm e
-    rw [e1, e2]
+  simp only [reaches, hco, id_bind, hn, hm, hk, id_pure]
+  cases c.id.key? == some k <;> rfl
 
 theorem keyless_payload_reaches_all (chart map : String) (payload : Value)
     (hk : fs.copyKey chart map payload = .ok none) (cs : List Instance) (hcs : CopiesOf chart map cs) :
@@ -90,7 +86,7 @@ theorem keyless_payload_reaches_all (chart map : String) (payload : Value)
 
 theorem keyed_payload_reaches_at_most_one (chart map : String) (payload : Value) (k : String)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs)
-    (hd : (cs.map fun c => c.copyOf.map (·.encodedKey)).Nodup) :
+    (hd : (cs.map (·.id.key?)).Nodup) :
     (cs.filter fun c => reaches fs st c payload matches .ok true).length ≤ 1 := by
   rw [keyed_payload_reaches_matching chart map payload k hk cs hcs]
   induction cs with
@@ -101,23 +97,19 @@ theorem keyed_payload_reaches_at_most_one (chart map : String) (payload : Value)
     simp only [List.filter_cons]
     split
     · rename_i hc
-      have : cs.filter (fun c => c.copyOf.any (·.encodedKey == k)) = [] := by
+      have : cs.filter (fun c => c.id.key? == some k) = [] := by
         rw [List.filter_eq_nil_iff]
         intro d hdm hd'
         apply hd.1
-        obtain ⟨_, co, hco, _⟩ := hcs c List.mem_cons_self
-        obtain ⟨_, do', hdo, _⟩ := hcs d (List.mem_cons_of_mem _ hdm)
-        simp only [hco, Option.any_some, beq_iff_eq] at hc
-        simp only [hdo, Option.any_some, beq_iff_eq] at hd'
-        refine List.mem_map.mpr ⟨d, hdm, ?_⟩
-        simp [hco, hdo, hc, hd']
+        simp only [beq_iff_eq] at hc hd'
+        exact List.mem_map.mpr ⟨d, hdm, by rw [hc, hd']⟩
       simp [this]
     · exact ih'
 
-theorem removeConflicts_sublist (s : State) (c : Chart) (enabled : List (String × Transition)) :
+theorem removeConflicts_sublist (s : State) (c : Chart) (enabled : List (InstanceId × Transition)) :
     (s.removeConflicts c enabled).Sublist enabled := by
   unfold State.removeConflicts
-  have key : ∀ (xs kept pre : List (String × Transition)), kept.Sublist pre →
+  have key : ∀ (xs kept pre : List (InstanceId × Transition)), kept.Sublist pre →
       (xs.foldl (fun kept t₁ =>
         let exits := s.exitKeys t₁
         let overlapping := kept.filter fun t₂ => (s.exitKeys t₂).any (· ∈ exits)
@@ -137,18 +129,18 @@ theorem removeConflicts_sublist (s : State) (c : Chart) (enabled : List (String 
   simpa using key enabled [] [] List.Sublist.slnil
 
 theorem select_follows_leaves (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (String × Option String)) (chosen : List (String × Transition))
+    (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     chosen.Sublist (leaves.filterMap fun l =>
       match pick fs st s top trigger extra l with
       | .ok (some c) => some c
       | _ => none) := by
-  let g : String × Option String → Option (String × Transition) := fun l =>
+  let g : InstanceId × Option String → Option (InstanceId × Transition) := fun l =>
     match pick fs st s top trigger extra l with
     | .ok (some c) => some c
     | _ => none
-  have key : ∀ (xs pre : List (String × Option String))
-      (acc : Except Fault (List (String × Transition))),
+  have key : ∀ (xs pre : List (InstanceId × Option String))
+      (acc : Except Fault (List (InstanceId × Transition))),
       (∀ e, acc = .ok e → e.Sublist (pre.filterMap g)) →
       ∀ e, xs.foldlM (m := Id) (fun acc l => do
         match acc with
@@ -201,7 +193,7 @@ theorem select_follows_leaves (s : State) (top : Instance) (trigger : Spec.Trigg
     exact (removeConflicts_sublist s _ e).trans (by simpa using key leaves [] _ (by intro e he; cases he; simp) e hfound)
 
 theorem select_picked_by_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (String × Option String)) (chosen : List (String × Transition))
+    (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     ∀ c ∈ chosen, ∃ l ∈ leaves, pick fs st s top trigger extra l = .ok (some c) := by
   intro c hc
@@ -246,9 +238,9 @@ theorem firstLevel_error_halts (s : State) (extra : Extra) (levels : List (Insta
     · exact ih h
 
 theorem select_error_halts (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (String × Option String)) (v : Fault)
+    (leaves : List (InstanceId × Option String)) (v : Fault)
     (h : select fs st s top trigger extra leaves = .error v) : v.halts = true := by
-  have key : ∀ (xs : List (String × Option String)) (acc : Except Fault (List (String × Transition))),
+  have key : ∀ (xs : List (InstanceId × Option String)) (acc : Except Fault (List (InstanceId × Transition))),
       (∀ w, acc = .error w → w.halts = true) →
       ∀ w, xs.foldlM (m := Id) (fun acc l => do
         match acc with
@@ -293,7 +285,7 @@ theorem select_error_halts (s : State) (top : Instance) (trigger : Spec.Trigger)
     exact h ▸ key leaves _ (fun w hw => by cases hw) u hfound
   | ok e => simp [Except.map] at h
 
-theorem copyLeaves_any (s : State) (reached : List String) (h n : String)
+theorem copyLeaves_any (s : State) (reached : List InstanceId) (h : InstanceId) (n : String)
     (ha : ((reached.filterMap fun h => (s.machine? h).map fun ci => (h, ci.chart.tree.leaves ci.active)).lookup h).any
       (n ∈ ·) = true) :
     ∃ ci, s.machine? h = some ci ∧ n ∈ ci.chart.tree.leaves ci.active := by
@@ -312,9 +304,9 @@ theorem copyLeaves_any (s : State) (reached : List String) (h n : String)
         exact ⟨ci, hm, ha⟩
       · exact ih ha
 
-theorem leavesOf_atomic (s : State) (top : Instance) (reached : List String) :
+theorem leavesOf_atomic (s : State) (top : Instance) (reached : List InstanceId) :
     ∀ l ∈ leavesOf s top reached, l.2 = none ∨ ∃ n, l.2 = some n ∧
-      (l.1 = top.resource ∧ n ∈ top.chart.tree.leaves top.active ∨ ∃ ci, s.machine? l.1 = some ci ∧ n ∈ ci.chart.tree.leaves ci.active) := by
+      (l.1 = top.id ∧ n ∈ top.chart.tree.leaves top.active ∨ ∃ ci, s.machine? l.1 = some ci ∧ n ∈ ci.chart.tree.leaves ci.active) := by
   intro l hl
   unfold leavesOf at hl
   simp only at hl
@@ -323,21 +315,21 @@ theorem leavesOf_atomic (s : State) (top : Instance) (reached : List String) :
   · obtain ⟨⟨h, n⟩, hm, rfl⟩ := List.mem_map.mp hl
     have ha := (List.mem_filter.mp hm).2
     refine Or.inr ⟨n, rfl, ?_⟩
-    by_cases e : h = top.resource
+    by_cases e : h = top.id
     · simp only [e, beq_self_eq_true, ↓reduceIte, Bool.and_eq_true, decide_eq_true_eq] at ha
       exact Or.inl ⟨e, ha.1⟩
-    · have : (h == top.resource) = false := by simpa using e
+    · have : (h == top.id) = false := by simpa using e
       simp only [this, Bool.false_eq_true, ↓reduceIte] at ha
       exact Or.inr (copyLeaves_any s reached h n ha)
 
 theorem select_one_per_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (String × Option String)) (chosen : List (String × Transition))
+    (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
-    ∃ f : String × Transition → String × Option String,
+    ∃ f : InstanceId × Transition → InstanceId × Option String,
       (∀ c ∈ chosen, f c ∈ leaves) ∧ ∀ c₁ ∈ chosen, ∀ c₂ ∈ chosen, f c₁ = f c₂ → c₁ = c₂ := by
   classical
   have hp := select_picked_by_leaf s top trigger extra leaves chosen h
-  let f : String × Transition → String × Option String := fun c =>
+  let f : InstanceId × Transition → InstanceId × Option String := fun c =>
     if hc : c ∈ chosen then (hp c hc).choose else default
   refine ⟨f, fun c hc => ?_, fun c₁ h₁ c₂ h₂ he => ?_⟩
   · simp only [f, hc, ↓reduceDIte]; exact (hp c hc).choose_spec.1

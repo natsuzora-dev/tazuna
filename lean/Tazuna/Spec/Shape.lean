@@ -81,18 +81,12 @@ def stateTree (shapes : List Shape) : Bool :=
   preorder [] [] shapes && shapes.all (shapeInTree shapes)
 
 /--
-Whether `n` has neither `@` nor `[`. A copy's resource is `{owner}@{map}[{key}]`, so a state name with `@` or `[`
-could make two copies collide.
--/
-def plainName (n : String) : Bool := !n.toList.contains '@' && !n.toList.contains '['
-
-/--
-Whether the shapes form the state tree of a chart whose initial is a child of the root, whose state names are all
-plain (`plainName`), and whose machine-level `on` transitions target states outside copies.
+Whether the shapes form the state tree of a chart whose initial is a child of the root and whose machine-level `on`
+transitions target states outside copies.
 -/
 def chartTree (shapes : List Shape) (initial : String) (rootTargets : List String) : Bool :=
   stateTree shapes &&
-    (shapes.any (fun s => s.name == initial && s.parent == none) && shapes.all (plainName ·.name) &&
+    (shapes.any (fun s => s.name == initial && s.parent == none) &&
       rootTargets.all (targetInScope shapes none))
 
 theorem stateTree_of_chartTree {shapes : List Shape} {initial : String} {rootTargets : List String}

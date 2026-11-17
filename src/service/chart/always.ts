@@ -1,7 +1,8 @@
 import { ref } from "../basic.ts";
+import { type InstanceId, ownerId } from "../instance.ts";
 import { limits } from "../limits.ts";
-import { stateValueName } from "../note.ts";
-import { type Chosen, copiesOf, type Instance, machine, ownerOf, report } from "../state.ts";
+import { valueName } from "../note.ts";
+import { type Chosen, copiesOf, type Instance, machine, report } from "../state.ts";
 import { transitionsAt } from "./basic.ts";
 import { syncCopies } from "./map.ts";
 import { microstep } from "./microstep.ts";
@@ -12,8 +13,8 @@ import { leavesOf, select } from "./select.ts";
  * Evaluates the always transitions of the owner of `name` (a copy's owner for a copy). It reuses a cached evaluation
  * only while no guard holds; after any transition, even one that writes nothing, it re-evaluates.
  */
-export function settle(r: Processing, name: string, step: number): void {
-  const owner = machine(r.state, ownerOf(r.state, name));
+export function settle(r: Processing, name: InstanceId, step: number): void {
+  const owner = machine(r.state, ownerId(name));
   if (owner === undefined) return;
   const { evaluations } = r;
   const rounds = { count: 0 };
@@ -21,7 +22,7 @@ export function settle(r: Processing, name: string, step: number): void {
     if (owner.closed) return;
     const changed = syncCopies(r, owner, step);
     let chosen: Chosen[] = [];
-    if (!evaluations.replayIfFresh(owner.resource, "always")) {
+    if (!evaluations.replayIfFresh(owner.id, "always")) {
       const reads = evaluations.track(() => {
         chosen = select(
           r,
@@ -38,10 +39,10 @@ export function settle(r: Processing, name: string, step: number): void {
           .filter(
             (state) => transitionsAt(owner.chart, state.name, { type: "always" }).length > 0 || state.kind === "map",
           )
-          .map((state) => stateValueName(holder.resource, state.name)),
+          .map((state) => valueName({ kind: "state", id: holder.id, state: state.name })),
       );
       // After a transition the evaluation stays stale, so only one that chose nothing is remembered.
-      if (chosen.length === 0) evaluations.remember(owner.resource, "always", reads, [...reads, ...states]);
+      if (chosen.length === 0) evaluations.remember(owner.id, "always", reads, [...reads, ...states]);
     }
     if (chosen.length === 0 && !changed) return;
     countRound(r, owner, rounds);
@@ -63,12 +64,12 @@ function countRound(r: Processing, instance: Instance, rounds: { count: number }
  * Runs `work` between two settles of the owner of `name`; without an instance, as for an automation's answer, only runs
  * it.
  */
-export function settled(r: Processing, name: string | undefined, step: number, work: () => void): void {
+export function settled(r: Processing, name: InstanceId | undefined, step: number, work: () => void): void {
   if (name === undefined) {
     work();
     return;
   }
-  const owner = ownerOf(r.state, name);
+  const owner = ownerId(name);
   r.note.settlesAround(owner);
   settle(r, owner, step);
   work();

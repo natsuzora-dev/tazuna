@@ -9,7 +9,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Service.Functions Taz
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem keeps_startCopy (step : Nat) (owner map : String) (key : Value) (k : String) :
+theorem keeps_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (k : String) :
     Keeps (startCopy fs st step owner map key k) := by
   unfold startCopy
   apply keeps_withMachine
@@ -19,14 +19,14 @@ theorem keeps_startCopy (step : Nat) (owner map : String) (key : Value) (k : Str
   · exact keeps_enter _ _ _ _
   · rfl
 
-theorem exitLeftCopy_fixed (owner map : String) (itemKeys : List String) (r : Processing) (k : String) :
+theorem exitLeftCopy_fixed (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
     (exitLeftCopy fs st owner map itemKeys r k).1.fixed = r.state.fixed := by
   unfold exitLeftCopy
   split
   · rfl
   · exact keeps_unlessHalted (keeps_endWith (fun c n => keeps_exitOne Limit.exitDepth.max c n) _) _
 
-theorem syncMap_fixed (step : Nat) (owner : String) (r : Processing) (map : String) :
+theorem syncMap_fixed (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     (syncMap fs st step owner r map).1.1.fixed = r.state.fixed := by
   unfold syncMap
   simp only [id_bind]
@@ -45,7 +45,7 @@ theorem syncMap_fixed (step : Nat) (owner : String) (r : Processing) (map : Stri
               keeps_unlessHalted (keeps_startCopy (fs := fs) (st := st) step owner map k.1 k.2) r) _ _).trans
               (foldl_fixed' _ (exitLeftCopy_fixed _ _ _) _ _)
 
-theorem syncCopies_fixed (step : Nat) (owner : String) (r : Processing) :
+theorem syncCopies_fixed (step : Nat) (owner : InstanceId) (r : Processing) :
     (syncCopies fs st step owner r).1.1.fixed = r.state.fixed := by
   unfold syncCopies
   split
@@ -54,7 +54,7 @@ theorem syncCopies_fixed (step : Nat) (owner : String) (r : Processing) :
     exact foldl_pair_keeps (fun acc map => ((syncMap fs st step owner acc.1 map).1, acc.2 || (syncMap fs st step owner acc.1 map).2))
       (fun acc map => syncMap_fixed step owner acc.1 map) _ _
 
-theorem syncMap_unchanged (step : Nat) (owner : String) (r : Processing) (map : String)
+theorem syncMap_unchanged (step : Nat) (owner : InstanceId) (r : Processing) (map : String)
     (h : (syncMap fs st step owner r map).2 = false) : (syncMap fs st step owner r map).1 = r := by
   by_cases hr : r.halted = true
   · simp [syncMap, hr]
@@ -84,7 +84,7 @@ theorem foldl_unchanged {α : Type} (g : Processing → α → Processing × Boo
     rw [h2, hg _ _ h1.2]
     exact ⟨h1.1, rfl⟩
 
-theorem syncCopies_unchanged (step : Nat) (owner : String) (r : Processing)
+theorem syncCopies_unchanged (step : Nat) (owner : InstanceId) (r : Processing)
     (h : (syncCopies fs st step owner r).2 = false) : (syncCopies fs st step owner r).1 = r := by
   unfold syncCopies at h ⊢
   split at h
@@ -93,7 +93,7 @@ theorem syncCopies_unchanged (step : Nat) (owner : String) (r : Processing)
     exact (foldl_unchanged (fun r map => syncMap fs st step owner r map) (fun r map => syncMap_unchanged step owner r map)
       _ (r, false) h).2
 
-theorem growsBy_startCopy (step : Nat) (owner map : String) (key : Value) (k : String) :
+theorem growsBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (k : String) :
     GrowsBy (startCopy fs st step owner map key k) := by
   unfold startCopy
   apply growsBy_withMachine
@@ -103,7 +103,7 @@ theorem growsBy_startCopy (step : Nat) (owner map : String) (key : Value) (k : S
   · exact (growsBy_enter _ _ _ _).bridge (by rfl) (by rfl)
   · exact Grows.of_lines rfl
 
-theorem exitLeftCopy_grows (owner map : String) (itemKeys : List String) (r : Processing) (k : String) :
+theorem exitLeftCopy_grows (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
     Grows r.state (exitLeftCopy fs st owner map itemKeys r k).1 := by
   unfold exitLeftCopy
   split
@@ -111,7 +111,7 @@ theorem exitLeftCopy_grows (owner map : String) (itemKeys : List String) (r : Pr
   · exact growsBy_unlessHalted (growsBy_endWith (fun c n => growsBy_exitOne Limit.exitDepth.max c n)
       (fun c n => keeps_exitOne Limit.exitDepth.max c n) _) r
 
-theorem syncMap_grows (step : Nat) (owner : String) (r : Processing) (map : String) :
+theorem syncMap_grows (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     Grows r.state (syncMap fs st step owner r map).1.1 := by
   unfold syncMap
   simp only [id_bind]
@@ -134,7 +134,7 @@ theorem syncMap_grows (step : Nat) (owner : String) (r : Processing) (map : Stri
                   (by rfl) (by rfl))
             exact congrArg Fixed.now (foldl_fixed' _ (exitLeftCopy_fixed _ _ _) _ _)
 
-theorem syncCopies_grows (step : Nat) (owner : String) (r : Processing) :
+theorem syncCopies_grows (step : Nat) (owner : InstanceId) (r : Processing) :
     Grows r.state (syncCopies fs st step owner r).1.1 := by
   unfold syncCopies
   split
@@ -178,14 +178,14 @@ theorem lookup_setCopyKeys (copyKeys : List (String × List String)) (map : Stri
       simp only [List.cons_append, List.lookup_cons, hb']
       exact ih h
 
-theorem syncMap_copies_follow_items (step : Nat) (owner map : String) (r : Processing) (o : Instance)
+theorem syncMap_copies_follow_items (step : Nat) (owner : InstanceId) (map : String) (r : Processing) (o : Instance)
     (keys : List (Value × String)) (hh : r.state.halted = none) (ho : r.state.machine? owner = some o)
     (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys)
     (hd : firstDuplicate (·.2) (sortItemKeys keys) = none) :
     syncMap fs st step owner r map =
       let itemKeys := (sortItemKeys keys).map (·.2)
       if o.copyKeysOf map == itemKeys then (r, false) else
-      let exited := (o.copyKeysOf map).reverse.foldlM (m := Id) (exitLeftCopy fs st o.resource map itemKeys) r
+      let exited := (o.copyKeysOf map).reverse.foldlM (m := Id) (exitLeftCopy fs st o.id map itemKeys) r
       let started := (newKeys (o.copyKeysOf map) (sortItemKeys keys)).foldlM (m := Id)
         (fun r k => unlessHalted (startCopy fs st step owner map k.1 k.2) r) exited
       (⟨started.state.setMachine owner fun o => { o with copyKeys := setCopyKeys o.copyKeys map itemKeys }, started.queue⟩,
@@ -193,7 +193,7 @@ theorem syncMap_copies_follow_items (step : Nat) (owner map : String) (r : Proce
   simp only [syncMap, Processing.halted, hh, ho, hi, hd, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind]
   split <;> rfl
 
-theorem syncMap_halts_on_duplicate_key (step : Nat) (owner map : String) (r : Processing) (o : Instance)
+theorem syncMap_halts_on_duplicate_key (step : Nat) (owner : InstanceId) (map : String) (r : Processing) (o : Instance)
     (keys : List (Value × String)) (k : Value × String) (hh : r.state.halted = none) (ho : r.state.machine? owner = some o)
     (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys)
     (hd : firstDuplicate (·.2) (sortItemKeys keys) = some k) :
@@ -201,7 +201,7 @@ theorem syncMap_halts_on_duplicate_key (step : Nat) (owner map : String) (r : Pr
       (⟨r.state.halt (Finding.fault (.duplicateItemKey (st.ref o.chart.name) map k.1)), r.queue⟩, true) := by
   simp [syncMap, Processing.halted, hh, ho, hi, hd, Processing.report, State.report, Fault.halts]
 
-theorem syncMap_copyKeys_are_item_keys (step : Nat) (owner map : String) (r : Processing) (o' : Instance)
+theorem syncMap_copyKeys_are_item_keys (step : Nat) (owner : InstanceId) (map : String) (r : Processing) (o' : Instance)
     (hh : r.state.halted = none) (hr : (syncMap fs st step owner r map).1.state.halted = none)
     (ho' : (syncMap fs st step owner r map).1.state.machine? owner = some o') :
     ∃ o keys, r.state.machine? owner = some o ∧ fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keys ∧
@@ -234,19 +234,19 @@ theorem syncMap_copyKeys_are_item_keys (step : Nat) (owner map : String) (r : Pr
           simp [Instance.copyKeysOf, lookup_setCopyKeys]
       exact ⟨o, keys, rfl, hi, he, he ▸ hn⟩
 
-theorem syncMap_copies_in_key_order (step : Nat) (owner : String) (r : Processing) (o' : Instance) (cs : ChartState)
+theorem syncMap_copies_in_key_order (step : Nat) (owner : InstanceId) (r : Processing) (o' : Instance) (cs : ChartState)
     (hcs : cs ∈ o'.chart.states) (hh : r.state.halted = none)
     (hr : (syncMap fs st step owner r cs.name).1.state.halted = none)
     (ho' : (syncMap fs st step owner r cs.name).1.state.machine? owner = some o') :
     ∃ o keys pre post, r.state.machine? owner = some o ∧
       fs.items (r.state.scopeOf o (some cs.name)) r.state.records = .ok keys ∧
-      o'.documentOrder = pre ++ (o'.resource, cs.name) ::
-        (((sortItemKeys keys).map (·.2)).flatMap fun k => (o'.chart.tree.descendants cs.name).map (copyName o'.resource cs.name k, ·)) ++ post := by
+      o'.documentOrder = pre ++ (o'.id, cs.name) ::
+        (((sortItemKeys keys).map (·.2)).flatMap fun k => (o'.chart.tree.descendants cs.name).map (o'.id.copyOf cs.name k, ·)) ++ post := by
   obtain ⟨o, keys, ho, hi, he, -⟩ := syncMap_copyKeys_are_item_keys step owner cs.name r o' hh hr ho'
   obtain ⟨pre, post, hd⟩ := documentOrder_at_map o' cs hcs
   exact ⟨o, keys, pre, post, ho, hi, he ▸ hd⟩
 
-theorem returning_key_starts_copy (step : Nat) (owner map : String) (r : Processing) (o o' : Instance)
+theorem returning_key_starts_copy (step : Nat) (owner : InstanceId) (map : String) (r : Processing) (o o' : Instance)
     (keysBefore keys : List (Value × String)) (k : Value × String) (hh : r.state.halted = none)
     (ho : r.state.machine? owner = some o) (hi : fs.items (r.state.scopeOf o (some map)) r.state.records = .ok keysBefore)
     (hr : (syncMap fs st step owner r map).1.state.halted = none)

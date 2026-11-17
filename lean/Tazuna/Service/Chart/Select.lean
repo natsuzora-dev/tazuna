@@ -24,13 +24,13 @@ def choose (st : Service) (s : State) (i : Instance) (extra : Extra) :
     else pure (.ok (some t))
 
 def firstLevel (st : Service) (s : State) (extra : Extra) : List (Instance × List Transition) →
-    m (Except Fault (Option (String × Transition)))
+    m (Except Fault (Option (InstanceId × Transition)))
   | [] => pure (.ok none)
   | (i, ts) :: rest => do
-    MonadNote.note (.readStates ((ts.head?.bind (·.source)).map (i.resource, ·)).toList)
+    MonadNote.note (.readStates ((ts.head?.bind (·.source)).map (i.id, ·)).toList)
     match ← choose fs st s i extra ts with
     | .error v => pure (.error v)
-    | .ok (some t) => pure (.ok (some (i.resource, t)))
+    | .ok (some t) => pure (.ok (some (i.id, t)))
     | .ok none => firstLevel st s extra rest
 
 /--
@@ -45,11 +45,11 @@ def reaches (st : Service) (c : Instance) (payload : Value) : m (Except Fault Bo
     | .error e => pure (.error (issueViolation st (st.ref c.chart.name) e))
     | .ok none => pure (.ok true)
     | .ok (some none) => pure (.ok false)
-    | .ok (some (some k)) => pure (.ok (k == co.encodedKey))
+    | .ok (some (some k)) => pure (.ok (c.id.key? == some k))
 
 def reachedCopies (st : Service) (s : State) (top : Instance) (payload : Value) :
-    m (Except Fault (List String)) :=
-  top.copyResources.foldlM (init := .ok []) fun acc c => do
+    m (Except Fault (List InstanceId)) :=
+  top.copyIds.foldlM (init := .ok []) fun acc c => do
     match acc, s.machine? c with
     | .ok found, some ci =>
       match ← reaches fs st ci payload with
@@ -58,20 +58,20 @@ def reachedCopies (st : Service) (s : State) (top : Instance) (payload : Value) 
     | acc, _ => pure acc
 
 /-- The states that transition `c` exits, by resource, including the states of copies of exited map states. -/
-def State.exitKeys (s : State) (c : String × Transition) : List (String × String) :=
+def State.exitKeys (s : State) (c : InstanceId × Transition) : List (InstanceId × String) :=
   match s.machine? c.1 with
   | none => []
   | some i =>
     (i.chart.exitsOf i.active c.2).flatMap fun n =>
       (c.1, n) :: (i.copyKeysOf n).flatMap fun k =>
-        let cr := copyName i.resource n k
+        let cr := i.id.copyOf n k
         ((s.machine? cr).map fun ci => ci.active.map (cr, ·)).getD []
 
 /--
 The enabled transitions without conflicts (SCXML removeConflictingTransitions): of two transitions whose exit sets
 overlap, the one from the inner state is kept, and if neither is inner, the earlier one.
 -/
-def State.removeConflicts (s : State) (c : Chart) (enabled : List (String × Transition)) : List (String × Transition) :=
+def State.removeConflicts (s : State) (c : Chart) (enabled : List (InstanceId × Transition)) : List (InstanceId × Transition) :=
   let tree := c.tree
   enabled.foldl (fun kept t₁ =>
     let exits := s.exitKeys t₁
@@ -80,17 +80,17 @@ def State.removeConflicts (s : State) (c : Chart) (enabled : List (String × Tra
     else kept.filter (· ∉ overlapping) ++ [t₁]) []
 
 /-- The leaves of `top` in document order, where the atomic states of reached copies replace their map state. -/
-def leavesOf (s : State) (top : Instance) (reached : List String) : List (String × Option String) :=
+def leavesOf (s : State) (top : Instance) (reached : List InstanceId) : List (InstanceId × Option String) :=
   let topLeaves := top.chart.tree.leaves top.active
   let copyLeaves := reached.filterMap fun h => (s.machine? h).map fun ci => (h, ci.chart.tree.leaves ci.active)
   let atomic := fun (h, n) =>
-    if h == top.resource then n ∈ topLeaves && !(top.copyKeysOf n).any (copyName top.resource n · ∈ reached)
+    if h == top.id then n ∈ topLeaves && !(top.copyKeysOf n).any (top.id.copyOf n · ∈ reached)
     else (copyLeaves.lookup h).any (n ∈ ·)
   let found := top.documentOrder.filter atomic
-  if found.isEmpty then [(top.resource, none)] else found.map fun (h, n) => (h, some n)
+  if found.isEmpty then [(top.id, none)] else found.map fun (h, n) => (h, some n)
 
 def eventLeaves (st : Service) (s : State) (top : Instance) (payload : Value) :
-    m (Except Fault (List (String × Option String))) := do
+    m (Except Fault (List (InstanceId × Option String))) := do
   pure ((← reachedCopies fs st s top payload).map (leavesOf s top))
 
 /--
@@ -108,7 +108,7 @@ def levelsOf (top holder : Instance) (trigger : Spec.Trigger) (leaf : Option Str
 The first transition on `trigger` (`.on key` or `.always`) whose guard holds, walking from the leaf to the root.
 -/
 def pick (st : Service) (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (l : String × Option String) : m (Except Fault (Option (String × Transition))) :=
+    (l : InstanceId × Option String) : m (Except Fault (Option (InstanceId × Transition))) :=
   match s.machine? l.1 with
   | none => pure (.ok none)
   | some holder => firstLevel fs st s extra (levelsOf top holder trigger l.2)
@@ -118,9 +118,9 @@ The transitions that the leaves select, without conflicts (SCXML selectTransitio
 As in SCXML, a parallel state handles an event if any region selects a transition.
 -/
 def select (st : Service) (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (String × Option String)) :
-    m (Except Fault (List (String × Transition))) := do
-  let found ← leaves.foldlM (init := (.ok [] : Except Fault (List (String × Transition))))
+    (leaves : List (InstanceId × Option String)) :
+    m (Except Fault (List (InstanceId × Transition))) := do
+  let found ← leaves.foldlM (init := (.ok [] : Except Fault (List (InstanceId × Transition))))
     fun acc l => do
     match acc with
     | .error v => pure (.error v)

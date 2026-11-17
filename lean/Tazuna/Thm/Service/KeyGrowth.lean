@@ -80,7 +80,7 @@ theorem keeps_emitAll (s : State) (r : Option String) (es : List Emit) : KeepsKe
 @[simp] theorem emitAll_keyOwner (s : State) (r : Option String) (es : List Emit) :
     (s.emitAll r es).keyOwner = s.keyOwner := (keeps_emitAll s r es).1
 
-theorem keeps_addDeadlines (name n : String) (ds : List (String × DeadlineTime)) (s : State) :
+theorem keeps_addDeadlines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
     KeepsKeys s (addDeadlines name n ds s) :=
   keeps_foldl _ (fun t x => by keys_leaf) _ _
 
@@ -99,7 +99,7 @@ theorem keysBy_unlessHalted {f : Processing → Id Processing} (h : KeysBy f) : 
   · exact .refl _
   · exact h r
 
-theorem keysBy_withMachine {name : String} {f : Instance → Processing → Id Processing} (h : ∀ i, KeysBy (f i)) :
+theorem keysBy_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, KeysBy (f i)) :
     KeysBy (withMachine name f) := by
   intro r; unfold withMachine; split
   · exact .refl _
@@ -107,7 +107,7 @@ theorem keysBy_withMachine {name : String} {f : Instance → Processing → Id P
     · exact h _ r
     · exact .refl _
 
-theorem keysBy_runAssign (name : String) (a : Assignment) (scope : Option String) (extra : Extra) :
+theorem keysBy_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     KeysBy (runAssign fs st name a scope extra) := by
   apply keysBy_withMachine
   intro i r
@@ -128,8 +128,8 @@ theorem keeps_endSubscriptions (s : State) (ps : List Pending) :
   | nil => rfl
   | cons p ps ih => simp only [List.foldl_cons, ih]; simp [State.endSubscription, State.write]
 
-theorem keysBy_endWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, KeysBy (exit c n))
-    (c : String) : KeysBy (endWith exit c) := by
+theorem keysBy_endWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, KeysBy (exit c n))
+    (c : InstanceId) : KeysBy (endWith exit c) := by
   apply keysBy_withMachine
   intro i r
   simp only [id_bind]
@@ -138,8 +138,8 @@ theorem keysBy_endWith {exit : String → String → Processing → Id Processin
   · exact h1
   · keys_close h1
 
-theorem keysBy_leaveWith {exit : String → String → Processing → Id Processing} (h : ∀ c n, KeysBy (exit c n))
-    (name n : String) : KeysBy (leaveWith fs st exit name n) := by
+theorem keysBy_leaveWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, KeysBy (exit c n))
+    (name : InstanceId) (n : String) : KeysBy (leaveWith fs st exit name n) := by
   intro r
   simp only [leaveWith, id_bind, note_id]
   have h1 := keysBy_runAssign (fs := fs) (st := st) name (.exit n) (some n) .none r
@@ -148,7 +148,7 @@ theorem keysBy_leaveWith {exit : String → String → Processing → Id Process
   · refine KeepsKeys.trans ?_ (keysBy_foldlM (fun c => keysBy_unlessHalted (keysBy_endWith h c)) _ _)
     keys_close h1
 
-theorem keysBy_exitOne (fuel : Nat) (name n : String) : KeysBy (exitOne fs st fuel name n) := by
+theorem keysBy_exitOne (fuel : Nat) (name : InstanceId) (n : String) : KeysBy (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
   | zero => intro r; simp only [exitOne]; keys_leaf
   | succ fuel ih =>
@@ -158,19 +158,19 @@ theorem keysBy_exitOne (fuel : Nat) (name n : String) : KeysBy (exitOne fs st fu
     intro i r
     simp only [id_bind]
     have h1 := keysBy_foldlM (fun k => keysBy_unlessHalted (keysBy_endWith (fun c n => ih c n)
-      (copyName i.resource n k))) (i.copyKeysOf n).reverse r
+      (i.id.copyOf n k))) (i.copyKeysOf n).reverse r
     split
     · exact h1
     · refine KeepsKeys.trans ?_ (keysBy_leaveWith (fun c n => ih c n) _ _ _)
       keys_close h1
 
-theorem keysBy_enterFinal (step : Nat) (name parent : String) : KeysBy (fun r => pure (enterFinal step name parent r)) := by
+theorem keysBy_enterFinal (step : Nat) (name : InstanceId) (parent : String) : KeysBy (fun r => pure (enterFinal step name parent r)) := by
   intro r
   simp only [enterFinal]
   repeat' split
   all_goals keys_leaf
 
-theorem keysBy_closeFinal (step : Nat) (name : String) : KeysBy (closeFinal fs st step name) := by
+theorem keysBy_closeFinal (step : Nat) (name : InstanceId) : KeysBy (closeFinal fs st step name) := by
   apply keysBy_withMachine
   intro i r
   simp only [id_bind]
@@ -186,7 +186,7 @@ theorem keysBy_closeFinal (step : Nat) (name : String) : KeysBy (closeFinal fs s
       · keys_close h
       · exact h
 
-theorem keysBy_enterOne (step : Nat) (name n : String) : KeysBy (enterOne fs st step name n) := by
+theorem keysBy_enterOne (step : Nat) (name : InstanceId) (n : String) : KeysBy (enterOne fs st step name n) := by
   apply keysBy_withMachine
   intro i r
   simp only [id_bind, note_id]
@@ -202,12 +202,12 @@ theorem keysBy_enterOne (step : Nat) (name n : String) : KeysBy (enterOne fs st 
     | exact h.trans (keysBy_enterFinal _ _ _ _)
     | exact h.trans (keeps_addDeadlines _ _ _ _)
 
-theorem keysBy_enter (step : Nat) (name : String) (targets : List String) : KeysBy (enter fs st step name targets) := by
+theorem keysBy_enter (step : Nat) (name : InstanceId) (targets : List String) : KeysBy (enter fs st step name targets) := by
   apply keysBy_withMachine
   intro i r
   exact keysBy_foldlM (fun n => keysBy_unlessHalted (keysBy_enterOne step name n)) _ r
 
-theorem keysBy_microstep (step : Nat) (name : String) (chosen : List (String × Transition)) (extra : Extra) :
+theorem keysBy_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     KeysBy (microstep fs st step name chosen extra) := by
   apply keysBy_withMachine
   intro i r
@@ -219,7 +219,7 @@ theorem keysBy_microstep (step : Nat) (name : String) (chosen : List (String × 
     refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_unlessHalted (keysBy_exitOne _ _ _)) _ _)
     exact keeps_foldl _ (fun t h => by keys_leaf) _ _
 
-theorem keysBy_request (step : Nat) (name state : String) (a : Activity) :
+theorem keysBy_request (step : Nat) (name : InstanceId) (state : String) (a : Activity) :
     KeysBy (request fs st step name state a) := by
   apply keysBy_withMachine
   intro i r
@@ -227,7 +227,7 @@ theorem keysBy_request (step : Nat) (name state : String) (a : Activity) :
   repeat' split
   all_goals keys_leaf
 
-theorem keysBy_openScreen (step : Nat) (name state : String) (a : Activity) :
+theorem keysBy_openScreen (step : Nat) (name : InstanceId) (state : String) (a : Activity) :
     KeysBy (openScreen fs st step name state a) := by
   apply keysBy_withMachine
   intro i r
@@ -235,7 +235,7 @@ theorem keysBy_openScreen (step : Nat) (name state : String) (a : Activity) :
   repeat' split
   all_goals keys_leaf
 
-theorem keysBy_activate (step : Nat) (name state : String) (a : Activity) :
+theorem keysBy_activate (step : Nat) (name : InstanceId) (state : String) (a : Activity) :
     KeysBy (activate fs st step name state a) := by
   unfold activate
   split
@@ -244,7 +244,7 @@ theorem keysBy_activate (step : Nat) (name state : String) (a : Activity) :
   · exact keysBy_request _ _ _ _
   · exact keysBy_request _ _ _ _
 
-theorem keysBy_activateEntered (e : String × String × Nat) : KeysBy (activateEntered fs st e) := by
+theorem keysBy_activateEntered (e : InstanceId × String × Nat) : KeysBy (activateEntered fs st e) := by
   apply keysBy_withMachine
   intro i r
   repeat' split
@@ -259,7 +259,7 @@ theorem keysBy_sendEntered : KeysBy (sendEntered fs st) := by
   refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_activateEntered e) _ _)
   exact .refl _
 
-theorem keysBy_startCopy (step : Nat) (owner map : String) (key : Value) (encodedKey : String) :
+theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (encodedKey : String) :
     KeysBy (startCopy fs st step owner map key encodedKey) := by
   apply keysBy_withMachine
   intro o r
@@ -269,7 +269,7 @@ theorem keysBy_startCopy (step : Nat) (owner map : String) (key : Value) (encode
     keys_leaf
   · keys_leaf
 
-theorem keysBy_exitLeftCopy (owner map : String) (itemKeys : List String) (k : String) :
+theorem keysBy_exitLeftCopy (owner : InstanceId) (map : String) (itemKeys : List String) (k : String) :
     KeysBy (fun r => exitLeftCopy fs st owner map itemKeys r k) := by
   intro r
   unfold exitLeftCopy
@@ -277,21 +277,21 @@ theorem keysBy_exitLeftCopy (owner map : String) (itemKeys : List String) (k : S
   · exact .refl _
   · exact keysBy_unlessHalted (keysBy_endWith (fun c n => keysBy_exitOne _ c n) _) r
 
-theorem keeps_setMachine (s : State) (name : String) (f : Instance → Instance) : KeepsKeys s (s.setMachine name f) := by
+theorem keeps_setMachine (s : State) (name : InstanceId) (f : Instance → Instance) : KeepsKeys s (s.setMachine name f) := by
   keys_leaf
 
-theorem keys_exitLeftCopies (owner map : String) (itemKeys xs : List String) (r : Processing) :
+theorem keys_exitLeftCopies (owner : InstanceId) (map : String) (itemKeys xs : List String) (r : Processing) :
     KeepsKeys r.state (xs.foldlM (fun r k => exitLeftCopy fs st owner map itemKeys r k) r).state :=
   keysBy_foldlM (g := fun k r => exitLeftCopy fs st owner map itemKeys r k)
     (fun k => keysBy_exitLeftCopy owner map itemKeys k) xs r
 
-theorem keys_startCopies (step : Nat) (owner map : String) (xs : List (Value × String)) (r : Processing) :
+theorem keys_startCopies (step : Nat) (owner : InstanceId) (map : String) (xs : List (Value × String)) (r : Processing) :
     KeepsKeys r.state (xs.foldlM (fun (r : Processing) (k : Value × String) =>
       unlessHalted (startCopy fs st step owner map k.1 k.2) r) r).state :=
   keysBy_foldlM (g := fun (k : Value × String) => unlessHalted (startCopy fs st step owner map k.1 k.2))
     (fun k => keysBy_unlessHalted (keysBy_startCopy step owner map k.1 k.2)) xs r
 
-theorem keys_syncMap (step : Nat) (owner : String) (r : Processing) (map : String) :
+theorem keys_syncMap (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     KeepsKeys r.state (syncMap fs st step owner r map).1.state := by
   simp only [syncMap, id_bind, note_id, id_pure]
   repeat' split
@@ -304,7 +304,7 @@ theorem keys_syncMap (step : Nat) (owner : String) (r : Processing) (map : Strin
     refine KeepsKeys.trans ?_ (keys_startCopies _ _ _ _ _)
     exact keys_exitLeftCopies _ _ _ _ _
 
-theorem keys_syncCopies (step : Nat) (owner : String) (r : Processing) :
+theorem keys_syncCopies (step : Nat) (owner : InstanceId) (r : Processing) :
     KeepsKeys r.state (syncCopies fs st step owner r).1.state := by
   simp only [syncCopies]
   split
@@ -318,8 +318,8 @@ theorem keys_syncCopies (step : Nat) (owner : String) (r : Processing) :
     | nil => intro acc h; exact h
     | cons x xs ih => intro acc h; exact ih _ (h.trans (keys_syncMap _ _ _ _))
 
-theorem keys_alwaysRound (step : Nat) (owner : String)
-    {next : Instance → List (String × Transition) → Processing → Id Processing} (h : ∀ o c, KeysBy (next o c)) :
+theorem keys_alwaysRound (step : Nat) (owner : InstanceId)
+    {next : Instance → List (InstanceId × Transition) → Processing → Id Processing} (h : ∀ o c, KeysBy (next o c)) :
     KeysBy (alwaysRound fs st step owner next) := by
   intro r
   simp only [alwaysRound, id_bind]
@@ -331,7 +331,7 @@ theorem keys_alwaysRound (step : Nat) (owner : String)
     | exact h1.trans (h _ _ _)
     | keys_close h1
 
-theorem keysBy_settleFrom (step : Nat) (owner : String) (rounds : Nat) : KeysBy (settleFrom fs st step owner rounds) := by
+theorem keysBy_settleFrom (step : Nat) (owner : InstanceId) (rounds : Nat) : KeysBy (settleFrom fs st step owner rounds) := by
   induction rounds with
   | zero => exact keys_alwaysRound step owner (fun o c r => by keys_leaf)
   | succ n ih =>
@@ -341,10 +341,10 @@ theorem keysBy_settleFrom (step : Nat) (owner : String) (rounds : Nat) : KeysBy 
     · exact ih _
     · exact (keysBy_microstep _ _ _ _ r).trans (ih _)
 
-theorem keysBy_settle (step : Nat) (name : String) : KeysBy (settle fs st step name) :=
+theorem keysBy_settle (step : Nat) (name : InstanceId) : KeysBy (settle fs st step name) :=
   fun r => keysBy_settleFrom _ _ _ r
 
-theorem keysBy_settled (step : Nat) (name : Option String) {f : Processing → Id Processing} (hf : KeysBy f) :
+theorem keysBy_settled (step : Nat) (name : Option InstanceId) {f : Processing → Id Processing} (hf : KeysBy f) :
     KeysBy (settled fs st step name f) := by
   intro r
   cases name with
@@ -353,7 +353,7 @@ theorem keysBy_settled (step : Nat) (name : Option String) {f : Processing → I
     simp only [settled, settleAround, id_bind, note_id]
     exact (keysBy_settleFrom _ _ _ r).trans ((keysBy_unlessHalted hf _).trans (keysBy_settleFrom _ _ _ _))
 
-theorem keeps_syncShows (s : State) (service owner : String) (wanted : List Wanted) :
+theorem keeps_syncShows (s : State) (owner : InstanceId) (service : String) (wanted : List Wanted) :
     KeepsKeys s (s.syncShows service owner wanted) := by
   unfold State.syncShows
   refine KeepsKeys.trans (keeps_foldl _ (fun t p => ?_) _ s) (keeps_foldl _ (fun t w => ?_) _ _)
@@ -362,7 +362,7 @@ theorem keeps_syncShows (s : State) (service owner : String) (wanted : List Want
   · unfold State.subscribeStep; split
     all_goals keys_leaf
 
-theorem keeps_refresh (s : State) (owner : String) : KeepsKeys s (refresh st fs s owner) := by
+theorem keeps_refresh (s : State) (owner : InstanceId) : KeepsKeys s (refresh st fs s owner) := by
   simp only [refresh, id_bind]
   repeat' split
   all_goals first | exact .refl _ | exact keeps_syncShows _ _ _ _ | keys_leaf
@@ -397,7 +397,7 @@ theorem keeps_publish (s : State) : KeepsKeys s (publish st fs s) :=
       | exact .refl _
       | keys_leaf) _ _
 
-theorem keysBy_applyCompletion (step : Nat) (name : String) (ts : List Transition) (extra : Extra) :
+theorem keysBy_applyCompletion (step : Nat) (name : InstanceId) (ts : List Transition) (extra : Extra) :
     KeysBy (applyCompletion fs st step name ts extra) := by
   apply keysBy_withMachine
   intro i r
@@ -407,7 +407,7 @@ theorem keysBy_applyCompletion (step : Nat) (name : String) (ts : List Transitio
   · exact .refl _
   · exact keysBy_microstep _ _ _ _ r
 
-theorem keysBy_handle (step : Nat) (name state : String) (a : Activity) (answer : Answer) :
+theorem keysBy_handle (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) :
     KeysBy (handle fs st step name state a answer) := by
   apply keysBy_withMachine
   intro i r
@@ -415,21 +415,21 @@ theorem keysBy_handle (step : Nat) (name state : String) (a : Activity) (answer 
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_applyCompletion _ _ _ _ r
 
-theorem keysBy_dispatch (step : Nat) (name key : String) (payload : Value) :
+theorem keysBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payload : Value) :
     KeysBy (dispatch fs st step name key payload) := by
   intro r
   simp only [dispatch, id_bind, note_id]
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_microstep _ _ _ _ r | keys_leaf
 
-theorem keysBy_receiveWork (step : Nat) (name : String) (received : List (String × Value)) :
+theorem keysBy_receiveWork (step : Nat) (name : InstanceId) (received : List (String × Value)) :
     KeysBy (receiveWork fs st step name received) := by
   intro r
   simp only [receiveWork, id_bind]
   exact keysBy_foldlM (g := fun (x : String × Value) r => dispatch fs st step name x.1 x.2 (settle fs st step name r))
     (fun x r => (keysBy_settle step name r).trans (keysBy_dispatch step name x.1 x.2 _)) received r
 
-theorem keysBy_done (step : Nat) (name n : String) : KeysBy (done fs st step name n) := by
+theorem keysBy_done (step : Nat) (name : InstanceId) (n : String) : KeysBy (done fs st step name n) := by
   apply keysBy_withMachine
   intro i r
   simp only [id_bind, note_id]
@@ -437,7 +437,7 @@ theorem keysBy_done (step : Nat) (name n : String) : KeysBy (done fs st step nam
   · exact .refl _
   · exact keysBy_applyCompletion _ _ _ _ r
 
-theorem keysBy_doneWork (step : Nat) (name : String) (fuel : Nat) : KeysBy (doneWork fs st step name fuel) := by
+theorem keysBy_doneWork (step : Nat) (name : InstanceId) (fuel : Nat) : KeysBy (doneWork fs st step name fuel) := by
   induction fuel with
   | zero => intro r; simp only [doneWork]; repeat' split
             all_goals exact .refl _
@@ -453,7 +453,7 @@ theorem keysBy_doneWork (step : Nat) (name : String) (fuel : Nat) : KeysBy (done
          refine KeepsKeys.trans ?_ (keysBy_settle _ _ _)
          keys_leaf)
 
-theorem keysBy_startWork (step : Nat) (name : String) : KeysBy (startWork fs st step name) := by
+theorem keysBy_startWork (step : Nat) (name : InstanceId) : KeysBy (startWork fs st step name) := by
   apply keysBy_withMachine
   intro i r
   simp only [id_bind]
@@ -503,7 +503,7 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
     · refine KeepsKeys.trans ?_ (keysBy_withMachine (fun i r => keysBy_applyCompletion _ _ _ _ r) _)
       keys_leaf
 
-theorem keysBy_settleScreen (name : String) : KeysBy (settleScreen st fs name) := by
+theorem keysBy_settleScreen (name : InstanceId) : KeysBy (settleScreen st fs name) := by
   intro r
   simp only [settleScreen, id_bind, note_id]
   split
@@ -536,7 +536,7 @@ theorem keeps_drain (n : Nat) (s : State) (q : Queue) : KeepsKeys s (drain st fs
          exact keysBy_sendEntered _)
       | (refine KeepsKeys.trans ?_ (ih _ _)
          refine KeepsKeys.trans (keeps_refreshScreens (st := st) (fs := fs) s) ?_
-         exact keysBy_foldlM (g := fun (name : String) r => settleScreen st fs name r)
+         exact keysBy_foldlM (g := fun (name : InstanceId) r => settleScreen st fs name r)
            (fun name => keysBy_settleScreen name) _ _)
 
 theorem keysBy_fire (step : Nat) (t : Deadline) : KeysBy (fire fs st step t) := by
@@ -689,7 +689,7 @@ theorem keeps_begin (s : State) : KeepsKeys s (begin st fs s) := by
       all_goals exact .refl _) _ _)
     keys_leaf
 
-theorem keeps_operate (screen control : String) (payload : Value) (s : State) :
+theorem keeps_operate (screen : InstanceId) (control : String) (payload : Value) (s : State) :
     KeepsKeys s (operate st fs s screen control payload) := by
   simp only [operate, id_bind]
   repeat' split

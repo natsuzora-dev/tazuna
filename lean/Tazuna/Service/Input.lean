@@ -176,9 +176,9 @@ def decodedAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (ans
     | .ok (some decoded) => return .ok (.ok decoded)
 
 /-- The check of an answer to the request `p` from a spec service, which parsed the input itself. -/
-def specAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+def specAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
     m (Except Issue AnswerCheck) := do
-  match s.rejectedInput? st p.activity.ref p.requester answer with
+  match p.requester.rejectedInput? st p.activity.ref answer with
   | some fault => return .ok { decoded := .error (.fault fault) }
   | none =>
     match ← decodedAnswer st fs p answer with
@@ -190,12 +190,12 @@ The check of an answer to the request `p` from an assumed peer. Its input schema
 answer is also checked against its requires over the input alone and, for a query, its ensures that read no records; a
 command's ensures waits for the end of the run, when all its result events arrived.
 -/
-def assumedAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+def assumedAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
     m (Except Issue AnswerCheck) := do
   let target := p.activity.ref
   match ← fs.parse (.input (st.traceNameOf target)) p.input with
   | .error e => return .error e
-  | .ok none => return .ok { decoded := .error (.fault (s.inputFault st target p.requester)) }
+  | .ok none => return .ok { decoded := .error (.fault (p.requester.inputFault st target)) }
   | .ok (some input) =>
   match ← firstFalse (fs.inputRequirement (st.traceNameOf target) · input) (st.«structure».requiresOf target) with
   | .error e => return .error e
@@ -214,9 +214,9 @@ def assumedAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : P
     | .error e => return .error e
     | .ok failedEnsures => return .ok { assumption := broken failedEnsures, decoded := .ok decoded }
 
-def checkAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
     m (Except Issue AnswerCheck) :=
-  if st.«structure».isAssumed p.activity.ref then assumedAnswer st fs s p answer else specAnswer st fs s p answer
+  if st.«structure».isAssumed p.activity.ref then assumedAnswer st fs p answer else specAnswer st fs p answer
 
 /--
 The state after an answer input with id `givenId` answers the request `p`, as checkAnswer checks the answer. The line
@@ -224,7 +224,7 @@ holds the answer as it arrived, and the requester gets it decoded.
 -/
 def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (givenId : Option String)
     (p : Pending) (answer : Answer) : m State := do
-  match ← checkAnswer st fs s p answer with
+  match ← checkAnswer st fs p answer with
   | .error e =>
     pure (s.report (.fault (issueViolation st p.activity.ref e)))
   | .ok checked =>
@@ -260,9 +260,9 @@ def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : C
   match ← initialContextOf fs st c.name (.obj []) with
   | .error fault => pure (s.report (.fault fault))
   | .ok context =>
-    pure { s with machines := s.machines ++ [{ chart := c, resource := c.name, context, input := .obj [],
+    pure { s with machines := s.machines ++ [{ chart := c, id := .top c.name 0, context, input := .obj [],
                                                 shown := c.slots.map (·, .null) }],
-                  stack := if c.screen then s.stack ++ [c.name] else s.stack }
+                  stack := if c.screen then s.stack ++ [.top c.name 0] else s.stack }
 
 /-- The charts that start when the service begins. A screen that another screen opens does not. -/
 def starting (st : Service) : List Chart := st.charts.filter (!·.opened)
@@ -279,24 +279,23 @@ def startRecords [Monad m] (st : Service) (fs : Functions m) (s : State) : m Sta
 def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
   if s.started then pure s else
   let s ← startInstances st fs (← startRecords st fs { s with started := true }.newMessage)
-  message st fs s { tasks := st.starting.map (.start ·.name none) }
+  message st fs s { tasks := st.starting.map (fun c => .start (.top c.name 0) none) }
 
 /--
 Which of the open instances of the screen of `resource`, in opening order, it is, when more than one is open: an
 operation line names its instance only then, as Playwright's strict locator needs `nth` only for several matches.
 -/
-def State.nthOpen (s : State) (resource : String) : Option Nat :=
-  let screen := s.chartName resource
-  let open_ := s.stack.filter fun r => s.chartName r == screen
+def State.nthOpen (s : State) (resource : InstanceId) : Option Nat :=
+  let open_ := s.stack.filter (·.chart == resource.chart)
   if open_.length > 1 then open_.idxOf? resource else none
 
 /--
 The state after an operate input on the screen instance `resource`. As Playwright's click fails on a covered or missing
 element, operate reports an operation that the instance does not accept.
 -/
-def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (resource control : String)
-    (payload : Value) : m State := do
-  let screen := s.chartName resource
+def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (resource : InstanceId)
+    (control : String) (payload : Value) : m State := do
+  let screen := resource.chart
   match st.chart? screen with
   | none => pure (s.report (.invalidInput (.unownedTarget (st.refOf screen))))
   | some c =>
@@ -314,7 +313,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
       | .error fault => pure (s.report (.fault fault))
       | .ok (.ok i) =>
         let (s, step) := s.newMessage.newStep none
-        let r ← settled fs st step (some i.resource) (dispatch fs st step i.resource control decoded) ⟨s, {}⟩
+        let r ← settled fs st step (some i.id) (dispatch fs st step i.id control decoded) ⟨s, {}⟩
         message st fs r.state r.queue
       | .ok (.error r) => pure (s.report (r.finding st screen control decoded))
 

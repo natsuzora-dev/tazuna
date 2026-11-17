@@ -4,15 +4,16 @@ import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
-import { contentOf } from "../data/trace.ts";
+import { contentOf, receivedId, senderOf } from "../data/trace.ts";
 import { byCodePoint, stringsOf } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
+import type { InstanceId } from "../service/instance.ts";
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf, refOfTraceName } from "../spec/structure.ts";
-import { arriveFrom, nameIn, receivedId, senderOf } from "./receive.ts";
+import { arriveFrom, nameIn } from "./receive.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -64,8 +65,7 @@ export type Assignment = readonly [Fact, readonly number[]];
 export interface Opened {
   readonly origin: Origin;
   readonly service: string;
-  readonly chart: string;
-  readonly resource: string;
+  readonly id: InstanceId;
 }
 
 export interface Sent {
@@ -122,8 +122,7 @@ export function noteTo(w: World, r: InvalidScenario): void {
 }
 
 /** Lean's screensOf. */
-const screensOf = (s: State): string[] =>
-  [...s.machines.values()].filter((i) => i.chart.screen).map((i) => `${i.chart.name}\u0000${i.resource}`);
+const screensOf = (s: State): InstanceId[] => [...s.machines.values()].filter((i) => i.chart.screen).map((i) => i.id);
 
 /** Lean's targetOf. */
 function targetOf(service: string, lines: readonly TraceLine[], id: string): string | undefined {
@@ -254,10 +253,8 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
     s.stepOrder = [];
     p.halted = error.violation;
   }
-  for (const key of screensOf(s).filter((k) => reopen || !screens.includes(k))) {
-    const [chart = "", resource = ""] = key.split("\u0000");
-    w.opened.push({ origin: o, service, chart, resource });
-  }
+  for (const id of screensOf(s).filter((k) => reopen || !screens.includes(k)))
+    w.opened.push({ origin: o, service, id });
   w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
   const sent = s.lines.slice(before);
   route(w, o, service, sent);

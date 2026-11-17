@@ -40,6 +40,22 @@ export const subjectOf = (l: TraceLine): Subject =>
 
 export const resultOf = (l: TraceLine): string | undefined => ("resultOf" in l ? l.resultOf : undefined);
 
+/**
+ * Lean's receivedId: the id by which the receiver of a message from `sender` names it in its trace. `sentId` and
+ * `senderOf` read it back; together they are the one place a simulated message's id meets a string.
+ */
+export const receivedId = (sender: string, id: string): string => `${sender}/${id}`;
+
+/** Lean's sentId?: the sender's id of a message that `service` received with the id `id`, when `service` sent it. */
+export const sentId = (service: string, id: string): string | undefined =>
+  id.startsWith(`${service}/`) ? id.slice(service.length + 1) : undefined;
+
+/** Lean's senderOf?: the service whose message `id` names, when another service sent it. */
+export function senderOf(id: string): string | undefined {
+  const parts = id.split("/");
+  return parts.length === 2 ? parts[0] : undefined;
+}
+
 export interface NumberedLine {
   readonly line: TraceLine;
   /** The 1-based line number. */

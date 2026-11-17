@@ -18,10 +18,7 @@ type TreeNode =
        */
       readonly held?: Shape;
       readonly initial?: string;
-      /**
-       * The child states, whose names are unique in the tree and contain neither `@` nor `[`
-       * (`reservedStateNameCharacter`).
-       */
+      /** The child states, whose names are unique in the tree. */
       readonly states?: Tree;
     }
   | { readonly type: "parallel"; readonly held?: Shape; readonly initial?: never; readonly states: Tree }
@@ -155,15 +152,13 @@ type InMap<F, Kinds> = {
         : never
     : never;
 }[keyof F];
-type Reserved<T> = Names<T> & (`${string}@${string}` | `${string}[${string}`);
 export type ErrorIf<Name extends string, V> = [V] extends [never] ? unknown : { readonly [k in Name]: V };
 export type TreeErrors<T> = ErrorIf<"duplicateStateNames", Duplicates<T>> &
   ErrorIf<"shadowedHeld", Shadowed<Flat<T>>> &
   ErrorIf<"nullableHeld", Nullable<Flat<T>>> &
   ErrorIf<"emptyKeyword", EmptyHeld<T>> &
   ErrorIf<"nestedMap", `${InMap<Flat<T>, "map"> & string}: a copy would read two keys as key`> &
-  ErrorIf<"finalInMap", `${InMap<Flat<T>, "final"> & string}: a copy ends only when its key leaves items`> &
-  ErrorIf<"reservedStateNameCharacter", `${Reserved<T>}: a copy is named {instance}@{map state}[{key}]`>;
+  ErrorIf<"finalInMap", `${InMap<Flat<T>, "final"> & string}: a copy ends only when its key leaves items`>;
 
 export type HeldIn<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["held"] : never;
 export type KindOf<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["kind"] : never;

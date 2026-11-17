@@ -8,7 +8,7 @@ open Tazuna.Thm.Data.Basic
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem accepting_skips (resource : String) (pre rest : List String)
+theorem accepting_skips (resource : InstanceId) (pre rest : List InstanceId)
     (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → ∀ o, i.opener = some o → o.modal = false) :
     State.accepting.go s resource (pre ++ rest) = State.accepting.go s resource rest := by
   induction pre with
@@ -28,7 +28,7 @@ theorem accepting_skips (resource : String) (pre rest : List String)
       | some o => simp [ho i hm o hop]
 
 /-- An instance that a modal `opens` opened after the operated instance `resource` covers it. -/
-theorem modal_child_covers (resource : String) (pre rest : List String) (c : String) (ci : Instance) (o : Opener)
+theorem modal_child_covers (resource : InstanceId) (pre rest : List InstanceId) (c : InstanceId) (ci : Instance) (o : Opener)
     (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → ∀ o, i.opener = some o → o.modal = false)
     (hc : s.machine? c = some ci) (hn : c ≠ resource) (ho : ci.opener = some o) (hm : o.modal = true) :
     State.accepting.go s resource (pre ++ c :: rest) = .error (.covered ci.chart.name) := by
@@ -40,14 +40,14 @@ theorem modal_child_covers (resource : String) (pre rest : List String) (c : Str
 The operated instance `resource` accepts when only non-modal instances were opened after it, whatever their charts, so
 several open instances of one screen are each operable (B13).
 -/
-theorem nonmodal_child_lets_parent (resource : String) (pre rest : List String) (pi : Instance)
+theorem nonmodal_child_lets_parent (resource : InstanceId) (pre rest : List InstanceId) (pi : Instance)
     (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → ∀ o, i.opener = some o → o.modal = false)
     (hpi : s.machine? resource = some pi) :
     State.accepting.go s resource (pre ++ resource :: rest) = .ok pi := by
   rw [accepting_skips resource pre (resource :: rest) hp, State.accepting.go]
   simp [hpi]
 
-theorem accepts_iff (resource control : String) (payload : Value) (top : Instance) :
+theorem accepts_iff (resource : InstanceId) (control : String) (payload : Value) (top : Instance) :
     acceptsOperation fs st s resource control payload = .ok (.ok top) ↔
       s.accepting resource = .ok top ∧ ∃ applied, offered fs st s top control payload = .ok applied ∧
         applied.any (·.2.admits payload) = true := by

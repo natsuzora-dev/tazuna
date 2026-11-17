@@ -38,22 +38,22 @@ def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Ins
 
 def inputOf (wanted : List Wanted) (slot : String) : Option Value := (wanted.find? (·.slot == slot)).map (·.input)
 
-def State.endShowStep (wanted : List Wanted) (owner : String) (s : State) (p : Pending) : State :=
+def State.endShowStep (wanted : List Wanted) (owner : InstanceId) (s : State) (p : Pending) : State :=
   let slot := p.requester.slot?.getD ""
   if (inputOf wanted slot).any (· == p.input) then s else
   let s := s.endSubscription p
   if (inputOf wanted slot).isNone then s.setShown owner slot .null else s
 
 /-- `service` is the subscribing service, from which the subscribe line names the query. -/
-def State.subscribeStep (service : String) (opened : List Pending) (owner : String) (s : State) (w : Wanted) : State :=
+def State.subscribeStep (service : String) (opened : List Pending) (owner : InstanceId) (s : State) (w : Wanted) : State :=
   if opened.any (fun p => p.requester.slot? == some w.slot && p.input == w.input) then s else
   s.await (.subscribe (w.activity.ref.traceName service) w.input) (.slot owner w.slot) w.activity w.input
 
-def State.syncShows (s : State) (service owner : String) (wanted : List Wanted) : State :=
+def State.syncShows (s : State) (service : String) (owner : InstanceId) (wanted : List Wanted) : State :=
   wanted.foldl (State.subscribeStep service (s.openShows owner) owner)
     ((s.openShows owner).foldl (State.endShowStep wanted owner) s)
 
-def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : String) : m State := do
+def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : InstanceId) : m State := do
   match s.machine? owner with
   | none => pure s
   | some i =>
@@ -63,6 +63,6 @@ def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : Str
     | .ok wanted => pure (s.syncShows st.service owner wanted)
 
 def refreshScreens [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
-  s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.resource) s
+  s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.id) s
 
 end Tazuna.Service

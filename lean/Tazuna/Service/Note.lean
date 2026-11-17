@@ -1,5 +1,6 @@
 import Tazuna.Data.Time
 import Tazuna.Spec.Structure
+import Tazuna.Service.Instance
 
 /-! This module defines the notes that the semantic run sends to the instrumentation. -/
 
@@ -13,11 +14,6 @@ inductive RecordPart where
   | field (entity : String) (key : Option String) (name : String)
 deriving DecidableEq, Repr, Inhabited
 
-def RecordPart.name : RecordPart → String
-  | .keys entity => s!"keys:{entity}"
-  | .record entity key => s!"record:{entity}#{key}"
-  | .field entity (some key) name => s!"field:{entity}#{key}.{name}"
-  | .field entity none name => s!"field:{entity}.{name}"
 
 /-- A copy of map state `map`, made for the item whose key is `itemKey`. -/
 structure Copy where
@@ -27,8 +23,10 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Copy
 
+/-- The instance or copy that a step runs in; `serial` tells apart the instances of one screen (InstanceId). -/
 structure Who where
   chart : Spec.Ref
+  serial : Nat := 0
   copy : Option Copy := none
 deriving DecidableEq, Repr, Inhabited
 
@@ -90,15 +88,15 @@ inductive Note where
   | events (step start : Nat) (groups : List Nat)
   /-- The record parts that `definition` read without asking Functions. -/
   | read (definition : Spec.Ref) (parts : List RecordPart)
-  | stepBegins (step : Nat) (name : StepName) (startedResource : Option String)
+  | stepBegins (step : Nat) (name : StepName) (started : Option InstanceId)
   | stepEnds
   /-- The evaluation of the always transitions of `owner` and its copies before and after the work of the open step. -/
-  | settlesAround (owner : String)
-  /-- A read by the open step of whether instances or copies, by resource, are in the given states. -/
-  | readStates (states : List (String × String))
-  | wroteState (resource state : String)
-  | wroteCopies (resource map : String)
-  | wroteShown (resource slot : String)
+  | settlesAround (owner : InstanceId)
+  /-- A read by the open step of whether instances or copies are in the given states. -/
+  | readStates (states : List (InstanceId × String))
+  | wroteState (id : InstanceId) (state : String)
+  | wroteCopies (id : InstanceId) (map : String)
+  | wroteShown (id : InstanceId) (slot : String)
   | transitionPart (part : Nat)
   | microstepEnds (check : RegionCheck)
   /-- The start of the checks and subscription answers after message `message` (afterMessage), which no step runs. -/

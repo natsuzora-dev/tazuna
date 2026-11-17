@@ -159,7 +159,7 @@ deriving Repr
 def Chart.tryFrom (c : ChartFields) : Except String Chart :=
   if h : chartTree (c.states.map (·.shape)) c.initial (c.on.filterMap (·.target)) = true then
     pure { toChartFields := c, shaped := h }
-  else throw "expected the states as a tree in document order (the parent path of each state is a prefix of the path of the state before it), with unique names, parents, children, and initial states that match the paths, an initial state for each state with children other than a parallel state, no children of final and history states, no map or final state under a map state, and transition targets inside the same map state as their source or outside every map state, an initial state of the chart among the children of the root, and no @ or [ in state names"
+  else throw "expected the states as a tree in document order (the parent path of each state is a prefix of the path of the state before it), with unique names, parents, children, and initial states that match the paths, an initial state for each state with children other than a parallel state, no children of final and history states, no map or final state under a map state, and transition targets inside the same map state as their source or outside every map state, and an initial state of the chart among the children of the root"
 
 derive_wire Chart try_from ChartFields
 
@@ -290,7 +290,7 @@ The kinds that an answer to the command or query `r` may be rejected with when a
 an external `r`, the kinds it declares. Otherwise `requires` needs a requires condition or a binds value, `notFound` an
 input ref field, and `alreadyExists` an emitted event that creates or updates a record, and a request to another
 service may also be rejected with `unavailable`, and a command to another service with `reusedId`. An answer
-rejected with `invalidInput` is the sender's fault (State.inputFault), so it is not listed.
+rejected with `invalidInput` is the sender's fault (Requester.inputFault), so it is not listed.
 -/
 def Structure.rejectionKinds (s : Structure) (service : String) (r : Ref) : List RejectionKind :=
   let other (kinds : List RejectionKind) := if r.service == service then [] else kinds

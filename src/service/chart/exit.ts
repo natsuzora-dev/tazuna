@@ -2,11 +2,11 @@ import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Assignment, Failed, issueViolation } from "../functions.ts";
+import { copyId, type InstanceId, ownerId } from "../instance.ts";
 import { limits } from "../limits.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   copyKeysOf,
-  copyName,
   createKeys,
   halt,
   type Instance,
@@ -31,7 +31,7 @@ export function stateEndSubscription(r: Processing, p: Pending): void {
 
 type ShowsRequest = Pending & { readonly requester: Extract<Requester, { readonly kind: "slot" }> };
 
-export function openShows(s: State, owner: string): ShowsRequest[] {
+export function openShows(s: State, owner: InstanceId): ShowsRequest[] {
   return s.pending.filter(
     (p): p is ShowsRequest => p.requester.kind === "slot" && p.requester.machine === owner && !p.stale,
   );
@@ -67,7 +67,7 @@ export function runAssign(
     instance.context = assigned.context;
     return;
   }
-  const owner = machine(r.state, copy.owner);
+  const owner = machine(r.state, ownerId(instance.id));
   if (owner !== undefined) owner.context = assigned.context;
   instance.context = assigned.copyContext ?? instance.context;
 }
@@ -76,7 +76,7 @@ export function runAssign(
  * Exits every active state in exitOrder and then stops, like SCXML exitInterpreter. A closed instance stays in State,
  * so an assign of a transition that a copy closed in the same microstep chose reads the copy's values at exit.
  */
-export function endWith(r: Processing, name: string, fuel: number): void {
+export function endWith(r: Processing, name: InstanceId, fuel: number): void {
   const instance = machine(r.state, name);
   if (instance === undefined) return;
   for (const n of exitOrder(instance.chart.tree, instance.entered)) exitOne(r, fuel, instance, n);
@@ -86,7 +86,7 @@ export function endWith(r: Processing, name: string, fuel: number): void {
 }
 
 function leaveState(s: State, instance: Instance, n: string): void {
-  const name = instance.resource;
+  const name = instance.id;
   instance.entered.delete(n);
   for (let i = s.deadlines.length - 1; i >= 0; i -= 1) {
     const t = s.deadlines[i];
@@ -97,24 +97,24 @@ function leaveState(s: State, instance: Instance, n: string): void {
   for (const q of s.queued) if (q.machine === name && q.state === n) q.stale = true;
 }
 
-function childrenOf(s: State, name: string, n: string): string[] {
+function childrenOf(s: State, name: InstanceId, n: string): InstanceId[] {
   return [...s.machines.values()]
     .filter((child) => !child.closed && child.opener?.parent === name && child.opener.state === n)
-    .map((child) => child.resource);
+    .map((child) => child.id);
 }
 
 function leaveWith(r: Processing, fuel: number, instance: Instance, n: string): void {
   runAssign(r, instance, { kind: "exit", state: n }, {}, n);
-  r.note.wroteState(instance.resource, n);
+  r.note.wroteState(instance.id, n);
   leaveState(r.state, instance, n);
-  for (const child of childrenOf(r.state, instance.resource, n)) endWith(r, child, fuel);
+  for (const child of childrenOf(r.state, instance.id, n)) endWith(r, child, fuel);
 }
 
 /** Exits state `n` of `instance`, after its copies; `fuel` is the remaining nesting depth of exits. */
 export function exitOne(r: Processing, fuel: number, instance: Instance, n: string): void {
   if (fuel === 0)
     report(r.state, { kind: "Fault.exceededExitDepth", definition: null, data: { limit: limits.exitDepth } });
-  for (const k of copyKeysOf(instance, n).toReversed()) endWith(r, copyName(instance.resource, n, k), fuel - 1);
+  for (const k of copyKeysOf(instance, n).toReversed()) endWith(r, copyId(instance.id, n, k), fuel - 1);
   instance.copyKeys.delete(n);
   leaveWith(r, fuel - 1, instance, n);
 }

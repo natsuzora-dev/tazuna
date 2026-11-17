@@ -35,14 +35,14 @@ theorem inputOf_of_mem (wanted : List Wanted) (hw : (wanted.map (·.slot)).Nodup
       unfold inputOf at ih ⊢
       simp [hne, ih]
 
-theorem endShowStep_fixed (wanted : List Wanted) (owner : String) (t : State)
+theorem endShowStep_fixed (wanted : List Wanted) (owner : InstanceId) (t : State)
     (p : Pending) : (t.endShowStep wanted owner p).fixed = t.fixed := by
   dsimp only [State.endShowStep]
   split
   · rfl
   · split <;> rfl
 
-theorem subscribeStep_fixed (opened : List Pending) (owner : String) (t : State)
+theorem subscribeStep_fixed (opened : List Pending) (owner : InstanceId) (t : State)
     (w : Wanted) : (t.subscribeStep service opened owner w).fixed = t.fixed := by
   obtain ⟨slot, a, input⟩ := w
   dsimp only [State.subscribeStep]
@@ -50,11 +50,11 @@ theorem subscribeStep_fixed (opened : List Pending) (owner : String) (t : State)
   · rfl
   · exact await_fixed ..
 
-theorem syncShows_fixed (owner : String) (wanted : List Wanted) :
+theorem syncShows_fixed (owner : InstanceId) (wanted : List Wanted) :
     (s.syncShows service owner wanted).fixed = s.fixed :=
   (foldl_fixed _ (subscribeStep_fixed _ _) _ _).trans (foldl_fixed _ (endShowStep_fixed _ _) _ _)
 
-theorem refresh_fixed (owner : String) : (refresh st fs s owner).fixed = s.fixed := by
+theorem refresh_fixed (owner : InstanceId) : (refresh st fs s owner).fixed = s.fixed := by
   unfold refresh
   split
   · rfl
@@ -73,7 +73,7 @@ theorem refreshScreens_fixed : (refreshScreens st fs s).fixed = s.fixed := by
     · rfl
     · exact refresh_fixed _) _ _
 
-theorem endShowStep_grows (wanted : List Wanted) (owner : String) (t : State)
+theorem endShowStep_grows (wanted : List Wanted) (owner : InstanceId) (t : State)
     (p : Pending) : Grows t (t.endShowStep wanted owner p) := by
   dsimp only [State.endShowStep]
   split
@@ -82,7 +82,7 @@ theorem endShowStep_grows (wanted : List Wanted) (owner : String) (t : State)
     · exact (endSubscription_grows (s := t) p).trans rfl (Grows.of_lines (s := t.endSubscription p) rfl)
     · exact endSubscription_grows _
 
-theorem subscribeStep_grows (opened : List Pending) (owner : String) (t : State)
+theorem subscribeStep_grows (opened : List Pending) (owner : InstanceId) (t : State)
     (w : Wanted) : Grows t (t.subscribeStep service opened owner w) := by
   obtain ⟨slot, a, input⟩ := w
   dsimp only [State.subscribeStep]
@@ -90,13 +90,13 @@ theorem subscribeStep_grows (opened : List Pending) (owner : String) (t : State)
   · exact Grows.refl _
   · exact (grows_write (s := t) Dir.out none _).trans rfl (Grows.of_lines rfl)
 
-theorem syncShows_grows (owner : String) (wanted : List Wanted) :
+theorem syncShows_grows (owner : InstanceId) (wanted : List Wanted) :
     Grows s (s.syncShows service owner wanted) :=
   (foldl_grows _ (endShowStep_grows _ _) (fun t p => congrArg Fixed.now (endShowStep_fixed _ _ t p)) _ _).trans
     (congrArg Fixed.now (foldl_fixed _ (endShowStep_fixed _ _) _ _))
     (foldl_grows _ (subscribeStep_grows _ _) (fun t w => congrArg Fixed.now (subscribeStep_fixed _ _ t w)) _ _)
 
-theorem refresh_grows (owner : String) : Grows s (refresh st fs s owner) := by
+theorem refresh_grows (owner : InstanceId) : Grows s (refresh st fs s owner) := by
   unfold refresh
   split
   · exact Grows.refl _
@@ -118,7 +118,7 @@ theorem refreshScreens_grows : Grows s (refreshScreens st fs s) := by
     · rfl
     · exact congrArg Fixed.now (refresh_fixed _)
 
-theorem endShowStep_pending (wanted : List Wanted) (owner : String) (t : State) (p : Pending) :
+theorem endShowStep_pending (wanted : List Wanted) (owner : InstanceId) (t : State) (p : Pending) :
     (t.endShowStep wanted owner p).pending =
       if kept wanted p then t.pending
       else t.pending.map fun q => if q.id == p.id then { q with stale := true } else q := by
@@ -128,7 +128,7 @@ theorem endShowStep_pending (wanted : List Wanted) (owner : String) (t : State) 
   · simp only [hc, Bool.false_eq_true, ↓reduceIte]
     split <;> rfl
 
-theorem endShows_pending (wanted : List Wanted) (owner : String) :
+theorem endShows_pending (wanted : List Wanted) (owner : InstanceId) :
     ∀ (L : List Pending) (t : State), (L.foldl (State.endShowStep wanted owner) t).pending =
       t.pending.map fun q => if (L.filter fun p => !kept wanted p).any (·.id == q.id) then { q with stale := true } else q := by
   intro L
@@ -149,7 +149,7 @@ theorem endShows_pending (wanted : List Wanted) (owner : String) :
         · simp [h, h']
         · simp [h, h', Ne.symm h]
 
-theorem subscribes_pending (opened : List Pending) (owner : String) :
+theorem subscribes_pending (opened : List Pending) (owner : InstanceId) :
     ∀ (W : List Wanted) (t : State), ∃ new, (W.foldl (State.subscribeStep service opened owner) t).pending = t.pending ++ new ∧
       (∀ q ∈ new, q.requester.machine? = some owner ∧ q.stale = false ∧ ∃ w ∈ W, matched opened w = false ∧
         q.requester.slot? = some w.slot ∧ q.input = w.input) ∧
@@ -193,7 +193,7 @@ theorem subscribes_pending (opened : List Pending) (owner : String) :
         · obtain ⟨r, hr, h⟩ := h₃ w hw hu
           exact ⟨r, List.mem_cons_of_mem _ hr, h⟩
 
-theorem kept_stays_open (wanted : List Wanted) (owner : String) (hid : (s.pending.map (·.id)).Nodup) (p : Pending)
+theorem kept_stays_open (wanted : List Wanted) (owner : InstanceId) (hid : (s.pending.map (·.id)).Nodup) (p : Pending)
     (hp : p ∈ s.openShows owner) (hk : kept wanted p = true) :
     p ∈ ((s.openShows owner).foldl (State.endShowStep wanted owner) s).openShows owner := by
   unfold State.openShows at hp ⊢
@@ -212,7 +212,7 @@ theorem kept_stays_open (wanted : List Wanted) (owner : String) (hid : (s.pendin
     simp [hk] at hq1
   refine List.mem_filter.mpr ⟨List.mem_map.mpr ⟨p, hmem, by simp only [hnot, Bool.false_eq_true, ↓reduceIte]⟩, hopen⟩
 
-theorem open_after_end_kept (wanted : List Wanted) (owner : String) (q : Pending)
+theorem open_after_end_kept (wanted : List Wanted) (owner : InstanceId) (q : Pending)
     (hq : q ∈ ((s.openShows owner).foldl (State.endShowStep wanted owner) s).openShows owner) :
     q ∈ s.openShows owner ∧ kept wanted q = true := by
   unfold State.openShows at hq ⊢
@@ -231,7 +231,7 @@ theorem open_after_end_kept (wanted : List Wanted) (owner : String) (q : Pending
       exact List.any_eq_true.mpr ⟨p, List.mem_filter.mpr ⟨List.mem_filter.mpr ⟨hp, hq2⟩, by simpa using hk⟩,
         by simp⟩
 
-theorem syncShows_matches (owner : String) (wanted : List Wanted) (hw : (wanted.map (·.slot)).Nodup)
+theorem syncShows_matches (owner : InstanceId) (wanted : List Wanted) (hw : (wanted.map (·.slot)).Nodup)
     (hid : (s.pending.map (·.id)).Nodup) :
     (∀ w ∈ wanted, ∃ p ∈ (s.syncShows service owner wanted).openShows owner,
       p.requester.slot? = some w.slot ∧ p.input = w.input) ∧
@@ -315,7 +315,7 @@ theorem wantedShows_nodup (i : Instance) (wanted : List Wanted) (h : wantedShows
         exact setWanted_nodup _ _ (hacc _ rfl)
   exact hP wanted h
 
-theorem same_input_subscription_kept (owner : String) (wanted : List Wanted) (hw : (wanted.map (·.slot)).Nodup)
+theorem same_input_subscription_kept (owner : InstanceId) (wanted : List Wanted) (hw : (wanted.map (·.slot)).Nodup)
     (hid : (s.pending.map (·.id)).Nodup) (p : Pending) (hp : p ∈ s.openShows owner) (slot : String)
     (a : Activity) (hs : p.requester.slot? = some slot) (hin : ⟨slot, a, p.input⟩ ∈ wanted) :
     p ∈ (s.syncShows service owner wanted).openShows owner := by
@@ -332,7 +332,7 @@ theorem same_input_subscription_kept (owner : String) (wanted : List Wanted) (hw
   rw [hS]
   exact List.mem_append_left _ (kept_stays_open wanted owner hid p hp hk)
 
-theorem refresh_open_shows_match (owner : String) (i : Instance) (wanted : List Wanted) (hi : s.machine? owner = some i)
+theorem refresh_open_shows_match (owner : InstanceId) (i : Instance) (wanted : List Wanted) (hi : s.machine? owner = some i)
     (hc : i.closed = false) (hw : wantedShows st fs s i = .ok wanted) (hid : (s.pending.map (·.id)).Nodup) :
     (∀ w ∈ wanted, ∃ p ∈ (refresh st fs s owner).openShows owner, p.requester.slot? = some w.slot ∧ p.input = w.input) ∧
     (∀ p ∈ (refresh st fs s owner).openShows owner, ∃ w ∈ wanted, p.requester.slot? = some w.slot ∧ p.input = w.input) := by
