@@ -12,6 +12,6 @@
 {"time":"2026-10-25T02:30:00Z","dir":"in","type":"command","id":"addTask#3","name":"addTask","input":{"taskId":"task-3"}}
 {"time":"2026-10-25T02:30:00Z","dir":"out","type":"answer","id":"answer#3","to":"addTask#3","answer":{"result":"accepted"}}
 {"time":"2026-10-25T02:30:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"taskId":"task-3"},"resultOf":"addTask#3"}
-{"time":"2026-10-25T03:30:00Z","dir":"out","type":"event","id":"reminded#4","name":"reminded","payload":{"by":"restartsDeadline"},"after":["answer#3","taskAdded#3"]}
-{"time":"2026-10-25T03:30:00Z","dir":"out","type":"event","id":"reminded#5","name":"reminded","payload":{"by":"restartsDeadlineToChild"},"after":["answer#3","taskAdded#3"]}
-{"time":"2026-10-25T04:00:00Z","dir":"in","type":"time","id":"time#3"}
+{"time":"2026-10-25T04:30:00Z","dir":"out","type":"event","id":"reminded#4","name":"reminded","payload":{"by":"restartsDeadline"},"after":["answer#3","taskAdded#3"]}
+{"time":"2026-10-25T04:30:00Z","dir":"out","type":"event","id":"reminded#5","name":"reminded","payload":{"by":"restartsDeadlineToChild"},"after":["answer#3","taskAdded#3"]}
+{"time":"2026-10-25T05:00:00Z","dir":"in","type":"time","id":"time#3"}

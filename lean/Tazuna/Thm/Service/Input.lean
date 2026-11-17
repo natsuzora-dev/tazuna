@@ -58,18 +58,6 @@ theorem begin_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (begin st
       · simp only [id_bind]
         split <;> simp
 
-@[simp] theorem checkDeadlineOrder_records : s.checkDeadlineOrder.records = s.records := by
-  unfold State.checkDeadlineOrder; split <;> simp
-
-@[simp] theorem checkDeadlineOrder_started : s.checkDeadlineOrder.started = s.started := by
-  unfold State.checkDeadlineOrder; split <;> simp
-
-@[simp] theorem checkDeadlineOrder_lines : s.checkDeadlineOrder.lines = s.lines := by
-  unfold State.checkDeadlineOrder; split <;> simp
-
-@[simp] theorem checkDeadlineOrder_commandAnswers : s.checkDeadlineOrder.commandAnswers = s.commandAnswers := by
-  unfold State.checkDeadlineOrder; split <;> simp
-
 theorem send_keysDistinct (name : String) (id : Option String) (raw : Value) (h : KeysDistinct s.records) :
     KeysDistinct (send st fs s name id raw).records := by
   unfold send

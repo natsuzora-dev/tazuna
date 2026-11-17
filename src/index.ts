@@ -23,7 +23,6 @@ export type {
   ClientRequestLine,
   ClientSubscribeLine,
   Created,
-  DeadlineOf,
   Delivered,
   DeliveredRequest,
   EndRef,
@@ -52,7 +51,6 @@ export type {
 export {
   answered,
   created,
-  deadline,
   emitted,
   endOf,
   event,

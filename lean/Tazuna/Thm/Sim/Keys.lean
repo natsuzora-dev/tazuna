@@ -153,11 +153,10 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender 
   · exact keeps_receive _ _ _ _ _
   · exact .refl _
 
-theorem keeps_fireTo (time : Time) (order : List DeadlineId) (st : Service) (fs : Functions Id) (s : State) :
-    KeepsKeys s (fireTo time order st fs s) := by
+theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State) :
+    KeepsKeys s (fireTo time st fs s) := by
   simp only [fireTo, id_bind]
-  keys_close (keeps_fireDue (st := st) (fs := fs) true time Limit.dueDeadlines.max none
-    { s with deadlineOrder := order })
+  keys_close (keeps_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max none s)
 
 theorem keeps_requestOf (type : Scenario.RequestType) (name : String) (id : Option String) (v : Value)
     (st : Service) (fs : Functions Id) (s : State) : KeepsKeys s (requestOf type name id v st fs s) := by
@@ -268,7 +267,7 @@ macro "kw_tac" : tactic => `(tactic| repeat' (first
   | with_reducible exact keeps_endSubscription _ _
   | with_reducible exact keeps_operate _ _ _ _
   | with_reducible exact keeps_restart _
-  | with_reducible exact keeps_fireTo _ _ _ _ _
+  | with_reducible exact keeps_fireTo _ _ _ _
   | dsimp only
   | split))
 

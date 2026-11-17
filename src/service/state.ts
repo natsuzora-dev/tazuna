@@ -3,7 +3,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
-import type { Answer, DeadlineId, TraceLine } from "../data/trace.generated.ts";
+import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { UntimedTraceLine } from "../data/trace.ts";
 import { type Fields, plain } from "../data/values.ts";
 import type { Located, Location, Violation } from "../data/violation.ts";
@@ -171,12 +171,6 @@ export interface Deadline {
   readonly name: string;
 }
 
-export const deadlineId = (deadline: Deadline): DeadlineId => ({
-  instance: deadline.machine,
-  state: deadline.state,
-  name: deadline.name,
-});
-
 /**
  * The sender of a request. A `state` requester is machine `machine`, which sent the request on entering `state`. A
  * `slot` requester is screen `machine`, which subscribed to the query of shows slot `slot`; answers keep coming until
@@ -224,7 +218,7 @@ interface Queued {
  * the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
  * marks a step that comes after every earlier step of the same message and before every later one. `nested` marks a
  * step that began while its cause was running (a copy start), so it ends before its cause does. `tie` is, for a
- * deadline step, the time of the tie it fired in when no line orders that tie.
+ * deadline step, the time of the tie it fired in.
  */
 export interface StepInfo {
   readonly cause: number | undefined;
@@ -268,8 +262,6 @@ export interface State {
   readonly stack: string[];
   /** The deadlines in entry order, which is also the order of the due deadlines. */
   readonly deadlines: Deadline[];
-  /** The entries of the current input's `deadlineOrder` that no tie has used yet. */
-  deadlineOrder: readonly DeadlineId[];
   /** The entries of the current input's `stepOrder` that the internal queue has not used yet. */
   stepOrder: readonly StepName[];
   /** The pending requests, in sending order. */
@@ -308,7 +300,6 @@ export function newState(st: Service): State {
     copies: new Map(),
     stack: [],
     deadlines: [],
-    deadlineOrder: [],
     stepOrder: [],
     pending: [],
     queued: [],

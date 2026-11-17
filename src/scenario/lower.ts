@@ -19,7 +19,6 @@ import {
   type ClientRequestLine,
   type ClientSubscribeLine,
   createdMark,
-  type DeadlineOf,
   type Delivered,
   type EndRef,
   type EventMessage,
@@ -415,14 +414,10 @@ export function lower(
         handle<Line>({ [lineIndex]: place({ type: "inFlight", message: factOfHandle(message) }) }),
     },
     clock: {
-      at: (time: string, options?: { readonly order?: readonly DeadlineOf[] }) => {
+      at: (time: string) => {
         const t = instant(time);
         if (t === undefined) problems.push({ kind: "unparsableTime", line: lines.length });
-        const order = (options?.order ?? []).map((d, k) => {
-          const chart = named(d.chart, [...at(), "order", k]);
-          return { service: chart.service, deadline: { instance: chart.name, state: d.state, name: d.name } };
-        });
-        return processing({ type: "at", time: t ?? time, order });
+        return processing({ type: "at", time: t ?? time });
       },
     },
     host: { restart: () => processing({ type: "restart" }) },

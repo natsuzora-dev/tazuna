@@ -24,7 +24,8 @@ A *scenario* of a service, the *own* service, has three parts:
 The own service and its running peers are the *participants* of one *simulation*.
 They share one clock, and a message between two of them stays *in flight* until a network line delivers, redelivers, loses, or fails it.
 Messages travel on *channels*: a request, its answers, its end, and the events that name it as their `resultOf` share the request's channel, and an event without `resultOf` travels on the channel of its sender and receiver.
-The simulation is deterministic: the scenario writes every choice that nobody's code makes, such as which message arrives next, when the time advances, and which of two deadlines due at the same time fires first.
+The simulation is deterministic: the scenario writes every choice that nobody's code makes, such as which message arrives next and when the time advances.
+Deadlines of one service due at the same time are no such choice: they tie inside the service, `test` runs them in every order, and it reports `ChoiceDependent` when the order changes the result.
 
 The trace of the own service is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 tazuna has three tools that report violations:
@@ -215,8 +216,7 @@ Precedent: the modal dialog of the WAI-ARIA Authoring Practices (W3C), which mak
 - Processing a message never changes the current time; only a clock line advances it (`drain_keeps_now`).
 - Every line that processing a message writes carries the current time (`message_outputs_at_its_time`).
 - A deadline due by the time that the clock advances to fires as a message of its own, at its time (`deadline_is_own_message`, `deadline_message_at_its_time`).
-- Of deadlines due at the same time while a clock line advances the clock, the next entry of the line's `order` chooses the one that fires (`chooseDeadline_named`), and a tie that no entry decides is reported instead of decided (`chooseDeadline_required`).
-- Deadlines that become due at the same time while a service processes any other line tie inside that service, where no line can order them; they fire in the order of the step order that `test` searches (`chooseDeadline_stepOrder`), and `test` reports `ChoiceDependent` when another order changes the result.
+- Deadlines of one service due at the same time tie inside that service, whichever line advanced the time; they fire in the step order that `test` searches (`chooseDeadline_stepOrder`), and `test` reports `ChoiceDependent` when another order changes the result.
 
 Precedent: deterministic simulation testing (FoundationDB), where the simulator supplies the clock.
 

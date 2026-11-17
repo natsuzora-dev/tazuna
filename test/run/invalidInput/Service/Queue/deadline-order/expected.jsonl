@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.unreadyDeadline","definition":null,"data":{"named":{"instance":"reminder","state":"waiting","name":"hour"},"candidates":[{"instance":"counter","state":"waiting","name":"hour"}]},"location":{"file":"todo/scenarios.ts","line":7},"scenario":{"service":"todo","name":"orderOfFiredDeadline"}}

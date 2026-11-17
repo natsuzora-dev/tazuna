@@ -34,7 +34,6 @@ import {
   constants,
   created,
   datetime,
-  deadline,
   emit,
   emitted,
   event as emittedEvent,
@@ -1316,7 +1315,7 @@ screen({
 });
 
 // A state's deadlines are named in the tree and written in the body, one under each name.
-const timer = machine({
+machine({
   description: "",
   initial: "a",
   states: { a: { after: ["soon"] }, b: { after: ["late"] } },
@@ -1346,15 +1345,8 @@ machine({ description: "", initial: "a", states: { a: { after: ["soon"] }, b: {}
   states: { b: { always: [] } },
 });
 const deadlineNames: string[] = ["soon"];
-// @ts-expect-error the tree lists the deadline names in place, so that deadline() can check them
+// @ts-expect-error the tree lists the deadline names in place, so that the body is checked against them
 machine({ description: "", initial: "a", states: { a: { after: deadlineNames }, b: {} } });
-
-// A clock line's order names a deadline by its chart, its state, and its name in the tree.
-deadline(timer, "a", "soon");
-// @ts-expect-error the state has no deadline of that name
-deadline(timer, "a", "late");
-// @ts-expect-error the chart has no state with deadlines of that name
-deadline(timer, "c", "soon");
 
 // Given keys each peer by its service's name, and the own service is no peer.
 scenarioOfScreens("types", {

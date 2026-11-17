@@ -479,8 +479,8 @@ theorem drain_agrees (fuel : Nat) (s : State) (q : Queue) :
     agree [runWork_agrees h, processCommand_agrees h, sendEntered_agrees h, refreshScreens_agrees h,
       settleScreen_agrees h, ih]
 
-theorem fireDue_agrees (clock : Bool) (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
-    Agrees (fireDue st fsI clock to fuel tie s) (fireDue st fs clock to fuel tie s) := by
+theorem fireDue_agrees (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
+    Agrees (fireDue st fsI to fuel tie s) (fireDue st fs to fuel tie s) := by
   induction fuel generalizing s tie with
   | zero => unfold fireDue; agree []
   | succ fuel ih => unfold fireDue; agree [note_agrees, settled_agrees h, fire_agrees h, drain_agrees h, afterMessage_agrees h, ih]

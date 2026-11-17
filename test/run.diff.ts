@@ -9,7 +9,6 @@ import type { Violation } from "../src/data/violation.ts";
 import {
   enabledLines,
   type Move,
-  orderedMoves,
   seenLines,
   valuesPerPayload,
   type Walked,
@@ -86,7 +85,7 @@ function invalidLines(spec: Spec, sc: Scenario, walked: Walked, enabledLines: re
   const answer = enabledLines.find((l) => l.type === "answer");
   const operate = enabledLines.find((l) => l.type === "operate");
   const lines: Line[] = [
-    { type: "at", time: walked.world.now.subtract({ milliseconds: 1 }).toString(), order: [] },
+    { type: "at", time: walked.world.now.subtract({ milliseconds: 1 }).toString() },
     { type: "unsubscribe", subscription: 0 },
     ...(command === undefined
       ? []
@@ -145,9 +144,7 @@ for (const { name, spec } of specs) {
           if (error instanceof Halt) return [];
           throw error;
         }
-        const children = new Map(
-          moves.flatMap((move) => orderedMoves(move, (m) => both([...appended, ...m])).map((c) => [c.move, c.walked])),
-        );
+        const children = new Map(moves.map((move) => [move, both([...appended, ...move])]));
         made.set(walked, children);
         const others = invalidLines(spec, sc, walked, moves.flat());
         for (const move of others) invalid.add(move);

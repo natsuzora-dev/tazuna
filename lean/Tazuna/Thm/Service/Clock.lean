@@ -47,37 +47,26 @@ theorem fires_only_in_active_state (step : Nat) (t : Deadline) (r : Processing) 
       · simp [hm, hn]
 
 /-- Without a tie, the earliest deadline in entry order fires. -/
-theorem chooseDeadline_untied (s : State) (clock : Bool) (first : Deadline) (due : List Deadline) :
-    chooseDeadline st s clock first due false = .ok (first, s) := rfl
-
-/-- In a tie during a clock line with no `order` entry left, the tie is reported instead of decided. -/
-theorem chooseDeadline_required (s : State) (first : Deadline) (due : List Deadline) (h : s.deadlineOrder = []) :
-    chooseDeadline st s true first due true = .error (.unorderedDeadlines (due.map Deadline.id)) := by
-  simp [chooseDeadline, h]
-
-/-- In a tie during a clock line, the next entry of the line's `order` chooses which of the tied deadlines fires. -/
-theorem chooseDeadline_named (s : State) (first t : Deadline) (due : List Deadline) (c : DeadlineId)
-    (rest : List DeadlineId) (ho : s.deadlineOrder = c :: rest) (h : due.find? (·.id == c) = some t) :
-    chooseDeadline st s true first due true = .ok (t, { s with deadlineOrder := rest }) := by
-  simp [chooseDeadline, ho, h]
+theorem chooseDeadline_untied (s : State) (first : Deadline) (due : List Deadline) :
+    chooseDeadline st s first due false = .ok (first, s) := rfl
 
 /--
-In a tie of any other processing, the next entry of the input's `stepOrder` chooses which of the tied deadlines fires,
-as it chooses the internal queue's next step.
+In a tie, whichever line advanced the time, the next entry of the input's `stepOrder` chooses which of the tied
+deadlines fires, as it chooses the internal queue's next step.
 -/
 theorem chooseDeadline_stepOrder (s : State) (first t : Deadline) (due : List Deadline) (named : StepName)
     (rest : List StepName) (ho : s.stepOrder = named :: rest) (h : due.find? (s.deadlineStep st · == named) = some t) :
-    chooseDeadline st s false first due true = .ok (t, { s with stepOrder := rest }) := by
+    chooseDeadline st s first due true = .ok (t, { s with stepOrder := rest }) := by
   simp [chooseDeadline, ho, h]
 
-/-- Choosing a deadline changes only the order entries left. -/
-theorem chooseDeadline_orders {s s' : State} {clock tied : Bool} {first t : Deadline} {due : List Deadline}
-    (h : chooseDeadline st s clock first due tied = .ok (t, s')) :
-    ∃ d o, s' = { s with deadlineOrder := d, stepOrder := o } := by
+/-- Choosing a deadline changes only the step order entries left. -/
+theorem chooseDeadline_orders {s s' : State} {tied : Bool} {first t : Deadline} {due : List Deadline}
+    (h : chooseDeadline st s first due tied = .ok (t, s')) :
+    ∃ o, s' = { s with stepOrder := o } := by
   unfold chooseDeadline at h
   repeat' split at h
   all_goals (try simp only [Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h)
   all_goals (try obtain ⟨-, rfl⟩ := h)
-  all_goals exact ⟨_, _, rfl⟩
+  all_goals exact ⟨_, rfl⟩
 
 end Tazuna.Thm.Service.Clock

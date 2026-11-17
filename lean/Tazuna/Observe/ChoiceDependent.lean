@@ -27,7 +27,7 @@ derive_wire Difference tag "aspect"
 
 /--
 A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders, or
-of two deadlines due at one time that no clock line orders. Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
+of two deadlines of one service due at one time. Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
 -/
 inductive ChoiceDependent where
   /--
@@ -149,7 +149,7 @@ def Walk.span? (w : Walk) (origin : Scenario.Origin) (service : String) : Option
 
 /--
 The steps of the processing of `span` that an order takes, by step number and name, in the order they began: those
-that the internal queue took when no step was open, and the deadlines of ties that no line orders. Barriers and other
+that the internal queue took when no step was open, and the deadlines of ties. Barriers and other
 deadlines take no order.
 -/
 def Walk.taken (w : Walk) (span : Sim.Span) : List (Nat × StepName) :=

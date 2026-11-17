@@ -1,12 +1,12 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Report } from "../data/report.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { Answer, DeadlineId, TraceLine } from "../data/trace.generated.ts";
+import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { byCodePoint, canonicalJson } from "../data/values.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
-import { begin, call, checkDeadlineOrder, endSubscription, operate, send, subscribe } from "../service/input.ts";
+import { begin, call, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
@@ -364,12 +364,10 @@ function offeredAt(r: Processing, o: Opened, control: string, payload: unknown):
 }
 
 /** Lean's fireTo. */
-function fireTo(time: Temporal.Instant, order: readonly DeadlineId[]): (r: Processing) => void {
+function fireTo(time: Temporal.Instant): (r: Processing) => void {
   return (r) => {
     const s = r.state;
-    s.deadlineOrder = order;
-    fireDue(r, true, time);
-    checkDeadlineOrder(r);
+    fireDue(r, time);
     if (Temporal.Instant.compare(time, s.now) > 0) {
       s.now = time;
       r.note.wroteNow();
@@ -685,12 +683,9 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           definition: null,
           data: { scenarioLine: i, at: time.toString(), now: w.now.toString() },
         });
-      const unknown = l.order.find((e) => !running(w.roles.get(e.service)));
-      if (unknown !== undefined) return wrongRole(i, unknown.service);
       for (const service of w.participants.keys()) {
         if (stopped(w)) break;
-        const order = l.order.filter((e) => e.service === service).map((e) => e.deadline);
-        act(w, origin, service, fireTo(time, order));
+        act(w, origin, service, fireTo(time));
       }
       w.now = time;
       return;

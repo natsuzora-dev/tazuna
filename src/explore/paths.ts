@@ -1,6 +1,6 @@
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { Answer, DeadlineId } from "../data/trace.generated.ts";
+import type { Answer } from "../data/trace.generated.ts";
 import { canonicalJson, type Shape } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, ChartSpec, Named } from "../dsl/definition.ts";
@@ -196,7 +196,7 @@ export function enabledLines(
             Temporal.Instant.from(next.nextDeadline),
           ]
             .filter((t) => Temporal.Instant.compare(t, w.now) >= 0)
-            .map((t): Line => ({ type: "at", time: t.toString(), order: [] }));
+            .map((t): Line => ({ type: "at", time: t.toString() }));
     const operations = next.operations.flatMap((o) => {
       const opened = w.opened.findLast(
         (s) => s.service === own && s.chart === o.screen && r.state.stack.includes(s.resource),
@@ -283,26 +283,6 @@ const givable = (parent: Walked, child: Walked): boolean =>
   (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
 
-/**
- * Returns the copies of the move of the clock line `line` with every order of the deadlines in its ties: a clock line
- * whose walk reports an unordered tie of a running service becomes, recursively, one line per deadline of the tie,
- * appended to its order. Any other move is itself.
- */
-export function orderedMoves(move: Move, walk: (move: Move) => Walked): { move: Move; walked: Walked }[] {
-  const walked = walk(move);
-  const [line] = move;
-  if (move.length !== 1 || line?.type !== "at") return [{ move, walked }];
-  for (const [service, p] of walked.world.participants) {
-    const v = p.halted;
-    if (v?.kind !== "InvalidInput.unorderedDeadlines") continue;
-    const { candidates } = v.data as unknown as { readonly candidates: readonly DeadlineId[] };
-    return candidates.flatMap((deadline) =>
-      orderedMoves([{ ...line, order: [...line.order, { service, deadline }] }], walk),
-    );
-  }
-  return [{ move, walked }];
-}
-
 /** The state of a world that explore merges paths by: each participant's and the messages in flight. */
 function worldFingerprint(w: World): string {
   return canonicalJson([
@@ -368,9 +348,10 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
       found.push({ violation: error.violation, appended });
       return [];
     }
-    for (const move of moves)
-      for (const c of orderedMoves(move, (m) => walkAppended(spec, sc, [...appended, ...m])))
-        if (givable(walked, c.walked)) made.set(c.move, c.walked);
+    for (const move of moves) {
+      const child = walkAppended(spec, sc, [...appended, ...move]);
+      if (givable(walked, child)) made.set(move, child);
+    }
     if (made.size > 0) children.set(walked, made);
     return [...made.keys()];
   };

@@ -41,13 +41,8 @@ function afterMessage(r: Processing): void {
   publish(r);
 }
 
-/**
- * Fires the deadlines due by `to`, earliest first. A tie starts when two or more deadlines are due at the earliest
- * time; until no deadline is due at that time, the next entry of the input's `deadlineOrder` names each one that fires,
- * and after the entries, the first in entry order.
- */
-/** Lean's fireDue: fires the deadlines due by `to`, ties chosen from the clock line's order when `clock`. */
-export function fireDue(r: Processing, clock: boolean, to: Temporal.Instant): void {
+/** Lean's fireDue: fires the deadlines due by `to`, each tie chosen by chooseDeadline. */
+export function fireDue(r: Processing, to: Temporal.Instant): void {
   const s = r.state;
   let fired = 0;
   let tie: Temporal.Instant | undefined;
@@ -58,14 +53,14 @@ export function fireDue(r: Processing, clock: boolean, to: Temporal.Instant): vo
     const { time } = e;
     const due = s.deadlines.filter((t): t is Deadline & { time: Temporal.Instant } => t.time?.equals(time) === true);
     tie = due.length > 1 || tie?.equals(time) === true ? time : undefined;
-    const deadline = chooseDeadline(r, clock, e, due, tie !== undefined);
+    const deadline = chooseDeadline(r, e, due, tie !== undefined);
     if (Temporal.Instant.compare(deadline.time, s.now) > 0) {
       s.now = deadline.time;
       r.note.wroteNow();
     }
     newMessage(s);
     r.note.deadline(s.messageCount, deadline.time);
-    const step = newStep(s, undefined, { tie: tie !== undefined && !clock ? tie : undefined });
+    const step = newStep(s, undefined, { tie });
     inStep(r, step, deadlineStep(r, deadline), undefined, () =>
       settled(r, deadline.machine, step, () => fire(r, deadline, step)),
     );
@@ -76,7 +71,7 @@ export function fireDue(r: Processing, clock: boolean, to: Temporal.Instant): vo
 
 function finish(r: Processing): void {
   afterMessage(r);
-  fireDue(r, false, r.state.now);
+  fireDue(r, r.state.now);
 }
 
 /** Processes the internal queue and finishes the message. */

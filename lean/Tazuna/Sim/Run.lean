@@ -175,13 +175,13 @@ def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (contro
   | _ => pure false
 
 /--
-The running service after the deadlines due by `time` fire, ties ordered by `order`, and the clock's time line arrives,
-as the input that verify gives the implementation.
+The running service after the deadlines due by `time` fire and the clock's time line arrives, as the input that verify
+gives the implementation.
 -/
-def fireTo (time : Time) (order : List DeadlineId) : Service → Functions m → State → m State :=
+def fireTo (time : Time) : Service → Functions m → State → m State :=
   fun st fs s => do
-    let s ← fireDue st fs true time Limit.dueDeadlines.max none { s with deadlineOrder := order }
-    let s := { s.checkDeadlineOrder with now := max s.now time }
+    let s ← fireDue st fs time Limit.dueDeadlines.max none s
+    let s := { s with now := max s.now time }
     pure (if s.halted.isSome then s else (s.write .in none .time).1)
 
 /-- Whether an answer to the request `to` from `sender` is among the messages. -/
@@ -351,13 +351,11 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       let some msg := w.messages[k]? | return w
       if w.inFlight.any (·.2 == k) then return w.report (.repeatedInFlight i msg.describe)
       pure { w with inFlight := w.inFlight ++ [(i, k)] }
-  | .at time order => do
+  | .at time => do
     if time.time ≤ w.now then return w.report (.notLater i time.time w.now)
-    if let some e := order.find? fun e => !((w.role e.service).any (·.running)) then
-      return w.report (.wrongRole i e.service)
     let w ← w.services.foldlM (init := w) fun w (service, _) =>
       if w.stopped then pure w else
-      w.act fsOf (.line i) service (fireTo time.time ((order.filter (·.service == service)).map (·.deadline)))
+      w.act fsOf (.line i) service (fireTo time.time)
     pure { w with now := time.time }
   | .restart => w.act fsOf (.line i) own restart (reopen := true)
 

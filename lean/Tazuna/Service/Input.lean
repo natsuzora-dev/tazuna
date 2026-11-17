@@ -254,14 +254,6 @@ def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) 
   message st fs s { tasks := st.starting.map (.start ·.name none) }
 
 /--
-The state at the end of a clock input, with the entries of its `deadlineOrder` that no tie used reported. The entries of
-a `stepOrder` left unused are the processing's to report (Sim.checkStepOrder), as for any other input.
--/
-def State.checkDeadlineOrder (s : State) : State :=
-  if s.halted.isNone && !s.deadlineOrder.isEmpty then s.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
-  else s
-
-/--
 The state after an operate input. As Playwright's click fails on a covered or missing element, operate reports an
 operation that the screen does not accept.
 -/

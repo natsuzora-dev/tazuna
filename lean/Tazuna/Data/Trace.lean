@@ -10,18 +10,6 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Dir
 
-/--
-The identity of a deadline of an active state. `instance` is the resource of the chart instance or copy that holds
-the deadline: the chart name, `name(2)` for the second opening of a screen, or `owner@map[key]` for a copy.
--/
-structure DeadlineId where
-  «instance» : String
-  state : String
-  name : String
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire DeadlineId
-
 inductive InDir where
   | «in»
 deriving DecidableEq, Repr, Inhabited

@@ -33,18 +33,6 @@ const answer = z.discriminatedUnion("result", [
 /** The answer to a request. A command is accepted or rejected, and a query is fulfilled or rejected. */
 export type Answer = z.infer<typeof answer>;
 
-const deadlineId = z.object({
-  instance: z.string(),
-  state: z.string(),
-  name: z.string(),
-});
-
-/**
- * The identity of a deadline of an active state. `instance` is the resource of the chart instance or copy that holds
- * the deadline: the chart name, `name(2)` for the second opening of a screen, or `owner@map[key]` for a copy.
- */
-export type DeadlineId = z.infer<typeof deadlineId>;
-
 export const traceLine = z.discriminatedUnion("type", [
   z.object({
     time: z.iso.datetime({ offset: true }),

@@ -4,7 +4,7 @@ import { transitionsAt } from "./chart/basic.ts";
 import { takeDeadline } from "./chart/deadline.ts";
 import { applyCompletion } from "./chart/macrostep.ts";
 import type { Processing } from "./chart/queue.ts";
-import { type Deadline, deadlineId, machine, report, who } from "./state.ts";
+import { type Deadline, machine, report, who } from "./state.ts";
 
 export function fire(r: Processing, due: Deadline, step: number): void {
   const waiting = takeDeadline(r.state, due);
@@ -37,44 +37,21 @@ export const deadlineStep = (r: Processing, t: Deadline): StepName => ({
 
 /**
  * Lean's chooseDeadline: returns the deadline that fires among `due`, the deadlines due at the earliest time in entry
- * order, whose first is `first`, and uses the order entry that chose it. Without a tie it is `first`. In a tie during a
- * clock line (`clock`), the next entry of the line's `deadlineOrder` chooses it, and a tie with no entry left is
- * reported. In a tie of any other processing, the next entry of the input's `stepOrder` chooses it, and without entries
- * it is `first`.
+ * order, whose first is `first`, and uses the order entry that chose it. Without a tie it is `first`. In a tie, the
+ * next entry of the input's `stepOrder` chooses it, and without entries it is `first`.
  */
-export function chooseDeadline<T extends Deadline>(
-  r: Processing,
-  clock: boolean,
-  first: T,
-  due: readonly T[],
-  tied: boolean,
-): T {
+export function chooseDeadline<T extends Deadline>(r: Processing, first: T, due: readonly T[], tied: boolean): T {
   const s = r.state;
   if (!tied) return first;
-  if (!clock) {
-    const [named, ...rest] = s.stepOrder;
-    if (named === undefined) return first;
-    const deadline = due.find((t) => canonicalJson(deadlineStep(r, t)) === canonicalJson(named));
-    if (deadline === undefined)
-      return report(s, {
-        kind: "InvalidInput.unreadyStep",
-        definition: null,
-        data: { named, candidates: due.map((t) => deadlineStep(r, t)) },
-      });
-    s.stepOrder = rest;
-    return deadline;
-  }
-  const deadlines = due.map(deadlineId);
-  const [named, ...rest] = s.deadlineOrder;
-  if (named === undefined)
-    return report(s, { kind: "InvalidInput.unorderedDeadlines", definition: null, data: { candidates: deadlines } });
-  const deadline = due.find((t) => canonicalJson(deadlineId(t)) === canonicalJson(named));
+  const [named, ...rest] = s.stepOrder;
+  if (named === undefined) return first;
+  const deadline = due.find((t) => canonicalJson(deadlineStep(r, t)) === canonicalJson(named));
   if (deadline === undefined)
     return report(s, {
-      kind: "InvalidInput.unreadyDeadline",
+      kind: "InvalidInput.unreadyStep",
       definition: null,
-      data: { named, candidates: deadlines },
+      data: { named, candidates: due.map((t) => deadlineStep(r, t)) },
     });
-  s.deadlineOrder = rest;
+  s.stepOrder = rest;
   return deadline;
 }

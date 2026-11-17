@@ -63,7 +63,6 @@ structure Deadline where
   name : String
 deriving DecidableEq, Repr, Inhabited
 
-def Deadline.id (t : Deadline) : DeadlineId := { «instance» := t.machine, state := t.state, name := t.name }
 
 inductive Requester where
   /-- The machine `machine`, which sent the request on entering `state`. -/
@@ -118,8 +117,7 @@ A step of a run. `cause` is the step that caused this one, or none for input and
 message number, inherited from the cause. `command` is whether the step processes an own-service command. `barrier` is
 whether the step comes after every earlier step of the same message and before every later one. `nested` is whether
 the step began while its cause was running (a copy start), so that it ends before its cause does. `tie` is, for a
-deadline step, the time of the tie it fired in when no line orders that tie, so that test's search takes the tie's
-deadlines in every order.
+deadline step, the time of the tie it fired in, so that test's search takes the tie's deadlines in every order.
 -/
 structure StepInfo where
   cause : Option Nat
@@ -164,8 +162,6 @@ structure State where
   stack : List String := []
   deadlines : List Deadline := []
   deadlineCount : Nat := 0
-  /-- The entries of the current input's `deadlineOrder` that no tie has used yet. -/
-  deadlineOrder : List DeadlineId := []
   /-- The entries of the current input's `stepOrder` that the internal queue has not used yet. -/
   stepOrder : List StepName := []
   /-- The pending requests in sending order. -/

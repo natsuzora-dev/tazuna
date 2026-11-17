@@ -425,7 +425,7 @@ def instrument : Functions (StateT Collect m) :=
       audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
         fun a b => sameValue a.1 b.1 && a.2 == b.2 }
 
-/-- Whether steps `i` and `j` are deadlines of one tie that no line orders. -/
+/-- Whether steps `i` and `j` are deadlines of one tie. -/
 def tiedDeadlines (s : State) (i j : Nat) : Bool :=
   match s.steps[i]?.bind (·.tie), s.steps[j]?.bind (·.tie) with
   | some a, some b => a == b
@@ -433,7 +433,7 @@ def tiedDeadlines (s : State) (i j : Nat) : Bool :=
 
 /--
 The pairs of steps whose other order test runs, by step number in the order they began, whose names differ so that a
-`stepOrder` names each, and that no cause orders: the deadlines of one tie that no line orders, whatever their steps
+`stepOrder` names each, and that no cause orders: the deadlines of one tie, whatever their steps
 access, since each deadline's effects run in the later steps of its own message; and the steps of one message whose
 accesses overlap and do not commute.
 A run that halted (in the semantic run, or `stopped` from enabled) skips the steps after the halt, so it has none.

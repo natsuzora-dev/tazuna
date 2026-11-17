@@ -254,25 +254,7 @@
     },
     {
       "type": "at",
-      "time": "2026-10-25T02:00:00.000Z",
-      "order": [
-        {
-          "service": "todo",
-          "deadline": {
-            "instance": "morning",
-            "state": "waiting",
-            "name": "hour"
-          }
-        },
-        {
-          "service": "todo",
-          "deadline": {
-            "instance": "evening",
-            "state": "waiting",
-            "name": "hour"
-          }
-        }
-      ]
+      "time": "2026-10-25T02:00:00.000Z"
     }
   ],
   "expectations": [

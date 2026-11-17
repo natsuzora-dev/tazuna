@@ -44,12 +44,6 @@ inductive InvalidInput where
   | coveredByModal (screen : Syntax.Ref) (control : String) (child : Syntax.Ref)
   /-- No active state of the screen offers the payload of the operation input. -/
   | unofferedPayload (screen : Syntax.Ref) (control : String) (payload : Value)
-  /-- The deadlineOrder entry `named` is not among the deadlines due in the tie, `candidates`. -/
-  | unreadyDeadline (named : DeadlineId) (candidates : List DeadlineId)
-  /-- No entry of the clock line's order names which of the deadlines `candidates`, due at the same time, fires first. -/
-  | unorderedDeadlines (candidates : List DeadlineId)
-  /-- No tie during the input used the deadlineOrder `entries`. -/
-  | unusedDeadlineOrder (entries : List DeadlineId)
   /-- The stepOrder entry `named` is not among the steps that can begin next, `candidates`. -/
   | unreadyStep (named : StepName) (candidates : List StepName)
   /-- No step choice during the input used the stepOrder `entries`. -/
@@ -65,16 +59,14 @@ derive_group InvalidInput
 Whether the violation halts the run, which it does when the scenario as written describes no run, or not one run, from
 this input on, so that later inputs would build on a history no run has: the input is one that no sender could give
 (it cannot be written as a trace line), it states a cause that did not occur (an event's resultOf naming a request that
-cannot have the event as its result), or the order written for it does not fit the run (an entry that names nothing
-due, a tie it leaves unordered, or an entry it leaves unused). An input that a sender can give, such as a subscription
+cannot have the event as its result), or the step order written for it does not fit the run (an entry that names
+nothing that can begin next, or an entry it leaves unused). An input that a sender can give, such as a subscription
 id it reuses on a retry or an answer that breaks the receiver's assumption, is written as given and the run goes on.
 -/
 def InvalidInput.halts : InvalidInput → Bool
   | .unownedTarget .. | .eventPayloadSchema .. | .controlPayloadSchema ..
   | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
-  | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyDeadline ..
-  | .unorderedDeadlines ..
-  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .resultOfUnansweredRequest ..
+  | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyStep .. | .unusedStepOrder .. | .resultOfUnansweredRequest ..
   | .resultOfNonCommand .. | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. => true
   | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. => false

@@ -289,7 +289,7 @@ declare const deadlinesOf: unique symbol;
 export type Deadlines = { readonly [state: string]: string };
 
 /** A chart; `Dl` holds, as a type only, the names of its deadlines. */
-export interface Chart<Dl extends Deadlines = Deadlines> extends ChartSpec {
+interface Chart<Dl extends Deadlines = Deadlines> extends ChartSpec {
   readonly service: ServiceDefinition;
   readonly description: string;
   readonly [deadlinesOf]?: Dl;

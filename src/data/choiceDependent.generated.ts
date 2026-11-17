@@ -86,7 +86,7 @@ export type Difference =
 
 /**
  * A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders, or
- * of two deadlines due at one time that no clock line orders. Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
+ * of two deadlines of one service due at one time. Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
  */
 export type ChoiceDependent =
   /**

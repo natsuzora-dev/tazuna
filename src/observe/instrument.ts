@@ -109,7 +109,7 @@ function commutes(a: StepAccess, b: StepAccess): boolean {
   );
 }
 
-/** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie that no line orders. */
+/** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie. */
 function tiedDeadlines(steps: readonly StepInfo[], i: number, j: number): boolean {
   const [a, b] = [steps[i]?.tie, steps[j]?.tie];
   return a !== undefined && b !== undefined && a.equals(b);

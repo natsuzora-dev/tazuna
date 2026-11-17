@@ -43,7 +43,7 @@ theorem keeps_foldlM {α : Type} (f : State → α → Id State) (h : ∀ t x, K
 macro "keys_leaf" : tactic => `(tactic| (refine ⟨?_, ?_⟩ <;> simp [State.halt, State.violate,
   State.write, State.newStep, State.newMessage, State.await, State.setMachine, State.setShown, State.removeFromStack,
   State.startQueued, State.takeQueued, State.answered, State.createKeys, State.endSubscription, State.leaveState,
-  State.takeDeadline, State.answer, State.newCommandStep, Processing.report, State.checkDeadlineOrder, State.stop,
+  State.takeDeadline, State.answer, State.newCommandStep, Processing.report, State.stop,
   apply_ite State.keyOwner, apply_ite State.createdEntities]
   <;> (repeat' split) <;> (try simp)) <;> done)
 
@@ -51,7 +51,7 @@ macro "keys_leaf" : tactic => `(tactic| (refine ⟨?_, ?_⟩ <;> simp [State.hal
 macro "keys_close " h:term : tactic => `(tactic| (obtain ⟨hk1, hk2⟩ := $h; (try simp at hk1 hk2); refine ⟨?_, ?_⟩ <;> simp [State.halt,
   State.violate, State.write, State.newStep, State.newMessage, State.await, State.setMachine, State.setShown,
   State.removeFromStack, State.startQueued, State.takeQueued, State.answered, State.createKeys,
-  State.leaveState, State.takeDeadline, State.answer, State.newCommandStep, Processing.report, State.checkDeadlineOrder,
+  State.leaveState, State.takeDeadline, State.answer, State.newCommandStep, Processing.report,
   State.stop, apply_ite State.keyOwner, apply_ite State.createdEntities, hk1] <;> (try split) <;> (try simp [hk1]) <;> (try exact hk2) <;> exact hk2.trans (List.prefix_append _ _)))
 
 theorem keeps_reportAll (s : State) (fs : List Fault) : KeepsKeys s (s.reportAll fs) :=
@@ -567,8 +567,8 @@ theorem keeps_afterMessage (s : State) : KeepsKeys s (afterMessage st fs s) := b
     · exact KeepsKeys.trans (h1.trans (keeps_reportAll _ _)) (keeps_rearm _)
     · exact KeepsKeys.trans (KeepsKeys.trans (h1.trans (keeps_reportAll _ _)) (keeps_rearm _)) (keeps_publish _)
 
-theorem keeps_fireDue (clock : Bool) (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
-    KeepsKeys s (fireDue st fs clock to fuel tie s) := by
+theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
+    KeepsKeys s (fireDue st fs to fuel tie s) := by
   induction fuel generalizing s tie with
   | zero => simp only [fireDue]; split <;> keys_leaf
   | succ fuel ih =>
@@ -581,7 +581,7 @@ theorem keeps_fireDue (clock : Bool) (to : Time) (fuel : Nat) (tie : Option Time
         split
         · keys_leaf
         · rename_i hc
-          obtain ⟨_, _, rfl⟩ := Tazuna.Thm.Service.Clock.chooseDeadline_orders hc
+          obtain ⟨_, rfl⟩ := Tazuna.Thm.Service.Clock.chooseDeadline_orders hc
           simp only [id_bind, note_id]
           refine KeepsKeys.trans ?_ (ih _ _)
           refine KeepsKeys.trans ?_ (keeps_afterMessage _)
@@ -591,7 +591,7 @@ theorem keeps_fireDue (clock : Bool) (to : Time) (fuel : Nat) (tie : Option Time
 
 theorem keeps_message (s : State) (q : Queue) : KeepsKeys s (message st fs s q) := by
   simp only [message, finish, id_bind]
-  exact (keeps_drain _ _ _).trans ((keeps_afterMessage _).trans (keeps_fireDue _ _ _ _ _))
+  exact (keeps_drain _ _ _).trans ((keeps_afterMessage _).trans (keeps_fireDue _ _ _ _))
 
 /-- Closes an equation between the keys of `t` and of `s`, where `t` is `s` with fields other than the keys changed. -/
 macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, State.violate,

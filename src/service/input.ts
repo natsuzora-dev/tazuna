@@ -360,13 +360,6 @@ export function begin(r: Processing): void {
   message(r);
 }
 
-/** Lean's State.checkDeadlineOrder. */
-export function checkDeadlineOrder(r: Processing): void {
-  const s = r.state;
-  if (s.deadlineOrder.length > 0)
-    report(r.state, { kind: "InvalidInput.unusedDeadlineOrder", definition: null, data: { entries: s.deadlineOrder } });
-}
-
 export function operate(r: Processing, screen: string, key: string, payload: unknown): void {
   const { decoded, found } = writeOperation(r, screen, key, payload);
   const data = { screen: ref(r.st, screen), control: key };

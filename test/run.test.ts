@@ -47,8 +47,6 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
       "Only test's step-order search writes a step order, naming only the steps that a walk took",
     "InvalidInput.unusedStepOrder":
       "Only test's step-order search writes a step order, naming only the steps that a walk took",
-    "InvalidInput.unorderedDeadlines":
-      "Only a tie during a clock line needs a written order (test searches the orders of every other tie); test/sim/Run/network/unorderedDeadlines exemplifies it",
   },
   Fault: {
     "Fault.exceededMessageWork":

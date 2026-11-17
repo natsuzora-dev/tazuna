@@ -65,7 +65,7 @@ Precedent: Given-When-Then (Behavior-Driven Development).
 A message between two participants arrives only by a line that the scenario writes: `w.net.deliver(message)`, `redeliver`, `lose`, or `fail`, or `w.net.inFlight(message)` for a message that is still undelivered at the end.
 An external peer answers only a request that reached it, and a request that reached it needs its answer or `leaveUnanswered`.
 A message never overtakes an earlier one on its channel; to deliver the later one, lose or fail the earlier one first.
-Of deadlines of one service due at the same time, the clock line names the order, as in `w.clock.at(time, { order: [deadline(chart, state, name)] })`, where `name` is one that the chart's tree lists in the state's `after`.
+The clock line `w.clock.at(time)` names no order for deadlines of one service due at the same time: `test` fires them in every order and reports `ChoiceDependent` when the result differs, which the definition fixes, for example by guarding one transition on the other chart's state.
 
 Precedent: model checkers such as Stateright, which model the network as a set of messages that each step delivers.
 

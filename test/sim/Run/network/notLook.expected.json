@@ -184,7 +184,12 @@
         }
       ],
       "violations": [],
-      "candidates": []
+      "candidates": [
+        [
+          30,
+          31
+        ]
+      ]
     },
     {
       "service": "notifier",

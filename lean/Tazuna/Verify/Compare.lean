@@ -13,7 +13,8 @@ lines one by one under one deterministic simulation, so nothing is searched.
 - `in` lines align by position and compare exactly under the binding. After the first `in` line that differs or is
   missing, nothing later is compared.
 - The `out` lines after an `in` line, or before the first, are that input's group. A group's lines pair by content and
-  time in any order that keeps the snapshot's `after` order.
+  time in any order that keeps the snapshot's `after` order. The order of deadlines due at one time is no exception:
+  test reports ChoiceDependent when another order of a tie changes the result, so a spec without that report fixes none.
 - The binding (Verify/Binding) maps snapshot strings to implementation strings over the whole comparison, one-to-one
   within each domain (valueDomains): request ids, the keys of each entity, and the other strings. A value that a
   snapshot line introduces (the id of an `out` request, a `created` key) is fresh until bound and binds to the

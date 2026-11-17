@@ -4,14 +4,6 @@ namespace Tazuna.Scenario
 
 open Tazuna.Data
 
-/-- The deadline `deadline` of the running service `service`. -/
-structure OrderEntry where
-  service : String
-  deadline : DeadlineId
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire OrderEntry
-
 /--
 A line of a scenario's When, in written order. The sender is named by the line: the client and the user are outside
 every service, a peer is named by its service, and the receiver is the owner of the definition written or the sender of
@@ -65,10 +57,10 @@ inductive Line where
   /-- The message `message` is undelivered at the end. -/
   | inFlight (message : Fact)
   /--
-  The clock advances to `time`, and every running service fires its deadlines due by then; in a tie of a service, the
-  next entry of `order` for that service names the deadline that fires.
+  The clock advances to `time`, and every running service fires its deadlines due by then; a tie of a service is
+  internal to it (chooseDeadline).
   -/
-  | «at» (time : DateTime) (order : List OrderEntry)
+  | «at» (time : DateTime)
   /-- The host restarts the own service, which reopens its screens as new instances. -/
   | restart
 deriving Repr, Inhabited

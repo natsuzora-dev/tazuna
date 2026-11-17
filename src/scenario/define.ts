@@ -3,19 +3,7 @@ import type { MarkOf } from "../data/bag.ts";
 import type { Rejection } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { Contract, RecordsOf, ServiceOf } from "../dsl/contract.ts";
-import type {
-  AnyCommand,
-  AnyEvent,
-  AnyQuery,
-  AnyScreen,
-  Chart,
-  ChartSpec,
-  Command,
-  Control,
-  Deadlines,
-  OwnerOf,
-  Query,
-} from "../dsl/definition.ts";
+import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen, Command, Control, OwnerOf, Query } from "../dsl/definition.ts";
 import type { EncodedPayload, PayloadShape } from "../dsl/event.ts";
 
 type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>;
@@ -469,10 +457,10 @@ export interface When<
   };
   readonly clock: {
     /**
-     * The clock advances to `time`, and every running service fires its deadlines due by then; in a tie of deadlines of
-     * one service, the next of `order` that names one of them fires.
+     * The clock advances to `time`, and every running service fires its deadlines due by then; deadlines of one service
+     * due at one time fire in every order that test searches.
      */
-    at(time: Instant, options?: { readonly order?: readonly DeadlineOf[] }): ProcessingLine<S, X>;
+    at(time: Instant): ProcessingLine<S, X>;
   };
   readonly host: {
     /** The host restarts the own service, which reopens its screens as new instances. */
@@ -593,27 +581,6 @@ export const created = (): Created => createdValue as unknown as Created;
  * as a client that sends malformed JSON does.
  */
 export const raw = (value: unknown): Raw => Object.freeze({ [rawMark]: value }) as unknown as Raw;
-
-/** The deadline `name` of state `state` of the chart instance `chart` names, which a clock line's order names. */
-export interface DeadlineOf {
-  readonly chart: ChartSpec;
-  readonly state: string;
-  readonly name: string;
-}
-
-/**
- * The deadline `name` of state `state` of the chart `chart`'s one instance, for the order of a clock line: a state and
- * one of its deadlines that the chart's tree lists.
- */
-export const deadline = <Dl extends Deadlines, S extends keyof Dl & string>(
-  chart: Chart<Dl>,
-  state: S,
-  name: Dl[S],
-): DeadlineOf => ({
-  chart,
-  state,
-  name,
-});
 
 /** A scenario of the own service, as the scenario file writes it. */
 export interface ScenarioDefinition {

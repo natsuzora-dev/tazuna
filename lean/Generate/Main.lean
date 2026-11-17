@@ -44,7 +44,7 @@ def tsTypes : List TsType :=
    ⟨``Tazuna.Verify.Subject, "Subject", some "./mismatch.generated.ts"⟩,
    ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Rejection, "Rejection", some "./trace.generated.ts"⟩,
-   ⟨``Tazuna.Data.DeadlineId, "DeadlineId", some "./trace.generated.ts"⟩, ⟨``Tazuna.Data.Time, "string", none⟩,
+   ⟨``Tazuna.Data.Time, "string", none⟩,
    ⟨``Tazuna.Syntax.TransitionRef, "TransitionRef", some "./transitionRef.ts"⟩,
    ⟨``Tazuna.Semantics.Copy, "Copy", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Semantics.Who, "Who", some "./choiceDependent.generated.ts"⟩,
@@ -333,9 +333,9 @@ def files : List (String × String) :=
    ("data/report.generated.ts", typescript% Tazuna.Sim.Report ++
       halting "Report" (((samples% Tazuna.Sim.Report).filter (·.halts)).map (·.kind))),
    ("data/scenario.generated.ts",
-    zod% Tazuna.Scenario Tazuna.Syntax.Ref Tazuna.Data.DeadlineId Tazuna.Scenario.Origin
+    zod% Tazuna.Scenario Tazuna.Syntax.Ref Tazuna.Scenario.Origin
       Tazuna.Scenario.Fact Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
-      Tazuna.Scenario.OrderEntry Tazuna.Scenario.Line Tazuna.Scenario.SentRequest Tazuna.Scenario.EmittedEvent
+      Tazuna.Scenario.Line Tazuna.Scenario.SentRequest Tazuna.Scenario.EmittedEvent
       Tazuna.Scenario.Expectation Tazuna.Scenario.GivenRecord Tazuna.Scenario.Peer Tazuna.Scenario.PeerEntry
       Tazuna.Scenario.Given),
    ("data/fault.generated.ts", typescript% Tazuna.Semantics.Fault ++
@@ -345,8 +345,7 @@ def files : List (String × String) :=
     typescript% Tazuna.Observe.ChoiceDependent Tazuna.Semantics.Copy Tazuna.Semantics.Who Tazuna.Semantics.StepName
       Tazuna.Observe.Difference),
    ("data/trace.generated.ts",
-    zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer
-      Tazuna.Data.DeadlineId),
+    zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer),
    ("syntax/structure.generated.ts",
     zodType% Tazuna.Syntax.Structure Tazuna.Data.RejectionKind Tazuna.Syntax.Ref Tazuna.Syntax.Activity
       Tazuna.Syntax.Transition Tazuna.Syntax.State Tazuna.Syntax.ChartFields Tazuna.Syntax.Reference

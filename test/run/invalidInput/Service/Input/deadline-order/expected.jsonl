@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.unusedDeadlineOrder","definition":null,"data":{"entries":[{"instance":"reminder","state":"waiting","name":"hour"}]},"location":{"file":"todo/scenarios.ts","line":7},"scenario":{"service":"todo","name":"orderWithoutTie"}}
