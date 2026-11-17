@@ -1345,6 +1345,9 @@ machine({ description: "", initial: "a", states: { a: { after: ["soon"] }, b: {}
 machine({ description: "", initial: "a", states: { a: { after: ["soon"] }, b: {} } }).chart({
   states: { b: { always: [] } },
 });
+const deadlineNames: string[] = ["soon"];
+// @ts-expect-error the tree lists the deadline names in place, so that deadline() can check them
+machine({ description: "", initial: "a", states: { a: { after: deadlineNames }, b: {} } });
 
 // A clock line's order names a deadline by its chart, its state, and its name in the tree.
 deadline(timer, "a", "soon");

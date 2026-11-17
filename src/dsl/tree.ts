@@ -18,8 +18,9 @@ type TreeNode =
        */
       readonly held?: Shape;
       /**
-       * The names of the state's deadlines. The body writes each deadline under its name in `after`, and a clock line's
-       * order names it by the chart, the state, and this name.
+       * The names of the state's deadlines, listed in place (a string[] is `unlistedDeadlineNames`). The body writes
+       * each deadline under its name in `after`, and a clock line's order names it by the chart, the state, and this
+       * name.
        */
       readonly after?: readonly DeadlineName[];
       readonly initial?: string;
@@ -182,7 +183,10 @@ export type TreeErrors<T> = ErrorIf<"duplicateStateNames", Duplicates<T>> &
   ErrorIf<"emptyKeyword", EmptyHeld<T>> &
   ErrorIf<"nestedMap", `${InMap<Flat<T>, "map"> & string}: a copy would read two keys as key`> &
   ErrorIf<"finalInMap", `${InMap<Flat<T>, "final"> & string}: a copy ends only when its key leaves items`> &
-  ErrorIf<"reservedStateNameCharacter", `${Reserved<T>}: a copy is named {instance}@{map state}[{key}]`>;
+  ErrorIf<"reservedStateNameCharacter", `${Reserved<T>}: a copy is named {instance}@{map state}[{key}]`> &
+  ErrorIf<"unlistedDeadlineNames", `${Unlisted<Flat<T>> & string}: the tree lists the deadline names, not a string[]`>;
+/** The states whose `after` is a string[], which names no deadline that a clock line's order could name. */
+type Unlisted<F> = { [K in keyof F]: string extends DeadlinesIn<F, K> ? K : never }[keyof F];
 
 export type HeldIn<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["held"] : never;
 export type KindOf<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["kind"] : never;
