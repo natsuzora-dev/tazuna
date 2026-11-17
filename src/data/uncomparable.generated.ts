@@ -97,9 +97,10 @@ export type Uncomparable =
       };
     }
   /**
-   * The snapshot line, which holds values that are not bound yet (introduced by its group or an earlier one), equals two
-   * or more lines of the trace's group, `candidates`, which bind those values differently, and the binding cannot keep
-   * the choice open (Verify/Compare). `line` is the first candidate.
+   * The `in` line names a value that the bindings that agree with the lines so far give different implementation values,
+   * `candidates` are the trace's `out` lines with those values as ids, and the snapshot's `in` lines do not use alike the
+   * values that may stand for them, so the route that the harness chose decides what the implementation got
+   * (Verify/Compare).
    */
   | {
       readonly kind: "Uncomparable.ambiguous";
@@ -109,6 +110,20 @@ export type Uncomparable =
         readonly subject: Subject;
         readonly snapshotLine: number;
         readonly candidates: readonly number[];
+      };
+    }
+  /**
+   * Comparing the snapshot line would keep more than `limit` bindings, or ways of pairing its group, that agree with the
+   * lines so far.
+   */
+  | {
+      readonly kind: "Uncomparable.bindingLimit";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly subject: Subject;
+        readonly snapshotLine: number;
+        readonly limit: number;
       };
     }
   | {
@@ -166,6 +181,7 @@ export const uncomparableKinds = [
   "Uncomparable.missingInput",
   "Uncomparable.differentInput",
   "Uncomparable.ambiguous",
+  "Uncomparable.bindingLimit",
   "Uncomparable.unknownService",
   "Uncomparable.unknownScenario",
   "Uncomparable.missingTrace",

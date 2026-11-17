@@ -57,11 +57,12 @@ function substitutedLine(bindings: Bindings, line: TraceLine): TraceLine {
  * boundary. The implementation starts at the scenario's start from the Given records, then gets the snapshot's `in`
  * lines one by one: before each, the harness waits until the implementation has settled (Adapter.settled), and moves
  * the clock to the line's time. A command, query or subscription does not hold the harness: its answer is an output
- * that the trace gets when the implementation gives it, maybe after later inputs. A value of the snapshot that the implementation stands for in its own way (a key it created, the id of a
- * request it sent) is substituted to the implementation's value by the bindings that verify's comparison makes of the
- * trace so far, so an answer reaches the request that the implementation sent; where the binding keeps several values
- * open, it chooses by position, and the comparison reports the line as ambiguous when another choice could give the
- * implementation different inputs. Once that comparison finds the trace uncomparable, the harness gives no more lines.
+ * that the trace gets when the implementation gives it, maybe after later inputs. A value of the snapshot that the
+ * implementation stands for in its own way (a key it created, the id of a request it sent) is substituted to the
+ * implementation's value by the first of the bindings that verify's comparison keeps for the trace so far, so an answer
+ * reaches the request that the implementation sent; where the bindings disagree on the value, the comparison reports
+ * the line as ambiguous when another binding could give the implementation different inputs. Once that comparison
+ * finds the trace uncomparable, the harness gives no more lines.
  */
 export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
   const runner = run.runner ?? run.service;
@@ -196,7 +197,7 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
     const compared = comparedBefore(k);
     // The comparison compares nothing after an Uncomparable finding, so the later lines would go by no binding.
     if (compared.found.some(({ kind }) => kind.startsWith("Uncomparable."))) break;
-    await give(substitutedLine(compared.bindings, line));
+    await give(substitutedLine(compared.first, line));
   }
   await adapter.settled();
   for (const controller of subscriptions.values()) controller.abort();

@@ -7,33 +7,37 @@ import Tazuna.Verify.Uncomparable
 
 /-!
 This module compares an implementation trace with a snapshot. The harness gave the implementation the snapshot's `in`
-lines one by one under one deterministic simulation, so nothing is searched.
+lines one by one under one deterministic simulation, so the lines align without a search; only the bindings of the
+values that the implementation chose in its own way are open.
 
 - Values are read by their definition's schema (the `ask` parameter) and compare as CValue.
-- `in` lines align by position and compare exactly under the binding. After the first `in` line that differs or is
-  missing, nothing later is compared.
-- The `out` lines after an `in` line, or before the first, are that input's group. A group's lines pair by content and
-  time in any order that keeps the snapshot's `after` order. The order of deadlines due at one time is no exception:
-  test reports ChoiceDependent when another order of a tie changes the result, so a spec without that report fixes none.
-- The binding (Verify/Binding) maps snapshot strings to implementation strings over the whole comparison, one-to-one
-  within each domain (valueDomains): request ids, the keys of each entity, and the other strings. A value that a
-  snapshot line introduces (the id of an `out` request, a `created` key) is fresh until bound and binds to the
-  implementation string at the same place of the first compared line that holds it, maybe in a later group; a request
-  id or key that is not fresh binds to itself; any other string compares equal to itself without entering the binding.
-  A string that already stands for another value of its domain does not compare equal, so an implementation that
-  reuses an existing request id or key for a new one differs, while using an input's string (a title, an idempotency
-  key) as a new key does not.
-- An `in` line that names a value whose slot is still open (a larger slot) gets the implementation value that the
-  harness chose by position. Verify reports the line as ambiguous unless the snapshot's `in` lines name every value of
-  that slot alike (sameUses), since then every choice gives the implementation the same inputs.
-- Pairing a group: again and again, the first unpaired snapshot line whose candidates (the unpaired implementation
-  lines equal to it under the binding) are one line, or several lines that bind it the same way, pairs with its first
-  candidate. When no line is decided so, snapshot lines that each have the same candidates, as many as they are, and
-  that each bind one value differently per candidate pair in order, and the binding keeps the choice open in a slot
-  until a later line binds one of its values. A snapshot line left with two or more candidates is ambiguous: verify
-  reports only the ambiguous lines of the group and compares nothing later. A bag pairs its elements by the same rule.
-- Lines left unpaired pair by place (type and name, or the answered request) to report how they differ; the others are
-  missing or unexpected. Paired lines compare their time and the snapshot's `after` order.
+- A binding (Verify/Binding) maps snapshot strings to implementation strings, one to one within each domain
+  (valueDomains): request ids, the keys of each entity, and the other strings. A value that a snapshot line introduces
+  (the id of an `out` request, a `created` key) is fresh until bound and binds to the implementation string at the same
+  place of a compared line that holds it, maybe in a later group; a request id or key that is not fresh binds to itself;
+  any other string compares equal to itself without entering the binding. A string that already stands for another
+  value of its domain does not compare equal, so an implementation that reuses an existing request id or key for a new
+  one differs, while using an input's string (a title, an idempotency key) as a new key does not.
+- The comparison carries the set of every binding that agrees with the lines compared so far (forward state-set
+  tracking, as ioco testers do). Each compared line keeps the bindings under which it compares equal, extended by the
+  values that it binds; a bag or a group of lines that pairs in several ways keeps each way's binding. The set holds
+  at most `bindingLimit` bindings, and a line that would make it hold more is reported as `bindingLimit`. A line that
+  would leave no binding is reported, and the set stays as it was before it. Bindings that the lines cannot tell apart
+  stay in the set to the end, and each of them is fine.
+- `in` lines align by position and compare under each binding of the set. After the first `in` line that differs or is
+  missing, nothing later is compared. The harness gives an `in` line by one binding of the set (the first); when the
+  line names a value that the bindings give different implementation values (a route that the set does not decide),
+  verify reports the line as ambiguous unless the snapshot's `in` lines use alike every value that may stand for those
+  (sameUses), since then every route gives the implementation the same inputs.
+- The `out` lines after an `in` line, or before the first, are that input's group. A group's snapshot lines, in file
+  order, each pair with any unpaired trace line of the group that compares equal under a binding of the set, at the same
+  time and after the lines that its `after` names, keeping every way. The order of deadlines due at one time is no
+  exception: test reports ChoiceDependent when another order of a tie changes the result, so a spec without that report
+  fixes none.
+- A snapshot line that pairs in no way pairs by place (type and name, or the answered request under the first way) to
+  report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
+  unexpected. The set keeps the ways that leave the same trace lines unpaired. Paired lines compare their time and the
+  snapshot's `after` order.
 - Verify reports the trace's first malformed line, and compares neither the group of that line nor anything later.
 -/
 
@@ -204,151 +208,40 @@ inductive Finding where
   | mismatch (m : Mismatch)
   | uncomparable (u : Uncomparable)
 
-/-- The violations of a comparison, and the binding that it ends with. -/
+/-- The violations of a comparison, and the bindings that agree with every compared line. -/
 structure Compared where
   findings : List Finding
-  binding : Binding
+  bindings : List Binding
 
-/-- The pairs of strings of the binding, choosing in each larger slot by position. -/
+/-- The pairs of strings of the binding. -/
 def Binding.strings (b : Binding) : Bindings := b.pairs.map fun (s, t) => (s.2, t.2)
 
-/-- The pairs of the binding that the comparison ends with, choosing in each larger slot by position. -/
-def Compared.bindings (c : Compared) : Bindings := c.binding.strings
+/-- The pairs of strings of the first binding of the comparison, by which the harness gives its next `in` line. -/
+def Compared.first (c : Compared) : Bindings := (c.bindings.head?.map Binding.strings).getD []
 
-/-- How a snapshot value or line compares with an implementation one under binding `b`. -/
-inductive Match (b : Binding) where
-  | equal (b' : Binding) (h : b.Extends b')
-  | differ
-  | ambiguous
+/-- A binding that keeps every pair of `root`. -/
+abbrev From (root : Binding) := { b : Binding // root.Extends b }
 
-instance (b : Binding) : Inhabited (Match b) := ⟨.differ⟩
-
-def Match.ofOption {b : Binding} : Option { b' : Binding // b.Extends b' } → Match b
-  | some ⟨b', h⟩ => .equal b' h
-  | none => .differ
-
-def Match.andThen {b : Binding} (m : Match b) (f : (b' : Binding) → Match b') : Match b :=
-  match m with
-  | .equal b' h =>
-    match f b' with
-    | .equal c hc => .equal c (h.trans hc)
-    | .differ => .differ
-    | .ambiguous => .ambiguous
-  | .differ => .differ
-  | .ambiguous => .ambiguous
-
-/-- What pairing two lists leaves: the pairs by index, the binding, and the left items left over. -/
-structure Paired (start : Binding) where
-  pairs : List (Nat × Nat)
-  bindings : Binding
-  ext : start.Extends bindings
-  /-- Left items with two or more candidates, or with a candidate that is ambiguous itself. -/
-  ambiguous : List Nat
-  /-- Left items with no candidate. -/
-  unmatched : List Nat
-  /-- Right items that pair with no left item. -/
-  extra : List Nat
-
-/-- The slots that hold one value on each side, as pairs. -/
-def singletons (slots : List Slot) : List (Bound × Bound) :=
-  slots.filterMap fun
-    | ([s], [t]) => some (s, t)
-    | _ => none
-
-/-- The slots with `s` standing for `t`, as Binding.bindString makes them for a string that may bind. -/
-def bindSlots (slots : List Slot) (s t : Bound) : Option (List Slot) :=
-  if s ∈ domainOf slots then resolveIn s t slots
-  else if t ∈ imageOf slots then none
-  else some (slots ++ [([s], [t])])
+def From.same {root : Binding} (a b : From root) : Bool := a.val.same b.val
 
 /--
-The pair that `b'` binds beyond `b`, when `b'` is `b` with that pair bound. Binding one value of a slot of two also
-binds the other, so the first new pair that gives `b'` is the one.
+The bindings under which a snapshot value or line compares equal with an implementation one, each extending `b`:
+none when they differ, and `none` (no list) when they are more than `bindingLimit`.
 -/
-def newPair (b b' : Binding) : Option (Bound × Bound) :=
-  ((singletons b'.slots).filter fun p => !(singletons b.slots).contains p).find? fun (s, t) =>
-    bindSlots b.slots s t == some b'.slots
+abbrev Matches (b : Binding) := Option (List (From b))
 
-/--
-The slots with the snapshot values `σs` standing for the implementation values `τs` in some order: a new slot when no
-value is in a slot yet, or a split of the one slot that holds them all.
--/
-def refineSlots (slots : List Slot) (σs τs : List Bound) : Option (List Slot) :=
-  if !(decide σs.Nodup && decide τs.Nodup) then none
-  else if σs.all (· ∉ domainOf slots) && τs.all (· ∉ imageOf slots) then some (slots ++ [(σs, τs)])
-  else
-    match slots.find? fun k => σs.all (· ∈ k.1) && τs.all (· ∈ k.2) with
-    | none => none
-    | some k =>
-      let rest : Slot := (k.1.filter (· ∉ σs), k.2.filter (· ∉ τs))
-      some (slots.flatMap fun k' => if k' == k then (σs, τs) :: (if rest.1.isEmpty then [] else [rest]) else [k'])
+def Matches.one {b : Binding} : Option (From b) → Matches b
+  | some c => some [c]
+  | none => some []
 
-def allSame {α : Type} [BEq α] : List α → Option α
-  | x :: xs => if xs.all (· == x) then some x else none
-  | [] => none
+def lift {root b : Binding} (h : root.Extends b) (cs : List (From b)) : List (From root) :=
+  cs.map fun c => ⟨c.val, h.trans c.property⟩
 
-def sameSlots (a b : Binding) : Bool :=
-  a.slots == b.slots || (a.slots.length == b.slots.length && a.slots.all b.slots.contains)
+def Matches.andThen {b : Binding} (m : Matches b) (f : (c : Binding) → Matches c) : Matches b := do
+  expand From.same (← m) fun c => (f c.val).map (lift c.property)
 
-/--
-Pairs the items of `left` with those of `right` (each with its index) by the rule of the module documentation: `test`
-compares two items under a binding, and `allowed pairs i j` tells whether left item `i` may pair with right item `j`
-after `pairs`.
--/
-def pairUp {α β : Type} (test : (b : Binding) → α → β → Match b) (allowed : List (Nat × Nat) → Nat → Nat → Bool)
-    (start : Binding) (left : List (Nat × α)) (right : List (Nat × β)) : Paired start :=
-  go left.length start (.refl start) left right []
-where
-  candidates (b : Binding) (pairs : List (Nat × Nat)) (rs : List (Nat × β)) (i : Nat) (s : α) :
-      List (Nat × { b' : Binding // b.Extends b' }) × Bool :=
-    rs.foldl (fun (cs, amb) (j, t) =>
-      if !allowed pairs i j then (cs, amb)
-      else
-        match test b s t with
-        | .equal b' h => (cs ++ [(j, ⟨b', h⟩)], amb)
-        | .differ => (cs, amb)
-        | .ambiguous => (cs, true)) ([], false)
-  /-- The first left item whose candidates all bind it the same way, with its first candidate. -/
-  determined (b : Binding) (pairs : List (Nat × Nat)) (ls : List (Nat × α)) (rs : List (Nat × β)) :
-      Option (List (Nat × Nat) × { b' : Binding // b.Extends b' }) :=
-    ls.findSome? fun (i, s) =>
-      match candidates b pairs rs i s with
-      | ((j, c) :: rest, false) => if rest.all fun (_, d) => sameSlots d.val c.val then some ([(i, j)], c) else none
-      | _ => none
-  /--
-  Left items that each have the same candidates, as many as they are, where pairing left item `k` with candidate `j`
-  binds one more pair, `σ k ↦ τ j`. Every way of pairing them compares equal, so they pair in order and the binding
-  gets the slot `(σs, τs)` instead of a choice.
-  -/
-  block (b : Binding) (pairs : List (Nat × Nat)) (ls : List (Nat × α)) (rs : List (Nat × β)) :
-      Option (List (Nat × Nat) × { b' : Binding // b.Extends b' }) :=
-    ls.findSome? fun (i, s) => do
-      let (cs, amb) := candidates b pairs rs i s
-      if amb || cs.length < 2 then none else
-      let js := cs.map (·.1)
-      let group := ls.filterMap fun (k, x) =>
-        let (cx, ax) := candidates b pairs rs k x
-        if !ax && cx.map (·.1) == js then some (k, cx) else none
-      if group.length != js.length then none else
-      let rows ← group.mapM fun (_, cx) => cx.mapM fun (_, c) => newPair b c.val
-      let σs ← rows.mapM fun row => allSame (row.map (·.1))
-      let τs ← (List.range js.length).mapM fun n => allSame (rows.map fun row => (row[n]?.map (·.2)).getD ("", ""))
-      let slots ← refineSlots b.slots σs τs
-      let b' ← b.refine slots
-      pure ((group.map (·.1)).zip js, b')
-  go : Nat → (b : Binding) → start.Extends b → List (Nat × α) → List (Nat × β) → List (Nat × Nat) → Paired start
-    | fuel + 1, b, h, ls, rs, pairs =>
-      match (determined b pairs ls rs).orElse fun _ => block b pairs ls rs with
-      | some (new, ⟨b', h'⟩) =>
-        go fuel b' (h.trans h') (ls.filter fun (i, _) => !new.any (·.1 == i))
-          (rs.filter fun (j, _) => !new.any (·.2 == j)) (pairs ++ new)
-      | none => go 0 b h ls rs pairs
-    | 0, b, h, ls, rs, pairs =>
-      let left := ls.map fun (i, s) => (i, candidates b pairs rs i s)
-      { pairs, bindings := b, ext := h
-        ambiguous := left.filterMap fun (i, cs, amb) => if amb || cs.length ≥ 2 then some i else none
-        unmatched := left.filterMap fun (i, cs, amb) => if amb || cs.length ≥ 2 then none else some i
-        extra := rs.map (·.1) }
+/-- Whether two lists hold the same items, as sets. -/
+def sameSet {α : Type} [BEq α] (a b : List α) : Bool := a.length == b.length && a.all b.contains
 
 /-- What the comparison knows of the snapshot's values: the domain of each (valueDomains), and the fresh ones so far. -/
 structure Values where
@@ -356,46 +249,50 @@ structure Values where
   fresh : List String
 
 /-- The binding with snapshot string `s` standing for implementation string `t`, both in the domain of `s`. -/
-def Values.bind (v : Values) (b : Binding) (s t : String) : Match b :=
-  .ofOption (b.bindString (v.fresh.contains s) (v.domain s, s) (v.domain s, t))
+def Values.bind (v : Values) (b : Binding) (s t : String) : Matches b :=
+  .one (b.bindString (v.fresh.contains s) (v.domain s, s) (v.domain s, t))
 
 mutual
 
-/-- How snapshot value `s` compares with implementation value `t` under `b`, binding the strings of `s`. -/
-partial def matchValue (v : Values) (b : Binding) : CValue → CValue → Match b
+/-- The bindings under which snapshot value `s` compares equal with implementation value `t`, extending `b`. -/
+partial def matchValue (v : Values) (b : Binding) : CValue → CValue → Matches b
   | .leaf (.str s), .leaf (.str t) | .ref _ s, .ref _ t => v.bind b s t
-  | .leaf x, .leaf y => if x == y then .equal b (.refl b) else .differ
+  | .leaf x, .leaf y => some (if x == y then [⟨b, .refl b⟩] else [])
   | .arr xs, .arr ys | .runs xs, .runs ys => matchList v b xs ys
-  | .obj fs, .obj gs => if sameKeys fs gs then matchFields v b fs gs else .differ
-  | .bag xs, .bag ys => if xs.length == ys.length then matchBag v b xs ys else .differ
-  | _, _ => .differ
+  | .obj fs, .obj gs => if sameKeys fs gs then matchFields v b fs gs else some []
+  | .bag xs, .bag ys => if xs.length == ys.length then matchBag v b xs ys else some []
+  | _, _ => some []
 
-partial def matchList (v : Values) (b : Binding) : List CValue → List CValue → Match b
-  | [], [] => .equal b (.refl b)
-  | x :: xs, y :: ys => (matchValue v b x y).andThen fun b' => matchList v b' xs ys
-  | _, _ => .differ
+partial def matchList (v : Values) (b : Binding) : List CValue → List CValue → Matches b
+  | [], [] => some [⟨b, .refl b⟩]
+  | x :: xs, y :: ys => (matchValue v b x y).andThen fun c => matchList v c xs ys
+  | _, _ => some []
 
 partial def matchFields (v : Values) (b : Binding) :
-    List (String × CValue) → List (String × CValue) → Match b
-  | [], _ => .equal b (.refl b)
+    List (String × CValue) → List (String × CValue) → Matches b
+  | [], _ => some [⟨b, .refl b⟩]
   | (k, x) :: fs, gs =>
     match gs.lookup k with
-    | some y => (matchValue v b x y).andThen fun b' => matchFields v b' fs gs
-    | none => .differ
+    | some y => (matchValue v b x y).andThen fun c => matchFields v c fs gs
+    | none => some []
 
-partial def matchBag (v : Values) (b : Binding) (xs ys : List CValue) : Match b :=
-  let p := pairUp (matchValue v) (fun _ _ _ => true) b
-    (xs.zipIdx.map fun (x, i) => (i, x)) (ys.zipIdx.map fun (y, i) => (i, y))
-  if !p.ambiguous.isEmpty then .ambiguous
-  else if p.unmatched.isEmpty then .equal p.bindings p.ext
-  else .differ
+/-- Each element of `xs`, in order, pairs with each unpaired element of `ys` that it compares equal with. -/
+partial def matchBag (v : Values) (b : Binding) (xs ys : List CValue) : Matches b := do
+  let same (p q : From b × List Nat) : Bool := p.1.same q.1 && sameSet p.2 q.2
+  let step (states : List (From b × List Nat)) (x : CValue) : Option (List (From b × List Nat)) :=
+    expand same states fun (c, used) => do
+      let next ← ((ys.zipIdx.filter fun (_, j) => !used.contains j).mapM fun (y, j) =>
+        (matchValue v c.val x y).map fun ds => (lift c.property ds).map ((·, used ++ [j])))
+      pure next.flatten
+  let paired ← xs.foldlM step [(⟨b, .refl b⟩, [])]
+  limited From.same (paired.map (·.1))
 
 end
 
-def matchOption (v : Values) (b : Binding) : Option CValue → Option CValue → Match b
-  | none, none => .equal b (.refl b)
+def matchOption (v : Values) (b : Binding) : Option CValue → Option CValue → Matches b
+  | none, none => some [⟨b, .refl b⟩]
   | some s, some t => matchValue v b s t
-  | _, _ => .differ
+  | _, _ => some []
 
 def Line.isOutRequest (l : Line) : Bool :=
   match l.body with
@@ -412,28 +309,29 @@ def Line.fields (l : Line) : Value :=
   | v => v
 
 /--
-How snapshot line `s` compares with implementation line `t`, apart from their time: their type, direction and name are
-equal; the id of an `out` request binds, and an `in` line's id compares, while other `out` lines' ids are not compared;
-the answered request, `resultOf` and the content compare under the binding.
+The bindings under which snapshot line `s` compares equal with implementation line `t`, apart from their time: their
+type, direction and name are equal; the id of an `out` request binds, and an `in` line's id compares, while other `out`
+lines' ids are not compared; the answered request, `resultOf` and the content compare under the binding.
 -/
-def matchContent (v : Values) (b : Binding) (s t : Line) : Match b :=
-  if s.fields != t.fields then .differ
+def matchContent (v : Values) (b : Binding) (s t : Line) : Matches b :=
+  if s.fields != t.fields then some []
   else
-    let ids : Match b :=
+    let ids : Matches b :=
       if s.body.dir == .in || s.isOutRequest then v.bind b s.body.id t.body.id
-      else .equal b (.refl b)
-    let opt (x y : Option String) (b : Binding) : Match b :=
+      else some [⟨b, .refl b⟩]
+    let opt (x y : Option String) (b : Binding) : Matches b :=
       match x, y with
-      | none, none => .equal b (.refl b)
+      | none, none => some [⟨b, .refl b⟩]
       | some x, some y => v.bind b x y
-      | _, _ => .differ
+      | _, _ => some []
     ids.andThen fun b =>
       (opt s.body.to? t.body.to? b).andThen fun b =>
         (opt s.body.resultOf? t.body.resultOf? b).andThen fun b => matchOption v b s.content t.content
 
-/-- How snapshot line `s` compares with implementation line `t`: at the same time, and by matchContent. -/
-def matchLine (v : Values) (b : Binding) (s t : Line) : Match b :=
-  if s.time.time == t.time.time then matchContent v b s t else .differ
+/-- The bindings under which snapshot line `s` compares equal with implementation line `t`: at the same time, and by
+matchContent. -/
+def matchLine (v : Values) (b : Binding) (s t : Line) : Matches b :=
+  if s.time.time == t.time.time then matchContent v b s t else some []
 
 def json (v : Option CValue) : Value := (v.map (·.flatten)).getD .null
 
@@ -514,71 +412,6 @@ def valueDomains (snapshot : List (Option Line)) : String → String :=
   let requests := lines.flatMap Line.requestIds
   let keys := lines.flatMap fun l => (l.content.map CValue.keyRefs).getD []
   fun s => if requests.contains s then "request" else (keys.lookup s).getD ""
-
-/--
-Pairs the `out` lines of one group and reports their differences. `v.fresh` holds the values that this and earlier
-groups introduced, also on lines that are not compared; one that is not bound yet binds where a compared line first
-holds it. `place` is the trace line of the group's input. A group with an ambiguous line reports only its ambiguous
-lines, and the last component tells that nothing later is compared.
--/
-def compareGroup (b : Binding) (v : Values) (snapshot trace : List Numbered) (place : Nat) :
-    List Finding × { b' : Binding // b.Extends b' } × Bool :=
-  let p := pairUp (fun b (s : Numbered) (t : Numbered) => matchLine v b s.line t.line) (followsPaired snapshot)
-    b (snapshot.map fun s => (s.index, s)) (trace.map fun t => (t.index, t))
-  let byIndex {γ : Type} (xs : List Numbered) (i : Nat) (f : Numbered → γ) : List γ :=
-    (xs.find? (·.index == i)).toList.map f
-  let ambiguous := p.ambiguous.flatMap fun i => byIndex snapshot i fun s =>
-    let cands := (trace.filter fun t => !p.pairs.any (·.2 == t.index)).filter fun t =>
-      match matchLine v p.bindings s.line t.line with
-      | .differ => false
-      | _ => true
-    Finding.uncomparable (.ambiguous ((cands.head?.map (·.index)).getD place) (Subject.of s.line.toTraceLine) s.index
-      (cands.map (·.index)))
-  if !ambiguous.isEmpty then (ambiguous, ⟨p.bindings, p.ext⟩, true) else
-  -- Unpaired lines pair by place, in snapshot order, each with the first unpaired trace line at its place. A pair whose
-  -- content compares equal differs only in its time or order, which the checks below report.
-  let start : List (Numbered × Option (Numbered × Bool)) × List Nat × { b' : Binding // b.Extends b' } :=
-    ([], p.extra, ⟨p.bindings, p.ext⟩)
-  let (placed, extra, ⟨b', h'⟩) := p.unmatched.foldl (fun (placed, extra, ⟨b', h'⟩) i =>
-    match snapshot.find? (·.index == i) with
-    | none => (placed, extra, ⟨b', h'⟩)
-    | some s =>
-      match (trace.filter fun t => extra.contains t.index).find? fun t => samePlace b'.strings s.line t.line with
-      | some t =>
-        let extra := extra.filter (· != t.index)
-        match matchContent v b' s.line t.line with
-        | .equal b'' h'' => (placed ++ [(s, some (t, true))], extra, ⟨b'', h'.trans h''⟩)
-        | _ =>
-          let bound : { c : Binding // b.Extends c } :=
-            if s.line.isOutRequest then
-              match v.bind b' s.line.body.id t.line.body.id with
-              | .equal c hc => ⟨c, h'.trans hc⟩
-              | _ => ⟨b', h'⟩
-            else ⟨b', h'⟩
-          (placed ++ [(s, some (t, false))], extra, bound)
-      | none => (placed ++ [(s, none)], extra, ⟨b', h'⟩)) start
-  let differences := placed.filterMap fun
-    | (s, some (t, false)) => some (Finding.mismatch (difference s.line t))
-    | (_, some (_, true)) => none
-    | (s, none) => some (.mismatch (missing s place))
-  let unexpectedLines := (trace.filter fun t => extra.contains t.index).map (.mismatch ∘ unexpected)
-  let pairs := (p.pairs.filterMap fun (i, j) => do
-      pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))) ++
-    placed.filterMap fun (s, t) => t.map fun (t, _) => (s, t)
-  let times := pairs.filterMap fun (s, t) =>
-    if s.line.time.time == t.line.time.time then none
-    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text))
-  let orders := snapshot.zipIdx.flatMap fun (s, k) =>
-    match pairs.find? (·.1.index == s.index) with
-    | none => []
-    | some (_, t) =>
-      (mustFollow snapshot s k).filterMap fun n => do
-        let (_, before) ← pairs.find? (·.1.index == n)
-        if before.index < t.index then none
-        else some (Finding.mismatch
-          (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
-  (differences ++ unexpectedLines ++ times ++ orders, ⟨b', h'⟩, false)
-
 /-- The line that orders a finding in a report. -/
 def Finding.line : Finding → Nat
   | .mismatch m =>
@@ -593,6 +426,106 @@ def Finding.line : Finding → Nat
 def differentInput (b : Binding) (s t : Numbered) : Finding :=
   .uncomparable (.differentInput t.index s.index (Bindings.substitute b.strings (lineValue s.line)) (lineValue t.line))
 
+/-- One way of pairing a group's lines so far: its binding, and the snapshot and trace lines paired, by number. -/
+structure State (root : Binding) where
+  binding : From root
+  pairs : List (Nat × Nat)
+
+def State.used {root : Binding} (st : State root) : List Nat := st.pairs.map (·.2)
+
+/--
+Whether two ways go on alike: the same binding, the same trace lines paired, and the same pairs of the snapshot lines
+`named`, those that an `after` names.
+-/
+def State.same {root : Binding} (named : List Nat) (a b : State root) : Bool :=
+  a.binding.same b.binding && sameSet a.used b.used &&
+    sameSet (a.pairs.filter fun p => named.contains p.1) (b.pairs.filter fun p => named.contains p.1)
+
+/-- The items, each once by `same`, in the order of their first appearance. -/
+def distinctBy {α : Type} (same : α → α → Bool) (xs : List α) : List α :=
+  xs.foldl (fun acc x => if acc.any (same x) then acc else acc ++ [x]) []
+
+/--
+Pairs the `out` lines of one group under the set of bindings and reports their differences. `v.fresh` holds the values
+that this and earlier groups introduced, also on lines that are not compared; one that is not bound yet binds where a
+compared line first holds it. `place` is the trace line of the group's input. The last component tells that nothing
+later is compared.
+-/
+def compareGroup {root : Binding} (set : List (From root)) (v : Values) (snapshot trace : List Numbered) (place : Nat) :
+    List Finding × List (From root) × Bool :=
+  let named := snapshot.zipIdx.flatMap fun (s, k) => mustFollow snapshot s k
+  let same := State.same named
+  let over (s : Numbered) : Finding :=
+    .uncomparable (.bindingLimit place (Subject.of s.line.toTraceLine) s.index bindingLimit)
+  let paired (st : State root) (s t : Numbered) (cs : List (From st.binding.val)) : List (State root) :=
+    (lift st.binding.property cs).map fun c => { binding := c, pairs := st.pairs ++ [(s.index, t.index)] }
+  let start : Except Finding (List (State root) × List Numbered) := .ok (set.map ({ binding := ·, pairs := [] }), [])
+  let exact := snapshot.foldl (fun acc s => acc.bind fun (states, failed) =>
+    let next (st : State root) : Option (List (State root)) := do
+      let ways ← (trace.filter fun t => !st.used.contains t.index && followsPaired snapshot st.pairs s.index t.index).mapM
+        fun t => (matchLine v st.binding.val s.line t.line).map (paired st s t)
+      pure ways.flatten
+    match expand same states next with
+    | none => .error (over s)
+    | some [] => .ok (states, failed ++ [s])
+    | some ways => .ok (ways, failed)) start
+  match exact with
+  | .error f => ([f], set, true)
+  | .ok (states, failed) =>
+  -- A snapshot line that pairs in no way pairs by place, in snapshot order, with the first trace line at its place that
+  -- the first way leaves unpaired. A pair whose content compares equal differs only in its time or order, which the
+  -- checks below report.
+  let placing : Except Finding (List (State root) × List (Numbered × Option (Numbered × Bool))) :=
+    failed.foldl (fun acc s => acc.bind fun (states, placed) =>
+      let first := states.head?
+      let at? := first.bind fun w =>
+        trace.find? fun t => !w.used.contains t.index && samePlace w.binding.val.strings s.line t.line
+      match at? with
+      | none => .ok (states, placed ++ [(s, none)])
+      | some t =>
+        let free := states.filter fun st => !st.used.contains t.index
+        match expand same free fun st => (matchContent v st.binding.val s.line t.line).map (paired st s t) with
+        | none => .error (over s)
+        | some (w :: ws) => .ok (w :: ws, placed ++ [(s, some (t, true))])
+        | some [] =>
+          let bound := free.map fun st =>
+            let id := s.line.body.id
+            let c : From root :=
+              if s.line.isOutRequest then
+                match st.binding.val.bindString (v.fresh.contains id) (v.domain id, id) (v.domain id, t.line.body.id) with
+                | some c => ⟨c.val, st.binding.property.trans c.property⟩
+                | none => st.binding
+              else st.binding
+            { binding := c, pairs := st.pairs ++ [(s.index, t.index)] }
+          .ok (bound, placed ++ [(s, some (t, false))])) (.ok (states, []))
+  match placing with
+  | .error f => ([f], set, true)
+  | .ok (states, placed) =>
+  let first := states.head?
+  let used := (first.map State.used).getD []
+  let differences := placed.filterMap fun
+    | (s, some (t, false)) => some (Finding.mismatch (difference s.line t))
+    | (_, some (_, true)) => none
+    | (s, none) => some (.mismatch (missing s place))
+  let unexpectedLines := (trace.filter fun t => !used.contains t.index).map (.mismatch ∘ unexpected)
+  let pairs := ((first.map (·.pairs)).getD []).filterMap fun (i, j) => do
+    pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))
+  let times := pairs.filterMap fun (s, t) =>
+    if s.line.time.time == t.line.time.time then none
+    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text))
+  let orders := snapshot.zipIdx.flatMap fun (s, k) =>
+    match pairs.find? (·.1.index == s.index) with
+    | none => []
+    | some (_, t) =>
+      (mustFollow snapshot s k).filterMap fun n => do
+        let (_, before) ← pairs.find? (·.1.index == n)
+        if before.index < t.index then none
+        else some (Finding.mismatch
+          (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
+  let kept := states.filter fun st => sameSet st.used used
+  (differences ++ unexpectedLines ++ times ++ orders, distinctBy From.same (kept.map (·.binding)), false)
+
+
 /-- The line without its own id, which names the line rather than what it gives. -/
 def useValue (l : Line) : Value :=
   match lineValue l with
@@ -604,83 +537,93 @@ def usesOf (inputs : List Line) (σ : String) : List String :=
   (inputs.filter fun l => (useValue l).strings.contains σ).map fun l =>
     ((useValue l).mapStrings fun x => if x == σ then "" else x).canonical
 
-/-- Whether the snapshot `in` lines `inputs` use the values of slot `k` alike, so that any choice among them does. -/
-def sameUses (inputs : List Line) (k : Slot) : Bool :=
-  match k.1.map fun σ => usesOf inputs σ.2 with
+/-- Whether the snapshot `in` lines `inputs` use the values `σs` alike, so that any choice among them does. -/
+def sameUses (inputs : List Line) (σs : List String) : Bool :=
+  match σs.map (usesOf inputs) with
   | u :: us => us.all (· == u)
   | [] => true
 
 /--
-The open slot of `b` (a larger slot) that `in` line `l` names a value of, when the snapshot `in` lines `inputs` do not
-use its values alike (sameUses): the harness gave the implementation the value that it chose by position.
+The implementation values that the bindings give the value `σ` of `in` line `l`, when they are two or more and the
+snapshot `in` lines `inputs` do not use alike (sameUses) the snapshot values that some binding gives one of them: the
+harness had to choose a route that the set does not decide.
 -/
-def unevenSlot (b : Binding) (inputs : List Line) (l : Line) : Option Slot :=
-  let named := (useValue l).strings
-  b.slots.find? fun k => 2 ≤ k.1.length && k.1.any (named.contains ·.2) && !sameUses inputs k
+def unrouted (set : List Binding) (v : Values) (inputs : List Line) (l : Line) : Option (List String) :=
+  (useValue l).strings.findSome? fun σ =>
+    let d := v.domain σ
+    let images := distinctBy (· == ·) (set.map fun b => b.image (d, σ))
+    let standing := distinctBy (· == ·) (σ :: set.flatMap fun b =>
+      b.pairs.filterMap fun (s, t) => if s.1 == d && images.contains t.2 then some s.2 else none)
+    if images.length < 2 || sameUses inputs standing then none else some images
 
 /--
-Compares the groups in order, carrying the binding. When `cut`, the trace's last group ends at a malformed line, and
-only its input is compared. `internal` selects the `out` lines that are not compared. `inputs` holds the snapshot's
+Compares the groups in order, carrying the set of bindings. When `cut`, the trace's last group ends at a malformed line,
+and only its input is compared. `internal` selects the `out` lines that are not compared. `inputs` holds the snapshot's
 `in` lines, and `outs` the trace's `out` lines.
 -/
 def compareGroups (lineCount : Nat) (internal : Line → Bool) (inputs : List Line) (outs : List Numbered)
-    (expected actual : List Group) (cut : Bool) :
-    Nat → Values → (b : Binding) → List Finding × { b' : Binding // b.Extends b' }
-  | 0, _, b => ([], ⟨b, .refl b⟩)
-  | fuel + 1, v, b =>
+    (expected actual : List Group) (cut : Bool) {root : Binding} :
+    Nat → Values → List (From root) → List Finding × List (From root)
+  | 0, _, set => ([], set)
+  | fuel + 1, v, set =>
     match expected, actual with
-    | [], [] => ([], ⟨b, .refl b⟩)
+    | [], [] => ([], set)
     | e :: es, a :: as =>
-      let inputs' : Except Finding { b' : Binding // b.Extends b' } :=
+      let inputs' : Except Finding (List (From root)) :=
         match e.input, a.input with
-        | none, none => .ok ⟨b, .refl b⟩
+        | none, none => .ok set
         | some s, some t =>
-          match matchLine { v with fresh := [] } b s.line t.line with
-          | .equal b' h =>
-            match unevenSlot b inputs s.line with
-            | some k =>
-              .error (.uncomparable (.ambiguous t.index (Subject.of s.line.toTraceLine) s.index
-                ((outs.filter fun o => k.2.any (·.2 == o.line.body.id)).map (·.index))))
-            | none => .ok ⟨b', h⟩
-          | _ => .error (differentInput b s t)
+          let subject := Subject.of s.line.toTraceLine
+          match expand From.same set fun b => (matchLine { v with fresh := [] } b.val s.line t.line).map
+              (lift b.property) with
+          | none => .error (.uncomparable (.bindingLimit t.index subject s.index bindingLimit))
+          | some [] => .error (differentInput ((set.head?.map (·.val)).getD .empty) s t)
+          | some set' =>
+            match unrouted (set.map (·.val)) v inputs s.line with
+            | some images =>
+              .error (.uncomparable (.ambiguous t.index subject s.index
+                ((outs.filter fun o => images.contains o.line.body.id).map (·.index))))
+            | none => .ok set'
         | some s, none => .error (.uncomparable (.missingInput lineCount (lineValue s.line) s.index))
         | none, some t => .error (.uncomparable (.unexpectedInput t.index (lineValue t.line)))
       match inputs' with
-      | .error f => ([f], ⟨b, .refl b⟩)
-      | .ok ⟨b₁, h₁⟩ =>
-        if cut && as.isEmpty then ([], ⟨b₁, h₁⟩)
+      | .error f => ([f], set)
+      | .ok set₁ =>
+        if cut && as.isEmpty then ([], set₁)
         else
           let place := (a.input.map (·.index)).getD 1
           let compared (outs : List Numbered) := outs.filter fun o => !internal o.line
           let v := { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) }
-          let (found, ⟨b₂, h₂⟩, stop) := compareGroup b₁ v (compared e.outs) (compared a.outs) place
-          if stop then (found, ⟨b₂, h₁.trans h₂⟩)
+          let (found, set₂, stop) := compareGroup set₁ v (compared e.outs) (compared a.outs) place
+          if stop then (found, set₂)
           else
-            let (rest, ⟨b₃, h₃⟩) := compareGroups lineCount internal inputs outs es as cut fuel v b₂
-            (found ++ rest, ⟨b₃, h₁.trans (h₂.trans h₃)⟩)
+            let (rest, set₃) := compareGroups lineCount internal inputs outs es as cut fuel v set₂
+            (found ++ rest, set₃)
     | e :: _, [] =>
       match e.input with
-      | some s => ([.uncomparable (.missingInput lineCount (lineValue s.line) s.index)], ⟨b, .refl b⟩)
-      | none => ([], ⟨b, .refl b⟩)
+      | some s => ([.uncomparable (.missingInput lineCount (lineValue s.line) s.index)], set)
+      | none => ([], set)
     | [], a :: _ =>
       match a.input with
-      | some t => ([.uncomparable (.unexpectedInput t.index (lineValue t.line))], ⟨b, .refl b⟩)
-      | none => ([], ⟨b, .refl b⟩)
+      | some t => ([.uncomparable (.unexpectedInput t.index (lineValue t.line))], set)
+      | none => ([], set)
 
 /--
-The violations of comparing a trace with a snapshot, and the binding. In `snapshot`, `none` is a blank line. `lines`
-holds the trace lines before its first malformed line, with `none` for blank lines and repeated subscription answers,
-and `malformed` is the number of that line. `internal` selects the event lines that verify does not compare. An
-`unknownAfters` id orders no line, because reading the snapshot reports it before the comparison.
+The violations of comparing a trace with a snapshot, and the bindings that agree with every compared line. In
+`snapshot`, `none` is a blank line. `lines` holds the trace lines before its first malformed line, with `none` for blank
+lines and repeated subscription answers, and `malformed` is the number of that line. `internal` selects the event lines
+that verify does not compare. An `unknownAfters` id orders no line, because reading the snapshot reports it before the
+comparison.
 -/
 def compare (snapshot lines : List (Option Line)) (malformed : Option Nat) (internal : Line → Bool) : Compared :=
   let expected := groups snapshot
   let actual := groups lines
   let inputs := expected.filterMap fun g => g.input.map (·.line)
-  let (found, binding) :=
+  let (found, set) :=
     compareGroups lines.length internal inputs (actual.flatMap (·.outs)) expected actual malformed.isSome
-      (expected.length + actual.length) { domain := valueDomains snapshot, fresh := [] } Binding.empty
-  { findings := found ++ (malformed.map fun n => Finding.uncomparable (.lineSchema n)).toList, binding := binding.val }
+      (expected.length + actual.length) { domain := valueDomains snapshot, fresh := [] } [⟨Binding.empty, .refl _⟩]
+  { findings := found ++ (malformed.map fun n => Finding.uncomparable (.lineSchema n)).toList
+    bindings := set.map (·.val) }
 
 def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
     (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : m Compared := do

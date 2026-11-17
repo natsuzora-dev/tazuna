@@ -70,9 +70,12 @@ The [simulation section](#simulation) of the proven properties lists what Lean p
 ### When a trace matches a snapshot
 
 `drive` controls only the implementation's world, the start, the clock, and the messages it receives, so the implementation creates its keys and request ids in its own way; `src/verify/harness.ts` states how.
-A trace *matches* a snapshot when its `in` lines equal the snapshot's exactly and the `out` lines after each pair up one to one, with each value that the snapshot creates bound to one implementation value over the whole comparison.
-The binding is one-to-one within each domain, the request ids and the keys of each entity (`compare_oneToOne`), so an implementation that reuses an existing request id or key of an entity for a new one differs, while one that uses a string of an input, such as an idempotency key, as a new key does not.
-When the snapshot's lines leave the choice among equal implementation requests or keys open and an `in` line names one of them, `verify` reports the line as `Uncomparable.ambiguous` unless the snapshot's `in` lines use those values alike; `lean/Tazuna/Verify/Compare.lean` defines the comparison.
+A trace *matches* a snapshot when its `in` lines equal the snapshot's exactly and the `out` lines after each pair up one to one, under a binding of each value that the snapshot creates to one implementation value over the whole comparison.
+`verify` carries the set of every binding that agrees with the lines compared so far: each line keeps the bindings under which it compares equal, a line that would keep none is reported, and bindings that no line tells apart all stay, since each of them is fine.
+So the counts in a bag decide a binding (the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`), and keys that only a later line tells apart wait for it.
+Every binding of the set is one-to-one within each domain, the request ids and the keys of each entity (`compare_oneToOne`), so an implementation that reuses an existing request id or key of an entity for a new one differs, while one that uses a string of an input, such as an idempotency key, as a new key does not.
+The harness gives each `in` line by one binding of the set; when the bindings give a value of the line different implementation values and the snapshot's `in` lines do not use those values alike, `verify` reports the line as `Uncomparable.ambiguous`, since the route that the harness chose decided what the implementation got.
+The set holds at most 256 bindings, and a line that would make it hold more is reported as `Uncomparable.bindingLimit`; `lean/Tazuna/Verify/Compare.lean` defines the comparison.
 
 ## Who fixes a violation
 
@@ -259,4 +262,4 @@ Precedent: the Restart action of the Raft TLA+ spec (Diego Ongaro).
 ### Comparison
 
 - A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
-- The binding of a trace comparison is one-to-one within each domain of values, and every pair that any step bound stays in it (`compare_oneToOne`, `compareGroups_extends`).
+- Every binding of the set that a trace comparison ends with is one-to-one within each domain of values, and keeps every pair that a step on its way bound (`compare_oneToOne`, `compareGroups_extends`).

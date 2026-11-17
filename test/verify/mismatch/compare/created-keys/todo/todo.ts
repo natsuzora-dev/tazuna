@@ -49,4 +49,8 @@ export const seenIds = query({
   return { repeated: ids.concat(seenOf("task-1")), none: [], ids, listed };
 });
 
-export const todo = contract({ addTask, seenIds });
+export const seenTwice = query({ output: { repeated: bag(ref(Seen)) } }).resolve(({ records }) => ({
+  repeated: records.Seen.map((s) => s.id).concat(records.Seen.filter((s) => s.taskId === "task-1").map((s) => s.id)),
+}));
+
+export const todo = contract({ addTask, seenIds, seenTwice });

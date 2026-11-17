@@ -11,14 +11,14 @@ export const { screen, scenario } = service({
 });
 
 export const linkScreen = screen({
-  description: "Two new drafts linked both ways",
+  description: "Two new drafts linked both ways, and the first draft pointed at alone",
   context: { first: z.string().default(""), second: z.string().default("") },
   queries: { linked: todo.linked },
-  controls: { draft: { label: "Draft" } },
+  controls: { draft: { label: "Draft" }, point: { label: "Point at the first" } },
   initial: "list",
   states: { list: {} },
 }).chart({
-  offers: { draft: any },
+  offers: { draft: any, point: any },
   states: {
     list: {
       on: {
@@ -30,6 +30,7 @@ export const linkScreen = screen({
             },
           },
         ],
+        point: [{ assign: { second: () => "" } }],
       },
       shows: {
         linked: {

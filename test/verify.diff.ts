@@ -57,7 +57,7 @@ function violationCountOfBoth({ spec, service, snapshot }: Case, trace: readonly
   const { found: ts, bindings } = verifyLines(spec, service, snapshot, lines);
   assert.deepEqual(
     lean.verify(spec, service, snapshot, lines, new VerifyFunctions(spec)),
-    { findings: ts.map(value), bindings: [...bindings] },
+    { findings: ts.map(value), bindings: bindings.map((b) => [...b]) },
     at,
   );
   for (const { kind } of ts) findings.set(kind, (findings.get(kind) ?? 0) + 1);
@@ -460,7 +460,32 @@ describe("Content comparison", () => {
     ];
     assert.equal(violationCountOfBoth(created, trace, "named later"), 0);
     const { bindings } = verifyLines(created.spec, "todo", created.snapshot, parseFileLines(trace));
-    assert.deepEqual([bindings.get("Seen-1"), bindings.get("Seen-2")], ["y", "x"]);
+    assert.deepEqual(
+      bindings.map((b) => [b.get("Seen-1"), b.get("Seen-2")]),
+      [["y", "x"]],
+    );
+  });
+
+  test("TS and Lean end with every binding that agrees with the trace: bag counts decide one, and symmetric links keep two until a later line decides", () => {
+    const ended = (example: string, name: string) => {
+      const base = bases.find((b) => b.spec === specs.get(join(verifyRoot, example)) && b.name === name);
+      assert.ok(base !== undefined, name);
+      const trace = readTrace(join(verifyRoot, example, "traces", base.service, `${name}.jsonl`));
+      assert.equal(violationCountOfBoth(base, trace, name), 0, name);
+      return verifyLines(base.spec, base.service, base.snapshot, parseFileLines(trace)).bindings;
+    };
+    const keys = (example: string, name: string, ...snapshotKeys: string[]) =>
+      ended(example, name).map((b) => snapshotKeys.map((k) => b.get(k)));
+    assert.deepEqual(keys("mismatch/compare/created-keys", "seenMultiplicity", "todo/Seen-1", "todo/Seen-2"), [
+      ["y", "x"],
+    ]);
+    assert.deepEqual(keys("mismatch/compare/symmetric-keys", "draftTwo", "screens/Draft-1", "screens/Draft-2"), [
+      ["n2", "n1"],
+      ["n1", "n2"],
+    ]);
+    assert.deepEqual(keys("mismatch/compare/symmetric-keys", "draftTwoPointed", "screens/Draft-1", "screens/Draft-2"), [
+      ["n2", "n1"],
+    ]);
   });
 
   test("TS and Lean report an implementation that gives a created key the value of an existing key of its entity", () => {
@@ -507,7 +532,10 @@ describe("Content comparison", () => {
     const trace = [addTask("addTask#1", 1), { ...nextDay("r2"), time: later }, nextDay("r1")];
     assert.equal(violationCountOfBoth(byTime, trace, "time"), 0);
     const { bindings } = verifyLines(byTime.spec, "todo", byTime.snapshot, parseFileLines(trace));
-    assert.deepEqual([bindings.get("calendar.nextDay#1"), bindings.get("calendar.nextDay#2")], ["r1", "r2"]);
+    assert.deepEqual(
+      bindings.map((b) => [b.get("calendar.nextDay#1"), b.get("calendar.nextDay#2")]),
+      [["r1", "r2"]],
+    );
     const byAfter = caseOf("compare/order", "todo", [
       addTask("addTask#1", 1),
       nextDay("calendar.nextDay#1"),

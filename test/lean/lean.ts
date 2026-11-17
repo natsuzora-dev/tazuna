@@ -137,7 +137,10 @@ export class Lean {
     snapshot: readonly (TraceLine | undefined)[],
     trace: readonly FileLine[],
     functions: Answering,
-  ): { readonly findings: readonly VerifyViolation[]; readonly bindings: readonly (readonly [string, string])[] } {
+  ): {
+    readonly findings: readonly VerifyViolation[];
+    readonly bindings: readonly (readonly (readonly [string, string])[])[];
+  } {
     const result = this.exchange(
       {
         type: "verify",
@@ -151,7 +154,7 @@ export class Lean {
     );
     return {
       findings: result["findings"] as VerifyViolation[],
-      bindings: result["bindings"] as [string, string][],
+      bindings: result["bindings"] as [string, string][][],
     };
   }
 

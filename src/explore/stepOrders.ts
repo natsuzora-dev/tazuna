@@ -31,9 +31,9 @@ const violationValue = ({ kind, definition, data }: ViolationValue): ViolationVa
 const compareOf =
   (spec: Spec, service: string): Compare =>
   (expected, actual) => {
-    const { found, bindings } = compareTrace(spec, service, expected, actual);
+    const { found, first } = compareTrace(spec, service, expected, actual);
     const [mismatch] = found;
-    return mismatch === undefined ? { bindings } : { mismatch: violationValue(mismatch) };
+    return mismatch === undefined ? { bindings: first } : { mismatch: violationValue(mismatch) };
   };
 
 /** Lean's Walk.outcome. */

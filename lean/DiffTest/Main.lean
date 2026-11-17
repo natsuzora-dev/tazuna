@@ -277,7 +277,7 @@ def compareOf (spec : Syntax.Structure) (service : String)
     (f.line, v)
   pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
     | some (_, v) => .error v
-    | none => .ok compared.bindings)
+    | none => .ok compared.first)
 
 /-- The reply to request `check`, which takes a structure and returns the Illegal violations. -/
 def check (request : Value) : Except String Value := do
@@ -286,8 +286,8 @@ def check (request : Value) : Except String Value := do
 
 /--
 The reply to request `verify`, which takes a structure, a service, the snapshot lines (null for a blank line), and the
-implementation lines (as `FileLine.decode` reads them), and returns the comparison violations and the pairs of the
-binding that it ends with. TS computes
+implementation lines (as `FileLine.decode` reads them), and returns the comparison violations and the pairs of each
+binding of the set that it ends with. TS computes
 `comparableValue` for each value.
 -/
 def verify (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
@@ -299,7 +299,7 @@ def verify (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
   let trace ← IO.ofExcept do (← asList (← field request "trace")).mapM FileLine.decode
   let compared ← Verify.verifyLines spec service (askComparable stdin stdout (← IO.mkRef {})) snapshot trace
   pure (.obj [("type", .str "verified"), ("findings", .arr (compared.findings.map Verify.Finding.toValue)),
-    ("bindings", .arr (compared.bindings.map fun (s, t) => .arr [.str s, .str t]))])
+    ("bindings", .arr (compared.bindings.map fun b => .arr (b.strings.map fun (s, t) => .arr [.str s, .str t])))])
 
 /--
 The reply to request `afters`, which takes the snapshot lines (null for a blank line) and returns the `unknownAfter`

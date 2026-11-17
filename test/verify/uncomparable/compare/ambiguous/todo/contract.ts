@@ -1,3 +1,3 @@
-import { contract, linked } from "./todo.ts";
+import { addTask, contract, taskAdded, taskCountChanged } from "./todo.ts";
 
-export const todo = contract({ linked });
+export const todo = contract({ addTask, taskAdded, taskCountChanged });
