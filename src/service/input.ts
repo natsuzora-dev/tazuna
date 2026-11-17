@@ -86,8 +86,8 @@ export function endSubscription(r: Processing, id: string): void {
   message(r);
 }
 
-/** Lean's resultRequest: the request `handle` whose answer the service took, which an event names as its resultOf. */
-function resultRequest(r: Processing, name: string, handle: string): Pending | undefined {
+/** Lean's resultRequest: the request `handle` whose answer arrived, which an event names as its resultOf. */
+function resultRequest(r: Processing, name: string, handle: string): string | undefined {
   const answered = r.state.takenAnswers.get(handle);
   if (answered === undefined)
     return report(r.state, {
@@ -95,24 +95,23 @@ function resultRequest(r: Processing, name: string, handle: string): Pending | u
       definition: null,
       data: { event: refOf(r.st, name), requestId: handle },
     });
-  const { request, answer } = answered;
-  const target = activityRef(request.activity);
+  const { target, answer } = answered;
   const event = refOf(r.st, name);
   const mismatch = resultOfMismatch(r.st.structure, target, answer.result === "accepted", event);
-  if (mismatch === undefined) return request;
+  if (mismatch === undefined) return handle;
   return report(r.state, {
     kind: `InvalidInput.${mismatch}`,
     definition: null,
-    data: { event, requestId: request.id, target },
+    data: { event, requestId: handle, target },
   });
 }
 
 /**
- * Adds the arrived result event `e` to `request`, an accepted request to an external service's command, and checks the
- * assumed ensures of its result.
+ * Adds the arrived result event `e` to the request `requestId`, an accepted request to an external service's command,
+ * and checks the assumed ensures of its result.
  */
-function addResult(r: Processing, request: Pending, e: Emit): void {
-  const accepted = r.state.results.get(request.id);
+function addResult(r: Processing, requestId: string, e: Emit): void {
+  const accepted = r.state.results.get(requestId);
   if (accepted === undefined) return;
   accepted.events.push(e);
   const target = activityRef(accepted.activity);
@@ -145,7 +144,7 @@ function redeliver(
     ...given,
     name,
     payload: written,
-    ...(request === undefined ? {} : { resultOf: request.id }),
+    ...(request === undefined ? {} : { resultOf: request }),
   });
   newMessage(s);
   message(r);
@@ -159,7 +158,7 @@ export function receive(
   resultOf?: string,
 ): void {
   const s = r.state;
-  if (s.eventDeliveries.has(lineId(s, given.id, name))) {
+  if (s.deliveries.has(lineId(s, given.id, name))) {
     redeliver(r, name, payload, given, resultOf);
     return;
   }
@@ -182,9 +181,9 @@ export function receive(
     ...given,
     name,
     payload: encoded,
-    ...(request === undefined ? {} : { resultOf: request.id }),
+    ...(request === undefined ? {} : { resultOf: request }),
   });
-  s.eventDeliveries.add(id);
+  s.deliveries.add(id);
   const e: Emit = { event: name, payload: decoded };
   if (request !== undefined) addResult(r, request, e);
   newMessage(s);
@@ -312,7 +311,7 @@ function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
 }
 
 /** Lean's answerRequest. */
-export function answerRequest(r: Processing, p: Pending, answer: Answer): Pending | undefined {
+export function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answer): Pending | undefined {
   const s = r.state;
   const checked = checkAnswer(r, p, answer);
   if (checked.assumption !== undefined) report(s, checked.assumption);
@@ -322,7 +321,7 @@ export function answerRequest(r: Processing, p: Pending, answer: Answer): Pendin
   }
   const { written, decoded } = checked.written;
   if (checked.recorded !== undefined) s.results.set(checked.recorded.id, checked.recorded);
-  write(s, { dir: "in", type: "answer", to: p.id, answer: written });
+  write(s, { dir: "in", type: "answer", id: givenId, to: p.id, answer: written });
   newMessage(s);
   const step = newStep(s, undefined);
   settled(r, machineOf(p.requester), step, () => deliverAnswer(r, step, p, decoded));

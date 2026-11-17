@@ -100,10 +100,8 @@ export function fingerprint(r: Processing): string {
     commandAnswers: [...s.commandAnswers]
       .toSorted(byKey)
       .map(([id, { request, answer }]) => [id, request.name, JSON.stringify(request.input), answer]),
-    eventDeliveries: [...s.eventDeliveries].toSorted(),
-    takenAnswers: [...s.takenAnswers.values()]
-      .map(({ request, answer }) => canonicalJson([request.id, answer]))
-      .toSorted(),
+    deliveries: [...s.deliveries].toSorted(),
+    takenAnswers: [...s.takenAnswers].map(([id, { answer }]) => canonicalJson([id, answer])).toSorted(),
     started: s.started,
   });
 }

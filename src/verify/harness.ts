@@ -155,15 +155,17 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
       // line.
       if (key === undefined || request === undefined || keys.length > 1) return;
       if (!request.subscription) waiting.delete(key);
-      return request.answer(line.answer);
+      return request.answer(line.answer, line.id);
     }
     const { id } = line;
     switch (line.type) {
       case "time":
         return;
       case "restart":
-        // The requests that the old process sent get no answers.
+        // The requests that the old process sent get no answers, and its subscriptions end.
         waiting.clear();
+        for (const controller of subscriptions.values()) controller.abort();
+        subscriptions.clear();
         return required(adapter.restart, line.type)();
       case "command": {
         const command = required(adapter.command, line.type);

@@ -656,7 +656,7 @@ theorem keeps_endSubscription (id : String) (s : State) : KeepsKeys s (endSubscr
   refine KeepsKeys.trans ?_ (keeps_message _ _)
   keys_leaf
 
-theorem keeps_deliver (name : String) (id : Option String) (payload : Value) (request : Option Pending) (s : State) :
+theorem keeps_deliver (name : String) (id : Option String) (payload : Value) (request : Option String) (s : State) :
     KeepsKeys s (deliver st fs s name id payload request) := by
   simp only [deliver, id_bind]
   split <;> (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
@@ -670,8 +670,8 @@ theorem keeps_receive (name : String) (id : Option String) (raw : Value) (result
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
     | (refine KeepsKeys.trans ?_ (keeps_deliver _ _ _ _ _); keys_leaf)
 
-theorem keeps_answerRequest (p : Pending) (answer : Answer) (s : State) :
-    KeepsKeys s (answerRequest st fs s p answer) := by
+theorem keeps_answerRequest (id : Option String) (p : Pending) (answer : Answer) (s : State) :
+    KeepsKeys s (answerRequest st fs s id p answer) := by
   simp only [answerRequest, id_bind]
   repeat' split
   all_goals first

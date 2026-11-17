@@ -9,8 +9,8 @@ variable {m : Type → Type}
 /--
 The state when the service process stops, without the part that lives in its memory: the instances, copies, open
 screens, deadlines, awaited requests, queued work, and the subscriptions that other services opened. As in the Raft
-TLA+ spec's Restart, the persisted part stays: the records, the kept command answers and event deliveries, the accepted
-external commands, the createKey values, and the trace.
+TLA+ spec's Restart, the persisted part stays: the records, the kept command answers, the events and answers that
+arrived, the accepted external commands, the createKey values, and the trace.
 -/
 def State.stop (s : State) : State :=
   { s with started := false, machines := [], copies := [], stack := [], deadlines := [], pending := [], queued := [],

@@ -165,3 +165,76 @@ test("drive keeps both requests that the implementation sends under one id, and 
   );
   assert.deepEqual(kinds, ["Uncomparable.duplicateId"]);
 });
+
+const subscriptionAnswers = join(import.meta.dirname, "verify/mismatch/compare/subscription-answers");
+
+/** A todo whose subscriptions end with an error at a restart, as when a server drops its connections. */
+function droppingTodoAdapter(): Adapter {
+  const titles: string[] = [];
+  let open: { readonly push: () => void; readonly fail: () => void }[] = [];
+  let time = Temporal.Instant.fromEpochMilliseconds(0);
+  let outputs: Parameters<Adapter["start"]>[0] | undefined;
+  return {
+    async start(o, start) {
+      outputs = o;
+      time = start;
+    },
+    now: () => time,
+    async advanceTo(to) {
+      time = to;
+    },
+    settled: () => new Promise((resolve) => setImmediate(resolve)),
+    async command({ id, input }) {
+      const { taskId, title } = input as { readonly taskId: string; readonly title: string };
+      titles.push(title);
+      outputs?.event({ name: "taskAdded", payload: { id: taskId, title }, resultOf: id });
+      for (const s of open) s.push();
+      return { result: "accepted" };
+    },
+    async subscribe(_, signal) {
+      const answers: unknown[] = [{ titles: [...titles] }];
+      let failed = false;
+      let wake = () => {};
+      open.push({
+        push: () => {
+          answers.push({ titles: [...titles] });
+          wake();
+        },
+        fail: () => {
+          failed = true;
+          wake();
+        },
+      });
+      return (async function* () {
+        while (true) {
+          if (failed) throw new Error("connection reset by the restart");
+          const output = answers.shift();
+          if (output !== undefined) yield { result: "fulfilled" as const, output };
+          else if (signal.aborted) return;
+          else await new Promise<void>((resolve) => (wake = resolve));
+        }
+      })();
+    },
+    async restart() {
+      for (const s of open) s.fail();
+      open = [];
+    },
+  };
+}
+
+test("drive ends the subscriptions of the old process at a restart, so an iterable that throws then is no failure, and the same id subscribes anew", async () => {
+  const spec = await checkedRoot(subscriptionAnswers);
+  const traces = join(copies, "resubscribed");
+  mkdirSync(join(traces, "todo"), { recursive: true });
+  const run = { service: "todo", name: "resubscribeAfterRestart" };
+  const trace = await drive(spec, run, droppingTodoAdapter());
+  writeFileSync(
+    join(traces, "todo/resubscribeAfterRestart.jsonl"),
+    trace.map((l) => `${JSON.stringify(l)}\n`).join(""),
+  );
+  const kinds = verifyTraces(spec, traces).violations.map((p) => p.kind);
+  assert.deepEqual(
+    kinds.filter((k) => k !== "Uncomparable.missingTrace"),
+    [],
+  );
+});

@@ -1,0 +1,4 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"subscribe","id":"isLate#1","name":"isLate","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"isLate#1","answer":{"result":"fulfilled","output":{"late":false}}}
+{"time":"2026-10-25T03:00:00Z","dir":"in","type":"time","id":"time#1"}
+{"time":"2026-10-25T03:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"isLate#1","answer":{"result":"fulfilled","output":{"late":true}}}

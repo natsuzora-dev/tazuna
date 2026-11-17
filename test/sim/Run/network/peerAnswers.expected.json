@@ -43,21 +43,21 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "answer",
+          "id": "todo/answer#2",
           "to": "todo.markSeen#1",
           "answer": {
             "result": "accepted"
-          },
-          "id": "answer#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "answer",
+          "id": "todo/answer#3",
           "to": "todo.ping#1",
           "answer": {
             "result": "accepted"
-          },
-          "id": "answer#2"
+          }
         },
         {
           "time": "2026-10-25T02:00:00Z",

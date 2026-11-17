@@ -1,2 +1,2 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"todo.titled#1","name":"todo.titled","input":{"prefix":""}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.titled#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"notEmpty"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"todo/answer#1","to":"todo.titled#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"notEmpty"}}}

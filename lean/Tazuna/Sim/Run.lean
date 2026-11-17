@@ -176,13 +176,13 @@ def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (contro
 
 /--
 The running service after the deadlines due by `time` fire and the clock's time line arrives, as the input that verify
-gives the implementation.
+gives the implementation. A subscription answer that the new time changes is sent after the time line.
 -/
 def fireTo (time : Time) : Service → Functions m → State → m State :=
   fun st fs s => do
     let s ← fireDue st fs time Limit.dueDeadlines.max none s
     let s := { s with now := max s.now time }
-    pure (if s.halted.isSome then s else (s.write .in none .time).1)
+    if s.halted.isSome then pure s else publish st fs (s.write .in none .time).1
 
 /-- Whether an answer to the request `to` from `sender` is among the messages. -/
 def World.answered (w : World) (sender to : String) : Bool :=

@@ -71,14 +71,14 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "answer",
+          "id": "calendar/answer#1",
           "to": "calendar.book#1",
           "answer": {
             "result": "accepted",
             "output": {
               "slot": "10:00"
             }
-          },
-          "id": "answer#2"
+          }
         }
       ],
       "violations": [],

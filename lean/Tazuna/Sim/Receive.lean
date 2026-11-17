@@ -29,15 +29,26 @@ def nameIn (sender receiver name : String) : String :=
 
 variable {m : Type → Type} [Monad m] [MonadNote m]
 
+/-- The target of the request `to` that the service sent, read from its request line. -/
+def requestTarget? (st : Service) (s : State) (to : String) : Option Spec.Ref :=
+  s.lines.findSome? fun l => match l.dir, l.body with
+    | .out, .command name _ | .out, .query name _ | .out, .subscribe name _ => if l.id == to then some (st.refOf name) else none
+    | _, _ => none
+
 /--
-The state after the answer `a` to the request `to` arrives. A later event's resultOf names the request by its id, so the
-answer is kept under it. A request that no longer waits, as after a restart, takes the answer as a message with no
-effect.
+The state after the answer `a` to the request `to` arrives with the id `id`. A later event's resultOf names the request
+by its id, so the answer is kept under it, also when the request no longer waits, as after a restart; such an answer is
+a message with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
 -/
-def answerIn (st : Service) (fs : Functions m) (s : State) (to : String) (a : Answer) : m State :=
+def answerIn (st : Service) (fs : Functions m) (s : State) (id to : String) (a : Answer) : m State :=
+  if s.deliveries.contains id then message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} else
+  let s := { s with deliveries := s.deliveries ++ [id],
+                    takenAnswers := match requestTarget? st s to with
+                      | some target => (to, target, a) :: s.takenAnswers
+                      | none => s.takenAnswers }
   match s.pending.find? (·.id == to) with
-  | some p => answerRequest st fs { s with takenAnswers := (to, p, a) :: s.takenAnswers } p a
-  | none => message st fs (s.write .in none (.answer to a)).1.newMessage {}
+  | some p => answerRequest st fs s (some id) p a
+  | none => message st fs (s.write .in (some id) (.answer to a)).1.newMessage {}
 
 /--
 The state after the message with body `body`, which `sender` sent with id `id`, arrives at the service. An event names
@@ -52,7 +63,7 @@ def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender id : String
   | .subscribe n input => subscribe st fs s (name n) given input
   | .unsubscribe to => endSubscription st fs s (receivedId sender to)
   | .answer to a => match sentId? st.service to with
-    | some own => answerIn st fs s own a
+    | some own => answerIn st fs s (receivedId sender id) own a
     | none => pure s
   | .event n payload resultOf =>
     receive st fs s (name n) given payload (resultOf.bind (sentId? st.service))

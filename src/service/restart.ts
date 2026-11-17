@@ -6,8 +6,8 @@ import { type State, write } from "./state.ts";
 /**
  * Stops the service process, discarding the part of the state that lives in its memory: the instances, copies, open
  * screens, deadlines, awaited requests, queued work, and the subscriptions that other services opened. As in the Raft
- * TLA+ spec's Restart, the persisted part stays: the records, the kept command answers and event deliveries, the
- * accepted external commands, the createKey values, and the trace.
+ * TLA+ spec's Restart, the persisted part stays: the records, the kept command answers, the events and answers that
+ * arrived, the accepted external commands, the createKey values, and the trace.
  */
 function stop(s: State): void {
   s.started = false;

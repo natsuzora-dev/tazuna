@@ -1,8 +1,8 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.taskCount#1","name":"todo.taskCount","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"taskIds":[]}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"taskIds":[]}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"listScreen.showAll#1","name":"listScreen.showAll"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"todo.taskCount#1","answer":{"result":"fulfilled","output":{"count":0}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#2","to":"todo.taskCount#1","answer":{"result":"fulfilled","output":{"count":0}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"listScreen.showAll#2","name":"listScreen.showAll"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.tasks#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#2","name":"todo.tasks","input":{"filter":"all"}}

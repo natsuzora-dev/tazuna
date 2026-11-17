@@ -154,7 +154,8 @@ structure State where
   started : Bool := false
   records : Records := []
   commandAnswers : CommandAnswers := []
-  eventDeliveries : List String := []
+  /-- The ids of the events and answers that arrived; one that arrives again is not processed again. -/
+  deliveries : List String := []
   /-- The machine and screen instances in creation order. -/
   machines : List Instance := []
   copies : List Instance := []
@@ -181,8 +182,11 @@ structure State where
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []
   results : List Accepted := []
-  /-- The answers that the service took to its requests, latest first, under the request id that a resultOf names. -/
-  takenAnswers : List (String × Pending × Answer) := []
+  /--
+  The answers that arrived to the service's requests, latest first, with the target, under the request id that a
+  resultOf names. A restart keeps them, so a result event that comes after it still finds its request.
+  -/
+  takenAnswers : List (String × Spec.Ref × Answer) := []
   violations : List Violation := []
   /-- The halting violation; after it, no input changes the state. -/
   halted : Option Violation := none

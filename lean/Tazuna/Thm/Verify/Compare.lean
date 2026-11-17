@@ -52,4 +52,10 @@ theorem compareGroups_extends (lineCount : Nat) (internal : Line → Bool) (inpu
     ∀ b ∈ (compareGroups lineCount internal inputs outs expected actual cut fuel v set).2, root.Extends b.val :=
   fun b _ => b.property
 
+/-- A restart ends every subscription, so no answer after it is dropped as a repeat of an answer before it. -/
+theorem restart_ends_subscriptions (l : Line) (id : String) (ls : List (Option Line)) (o : List (String × Option String))
+    (h : l.body = .restart .in id) :
+    withoutRepeatedAnswers.go (some l :: ls) o = some l :: withoutRepeatedAnswers.go ls [] := by
+  simp [withoutRepeatedAnswers.go, h]
+
 end Tazuna.Thm.Verify.Compare

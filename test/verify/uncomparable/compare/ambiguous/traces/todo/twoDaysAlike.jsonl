@@ -5,5 +5,5 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e3","name":"taskCountChanged","payload":{"count":1},"resultOf":"addTask#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"r1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"r2","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#2","to":"r1","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"answer#3","to":"r2","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"calendar/answer#1","to":"r1","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"calendar/answer#2","to":"r2","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}

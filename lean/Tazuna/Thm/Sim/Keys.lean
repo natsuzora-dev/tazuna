@@ -171,13 +171,17 @@ theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin
     · rw [lookup_map_ne _ _ _ _ (by simpa using hp)]
       exact .refl _
 
-theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (to : String) (a : Answer) :
-    KeepsKeys s (answerIn st fs s to a) := by
+theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer) :
+    KeepsKeys s (answerIn st fs s id to a) := by
   unfold answerIn
   split
-  · exact (by keys_leaf : KeepsKeys s { s with takenAnswers := _ }).trans (keeps_answerRequest _ _ _)
   · refine KeepsKeys.trans ?_ (keeps_message _ _)
     keys_leaf
+  · dsimp only
+    split
+    · exact (by keys_leaf : KeepsKeys s { s with deliveries := _, takenAnswers := _ }).trans (keeps_answerRequest _ _ _ _)
+    · refine KeepsKeys.trans ?_ (keeps_message _ _)
+      keys_leaf
 
 theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender id : String) (body : LineBody) :
     KeepsKeys s (arriveFrom st fs s sender id body) := by
@@ -189,7 +193,7 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender 
   · exact keeps_subscribe _ _ _ _
   · exact keeps_endSubscription _ _
   · split
-    · exact keeps_answerIn _ _ _ _ _
+    · exact keeps_answerIn _ _ _ _ _ _
     · exact .refl _
   · exact keeps_receive _ _ _ _ _
   · exact .refl _
@@ -197,7 +201,11 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender 
 theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State) :
     KeepsKeys s (fireTo time st fs s) := by
   simp only [fireTo, id_bind]
-  keys_close (keeps_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max none s)
+  have h := keeps_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max none s
+  split
+  · keys_close h
+  · refine KeepsKeys.trans ?_ (keeps_publish _)
+    keys_close h
 
 theorem keeps_requestOf (type : Scenario.RequestType) (name : String) (id : Option String) (v : Value)
     (st : Service) (fs : Functions Id) (s : State) : KeepsKeys s (requestOf type name id v st fs s) := by

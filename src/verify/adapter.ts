@@ -33,7 +33,7 @@ export interface Adapter {
   readonly settled: () => Promise<void>;
   readonly command?: (command: InputMessage) => Promise<CommandAnswer>;
   readonly query?: (query: InputMessage) => Promise<QueryAnswer>;
-  /** `signal` aborts when the subscription ends. */
+  /** `signal` aborts when the subscription ends: at its unsubscribe or at a restart. */
   readonly subscribe?: (
     subscription: InputMessage,
     signal: AbortSignal,
@@ -53,11 +53,14 @@ export class Unsettled extends Error {
   }
 }
 
-/** A request that the implementation sent to another service, which the harness answers by the scenario. */
+/**
+ * A request that the implementation sent to another service, which the harness answers by the scenario. An answer that
+ * arrives again keeps its `id`, and the implementation drops it.
+ */
 export interface ForeignRequest {
   readonly definition: AnyCommand | AnyQuery;
   readonly input: unknown;
-  readonly answer: (answer: Answer) => void;
+  readonly answer: (answer: Answer, id: string) => void;
 }
 
 /**
@@ -84,14 +87,14 @@ export function decodeAnswer(request: AnyCommand | AnyQuery, answer: Answer): An
 export const commandRequest = (
   command: AnyCommand,
   input: unknown,
-  answer: (answer: CommandAnswer) => void,
-): ForeignRequest => ({ definition: command, input, answer: (a) => answer(decodeAnswer(command, a)) });
+  answer: (answer: CommandAnswer, id: string) => void,
+): ForeignRequest => ({ definition: command, input, answer: (a, id) => answer(decodeAnswer(command, a), id) });
 
 export const queryRequest = <Q extends AnyQuery>(
   query: Q,
   input: unknown,
-  answer: (answer: QueryAnswer<z.output<z.ZodObject<Q["output"]>>>) => void,
-): ForeignRequest => ({ definition: query, input, answer: (a) => answer(decodeAnswer(query, a)) });
+  answer: (answer: QueryAnswer<z.output<z.ZodObject<Q["output"]>>>, id: string) => void,
+): ForeignRequest => ({ definition: query, input, answer: (a, id) => answer(decodeAnswer(query, a), id) });
 
 /** A place in the trace where the implementation's outputs are written. */
 export interface OutputSlot {

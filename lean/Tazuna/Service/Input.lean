@@ -69,16 +69,15 @@ def resultOfFinding (event : Spec.Ref) (requestId : String) (target : Spec.Ref) 
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
 
 /--
-The request `handle` whose answer the service took (State.takenAnswers), which an event names as its resultOf. It is none
-after reporting that the service took no answer to it, or that the request cannot have the event as its result
-(resultOfMismatch).
+The request `handle` whose answer arrived (State.takenAnswers), which an event names as its resultOf. It is none after
+reporting that no answer to it arrived, or that the request cannot have the event as its result (resultOfMismatch).
 -/
-def resultRequest (st : Service) (s : State) (name handle : String) : State × Option Pending :=
+def resultRequest (st : Service) (s : State) (name handle : String) : State × Option String :=
   match s.takenAnswers.lookup handle with
-  | some (p, answer) =>
-    match st.«structure».resultOfMismatch p.activity.ref (answer matches .accepted _) (st.refOf name) with
-    | some mismatch => (s.report (resultOfFinding (st.refOf name) p.id p.activity.ref mismatch), none)
-    | none => (s, some p)
+  | some (target, answer) =>
+    match st.«structure».resultOfMismatch target (answer matches .accepted _) (st.refOf name) with
+    | some mismatch => (s.report (resultOfFinding (st.refOf name) handle target mismatch), none)
+    | none => (s, some handle)
   | none => (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) handle)), none)
 
 def addResult [Monad m] (st : Service) (fs : Functions m) (s : State) (id : String) (e : Emit) : m State := do
@@ -94,16 +93,16 @@ def addResult [Monad m] (st : Service) (fs : Functions m) (s : State) (id : Stri
     | .ok none => pure s
 
 def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (payload : Value) (request : Option Pending) : m State := do
-  let (s, id) := s.write .in givenId (.event name payload (request.map (·.id)))
-  let s := { s with eventDeliveries := s.eventDeliveries ++ [id] }
+    (payload : Value) (request : Option String) : m State := do
+  let (s, id) := s.write .in givenId (.event name payload request)
+  let s := { s with deliveries := s.deliveries ++ [id] }
   let s ← match request with
-    | some p => addResult st fs s p.id { event := name, payload }
+    | some r => addResult st fs s r { event := name, payload }
     | none => pure s
   let (s, step) := s.newMessage.newStep none
   message st fs s { tasks := reactions st s [{ event := name, payload }] false step }
 
-def withResultOf (st : Service) (s : State) (name : String) : Option String → State × Option Pending
+def withResultOf (st : Service) (s : State) (name : String) : Option String → State × Option String
   | some handle => resultRequest st s name handle
   | none => (s, none)
 
@@ -120,12 +119,12 @@ def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
   | .ok payload =>
   let (s, request) := withResultOf st s name resultOf
   if s.halted.isSome then pure s else
-  let (s, _) := s.write .in givenId (.event name payload (request.map (·.id)))
+  let (s, _) := s.write .in givenId (.event name payload request)
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) (resultOf : Option String) : m State := do
-  if s.eventDeliveries.contains (s.lineId givenId name) then redeliver st fs s name givenId raw resultOf
+  if s.deliveries.contains (s.lineId givenId name) then redeliver st fs s name givenId raw resultOf
   else
     match ← fs.parse (.payload name) raw with
     | .error e =>
@@ -206,9 +205,9 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
         return .ok { assumption := broken failedEnsures, written := .ok written,
                      recorded := p.activity.keyword == "sends" }
 
-/-- The state after an answer input answers the request `p`, as checkAnswer checks the answer. -/
-def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
-    m State := do
+/-- The state after an answer input with id `givenId` answers the request `p`, as checkAnswer checks the answer. -/
+def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (givenId : Option String)
+    (p : Pending) (answer : Answer) : m State := do
   match ← checkAnswer st fs p answer with
   | .error e =>
     pure (s.report (.fault (issueViolation st p.activity.ref e)))
@@ -223,7 +222,7 @@ def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
         { s with results := s.results ++ [{ id := p.id, activity := p.activity, input := p.input,
                                              output := written.output? }] }
       else s
-    let started := (s.write .in none (.answer p.id written)).1.newMessage.newStep none
+    let started := (s.write .in givenId (.answer p.id written)).1.newMessage.newStep none
     let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
     message st fs r.state r.queue
 

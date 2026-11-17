@@ -7,6 +7,7 @@ import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { begin, call, endSubscription, operate, send, subscribe } from "../service/input.ts";
+import { publish } from "../service/query.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
@@ -413,6 +414,7 @@ function fireTo(time: Temporal.Instant): (r: Processing) => void {
       r.note.wroteNow();
     }
     write(s, { dir: "in", type: "time" });
+    publish(r);
   };
 }
 

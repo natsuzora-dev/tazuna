@@ -153,8 +153,8 @@ def Line.content (l : Line) : Option CValue :=
 
 /--
 The lines with each `out` answer to a subscription that equals the previous answer to it set to `none`. A
-subscription is open from the `in` subscribe to the `in` unsubscribe. Values compare ignoring bag order and object
-field order.
+subscription is open from the `in` subscribe to the `in` unsubscribe or restart. Values compare ignoring bag order and
+object field order.
 -/
 def withoutRepeatedAnswers (lines : List (Option Line)) : List (Option Line) :=
   go lines []
@@ -166,6 +166,7 @@ where
       match l.body with
       | .subscribe .in id _ _ => some l :: go ls (if (o.lookup id).isSome then o else o ++ [(id, none)])
       | .unsubscribe .in _ to => some l :: go ls (o.filter (·.1 != to))
+      | .restart .in _ => some l :: go ls []
       | .answer .out _ to answer =>
         match o.lookup to with
         | some last =>

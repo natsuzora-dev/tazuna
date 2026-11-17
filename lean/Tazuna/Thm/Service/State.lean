@@ -19,7 +19,7 @@ structure Fixed where
   records : Records
   now : Time
   started : Bool
-  takenAnswers : List (String × Pending × Answer)
+  takenAnswers : List (String × Spec.Ref × Answer)
 
 def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
   ⟨s.commandAnswers, s.records, s.now, s.started, s.takenAnswers⟩
@@ -345,8 +345,8 @@ theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer
 @[simp] theorem write_records (d : Dir) (g : Option String) (b : LineBody) :
     (s.write d g b).1.records = s.records := rfl
 
-@[simp] theorem write_eventDeliveries (d : Dir) (g : Option String) (b : LineBody) :
-    (s.write d g b).1.eventDeliveries = s.eventDeliveries := rfl
+@[simp] theorem write_deliveries (d : Dir) (g : Option String) (b : LineBody) :
+    (s.write d g b).1.deliveries = s.deliveries := rfl
 
 @[simp] theorem write_halted (d : Dir) (g : Option String) (b : LineBody) :
     (s.write d g b).1.halted = s.halted := rfl
@@ -368,8 +368,8 @@ theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer
 
 @[simp] theorem newMessage_records : s.newMessage.records = s.records := rfl
 
-@[simp] theorem newStep_eventDeliveries (c : Option Nat) :
-    (s.newStep c).1.eventDeliveries = s.eventDeliveries := rfl
+@[simp] theorem newStep_deliveries (c : Option Nat) :
+    (s.newStep c).1.deliveries = s.deliveries := rfl
 
 @[simp] theorem newStep_halted (c : Option Nat) : (s.newStep c).1.halted = s.halted := rfl
 

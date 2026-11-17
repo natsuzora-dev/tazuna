@@ -1,3 +1,3 @@
-import { contract, requestPermission } from "./device.ts";
+import { contract, granted, requestPermission } from "./device.ts";
 
-export const device = contract({ requestPermission });
+export const device = contract({ granted, requestPermission });

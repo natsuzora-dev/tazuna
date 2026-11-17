@@ -27,3 +27,7 @@ export const taskCount = query({
 export const hasTasks = query({
   output: { hasTasks: z.boolean() },
 }).resolve(({ records }) => ({ hasTasks: records.Task.size > 0 }));
+
+export const isLate = query({
+  output: { late: z.boolean() },
+}).resolve(({ now }) => ({ late: Temporal.Instant.compare(now, Temporal.Instant.from("2026-10-25T02:00:00Z")) >= 0 }));

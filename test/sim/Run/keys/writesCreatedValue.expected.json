@@ -17,11 +17,11 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "answer",
+          "id": "tags/answer#1",
           "to": "tags.register#1",
           "answer": {
             "result": "accepted"
-          },
-          "id": "answer#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
@@ -127,11 +127,11 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "answer",
+          "id": "notes/answer#2",
           "to": "notes.attach#1",
           "answer": {
             "result": "accepted"
-          },
-          "id": "answer#2"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",

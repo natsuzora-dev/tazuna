@@ -37,3 +37,19 @@ export const requestsDiscarded = scenario(
     then: () => [],
   },
 );
+
+export const resultAfterRestart = scenario(
+  "Restart while the device holds requestPermission, then the device accepts it and emits granted as its result; the answer arrived, so the event is the result of that request, though the request of the stopped process waits no more",
+  {
+    given,
+    when: (w) => {
+      const first = w.startup.request(device.requestPermission);
+      w.net.deliver(first);
+      const restarting = w.host.restart();
+      w.net.leaveInFlight(restarting.request(device.requestPermission));
+      w.net.deliver(w.peer.device.answer(first, { result: "accepted" }));
+      w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: first }));
+    },
+    then: () => [],
+  },
+);

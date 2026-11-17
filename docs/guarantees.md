@@ -199,7 +199,7 @@ The following items are tazuna's own:
 
 ### Subscriptions and screens
 
-- The service sends a new answer to a subscription only when the answer changes (`changed_answer_sent`, `unchanged_answer_not_sent`).
+- The service sends a new answer to a subscription only when the answer changes, also when a clock line changes it (`changed_answer_sent`, `unchanged_answer_not_sent`, `clock_line_publishes`).
 - The service sends no answer to an ended subscription (`ended_subscription_not_answered`).
 - Opening a screen creates one child instance of the opened screen (`entering_opens_one_child`).
 - An operation reaches a screen only when no modal screen that was opened later is still open, as in the WAI-ARIA modal dialog (`modal_child_covers`).
@@ -234,13 +234,15 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - A reference that does not resolve is a `Fault` (`dangling_ref_reported_iff`).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`, `resent_command_ignores_decide`).
 - The service rejects a command that reuses an id with a different input (`reused_id_rejected`).
-- When an event arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`).
+- When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
 - The service answers a repeated query again, because a query has no identity (`query_processed_again`).
 - Equality up to a renaming of created keys, by which `test` compares two runs, is an equivalence. Every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain, as `test`'s bindings do.
 
 ### Restart
 
-- After a restart, a service keeps its records, its command answers, its delivered events, and its created keys. It discards its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
+- After a restart, a service keeps its records, its command answers, the events and answers that arrived, and its created keys. It discards its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
+- A subscription lives within one process: a restart ends it, and a subscription with the same id after the restart is a new one, whose first answer `verify` expects (`restart_ends_subscriptions`).
+- A result event finds the answer to its request also when the answer arrived after a restart (`late_answer_taken`).
 - A restart reads nothing of the state that it discards (`restart_forgets`).
 
 ### Comparison

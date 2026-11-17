@@ -507,7 +507,7 @@ theorem endSubscription_agrees (s : State) (id : String) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
 
-theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload : Value) (request : Option Pending) :
+theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload : Value) (request : Option String) :
     Agrees (deliver st fsI s name id payload request) (deliver st fs s name id payload request) := by
   unfold deliver
   split
@@ -536,8 +536,8 @@ theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
   dsimp only
   agree [firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
 
-theorem answerRequest_agrees (s : State) (p : Pending) (answer : Answer) :
-    Agrees (answerRequest st fsI s p answer) (answerRequest st fs s p answer) := by
+theorem answerRequest_agrees (s : State) (id : Option String) (p : Pending) (answer : Answer) :
+    Agrees (answerRequest st fsI s id p answer) (answerRequest st fs s id p answer) := by
   unfold answerRequest
   agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 

@@ -102,7 +102,7 @@ theorem endSubscription_keysDistinct (id : String) (h : KeysDistinct s.records) 
   apply message_keysDistinct
   split <;> exact h
 
-theorem deliver_keysDistinct (name : String) (id : Option String) (payload : Value) (request : Option Pending)
+theorem deliver_keysDistinct (name : String) (id : Option String) (payload : Value) (request : Option String)
     (h : KeysDistinct s.records) : KeysDistinct (deliver st fs s name id payload request).records := by
   unfold deliver
   simp only [id_bind]
@@ -161,29 +161,29 @@ theorem operate_keysDistinct (screen control : String) (payload : Value)
         | exact h
         | (rw [(keeps_settled _ _ (keeps_dispatch _ _ _ _)).records]; exact h))
 
-theorem result_is_event_of_emits (name k : String) (s' : State) (p : Pending)
-    (h : resultRequest st s name k = (s', some p)) :
-    (∃ d ∈ st.«structure».definitions.find? (·.ref == p.activity.ref), match d.body with
-      | .command _ _ _ emits .. => some (st.refOf name) ∈ emits
-      | _ => False) ∧
-      ∃ o, s.takenAnswers.lookup k = some (p, .accepted o) := by
+theorem result_is_event_of_emits (name k r : String) (s' : State)
+    (h : resultRequest st s name k = (s', some r)) :
+    r = k ∧ ∃ target o, s.takenAnswers.lookup k = some (target, .accepted o) ∧
+      ∃ d ∈ st.«structure».definitions.find? (·.ref == target), match d.body with
+        | .command _ _ _ emits .. => some (st.refOf name) ∈ emits
+        | _ => False := by
   unfold resultRequest at h
   split at h
   · rename_i q a hk
     cases a with
     | accepted o =>
-      cases hm : st.«structure».resultOfMismatch q.activity.ref true (st.refOf name) with
+      cases hm : st.«structure».resultOfMismatch q true (st.refOf name) with
       | some m => simp [hm] at h
       | none =>
         simp only [hm, Prod.mk.injEq, Option.some.injEq] at h
         obtain ⟨-, rfl⟩ := h
-        exact ⟨((resultOfMismatch_eq_none_iff _ _ _ _).mp hm).2, o, hk⟩
+        exact ⟨rfl, q, o, hk, ((resultOfMismatch_eq_none_iff _ _ _ _).mp hm).2⟩
     | fulfilled o =>
-      cases hm : st.«structure».resultOfMismatch q.activity.ref false (st.refOf name) with
+      cases hm : st.«structure».resultOfMismatch q false (st.refOf name) with
       | none => exact absurd hm (resultOfMismatch_unaccepted _ _ _)
       | some m => simp [hm] at h
     | rejected r =>
-      cases hm : st.«structure».resultOfMismatch q.activity.ref false (st.refOf name) with
+      cases hm : st.«structure».resultOfMismatch q false (st.refOf name) with
       | none => exact absurd hm (resultOfMismatch_unaccepted _ _ _)
       | some m => simp [hm] at h
   · simp at h
@@ -286,7 +286,7 @@ theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCh
     | (simp only [Except.error.injEq] at hr; subst hr; exact ⟨rfl, by simp⟩)
 
 /-- An event whose resultOf names a request that cannot have the event as its result halts the run with that report. -/
-theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Pending) (a : Answer)
+theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Spec.Ref) (a : Answer)
     (hp : s.takenAnswers.lookup k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
     ∃ event requestId target m, s₁ = s.halt (resultOfFinding event requestId target m).toViolation := by
   unfold resultRequest at hq
@@ -299,7 +299,7 @@ theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Pending) (a
   · rename_i hn
     simp [hp] at hn
 
-/-- An event whose resultOf names a request whose answer the service has not taken halts the run with that report. -/
+/-- An event whose resultOf names a request to which no answer arrived halts the run with that report. -/
 theorem unanswered_result_halts (name k : String) (hn : s.takenAnswers.lookup k = none) :
     resultRequest st s name k =
       (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) k)), none) := by
@@ -357,7 +357,7 @@ theorem invalid_input_not_kept (name id : String) (raw input : Value)
   simp only at hk
   simp only [send, hc, hi, ↓reduceIte, newStep_commandAnswers, newMessage_commandAnswers, write_commandAnswers,
       write_id, hk, processCommand, evaluate, hp, id_pure, newStep_records, newMessage_records, write_records,
-      newStep_now, newMessage_now, write_now, id_bind, newStep_eventDeliveries, newStep_halted, newMessage_halted,
+      newStep_now, newMessage_now, write_now, id_bind, newStep_deliveries, newStep_halted, newMessage_halted,
       write_halted, Tazuna.Thm.Service.Note.note_id, CommandAnswers.keep, keepsAnswer, answer_now, Bool.false_eq_true,
       answer_commandAnswers, answer_halted, sent]
   rfl
@@ -382,13 +382,13 @@ theorem corrected_input_processed (name id : String) (raw₁ raw₂ input₁ inp
   rw [unanswered_command_processed name id raw₂ input₂ hc hi₂ (by rw [h₂, hk₁]; exact hk), h₂, hk₁]
 
 theorem redelivered_event_not_processed (name id : String) (raw payload : Value) (hh : s.halted = none)
-    (hd : id ∈ s.eventDeliveries) (hc : fs.canonical (.payload name) raw = .ok payload) :
+    (hd : id ∈ s.deliveries) (hc : fs.canonical (.payload name) raw = .ok payload) :
     receive st fs s name (some id) raw none = message st fs (delivered s name id payload).newMessage {} := by
   simp [receive, redeliver, withResultOf, hh, hd, hc, delivered, State.lineId]
 
 /-- The theorem is restricted to the state before `message` for the same reason as resent_command_ignores_decide. -/
 theorem redelivered_event_keeps_records (name id : String) (raw payload : Value) (hh : s.halted = none)
-    (hd : id ∈ s.eventDeliveries)
+    (hd : id ∈ s.deliveries)
     (hc : fs.canonical (.payload name) raw = .ok payload)
     (parse : Schema → Value → Id (Except Issue (Option Value)))
     (decide : String → Value → Records → Time → Id (Except Issue (List (List Emit))))
@@ -420,22 +420,22 @@ theorem send_is_one_message (name : String) (id : Option String) (raw input : Va
   · exact ⟨_, _, rfl⟩
 
 theorem line_names_accepted_request (name : String) (id : Option String) (raw payload : Value) (k : String)
-    (s₁ : State) (p : Pending) (hh : s₁.halted = none)
-    (hd : s.eventDeliveries.contains (s.lineId id name) = false)
+    (s₁ : State) (p : String) (hh : s₁.halted = none)
+    (hd : s.deliveries.contains (s.lineId id name) = false)
     (hp : fs.parse (.payload name) raw = .ok (some payload)) (hq : resultRequest st s name k = (s₁, some p)) :
     (receive st fs s name id raw (some k)).lines[s.lines.size]? =
-      some { time := s.now, dir := .in, id := (s₁.write .in id (.event name payload (some p.id))).2,
-             body := .event name payload (some p.id) } := by
+      some { time := s.now, dir := .in, id := (s₁.write .in id (.event name payload (some p))).2,
+             body := .event name payload (some p) } := by
   simp only [State.lineId] at hd
   have hl : s₁.lines = s.lines := by rw [← resultRequest_lines (st := st) (s := s) name k, hq]
   have hn : s₁.now = s.now := by rw [← resultRequest_now (st := st) (s := s) name k, hq]
   simp only [receive, hd, id_bind, hp, withResultOf, hq, id_pure, State.lineId, hh, Option.isSome_none,
     Bool.false_eq_true, ↓reduceIte]
   unfold deliver
-  simp only [id_bind, Option.map_some]
-  have hw : (s₁.write .in id (.event name payload (some p.id))).1.lines[s.lines.size]? =
-      some { time := s.now, dir := .in, id := (s₁.write .in id (.event name payload (some p.id))).2,
-             body := .event name payload (some p.id) } := by
+  simp only [id_bind]
+  have hw : (s₁.write .in id (.event name payload (some p))).1.lines[s.lines.size]? =
+      some { time := s.now, dir := .in, id := (s₁.write .in id (.event name payload (some p))).2,
+             body := .event name payload (some p) } := by
     simp [State.write, hl, hn]
   refine (message_extends _).getElem? ?_
   simp only [State.newStep, State.newMessage]

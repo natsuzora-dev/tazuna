@@ -245,7 +245,7 @@ export interface Accepted {
  *   report throws Halt, and the run stops there.
  * - `lineCounts` is TS only: it counts `lines` per id name.
  * - `machines` and `copies` are maps by resource, in the order of Lean's lists.
- * - Records, command answers, event deliveries and results are maps; `subscriptions` is the class that verify also
+ * - Records, command answers, deliveries and results are maps; `subscriptions` is the class that verify also
  *   uses.
  */
 export interface State {
@@ -254,7 +254,8 @@ export interface State {
   started: boolean;
   readonly records: Records;
   readonly commandAnswers: CommandAnswers;
-  readonly eventDeliveries: Set<string>;
+  /** The ids of the events and answers that arrived; one that arrives again is not processed again. */
+  readonly deliveries: Set<string>;
   /** The machine and screen instances, in creation order. */
   readonly machines: Map<string, Instance>;
   readonly copies: Map<string, Instance>;
@@ -282,8 +283,11 @@ export interface State {
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
-  /** The answers that the service took to its requests, under the request id that a resultOf names. */
-  readonly takenAnswers: Map<string, { readonly request: Pending; readonly answer: Answer }>;
+  /**
+   * The answers that arrived to the service's requests, with the target, under the request id that a resultOf names. A
+   * restart keeps them, so a result event that comes after it still finds its request.
+   */
+  readonly takenAnswers: Map<string, { readonly target: DefinitionRef; readonly answer: Answer }>;
   readonly violations: Violation[];
 }
 
@@ -295,7 +299,7 @@ export function newState(st: Service): State {
     started: false,
     records: { keyed, singles: new Map() },
     commandAnswers: new Map(),
-    eventDeliveries: new Set(),
+    deliveries: new Set(),
     machines: new Map(),
     copies: new Map(),
     stack: [],
