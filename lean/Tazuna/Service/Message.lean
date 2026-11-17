@@ -38,15 +38,13 @@ def LineBody.idName : LineBody → String
   | .restart => "restart"
 
 /--
-A trace line. On an `in` line, `deadlineOrder` is the `deadlineOrder` of the input that wrote it. Test adds `after` and
-`created` when it writes a snapshot.
+A trace line. Test adds `after` and `created` when it writes a snapshot.
 -/
 structure Line where
   time : Time
   dir : Dir
   id : String
   body : LineBody
-  deadlineOrder : List DeadlineId := []
 deriving DecidableEq, Repr, Inhabited
 
 structure Emit where

@@ -58,9 +58,6 @@ def _root_.Tazuna.Semantics.State.fixed (s : State) : Fixed :=
 @[simp] theorem report_now (f : Finding) : (s.report f).now = s.now := by
   unfold State.report; split <;> rfl
 
-@[simp] theorem report_inputDeadlineOrder (f : Finding) : (s.report f).inputDeadlineOrder = s.inputDeadlineOrder := by
-  unfold State.report; split <;> rfl
-
 theorem report_eq (f : Finding) :
     s.report f = { s with halted := if f.halts then some f.toViolation else s.halted,
                           violations := if f.halts then s.violations else s.violations ++ [f.toViolation] } := by
@@ -124,10 +121,6 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 
 @[simp] theorem reportAll_mocks (fs : List Fault) : (s.reportAll fs).mocks = s.mocks :=
   reportAll_preserves State.mocks (fun _ _ => report_mocks ..) fs s
-
-@[simp] theorem reportAll_inputDeadlineOrder (fs : List Fault) :
-    (s.reportAll fs).inputDeadlineOrder = s.inputDeadlineOrder :=
-  reportAll_preserves State.inputDeadlineOrder (fun _ _ => report_inputDeadlineOrder ..) fs s
 
 theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false) (t : State) :
     (t.reportAll fs).halted = t.halted ∧
@@ -364,22 +357,6 @@ theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer
 @[simp] theorem write_now (d : Dir) (g : Option String) (b : LineBody) :
     (s.write d g b).1.now = s.now := rfl
 
-@[simp] theorem writeInput_fixed (g : Option String) (b : LineBody) : (s.writeInput g b).1.fixed = s.fixed := rfl
-
-@[simp] theorem writeInput_commandAnswers (g : Option String) (b : LineBody) :
-    (s.writeInput g b).1.commandAnswers = s.commandAnswers := rfl
-
-@[simp] theorem writeInput_records (g : Option String) (b : LineBody) : (s.writeInput g b).1.records = s.records := rfl
-
-@[simp] theorem writeInput_eventDeliveries (g : Option String) (b : LineBody) :
-    (s.writeInput g b).1.eventDeliveries = s.eventDeliveries := rfl
-
-@[simp] theorem writeInput_halted (g : Option String) (b : LineBody) : (s.writeInput g b).1.halted = s.halted := rfl
-
-@[simp] theorem writeInput_id (id : String) (b : LineBody) : (s.writeInput (some id) b).2 = id := rfl
-
-@[simp] theorem writeInput_now (g : Option String) (b : LineBody) : (s.writeInput g b).1.now = s.now := rfl
-
 @[simp] theorem newStep_now (c : Option Nat) : (s.newStep c).1.now = s.now := rfl
 
 @[simp] theorem newMessage_now : s.newMessage.now = s.now := rfl
@@ -403,11 +380,11 @@ theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer
 
 /-- The state and the step after `send` writes the input line and begins the message and its step. -/
 def sent (s : State) (name id : String) (input : Value) : State × Nat :=
-  (s.writeInput (some id) (.command name input)).1.newMessage.newStep none
+  (s.write .in (some id) (.command name input)).1.newMessage.newStep none
 
 /-- The state after `receive` writes the input line. -/
 def delivered (s : State) (name id : String) (payload : Value) : State :=
-  (s.writeInput (some id) (.event name payload none)).1
+  (s.write .in (some id) (.event name payload none)).1
 
 def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l
 

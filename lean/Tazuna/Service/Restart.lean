@@ -21,6 +21,6 @@ The state after a restart input. The process stops after the deadlines due by th
 as at the first input. Answers to the requests of the stopped process find no waiting request.
 -/
 def restart [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
-  begin st fs (s.writeInput none .restart).1.stop
+  begin st fs (s.write .in none .restart).1.stop
 
 end Tazuna.Semantics

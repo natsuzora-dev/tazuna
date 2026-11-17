@@ -162,8 +162,6 @@ structure State where
   stack : List String := []
   deadlines : List Deadline := []
   deadlineCount : Nat := 0
-  /-- The current input's `deadlineOrder`, which its `in` line carries. -/
-  inputDeadlineOrder : List DeadlineId := []
   /-- The entries of the current input's `deadlineOrder` that no tie has used yet. -/
   deadlineOrder : List DeadlineId := []
   /-- The entries of the current input's `stepOrder` that the internal queue has not used yet. -/
@@ -202,11 +200,6 @@ def State.lineId (s : State) (givenId : Option String) (name : String) : String 
 def State.write (s : State) (dir : Dir) (givenId : Option String) (body : LineBody) : State × String :=
   let id := s.lineId givenId body.idName
   ({ s with lines := s.lines.push { time := s.now, dir, id, body } }, id)
-
-/-- The state with the `in` line of the current input written, with the input's `deadlineOrder`, and the line's id. -/
-def State.writeInput (s : State) (givenId : Option String) (body : LineBody) : State × String :=
-  let id := s.lineId givenId body.idName
-  ({ s with lines := s.lines.push { time := s.now, dir := .in, id, body, deadlineOrder := s.inputDeadlineOrder } }, id)
 
 def State.await (s : State) (body : LineBody) (requester : Requester) (activity : Activity) (input : Value) : State :=
   let (s, id) := s.write .out none body

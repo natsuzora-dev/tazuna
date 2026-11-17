@@ -37,7 +37,7 @@ effect.
 def answerIn (st : Service) (fs : Functions m) (s : State) (to : String) (a : Answer) : m State :=
   match s.pending.find? (·.id == to) with
   | some p => answerRequest st fs { s with mocks := (to, p, a) :: s.mocks } p a
-  | none => message st fs (s.writeInput none (.answer to a)).1.newMessage {}
+  | none => message st fs (s.write .in none (.answer to a)).1.newMessage {}
 
 /--
 The state after the message with body `body`, which `sender` sent with id `id`, arrives at the service. An event names

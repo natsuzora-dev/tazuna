@@ -53,13 +53,6 @@ export const traceLine = z.discriminatedUnion("type", [
     id: z.string(),
     name: z.string(),
     input: z.unknown(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -70,13 +63,6 @@ export const traceLine = z.discriminatedUnion("type", [
     id: z.string(),
     name: z.string(),
     input: z.unknown(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -87,13 +73,6 @@ export const traceLine = z.discriminatedUnion("type", [
     id: z.string(),
     name: z.string(),
     input: z.unknown(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -104,13 +83,6 @@ export const traceLine = z.discriminatedUnion("type", [
     id: z.string(),
     to: z.string(),
     answer: answer,
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -120,13 +92,6 @@ export const traceLine = z.discriminatedUnion("type", [
     type: z.literal("unsubscribe"),
     id: z.string(),
     to: z.string(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -138,13 +103,6 @@ export const traceLine = z.discriminatedUnion("type", [
     name: z.string(),
     payload: z.unknown(),
     resultOf: z.string().exactOptional(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -155,13 +113,6 @@ export const traceLine = z.discriminatedUnion("type", [
     id: z.string(),
     name: z.string(),
     payload: z.unknown().exactOptional(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -170,13 +121,6 @@ export const traceLine = z.discriminatedUnion("type", [
     dir: z.enum(["in"]),
     type: z.literal("time"),
     id: z.string(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
@@ -185,13 +129,6 @@ export const traceLine = z.discriminatedUnion("type", [
     dir: z.enum(["in"]),
     type: z.literal("restart"),
     id: z.string(),
-    /**
-     * On an `in` line, the deadlines that fire first in the ties during the input, in firing order, which only test's
-     * search writes. A tie starts when two or more deadlines are due at the earliest due time; from then until no deadline
-     * is due at that time, each deadline that fires at that time is the next entry (InvalidInput.unreadyDeadline), and
-     * after the entries, the first due in entry order.
-     */
-    deadlineOrder: z.array(deadlineId).exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),

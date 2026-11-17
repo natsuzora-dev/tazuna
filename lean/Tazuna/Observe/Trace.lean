@@ -143,7 +143,6 @@ def traceLineOf (line : Line) (after created : List String) : TraceLine :=
     | .operation name payload => .operation dir id name payload
   { time := { text := renderTime line.time, time := line.time }
     body
-    deadlineOrder := if line.deadlineOrder.isEmpty then none else some line.deadlineOrder
     after := if after.isEmpty then none else some after
     created := if created.isEmpty then none else some created }
 

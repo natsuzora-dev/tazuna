@@ -16,7 +16,7 @@ def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref name) e)))
     | .ok input =>
-    let (s, id) := s.writeInput givenId (.command name input)
+    let (s, id) := s.write .in givenId (.command name input)
     let (s, step) := s.newMessage.newStep none
     let request : Request := { name, input }
     match s.commandAnswers.find? id with
@@ -34,7 +34,7 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref name) e)))
     | .ok input =>
-    let (s, id) := s.writeInput givenId (.query name input)
+    let (s, id) := s.write .in givenId (.query name input)
     let s := s.newMessage
     match ← resolveChecked st fs s name raw with
     | .answered answer violations => message st fs ((s.reportAll violations).answer (some id) answer) {}
@@ -49,7 +49,7 @@ def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref name) e)))
     | .ok input =>
-    let (s, id) := s.writeInput givenId (.subscribe name input)
+    let (s, id) := s.write .in givenId (.subscribe name input)
     let s := if s.subscriptions.any (·.id == id) then
         s.report (.invalidInput (.reusedSubscriptionId id))
       else { s with subscriptions := s.subscriptions ++ [{ id, query := name, input := raw }] }
@@ -58,7 +58,7 @@ def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
 
 /-- The state after an unsubscribe input that ends the subscription `id`. -/
 def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
-  let s := (s.writeInput none (.unsubscribe id)).1
+  let s := (s.write .in none (.unsubscribe id)).1
   let s := if s.subscriptions.any (·.id == id) then { s with subscriptions := s.subscriptions.filter (·.id != id) }
     else s.report (.invalidInput (.unopenedSubscription id))
   message st fs s.newMessage {}
@@ -95,7 +95,7 @@ def addResult [Monad m] (st : Service) (fs : Functions m) (s : State) (id : Stri
 
 def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (payload : Value) (request : Option Pending) : m State := do
-  let (s, id) := s.writeInput givenId (.event name payload (request.map (·.id)))
+  let (s, id) := s.write .in givenId (.event name payload (request.map (·.id)))
   let s := { s with eventDeliveries := s.eventDeliveries ++ [id] }
   let s ← match request with
     | some p => addResult st fs s p.id { event := name, payload }
@@ -119,7 +119,7 @@ def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
     pure (s.report (.fault (issueViolation st (st.refOf name) e)))
   | .ok payload =>
   let (s, request) := withResultOf st s name resultOf
-  let (s, _) := s.writeInput givenId (.event name payload (request.map (·.id)))
+  let (s, _) := s.write .in givenId (.event name payload (request.map (·.id)))
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
@@ -222,7 +222,7 @@ def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
         { s with results := s.results ++ [{ id := p.id, activity := p.activity, input := p.input,
                                              output := written.output? }] }
       else s
-    let started := (s.writeInput none (.answer p.id written)).1.newMessage.newStep none
+    let started := (s.write .in none (.answer p.id written)).1.newMessage.newStep none
     let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
     message st fs r.state r.queue
 
@@ -257,9 +257,8 @@ The state at the end of a clock input, with the entries of its `deadlineOrder` t
 a `stepOrder` left unused are the processing's to report (Sim.checkStepOrder), as for any other input.
 -/
 def State.checkDeadlineOrder (s : State) : State :=
-  let t := { s with inputDeadlineOrder := [] }
-  if s.halted.isNone && !s.deadlineOrder.isEmpty then t.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
-  else t
+  if s.halted.isNone && !s.deadlineOrder.isEmpty then s.report (.invalidInput (.unusedDeadlineOrder s.deadlineOrder))
+  else s
 
 /--
 The state after an operate input. As Playwright's click fails on a covered or missing element, operate reports an
@@ -274,7 +273,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   match c.controls.find? (·.name == control) with
   | none => pure (s.report (.invalidInput (.unknownControl (st.ref screen) control)))
   | some ctl =>
-    let s := (s.writeInput none (.operation name (if ctl.hasPayload then some payload else none))).1
+    let s := (s.write .in none (.operation name (if ctl.hasPayload then some payload else none))).1
     match ← fs.parse (.control screen control) payload with
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref screen) e)))

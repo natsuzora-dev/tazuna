@@ -264,12 +264,6 @@ theorem resultRequest_now (name k : String) : (resultRequest st s name k).1.now 
   repeat' split
   all_goals first | rfl | simp
 
-theorem resultRequest_inputDeadlineOrder (name k : String) :
-    (resultRequest st s name k).1.inputDeadlineOrder = s.inputDeadlineOrder := by
-  unfold resultRequest
-  repeat' split
-  all_goals first | rfl | simp
-
 theorem resultOfFinding_halts (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
     (m : Syntax.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = false := by
   cases m <;> rfl
@@ -316,10 +310,10 @@ theorem refused_operation_reported (screen control : String) (payload : Value) (
     (ctl : Control) (decoded : Value) (r : Refusal) (hc : st.chart? screen = some c)
     (hctl : c.controls.find? (·.name == control) = some ctl)
     (hp : fs.parse (.control screen control) payload = .ok (some decoded))
-    (ha : acceptsOperation fs st (s.writeInput none (.operation s!"{screen}.{control}"
+    (ha : acceptsOperation fs st (s.write .in none (.operation s!"{screen}.{control}"
       (if ctl.hasPayload then some payload else none))).1 screen control decoded = .ok (.error r)) :
     let s₁ :=
-      (s.writeInput none (.operation s!"{screen}.{control}" (if ctl.hasPayload then some payload else none))).1
+      (s.write .in none (.operation s!"{screen}.{control}" (if ctl.hasPayload then some payload else none))).1
     operate st fs s screen control payload = s₁.halt (r.finding st screen control decoded).toViolation := by
   simp only [operate, hc, hctl, id_bind, hp, ha]
   cases r <;> simp [State.report, Finding.halts, InvalidInput.halts, Refusal.finding]
@@ -362,10 +356,10 @@ theorem invalid_input_not_kept (name id : String) (raw input : Value)
       message st fs (s'.answer (some id) (.rejected { kind := .invalidInput })) {} := by
   rcases s with ⟨⟩
   simp only at hk
-  simp only [send, hc, hi, ↓reduceIte, newStep_commandAnswers, newMessage_commandAnswers, writeInput_commandAnswers,
-      writeInput_id, hk, processCommand, evaluate, hp, id_pure, newStep_records, newMessage_records, writeInput_records,
-      newStep_now, newMessage_now, writeInput_now, id_bind, newStep_eventDeliveries, newStep_halted, newMessage_halted,
-      writeInput_halted, Tazuna.Thm.Service.Note.note_id, CommandAnswers.keep, keepsAnswer, answer_now, Bool.false_eq_true,
+  simp only [send, hc, hi, ↓reduceIte, newStep_commandAnswers, newMessage_commandAnswers, write_commandAnswers,
+      write_id, hk, processCommand, evaluate, hp, id_pure, newStep_records, newMessage_records, write_records,
+      newStep_now, newMessage_now, write_now, id_bind, newStep_eventDeliveries, newStep_halted, newMessage_halted,
+      write_halted, Tazuna.Thm.Service.Note.note_id, CommandAnswers.keep, keepsAnswer, answer_now, Bool.false_eq_true,
       answer_commandAnswers, answer_halted, sent]
   rfl
 
@@ -411,7 +405,7 @@ theorem redelivered_event_keeps_records (name id : String) (raw payload : Value)
 theorem query_processed_again (name id : String) (raw input : Value) (hq : name ∈ st.queries)
     (hi : fs.canonical (.input name) raw = .ok input) :
     call st fs s name (some id) raw =
-      let s₁ := (s.writeInput (some id) (.query name input)).1.newMessage
+      let s₁ := (s.write .in (some id) (.query name input)).1.newMessage
       match resolveChecked st fs s₁ name raw with
       | .answered a vs => message st fs ((s₁.reportAll vs).answer (some id) a) {}
       | .halted f => s₁.report (.fault f) := by
@@ -431,19 +425,18 @@ theorem line_names_accepted_request (name : String) (id : Option String) (raw pa
     (hd : s.eventDeliveries.contains (s.lineId id name) = false)
     (hp : fs.parse (.payload name) raw = .ok (some payload)) (hq : resultRequest st s name k = (s₁, some p)) :
     (receive st fs s name id raw (some k)).lines[s.lines.size]? =
-      some { time := s.now, dir := .in, id := (s₁.writeInput id (.event name payload (some p.id))).2,
-             body := .event name payload (some p.id), deadlineOrder := s.inputDeadlineOrder } := by
+      some { time := s.now, dir := .in, id := (s₁.write .in id (.event name payload (some p.id))).2,
+             body := .event name payload (some p.id) } := by
   simp only [State.lineId] at hd
   have hl : s₁.lines = s.lines := by rw [← resultRequest_lines (st := st) (s := s) name k, hq]
   have hn : s₁.now = s.now := by rw [← resultRequest_now (st := st) (s := s) name k, hq]
-  have ho : s₁.inputDeadlineOrder = s.inputDeadlineOrder := by rw [← resultRequest_inputDeadlineOrder (st := st) (s := s) name k, hq]
   simp only [receive, hd, id_bind, hp, withResultOf, hq, id_pure, State.lineId]
   unfold deliver
   simp only [id_bind, Option.map_some]
-  have hw : (s₁.writeInput id (.event name payload (some p.id))).1.lines[s.lines.size]? =
-      some { time := s.now, dir := .in, id := (s₁.writeInput id (.event name payload (some p.id))).2,
-             body := .event name payload (some p.id), deadlineOrder := s.inputDeadlineOrder } := by
-    simp [State.writeInput, hl, hn, ho]
+  have hw : (s₁.write .in id (.event name payload (some p.id))).1.lines[s.lines.size]? =
+      some { time := s.now, dir := .in, id := (s₁.write .in id (.event name payload (some p.id))).2,
+             body := .event name payload (some p.id) } := by
+    simp [State.write, hl, hn]
   refine (message_extends _).getElem? ?_
   simp only [State.newStep, State.newMessage]
   rw [addResult_lines]

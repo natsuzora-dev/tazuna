@@ -8,8 +8,8 @@ open Tazuna.Thm.Service.Records Tazuna.Thm.Service.Input
 
 variable {st : Service} {fs : Functions Id} {s t : State}
 
-theorem stop_writeInput (givenId : Option String) (body : LineBody) :
-    (s.writeInput givenId body).1.stop = (s.stop.writeInput givenId body).1 := rfl
+theorem stop_write (givenId : Option String) (body : LineBody) :
+    (s.write .in givenId body).1.stop = (s.stop.write .in givenId body).1 := rfl
 
 /--
 The service begins again from the persisted part of the state: the records, the kept command answers and event
@@ -25,7 +25,7 @@ theorem restart_keeps :
 
 /-- A restart reads nothing of the part of the state that it discards. -/
 theorem restart_forgets (h : s.stop = t.stop) : restart st fs s = restart st fs t := by
-  simp only [restart, stop_writeInput, h]
+  simp only [restart, stop_write, h]
 
 theorem restart_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (restart st fs s).records :=
   begin_keysDistinct h

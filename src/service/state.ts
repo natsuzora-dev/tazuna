@@ -267,8 +267,6 @@ export interface State {
   readonly stack: string[];
   /** The deadlines in entry order, which is also the order of the due deadlines. */
   readonly deadlines: Deadline[];
-  /** The current input's `deadlineOrder`, which its `in` line carries. */
-  inputDeadlineOrder: readonly DeadlineId[];
   /** The entries of the current input's `deadlineOrder` that no tie has used yet. */
   deadlineOrder: readonly DeadlineId[];
   /** The entries of the current input's `stepOrder` that the internal queue has not used yet. */
@@ -311,7 +309,6 @@ export function newState(st: Service): State {
     copies: new Map(),
     stack: [],
     deadlines: [],
-    inputDeadlineOrder: [],
     deadlineOrder: [],
     stepOrder: [],
     pending: [],
@@ -349,11 +346,6 @@ export function write(s: State, line: UnwrittenLine): string {
   s.lineCounts.set(name, (s.lineCounts.get(name) ?? 0) + 1);
   s.lines.push({ time: s.now.toString(), ...line, id });
   return id;
-}
-
-/** Writes the `in` line of the current input, with the input's `deadlineOrder`. */
-export function writeInput(s: State, line: UnwrittenLine): string {
-  return write(s, s.inputDeadlineOrder.length === 0 ? line : { ...line, deadlineOrder: [...s.inputDeadlineOrder] });
 }
 
 /** Lean's State.await: writes the request line and waits for its answer. TS cannot name a function `await`. */

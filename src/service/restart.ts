@@ -1,7 +1,7 @@
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { Processing } from "./chart/queue.ts";
 import { begin } from "./input.ts";
-import { type State, writeInput } from "./state.ts";
+import { type State, write } from "./state.ts";
 
 /**
  * Stops the service process, discarding the part of the state that lives in its memory: the instances, copies, open
@@ -25,7 +25,7 @@ function stop(s: State): void {
  * the first input. Answers to the requests of the stopped process find no waiting request.
  */
 export function restart(r: Processing): void {
-  writeInput(r.state, { dir: "in", type: "restart" });
+  write(r.state, { dir: "in", type: "restart" });
   stop(r.state);
   begin(r);
 }

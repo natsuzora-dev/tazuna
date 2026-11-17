@@ -2,7 +2,7 @@ import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { answerRequest, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
 import { message } from "../service/queue.ts";
-import { newMessage, writeInput } from "../service/state.ts";
+import { newMessage, write } from "../service/state.ts";
 import { refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
 
 /** Lean's receivedId. */
@@ -31,7 +31,7 @@ function answerIn(r: Processing, to: string, a: Answer): void {
     answerRequest(r, p, a);
     return;
   }
-  writeInput(s, { dir: "in", type: "answer", to, answer: a });
+  write(s, { dir: "in", type: "answer", to, answer: a });
   newMessage(s);
   message(r);
 }

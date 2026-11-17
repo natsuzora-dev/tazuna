@@ -26,18 +26,7 @@ import type { Emit } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
-import {
-  type Accepted,
-  halt,
-  lineId,
-  machineOf,
-  newMessage,
-  newStep,
-  type Pending,
-  report,
-  write,
-  writeInput,
-} from "./state.ts";
+import { type Accepted, halt, lineId, machineOf, newMessage, newStep, type Pending, report, write } from "./state.ts";
 
 export function send(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
@@ -46,7 +35,7 @@ export function send(r: Processing, name: string, input: unknown, given: { reado
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
   const request: Request = { name, input: canonicalInput };
-  const id = writeInput(s, { dir: "in", type: "command", ...given, ...request });
+  const id = write(s, { dir: "in", type: "command", ...given, ...request });
   newMessage(s);
   const step = newStep(s, undefined);
   const known = s.commandAnswers.get(id);
@@ -68,7 +57,7 @@ export function call(r: Processing, name: string, input: unknown, given: { reado
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
-  const id = writeInput(s, { dir: "in", type: "query", ...given, name, input: canonicalInput });
+  const id = write(s, { dir: "in", type: "query", ...given, name, input: canonicalInput });
   newMessage(s);
   write(s, { dir: "out", type: "answer", to: id, answer: resolveChecked(r, name, input) });
   message(r);
@@ -80,7 +69,7 @@ export function subscribe(r: Processing, name: string, input: unknown, given: { 
   const definition = ref(r.st, name);
   const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
   if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
-  const id = writeInput(s, { dir: "in", type: "subscribe", ...given, name, input: canonicalInput });
+  const id = write(s, { dir: "in", type: "subscribe", ...given, name, input: canonicalInput });
   if (!s.subscriptions.subscribe(id, { query: name, input }))
     report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
   newMessage(s);
@@ -90,7 +79,7 @@ export function subscribe(r: Processing, name: string, input: unknown, given: { 
 /** Lean's endSubscription: the unsubscribe input that ends the subscription `id`. */
 export function endSubscription(r: Processing, id: string): void {
   const s = r.state;
-  writeInput(s, { dir: "in", type: "unsubscribe", to: id });
+  write(s, { dir: "in", type: "unsubscribe", to: id });
   if (!s.subscriptions.unsubscribe(id))
     report(r.state, { kind: "InvalidInput.unopenedSubscription", definition: null, data: { subscriptionId: id } });
   newMessage(s);
@@ -145,7 +134,7 @@ function redeliver(
   const written = r.functions.canonical({ kind: "payload", event }, payload);
   if (written instanceof Failed) halt(issueViolation(event, written));
   const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
-  writeInput(s, {
+  write(s, {
     dir: "in",
     type: "event",
     ...given,
@@ -182,7 +171,7 @@ export function receive(
     );
   const { value: decoded, encoded } = parsed;
   const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
-  const id = writeInput(s, {
+  const id = write(s, {
     dir: "in",
     type: "event",
     ...given,
@@ -328,7 +317,7 @@ export function answerRequest(r: Processing, p: Pending, answer: Answer): Pendin
   }
   const { written, decoded } = checked.written;
   if (checked.recorded !== undefined) s.results.set(checked.recorded.id, checked.recorded);
-  writeInput(s, { dir: "in", type: "answer", to: p.id, answer: written });
+  write(s, { dir: "in", type: "answer", to: p.id, answer: written });
   newMessage(s);
   const step = newStep(s, undefined);
   settled(r, machineOf(p.requester), step, () => deliverAnswer(r, step, p, decoded));
@@ -369,7 +358,6 @@ export function begin(r: Processing): void {
 /** Lean's State.checkDeadlineOrder. */
 export function checkDeadlineOrder(r: Processing): void {
   const s = r.state;
-  s.inputDeadlineOrder = [];
   if (s.deadlineOrder.length > 0)
     report(r.state, { kind: "InvalidInput.unusedDeadlineOrder", definition: null, data: { entries: s.deadlineOrder } });
 }
@@ -415,7 +403,7 @@ function writeOperation(r: Processing, screen: string, key: string, payload: unk
       data: { screen: definition, control: key },
     });
   const name = `${screen}.${key}`;
-  writeInput(r.state, { dir: "in", type: "operation", name, ...(control.hasPayload ? { payload } : {}) });
+  write(r.state, { dir: "in", type: "operation", name, ...(control.hasPayload ? { payload } : {}) });
   const parsed = r.functions.parse({ kind: "control", screen: definition, control: key }, payload);
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
   if ("error" in parsed)

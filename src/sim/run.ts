@@ -10,7 +10,7 @@ import { begin, call, checkDeadlineOrder, endSubscription, operate, send, subscr
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
-import { Halt, writeInput } from "../service/state.ts";
+import { Halt, write } from "../service/state.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
 import { contractsListing, isKeyOf, refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
 import { given } from "./given.ts";
@@ -382,7 +382,7 @@ function fireTo(time: Temporal.Instant, order: readonly DeadlineId[]): (r: Proce
       r.note.wroteNow();
     }
     s.tieOrderRequired = false;
-    writeInput(s, { dir: "in", type: "time" });
+    write(s, { dir: "in", type: "time" });
   };
 }
 
