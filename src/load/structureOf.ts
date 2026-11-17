@@ -184,6 +184,7 @@ function structureOfChart(
         activities,
         transitions: transitions(node, name),
         deadlines: Object.keys(node.after ?? {}),
+        treeDeadlines: [...(chart.deadlineNames?.[name] ?? [])],
       };
       states.push(state);
       visit(node.states ?? {}, state);

@@ -34,6 +34,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.missingParent":
     case "Illegal.ownQuery":
     case "Illegal.unlistedControl":
+    case "Illegal.unnamedDeadline":
     case "Illegal.alwaysCycle":
     case "Illegal.foreignEvent":
     case "Illegal.indexReason":

@@ -92,7 +92,10 @@ structure State where
   /-- The activities, in the order calls, sends, shows, opens. -/
   activities : List Activity
   transitions : List Transition
+  /-- The names of the deadlines that the body writes under `after`. -/
   deadlines : List String
+  /-- The deadline names that the chart's tree lists in the state's `after`, which a clock line's order uses. -/
+  treeDeadlines : List String
 deriving Repr, Inhabited
 
 derive_wire State

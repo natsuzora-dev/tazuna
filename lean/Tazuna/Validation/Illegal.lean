@@ -23,6 +23,11 @@ inductive Illegal where
   state does not offer is written, not left out.
   -/
   | unlistedControl (definition : Syntax.Ref) (control : String)
+  /--
+  The body of `state` writes under `after` the deadline `deadline`, which the chart's tree does not list in the state's
+  `after`; a clock line's order names a deadline by the tree's names.
+  -/
+  | unnamedDeadline (definition : Syntax.Ref) (state deadline : String)
   /-- `statePath` leads from the state of an unguarded always transition back to that state. -/
   | alwaysCycle (definition : Syntax.Ref) (statePath : List String)
   | foreignEvent (definition : Syntax.Ref) (event : Syntax.Ref)

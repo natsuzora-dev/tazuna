@@ -265,13 +265,15 @@ type RuntimeNode = {
   readonly key?: Shape;
   readonly context?: Shape;
   readonly held?: Shape;
+  readonly after?: readonly string[];
   readonly initial?: string;
   readonly states?: Readonly<Record<string, RuntimeNode>>;
 };
-type Assembled = Required<Pick<ChartSpec, "states" | "held" | "holds">>;
+type Assembled = Required<Pick<ChartSpec, "states" | "held" | "deadlineNames" | "holds">>;
 
 export function assemble(tree: object, table: object): Assembled {
   const held: Record<string, Shape> = {};
+  const deadlineNames: Record<string, readonly string[]> = {};
   const holds: Record<string, NonNullable<ChartSpec["holds"]>[string]> = {};
   const behaviors = table as Readonly<Record<string, { readonly holds?: NonNullable<ChartSpec["holds"]>[string] }>>;
   const nest = (nodes: Readonly<Record<string, RuntimeNode>>): Record<string, StateSpec> =>
@@ -279,6 +281,7 @@ export function assemble(tree: object, table: object): Assembled {
       Object.entries(nodes).map(([name, node]) => {
         const { holds: own, ...behavior } = behaviors[name] ?? {};
         if (node.held !== undefined) held[name] = node.held;
+        if (node.after !== undefined) deadlineNames[name] = node.after;
         if (own !== undefined) holds[name] = own;
         const spec = {
           ...(node.type === undefined ? {} : { type: node.type }),
@@ -291,5 +294,5 @@ export function assemble(tree: object, table: object): Assembled {
         return [name, spec as StateSpec];
       }),
     );
-  return { states: nest(tree as Readonly<Record<string, RuntimeNode>>), held, holds };
+  return { states: nest(tree as Readonly<Record<string, RuntimeNode>>), held, deadlineNames, holds };
 }

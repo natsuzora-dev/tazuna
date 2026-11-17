@@ -259,6 +259,8 @@ export interface ChartSpec {
   readonly screens?: Readonly<Record<string, AnyScreen>>;
   /** The shapes of the values that each state holds, per state name. */
   readonly held?: Readonly<Record<string, Shape>>;
+  /** The deadline names that the tree lists in each state's `after`, per state name. */
+  readonly deadlineNames?: Readonly<Record<string, readonly string[]>>;
   /** The expressions of the values that each state holds, per state name. */
   readonly holds?: Readonly<Record<string, Readonly<Record<string, (args: unknown) => unknown>>>>;
   readonly initial: string;
