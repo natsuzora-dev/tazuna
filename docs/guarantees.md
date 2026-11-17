@@ -106,7 +106,7 @@ An explored path uses values from the scenarios and new IDs, and it neither rese
 | Violations that `test` finds on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by another name than the ones that `check` looks for in the spec's source. |
 | `OrderDependent` | Orders of a `Bag` other than the written one and its reverse. |
-| `ChoiceDependent` | Step orders beyond the `ChoiceDependent.searchLimit` of one processing. |
+| `ChoiceDependent` | Orders of steps and of tied deadlines beyond the `ChoiceDependent.searchLimit` of one processing. |
 | `InvalidInput` | An external peer's answer is checked only against the requires that read the input alone and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 
@@ -197,7 +197,8 @@ Precedent: the modal dialog of the WAI-ARIA Authoring Practices (W3C), which mak
 - Processing a message never changes the current time; only a clock line advances it (`drain_keeps_now`).
 - Every line that processing a message writes carries the current time (`message_outputs_at_its_time`).
 - A deadline due by the time that the clock advances to fires as a message of its own, at its time (`deadline_is_own_message`, `deadline_message_at_its_time`).
-- Of deadlines due at the same time, the next entry of the clock line's `order` chooses the one that fires (`chooseDeadline_named`), and a tie that no entry decides is reported instead of decided (`chooseDeadline_required`).
+- Of deadlines due at the same time while a clock line advances the clock, the next entry of the line's `order` chooses the one that fires (`chooseDeadline_named`), and a tie that no entry decides is reported instead of decided (`chooseDeadline_required`).
+- Deadlines that become due at the same time while a service processes any other line tie inside that service, where no line can order them; they fire in the order of the step order that `test` searches (`chooseDeadline_stepOrder`), and `test` reports `ChoiceDependent` when another order changes the result.
 
 Precedent: deterministic simulation testing (FoundationDB), where the simulator supplies the clock.
 

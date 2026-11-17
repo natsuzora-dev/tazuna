@@ -49,6 +49,10 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
 
+def StepName.isDeadline : StepName → Bool
+  | .deadline .. => true
+  | _ => false
+
 def StepName.definition : StepName → Syntax.Ref
   | .start w | .receive w _ | .always w | .onDone w | .opensDone w _ | .activities w _ | .deadline w _ => w.chart
   | .reaction a => a

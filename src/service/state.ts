@@ -223,7 +223,8 @@ interface Queued {
  * A step of a message. `cause` is the step that caused this one, undefined for input and deadline steps. `message` is
  * the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
  * marks a step that comes after every earlier step of the same message and before every later one. `nested` marks a
- * step that began while its cause was running (a copy start), so it ends before its cause does.
+ * step that began while its cause was running (a copy start), so it ends before its cause does. `tie` is, for a
+ * deadline step, the time of the tie it fired in when no line orders that tie.
  */
 export interface StepInfo {
   readonly cause: number | undefined;
@@ -231,6 +232,7 @@ export interface StepInfo {
   readonly command: boolean;
   readonly barrier: boolean;
   readonly nested: boolean;
+  readonly tie: Temporal.Instant | undefined;
 }
 
 /** A recorded acceptance of an external command and the result events received so far, with decoded values. */
@@ -285,8 +287,6 @@ export interface State {
   readonly created: (readonly [string, string])[];
   /** Lean's State.keyOwner. */
   keyOwner: string | undefined;
-  /** Lean's State.tieOrderRequired. */
-  tieOrderRequired: boolean;
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
@@ -320,7 +320,6 @@ export function newState(st: Service): State {
     messageCount: 0,
     created: [],
     keyOwner: undefined,
-    tieOrderRequired: false,
     subscriptions: new Subscriptions(),
     results: new Map(),
     takenAnswers: new Map(),
@@ -388,9 +387,17 @@ export function newMessage(s: State): void {
   s.messageCount += 1;
 }
 
-export function newStep(s: State, cause: number | undefined, { barrier = false, nested = false } = {}): number {
+export function newStep(
+  s: State,
+  cause: number | undefined,
+  {
+    barrier = false,
+    nested = false,
+    tie,
+  }: { barrier?: boolean; nested?: boolean; tie?: Temporal.Instant | undefined } = {},
+): number {
   const message = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount;
-  s.steps.push({ cause, message, command: false, barrier, nested });
+  s.steps.push({ cause, message, command: false, barrier, nested, tie });
   return s.steps.length - 1;
 }
 

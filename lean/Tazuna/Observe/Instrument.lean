@@ -425,9 +425,17 @@ def instrument : Functions (StateT Collect m) :=
       audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
         fun a b => sameValue a.1 b.1 && a.2 == b.2 }
 
+/-- Whether steps `i` and `j` are deadlines of one tie that no line orders. -/
+def tiedDeadlines (s : State) (i j : Nat) : Bool :=
+  match s.steps[i]?.bind (·.tie), s.steps[j]?.bind (·.tie) with
+  | some a, some b => a == b
+  | _, _ => false
+
 /--
-The pairs of steps whose other order test runs: steps of one message, by step number in the order they began, whose
-accesses overlap, that do not commute, whose names differ so that a `stepOrder` names each, and that no cause orders.
+The pairs of steps whose other order test runs, by step number in the order they began, whose names differ so that a
+`stepOrder` names each, and that no cause orders: the deadlines of one tie that no line orders, whatever their steps
+access, since each deadline's effects run in the later steps of its own message; and the steps of one message whose
+accesses overlap and do not commute.
 A run that halted (in the semantic run, or `stopped` from enabled) skips the steps after the halt, so it has none.
 Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
 orders to run.
@@ -436,8 +444,9 @@ def candidates (s : State) (c : Collect) (stopped : Option Violation) : List (Na
   if (s.halted <|> stopped).isSome then [] else
   c.steps.toList.zipIdx.flatMap fun ((i, a), n) =>
     (c.steps.toList.drop (n + 1)).filterMap fun (j, b) =>
-      if (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message)) && overlaps a.access b.access &&
-          !a.commutes b && a.name != b.name && !leadsTo s i j then
+      if (tiedDeadlines s i j ||
+            (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message)) && overlaps a.access b.access &&
+              !a.commutes b) && a.name != b.name && !leadsTo s i j then
         some (i, j)
       else none
 

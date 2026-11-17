@@ -374,14 +374,12 @@ function fireTo(time: Temporal.Instant, order: readonly DeadlineId[]): (r: Proce
   return (r) => {
     const s = r.state;
     s.deadlineOrder = order;
-    s.tieOrderRequired = true;
-    fireDue(r, time);
+    fireDue(r, true, time);
     checkDeadlineOrder(r);
     if (Temporal.Instant.compare(time, s.now) > 0) {
       s.now = time;
       r.note.wroteNow();
     }
-    s.tieOrderRequired = false;
     write(s, { dir: "in", type: "time" });
   };
 }

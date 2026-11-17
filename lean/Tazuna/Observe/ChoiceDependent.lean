@@ -26,8 +26,8 @@ deriving Repr, Inhabited
 derive_wire Difference tag "aspect"
 
 /--
-A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders.
-Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
+A result that depends on an order nobody controls: the order of two steps of one processing that no cause orders, or
+of two deadlines due at one time that no clock line orders. Every other order of a simulation is a written line. stepOrder writes the pair in canonical order.
 -/
 inductive ChoiceDependent where
   /--
@@ -148,17 +148,15 @@ def Walk.span? (w : Walk) (origin : Scenario.Origin) (service : String) : Option
   w.world.spans.find? fun s => s.service == service && s.origin == origin
 
 /--
-The steps that the internal queue of the processing of `span` took, by step number and name, in the order they began:
-those that began while no step was open, except the steps of deadlines and barriers, which no order takes.
+The steps of the processing of `span` that an order takes, by step number and name, in the order they began: those
+that the internal queue took when no step was open, and the deadlines of ties that no line orders. Barriers and other
+deadlines take no order.
 -/
 def Walk.taken (w : Walk) (span : Sim.Span) : List (Nat × StepName) :=
   let s := w.world.state span.service
   (w.collect span.service).steps.toList.filterMap fun (n, a) =>
-    let deadline := match a.name with
-      | .deadline .. => true
-      | _ => false
-    if span.stepsFrom ≤ n && n < span.stepsTo && !deadline && !(s.steps[n]?.any (·.barrier)) then some (n, a.name)
-    else none
+    let fixed := (a.name.isDeadline && (s.steps[n]?.bind (·.tie)).isNone) || s.steps[n]?.any (·.barrier)
+    if span.stepsFrom ≤ n && n < span.stepsTo && !fixed then some (n, a.name) else none
 
 /--
 Whether the service of `span` halted while the processing of `span` ran: it halted, and the processing is its last.

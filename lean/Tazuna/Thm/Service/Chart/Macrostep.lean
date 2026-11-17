@@ -484,12 +484,25 @@ theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (r
   | cons x xs => dsimp only; rw [h]
 
 theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready)
-    (rs : List Ready) (hr : q.ready = r :: rs) (h : q.ready.zipIdx.find? (name ·.1 == named) = none) :
+    (rs : List Ready) (hr : q.ready = r :: rs) (h : q.ready.zipIdx.find? (name ·.1 == named) = none)
+    (hd : named.isDeadline = false) :
     q.take name (named :: rest) = .error (.unreadyStep named (q.ready.map name)) := by
   simp only [Queue.take]
   rw [hr] at h ⊢
   dsimp only
   rw [h]
+  simp [hd]
+
+/-- An entry that names a deadline waits for its tie: the queue takes its first ready entry and keeps the entry. -/
+theorem take_deadline (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready)
+    (rs : List Ready) (hr : q.ready = r :: rs) (h : q.ready.zipIdx.find? (name ·.1 == named) = none)
+    (hd : named.isDeadline = true) :
+    q.take name (named :: rest) = .ok (some (r, q.without 0, named :: rest)) := by
+  simp only [Queue.take]
+  rw [hr] at h ⊢
+  dsimp only
+  rw [h]
+  simp [hd]
 
 theorem newCommandStep_exceeded_halts (cause : Nat) (sender : Syntax.Ref) (exceeded : Fault)
     (h : (s.newCommandStep cause sender).2 = some exceeded) : exceeded.halts = true := by

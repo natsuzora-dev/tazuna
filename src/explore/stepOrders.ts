@@ -59,7 +59,8 @@ function taken(m: Made, span: Span): (readonly [number, StepName])[] {
   const steps = m.world.participants.get(span.service)?.processing.state.steps ?? [];
   const collected = m.listeners.get(span.service)?.collected;
   return (collected?.names(span.stepsFrom) ?? []).filter(
-    ([n, name]) => n < span.stepsTo && name.kind !== "deadline" && steps[n]?.barrier !== true,
+    ([n, name]) =>
+      n < span.stepsTo && (name.kind !== "deadline" || steps[n]?.tie !== undefined) && steps[n]?.barrier !== true,
   );
 }
 

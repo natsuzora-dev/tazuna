@@ -8,7 +8,7 @@ namespace Tazuna.Thm.Service.Queue
 open Tazuna.Data Tazuna.Semantics
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Clock
 
-variable {st : Service} {fs : Functions Id} {s : State}
+variable {st : Service} {fs : Functions Id} {s : State} {clock : Bool}
 
 theorem checkHolds_fixed : (checkHolds st fs s).fixed = s.fixed := by
   unfold checkHolds
@@ -83,7 +83,7 @@ theorem afterMessage_commandAnswers : (afterMessage st fs s).commandAnswers = s.
   congrArg Fixed.commandAnswers afterMessage_fixed
 
 theorem fireDue_commandAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
-    (fireDue st fs to fuel tie s).commandAnswers = s.commandAnswers := by
+    (fireDue st fs clock to fuel tie s).commandAnswers = s.commandAnswers := by
   induction fuel generalizing s tie with
   | zero => simp only [fireDue]; split <;> rfl
   | succ fuel ih =>
@@ -95,7 +95,9 @@ theorem fireDue_commandAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
       · dsimp only
         split
         · simp
-        · try simp only [id_bind]
+        · rename_i hc
+          obtain ⟨_, _, rfl⟩ := chooseDeadline_orders hc
+          try simp only [id_bind]
           rw [ih, afterMessage_commandAnswers, drain_commandAnswers, (keeps_settled _ _ (keeps_fire _ _)).commandAnswers]
           rfl
 
@@ -128,7 +130,7 @@ theorem afterMessage_grows : Grows s (afterMessage st fs s) := by
     · exact (Grows.of_lines (rearm_lines.trans (checkInvariants_lines.trans checkHolds_lines))).trans
         (congrArg Fixed.now (rearm_fixed.trans (checkInvariants_fixed.trans checkHolds_fixed))) publish_grows
 
-theorem fireDue_extends (to : Time) (fuel : Nat) (tie : Option Time) : Extends s (fireDue st fs to fuel tie s) := by
+theorem fireDue_extends (to : Time) (fuel : Nat) (tie : Option Time) : Extends s (fireDue st fs clock to fuel tie s) := by
   induction fuel generalizing s tie with
   | zero => simp only [fireDue]; split <;> exact ⟨#[], by simp [State.report, Fault.halts, State.halt]⟩
   | succ fuel ih =>
@@ -140,7 +142,9 @@ theorem fireDue_extends (to : Time) (fuel : Nat) (tie : Option Time) : Extends s
       · dsimp only
         split
         · exact ⟨#[], by simp⟩
-        · try simp only [id_bind]
+        · rename_i hc
+          obtain ⟨_, _, rfl⟩ := chooseDeadline_orders hc
+          try simp only [id_bind]
           refine Extends.trans ?_ (ih _)
           refine Extends.trans ?_ afterMessage_grows.toExtends
           refine Extends.trans ?_ (drain_grows _ _).toExtends
@@ -157,7 +161,7 @@ theorem afterMessage_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (a
   exact h
 
 theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : KeysDistinct s.records) :
-    KeysDistinct (fireDue st fs to fuel tie s).records := by
+    KeysDistinct (fireDue st fs clock to fuel tie s).records := by
   induction fuel generalizing s tie with
   | zero => simp only [fireDue]; split <;> exact h
   | succ fuel ih =>
@@ -169,23 +173,26 @@ theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : K
       · dsimp only
         split
         · simpa using h
-        · try simp only [id_bind]
+        · rename_i hc
+          obtain ⟨_, _, rfl⟩ := chooseDeadline_orders hc
+          try simp only [id_bind]
           exact ih _ (afterMessage_keysDistinct (drain_keysDistinct _ _ (by rw [(keeps_settled _ _ (keeps_fire _ _)).records]; exact h)))
 
 theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDistinct (message st fs s q).records := by
   simp only [message, finish, id_bind]
   exact fireDue_keysDistinct _ _ _ (afterMessage_keysDistinct (drain_keysDistinct _ _ h))
 
-theorem deadline_is_own_message (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (order : List DeadlineId)
+theorem deadline_is_own_message (clock : Bool) (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
     (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
-    (hc : chooseDeadline e (s.deadlines.filter (·.time == e.time)) (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time)
-      s.tieOrderRequired s.deadlineOrder = .ok (t, order)) :
-    fireDue st fs to (fuel + 1) tie s =
-      let time := t.time.getD s.now
-      let s₁ := { s with now := max s.now time, deadlineOrder := order }.newMessage
-      let (s₂, step) := s₁.newStep none
+    (hc : chooseDeadline st s clock e (s.deadlines.filter (·.time == e.time))
+      (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
+    fireDue st fs clock to (fuel + 1) tie s =
+      let time := t.time.getD s'.now
+      let s₁ := { s' with now := max s'.now time }.newMessage
+      let tied := 1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time
+      let (s₂, step) := s₁.newStep none (tie := if tied && !clock then e.time else none)
       let r := settled fs st step (some t.machine) (fire fs st step t) ⟨s₂, {}⟩
-      fireDue st fs to fuel
+      fireDue st fs clock to fuel
         (if 1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time then e.time else none)
         (afterMessage st fs (drain st fs Limit.messageWork.max r.state r.queue)) := by
   simp [fireDue, hh, he, hc]
@@ -193,13 +200,13 @@ theorem deadline_is_own_message (to : Time) (fuel : Nat) (tie : Option Time) (e 
 theorem message_keeps_earlier_lines (q : Queue) : ∃ new, (message st fs s q).lines = s.lines ++ new :=
   message_extends q
 
-theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (order : List DeadlineId)
+theorem deadline_message_at_its_time (clock : Bool) (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
     (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
-    (hc : chooseDeadline e (s.deadlines.filter (·.time == e.time)) (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time)
-      s.tieOrderRequired s.deadlineOrder = .ok (t, order)) :
-    ∃ s₁ q tie', fireDue st fs to (fuel + 1) tie s =
-        fireDue st fs to fuel tie' (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q)) ∧
-      s₁.now = max s.now (t.time.getD s.now) := by
+    (hc : chooseDeadline st s clock e (s.deadlines.filter (·.time == e.time))
+      (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
+    ∃ s₁ q tie', fireDue st fs clock to (fuel + 1) tie s =
+        fireDue st fs clock to fuel tie' (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q)) ∧
+      s₁.now = max s'.now (t.time.getD s'.now) := by
   refine ⟨_, _, _, by simp only [fireDue, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, he, hc, Tazuna.Thm.Service.Note.note_id,
       id_pure, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _
@@ -208,7 +215,7 @@ theorem afterMessage_takenAnswers : (afterMessage st fs s).takenAnswers = s.take
   congrArg Fixed.takenAnswers afterMessage_fixed
 
 theorem fireDue_takenAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
-    (fireDue st fs to fuel tie s).takenAnswers = s.takenAnswers := by
+    (fireDue st fs clock to fuel tie s).takenAnswers = s.takenAnswers := by
   induction fuel generalizing s tie with
   | zero => simp only [fireDue]; split <;> rfl
   | succ fuel ih =>
@@ -220,7 +227,9 @@ theorem fireDue_takenAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
       · dsimp only
         split
         · exact congrArg Fixed.takenAnswers (report_fixed ..)
-        · try simp only [id_bind]
+        · rename_i hc
+          obtain ⟨_, _, rfl⟩ := chooseDeadline_orders hc
+          try simp only [id_bind]
           rw [ih, afterMessage_takenAnswers, drain_takenAnswers, (keeps_settled _ _ (keeps_fire _ _)).takenAnswers]
           rfl
 
@@ -233,7 +242,7 @@ theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
   (drain_grows n q).trans (drain_keeps_now n q) afterMessage_grows
 
 theorem fireDue_at_deadline_limit (to : Time) (tie : Option Time) :
-    fireDue st fs to 0 tie s =
+    fireDue st fs clock to 0 tie s =
       if s.halted.isNone && (earliestDeadline s.deadlines to).isSome then s.halt (Finding.fault (.exceededDueDeadlines Limit.dueDeadlines.max)).toViolation else s := by
   simp only [fireDue, id_pure, State.report]
   rfl

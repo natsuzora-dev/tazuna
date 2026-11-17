@@ -77,18 +77,20 @@ export type Ready = { readonly kind: "work"; readonly work: Work } | { readonly 
  * Lean's Queue.take: removes the entry that the queue takes next and returns it, or undefined when nothing is ready.
  * While the state has `stepOrder` entries, the taken entry is the first ready one that the next entry names (`name`
  * names each). Otherwise, it is the first in queue order: the tasks in arrival order, then the commands, with the round
- * joined to them in sender-definition order.
+ * joined to them in sender-definition order. An entry that names a deadline waits for its tie (chooseDeadline), so the
+ * queue takes the first in queue order and keeps the entry.
  */
 export function take(r: Processing, name: (ready: Ready) => StepName): Ready | undefined {
   const { state: s, queue } = r;
   const [named, ...rest] = s.stepOrder;
-  if (named === undefined) {
+  const first = (): Ready | undefined => {
     const work = queue.tasks.shift();
     if (work !== undefined) return { kind: "work", work };
     queue.commands.push(...sortSent(queue.round.splice(0)));
     const sent = queue.commands.shift();
     return sent === undefined ? undefined : { kind: "command", sent };
-  }
+  };
+  if (named === undefined) return first();
   const commands = [...queue.commands, ...sortSent(queue.round)];
   const ready = [
     ...queue.tasks.map((work): Ready => ({ kind: "work", work })),
@@ -96,6 +98,7 @@ export function take(r: Processing, name: (ready: Ready) => StepName): Ready | u
   ];
   if (ready.length === 0) return undefined;
   const i = ready.findIndex((entry) => canonicalJson(name(entry)) === canonicalJson(named));
+  if (i < 0 && named.kind === "deadline") return first();
   if (i < 0)
     return report(s, {
       kind: "InvalidInput.unreadyStep",

@@ -3,23 +3,12 @@ import { settled } from "./chart/always.ts";
 import { rearm } from "./chart/deadline.ts";
 import { drain } from "./chart/macrostep.ts";
 import type { Processing } from "./chart/queue.ts";
-import { chooseDeadline, earliestDeadline, fire } from "./clock.ts";
+import { chooseDeadline, deadlineStep, earliestDeadline, fire } from "./clock.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { limits } from "./limits.ts";
 import { publish } from "./query.ts";
 import { LazyRecordSource } from "./records.ts";
-import {
-  type Deadline,
-  halt,
-  inStep,
-  NoteAccess,
-  newMessage,
-  newStep,
-  report,
-  running,
-  scopeOf,
-  who,
-} from "./state.ts";
+import { type Deadline, halt, inStep, NoteAccess, newMessage, newStep, report, running, scopeOf } from "./state.ts";
 
 function checkHolds(r: Processing): void {
   for (const instance of running(r.state)) {
@@ -57,7 +46,8 @@ function afterMessage(r: Processing): void {
  * time; until no deadline is due at that time, the next entry of the input's `deadlineOrder` names each one that fires,
  * and after the entries, the first in entry order.
  */
-export function fireDue(r: Processing, to: Temporal.Instant): void {
+/** Lean's fireDue: fires the deadlines due by `to`, ties chosen from the clock line's order when `clock`. */
+export function fireDue(r: Processing, clock: boolean, to: Temporal.Instant): void {
   const s = r.state;
   let fired = 0;
   let tie: Temporal.Instant | undefined;
@@ -68,15 +58,15 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
     const { time } = e;
     const due = s.deadlines.filter((t): t is Deadline & { time: Temporal.Instant } => t.time?.equals(time) === true);
     tie = due.length > 1 || tie?.equals(time) === true ? time : undefined;
-    const deadline = tie === undefined ? e : chooseDeadline(r, e, due);
+    const deadline = chooseDeadline(r, clock, e, due, tie !== undefined);
     if (Temporal.Instant.compare(deadline.time, s.now) > 0) {
       s.now = deadline.time;
       r.note.wroteNow();
     }
     newMessage(s);
     r.note.deadline(s.messageCount, deadline.time);
-    const step = newStep(s, undefined);
-    inStep(r, step, { kind: "deadline", who: who(s, r.st, deadline.machine), name: deadline.name }, undefined, () =>
+    const step = newStep(s, undefined, { tie: tie !== undefined && !clock ? tie : undefined });
+    inStep(r, step, deadlineStep(r, deadline), undefined, () =>
       settled(r, deadline.machine, step, () => fire(r, deadline, step)),
     );
     drain(r);
@@ -86,7 +76,7 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
 
 function finish(r: Processing): void {
   afterMessage(r);
-  fireDue(r, r.state.now);
+  fireDue(r, false, r.state.now);
 }
 
 /** Processes the internal queue and finishes the message. */

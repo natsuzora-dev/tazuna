@@ -109,6 +109,12 @@ function commutes(a: StepAccess, b: StepAccess): boolean {
   );
 }
 
+/** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie that no line orders. */
+function tiedDeadlines(steps: readonly StepInfo[], i: number, j: number): boolean {
+  const [a, b] = [steps[i]?.tie, steps[j]?.tie];
+  return a !== undefined && b !== undefined && a.equals(b);
+}
+
 const reportedKey = (v: OrderDependent): string => JSON.stringify([v.kind, v.definition, v.data]);
 
 /**
@@ -268,9 +274,8 @@ export class Collect
         .slice(n + 1)
         .filter(
           ([j, b]) =>
-            steps[i]?.message === steps[j]?.message &&
-            overlaps(a, b) &&
-            !commutes(a, b) &&
+            (tiedDeadlines(steps, i, j) ||
+              (steps[i]?.message === steps[j]?.message && overlaps(a, b) && !commutes(a, b))) &&
             canonicalJson(a.name) !== canonicalJson(b.name) &&
             !leadsTo(steps, i, j),
         )
