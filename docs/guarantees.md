@@ -162,7 +162,7 @@ A map state has one *copy* of its child states for each key of its items.
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer line that names a request that has not reached that peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A report that halts stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
-- No two createKey values of a participant are equal, since the `n`-th value of an entity is `<participant>/<Entity>-<n>` (`created_distinct`), and a key of a keyed entity that the scenario may write, such as the key of a Given record, is none of them (`unwritten_not_created`).
+- No two createKey calls of a participant in a simulation return the same key: each line keeps every value that a participant has created and may only add to them (`walk_keepsKeys`, `created_kept`), and no two of its values are equal, since the `n`-th value of an entity is `<participant>/<Entity>-<n>` (`created_distinct`). A key of a keyed entity that the scenario may write, such as the key of a Given record, is none of them at any point of the run (`unwritten_not_created`, `walk_unwritten_not_created`).
 - The order in which Given writes the records of a running service reaches nothing: Given places them ordered by entity and key, so a scenario that writes the same records in another order, no two of one entity and key, simulates alike, with the same traces, messages, halt, and reports (`simulate_records_perm`).
 
 ### Data validity
