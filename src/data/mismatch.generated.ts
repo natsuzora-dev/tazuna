@@ -214,6 +214,27 @@ export type Mismatch =
         readonly rejection: Rejection;
       };
     }
+  /** The answer has a result that the target never answers with: `fulfilled` to a command or `accepted` to a query. */
+  | {
+      readonly kind: "Mismatch.answerResult";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+        readonly result: string;
+      };
+    }
+  /** The answer answers a request that an earlier line answered. */
+  | {
+      readonly kind: "Mismatch.repeatedAnswer";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
+    }
   | {
       readonly kind: "Mismatch.rejectedAssumedRequires";
       readonly definition: null;
@@ -281,6 +302,8 @@ export const mismatchKinds = [
   "Mismatch.resultOfUnacceptedRequest",
   "Mismatch.resultOfUnlistedEvent",
   "Mismatch.unlistedRejectionKind",
+  "Mismatch.answerResult",
+  "Mismatch.repeatedAnswer",
   "Mismatch.rejectedAssumedRequires",
   "Mismatch.failedAssumedRequires",
   "Mismatch.failedAssumedEnsures",

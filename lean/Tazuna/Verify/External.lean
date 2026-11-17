@@ -13,6 +13,7 @@ open Tazuna.Spec
 structure Request where
   definition : Definition
   accepted : Bool
+  answered : Bool
 
 def resultOfFinding (line : Nat) (event : Ref) (requestId : String) (target : Ref) : ResultOfMismatch → Finding
   | .resultOfNonCommand => .uncomparable (.resultOfNonCommand line event requestId target)
@@ -25,16 +26,21 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
   | .command .in id name _ | .query .in id name _ =>
     let definition := s.named service (some name) [l.body.type]
     (if definition.isSome then none else some (.uncomparable (.unknownRequest line (Subject.of l))),
-      setAt requests id (definition.map fun definition => { definition, accepted := false }))
+      setAt requests id (definition.map fun definition => { definition, accepted := false, answered := false }))
   | .answer .out _ to answer =>
     match requests.lookup to, answer with
     | none, _ => (some (.uncomparable (.unknownAnswer line (Subject.of l))), requests)
     | some none, _ => (none, requests)
-    | some (some r), .rejected rejection =>
-      (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none
-       else some (.mismatch (.unlistedRejectionKind line to r.definition.ref rejection)), requests)
-    | some (some r), .accepted _ => (none, setAt requests to (some { r with accepted := true }))
-    | some (some r), .fulfilled _ => (none, setAt requests to (some { r with accepted := false }))
+    | some (some r), _ =>
+      if r.answered then (some (.mismatch (.repeatedAnswer line to r.definition.ref)), requests) else
+      let answered := setAt requests to (some { r with accepted := answer matches .accepted _, answered := true })
+      match answer, r.definition.kind with
+      | .rejected rejection, _ =>
+        (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none
+         else some (.mismatch (.unlistedRejectionKind line to r.definition.ref rejection)), answered)
+      | .accepted _, "command" | .fulfilled _, "query" => (none, answered)
+      | .accepted _, _ => (some (.mismatch (.answerResult line to r.definition.ref "accepted")), answered)
+      | .fulfilled _, _ => (some (.mismatch (.answerResult line to r.definition.ref "fulfilled")), answered)
   | .event .out _ name _ resultOf =>
     let found := match s.named service (some name) ["event"] with
       | none => some (.uncomparable (.unknownEvent line (Subject.of l)))

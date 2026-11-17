@@ -29,6 +29,7 @@ interface Request {
   readonly definition: AnyCommand | AnyQuery;
   readonly line: LineOf<"command" | "query">;
   accepted: boolean;
+  answered: boolean;
 }
 
 type RequestRef = { readonly requestId: string; readonly target: DefinitionRef };
@@ -64,7 +65,10 @@ function checkLine(
 ): Found | Resolved | undefined {
   if (l.dir === "in" && (l.type === "command" || l.type === "query")) {
     const definition = definitionOfTraceName(spec, service, l.name, l.type);
-    requests.set(l.id, definition === undefined ? undefined : { definition, line: l, accepted: false });
+    requests.set(
+      l.id,
+      definition === undefined ? undefined : { definition, line: l, accepted: false, answered: false },
+    );
     return definition === undefined
       ? ({
           kind: "Uncomparable.unknownRequest",
@@ -84,8 +88,17 @@ function checkLine(
       } satisfies Uncomparable;
     const request = requests.get(l.to);
     if (request === undefined) return undefined;
-    if (l.answer.result === "rejected") {
-      const target = refOfDefinition(spec, request.definition);
+    const target = refOfDefinition(spec, request.definition);
+    if (request.answered)
+      return {
+        kind: "Mismatch.repeatedAnswer",
+        definition: null,
+        line: at,
+        data: { requestId: l.to, target },
+      } satisfies Mismatch;
+    request.answered = true;
+    request.accepted = l.answer.result === "accepted";
+    if (l.answer.result === "rejected")
       return rejectionKinds(spec.structure, service, target).includes(l.answer.rejection.kind)
         ? { at, line: l, request }
         : ({
@@ -94,9 +107,14 @@ function checkLine(
             line: at,
             data: { requestId: l.to, target, rejection: l.answer.rejection },
           } satisfies Mismatch);
-    }
-    request.accepted = l.answer.result === "accepted";
-    return { at, line: l, request };
+    return l.answer.result === (request.definition.kind === "command" ? "accepted" : "fulfilled")
+      ? { at, line: l, request }
+      : ({
+          kind: "Mismatch.answerResult",
+          definition: null,
+          line: at,
+          data: { requestId: l.to, target, result: l.answer.result },
+        } satisfies Mismatch);
   }
   if (l.dir === "out" && l.type === "event") {
     const event = definitionOfTraceName(spec, service, l.name, "event");
