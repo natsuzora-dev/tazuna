@@ -54,8 +54,8 @@ export function send(r: Processing, name: string, input: unknown, given: { reado
   const step = newStep(s, undefined);
   const known = s.commandAnswers.get(id);
   if (known === undefined) {
-    const { answer, emits } = processCommand(r, name, input, id, step);
-    r.queue.tasks.push(...commandWork(r.st, s, emits, step));
+    const { answer, groups } = processCommand(r, name, input, id, step);
+    r.queue.tasks.push(...commandWork(r.st, s, groups, step));
     keep(s.commandAnswers, id, request, answer);
   } else write(s, { dir: "out", type: "answer", to: id, answer: answerAgain(known, request) });
   message(r);
@@ -195,7 +195,7 @@ export function receive(
   if (request !== undefined) s.outgoing.get(request)?.accepted?.events.push(e);
   newMessage(s);
   const step = newStep(s, undefined);
-  r.queue.tasks.push(...reactions(r.st, s, [e], false, step));
+  r.queue.tasks.push(...reactions(r.st, s, [[e]], false, step));
   message(r);
 }
 

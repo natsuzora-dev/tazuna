@@ -100,7 +100,7 @@ theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Val
     (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
     applyAll st s.records groups.flatten = written ∧
       (processCommand st fs s name raw id n).1.records = written ∧
-      (processCommand st fs s name raw id n).2.2 = groups.flatten := by
+      (processCommand st fs s name raw id n).2.2 = groups := by
   refine ⟨(evaluate_accepted_applies _ _ _ _ _ _ _ h).1, ?_, ?_⟩
   · simp only [processCommand, id_bind, h]
     exact (congrArg Fixed.records (emitAll_fixed

@@ -30,10 +30,10 @@ inductive Work where
   -/
   | start (machine : InstanceId) (cause : Option Nat)
   /--
-  An evaluation of a machine. `received` holds the key and payload of each matching `receives`, and is empty when only
-  records changed.
+  An evaluation of a machine. `groups` holds the key and payload of each matching `receives`, in the groups of the
+  events, and is empty when only records changed. One step takes one event; the next group waits for the current one.
   -/
-  | receive (machine : InstanceId) (received : List (String × Value)) (cause : Nat)
+  | receive (machine : InstanceId) (groups : List (List (String × Value))) (cause : Nat)
   | onDone (machine : InstanceId) (cause : Nat)
   /-- The close in a final state of a screen that `opens` opened; the opener takes the `onDone` of its `opens`. -/
   | opensDone (machine : InstanceId) (state key : String) (output : Value) (serial : Nat) (cause : Nat)
@@ -72,40 +72,65 @@ inductive Ready where
 deriving Repr, Inhabited
 
 /--
-What the queue can take next, in queue order: the tasks in arrival order, then the commands, with the round joined to
-them in sender-definition order.
+The ways to take work `w`: a receive work takes any event of its first group first, since a group has no order. The
+first way is `w` itself.
 -/
-def Queue.ready (q : Queue) : List Ready := q.tasks.map .work ++ (q.commands ++ sortSent q.round).map .command
+def Work.choices : Work → List Work
+  | .receive machine ((e :: g) :: gs) cause =>
+    .receive machine ((e :: g) :: gs) cause :: (List.range g.length).filterMap fun k =>
+      g[k]?.map fun x => .receive machine ((x :: e :: g.eraseIdx k) :: gs) cause
+  | w => [w]
 
-/-- The queue without the entry at position `i` of `ready`. Taking a command joins the round to the commands. -/
+/--
+The work left after the step `step` took the first event of `w`: the rest of its group with the same cause, or else the
+next group, which the step causes. None for other work.
+-/
+def Work.rest (step : Nat) : Work → Option Work
+  | .receive machine ((_ :: e :: g) :: gs) cause => some (.receive machine ((e :: g) :: gs) cause)
+  | .receive machine ([_] :: g :: gs) _ => some (.receive machine (g :: gs) step)
+  | _ => none
+
+/--
+What the queue can take next, in queue order, each with the position of its task or command: the ways to take the
+tasks in arrival order, then the commands, with the round joined to them in sender-definition order.
+-/
+def Queue.entries (q : Queue) : List (Ready × Nat) :=
+  (q.tasks.zipIdx.flatMap fun (w, i) => w.choices.map (.work ·, i)) ++
+    (q.commands ++ sortSent q.round).zipIdx.map fun (c, j) => (.command c, q.tasks.length + j)
+
+def Queue.ready (q : Queue) : List Ready := q.entries.map (·.1)
+
+/-- The queue without the task or command at position `i`. Taking a command joins the round to the commands. -/
 def Queue.without (q : Queue) (i : Nat) : Queue :=
   if i < q.tasks.length then { q with tasks := q.tasks.eraseIdx i }
   else { q with commands := (q.commands ++ sortSent q.round).eraseIdx (i - q.tasks.length), round := [] }
 
+/-- The queue with the work left `w` back at task position `i`. -/
+def Queue.putBack (q : Queue) (i : Nat) : Option Work → Queue
+  | some w => { q with tasks := q.tasks.insertIdx i w }
+  | none => q
+
 /--
-The entry that the queue takes next, the queue without it, and the entries of `stepOrder` left; none when nothing is
-ready. While entries remain, it is the first ready one that the next entry names (`name` names each); otherwise it is
-the first in queue order. An entry that names a deadline is for a tie of deadlines after the message (chooseDeadline),
-so until then the queue takes the first in queue order and keeps the entry.
+The entry that the queue takes next, its position, the queue without it, and the entries of `stepOrder` left; none when
+nothing is ready. While entries remain, it is the first ready one that the next entry names (`name` names each);
+otherwise it is the first in queue order. An entry that names a deadline is for a tie of deadlines after the message
+(chooseDeadline), so until then the queue takes the first in queue order and keeps the entry.
 -/
 def Queue.take (q : Queue) (name : Ready → StepName) : List StepName →
-    Except InvalidInput (Option (Ready × Queue × List StepName))
+    Except InvalidInput (Option (Ready × Nat × Queue × List StepName))
   | [] =>
-    match q.tasks with
-    | w :: ws => .ok (some (.work w, { q with tasks := ws }, []))
-    | [] =>
-      match q.commands ++ sortSent q.round with
-      | c :: cs => .ok (some (.command c, { q with commands := cs, round := [] }, []))
-      | [] => .ok none
-  | named :: rest =>
-    match q.ready with
+    match q.entries with
+    | (r, i) :: _ => .ok (some (r, i, q.without i, []))
     | [] => .ok none
-    | first :: others =>
-      match (first :: others).zipIdx.find? (name ·.1 == named) with
-      | some (r, i) => .ok (some (r, q.without i, rest))
+  | named :: rest =>
+    match q.entries with
+    | [] => .ok none
+    | (first, p) :: others =>
+      match ((first, p) :: others).find? (name ·.1 == named) with
+      | some (r, i) => .ok (some (r, i, q.without i, rest))
       | none =>
-        if named.isDeadline then .ok (some (first, q.without 0, named :: rest))
-        else .error (.unreadyStep named ((first :: others).map name))
+        if named.isDeadline then .ok (some (first, p, q.without p, named :: rest))
+        else .error (.unreadyStep named (((first, p) :: others).map (name ·.1)))
 
 structure Processing where
   state : State
@@ -127,19 +152,21 @@ def withMachine [Monad m] (name : InstanceId) (f : Instance → Processing → m
   | none => pure r
 
 /-- The evaluation work of instance `i`. A record change alone also causes it, since always guards may read records. -/
-def machineWork (emits : List Emit) (recordsChanged : Bool) (cause : Nat) (i : Instance) : Option Work :=
-  let received := emits.flatMap fun e => (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)
+def machineWork (groups : List (List Emit)) (recordsChanged : Bool) (cause : Nat) (i : Instance) : Option Work :=
+  let received := (groups.map fun g => g.flatMap fun e =>
+    (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)).filter (!·.isEmpty)
   if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.id received cause)
 
 /--
-The work that the events `emits` cause. Copies get no work, since they move with their owner's evaluation.
+The work that the groups of events `groups` cause. Copies get no work, since they move with their owner's evaluation.
 -/
-def reactions (st : Service) (s : State) (emits : List Emit) (recordsChanged : Bool) (cause : Nat) : List Work :=
-  s.machines.filterMap (machineWork emits recordsChanged cause) ++
-  emits.flatMap fun e => (st.automations.filter (·.receives == e.event)).map (.reaction · e cause)
+def reactions (st : Service) (s : State) (groups : List (List Emit)) (recordsChanged : Bool) (cause : Nat) :
+    List Work :=
+  s.machines.filterMap (machineWork groups recordsChanged cause) ++
+  groups.flatten.flatMap fun e => (st.automations.filter (·.receives == e.event)).map (.reaction · e cause)
 
-/-- The work that a command's events cause. Writing an event counts as a record change. -/
-def commandWork (st : Service) (s : State) (emits : List Emit) (cause : Nat) : List Work :=
-  if emits.isEmpty then [] else reactions st s emits true cause
+/-- The work that a command's groups of events cause. Writing an event counts as a record change. -/
+def commandWork (st : Service) (s : State) (groups : List (List Emit)) (cause : Nat) : List Work :=
+  if groups.flatten.isEmpty then [] else reactions st s groups true cause
 
 end Tazuna.Service

@@ -97,7 +97,7 @@ def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     | some r => s.addResult r { event := name, payload }
     | none => s
   let (s, step) := s.newMessage.newStep none
-  message st fs s { tasks := reactions st s [{ event := name, payload }] false step }
+  message st fs s { tasks := reactions st s [[{ event := name, payload }]] false step }
 
 def withResultOf (st : Service) (s : State) (name : String) : Option String → State × Option String
   | some handle => resultRequest st s name handle

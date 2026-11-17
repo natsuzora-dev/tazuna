@@ -14,10 +14,11 @@ variable {st : Service} {fs : Functions Id} {s : State}
 theorem settled_some (step : Nat) (name : InstanceId) (f : Processing → Id Processing) (r : Processing) :
     settled fs st step (some name) f r = settleAround fs st step (name.owner) f r := rfl
 
-theorem records_change_settles (s : State) (emits : List Emit) (cause : Nat) (i : Instance) (hm : i ∈ s.machines)
-    (hc : i.closed = false) :
-    ∃ received, Work.receive i.id received cause ∈ reactions st s emits true cause := by
-  refine ⟨emits.flatMap fun e => (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload),
+theorem records_change_settles (s : State) (groups : List (List Emit)) (cause : Nat) (i : Instance)
+    (hm : i ∈ s.machines) (hc : i.closed = false) :
+    ∃ received, Work.receive i.id received cause ∈ reactions st s groups true cause := by
+  refine ⟨(groups.map fun g => g.flatMap fun e =>
+      (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)).filter (!·.isEmpty),
     List.mem_append_left _ (List.mem_filterMap.mpr ⟨i, hm, ?_⟩)⟩
   simp [machineWork, hc]
 
@@ -73,10 +74,13 @@ theorem keeps_dispatch (step : Nat) (name : InstanceId) (key : String) (payload 
         · rfl
         · exact keeps_microstep step name _ _ r
 
-theorem keeps_receiveWork (step : Nat) (name : InstanceId) (received : List (String × Value)) :
-    Keeps (receiveWork fs st step name received) :=
-  foldlM_keeps (g := fun (x : String × Value) r => dispatch fs st step name x.1 x.2 (settle fs st step name r))
-    (fun x r => (keeps_dispatch step name x.1 x.2 _).trans (keeps_settle step name r)) received
+theorem keeps_receiveWork (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) :
+    Keeps (receiveWork fs st step name groups) := by
+  intro r
+  unfold receiveWork
+  split
+  · exact (keeps_dispatch step name _ _ _).trans (keeps_settle step name r)
+  · rfl
 
 theorem keeps_done (step : Nat) (name : InstanceId) (n : String) : Keeps (done fs st step name n) := by
   unfold done
@@ -191,11 +195,13 @@ theorem growsBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payloa
         · exact Grows.refl _
         · exact growsBy_microstep step name _ _ r
 
-theorem growsBy_receiveWork (step : Nat) (name : InstanceId) (received : List (String × Value)) :
-    GrowsBy (receiveWork fs st step name received) :=
-  foldlM_grows (g := fun (x : String × Value) r => dispatch fs st step name x.1 x.2 (settle fs st step name r))
-    (fun x r => Grows.comp (growsBy_settle step name) (keeps_settle step name) (growsBy_dispatch step name x.1 x.2) r)
-    (fun x r => (keeps_dispatch step name x.1 x.2 _).trans (keeps_settle step name r)) received
+theorem growsBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) :
+    GrowsBy (receiveWork fs st step name groups) := by
+  intro r
+  unfold receiveWork
+  split
+  · exact Grows.comp (growsBy_settle step name) (keeps_settle step name) (growsBy_dispatch step name _ _) r
+  · exact Grows.refl _
 
 theorem growsBy_done (step : Nat) (name : InstanceId) (n : String) : GrowsBy (done fs st step name n) := by
   unfold done
@@ -464,15 +470,20 @@ theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step
       ⟨t.report (.fault (c.requester.inputFault st c.activity.ref)), q⟩ := by
   cases h : c.serial <;> simp [workBody, Requester.rejectedInput?, h]
 
-/-- Without `stepOrder` entries, the queue takes its first task. -/
+theorem choices_cons (w : Work) : ∃ cs, w.choices = w :: cs := by
+  unfold Work.choices
+  split <;> exact ⟨_, rfl⟩
+
+/-- Without `stepOrder` entries, the queue takes its first task and puts back what the step leaves of it. -/
 theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)
     (ho : s.stepOrder = []) (hq : q.tasks = w :: ws) :
     drain st fs (fuel + 1) s q =
       let (s₁, step) := s.newStep w.cause
-      let r := runWork st fs s₁ { q with tasks := ws } step w
+      let r := runWork st fs s₁ ({ q with tasks := ws }.putBack 0 (w.rest step)) step w
       drain st fs fuel r.state r.queue := by
+  obtain ⟨cs, hc⟩ := choices_cons w
   cases s; subst ho
-  simp_all [drain, Queue.take]
+  simp_all [drain, Queue.take, Queue.entries, Queue.without]
 
 /-- Without `stepOrder` entries or tasks, the queue takes the first command, with the round joined. -/
 theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c : Sent) (cs : List Sent)
@@ -485,23 +496,23 @@ theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c
         { tasks := commandWork st r.1 r.2.2 step ++ [.answered c r.2.1 step], round := [], commands := cs,
           entered := q.entered } := by
   cases s; subst ho
-  simp_all [drain, Queue.take, State.readyName]
+  simp_all [drain, Queue.take, Queue.entries, Queue.without, State.readyName]
 
 /-- A ready work or command that the next `stepOrder` entry names runs before the others, whatever their order. -/
 theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready) (i : Nat)
-    (h : q.ready.zipIdx.find? (name ·.1 == named) = some (r, i)) :
-    q.take name (named :: rest) = .ok (some (r, q.without i, rest)) := by
+    (h : q.entries.find? (name ·.1 == named) = some (r, i)) :
+    q.take name (named :: rest) = .ok (some (r, i, q.without i, rest)) := by
   simp only [Queue.take]
-  generalize q.ready = ready at h ⊢
-  cases ready with
+  generalize q.entries = entries at h ⊢
+  cases entries with
   | nil => simp at h
   | cons x xs => dsimp only; rw [h]
 
-theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready)
-    (rs : List Ready) (hr : q.ready = r :: rs) (h : q.ready.zipIdx.find? (name ·.1 == named) = none)
+theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (e : Ready × Nat)
+    (es : List (Ready × Nat)) (hr : q.entries = e :: es) (h : q.entries.find? (name ·.1 == named) = none)
     (hd : named.isDeadline = false) :
     q.take name (named :: rest) = .error (.unreadyStep named (q.ready.map name)) := by
-  simp only [Queue.take]
+  simp only [Queue.take, Queue.ready]
   rw [hr] at h ⊢
   dsimp only
   rw [h]
@@ -509,14 +520,33 @@ theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) 
 
 /-- An entry that names a deadline waits for its tie: the queue takes its first ready entry and keeps the entry. -/
 theorem take_deadline (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready)
-    (rs : List Ready) (hr : q.ready = r :: rs) (h : q.ready.zipIdx.find? (name ·.1 == named) = none)
+    (i : Nat) (es : List (Ready × Nat)) (hr : q.entries = (r, i) :: es) (h : q.entries.find? (name ·.1 == named) = none)
     (hd : named.isDeadline = true) :
-    q.take name (named :: rest) = .ok (some (r, q.without 0, named :: rest)) := by
+    q.take name (named :: rest) = .ok (some (r, i, q.without i, named :: rest)) := by
   simp only [Queue.take]
   rw [hr] at h ⊢
   dsimp only
   rw [h]
   simp [hd]
+
+theorem find_distinct_name {α : Type} (key : α → StepName) :
+    ∀ (l : List α) (x : α), l.Pairwise (key · ≠ key ·) → x ∈ l → l.find? (key · == key x) = some x
+  | [], _, _, hx => by simp at hx
+  | y :: ys, x, hp, hx => by
+    rw [List.pairwise_cons] at hp
+    rcases List.mem_cons.mp hx with rfl | hx
+    · simp
+    · have hne : key y ≠ key x := hp.1 x hx
+      simp [hne, find_distinct_name key ys x hp.2 hx]
+
+/--
+When the ready entries have distinct names, the step order can take any of them first: naming an entry takes exactly
+that entry. Step names that tell apart every two entries are what lets the step-order search reach every order.
+-/
+theorem take_reaches (q : Queue) (name : Ready → StepName) (rest : List StepName) (r : Ready) (i : Nat)
+    (hd : q.entries.Pairwise (name ·.1 ≠ name ·.1)) (hx : (r, i) ∈ q.entries) :
+    q.take name (name r :: rest) = .ok (some (r, i, q.without i, rest)) :=
+  take_named q name _ rest r i (find_distinct_name (name ·.1) q.entries (r, i) hd hx)
 
 theorem newCommandStep_exceeded_halts (cause : Nat) (sender : Spec.Ref) (exceeded : Fault)
     (h : (s.newCommandStep cause sender).2 = some exceeded) : exceeded.halts = true := by
@@ -535,7 +565,7 @@ theorem drain_halts_on_command_runaway (fuel : Nat) (q : Queue) (c : Sent) (cs :
       (s.newCommandStep c.cause (st.ref c.requester.sender)).1.1.halt (Finding.fault exceeded) := by
   have hx := newCommandStep_exceeded_halts _ _ _ hr
   cases s; subst ho
-  simp_all [drain, Queue.take, State.report]
+  simp_all [drain, Queue.take, Queue.entries, Queue.without, State.report]
 
 theorem drain_at_work_limit (q : Queue) (hh : s.halted = none) :
     drain st fs 0 s q =

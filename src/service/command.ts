@@ -44,7 +44,7 @@ export function processCommand(
   encoded: unknown,
   id: string | undefined,
   step: number,
-): { readonly answer: Answer; readonly emits: readonly Emitted[] } {
+): { readonly answer: Answer; readonly groups: readonly (readonly Emitted[])[] } {
   const s = r.state;
   const definition = ref(r.st, name);
   r.note.reached({ kind: "request", definition, data: {} });
@@ -62,7 +62,7 @@ export function processCommand(
         ...(id === undefined ? {} : { resultOf: id }),
       });
     if (reached !== undefined) r.note.reached(reached);
-    return { answer, emits: events.map((e) => e.emit) };
+    return { answer, groups: groups.map((g) => g.map((e) => e.emit)) };
   };
   const parsed = r.functions.parse({ kind: "input", definition }, encoded);
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));

@@ -91,19 +91,19 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
           pure (if violations.any (·.halts) then .halted violations else .accepted written groups violations)
 
 /--
-The state, answer, and events after a command. As in CQRS, an own-service command answers without output and the
+The state, answer, and groups of events after a command. As in CQRS, an own-service command answers without output and the
 sender reads records with a query. An external service's command may return output such as a created id, as external
 APIs like Stripe do.
 -/
 def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value)
-    (id : Option String) (step : Nat) : m (State × Answer × List Emit) := do
+    (id : Option String) (step : Nat) : m (State × Answer × List (List Emit)) := do
   let outcome ← evaluate st fs s.records s.now name raw
   match outcome with
   | .rejected r => pure (s.answer id (.rejected r), .rejected r, [])
   | .accepted records groups violations =>
     let s := ({ s with records }.reportAll violations).answer id (.accepted none)
     MonadNote.note (.events step s.lines.size (groups.map (·.length)))
-    pure (s.emitAll id groups.flatten, .accepted none, groups.flatten)
+    pure (s.emitAll id groups.flatten, .accepted none, groups)
   | .halted violations => pure (s.reportAll violations, outcome.answer, [])
 
 end Tazuna.Service

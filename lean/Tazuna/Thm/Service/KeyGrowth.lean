@@ -422,12 +422,13 @@ theorem keysBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payload
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_microstep _ _ _ _ r | keys_leaf
 
-theorem keysBy_receiveWork (step : Nat) (name : InstanceId) (received : List (String × Value)) :
-    KeysBy (receiveWork fs st step name received) := by
+theorem keysBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) :
+    KeysBy (receiveWork fs st step name groups) := by
   intro r
-  simp only [receiveWork, id_bind]
-  exact keysBy_foldlM (g := fun (x : String × Value) r => dispatch fs st step name x.1 x.2 (settle fs st step name r))
-    (fun x r => (keysBy_settle step name r).trans (keysBy_dispatch step name x.1 x.2 _)) received r
+  unfold receiveWork
+  split
+  · exact (keysBy_settle step name r).trans (keysBy_dispatch step name _ _ _)
+  · exact .refl _
 
 theorem keysBy_done (step : Nat) (name : InstanceId) (n : String) : KeysBy (done fs st step name n) := by
   apply keysBy_withMachine

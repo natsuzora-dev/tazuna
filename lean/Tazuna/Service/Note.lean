@@ -43,19 +43,19 @@ derive_wire Received
 /--
 A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
 that definition, so that two steps with equal names are interchangeable. `state` of a command or answer is the sending
-state (none for an automation).
+state (none for an automation or a shows slot), and `input` the request's input. A receive step takes one event.
 -/
 inductive StepName where
   | start (who : Who)
-  | receive (who : Who) (received : List Received)
+  | receive (who : Who) (received : Received)
   | always (who : Who)
   | onDone (who : Who)
   | opensDone (who : Who) (state key : String)
   | activities (who : Who) (state : String)
   | deadline (who : Who) (state name : String)
   | reaction (automation event : Spec.Ref) (payload : Value)
-  | command (command : Spec.Ref) (sender : Who) (state : Option String)
-  | answer (command : Spec.Ref) (sender : Who) (state : Option String)
+  | command (command : Spec.Ref) (sender : Who) (state : Option String) (input : Value)
+  | answer (command : Spec.Ref) (sender : Who) (state : Option String) (input : Value)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
@@ -67,7 +67,7 @@ def StepName.isDeadline : StepName → Bool
 def StepName.definition : StepName → Spec.Ref
   | .start w | .receive w _ | .always w | .onDone w | .opensDone w _ _ | .activities w _ | .deadline w _ _ => w.chart
   | .reaction a _ _ => a
-  | .command _ sender _ | .answer _ sender _ => sender.chart
+  | .command _ sender _ _ | .answer _ sender _ _ => sender.chart
 
 structure RegionPair where
   first : Nat

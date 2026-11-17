@@ -25,7 +25,7 @@ export type Received = {
 /**
  * A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
  * that definition, so that two steps with equal names are interchangeable. `state` of a command or answer is the sending
- * state (none for an automation).
+ * state (none for an automation or a shows slot), and `input` the request's input. A receive step takes one event.
  */
 export type StepName =
   | {
@@ -35,7 +35,7 @@ export type StepName =
   | {
       readonly kind: "receive";
       readonly who: Who;
-      readonly received: readonly Received[];
+      readonly received: Received;
     }
   | {
       readonly kind: "always";
@@ -73,12 +73,14 @@ export type StepName =
       readonly command: DefinitionRef;
       readonly sender: Who;
       readonly state: string | null;
+      readonly input: Json;
     }
   | {
       readonly kind: "answer";
       readonly command: DefinitionRef;
       readonly sender: Who;
       readonly state: string | null;
+      readonly input: Json;
     };
 
 /**

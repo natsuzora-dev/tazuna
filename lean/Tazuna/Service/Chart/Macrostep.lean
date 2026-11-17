@@ -31,16 +31,16 @@ def mapStateReads (i : Instance) : List (InstanceId × String) :=
 
 def State.workName (s : State) (st : Service) : Work → StepName
   | .reaction a e _ => .reaction (st.ref a.name) (st.refOf e.event) e.payload
-  | .answered c _ _ => .answer c.activity.ref (s.requesterWho st c.requester) c.requester.state?
+  | .answered c _ _ => .answer c.activity.ref (s.requesterWho st c.requester) c.requester.state? c.input
   | .start name _ => .start (s.who st name)
-  | .receive name [] _ => .always (s.who st name)
-  | .receive name received _ => .receive (s.who st name) (received.map fun (key, payload) => { key, payload })
+  | .receive name (((key, payload) :: _) :: _) _ => .receive (s.who st name) { key, payload }
+  | .receive name _ _ => .always (s.who st name)
   | .onDone name _ => .onDone (s.who st name)
   | .opensDone name state key _ _ _ => .opensDone (s.who st name) state key
 
 def State.readyName (s : State) (st : Service) : Ready → StepName
   | .work w => s.workName st w
-  | .command c => .command c.activity.ref (s.requesterWho st c.requester) c.requester.state?
+  | .command c => .command c.activity.ref (s.requesterWho st c.requester) c.requester.state? c.input
 
 def Work.cause : Work → Option Nat
   | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
@@ -90,9 +90,12 @@ def dispatch (st : Service) (step : Nat) (name : InstanceId) (key : String) (pay
     | .ok [] => pure r
     | .ok chosen => microstep fs st step name chosen (.payload payload) r
 
-def receiveWork (st : Service) (step : Nat) (name : InstanceId) (received : List (String × Value)) (r : Processing) :
-    m Processing :=
-  received.foldlM (fun r (key, payload) => do dispatch fs st step name key payload (← settle fs st step name r)) r
+/-- The processing of the first event of the receive work `groups` of `name`; none only settles. -/
+def receiveWork (st : Service) (step : Nat) (name : InstanceId) (groups : List (List (String × Value)))
+    (r : Processing) : m Processing :=
+  match groups with
+  | ((key, payload) :: _) :: _ => do dispatch fs st step name key payload (← settle fs st step name r)
+  | _ => pure r
 
 def done (st : Service) (step : Nat) (name : InstanceId) (n : String) : Processing → m Processing :=
   withMachine name fun i r => do
@@ -233,13 +236,13 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
   | fuel + 1 =>
     match q.take (s.readyName st) s.stepOrder with
     | .error invalid => pure (s.report (.invalidInput invalid))
-    | .ok (some (.work w, rest, stepOrder)) => do
+    | .ok (some (.work w, i, rest, stepOrder)) => do
       let (s, step) := { s with stepOrder }.newStep w.cause
       MonadNote.note (.stepBegins step (s.workName st w) w.started)
-      let r ← runWork st fs s rest step w
+      let r ← runWork st fs s (rest.putBack i (w.rest step)) step w
       MonadNote.note .stepEnds
       drain st fs fuel r.state r.queue
-    | .ok (some (.command c, rest, stepOrder)) => do
+    | .ok (some (.command c, _, rest, stepOrder)) => do
       let ((s, step), runaway) := { s with stepOrder }.newCommandStep c.cause (st.ref c.requester.sender)
       match runaway with
       | some exceeded => pure (s.report (.fault exceeded))

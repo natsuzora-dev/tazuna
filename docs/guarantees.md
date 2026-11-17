@@ -52,6 +52,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
 `test` searches the orders that no line writes:
 
 - Deadlines of one service due at the same time, and the steps of one processing that no cause orders.
+  A machine receives each event of one group that `decide` returns in a step of its own, so the order of a group is one of these orders.
   Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
   A tied deadline fires as a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
 - Which of the equal requests of one processing each handle of `requests` names.
@@ -122,7 +123,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
-| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
+| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, the order of two steps with equal step names, which the search takes as one step (`take_reaches`), and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 

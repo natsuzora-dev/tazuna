@@ -261,7 +261,7 @@ theorem setMachine_resources (s : State) (name : InstanceId) (f : Instance → I
   simp only [Function.comp]
   split <;> simp [hf]
 
-theorem stopped_machine_gets_no_work (emits : List Emit) (recordsChanged : Bool) (cause : Nat) (i : Instance)
+theorem stopped_machine_gets_no_work (emits : List (List Emit)) (recordsChanged : Bool) (cause : Nat) (i : Instance)
     (hc : i.closed = true) : machineWork emits recordsChanged cause i = none := by
   simp [machineWork, hc]
 
@@ -271,10 +271,10 @@ def reactionNames (ws : List Work) : List String :=
     | _ => none
 
 theorem reactions_follow_declarations (st : Service) (s : State) (e : Emit) (rc : Bool) (cause : Nat) :
-    reactionNames (reactions st s [e] rc cause) = (st.automations.filter (·.receives == e.event)).map (·.name) := by
+    reactionNames (reactions st s [[e]] rc cause) = (st.automations.filter (·.receives == e.event)).map (·.name) := by
   unfold reactionNames reactions
   rw [List.filterMap_append]
-  have hm : (s.machines.filterMap (machineWork [e] rc cause)).filterMap
+  have hm : (s.machines.filterMap (machineWork [[e]] rc cause)).filterMap
       (fun w => match w with
         | .reaction a _ _ => some a.name
         | _ => none) = [] := by

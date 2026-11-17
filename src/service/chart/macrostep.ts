@@ -1,6 +1,6 @@
 import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import type { Fields } from "../../data/values.ts";
+import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
 import { ref, refOf, traceNameOf } from "../basic.ts";
 import { processCommand } from "../command.ts";
@@ -35,7 +35,7 @@ import {
 import { settle, settled } from "./always.ts";
 import { type Activity, answerTrigger, isOwn, type Transition, transitionsAt } from "./basic.ts";
 import { enter, microstep } from "./microstep.ts";
-import { commandWork, type Processing, type Ready, take, type Work } from "./queue.ts";
+import { commandWork, type Processing, type Ready, type Received, take, type Work, workLeft } from "./queue.ts";
 import { sendEntered } from "./request.ts";
 import { choose, leavesOf, reaches, select } from "./select.ts";
 
@@ -54,17 +54,16 @@ function workName(r: Processing, work: Work): StepName {
         command: work.sent.activity.target,
         sender: requesterWho(r.state, r.st, work.sent.requester),
         state: requesterState(work.sent.requester),
+        input: work.sent.input as Json,
       };
     case "start":
       return { kind: "start", who: who(r.state, r.st, work.machine) };
-    case "receive":
-      return work.received.length === 0
+    case "receive": {
+      const e = work.groups[0]?.[0];
+      return e === undefined
         ? { kind: "always", who: who(r.state, r.st, work.machine) }
-        : {
-            kind: "receive",
-            who: who(r.state, r.st, work.machine),
-            received: work.received.map(({ key, encoded }) => ({ key, payload: encoded })),
-          };
+        : { kind: "receive", who: who(r.state, r.st, work.machine), received: { key: e.key, payload: e.encoded } };
+    }
     case "onDone":
       return { kind: "onDone", who: who(r.state, r.st, work.machine) };
     case "opensDone":
@@ -81,6 +80,7 @@ function readyName(r: Processing, ready: Ready): StepName {
     command: activity.target,
     sender: requesterWho(r.state, r.st, requester),
     state: requesterState(requester),
+    input: ready.sent.input as Json,
   };
 }
 
@@ -125,16 +125,12 @@ export function dispatch(r: Processing, name: InstanceId, key: string, payload: 
   microstep(r, instance, chosen, extra, step);
 }
 
-function receiveWork(
-  r: Processing,
-  name: InstanceId,
-  received: readonly { key: string; payload: unknown }[],
-  step: number,
-): void {
-  for (const { key, payload } of received) {
-    settle(r, name, step);
-    dispatch(r, name, key, payload, step);
-  }
+/** Lean's receiveWork: processes the first event of the work; without one it only settles. */
+function receiveWork(r: Processing, name: InstanceId, groups: readonly (readonly Received[])[], step: number): void {
+  const e = groups[0]?.[0];
+  if (e === undefined) return;
+  settle(r, name, step);
+  dispatch(r, name, e.key, e.payload, step);
 }
 
 function done(r: Processing, name: InstanceId, n: string, step: number): void {
@@ -264,7 +260,7 @@ function workBody(r: Processing, work: Work, step: number): void {
       startWork(r, work.machine, step);
       return;
     case "receive":
-      receiveWork(r, work.machine, work.received, step);
+      receiveWork(r, work.machine, work.groups, step);
       return;
     case "onDone":
       doneWork(r, work.machine, step);
@@ -321,18 +317,20 @@ export function drain(r: Processing): void {
       continue;
     }
     countWork();
-    if (next.kind === "work") {
-      const w = next.work;
+    if (next.ready.kind === "work") {
+      const w = next.ready.work;
       const step = newStep(s, w.cause);
+      const left = workLeft(w, step);
+      if (left !== undefined) queue.tasks.splice(next.at, 0, left);
       inStep(r, step, workName(r, w), started(w), () => runWork(r, w, step));
       continue;
     }
-    const c = next.sent;
+    const c = next.ready.sent;
     const { step, exceeded } = newCommandStep(s, c.cause, ref(r.st, sender(c.requester)));
     if (exceeded !== undefined) report(r.state, exceeded);
-    inStep(r, step, readyName(r, next), undefined, () => {
-      const { answer, emits } = processCommand(r, traceNameOf(r.st, c.activity.target), c.input, undefined, step);
-      queue.tasks.push(...commandWork(r.st, s, emits, step), {
+    inStep(r, step, readyName(r, next.ready), undefined, () => {
+      const { answer, groups } = processCommand(r, traceNameOf(r.st, c.activity.target), c.input, undefined, step);
+      queue.tasks.push(...commandWork(r.st, s, groups, step), {
         kind: "answered",
         sent: c,
         answer,
