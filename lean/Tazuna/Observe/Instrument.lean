@@ -438,22 +438,74 @@ def tiedDeadlines (s : State) (i j : Nat) : Bool :=
   | some a, some b => a == b
   | _, _ => false
 
+/-- Whether the `out` line `l` is an event that a contract lists, which verify compares (Verify's internalEvent). -/
+def comparedEvent (st : Service) (l : Line) : Bool :=
+  match l.body with
+  | .event name _ _ =>
+    match st.«structure».named st.service (some name) ["event"] with
+    | some d => !(st.«structure».contractsListing d.ref).isEmpty
+    | none => false
+  | _ => false
+
+def Channel.key : Channel → String
+  | .request id => s!"request {id}"
+  | .answers to => s!"answers {to}"
+  | .events (some resultOf) => s!"events {resultOf}"
+  | .events none => "events"
+
+/--
+The channels that the compared event lines of a run write, each with the step of `c.steps` that wrote it: the last that
+began at or before the line's writer, since nested steps are spans of their outer step.
+-/
+def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × String) :=
+  let ls := lineSteps s c.causes
+  let tops := c.steps.toList.map (·.1)
+  s.lines.toList.zipIdx.filterMap fun (l, i) =>
+    match ls[i]? with
+    | some (some (w, _)) =>
+      if l.dir == .out && comparedEvent st l then
+        match (tops.filter (· ≤ w)).getLast?, channelOf l with
+        | some t, some ch => some (t, ch.key)
+        | _, _ => none
+      else none
+    | _ => none
+
+/--
+The footprint of what step `n` stands for when the search swaps its order (one independence relation for every choice
+of order): a deadline of a tie stands for every step of its own message, since its effects run in the later steps of
+that message, and any other step for itself. Each channel that those steps wrote (channelWrites) is a write, since one
+channel keeps its order (Observe.ordered). Keys that the steps create are not in it, since test compares outcomes up
+to a renaming of created keys.
+-/
+def involved (s : State) (c : Collect) (channels : List (Nat × String)) (n : Nat) (a : StepAccess) : Footprint :=
+  let message := s.steps[n]?.map (·.message)
+  let steps := if (s.steps[n]?.bind (·.tie)).isSome then
+      c.steps.toList.filter fun (k, _) => s.steps[k]?.map (·.message) == message
+    else [(n, a)]
+  let numbers := steps.map (·.1)
+  steps.foldl (fun f (_, x) => f.union x.access)
+    { writes := (channels.filter fun (t, _) => numbers.contains t).map (·.2) }
+
+/-- The footprint (involved) of each step of `c.steps`, by position. -/
+def footprints (st : Service) (s : State) (c : Collect) : Array Footprint :=
+  let channels := channelWrites st s c
+  c.steps.map fun (n, a) => involved s c channels n a
+
 /--
 The pairs of steps whose other order test runs, by step number in the order they began, whose names differ so that a
-`stepOrder` names each, and that no cause orders: the deadlines of one tie, whatever their steps
-access, since each deadline's effects run in the later steps of its own message; and the steps of one message whose
-accesses overlap and do not commute.
-A run that halted (in the semantic run, or `stopped` from enabled) skips the steps after the halt, so it has none.
-Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
+`stepOrder` names each, that no cause orders, and whose order is a choice: the deadlines of one tie, or the steps of one
+message. Of those, only the pairs whose footprints overlap and that do not commute run, the one independence relation of
+the search. A run that halted (in the semantic run, or `stopped` from enabled) skips the steps after the halt, so it has
+none. Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
 orders to run.
 -/
-def candidates (s : State) (c : Collect) (stopped : Option Violation) : List (Nat × Nat) :=
+def candidates (st : Service) (s : State) (c : Collect) (stopped : Option Violation) : List (Nat × Nat) :=
   if (s.halted <|> stopped).isSome then [] else
+  let fps := footprints st s c
   c.steps.toList.zipIdx.flatMap fun ((i, a), n) =>
-    (c.steps.toList.drop (n + 1)).filterMap fun (j, b) =>
-      if (tiedDeadlines s i j ||
-            (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message)) && overlaps a.access b.access &&
-              !a.commutes b) && a.name != b.name && !leadsTo s i j then
+    (c.steps.toList.zipIdx.drop (n + 1)).filterMap fun ((j, b), k) =>
+      if (tiedDeadlines s i j || (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message))) &&
+          overlaps (fps[n]?.getD {}) (fps[k]?.getD {}) && !a.commutes b && a.name != b.name && !leadsTo s i j then
         some (i, j)
       else none
 

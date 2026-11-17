@@ -85,7 +85,9 @@ function candidatesOf(m: Made, span: Span): (readonly [number, number])[] {
   const p = m.world.participants.get(span.service);
   if (p === undefined || haltedIn(m, span)) return [];
   const collected = m.listeners.get(span.service)?.collected;
-  return (collected?.candidates(p.processing.state.steps, span.stepsFrom) ?? []).filter(([i]) => i < span.stepsTo);
+  return (collected?.candidates(p.processing.st, p.processing.state, span.stepsFrom) ?? []).filter(
+    ([i]) => i < span.stepsTo,
+  );
 }
 
 /** Lean's findingKey. */

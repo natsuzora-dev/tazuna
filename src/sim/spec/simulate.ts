@@ -96,7 +96,7 @@ export function participantViolations({ world, listeners }: Made, service: strin
 function participantCandidates({ world, listeners }: Made, service: string): (readonly [number, number])[] {
   const p = world.participants.get(service);
   if (p === undefined || p.halted !== undefined) return [];
-  return listeners.get(service)?.collected.candidates(p.processing.state.steps, 0) ?? [];
+  return listeners.get(service)?.collected.candidates(p.processing.st, p.processing.state, 0) ?? [];
 }
 
 /**

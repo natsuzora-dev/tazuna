@@ -4,7 +4,7 @@ import { Bag } from "../data/canonical.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { OrderDependent } from "../data/orderDependent.generated.ts";
-import type { Answer } from "../data/trace.generated.ts";
+import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
 import { type Located, type ProblemError, withExtra } from "../data/violation.ts";
@@ -24,8 +24,9 @@ import type { Emit } from "../service/message.ts";
 import type { Note, RegionCheck, RegionPair } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
-import type { StepInfo } from "../service/state.ts";
-import { type Causes, leadsTo } from "./trace.ts";
+import type { State, StepInfo } from "../service/state.ts";
+import { contractsListing, named } from "../syntax/structure.ts";
+import { type Causes, channelOf, leadsTo, lineSteps } from "./trace.ts";
 
 /** Lean's contextKey: the name of a context field, unique across the kinds of value, as recordPartName names parts. */
 export const contextKey = (resource: string, field: string): string => `context:${resource}.${field}`;
@@ -109,6 +110,13 @@ function commutes(a: StepAccess, b: StepAccess): boolean {
     a.settledOwner === b.settledOwner &&
     (a.name.kind === "always" || b.name.kind === "always")
   );
+}
+
+/** Lean's comparedEvent: whether the `out` line `l` is an event that a contract lists. */
+function comparedEvent(st: Service, l: TraceLine): boolean {
+  if (l.type !== "event") return false;
+  const d = named(st.structure, st.service, l.name, ["event"]);
+  return d !== undefined && contractsListing(st.structure, { service: d.service, name: d.name }).length > 0;
 }
 
 /** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie. */
@@ -262,18 +270,53 @@ export class Collect
     return [...this.steps].flatMap(([step, access]) => (step < from ? [] : [[step, access.name] as const]));
   }
 
+  /** Lean's channelWrites: each channel that a compared event line writes, with the step of `steps` that wrote it. */
+  private channelWrites(st: Service, s: State): (readonly [number, string])[] {
+    const lines = lineSteps(s.lines.length, this.causes);
+    const tops = [...this.steps.keys()];
+    return s.lines.flatMap((l, i) => {
+      const w = lines[i]?.[0];
+      if (w === undefined || l.dir !== "out" || !comparedEvent(st, l)) return [];
+      const t = tops.filter((k) => k <= w).at(-1);
+      const channel = channelOf(l);
+      return t === undefined || channel === undefined ? [] : [[t, channel] as const];
+    });
+  }
+
+  /** Lean's involved: the footprint of what step `n` stands for when the search swaps its order. */
+  private involved(s: State, channels: readonly (readonly [number, string])[], n: number, a: StepAccess): Footprint {
+    const message = s.steps[n]?.message;
+    const steps: (readonly [number, StepAccess])[] =
+      s.steps[n]?.tie === undefined ? [[n, a]] : [...this.steps].filter(([k]) => s.steps[k]?.message === message);
+    const numbers = new Set(steps.map(([k]) => k));
+    const f: Footprint = {
+      reads: new Set(),
+      writes: new Set(channels.filter(([t]) => numbers.has(t)).map(([, c]) => c)),
+      keyWrites: new Set(),
+    };
+    for (const [, x] of steps) {
+      for (const v of x.reads) f.reads.add(v);
+      for (const v of x.writes) f.writes.add(v);
+      for (const v of x.keyWrites) f.keyWrites.add(v);
+    }
+    return f;
+  }
+
   /** Returns Lean's candidates of a run that did not halt, of the steps from step `from` on. */
-  candidates(steps: readonly StepInfo[], from: number): (readonly [number, number])[] {
+  candidates(st: Service, s: State, from: number): (readonly [number, number])[] {
+    const channels = this.channelWrites(st, s);
+    const footprints = new Map([...this.steps].map(([n, a]) => [n, this.involved(s, channels, n, a)] as const));
     const tagged = [...this.steps].filter(([step]) => step >= from);
     return tagged.flatMap(([i, a], n) =>
       tagged
         .slice(n + 1)
         .filter(
           ([j, b]) =>
-            (tiedDeadlines(steps, i, j) ||
-              (steps[i]?.message === steps[j]?.message && overlaps(a, b) && !commutes(a, b))) &&
+            (tiedDeadlines(s.steps, i, j) || s.steps[i]?.message === s.steps[j]?.message) &&
+            overlaps(footprints.get(i) as Footprint, footprints.get(j) as Footprint) &&
+            !commutes(a, b) &&
             canonicalJson(a.name) !== canonicalJson(b.name) &&
-            !leadsTo(steps, i, j),
+            !leadsTo(s.steps, i, j),
         )
         .map(([j]) => [i, j] as const),
     );

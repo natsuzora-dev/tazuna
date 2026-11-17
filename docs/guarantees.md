@@ -26,7 +26,9 @@ They share one clock, and a message between two of them stays *in flight* until 
 Messages travel on *channels*: a request, its answers, its end, and the events that name it as their `resultOf` share the request's channel, and an event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
 The simulation is deterministic: the scenario writes every choice that nobody's code makes, such as which message arrives next and when the time advances.
-Deadlines of one service due at the same time are no such choice: they tie inside the service, `test` runs them in every order, and it reports `ChoiceDependent` when the order changes the result.
+Deadlines of one service due at the same time are no such choice: they tie inside the service, `test` runs them in every order that can change the result, and it reports `ChoiceDependent` when one does.
+`test` searches the order of tied deadlines and of the steps of one processing with one independence relation: two steps conflict when what they read and write overlaps, counting for a tied deadline every step of its message and counting an event on a channel as a write of that channel; orders of steps that do not conflict give the same result, so `test` does not run them (dynamic partial-order reduction).
+Created keys are not in it, since outcomes compare up to a renaming of created keys.
 Nor is which of equal requests of one processing each handle of `requests` names: nothing outside tells them apart, so `test` runs every assignment of the handles and reports `ChoiceDependent` when one changes the result.
 
 The trace of the own service is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.

@@ -1,3 +1,3 @@
-import { clearAll, contract, notified, starTask } from "./reminders.ts";
+import { clearAll, contract, starTask } from "./reminders.ts";
 
-export const reminders = contract({ starTask, clearAll, notified });
+export const reminders = contract({ starTask, clearAll });

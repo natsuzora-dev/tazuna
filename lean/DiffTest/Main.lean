@@ -392,7 +392,8 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
     let fields : List (String × Value) := [("service", .str service),
       ("lines", .arr (s.lines.toList.map fun l => lineValue l [] [])),
       ("violations", .arr ((reportedViolations s c none).map ToValue.toValue)),
-      ("candidates", .arr ((candidates s c none).map fun ((i, j) : Nat × Nat) => .arr [.num i, .num j]))]
+      ("candidates", .arr (((w.services.lookup service).map fun st => candidates st s c none).getD [] |>.map
+        fun ((i, j) : Nat × Nat) => .arr [.num i, .num j]))]
     pure (Value.obj (fields ++ enabled))).run acting
   pure (.obj [("type", .str "simulated"),
     ("participants", .arr participants),

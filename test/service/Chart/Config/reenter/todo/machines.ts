@@ -19,7 +19,7 @@ export const keepsDeadline = machine({
 });
 
 export const restartsDeadline = machine({
-  description: "Notify two hours after the last task is added",
+  description: "Notify an hour after the last task is added",
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
@@ -28,7 +28,7 @@ export const restartsDeadline = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "waiting", reenter: true }] },
-      after: { twoHours: { delay: { hours: 2 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: {
@@ -61,7 +61,7 @@ export const keepsDeadlineToChild = machine({
 
 export const restartsDeadlineToChild = machine({
   description:
-    "Reenter waiting when a task is added, enter noted, a child of waiting, and notify two hours after the last entry",
+    "Reenter waiting when a task is added, enter noted, a child of waiting, and notify an hour after the last entry",
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
@@ -74,7 +74,7 @@ export const restartsDeadlineToChild = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "noted", reenter: true }] },
-      after: { twoHours: { delay: { hours: 2 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: {

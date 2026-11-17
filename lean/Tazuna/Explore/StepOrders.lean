@@ -44,7 +44,8 @@ and otherwise those of its steps, whether or not a later processing halts.
 -/
 def Walk.candidatesOf (w : Walk) (span : Sim.Span) : List (Nat × Nat) :=
   if w.haltedIn span then [] else
-  (candidates { w.world.state span.service with halted := none } (w.collect span.service) none).filter
+  let st := (w.world.services.lookup span.service).getD default
+  (candidates st { w.world.state span.service with halted := none } (w.collect span.service) none).filter
     fun (i, _) => span.stepsFrom ≤ i && i < span.stepsTo
 
 /--

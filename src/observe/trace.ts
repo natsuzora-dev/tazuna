@@ -23,7 +23,7 @@ export interface Causes {
 }
 
 /** Returns, for each line, the step that wrote it and the number of its group if it is an event line. */
-function lineSteps(lineCount: number, causes: Causes): (readonly [number, number] | undefined)[] {
+export function lineSteps(lineCount: number, causes: Causes): (readonly [number, number] | undefined)[] {
   const steps: (readonly [number, number] | undefined)[] = Array.from({ length: lineCount }, () => undefined);
   causes.events.forEach(([step, start, count], group) => {
     steps.fill([step, group], start, start + count);
@@ -32,7 +32,7 @@ function lineSteps(lineCount: number, causes: Causes): (readonly [number, number
 }
 
 /** Returns Lean's channelOf as text: the channel that an `out` line travels on, seen from its sender. */
-function channelOf(l: TraceLine): string | undefined {
+export function channelOf(l: TraceLine): string | undefined {
   switch (l.type) {
     case "command":
     case "query":

@@ -1,3 +1,3 @@
-import { addTasks, completeTask, contract, greeted } from "./greeter.ts";
+import { addTasks, completeTask, contract } from "./greeter.ts";
 
-export const greeter = contract({ addTasks, completeTask, greeted });
+export const greeter = contract({ addTasks, completeTask });

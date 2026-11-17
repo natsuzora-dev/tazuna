@@ -686,34 +686,25 @@ theorem separate_values_report_nothing (c : Collect) (check : RegionCheck)
   · rfl
   · rw [he]; rfl
 
-theorem unordered_overlap_candidate (s : State) (c : Collect) (stopped : Option Violation) (i j n : Nat)
+theorem dependent_candidate (st : Service) (s : State) (c : Collect) (stopped : Option Violation) (i j n k : Nat)
     (a b : StepAccess) (hs : (s.halted <|> stopped) = none) (ha : c.steps[n]? = some (i, a))
-    (hb : (j, b) ∈ c.steps.toList.drop (n + 1)) (hm : (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message)))
+    (hb : ((j, b), k) ∈ c.steps.toList.zipIdx.drop (n + 1))
+    (hm : tiedDeadlines s i j = true ∨ (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message)))
     (hl : leadsTo s i j = false) (hc : a.commutes b = false) (hn : a.name ≠ b.name)
-    (ho : overlaps a.access b.access = true) :
-    (i, j) ∈ candidates s c stopped := by
+    (ho : overlaps ((footprints st s c)[n]?.getD {}) ((footprints st s c)[k]?.getD {}) = true) :
+    (i, j) ∈ candidates st s c stopped := by
   unfold candidates
   rw [hs]
-  refine List.mem_flatMap.mpr ⟨((i, a), n), List.mem_zipIdx_iff_getElem?.mpr ?_, List.mem_filterMap.mpr ⟨(j, b), hb, ?_⟩⟩
+  refine List.mem_flatMap.mpr ⟨((i, a), n), List.mem_zipIdx_iff_getElem?.mpr ?_,
+    List.mem_filterMap.mpr ⟨((j, b), k), hb, ?_⟩⟩
   · simpa using ha
-  · simp [hm, hl, hc, hn, ho]
+  · rcases hm with hm | hm <;> simp [hm, hl, hc, hn, ho]
 
-theorem tied_candidate (s : State) (c : Collect) (stopped : Option Violation) (i j n : Nat) (a b : StepAccess)
-    (hs : (s.halted <|> stopped) = none) (ha : c.steps[n]? = some (i, a)) (hb : (j, b) ∈ c.steps.toList.drop (n + 1))
-    (ht : tiedDeadlines s i j = true) (hl : leadsTo s i j = false) (hn : a.name ≠ b.name) :
-    (i, j) ∈ candidates s c stopped := by
-  unfold candidates
-  rw [hs]
-  refine List.mem_flatMap.mpr ⟨((i, a), n), List.mem_zipIdx_iff_getElem?.mpr ?_, List.mem_filterMap.mpr ⟨(j, b), hb, ?_⟩⟩
-  · simpa using ha
-  · simp [ht, hl, hn]
-
-theorem candidate_unordered (s : State) (c : Collect) (stopped : Option Violation) (i j : Nat)
-    (h : (i, j) ∈ candidates s c stopped) :
+theorem candidate_unordered (st : Service) (s : State) (c : Collect) (stopped : Option Violation) (i j : Nat)
+    (h : (i, j) ∈ candidates st s c stopped) :
     (s.halted <|> stopped) = none ∧ ∃ a b, (i, a) ∈ c.steps ∧ (j, b) ∈ c.steps ∧
-      leadsTo s i j = false ∧ a.name ≠ b.name ∧
-      (tiedDeadlines s i j = true ∨ (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message)) ∧
-        a.commutes b = false ∧ overlaps a.access b.access = true) := by
+      leadsTo s i j = false ∧ a.name ≠ b.name ∧ a.commutes b = false ∧
+      (tiedDeadlines s i j = true ∨ (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message))) := by
   unfold candidates at h
   cases hs : (s.halted <|> stopped) with
   | some _ => simp [hs] at h
@@ -721,15 +712,13 @@ theorem candidate_unordered (s : State) (c : Collect) (stopped : Option Violatio
   refine ⟨rfl, ?_⟩
   simp only [hs, Option.isSome_none, Bool.false_eq_true, ↓reduceIte] at h
   obtain ⟨⟨⟨i', a⟩, n⟩, hz, hf⟩ := List.mem_flatMap.mp h
-  obtain ⟨⟨j', b⟩, hd, he⟩ := List.mem_filterMap.mp hf
+  obtain ⟨⟨⟨j', b⟩, k⟩, hd, he⟩ := List.mem_filterMap.mp hf
   have hia : (i', a) ∈ c.steps := Array.mem_toList_iff.mp (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp hz))
-  have hjb : (j', b) ∈ c.steps := Array.mem_toList_iff.mp (List.mem_of_mem_drop hd)
+  have hjb : (j', b) ∈ c.steps :=
+    Array.mem_toList_iff.mp (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp (List.mem_of_mem_drop hd)))
   simp only [Option.ite_none_right_eq_some, Option.some.injEq, Bool.and_eq_true, Bool.or_eq_true, beq_iff_eq,
     Bool.not_eq_true', bne_iff_ne, ne_eq, Prod.mk.injEq] at he
-  obtain ⟨⟨⟨hk, hn⟩, hl⟩, rfl, rfl⟩ := he
-  refine ⟨a, b, hia, hjb, hl, hn, ?_⟩
-  rcases hk with ht | ⟨⟨hm, ho⟩, hc⟩
-  · exact .inl ht
-  · exact .inr ⟨hm, hc, ho⟩
+  obtain ⟨⟨⟨⟨⟨hk, _⟩, hc⟩, hn⟩, hl⟩, rfl, rfl⟩ := he
+  exact ⟨a, b, hia, hjb, hl, hn, hc, hk⟩
 
 end Tazuna.Thm.Observe.Instrument
