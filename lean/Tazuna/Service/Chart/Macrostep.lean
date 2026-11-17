@@ -30,8 +30,9 @@ def mapStateReads (i : Instance) : List (InstanceId × String) :=
   (i.active.filter (tree.kindOf · == some .map)).map (i.id, ·)
 
 def State.workName (s : State) (st : Service) : Work → StepName
-  | .reaction a e _ => .reaction (st.ref a.name) (st.refOf e.event) e.payload
-  | .answered c _ _ => .answer c.activity.ref (s.requesterWho st c.requester) c.requester.state? c.input
+  | .reaction a ((e :: _) :: _) _ => .reaction (st.ref a.name) (st.refOf a.receives) e.payload
+  | .reaction a _ _ => .reaction (st.ref a.name) (st.refOf a.receives) .null
+  | .answered c _ _ => .answer c.activity.ref (s.sender st c.requester) c.input
   | .start name _ => .start (s.who st name)
   | .receive name (((key, payload) :: _) :: _) _ => .receive (s.who st name) { key, payload }
   | .receive name _ _ => .always (s.who st name)
@@ -40,7 +41,7 @@ def State.workName (s : State) (st : Service) : Work → StepName
 
 def State.readyName (s : State) (st : Service) : Ready → StepName
   | .work w => s.workName st w
-  | .command c => .command c.activity.ref (s.requesterWho st c.requester) c.requester.state? c.input
+  | .command c => .command c.activity.ref (s.sender st c.requester) c.input
 
 def Work.cause : Work → Option Nat
   | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
@@ -172,7 +173,8 @@ def Work.settledMachine? : Work → Option InstanceId
   | .start _ _ | .reaction _ _ _ => none
 
 def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : Nat) : Work → Processing → m Processing
-  | .reaction a e _, ⟨s, q⟩ => do
+  | .reaction _ [] _, r | .reaction _ ([] :: _) _, r => pure r
+  | .reaction a ((e :: _) :: _) _, ⟨s, q⟩ => do
     let definition := st.ref a.name
     match ← fs.react a.name e.payload s.records s.now s.nextKeys with
     | .error issue =>

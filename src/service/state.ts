@@ -1,4 +1,4 @@
-import type { StepName, Who } from "../data/choiceDependent.generated.ts";
+import type { Sender, StepName, Who } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
@@ -166,10 +166,6 @@ export type Requester =
   | { readonly kind: "state"; readonly machine: InstanceId; readonly state: string }
   | { readonly kind: "slot"; readonly machine: InstanceId; readonly slot: string }
   | { readonly kind: "automation"; readonly automation: string };
-
-/** The state that sent the request, none for a shows slot or an automation. */
-export const requesterState = (requester: Requester): string | null =>
-  requester.kind === "state" ? requester.state : null;
 
 export const machineOf = (requester: Requester): InstanceId | undefined =>
   requester.kind === "automation" ? undefined : requester.machine;
@@ -596,11 +592,16 @@ export function who(s: State, st: Service, id: InstanceId): Who {
   return machine(s, id)?.who ?? { chart: ref(st, chartOf(id)), serial: serialOf(id), copy: null };
 }
 
-/** Lean's State.requesterWho. */
-export function requesterWho(s: State, st: Service, requester: Requester): Who {
-  return requester.kind === "automation"
-    ? { chart: ref(st, requester.automation), serial: 0, copy: null }
-    : who(s, st, requester.machine);
+/** Lean's State.sender: the sender of a request as a step names it. */
+export function stepSender(s: State, st: Service, requester: Requester): Sender {
+  switch (requester.kind) {
+    case "state":
+      return { kind: "state", who: who(s, st, requester.machine), state: requester.state };
+    case "slot":
+      return { kind: "slot", who: who(s, st, requester.machine), slot: requester.slot };
+    case "automation":
+      return { kind: "automation", automation: ref(st, requester.automation) };
+  }
 }
 
 export function* running(s: State): Generator<Instance> {

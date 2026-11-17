@@ -4,7 +4,7 @@ import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
-import { stepNameDefinition } from "../service/note.ts";
+import { stepNameDefinition, stepsKey } from "../service/note.ts";
 import { created } from "../service/state.ts";
 import type { Span, StepOrder } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
@@ -109,7 +109,7 @@ function stepOrderSearch(
   const compare = compareOf(spec, service);
   const tried: Tried[] = [];
   const found: ChoiceDependent[] = [];
-  const reached = new Set([canonicalJson(taken(base, baseSpan).map(([, name]) => name) as Json)]);
+  const reached = new Set([stepsKey(taken(base, baseSpan).map(([, name]) => name))]);
   const queue: { readonly executed: Made; readonly order: readonly StepName[] }[] = [{ executed: base, order: [] }];
   let first: StepName | undefined;
   for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
@@ -151,7 +151,7 @@ function stepOrderSearch(
       if (result !== undefined && !found.some((v) => findingKey(v) === findingKey(result))) found.push(result);
       const altSpan = spanOf(alternative, origin, service);
       if (altSpan === undefined) continue;
-      const sequence = canonicalJson(taken(alternative, altSpan).map(([, name]) => name) as Json);
+      const sequence = stepsKey(taken(alternative, altSpan).map(([, name]) => name));
       if (reached.has(sequence)) continue;
       reached.add(sequence);
       queue.push({ executed: alternative, order });

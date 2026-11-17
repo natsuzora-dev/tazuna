@@ -7,7 +7,7 @@ import { processCommand } from "../command.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { chartOf, type InstanceId } from "../instance.ts";
 import { limits } from "../limits.ts";
-import { byCallerKinds } from "../message.ts";
+import { byCallerKinds, type Emitted } from "../message.ts";
 import { recordSource } from "../records.ts";
 import { refreshScreens } from "../screen/subscription.ts";
 import {
@@ -26,9 +26,8 @@ import {
   type Requester,
   rejectedInput,
   report,
-  requesterState,
-  requesterWho,
   sender,
+  stepSender,
   takeQueued,
   who,
 } from "../state.ts";
@@ -39,21 +38,29 @@ import { commandWork, type Processing, type Ready, type Received, take, type Wor
 import { sendEntered } from "./request.ts";
 import { choose, leavesOf, reaches, select } from "./select.ts";
 
+/** The event that a reaction step takes. `reactions` builds a reaction work only with events. */
+function firstEvent(work: Extract<Work, { readonly kind: "reaction" }>): Emitted {
+  const e = work.groups[0]?.[0];
+  if (e === undefined) throw new Error("A reaction work has no event");
+  return e;
+}
+
 function workName(r: Processing, work: Work): StepName {
   switch (work.kind) {
-    case "reaction":
+    case "reaction": {
+      const e = firstEvent(work);
       return {
         kind: "reaction",
         automation: ref(r.st, work.automation.name),
-        event: refOf(r.st, work.event.event),
-        payload: work.event.encoded,
+        event: refOf(r.st, work.automation.receives),
+        payload: e.encoded,
       };
+    }
     case "answered":
       return {
         kind: "answer",
         command: work.sent.activity.target,
-        sender: requesterWho(r.state, r.st, work.sent.requester),
-        state: requesterState(work.sent.requester),
+        sender: stepSender(r.state, r.st, work.sent.requester),
         input: work.sent.input as Json,
       };
     case "start":
@@ -78,8 +85,7 @@ function readyName(r: Processing, ready: Ready): StepName {
   return {
     kind: "command",
     command: activity.target,
-    sender: requesterWho(r.state, r.st, requester),
-    state: requesterState(requester),
+    sender: stepSender(r.state, r.st, requester),
     input: ready.sent.input as Json,
   };
 }
@@ -220,7 +226,8 @@ function settledMachine(work: Work): InstanceId | undefined {
 function workBody(r: Processing, work: Work, step: number): void {
   switch (work.kind) {
     case "reaction": {
-      const { automation, event } = work;
+      const { automation } = work;
+      const event = firstEvent(work);
       const definition = ref(r.st, automation.name);
       r.note.reached({ kind: "automation", definition, data: {} });
       const reacted = r.functions.react(

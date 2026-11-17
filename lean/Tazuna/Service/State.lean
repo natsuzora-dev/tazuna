@@ -72,10 +72,6 @@ def Requester.machine? : Requester → Option InstanceId
   | .automation _ => none
 
 /-- The state that sent the request, none for a shows slot or an automation. -/
-def Requester.state? : Requester → Option String
-  | .state _ n => some n
-  | _ => none
-
 def Requester.slot? : Requester → Option String
   | .slot _ k => some k
   | _ => none
@@ -346,9 +342,10 @@ def State.who (s : State) (st : Service) (id : InstanceId) : Who :=
   | some i => i.who st
   | none => { chart := st.ref id.chart, serial := id.serial }
 
-def State.requesterWho (s : State) (st : Service) : Requester → Who
-  | .state m _ | .slot m _ => s.who st m
-  | .automation a => { chart := st.ref a }
+def State.sender (s : State) (st : Service) : Requester → Sender
+  | .state m n => .state (s.who st m) n
+  | .slot m k => .slot (s.who st m) k
+  | .automation a => .automation (st.ref a)
 
 /-- The scope of instance `i` at `state`. A copy's expressions also read the owner's context, shown, and input. -/
 def State.scopeOf (s : State) (i : Instance) (state : Option String) : Scope :=

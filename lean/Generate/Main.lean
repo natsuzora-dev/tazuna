@@ -50,6 +50,7 @@ def tsTypes : List TsType :=
    ⟨``Tazuna.Service.Copy, "Copy", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Service.Who, "Who", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Service.Received, "Received", some "./choiceDependent.generated.ts"⟩,
+   ⟨``Tazuna.Service.Sender, "Sender", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Service.StepName, "StepName", some "./choiceDependent.generated.ts"⟩,
    ⟨``Tazuna.Service.Violation, "ViolationValue", some "./violation.ts"⟩,
    ⟨``Tazuna.Explore.Difference, "Difference", none⟩, ⟨``Tazuna.Explore.Assigned, "Assigned", none⟩]
@@ -345,7 +346,7 @@ def files : List (String × String) :=
    ("data/bagOrderDependent.generated.ts", typescript% Tazuna.Explore.BagOrderDependent),
    ("data/choiceDependent.generated.ts",
     typescript% Tazuna.Explore.ChoiceDependent Tazuna.Service.Copy Tazuna.Service.Who Tazuna.Service.Received
-      Tazuna.Service.StepName
+      Tazuna.Service.Sender Tazuna.Service.StepName
       Tazuna.Explore.Difference Tazuna.Explore.Assigned),
    ("data/trace.generated.ts",
     zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer),

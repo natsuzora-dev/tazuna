@@ -40,10 +40,23 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Received
 
+/-- The sender of a request, as a step names it (Requester). -/
+inductive Sender where
+  | state (who : Who) (state : String)
+  | slot (who : Who) (slot : String)
+  | automation (automation : Spec.Ref)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Sender tag "kind"
+
+def Sender.definition : Sender → Spec.Ref
+  | .state w _ | .slot w _ => w.chart
+  | .automation a => a
+
 /--
 A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
-that definition, so that two steps with equal names are interchangeable. `state` of a command or answer is the sending
-state (none for an automation or a shows slot), and `input` the request's input. A receive step takes one event.
+that definition. The search treats two steps with equal names as one, so equal names must run equal work. `input` of a
+command or answer is the request's input. A receive step takes one event.
 -/
 inductive StepName where
   | start (who : Who)
@@ -54,8 +67,8 @@ inductive StepName where
   | activities (who : Who) (state : String)
   | deadline (who : Who) (state name : String)
   | reaction (automation event : Spec.Ref) (payload : Value)
-  | command (command : Spec.Ref) (sender : Who) (state : Option String) (input : Value)
-  | answer (command : Spec.Ref) (sender : Who) (state : Option String) (input : Value)
+  | command (command : Spec.Ref) (sender : Sender) (input : Value)
+  | answer (command : Spec.Ref) (sender : Sender) (input : Value)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
@@ -67,7 +80,7 @@ def StepName.isDeadline : StepName → Bool
 def StepName.definition : StepName → Spec.Ref
   | .start w | .receive w _ | .always w | .onDone w | .opensDone w _ _ | .activities w _ | .deadline w _ _ => w.chart
   | .reaction a _ _ => a
-  | .command _ sender _ _ | .answer _ sender _ _ => sender.chart
+  | .command _ sender _ | .answer _ sender _ => sender.definition
 
 structure RegionPair where
   first : Nat

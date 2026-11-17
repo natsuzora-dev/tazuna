@@ -287,7 +287,9 @@ theorem reactions_follow_declarations (st : Service) (s : State) (e : Emit) (rc 
     · cases hi
     · cases hi; rfl
   rw [hm, List.nil_append]
-  simp [List.filterMap_map, Function.comp_def]
+  induction st.automations with
+  | nil => rfl
+  | cons a as ih => by_cases h : a.receives = e.event <;> simp_all [automationWork]
 
 theorem mem_sortSent_insert (c x : Sent) : ∀ (l : List Sent), x ∈ sortSent.insert c l ↔ x = c ∨ x ∈ l
   | [] => by simp [sortSent.insert]

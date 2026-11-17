@@ -2,6 +2,7 @@ import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Obligation } from "../data/uncovered.ts";
+import { canonicalJson, type Json } from "../data/values.ts";
 import { type InstanceId, instanceName } from "./instance.ts";
 
 /**
@@ -41,13 +42,21 @@ export function valueName(k: ValueKey): string {
   }
 }
 
+/** The key of a step name. The search takes steps with equal names as one, so equal names must run equal work. */
+const stepKey = (name: StepName): string => canonicalJson(name as Json);
+
+export const sameStep = (a: StepName, b: StepName): boolean => stepKey(a) === stepKey(b);
+
+/** The key of a sequence of steps. */
+export const stepsKey = (names: readonly StepName[]): string => names.map(stepKey).join("\n");
+
 export function stepNameDefinition(name: StepName): DefinitionRef {
   switch (name.kind) {
     case "reaction":
       return name.automation;
     case "command":
     case "answer":
-      return name.sender.chart;
+      return name.sender.kind === "automation" ? name.sender.automation : name.sender.who.chart;
     default:
       return name.who.chart;
   }

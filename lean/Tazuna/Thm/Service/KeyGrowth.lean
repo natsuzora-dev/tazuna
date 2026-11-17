@@ -484,7 +484,10 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
   intro r
   obtain ⟨s, q⟩ := r
   cases w with
-  | reaction a e c =>
+  | reaction a gs c =>
+    rcases gs with _ | ⟨_ | ⟨e, g⟩, gs⟩
+    · exact ⟨rfl, List.prefix_refl _⟩
+    · exact ⟨rfl, List.prefix_refl _⟩
     simp only [workBody, id_bind]
     repeat' split
     all_goals keys_leaf

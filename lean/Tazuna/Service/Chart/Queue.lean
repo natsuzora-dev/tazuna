@@ -23,7 +23,8 @@ deriving Repr, Inhabited
 
 /-- Work that the step `cause` caused. -/
 inductive Work where
-  | reaction (automation : Automation) (event : Emit) (cause : Nat)
+  /-- A run of an automation. `groups` holds the events that it receives, in their groups, as for `receive`. -/
+  | reaction (automation : Automation) (groups : List (List Emit)) (cause : Nat)
   | answered (sent : Sent) (answer : Answer) (cause : Nat)
   /--
   The start of a machine or screen in its initial state. A screen that `opens` opened has the opening step as `cause`.
@@ -72,22 +73,33 @@ inductive Ready where
 deriving Repr, Inhabited
 
 /--
-The ways to take work `w`: a receive work takes any event of its first group first, since a group has no order. The
-first way is `w` itself.
+The ways to take the first item of groups `gs`: any item of the first group, since a group has no order. The first way is
+`gs` itself.
 -/
-def Work.choices : Work → List Work
-  | .receive machine ((e :: g) :: gs) cause =>
-    .receive machine ((e :: g) :: gs) cause :: (List.range g.length).filterMap fun k =>
-      g[k]?.map fun x => .receive machine ((x :: e :: g.eraseIdx k) :: gs) cause
-  | w => [w]
+def Groups.choices {α : Type} : List (List α) → List (List (List α))
+  | (e :: g) :: gs =>
+    ((e :: g) :: gs) :: (List.range g.length).filterMap fun k => g[k]?.map fun x => (x :: e :: g.eraseIdx k) :: gs
+  | gs => [gs]
 
 /--
-The work left after the step `step` took the first event of `w`: the rest of its group with the same cause, or else the
-next group, which the step causes. None for other work.
+The groups left after the step `step` took the first item of `gs`, with their cause: the rest of the group keeps
+`cause`; the next group waits for the group before it, so the step causes it.
 -/
+def Groups.rest {α : Type} (cause step : Nat) : List (List α) → Option (List (List α) × Nat)
+  | (_ :: e :: g) :: gs => some ((e :: g) :: gs, cause)
+  | [_] :: g :: gs => some (g :: gs, step)
+  | _ => none
+
+/-- The ways to take work `w`: a receive or reaction work takes any event of its first group first. -/
+def Work.choices : Work → List Work
+  | .receive machine gs cause => (Groups.choices gs).map (.receive machine · cause)
+  | .reaction a gs cause => (Groups.choices gs).map (.reaction a · cause)
+  | w => [w]
+
+/-- The work left after the step `step` took the first event of `w`. None for work other than receive and reaction. -/
 def Work.rest (step : Nat) : Work → Option Work
-  | .receive machine ((_ :: e :: g) :: gs) cause => some (.receive machine ((e :: g) :: gs) cause)
-  | .receive machine ([_] :: g :: gs) _ => some (.receive machine (g :: gs) step)
+  | .receive machine gs cause => (Groups.rest cause step gs).map fun (gs, c) => .receive machine gs c
+  | .reaction a gs cause => (Groups.rest cause step gs).map fun (gs, c) => .reaction a gs c
   | _ => none
 
 /--
@@ -157,13 +169,18 @@ def machineWork (groups : List (List Emit)) (recordsChanged : Bool) (cause : Nat
     (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)).filter (!·.isEmpty)
   if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.id received cause)
 
+/-- The reaction work of automation `a`. -/
+def automationWork (groups : List (List Emit)) (cause : Nat) (a : Automation) : Option Work :=
+  let received := (groups.map (·.filter (a.receives == ·.event))).filter (!·.isEmpty)
+  if received.isEmpty then none else some (.reaction a received cause)
+
 /--
-The work that the groups of events `groups` cause. Copies get no work, since they move with their owner's evaluation.
+The work that the groups of events `groups` cause: one receive work per machine and one reaction work per automation.
+Copies get no work, since they move with their owner's evaluation.
 -/
 def reactions (st : Service) (s : State) (groups : List (List Emit)) (recordsChanged : Bool) (cause : Nat) :
     List Work :=
-  s.machines.filterMap (machineWork groups recordsChanged cause) ++
-  groups.flatten.flatMap fun e => (st.automations.filter (·.receives == e.event)).map (.reaction · e cause)
+  s.machines.filterMap (machineWork groups recordsChanged cause) ++ st.automations.filterMap (automationWork groups cause)
 
 /-- The work that a command's groups of events cause. Writing an event counts as a record change. -/
 def commandWork (st : Service) (s : State) (groups : List (List Emit)) (cause : Nat) : List Work :=

@@ -1,9 +1,9 @@
 import type { StepName } from "../data/choiceDependent.generated.ts";
-import { canonicalJson } from "../data/values.ts";
 import { transitionsAt } from "./chart/basic.ts";
 import { takeDeadline } from "./chart/deadline.ts";
 import { applyCompletion } from "./chart/macrostep.ts";
 import type { Processing } from "./chart/queue.ts";
+import { sameStep } from "./note.ts";
 import { type Deadline, machine, report, who } from "./state.ts";
 
 export function fire(r: Processing, due: Deadline, step: number): void {
@@ -52,7 +52,7 @@ export function chooseDeadline<T extends Deadline>(r: Processing, first: T, due:
   if (!tied) return first;
   const [named, ...rest] = s.stepOrder;
   if (named === undefined) return first;
-  const deadline = due.find((t) => canonicalJson(deadlineStep(r, t)) === canonicalJson(named));
+  const deadline = due.find((t) => sameStep(deadlineStep(r, t), named));
   if (deadline === undefined)
     return report(s, {
       kind: "InvalidInput.unreadyStep",

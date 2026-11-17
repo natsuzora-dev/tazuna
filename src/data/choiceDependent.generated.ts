@@ -22,10 +22,27 @@ export type Received = {
   readonly payload: Json;
 };
 
+/** The sender of a request, as a step names it (Requester). */
+export type Sender =
+  | {
+      readonly kind: "state";
+      readonly who: Who;
+      readonly state: string;
+    }
+  | {
+      readonly kind: "slot";
+      readonly who: Who;
+      readonly slot: string;
+    }
+  | {
+      readonly kind: "automation";
+      readonly automation: DefinitionRef;
+    };
+
 /**
  * A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
- * that definition, so that two steps with equal names are interchangeable. `state` of a command or answer is the sending
- * state (none for an automation or a shows slot), and `input` the request's input. A receive step takes one event.
+ * that definition. The search treats two steps with equal names as one, so equal names must run equal work. `input` of a
+ * command or answer is the request's input. A receive step takes one event.
  */
 export type StepName =
   | {
@@ -71,15 +88,13 @@ export type StepName =
   | {
       readonly kind: "command";
       readonly command: DefinitionRef;
-      readonly sender: Who;
-      readonly state: string | null;
+      readonly sender: Sender;
       readonly input: Json;
     }
   | {
       readonly kind: "answer";
       readonly command: DefinitionRef;
-      readonly sender: Who;
-      readonly state: string | null;
+      readonly sender: Sender;
       readonly input: Json;
     };
 

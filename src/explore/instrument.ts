@@ -22,7 +22,7 @@ import {
 } from "../service/functions.ts";
 import { type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
-import { type Note, type RegionCheck, type RegionPair, type ValueKey, valueName } from "../service/note.ts";
+import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
@@ -354,7 +354,7 @@ export class Collect
             (tiedDeadlines(s.steps, i, j) || s.steps[i]?.message === s.steps[j]?.message) &&
             overlaps(footprints.get(i) as Footprint, footprints.get(j) as Footprint) &&
             !commutes(a, b) &&
-            canonicalJson(a.name) !== canonicalJson(b.name) &&
+            !sameStep(a.name, b.name) &&
             !leadsTo(s.steps, i, j),
         )
         .map(([j]) => [i, j] as const),

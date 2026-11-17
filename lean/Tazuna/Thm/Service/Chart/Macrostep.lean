@@ -302,7 +302,10 @@ theorem keeps_workBody (step : Nat) (w : Work) : Keeps (workBody st fs step w) :
   intro r
   obtain ⟨s, q⟩ := r
   cases w with
-  | reaction a e c =>
+  | reaction a gs c =>
+    rcases gs with _ | ⟨_ | ⟨e, g⟩, gs⟩
+    · rfl
+    · rfl
     simp only [workBody, id_bind]
     repeat' split
     all_goals first | rfl | exact (await_fixed ..).trans rfl | simp [State.fixed, report_eq]
@@ -323,7 +326,10 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
   intro r
   obtain ⟨s, q⟩ := r
   cases w with
-  | reaction a e c =>
+  | reaction a gs c =>
+    rcases gs with _ | ⟨_ | ⟨e, g⟩, gs⟩
+    · exact Grows.of_lines rfl
+    · exact Grows.of_lines rfl
     simp only [workBody, id_bind]
     repeat' split
     all_goals first
@@ -470,9 +476,19 @@ theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step
       ⟨t.report (.fault (c.requester.inputFault st c.activity.ref)), q⟩ := by
   cases h : c.serial <;> simp [workBody, Requester.rejectedInput?, h]
 
-theorem choices_cons (w : Work) : ∃ cs, w.choices = w :: cs := by
-  unfold Work.choices
+theorem groups_choices_cons {α : Type} (gs : List (List α)) : ∃ cs, Groups.choices gs = gs :: cs := by
+  unfold Groups.choices
   split <;> exact ⟨_, rfl⟩
+
+theorem choices_cons (w : Work) : ∃ cs, w.choices = w :: cs := by
+  cases w with
+  | receive machine gs cause =>
+    obtain ⟨cs, h⟩ := groups_choices_cons gs
+    exact ⟨cs.map (.receive machine · cause), by simp [Work.choices, h]⟩
+  | reaction a gs cause =>
+    obtain ⟨cs, h⟩ := groups_choices_cons gs
+    exact ⟨cs.map (.reaction a · cause), by simp [Work.choices, h]⟩
+  | _ => exact ⟨_, rfl⟩
 
 /-- Without `stepOrder` entries, the queue takes its first task and puts back what the step leaves of it. -/
 theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)
@@ -539,10 +555,7 @@ theorem find_distinct_name {α : Type} (key : α → StepName) :
     · have hne : key y ≠ key x := hp.1 x hx
       simp [hne, find_distinct_name key ys x hp.2 hx]
 
-/--
-When the ready entries have distinct names, the step order can take any of them first: naming an entry takes exactly
-that entry. Step names that tell apart every two entries are what lets the step-order search reach every order.
--/
+/-- When the ready entries have distinct names, naming an entry takes exactly that entry. -/
 theorem take_reaches (q : Queue) (name : Ready → StepName) (rest : List StepName) (r : Ready) (i : Nat)
     (hd : q.entries.Pairwise (name ·.1 ≠ name ·.1)) (hx : (r, i) ∈ q.entries) :
     q.take name (name r :: rest) = .ok (some (r, i, q.without i, rest)) :=
@@ -600,10 +613,12 @@ theorem queued_work_keeps_records (q : Queue) (step : Nat) (w : Work) :
     (runWork st fs s q step w).state.records = s.records :=
   congrArg Fixed.records (runWork_fixed q step w)
 
-theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation) (e : Emit) (cause : Nat) :
+theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation) (e : Emit) (g : List Emit)
+    (gs : List (List Emit)) (cause : Nat) :
     ∃ k : Except Issue (Option Value × List String) → Processing,
-      runWork st fs s q step (.reaction a e cause) = k (fs.react a.name e.payload s.records s.now s.nextKeys) :=
-  ⟨fun x => runWork st { fs with react := fun _ _ _ _ _ => x } s q step (.reaction a e cause), by
+      runWork st fs s q step (.reaction a ((e :: g) :: gs) cause) =
+        k (fs.react a.name e.payload s.records s.now s.nextKeys) :=
+  ⟨fun x => runWork st { fs with react := fun _ _ _ _ _ => x } s q step (.reaction a ((e :: g) :: gs) cause), by
     simp only [runWork, Work.settledMachine?, settled, workBody, id_bind]⟩
 
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=

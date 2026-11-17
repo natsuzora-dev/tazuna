@@ -1,9 +1,10 @@
 import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import { canonicalJson, type Fields, type Json } from "../../data/values.ts";
+import type { Fields, Json } from "../../data/values.ts";
 import type { Automation, Service } from "../basic.ts";
 import type { InstanceId } from "../instance.ts";
 import type { Emitted } from "../message.ts";
+import { sameStep } from "../note.ts";
 import { type Instance, type Requester, type Run, report, type State } from "../state.ts";
 import type { Activity } from "./basic.ts";
 
@@ -28,7 +29,13 @@ export interface Received {
 
 /** Work for the internal queue. `cause` is the step that caused the work. */
 export type Work =
-  | { readonly kind: "reaction"; readonly automation: Automation; readonly event: Emitted; readonly cause: number }
+  /** `groups` holds the events that the automation receives, in their groups, like a receive work's. */
+  | {
+      readonly kind: "reaction";
+      readonly automation: Automation;
+      readonly groups: readonly (readonly Emitted[])[];
+      readonly cause: number;
+    }
   | { readonly kind: "answered"; readonly sent: Sent; readonly answer: Answer; readonly cause: number }
   /** A machine or screen starts in its initial state. A screen that `opens` opened has the opening step as cause. */
   | { readonly kind: "start"; readonly machine: InstanceId; readonly cause: number | undefined }
@@ -89,22 +96,47 @@ export interface Entry {
   readonly at: number;
 }
 
-/** Lean's Work.choices: a receive work takes any event of its first group first. The first choice is `work`. */
-function choices(work: Work): Work[] {
-  if (work.kind !== "receive") return [work];
-  const [group, ...later] = work.groups;
+/** Lean's Groups.choices: any item of the first group may come first, since a group has no order. The first is `groups`. */
+function groupChoices<T>(groups: readonly (readonly T[])[]): (readonly (readonly T[])[])[] {
+  const [group, ...later] = groups;
   const [e, ...others] = group ?? [];
-  if (e === undefined) return [work];
-  return [work, ...others.map((x, k): Work => ({ ...work, groups: [[x, e, ...others.toSpliced(k, 1)], ...later] }))];
+  if (e === undefined) return [groups];
+  return [groups, ...others.map((x, k) => [[x, e, ...others.toSpliced(k, 1)], ...later])];
 }
 
-/** Lean's Work.rest: the rest of the group with the same cause, or else the next group, which `step` causes. */
-export function workLeft(work: Work, step: number): Work | undefined {
-  if (work.kind !== "receive") return undefined;
-  const [group, ...later] = work.groups;
+/**
+ * Lean's Groups.rest: the groups left after a step took the first item, and their cause. The rest of the group keeps
+ * `cause`; the next group waits for the one before it, so `step` causes it.
+ */
+function groupsLeft<T>(
+  groups: readonly (readonly T[])[],
+  cause: number,
+  step: number,
+): { readonly groups: readonly (readonly T[])[]; readonly cause: number } | undefined {
+  const [group, ...later] = groups;
   if (group === undefined || group.length === 0) return undefined;
-  if (group.length > 1) return { ...work, groups: [group.slice(1), ...later] };
-  return later.length === 0 ? undefined : { ...work, groups: later, cause: step };
+  if (group.length > 1) return { groups: [group.slice(1), ...later], cause };
+  return later.length === 0 ? undefined : { groups: later, cause: step };
+}
+
+/** Lean's Work.choices: a receive or reaction work takes any event of its first group first. The first is `work`. */
+function choices(work: Work): Work[] {
+  if (work.kind === "receive") return groupChoices(work.groups).map((groups) => ({ ...work, groups }));
+  if (work.kind === "reaction") return groupChoices(work.groups).map((groups) => ({ ...work, groups }));
+  return [work];
+}
+
+/** Lean's Work.rest: what is left of a receive or reaction work after `step` took its first event. */
+export function workLeft(work: Work, step: number): Work | undefined {
+  if (work.kind === "receive") {
+    const left = groupsLeft(work.groups, work.cause, step);
+    return left && { ...work, ...left };
+  }
+  if (work.kind === "reaction") {
+    const left = groupsLeft(work.groups, work.cause, step);
+    return left && { ...work, ...left };
+  }
+  return undefined;
 }
 
 /** Lean's Queue.entries. */
@@ -151,7 +183,7 @@ export function take(r: Processing, name: (ready: Ready) => StepName): Entry | u
     without(queue, first.at);
     return first;
   }
-  const found = ready.find((e) => canonicalJson(name(e.ready)) === canonicalJson(named));
+  const found = ready.find((e) => sameStep(name(e.ready), named));
   if (found === undefined && named.kind !== "deadline")
     return report(s, {
       kind: "InvalidInput.unreadyStep",
@@ -192,7 +224,10 @@ function machineWork(
   return { kind: "receive", machine: instance.id, groups: received, cause };
 }
 
-/** Returns the work that the groups of events cause. Copies get no work; they move with their owner's evaluation. */
+/**
+ * Returns the work that the groups of events cause: one receive work per machine and one reaction work per automation,
+ * each with its events in their groups. Copies get no work; they move with their owner's evaluation.
+ */
 export function reactions(
   st: Service,
   s: State,
@@ -202,13 +237,10 @@ export function reactions(
 ): Work[] {
   return [
     ...[...s.machines.values()].flatMap((i) => machineWork(groups, recordsChanged, cause, i) ?? []),
-    ...groups
-      .flat()
-      .flatMap((e) =>
-        st.automations
-          .filter((a) => a.receives === e.event)
-          .map((automation): Work => ({ kind: "reaction", automation, event: e, cause })),
-      ),
+    ...st.automations.flatMap((automation): Work[] => {
+      const received = groups.map((g) => g.filter((e) => e.event === automation.receives)).filter((g) => g.length > 0);
+      return received.length === 0 ? [] : [{ kind: "reaction", automation, groups: received, cause }];
+    }),
   ];
 }
 
