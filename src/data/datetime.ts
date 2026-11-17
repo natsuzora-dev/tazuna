@@ -18,8 +18,16 @@ export const duration = z.codec(z.iso.duration(), z.instanceof(Temporal.Duration
   encode: (length) => length.toString(),
 });
 
-/** An IANA time zone name ("Asia/Tokyo"). */
-export const timeZone = z.string().refine((name) => Intl.supportedValuesOf("timeZone").includes(name), {
+function namedZone(name: string): string | undefined {
+  try {
+    return new Temporal.ZonedDateTime(0n, name).timeZoneId;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An IANA time zone name ("Asia/Tokyo"), in the spelling Temporal gives it; an offset ("+09:00") is not a name. */
+export const timeZone = z.string().refine((name) => !/^[+-]/.test(name) && namedZone(name) === name, {
   error: "not an IANA time zone name",
 });
 

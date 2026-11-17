@@ -26,6 +26,7 @@ import {
   type Point,
   useFirstViewport,
 } from "./diagram.tsx";
+import { lineTones } from "./tone.ts";
 
 type MessageEntry = Exclude<FlowEntry, { type: "time" }>;
 
@@ -39,11 +40,6 @@ function messageText(entry: MessageEntry, l: Exclude<TraceLine, { type: "time" }
   if (l.type === "operation") return l.name;
   const name = entry.to !== null && l.name.startsWith(`${entry.to}.`) ? l.name.slice(entry.to.length + 1) : l.name;
   return [l.type === "subscribe" ? "subscribe" : undefined, name, l.id].filter((p) => p !== undefined).join(" ");
-}
-
-function tone(l: TraceLine): string {
-  if (l.type === "subscribe" || l.type === "unsubscribe") return "query";
-  return l.type;
 }
 
 export const entryText = (entry: FlowEntry, l: TraceLine) =>
@@ -124,7 +120,7 @@ function usePick(index: number) {
 function Label({ data: { entry, index, line } }: NodeProps<LabelNode>) {
   const { pressed, onClick } = usePick(index);
   return (
-    <button type="button" className={`label t-${tone(line)}`} aria-pressed={pressed} onClick={onClick}>
+    <button type="button" className={`label t-${lineTones[line.type]}`} aria-pressed={pressed} onClick={onClick}>
       {entryText(entry, line)}
     </button>
   );

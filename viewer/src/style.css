@@ -390,7 +390,8 @@ nav.list a:focus-visible {
   background: var(--kind-event-fill);
   box-shadow: 0 0 0 var(--stroke-hairline) var(--kind-event-line);
 }
-.t-control {
+.t-control,
+.t-operation {
   color: var(--kind-screen-ink);
   background: var(--kind-screen-fill);
   box-shadow: 0 0 0 var(--stroke-hairline) var(--kind-screen-line);
@@ -412,7 +413,8 @@ nav.list a:focus-visible {
 }
 .t-always,
 .t-onDone,
-.t-screen {
+.t-screen,
+.t-restart {
   color: var(--text-faint);
   background: var(--surface-node);
   box-shadow: 0 0 0 var(--stroke-hairline) var(--line-border);

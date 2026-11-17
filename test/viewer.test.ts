@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { tones } from "../viewer/src/tone.ts";
 
 const src = join(import.meta.dirname, "../viewer/src");
 const read = (file: string) => readFileSync(join(src, file), "utf8").replaceAll(/\/\*[\s\S]*?\*\//g, "");
@@ -43,6 +44,13 @@ test("style.css, the TSX files, or other variables read every variable that toke
   const used = [...[css, ...tsx, tokens].join("\n").matchAll(/(?:var\(|cssPx\(")(--[\w-]+)/g)].map((m) => m[1]);
   assert.deepEqual(
     defined.filter((name) => !used.includes(name)),
+    [],
+  );
+});
+
+test("style.css colors the label of every tone, so a label of each trace line and transition trigger has its color", () => {
+  assert.deepEqual(
+    tones.filter((tone) => !new RegExp(`\\.t-${tone}\\b`).test(css)),
     [],
   );
 });

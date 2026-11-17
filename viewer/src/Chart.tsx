@@ -30,6 +30,7 @@ import {
   roundedPath,
   useFirstViewport,
 } from "./diagram.tsx";
+import type { Tone } from "./tone.ts";
 
 export type ChartPick =
   | { readonly state: StateView }
@@ -58,7 +59,7 @@ export function transitionText(t: TransitionView): string {
  */
 export const activityText = (r: ActivityView) => `${r.keyword === "shows" ? "do" : "entry"} / ${r.keyword} ${r.name}`;
 
-function labelTone(trigger: Trigger): string {
+function labelTone(trigger: Trigger): Tone {
   if (trigger.type === "answer") return trigger.kind;
   return trigger.type;
 }
