@@ -109,7 +109,15 @@ local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 
 derive_group Report
 
-/-- Whether the report of a line stops the simulation: a line that cannot take place does. -/
+/--
+Whether the report stops the simulation, which a line's report does when the scenario as written describes no run, or
+not one run, from that line on: the line names what does not exist, or several things; states a message, delivery, or
+time that cannot occur at that point (a malformed answer, a second answer, an overtaking delivery, an earlier time);
+states again what an earlier line stated; or writes what only the run decides (a created key, `created()` out of
+place). differentPeerAnswer
+compares a message that did occur, so it stops nothing; the reports of Given end the simulation before any line, and
+those of the end and of Then come after every line.
+-/
 def Report.halts : Report → Bool
   | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight .. | .awaitingAnswer .. | .unmetExpectation ..
   | .notLook .. => false

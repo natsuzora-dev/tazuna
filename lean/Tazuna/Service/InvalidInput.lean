@@ -7,7 +7,11 @@ namespace Tazuna.Semantics
 
 open Tazuna.Data
 
-/-- A message that the service takes and that no sender could give it. The message is the subject, so `definition` is null. -/
+/--
+An input that the service takes and that breaks what it may assume: a message that no sender could give it, or that
+breaks the service's assumption about its sender, or an order that the scenario writes for the input. The input is the
+subject, so `definition` is null.
+-/
 inductive InvalidInput where
   /-- The input names a command, query, or screen that the service does not own. -/
   | unownedTarget (target : Syntax.Ref)
@@ -58,11 +62,12 @@ local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 derive_group InvalidInput
 
 /--
-Whether the violation halts the run, which it does when the input cannot take place: it cannot be written as a trace
-line, or it states a cause that did not occur (an event's resultOf naming a request that cannot have the event as its
-result), so that later inputs would build on a history no run has. An input that a sender can give, such as a
-subscription id it reuses on a retry or an answer that breaks the receiver's assumption, is written as given and the
-run goes on.
+Whether the violation halts the run, which it does when the scenario as written describes no run, or not one run, from
+this input on, so that later inputs would build on a history no run has: the input is one that no sender could give
+(it cannot be written as a trace line), it states a cause that did not occur (an event's resultOf naming a request that
+cannot have the event as its result), or the order written for it does not fit the run (an entry that names nothing
+due, a tie it leaves unordered, or an entry it leaves unused). An input that a sender can give, such as a subscription
+id it reuses on a retry or an answer that breaks the receiver's assumption, is written as given and the run goes on.
 -/
 def InvalidInput.halts : InvalidInput → Bool
   | .unownedTarget .. | .eventPayloadSchema .. | .controlPayloadSchema ..

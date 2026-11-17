@@ -4,7 +4,11 @@ import type { DefinitionRef } from "./definitionRef.ts";
 import type { DeadlineId, Rejection } from "./trace.generated.ts";
 import type { Json } from "./values.ts";
 
-/** A message that the service takes and that no sender could give it. The message is the subject, so `definition` is null. */
+/**
+ * An input that the service takes and that breaks what it may assume: a message that no sender could give it, or that
+ * breaks the service's assumption about its sender, or an order that the scenario writes for the input. The input is the
+ * subject, so `definition` is null.
+ */
 export type InvalidInput =
   /** The input names a command, query, or screen that the service does not own. */
   | {
