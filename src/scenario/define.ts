@@ -8,9 +8,11 @@ import type {
   AnyEvent,
   AnyQuery,
   AnyScreen,
+  Chart,
   ChartSpec,
   Command,
   Control,
+  Deadlines,
   Query,
 } from "../dsl/definition.ts";
 import type { EncodedPayload, PayloadShape } from "../dsl/event.ts";
@@ -533,11 +535,14 @@ export interface DeadlineOf {
   readonly name: string;
 }
 
-/** The deadline `name` of state `state` of the chart `chart`'s one instance, for the order of a clock line. */
-export const deadline = <C extends ChartSpec>(
-  chart: C,
-  state: keyof C["states"] & string,
-  name: string,
+/**
+ * The deadline `name` of state `state` of the chart `chart`'s one instance, for the order of a clock line: a state and
+ * one of its deadlines that the chart's tree lists.
+ */
+export const deadline = <Dl extends Deadlines, S extends keyof Dl & string>(
+  chart: Chart<Dl>,
+  state: S,
+  name: Dl[S],
 ): DeadlineOf => ({
   chart,
   state,

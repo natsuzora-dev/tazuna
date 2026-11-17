@@ -46,7 +46,7 @@ export const perTask = machine({
       type: "map",
       key: { taskId: ref(Task) },
       initial: "greeting",
-      states: { greeting: {}, waiting: {}, reminding: {}, done: {} },
+      states: { greeting: {}, waiting: { after: ["hour"] }, reminding: {}, done: {} },
     },
   },
 }).chart({

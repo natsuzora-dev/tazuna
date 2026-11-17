@@ -7,7 +7,7 @@ export const notifier = machine({
   receives: { taskAdded },
   commands: { showNotification: device.showNotification },
   initial: "idle",
-  states: { idle: {}, notifying: {}, retrying: {} },
+  states: { idle: {}, notifying: {}, retrying: { after: ["minute"] } },
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "notifying" }] } },

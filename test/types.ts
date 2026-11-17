@@ -25,6 +25,7 @@ import {
   constants,
   created,
   datetime,
+  deadline,
   emit,
   emitted,
   endOf,
@@ -651,7 +652,11 @@ screen({ description: "", context: { title: z.string() }, initial: "a", states: 
 });
 
 // An after deadline has one of delay or at, and onFired.
-machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
+machine({
+  description: "",
+  initial: "a",
+  states: { a: { after: ["minute", "created", "fromNow", "both", "neither", "noTransitions"] }, b: {} },
+}).chart({
   states: {
     a: {
       after: {
@@ -679,7 +684,11 @@ machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
 });
 
 // A delay is written in hours, minutes, seconds and milliseconds, or is a Temporal.Duration.
-machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
+machine({
+  description: "",
+  initial: "a",
+  states: { a: { after: ["units", "constant", "day", "weekAndHour", "microsecond"] }, b: {} },
+}).chart({
   states: {
     a: {
       after: {
@@ -1292,6 +1301,44 @@ screen({
   resolve: ({ active }) => ({ isClosed: active.closed }),
   states: { list: { on: { close: [{ target: "closed" }] } } },
 });
+
+// A state's deadlines are named in the tree and written in the body, one under each name.
+const timer = machine({
+  description: "",
+  initial: "a",
+  states: { a: { after: ["soon"] }, b: { after: ["late"] } },
+}).chart({
+  states: {
+    a: { after: { soon: { delay: { hours: 1 }, onFired: [{ target: "b" }] } } },
+    b: { after: { late: { delay: { hours: 2 }, onFired: [{ target: "a" }] } } },
+  },
+});
+machine({ description: "", initial: "a", states: { a: { after: ["soon"] }, b: {} } }).chart({
+  // @ts-expect-error the body writes each deadline that the tree names
+  states: { a: { after: {} } },
+});
+machine({ description: "", initial: "a", states: { a: { after: ["soon"] }, b: {} } }).chart({
+  states: {
+    a: {
+      after: {
+        soon: { delay: { hours: 1 }, onFired: [{ target: "b" }] },
+        // @ts-expect-error the body writes no deadline that the tree does not name
+        late: { delay: { hours: 2 }, onFired: [{ target: "b" }] },
+      },
+    },
+  },
+});
+// @ts-expect-error a state that the tree gives deadlines has a body (missingAfter)
+machine({ description: "", initial: "a", states: { a: { after: ["soon"] }, b: {} } }).chart({
+  states: { b: { always: [] } },
+});
+
+// A clock line's order names a deadline by its chart, its state, and its name in the tree.
+deadline(timer, "a", "soon");
+// @ts-expect-error the state has no deadline of that name
+deadline(timer, "a", "late");
+// @ts-expect-error the chart has no state with deadlines of that name
+deadline(timer, "c", "soon");
 
 // The scenario grammar: what a line names and writes.
 scenarioOfScreens("types", {

@@ -23,7 +23,7 @@ const clock = (by: string) =>
     receives: { armed },
     commands: { ring },
     initial: "idle",
-    states: { idle: {}, waiting: {}, ringing: {}, done: { type: "final" } },
+    states: { idle: {}, waiting: { after: ["due"] }, ringing: {}, done: { type: "final" } },
   }).chart({
     states: {
       idle: { on: { armed: [{ target: "waiting" }] } },

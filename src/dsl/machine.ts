@@ -20,10 +20,12 @@ import type {
 import type { DefaultedShape, Entities, Records, Row } from "./entity.ts";
 import {
   assemble,
+  type ChartDeadlines,
   type CheckTree,
   type CopyContext,
   type CopyKey,
   type CopyNames,
+  type DeadlinesIn,
   type ErrorIf,
   type Flat,
   type HeldIn,
@@ -135,10 +137,6 @@ export type StateSends<N extends string, Ctx, B, Cs extends Commands> = SomeKnow
 interface NodeBase<N extends string, Ctx, B, Ons> {
   /** The transitions per received event, and in screens also per control name. */
   readonly on?: Ons;
-  /**
-   * The deadlines by name. An empty `after` is NonCanonical.emptyAfter and not a type error, as an empty `guard` is.
-   */
-  readonly after?: { readonly [deadline: string]: Deadline<N, Ctx, B> };
   readonly always?: Transitions<N, Ctx, B>;
   readonly entry?: { readonly assign: Assign<Ctx, B> };
   readonly exit?: { readonly assign: Assign<Ctx, B> };
@@ -161,9 +159,18 @@ type MachineRequest<N extends string, Ctx, B, Qs extends Queries, Cs extends Com
   readonly sends?: StateSends<N, Ctx, B, Cs>;
 };
 
-export type StateBehavior<Kd, N extends string, Ctx, B, Ons, Rq, Key = never> = Kd extends "final"
+/**
+ * The deadlines of a state, one under each name that the tree lists in the state's `after`. An empty `after` is
+ * NonCanonical.emptyAfter and not a type error, as an empty `guard` is.
+ */
+type After<Dl, N extends string, Ctx, B> = [Dl] extends [never]
+  ? { readonly after?: { readonly [deadline: string]: never } }
+  : { readonly after: { readonly [D in Dl & string]: Deadline<N, Ctx, B> } };
+
+export type StateBehavior<Kd, N extends string, Ctx, B, Ons, Rq, Key = never, Dl = never> = Kd extends "final"
   ? Pick<NodeBase<N, Ctx, B, never>, "entry">
   : NodeBase<N, Ctx, B, Ons> &
+      After<Dl, N, Ctx, B> &
       Rq &
       (Kd extends "parent" ? ParentNode<N, Ctx, B> : { readonly onDone?: never }) &
       (Kd extends "map" ? MapNode<B, Key> : { readonly items?: never });
@@ -231,7 +238,8 @@ type MachineBehavior<
   B,
   Ons<S["context"], S["names"], Rs, B>,
   MachineRequest<S["names"], S["context"], B, Qs, Cs>,
-  CopyKey<F, K>
+  CopyKey<F, K>,
+  DeadlinesIn<F, K>
 >;
 export type HeldArgs<B, F, K extends keyof F> = B & { readonly held: HeldIn<F, K> };
 
@@ -249,7 +257,7 @@ interface MachineSetup<
       on?: Ons<Row<Ctx>, OuterNames<F>, Rs, OuterArguments<Ctx, Es>>;
       states?: Table<F, K, ScopeArgs<F, Ctx, Es>, MachineBehaviors<F, Ctx, Rs, Qs, Cs, Es>> & SomeKey<K>;
     } & NoInfer<RowsWritten<F, K>>,
-  ): Machine;
+  ): Machine<ChartDeadlines<F>>;
 }
 
 export type MachineDefiner<Es extends Entities> = <

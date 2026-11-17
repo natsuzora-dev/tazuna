@@ -10,7 +10,7 @@ export const workload = machine({
   receives: { openTaskRecorded },
   commands: { warn },
   initial: "quiet",
-  states: { quiet: {}, warning: {}, warned: {} },
+  states: { quiet: {}, warning: {}, warned: { after: ["periodEnd"] } },
 }).chart({
   states: {
     quiet: {
@@ -62,7 +62,10 @@ export const notification = machine({
   states: {
     starting: {},
     asking: {},
-    notAsking: { initial: "idle", states: { idle: {}, retrying: {}, awaitingUserChoice: {}, showing: {} } },
+    notAsking: {
+      initial: "idle",
+      states: { idle: {}, retrying: { after: ["retry"] }, awaitingUserChoice: {}, showing: {} },
+    },
   },
   invariants: {
     countsOnlyWhileRequesting: ({ context, active }) => active.asking || active.retrying || context.attempts === 0,

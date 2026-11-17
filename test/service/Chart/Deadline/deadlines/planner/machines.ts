@@ -8,7 +8,7 @@ export const reminder = machine({
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
-  states: { waiting: {}, reminding: {}, done: { type: "final" } },
+  states: { waiting: { after: ["due"] }, reminding: {}, done: { type: "final" } },
 }).chart({
   states: {
     waiting: {

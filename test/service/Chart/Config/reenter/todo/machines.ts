@@ -5,7 +5,7 @@ export const keepsDeadline = machine({
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
-  states: { waiting: {}, reminding: {}, done: { type: "final" } },
+  states: { waiting: { after: ["hour"] }, reminding: {}, done: { type: "final" } },
 }).chart({
   states: {
     waiting: {
@@ -23,7 +23,7 @@ export const restartsDeadline = machine({
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
-  states: { waiting: {}, reminding: {}, done: { type: "final" } },
+  states: { waiting: { after: ["hour"] }, reminding: {}, done: { type: "final" } },
 }).chart({
   states: {
     waiting: {
@@ -44,7 +44,11 @@ export const keepsDeadlineToChild = machine({
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
-  states: { waiting: { initial: "idle", states: { idle: {}, noted: {} } }, reminding: {}, done: { type: "final" } },
+  states: {
+    waiting: { after: ["hour"], initial: "idle", states: { idle: {}, noted: {} } },
+    reminding: {},
+    done: { type: "final" },
+  },
 }).chart({
   states: {
     waiting: {
@@ -65,7 +69,11 @@ export const restartsDeadlineToChild = machine({
   receives: { taskAdded },
   commands: { remind },
   initial: "waiting",
-  states: { waiting: { initial: "idle", states: { idle: {}, noted: {} } }, reminding: {}, done: { type: "final" } },
+  states: {
+    waiting: { after: ["hour"], initial: "idle", states: { idle: {}, noted: {} } },
+    reminding: {},
+    done: { type: "final" },
+  },
 }).chart({
   states: {
     waiting: {
@@ -88,6 +96,7 @@ export const keepsDeadlineInParallel = machine({
   initial: "waiting",
   states: {
     waiting: {
+      after: ["hour"],
       type: "parallel",
       states: {
         listing: { initial: "idle", states: { idle: {}, noted: {} } },

@@ -271,12 +271,19 @@ export interface ChartSpec {
 
 export type Events = Readonly<Record<string, AnyEvent>>;
 
-interface Chart extends ChartSpec {
+declare const deadlinesOf: unique symbol;
+
+/** The deadline names of a chart's states, by state name; see `deadline` of the scenario DSL. */
+export type Deadlines = { readonly [state: string]: string };
+
+/** A chart; `Dl` holds, as a type only, the names of its deadlines. */
+export interface Chart<Dl extends Deadlines = Deadlines> extends ChartSpec {
   readonly service: ServiceDefinition;
   readonly description: string;
+  readonly [deadlinesOf]?: Dl;
 }
 
-export interface Machine extends Chart {
+export interface Machine<Dl extends Deadlines = Deadlines> extends Chart<Dl> {
   readonly kind: "machine";
 }
 
@@ -299,8 +306,12 @@ export type AnyControl = Control<any>;
 
 type Controls = Readonly<Record<string, AnyControl>>;
 
-export interface Screen<I extends Shape = Shape, O extends Shape = Shape, Cs extends Controls = Controls>
-  extends Chart {
+export interface Screen<
+  I extends Shape = Shape,
+  O extends Shape = Shape,
+  Cs extends Controls = Controls,
+  Dl extends Deadlines = Deadlines,
+> extends Chart<Dl> {
   readonly kind: "screen";
   readonly input: I;
   readonly output: O;

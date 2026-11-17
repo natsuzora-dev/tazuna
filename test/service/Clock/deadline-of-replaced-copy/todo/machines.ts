@@ -8,7 +8,12 @@ export const perTask = machine({
   context: { restarted: z.boolean().default(false) },
   initial: "rows",
   states: {
-    rows: { type: "map", key: { taskId: ref(Task) }, initial: "waiting", states: { waiting: {}, reminding: {} } },
+    rows: {
+      type: "map",
+      key: { taskId: ref(Task) },
+      initial: "waiting",
+      states: { waiting: { after: ["hour"] }, reminding: {} },
+    },
   },
 }).chart({
   states: {

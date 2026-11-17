@@ -5,7 +5,7 @@ export const reminder = machine({
   receives: { taskAdded },
   commands: { remind },
   initial: "idle",
-  states: { idle: {}, waiting: {}, reminding: {} },
+  states: { idle: {}, waiting: { after: ["hour"] }, reminding: {} },
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "waiting" }] } },

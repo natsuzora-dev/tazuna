@@ -17,6 +17,11 @@ type TreeNode =
        * expressions read the values as `held`.
        */
       readonly held?: Shape;
+      /**
+       * The names of the state's deadlines. The body writes each deadline under its name in `after`, and a clock line's
+       * order names it by the chart, the state, and this name.
+       */
+      readonly after?: readonly DeadlineName[];
       readonly initial?: string;
       /**
        * The child states, whose names are unique in the tree and contain neither `@` nor `[`
@@ -24,7 +29,13 @@ type TreeNode =
        */
       readonly states?: Tree;
     }
-  | { readonly type: "parallel"; readonly held?: Shape; readonly initial?: never; readonly states: Tree }
+  | {
+      readonly type: "parallel";
+      readonly held?: Shape;
+      readonly after?: readonly DeadlineName[];
+      readonly initial?: never;
+      readonly states: Tree;
+    }
   | {
       readonly type: "map";
       /**
@@ -38,11 +49,17 @@ type TreeNode =
        */
       readonly context?: DefaultedShape;
       readonly held?: never;
+      readonly after?: readonly DeadlineName[];
       readonly initial?: string;
       readonly states: Tree;
     }
   | { readonly type: "final" | "history"; readonly held?: never; readonly initial?: never; readonly states?: never };
 export type Tree = { readonly [name: string]: TreeNode };
+/**
+ * A deadline name. The literal member keeps a written name a literal type, though the tree's type parameter is not
+ * const (St in MachineDefiner).
+ */
+type DeadlineName = "~" | (string & {});
 
 type CheckNode<T> = T extends { readonly type: "parallel"; readonly states: infer C }
   ? { readonly states: CheckTree<C> }
@@ -80,8 +97,9 @@ type CopyOfNode<T> = T extends { readonly type: "map"; readonly key: infer Key e
  * the nearest map state above. `regionOrMap` is, walking up from the state itself, the first child of a parallel state
  * or the first map state strictly above, or null when there is neither.
  */
-interface Entry<K, Own extends Shape, Held, Above, Kd, Path, M, Cp, RegionOrMap> {
+interface Entry<K, Own extends Shape, Held, Above, Kd, Path, M, Cp, RegionOrMap, Dl> {
   readonly name: K;
+  readonly deadlines: Dl;
   readonly path: Path;
   readonly own: Own;
   readonly above: Above;
@@ -102,7 +120,8 @@ type Entries<T, Above, Path extends string, M, RegionOrMap, InParallel> = {
         Path,
         M,
         CopyOfNode<T[K]>,
-        InParallel extends true ? K : RegionOrMap
+        InParallel extends true ? K : RegionOrMap,
+        T[K] extends { readonly after: readonly (infer D)[] } ? D : never
       >
     | (T[K] extends { readonly states: infer C }
         ? Entries<
@@ -115,7 +134,7 @@ type Entries<T, Above, Path extends string, M, RegionOrMap, InParallel> = {
           >
         : never);
 }[keyof T & string];
-type AnyEntry = Entry<string, Shape, unknown, unknown, string, string, unknown, unknown, string | null>;
+type AnyEntry = Entry<string, Shape, unknown, unknown, string, string, unknown, unknown, string | null, unknown>;
 
 type FlatEntries<T> = Entries<T, Empty, "", never, null, false>;
 export type Flat<T> = { readonly [E in FlatEntries<T> as E["name"]]: E };
@@ -168,6 +187,12 @@ export type TreeErrors<T> = ErrorIf<"duplicateStateNames", Duplicates<T>> &
 export type HeldIn<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["held"] : never;
 export type KindOf<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["kind"] : never;
 export type MapOf<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["map"] : never;
+/** The names of the deadlines of the state `K`. */
+export type DeadlinesIn<F, K extends keyof F> = F[K] extends AnyEntry ? F[K]["deadlines"] : never;
+/** The deadline names of each state outside the copies of map states that has deadlines. */
+export type ChartDeadlines<F> = {
+  readonly [S in OuterNames<F> as [DeadlinesIn<F, S>] extends [never] ? never : S]: DeadlinesIn<F, S> & string;
+};
 /** The states outside every map state's copies, map states included. */
 export type OuterNames<F> = { [K in keyof F]: [MapOf<F, K>] extends [never] ? K : never }[keyof F] & string;
 type InRegionOrMap<E, RegionOrMap extends string> = E extends AnyEntry
@@ -201,6 +226,7 @@ type HasHeld<F, K extends keyof F> = keyof OwnOf<F, K> extends never ? false : t
 
 export type TableKeys<F> = { [K in keyof F]: KindOf<F, K> extends "history" ? never : K }[keyof F];
 type HeldKeys<F> = { [K in keyof F]: HasHeld<F, K> extends true ? K : never }[keyof F];
+type DeadlineKeys<F> = { [K in keyof F]: [DeadlinesIn<F, K>] extends [never] ? never : K }[keyof F];
 /** A value of a type with known optional keys has at least one of the keys; `{}` is a type error. */
 export type SomeKnownKey<T> = { [k in keyof T]-?: { readonly [q in k]-?: unknown } }[keyof T];
 type TableRow<F, K extends keyof F, A, B> =
@@ -215,7 +241,8 @@ type Holds<A, Own extends Shape> = {
 };
 /**
  * The behaviors of the states. A state without behavior is left out; a state with held values needs `holds`
- * (`missingHolds`), and a map state needs `items` (`missingItems`).
+ * (`missingHolds`), a state with deadlines needs `after` (`missingAfter`), and a map state needs `items`
+ * (`missingItems`).
  */
 export type Table<
   F,
@@ -226,6 +253,7 @@ export type Table<
   readonly [P in K]?: TableRow<F, P, A[P], Behavior[P]>;
 };
 export type RowsWritten<F, K> = ErrorIf<"missingHolds", Exclude<HeldKeys<F>, K>> &
+  ErrorIf<"missingAfter", Exclude<DeadlineKeys<F>, K>> &
   ErrorIf<"missingItems", Exclude<MapNames<F>, K>>;
 
 type RuntimeNode = {
