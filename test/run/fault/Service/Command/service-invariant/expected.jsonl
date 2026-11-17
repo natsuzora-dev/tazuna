@@ -1,1 +1,1 @@
-{"kind":"Fault.exception","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"addUntitled"},"error":{"type":"thrownError","name":"Error","message":"the task task-1 has no title","stack":"<stack>"}}
+{"kind":"Fault.exception","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":6},"scenario":{"service":"todo","name":"addUntitled"},"error":{"type":"thrownError","name":"Error","message":"the task task-1 has no title","stack":"<stack>"}}

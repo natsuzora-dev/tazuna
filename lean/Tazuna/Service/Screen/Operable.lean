@@ -55,10 +55,15 @@ def offeringStates (st : Service) (s : State) (top : Instance) (control : String
       | some o => if hi.isIn n then some (hi, n, o) else none
       | none => none)
 
-def innermostOffers (c : Chart) (found : List (Instance × String × Spec.Offer)) :
+/--
+The offering states that no active descendant overrides. A descendant held by one map copy overrides the states of that
+copy and of `top`, but not those of another copy.
+-/
+def innermostOffers (top : Instance) (found : List (Instance × String × Spec.Offer)) :
     List (Instance × String × Spec.Offer) :=
-  let tree := c.tree
-  found.filter fun (_, a, _) => !found.any fun (_, b, _) => b != a && tree.isDescendant b a
+  let tree := top.chart.tree
+  found.filter fun (h, a, _) => !found.any fun (g, b, _) =>
+    b != a && tree.isDescendant b a && (g.resource == h.resource || h.resource == top.resource)
 
 /--
 The offers that apply to `control`: the innermost offering states, or else the chart's own offers. A control that
@@ -66,7 +71,7 @@ neither names is offered nothing.
 -/
 def appliedOffers (top : Instance) (control : String) (found : List (Instance × String × Spec.Offer)) :
     List (Instance × Option String × Spec.Offer) :=
-  match innermostOffers top.chart found, top.chart.offers.lookup control with
+  match innermostOffers top found, top.chart.offers.lookup control with
   | [], some o => [(top, none, o)]
   | innermost, _ => innermost.map fun (h, n, o) => (h, some n, o)
 

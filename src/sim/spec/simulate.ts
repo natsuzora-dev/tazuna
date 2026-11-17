@@ -20,7 +20,7 @@ import { newProcessing } from "./processing.ts";
  */
 function processingFor(spec: Spec, service: string, listener: Listener): Processing {
   const functions = instrumented(spec, service, listener);
-  return newProcessing(functions.st, functions, listener, undefined);
+  return newProcessing(functions.st, functions, listener, spec.services.get(service)?.place);
 }
 
 export const givenRecordsOf = (spec: Spec, sc: Scenario, service: string): GivenRecord[] =>

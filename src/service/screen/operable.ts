@@ -52,7 +52,8 @@ type Offered = "any" | readonly Payload[];
 
 /**
  * Returns what each applying offers gives the control, per offering state (null for the chart's own offers): the
- * innermost offering states, or else the chart's own offers. A control that neither names is offered nothing.
+ * innermost offering states, or else the chart's own offers. A control that neither names is offered nothing. A
+ * descendant held by one map copy overrides the states of that copy and of `top`, but not those of another copy.
  */
 function offered(
   r: Run,
@@ -68,7 +69,13 @@ function offered(
     return offer === undefined ? [] : [{ holder, state: n, offer }];
   });
   const innermost = found.filter(
-    (a) => !found.some((b) => b.state !== a.state && isDescendant(chart.tree, b.state, a.state)),
+    (a) =>
+      !found.some(
+        (b) =>
+          b.state !== a.state &&
+          isDescendant(chart.tree, b.state, a.state) &&
+          (b.holder.resource === a.holder.resource || a.holder.resource === top.resource),
+      ),
   );
   const own = chart.offers[key];
   const applied: { readonly holder: Instance; readonly state: string | null; readonly offer: "any" | "listed" }[] =
