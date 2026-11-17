@@ -48,6 +48,10 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
     "InvalidInput.unusedStepOrder":
       "Only test's step-order search writes a step order, naming only the steps that an execution took",
   },
+  ChoiceDependent: {
+    "ChoiceDependent.uncomparable":
+      "verify binds each created key at its first place in the outputs, so the records compare under bindings that fix every created key, unless the outputs cannot be compared with themselves; an example needs equal requests with different answers and seven created records that only their keys tell apart",
+  },
   Fault: {
     "Fault.exceededMessageWork":
       "An example that reaches the limit 100000 writes about 8300 event lines in one message and makes run.diff several times slower",

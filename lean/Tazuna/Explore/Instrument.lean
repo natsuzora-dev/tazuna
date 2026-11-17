@@ -299,16 +299,20 @@ def reportOrder (definition : Spec.Ref) (found : BagOrderDependent) : StateT Col
 
 /--
 Takes the answer of `again`, the question `function` asked again of `ifs.reversed`, and reports
-BagOrderDependent.reversedException when an Issue stops it, or BagOrderDependent.reversedResult when `same` tells it apart
-from `original`. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
+BagOrderDependent.reversedException when an Issue stops it, BagOrderDependent.reversedResult when `same` tells it apart
+from `original`, or BagOrderDependent.uncomparable when `same` cannot tell. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
 answer that depends on the order only as the reversal keeps it, such as on the middle of three values, is not reported.
 -/
 def orderAudit {ε α : Type} (definition : Spec.Ref) (function : String) (original : α) (again : m (Except ε α))
-    (same : α → α → Bool) : StateT Collect m Unit := do
+    (same : α → α → Sameness) : StateT Collect m Unit := do
   if definition ∈ (← get).reportedOrder then return
   match ← again with
   | .error _ => reportOrder definition (.reversedException definition function)
-  | .ok answer => unless same original answer do reportOrder definition (.reversedResult definition function)
+  | .ok answer =>
+    match same original answer with
+    | .same => pure ()
+    | .different => reportOrder definition (.reversedResult definition function)
+    | .uncomparable => reportOrder definition (.uncomparable definition function bindingLimit)
 
 /--
 Runs `collect` after the call of `call` that answered `r`, and audits the answer with orderAudit when that call
@@ -316,7 +320,7 @@ enumerated a Bag. An Issue needs no audit: the run halts with its Fault, which n
 and the message of a thrown error, which may name the value visited first, is TS's alone and is never compared.
 -/
 def auditCollect {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
-    (call : Functions m → m (Except ε α)) (same : α → α → Bool) (r : Except ε α) : StateT Collect m Unit := do
+    (call : Functions m → m (Except ε α)) (same : α → α → Sameness) (r : Except ε α) : StateT Collect m Unit := do
   collect
   if let .ok answer := r then
     if ← ifs.lastEnumerated then orderAudit definition function answer (call ifs.reversed) same
@@ -367,19 +371,17 @@ decreasing_by all_goals nested_decreasing
 /--
 Whether two answers that made a value and created keys are equal up to a renaming of the created keys: one to one
 within each entity's keys, and of the created keys only (matchValue). Arrays compare as bags then, since a renaming
-reorders an array that the keys order. Matches over bindingLimit count as a difference, never as equal.
+reorders an array that the keys order.
 -/
-def sameMade (keys : Keys) (a b : Value × List String) : Bool :=
-  sortedTexts a.2 == sortedTexts b.2 &&
-    if a.2.isEmpty then a.1.canonical == b.1.canonical else
+def sameMade (keys : Keys) (a b : Value × List String) : Sameness :=
+  if sortedTexts a.2 != sortedTexts b.2 then .different else
+    if a.2.isEmpty then .of (a.1.canonical == b.1.canonical) else
     let given := givenKeys keys a.2
     let entityOf (keys : List (String × String)) (s : String) := (keys.find? (·.2 == s)).map (·.1)
     let other := givenKeys keys b.2
     let v : Values := { domain := fun s => (entityOf given s).getD "", fresh := given.map (·.2),
                         image := fun s t => entityOf other t == entityOf given s }
-    match matchValue v .empty (madeValue a.1) (madeValue b.1) with
-    | some (_ :: _) => true
-    | _ => false
+    (matchValue v .empty (madeValue a.1) (madeValue b.1)).sameness
 
 /-- The texts without order or repetition, which compare two lists as sets. -/
 def textSet (texts : List String) : List String := (sortedTexts texts).eraseDups
@@ -396,9 +398,12 @@ spec functions that read records or values. The service invariants are not audit
 for a report to name.
 -/
 def instrument : Functions (StateT Collect m) :=
+  let auditBy {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
+      (call : Functions m → m (Except ε α)) (same : α → α → Sameness) :=
+    observe (call fs) (auditCollect ifs collect definition function call same)
   let audit {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
       (call : Functions m → m (Except ε α)) (same : α → α → Bool) :=
-    observe (call fs) (auditCollect ifs collect definition function call same)
+    auditBy collect definition function call fun a b => .of (same a b)
   let collect (scope : Option Scope) := stepCollect ifs scope
   { liftFunctions fs with
     binding := fun name b input records now =>
@@ -410,7 +415,7 @@ def instrument : Functions (StateT Collect m) :=
     decide := fun name input records now =>
       observe (fs.decide name input records now) fun r => do
         auditCollect ifs (collect none) (st.ref name) "decide" (·.decide name input records now)
-          (fun a b => groupTexts a == groupTexts b) r
+          (fun a b => .of (groupTexts a == groupTexts b)) r
         decideCollect st fs name records r
     ensures := fun name input before after now =>
       audit (pure ()) (st.ref name) "ensures" (·.ensures name input before after now) (· == ·)
@@ -424,17 +429,17 @@ def instrument : Functions (StateT Collect m) :=
     resolve := fun name input records now =>
       observe (fs.resolve name input records now) (resolveCollect st fs ifs name input records now)
     react := fun name payload records now keys =>
-      audit (collect none) (st.ref name) "react" (·.react name payload records now keys)
+      auditBy (collect none) (st.ref name) "react" (·.react name payload records now keys)
         fun a b => sameMade keys (a.1.getD .null, a.2) (b.1.getD .null, b.2)
     initialContext := fun machine input =>
       audit (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input) sameValue
     guard := fun scope records t extra =>
       audit (collect (some scope)) (st.ref scope.machine) "guard" (·.guard scope records t extra) (· == ·)
     assign := fun scope records a extra keys =>
-      audit (collect (some scope)) (st.ref scope.machine) "assign" (·.assign scope records a extra keys)
+      auditBy (collect (some scope)) (st.ref scope.machine) "assign" (·.assign scope records a extra keys)
         fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)
     input := fun scope records a keys =>
-      audit (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
+      auditBy (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
     holds := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "holds" (·.holds scope records) fun _ _ => true
     items := fun scope records =>

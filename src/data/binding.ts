@@ -75,6 +75,20 @@ export function expand<S, T>(
 /** Lean's Matches: the bindings under which two values compare equal, or `undefined` when over bindingLimit. */
 export type Matches = readonly Binding[] | undefined;
 
+/** Lean's Sameness: how two values compare up to a renaming. */
+export type Sameness = "same" | "different" | "uncomparable";
+
+/** Lean's Sameness.of. */
+export const sameness = (b: boolean): Sameness => (b ? "same" : "different");
+
+/** Lean's Matches.sameness. */
+export const matchesSameness = (m: Matches): Sameness =>
+  m === undefined ? "uncomparable" : m.length > 0 ? "same" : "different";
+
+/** Lean's Sameness.any. */
+export const anySameness = (all: readonly Sameness[]): Sameness =>
+  all.includes("same") ? "same" : all.includes("uncomparable") ? "uncomparable" : "different";
+
 /** Lean's Matches.andThen. */
 export const andThen = (m: Matches, f: (b: Binding) => Matches): Matches =>
   m === undefined ? undefined : expand(sameBinding, m, f);

@@ -1,6 +1,6 @@
 import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
-import { emptyBinding, matchValue } from "../data/binding.ts";
+import { bindingLimit, emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
@@ -392,13 +392,17 @@ function madeValue(value: unknown): unknown {
 }
 
 /** What an audit compares of two answers: the texts that a function gives them, or a relation (Lean's `same`). */
-type Same<T> = ((answer: T) => string) | { readonly same: (a: T, b: T) => boolean };
+type Same<T> = ((answer: T) => string) | { readonly same: (a: T, b: T) => Sameness };
 
 /** Lean's sameMade: whether two values that calls made are equal up to a renaming of the keys that they created. */
-function sameMade(keys: Keys, a: readonly [unknown, readonly string[]], b: readonly [unknown, readonly string[]]) {
+function sameMade(
+  keys: Keys,
+  a: readonly [unknown, readonly string[]],
+  b: readonly [unknown, readonly string[]],
+): Sameness {
   const entities = (created: readonly string[]) => canonicalJson(created.toSorted(byCodePoint));
-  if (entities(a[1]) !== entities(b[1])) return false;
-  if (a[1].length === 0) return text(a[0]) === text(b[0]);
+  if (entities(a[1]) !== entities(b[1])) return "different";
+  if (a[1].length === 0) return sameness(text(a[0]) === text(b[0]));
   const domains = new Map(givenKeys(keys, a[1]).map(([entity, key]) => [key, entity]));
   const others = new Map(givenKeys(keys, b[1]).map(([entity, key]) => [key, entity]));
   const values = {
@@ -406,8 +410,9 @@ function sameMade(keys: Keys, a: readonly [unknown, readonly string[]], b: reado
     fresh: new Set(domains.keys()),
     image: (s: string, t: string) => others.get(t) === domains.get(s),
   };
-  const found = matchValue(values, emptyBinding, madeValue(plain(unbagged(a[0]))), madeValue(plain(unbagged(b[0]))));
-  return found !== undefined && found.length > 0;
+  return matchesSameness(
+    matchValue(values, emptyBinding, madeValue(plain(unbagged(a[0]))), madeValue(plain(unbagged(b[0])))),
+  );
 }
 
 /** Lean's textSet: the texts without order or repetition. */
@@ -449,10 +454,20 @@ export class InstrumentedFunctions implements Functions {
         definition,
         withExtra({ kind: "BagOrderDependent.reversedException", definition, data }, { error: reversed.error }),
       );
-    else if (
-      !(typeof compared === "function" ? compared(answered) === compared(reversed) : compared.same(answered, reversed))
-    )
-      this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
+    else {
+      const same =
+        typeof compared === "function"
+          ? sameness(compared(answered) === compared(reversed))
+          : compared.same(answered, reversed);
+      if (same === "different")
+        this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
+      if (same === "uncomparable")
+        this.c.reportOrder(definition, {
+          kind: "BagOrderDependent.uncomparable",
+          definition,
+          data: { ...data, limit: bindingLimit },
+        });
+    }
     return answered;
   }
 

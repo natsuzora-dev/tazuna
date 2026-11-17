@@ -64,6 +64,12 @@ inductive ChoiceDependent where
   `assigned` changes.
   -/
   | assignment (definition : Spec.Ref) (service : String) (assigned : List Assigned) (difference : Difference)
+  /--
+  Comparing the records of two executions that a stepOrder or assignment violation at `definition` would name held more
+  than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
+  the choice changes the records is not known.
+  -/
+  | uncomparable (definition : Spec.Ref) (limit : Nat)
 deriving Repr, Inhabited
 
 derive_group ChoiceDependent
@@ -142,21 +148,25 @@ def recordsCValue : Value → CValue
 
 /--
 Whether the records of `original` and `alternative` are equal under one of the bindings `set`, extended by a renaming
-of the created keys of `original` (one to one within each entity's keys, created keys only). Matches over bindingLimit
-count as a difference, never as equal.
+of the created keys of `original` (one to one within each entity's keys, created keys only); uncomparable when matching
+held more than bindingLimit bindings and no binding of `set` made them equal.
 -/
-def sameRecords (set : List Binding) (original alternative : Outcome) : Bool :=
+def sameRecords (set : List Binding) (original alternative : Outcome) : Sameness :=
   let v := original.renaming alternative
     { domain := fun _ => "", fresh := original.created.map (·.1), image := fun _ _ => true }
-  set.any fun b =>
-    match matchValue v b (recordsCValue original.records) (recordsCValue alternative.records) with
-    | some (_ :: _) => true
-    | _ => false
+  .any (set.map fun b => (matchValue v b (recordsCValue original.records) (recordsCValue alternative.records)).sameness)
 
 /-- The identity of a halting violation. Two halting violations differ when their kinds or data differ. -/
 def haltIdentity : Option Violation → Option (String × String)
   | some v => some (v.kind, v.data.canonical)
   | none => none
+
+/-- What comparing two outcomes found: no difference, a difference, or too many renamings to tell (sameRecords). -/
+inductive Comparison where
+  | same
+  | differ (difference : Difference)
+  | uncomparable
+deriving Repr, Inhabited
 
 section
 
@@ -169,19 +179,28 @@ without a difference are equal up to a renaming of their created keys (symmetry,
 Outputs that `compare` cannot compare with themselves, as when equal requests get different answers, tell no choice
 apart, so only the records are compared then.
 -/
-def difference (compare : Compare m) (original alternative : Outcome) :
-    m (Option Difference) := do
+def difference (compare : Compare m) (original alternative : Outcome) : m Comparison := do
   if original.halted.isSome || alternative.halted.isSome then
-    return if haltIdentity original.halted == haltIdentity alternative.halted then none
-      else some (.halt original.halted alternative.halted)
-  let records (set : List Binding) : Option Difference :=
-    if sameRecords set original alternative then none else some (.records original.records alternative.records)
+    return if haltIdentity original.halted == haltIdentity alternative.halted then .same
+      else .differ (.halt original.halted alternative.halted)
+  let records (set : List Binding) : Comparison :=
+    match sameRecords set original alternative with
+    | .same => .same
+    | .different => .differ (.records original.records alternative.records)
+    | .uncomparable => .uncomparable
   match ← compare (original.renaming alternative) original.lines alternative.lines with
   | .ok set => return records set
   | .error mismatch =>
     match ← compare (original.renaming original) original.lines original.lines with
-    | .ok _ => return some (.outputs mismatch)
+    | .ok _ => return .differ (.outputs mismatch)
     | .error _ => return records [.empty]
+
+/-- The violation, if any, that a comparison found for a choice at `definition`, with `found` for a difference. -/
+def Comparison.violation (definition : Spec.Ref) (found : Difference → ChoiceDependent) :
+    Comparison → Option ChoiceDependent
+  | .same => none
+  | .differ d => some (found d)
+  | .uncomparable => some (.uncomparable definition bindingLimit)
 
 /--
 The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFirst` takes `a` first and is the execution with
@@ -193,7 +212,7 @@ def stepOrder (compare : Compare m) (a b : StepName) (aOrder bOrder : List StepN
   let (first, second, firstOrder, secondOrder, original, alternative) :=
     if (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical then (a, b, aOrder, bOrder, aFirst, bFirst)
     else (b, a, bOrder, aOrder, bFirst, aFirst)
-  return (← difference compare original alternative).map
+  return (← difference compare original alternative).violation first.definition
     (.stepOrder first.definition first second firstOrder secondOrder)
 
 /--
@@ -205,7 +224,8 @@ def assignment (compareFor : String → Compare m) (definition : Spec.Ref) (assi
     (outcomes : List (String × Outcome × Outcome)) : m (Option ChoiceDependent) :=
   outcomes.foldlM (init := none) fun found (service, original, alternative) => do
     if found.isSome then return found
-    return (← difference (compareFor service) original alternative).map (.assignment definition service assigned)
+    return (← difference (compareFor service) original alternative).violation definition
+      (.assignment definition service assigned)
 
 end
 

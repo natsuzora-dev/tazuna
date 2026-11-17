@@ -588,19 +588,21 @@ theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) fs := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
 
 theorem reversed_result_reported {ε α : Type} (definition : Spec.Ref) (function : String) (original answer : α)
-    (again : Id (Except ε α)) (same : α → α → Bool) (c : Collect) (ha : again = .ok answer) :
+    (again : Id (Except ε α)) (same : α → α → Sameness) (c : Collect) (ha : again = .ok answer) :
     ((orderAudit definition function original again same).run c).2 =
-      if definition ∈ c.reportedOrder ∨ same original answer then c
+      if definition ∈ c.reportedOrder ∨ same original answer = .same then c
+      else if same original answer = .uncomparable then
+        c.reportOrder definition (BagOrderDependent.uncomparable definition function bindingLimit).toViolation
       else c.reportOrder definition (BagOrderDependent.reversedResult definition function).toViolation := by
   by_cases hm : definition ∈ c.reportedOrder
   · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
   · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
       ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, ha, reportOrder, modify, modifyGet,
       MonadStateOf.modifyGet, false_or]
-    split <;> rfl
+    cases same original answer <;> rfl
 
 theorem reversed_exception_reported {ε α : Type} (definition : Spec.Ref) (function : String) (original : α)
-    (again : Id (Except ε α)) (same : α → α → Bool) (e : ε) (c : Collect) (ha : again = .error e) :
+    (again : Id (Except ε α)) (same : α → α → Sameness) (e : ε) (c : Collect) (ha : again = .error e) :
     ((orderAudit definition function original again same).run c).2 =
       if definition ∈ c.reportedOrder then c
       else c.reportOrder definition (BagOrderDependent.reversedException definition function).toViolation := by

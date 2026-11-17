@@ -6,7 +6,7 @@ import type { TransitionRef } from "./transitionRef.ts";
  * A result, found while the run evaluates, that depends on an order the spec does not fix. No BagOrderDependent violation
  * halts the run. In reversedException and reversedResult, orderAudit asked the question `function` of Functions again,
  * with every Bag visiting its values in reverse order, and `definition` is the definition whose code answers it: the
- * command, query, automation, entity, or chart. In bothAssign and assignRead, it is the chart of the conflicting
+ * command, query, automation, entity, or chart; so too in uncomparable. In bothAssign and assignRead, it is the chart of the conflicting
  * transitions.
  */
 export type BagOrderDependent =
@@ -24,6 +24,18 @@ export type BagOrderDependent =
       readonly definition: DefinitionRef;
       readonly data: {
         readonly function: string;
+      };
+    }
+  /**
+   * Comparing the second answer with the first held more than `limit` (bindingLimit) renamings of the keys that the
+   * answers created: too many renaming candidates to compare, so whether they differ is not known.
+   */
+  | {
+      readonly kind: "BagOrderDependent.uncomparable";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly function: string;
+        readonly limit: number;
       };
     }
   | {
@@ -50,6 +62,7 @@ export type BagOrderDependent =
 export const bagOrderDependentKinds = [
   "BagOrderDependent.reversedException",
   "BagOrderDependent.reversedResult",
+  "BagOrderDependent.uncomparable",
   "BagOrderDependent.bothAssign",
   "BagOrderDependent.assignRead",
 ] as const;

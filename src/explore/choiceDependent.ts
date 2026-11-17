@@ -1,4 +1,13 @@
-import { type Binding, emptyBinding, matchValue, type Values } from "../data/binding.ts";
+import {
+  anySameness,
+  type Binding,
+  bindingLimit,
+  emptyBinding,
+  matchesSameness,
+  matchValue,
+  type Sameness,
+  type Values,
+} from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
 import type { Assigned, ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
@@ -82,13 +91,13 @@ function recordsCValue(records: Json): unknown {
 }
 
 /** Lean's sameRecords. */
-function sameRecords(set: readonly Binding[], original: Outcome, alternative: Outcome): boolean {
+function sameRecords(set: readonly Binding[], original: Outcome, alternative: Outcome): Sameness {
   const values = renaming(
     original,
     alternative,
   )({ domain: () => "", fresh: new Set(original.created.keys()), image: () => true });
   const [o, a] = [recordsCValue(original.records), recordsCValue(alternative.records)];
-  return set.some((b) => (matchValue(values, b, o, a)?.length ?? 0) > 0);
+  return anySameness(set.map((b) => matchesSameness(matchValue(values, b, o, a))));
 }
 
 type Of<K extends ChoiceDependent["kind"]> = Extract<ChoiceDependent, { readonly kind: K }>;
@@ -96,22 +105,36 @@ type Of<K extends ChoiceDependent["kind"]> = Extract<ChoiceDependent, { readonly
 /** Returns the identity of a halting violation; two halting violations differ when their kinds or data differ. */
 const haltIdentity = (v: ViolationValue | null): string | null => (v === null ? null : canonicalJson([v.kind, v.data]));
 
+/** Lean's Comparison: no difference (`undefined`), a difference, or too many renamings to tell. */
+type Comparison = Difference | "uncomparable" | undefined;
+
 /** Lean's difference. */
-function difference(compare: Compare, original: Outcome, alternative: Outcome): Difference | undefined {
+function difference(compare: Compare, original: Outcome, alternative: Outcome): Comparison {
   if (original.halted !== null || alternative.halted !== null)
     return haltIdentity(original.halted) === haltIdentity(alternative.halted)
       ? undefined
       : { aspect: "halt", original: original.halted, alternative: alternative.halted };
-  const records = (set: readonly Binding[]): Difference | undefined =>
-    sameRecords(set, original, alternative)
-      ? undefined
-      : { aspect: "records", original: original.records, alternative: alternative.records };
+  const records = (set: readonly Binding[]): Comparison => {
+    const same = sameRecords(set, original, alternative);
+    if (same === "same") return undefined;
+    if (same === "uncomparable") return same;
+    return { aspect: "records", original: original.records, alternative: alternative.records };
+  };
   const compared = compare(renaming(original, alternative), original.lines, alternative.lines);
   if (!("mismatch" in compared)) return records(compared.set);
   return "mismatch" in compare(renaming(original, original), original.lines, original.lines)
     ? records([emptyBinding])
     : { aspect: "outputs", mismatch: compared.mismatch };
 }
+
+/** Lean's Comparison.violation. */
+const uncomparable = (
+  definition: Of<"ChoiceDependent.uncomparable">["definition"],
+): Of<"ChoiceDependent.uncomparable"> => ({
+  kind: "ChoiceDependent.uncomparable",
+  definition,
+  data: { limit: bindingLimit },
+});
 
 /**
  * Lean's stepOrder: the violation when the two executions differ. `aFirst` takes step `a` first and is the execution with the step
@@ -126,12 +149,13 @@ export function stepOrder(
   bOrder: readonly StepName[],
   aFirst: Outcome,
   bFirst: Outcome,
-): Of<"ChoiceDependent.stepOrder"> | undefined {
+): Of<"ChoiceDependent.stepOrder" | "ChoiceDependent.uncomparable"> | undefined {
   const [first, second, originalOrder, alternativeOrder, original, alternative] =
     byCodePoint(canonicalJson(a), canonicalJson(b)) <= 0
       ? [a, b, aOrder, bOrder, aFirst, bFirst]
       : [b, a, bOrder, aOrder, bFirst, aFirst];
   const found = difference(compare, original, alternative);
+  if (found === "uncomparable") return uncomparable(stepNameDefinition(first));
   return found === undefined
     ? undefined
     : {
@@ -150,9 +174,10 @@ export function assignment(
   definition: Of<"ChoiceDependent.assignment">["definition"],
   assigned: readonly Assigned[],
   outcomes: readonly (readonly [string, Outcome, Outcome])[],
-): Of<"ChoiceDependent.assignment"> | undefined {
+): Of<"ChoiceDependent.assignment" | "ChoiceDependent.uncomparable"> | undefined {
   for (const [service, original, alternative] of outcomes) {
     const found = difference(compareFor(service), original, alternative);
+    if (found === "uncomparable") return uncomparable(definition);
     if (found !== undefined)
       return { kind: "ChoiceDependent.assignment", definition, data: { service, assigned, difference: found } };
   }

@@ -1,5 +1,6 @@
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
@@ -217,16 +218,17 @@ function computedKey(
   return least === undefined || entity === undefined ? undefined : [least, entity];
 }
 
-/** Lean's World.checkComputed. */
+/** Lean's World.checkComputed: the fault halts the service. */
 function checkComputed(w: World, service: string, sent: readonly TraceLine[], records: Records): void {
-  if (w.halted !== undefined) return;
+  const p = w.services.get(service);
+  if (p === undefined || stopped(w)) return;
   const found = computedKey(w, sent, records);
   if (found !== undefined)
-    reportTo(w, {
-      kind: "InvalidScenario.computedKey",
+    p.halted = {
+      kind: "Fault.computedKey",
       definition: null,
-      data: { service, key: found[0], entity: found[1] },
-    });
+      data: { key: found[0], entity: found[1] },
+    } satisfies Fault;
 }
 
 /** Lean's World.act. */

@@ -180,6 +180,27 @@ partial def matchBag (v : Values) (b : Binding) (xs ys : List CValue) : Matches 
 
 end
 
+/--
+How two values compare up to a renaming: equal under some binding, under none, or not known because the bindings to
+try exceed bindingLimit.
+-/
+inductive Sameness where
+  | same
+  | different
+  | uncomparable
+deriving DecidableEq, Repr
+
+def Sameness.of (b : Bool) : Sameness := if b then .same else .different
+
+def Matches.sameness {b : Binding} : Matches b → Sameness
+  | some (_ :: _) => .same
+  | some [] => .different
+  | none => .uncomparable
+
+/-- Same when one comparison is same, else uncomparable when one is, else different. -/
+def Sameness.any (all : List Sameness) : Sameness :=
+  if all.contains .same then .same else if all.contains .uncomparable then .uncomparable else .different
+
 def matchOption (v : Values) (b : Binding) : Option CValue → Option CValue → Matches b
   | none, none => some [⟨b, .refl b⟩]
   | some s, some t => matchValue v b s t

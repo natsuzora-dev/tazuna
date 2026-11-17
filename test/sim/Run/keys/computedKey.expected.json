@@ -35,7 +35,19 @@
           "id": "answer#1"
         }
       ],
-      "violations": [],
+      "violations": [
+        {
+          "kind": "Fault.computedKey",
+          "definition": null,
+          "data": {
+            "key": "notes/Note-9",
+            "entity": {
+              "service": "notes",
+              "name": "Note"
+            }
+          }
+        }
+      ],
       "candidates": []
     },
     {
@@ -46,16 +58,5 @@
     }
   ],
   "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.computedKey",
-    "definition": null,
-    "data": {
-      "service": "notes",
-      "key": "notes/Note-9",
-      "entity": {
-        "service": "notes",
-        "name": "Note"
-      }
-    }
-  }
+  "halted": null
 }

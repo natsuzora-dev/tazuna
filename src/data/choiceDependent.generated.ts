@@ -143,10 +143,23 @@ export type ChoiceDependent =
         readonly assigned: readonly Assigned[];
         readonly difference: Difference;
       };
+    }
+  /**
+   * Comparing the records of two executions that a stepOrder or assignment violation at `definition` would name held more
+   * than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
+   * the choice changes the records is not known.
+   */
+  | {
+      readonly kind: "ChoiceDependent.uncomparable";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly limit: number;
+      };
     };
 
 export const choiceDependentKinds = [
   "ChoiceDependent.stepOrder",
   "ChoiceDependent.searchLimit",
   "ChoiceDependent.assignment",
+  "ChoiceDependent.uncomparable",
 ] as const;

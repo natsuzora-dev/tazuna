@@ -84,7 +84,7 @@ Keys that only a later line tells apart wait for that line.
 When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind, and its doc comment states the case.
 
 `test` compares outcomes the same way, so a spec without a `ChoiceDependent` violation fixes the order that `verify` asks of each channel.
-Because created keys compare only up to renaming, a string that a spec computes in the form of a created key is `InvalidScenario.computedKey`.
+Because created keys compare only up to renaming, a string that a spec computes in the form of a created key is `Fault.computedKey`.
 
 ## Who fixes a violation
 
@@ -120,8 +120,8 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 |---|---|
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for. |
-| `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse. |
-| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. |
+| `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
+| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 

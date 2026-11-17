@@ -96,12 +96,6 @@ inductive InvalidScenario where
   created key only through a handle.
   -/
   | writtenKey (scenarioLine : Nat) (key : String) (entity : Spec.Ref)
-  /--
-  The running service `service` sent `key` or holds it in a record, of the form of a key of `entity` that a running
-  service creates, and no running service created it: a spec computed it, and only createKey makes a created key, so
-  test could not tell it from one when it compares runs up to a renaming of created keys.
-  -/
-  | computedKey (service key : String) (entity : Spec.Ref)
   /-- The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick. -/
   | misplacedCreated (scenarioLine : Nat)
   /-- The screen instance `screen` that the line operates is not the one that takes operations of its screen. -/

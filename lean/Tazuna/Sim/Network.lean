@@ -215,13 +215,15 @@ def World.computedKey? (w : World) (sent : List Line) (records : Records) : Opti
   ((computed.mergeSort fun a b => decide (a ≤ b)).head?).bind fun x => (w.keyEntity? x).map (x, ·)
 
 /--
-The world with the computed key (computedKey?) that `service` sent in `sent` or holds in `records` reported, unless the
-world halted already: one cause, one report.
+The world with the computed key (computedKey?) that `service` sent in `sent` or holds in `records` reported as its
+fault, unless the simulation stopped already: one cause, one report.
 -/
 def World.checkComputed (w : World) (service : String) (sent : List Line) (records : Records) : World :=
-  if w.halted.isSome then w else
+  if w.stopped then w else
   match w.computedKey? sent records with
-  | some (key, entity) => w.report (.computedKey service key entity)
+  | some (key, entity) =>
+    { w with states := w.states.map fun (q, x) =>
+        if q == service then (q, x.report (.fault (.computedKey key entity))) else (q, x) }
   | none => w
 
 /--

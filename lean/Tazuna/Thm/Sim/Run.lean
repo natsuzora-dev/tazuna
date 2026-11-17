@@ -198,7 +198,7 @@ theorem keeps_checkComputed {w w' : World} (h : KeepsInFlight e w w') (service :
     (records : Records) : KeepsInFlight e w (w'.checkComputed service sent records) := by
   unfold World.checkComputed
   repeat' split
-  all_goals first | exact h | exact keeps_report h _
+  all_goals exact keeps_messages h rfl
 
 theorem keeps_act {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (service : String)
     (f : Service → Functions Id → State → Id State) (reopen : Bool) :

@@ -64,11 +64,21 @@ inductive Fault where
   | exceededExitDepth (limit : Nat)
   | rejectedAutomationCommand (definition : Spec.Ref) (rejection : Rejection)
   | rejectedShows (definition : Spec.Ref) (slot : String) (rejection : Rejection)
+  /--
+  The service sent `key` or holds it in a record, of the form of a key of `entity` that a running service creates, and
+  no running service created it: a spec computed it. Only createKey makes a created key, so test could not tell it from
+  one when it compares runs up to a renaming of created keys. The check follows the whole processing, whose definitions
+  any may have computed it, so the fault names no definition.
+  -/
+  | computedKey (key : String) (entity : Spec.Ref)
 deriving Repr
 
 derive_group Fault
 
-/-- Whether the fault halts the run, which it does when the behavior after the fault is undefined. -/
+/--
+Whether the fault halts the run, which it does when the behavior after the fault is undefined, or, for computedKey, when
+test could no longer compare the run with another.
+-/
 def Fault.halts : Fault → Bool
   | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .sameRecordInBag .. | .outputSchema ..
   | .automationInputSchema .. | .requestInputSchema .. | .showsInputSchema .. | .screenInputSchema ..
@@ -76,7 +86,7 @@ def Fault.halts : Fault → Bool
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
   | .itemsSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
-  | .exceededDueDeadlines .. | .exceededExitDepth .. => true
+  | .exceededDueDeadlines .. | .exceededExitDepth .. | .computedKey .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..
   | .failedServiceInvariant .. | .failedChartInvariant .. | .rejectedAutomationCommand .. | .rejectedShows .. => false
 
