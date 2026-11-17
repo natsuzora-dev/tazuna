@@ -25,11 +25,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./load": {
-      "tazuna:source": "./src/load/index.ts",
-      "types": "./dist/load/index.d.ts",
-      "default": "./dist/load/index.js"
-    },
     "./verify": {
       "tazuna:source": "./src/verify/index.ts",
       "types": "./dist/verify/index.d.ts",

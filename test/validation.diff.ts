@@ -30,7 +30,7 @@ const examples = [
 const bases = await Promise.all(
   examples.map(async (root) => ({
     name: relative(import.meta.dirname, root),
-    structure: (await loadSpec(root)).structure,
+    structure: (await loadSpec(root)).spec.structure,
   })),
 );
 

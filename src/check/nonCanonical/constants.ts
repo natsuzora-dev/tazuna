@@ -1,6 +1,6 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
-import type { Found } from "../found.ts";
-import { placeIn, type Spec } from "../load.ts";
+import type { Found } from "../../load/found.ts";
+import { placeIn, type Spec } from "../../load/load.ts";
 
 const DURATION_UNITS = new Set(["years", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds"]);
 

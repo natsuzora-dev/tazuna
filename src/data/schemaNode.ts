@@ -26,10 +26,11 @@ export function schemaNode(schema: z.ZodType): SchemaNode {
     case "lazy":
       return { type: "opaque", children: [(def["getter"] as () => z.ZodType)()] };
     default:
+      // A refinement in `checks` is a ZodCustom too, but a check, not a schema of the value.
       return {
         type: "opaque",
-        children: Object.values(def)
-          .flat()
+        children: Object.entries(def)
+          .flatMap(([key, v]) => (key === "checks" ? [] : v))
           .filter((v) => v instanceof z.ZodType),
       };
   }

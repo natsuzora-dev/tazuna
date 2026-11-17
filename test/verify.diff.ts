@@ -37,9 +37,11 @@ const examples = groupExamples("verify");
 // Run and validation examples too: the resultOf mutations need snapshots with resultOf on `in` lines.
 const snapshotExamples = [...examples, ...runExamples(), ...groupExamples("validation")];
 
-const samples = await loadSpec(join(import.meta.dirname, "../samples/todo/spec"));
+const samples = (await loadSpec(join(import.meta.dirname, "../samples/todo/spec"))).spec;
 
-const specs = new Map(await Promise.all(snapshotExamples.map(async (root) => [root, await loadSpec(root)] as const)));
+const specs = new Map(
+  await Promise.all(snapshotExamples.map(async (root) => [root, (await loadSpec(root)).spec] as const)),
+);
 
 const value = ({ kind, definition, line, data }: ViolationValue & Placed) =>
   JSON.parse(JSON.stringify({ kind, definition, line, data })) as VerifyViolation;

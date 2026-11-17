@@ -88,8 +88,8 @@ Run the commands in [samples/todo](samples/todo).
    Change the answer back to `accepted`, and run the test again.
    The output ends with `No violations found.`
 
-5. To compare an implementation with the snapshots, an implementation test drives it through each scenario with `drive` from `@natsuzora-dev/tazuna/verify` and writes each trace.
-   The ToDo sample's server does this in [web/test/todo.test.ts](samples/todo/web/test/todo.test.ts), through the `Adapter` in [web/test/support/serverAdapter.ts](samples/todo/web/test/support/serverAdapter.ts).
+5. To compare an implementation with the snapshots, an implementation test checks the spec with `checkSpec`, drives the implementation through each scenario with `drive`, both from `@natsuzora-dev/tazuna/verify`, and writes each trace.
+   The ToDo sample's server does this in [web/test/todo.test.ts](samples/todo/web/test/todo.test.ts), with the spec from [web/test/support/spec.ts](samples/todo/web/test/support/spec.ts) and the `Adapter` in [web/test/support/serverAdapter.ts](samples/todo/web/test/support/serverAdapter.ts).
    After that test writes the traces to `web/.traces`, compare them:
 
    ```sh

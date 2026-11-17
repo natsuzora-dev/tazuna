@@ -34,7 +34,8 @@ A run stops at a violation of a *halting* kind, because after it the spec's beha
 A command *passes* when it reports no violation.
 tazuna aims to report each mistake with the earliest tool that can find it, in this order: the TypeScript type checker, `check`, the simulation in `test`, the exploration in `test`, and `verify`.
 
-- When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
+- When `check` passes, every spec file type-checks under the nearest tsconfig.json, and the spec has no violation of the groups that `check` reports.
+  `test`, `verify`, and `view` run the checks of `check` first and stop at its violations, and `drive` and `verifyTraces` take only a spec that `checkSpec` returned as checked.
 - When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
   No explored path of up to `--depth` moves after a scenario reports a violation.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.

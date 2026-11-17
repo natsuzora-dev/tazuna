@@ -10,6 +10,7 @@ for (const [folder, group] of Object.entries(groups))
   testExamples(groupExamples("load", folder), group, ["check", "."]);
 
 const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restricted["kind"], true>> = {
+  "Malformed.unlistedFile": true,
   "Malformed.missingDefiner": true,
   "Malformed.unlistedEntity": true,
   "Malformed.listedTwice": true,
@@ -18,9 +19,11 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.unknownService": true,
   "Malformed.reservedNameCharacter": true,
   "Malformed.writtenCreatedKey": true,
+  "Malformed.caseCollision": true,
   "Malformed.duplicateName": true,
   "Malformed.alias": true,
   "Malformed.opaqueCollection": true,
+  "Malformed.unrepresentableSchema": true,
   "Malformed.defaultSchema": true,
   "Malformed.unexportedDefinition": true,
   "Malformed.unparsableTime": true,
@@ -53,4 +56,6 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Restricted.crossServiceImport": true,
 };
 
-testEveryKind(groupExamples("load"), Object.keys(kinds));
+testEveryKind(groupExamples("load"), Object.keys(kinds), {
+  "Malformed.unlistedFile": "the examples skip tsc; cli.test.ts runs tsc on a spec that its tsconfig leaves out",
+});

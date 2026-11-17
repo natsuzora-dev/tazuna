@@ -1,15 +1,16 @@
 import { join, relative } from "node:path";
+import type { CheckedSpec } from "../check/spec.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { parseFileLines } from "../data/trace.ts";
 import { readTrace, snapshotPath } from "../data/traceFile.ts";
 import type { ReportedViolation } from "../data/violation.ts";
-import type { Spec } from "../load/load.ts";
 import { compareTrace, verifying } from "./compare.ts";
 import { verifyExternal } from "./external.ts";
 import { type Found, readSnapshotViolations, violationsAt } from "./lines.ts";
 import { pairingViolation, pairTraces, traceFolderOf } from "./pairing.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
+export { type CheckedSpec, checkSpec, type SpecCheck } from "../check/spec.ts";
 export type { GivenRecord } from "../data/scenario.generated.ts";
 export {
   type Adapter,
@@ -33,7 +34,7 @@ export { drive, lineIds, type Run } from "./harness.ts";
  * have no trace. A trace line's violation is at its line. A violation of the snapshot, a line that the trace line
  * schema cannot read or an unknown after, is at the snapshot line, and then the trace is not compared.
  */
-export function verifyTraces(spec: Spec, folder: string): { traces: number; violations: ReportedViolation[] } {
+export function verifyTraces(spec: CheckedSpec, folder: string): { traces: number; violations: ReportedViolation[] } {
   const runs = snapshotRuns(spec);
   const snapshotted = hasSnapshot(spec, runs);
   const pairing = pairTraces(
@@ -68,7 +69,7 @@ export function verifyTraces(spec: Spec, folder: string): { traces: number; viol
  * Returns the snapshots of running peers' runs in scenarios. `drive` drives an implementation of a snapshot's `runner`
  * through it as through a scenario's snapshot, and verify compares the trace <service>/<name>.jsonl with it.
  */
-export function peerSnapshots(spec: Spec): SnapshotRun[] {
+export function peerSnapshots(spec: CheckedSpec): SnapshotRun[] {
   const runs = snapshotRuns(spec).filter((r) => r.runner !== r.service);
   return runs.filter(hasSnapshot(spec, runs));
 }

@@ -1,5 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { CheckedSpec } from "../check/spec.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { toJsonl } from "../data/trace.ts";
@@ -90,7 +91,7 @@ function testSnapshots(
  * Simulates and explores every scenario, then tests the snapshots (testSnapshots). A scenario still written as an input
  * list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it is.
  */
-export function testSpec(spec: Spec, options: { readonly update: boolean; readonly depth: number }): TestResult {
+export function testSpec(spec: CheckedSpec, options: { readonly update: boolean; readonly depth: number }): TestResult {
   const bounds = { depth: options.depth, valuesPerPayload };
   const reached = new Coverage();
   const simulated = simulateScenarios(spec);

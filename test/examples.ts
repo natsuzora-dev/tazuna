@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { check } from "../src/cli/check.ts";
+import { type CheckedSpec, checkSpec } from "../src/check/spec.ts";
+import type { TypeCheck } from "../src/check/typeCheck.ts";
 import type { ViolationError } from "../src/data/violation.ts";
-import { loadSpec, type Spec } from "../src/load/load.ts";
 
 export const serviceRoot = join(import.meta.dirname, "service");
 export const runRoot = join(import.meta.dirname, "run");
@@ -25,16 +25,16 @@ export const depth = 2;
 
 export const isServiceFolder = (dir: string): boolean => readdirSync(dir).some((name) => name.endsWith(".ts"));
 
-/**
- * Loads the spec of the example `root` and throws when check reports a violation in it, because tazuna test runs only a
- * spec without one.
- */
-export async function loadRoot(root: string): Promise<Spec> {
-  const spec = await loadSpec(root);
-  const found = check(spec);
+/** A passed type check whose program includes every file, which the examples take in place of running tsc. */
+export const typeChecked: TypeCheck = { kind: "ran", passed: true, output: "", tsconfig: "", includes: () => true };
+
+/** Checks the spec of the example `root` with typeChecked, and throws unless it is checked. */
+export async function checkedRoot(root: string): Promise<CheckedSpec> {
+  const result = await checkSpec(root, () => typeChecked);
+  if (result.kind === "checked") return result.spec;
   const name = relative(join(import.meta.dirname, ".."), root);
-  if (found.length > 0) throw new Error(`${name} is no root: check reports ${found.map((p) => p.kind).join(", ")}`);
-  return spec;
+  const kinds = result.kind === "violations" ? result.violations.map((p) => p.kind).join(", ") : result.kind;
+  throw new Error(`${name} is not checked: ${kinds}`);
 }
 
 /** Returns the examples test/<folder>/<group>/<target>/<example> of `group`, or of every group without it. */

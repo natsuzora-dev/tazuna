@@ -23,7 +23,7 @@ import { byCallerKinds } from "../src/service/message.ts";
 import { Halt } from "../src/service/state.ts";
 import type { RunningService } from "../src/sim/network.ts";
 import { outcomeOf } from "../src/sim/spec/simulate.ts";
-import { depth, loadRoot, runExamples } from "./examples.ts";
+import { checkedRoot, depth, runExamples } from "./examples.ts";
 import { SimFunctions } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";
 
@@ -35,7 +35,7 @@ after(() => lean.close());
 const roots = runExamples();
 
 const specs = await Promise.all(
-  roots.map(async (root) => ({ name: relative(tazuna, root), spec: await loadRoot(root) })),
+  roots.map(async (root) => ({ name: relative(tazuna, root), spec: await checkedRoot(root) })),
 );
 
 test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values match Limit.max, and haltingFaultKinds has the Fault kind named exceeded and each limit's name", () => {

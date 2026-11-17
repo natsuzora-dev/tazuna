@@ -32,6 +32,8 @@ async function withCopy(body: (copy: string, viewer: string) => Promise<void>): 
   try {
     writeFileSync(join(viewer, "index.html"), "");
     cpSync(join(import.meta.dirname, "../samples/todo/spec"), copy, { recursive: true });
+    // tsc's include skips the dot folder .fixtures, so the copy gets a tsconfig.json of its own.
+    writeFileSync(join(copy, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
     await body(copy, viewer);
   } finally {
     rmSync(copy, { recursive: true, force: true });
@@ -63,7 +65,10 @@ test("The view server reloads the spec in a child process when a spec file chang
       appendFileSync(data, "const broken = ;\n");
       const failed = (await watching.next()).value;
       assert.equal(failed?.type, "error");
-      assert.match(failed?.type === "error" ? failed.message : "", /data\.ts:\d+[\s\S]*Expression expected/);
+      assert.match(
+        failed?.type === "error" ? failed.message : "",
+        /data\.ts\(\d+,\d+\): error TS1109: Expression expected/,
+      );
       assert.equal(await task(), "A to-do of the user");
       assert.deepEqual((await (await listen(server.url)).next()).value, failed);
 

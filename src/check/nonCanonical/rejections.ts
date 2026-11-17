@@ -1,9 +1,9 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import { stateAt } from "../../dsl/chart.ts";
 import type { Automation } from "../../dsl/definition.ts";
+import type { Found } from "../../load/found.ts";
+import { charts, type Spec } from "../../load/load.ts";
 import { rejectionKinds } from "../../spec/structure.ts";
-import type { Found } from "../found.ts";
-import { charts, type Spec } from "../load.ts";
 
 const kindOf = (arrives: boolean) =>
   arrives ? "NonCanonical.missingOnRejected" : "NonCanonical.unreachableOnRejected";

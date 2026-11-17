@@ -11,6 +11,8 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * A spec that the loader cannot read faithfully, or whose declared defaults fail their own schemas or throw. When the
  * loader finds one, check skips the structure checks (Illegal).
  *
+ * - `unlistedFile`: the program of `tsconfig`, the nearest tsconfig.json, does not include the spec file, so tsc did
+ *   not check it (TypeScript's TS6307).
  * - `missingDefiner`: the definer that the definition names is not exported.
  * - `listedUnderOtherName`: a service definer lists the entity under `key`, not under its export name, which also names
  *   its records.
@@ -19,12 +21,16 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `unknownService`: the `constants()` call names `name`, which no service definer has.
  * - `reservedNameCharacter`: the service or scenario name `name` contains `character`, one of the characters that
  *   separate the parts of tazuna's generated names (trace names, created keys, line ids, copy names, snapshot names).
+ * - `caseCollision`: the service name, or the scenario name within its service, differs from `collidesWith` only in
+ *   case or Unicode normalization, so their snapshot and trace files are one file on a case-insensitive file system.
  * - `duplicateName`: `name` also names another definition, scenario, or `constants()` call of the service in the file
  *   `elsewhere`.
  * - `alias`: the definition, scenario, or `constants()` call is already exported as `name`.
- * - `unexportedDefinition` and `opaqueCollection`: `path` leads from the definition, service definer, or
- *   `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema
+ * - `unexportedDefinition`, `opaqueCollection`, and `unrepresentableSchema`: `path` leads from the definition, service
+ *   definer, or `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema
  *   has the path of the field that holds it, and a chart holds each state's `held` under `held` by the state's name.
+ * - `unrepresentableSchema`: the schema has a value that JSON cannot hold, of the Zod type `type`, such as
+ *   `bigint`, `set`, or a one-way `transform` (a `z.codec` has a way back).
  * - `unparsableTime`: a time of the scenario, Given's start or a clock line's time, is not an ISO datetime with
  *   seconds and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds.
  *   The report is at the clock line, or at the scenario for Given's start.
@@ -42,6 +48,7 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.
  */
 export type Malformed =
+  | Of<"unlistedFile", null, { readonly tsconfig: string }>
   | Of<"missingDefiner", null, { readonly name: string }>
   | Of<"unlistedEntity", null, { readonly name: string }>
   | Of<"listedTwice", null, { readonly name: string; readonly services: readonly string[] }>
@@ -49,6 +56,7 @@ export type Malformed =
   | Of<"duplicateService", null, { readonly name: string; readonly elsewhere: string }>
   | Of<"unknownService", null, { readonly name: string }>
   | Of<"reservedNameCharacter", null, { readonly name: string; readonly character: string }>
+  | Of<"caseCollision", null, { readonly name: string; readonly collidesWith: string }>
   | Of<"duplicateName", null, { readonly name: string; readonly elsewhere: string }>
   | Of<"alias", null, { readonly name: string; readonly alias: string }>
   | Of<"opaqueCollection", DefinitionRef, { readonly path: readonly string[]; readonly collection: Collection["kind"] }>
@@ -56,6 +64,12 @@ export type Malformed =
       "opaqueCollection",
       null,
       { readonly name: string; readonly path: readonly string[]; readonly collection: Collection["kind"] }
+    >
+  | Of<"unrepresentableSchema", DefinitionRef, { readonly path: readonly string[]; readonly type: string }>
+  | Of<
+      "unrepresentableSchema",
+      null,
+      { readonly name: string; readonly path: readonly string[]; readonly type: string }
     >
   | Of<"defaultSchema", DefinitionRef, Readonly<Record<string, never>>>
   | Of<"defaultSchema", DefinitionRef, { readonly map: string }>

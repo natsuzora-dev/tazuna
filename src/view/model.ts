@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { z } from "zod";
+import type { CheckedSpec } from "../check/spec.ts";
 import { type JsonSchema, jsonSchema } from "../data/jsonSchema.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { MalformedLine } from "../data/trace.ts";
@@ -203,7 +204,7 @@ function scenarioView(spec: Spec, scenario: Named<{ readonly description: string
   };
 }
 
-export function viewModel(spec: Spec, path: string): ViewModel {
+export function viewModel(spec: CheckedSpec, path: string): ViewModel {
   // A scenario file imports the contracts of the peers that its Given lists, which the service itself does not use.
   const scenarioFiles = new Set(spec.scenarios.map((s) => s.place.file));
   const imports = spec.imports.filter((i) => i.contract && !scenarioFiles.has(i.source.file));

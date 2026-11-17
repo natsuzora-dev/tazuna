@@ -1,6 +1,6 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
-import type { Found } from "../found.ts";
-import type { Spec } from "../load.ts";
+import type { Found } from "../../load/found.ts";
+import type { Spec } from "../../load/load.ts";
 
 export const check = (spec: Spec): Found<NonCanonical>[] => [
   ...[...spec.services]

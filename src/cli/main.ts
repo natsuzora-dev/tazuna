@@ -1,12 +1,10 @@
 import { statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { checkSpec } from "../check/spec.ts";
+import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { ReportedViolation } from "../data/violation.ts";
-import { loadSpec, type Spec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
-import { reason } from "../view/load.ts";
-import { check } from "./check.ts";
 import { testSpec, uncoveredOf } from "./test.ts";
-import { type TypeCheck, typeCheck } from "./typeCheck.ts";
 import { isViewerBuilt, viewerFolder, viewSpec } from "./view.ts";
 
 interface Io {
@@ -37,7 +35,7 @@ const commands: Readonly<Record<string, Command>> = {
   test: {
     positionals: ["spec"],
     description:
-      "Run the checks of check first; if they report a violation, report those violations and run no scenario. Otherwise simulate every scenario, explore the paths of up to --depth moves after it, and search the orders of the steps of each processing that no cause orders. Report the violations of every path once per kind, definition, data and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first; a stepOrder violation counts as the same violation whichever of its two steps comes first, and a violation that only an explored path reports lists the path's lines after the scenario in its appendedLines field. Compare the trace of each running service of a scenario that did not halt with its snapshot: the own service's <service>/__snapshots__/<scenario>.jsonl, and each running peer's with lines <service>/__snapshots__/<scenario>.<peer>.jsonl. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
+      "Simulate every scenario, explore the paths of up to --depth moves after it, and search the orders of the steps of each processing that no cause orders. Report the violations of every path once per kind, definition, data and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first; a stepOrder violation counts as the same violation whichever of its two steps comes first, and a violation that only an explored path reports lists the path's lines after the scenario in its appendedLines field. Compare the trace of each running service of a scenario that did not halt with its snapshot: the own service's <service>/__snapshots__/<scenario>.jsonl, and each running peer's with lines <service>/__snapshots__/<scenario>.<peer>.jsonl. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
     options: {
       "--depth": {
         value: "n",
@@ -114,7 +112,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__. check and test first run tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files, and write tsc's output to stderr. If tsc reports an error, check and test stop without checking the spec. If loading the spec finds a Malformed violation, check and test report the violations that loading finds (Malformed, NonCanonical, Restricted) and stop without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, or a tsc that does not finish, is a usage error. A spec file that throws when check, test, or verify imports it is a usage error too, reported in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none, and the paths of the snapshots that test --update writes or removes.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files; a symlinked folder is walked once. Every command first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error; the last is reported in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none, and the paths of the snapshots that test --update writes or removes.",
   ),
   ...wrap(
     "",
@@ -169,51 +167,52 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   const [target, traceFolder] = positional;
   const root = target ?? "";
   if (!isFolder(resolve(io.cwd, root))) return misused(`no such folder ${root}`);
+  const givenDepth = options.get("--depth");
+  if (givenDepth !== undefined && !/^\d+$/.test(givenDepth))
+    return misused(`invalid depth ${givenDepth} (expected a non-negative integer)`);
+  const given = options.get("--port") ?? "0";
+  const port = Number(given);
+  if (!/^\d+$/.test(given) || port > 65535)
+    return misused(`invalid port ${given} (expected an integer from 0 to 65535)`);
+  const folder = io.viewer ?? viewerFolder;
+  if (command === "view" && !isViewerBuilt(folder)) return misused("viewer not built. Run npm run build -w tazuna");
+  const traces = resolve(io.cwd, traceFolder ?? "");
+  if (command === "verify" && !isFolder(traces)) return misused(`no such folder ${traceFolder}`);
+  const result = await checkSpec(resolve(io.cwd, root), (r) => (io.typeCheck ?? typeCheck)(r, io.cwd));
+  switch (result.kind) {
+    case "noTsconfig":
+      return misused(`no tsconfig.json at or above ${root}`);
+    case "noTypescript":
+      return misused(`cannot resolve typescript from ${root}`);
+    case "unfinished":
+      return misused(`tsc did not finish: ${result.reason}`);
+    case "unloadable":
+      return misused(`cannot load ${root}: ${result.reason.replace(/\s+/g, " ").trim()}`);
+    case "typeErrors":
+      io.error(result.output.trimEnd());
+      return 1;
+    case "violations":
+      return report(io, resolve(io.cwd, root), result.violations, `Checked ${count(result.files, "file")}`);
+  }
+  const { spec } = result;
   if (command === "view") {
-    const given = options.get("--port") ?? "0";
-    const port = Number(given);
-    if (!/^\d+$/.test(given) || port > 65535)
-      return misused(`invalid port ${given} (expected an integer from 0 to 65535)`);
-    const folder = io.viewer ?? viewerFolder;
-    if (!isViewerBuilt(folder)) return misused("viewer not built. Run npm run build -w tazuna");
-    const server = await viewSpec({ root: resolve(io.cwd, root), path: root }, port, folder);
+    const server = await viewSpec(spec, root, port, folder);
     if (server === undefined) return misused(`port ${port} in use`);
     io.log(`Serving the viewer at ${server.url}`);
     await server.closed;
     return 0;
   }
-  const givenDepth = options.get("--depth");
-  if (givenDepth !== undefined && !/^\d+$/.test(givenDepth))
-    return misused(`invalid depth ${givenDepth} (expected a non-negative integer)`);
-  if (command === "check" || command === "test") {
-    const typeChecked = (io.typeCheck ?? typeCheck)(resolve(io.cwd, root), io.cwd);
-    if (typeChecked.kind === "noTsconfig") return misused(`no tsconfig.json at or above ${root}`);
-    if (typeChecked.kind === "noTypescript") return misused(`cannot resolve typescript from ${root}`);
-    if (typeChecked.kind === "unfinished") return misused(`tsc did not finish: ${typeChecked.reason}`);
-    if (typeChecked.output !== "") io.error(typeChecked.output.trimEnd());
-    if (!typeChecked.passed) return 1;
-  }
-  let spec: Spec;
-  try {
-    spec = await loadSpec(resolve(io.cwd, root));
-  } catch (error) {
-    return misused(`cannot load ${root}: ${reason(error).replace(/\s+/g, " ").trim()}`);
-  }
   const checked = `Checked ${count(spec.sources.length, "file")}`;
-  if (command === "check") return report(io, spec.root, check(spec), checked);
+  if (command === "check") return report(io, spec.root, [], checked);
   if (command === "test") {
     const depth = Number(givenDepth);
-    const failed = check(spec);
-    if (failed.length > 0) return report(io, spec.root, failed, checked);
-    const result = testSpec(spec, { update: options.has("--update"), depth });
-    for (const written of result.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
-    for (const removed of result.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
-    const violations = [...(options.has("--coverage") ? uncoveredOf(spec, result.reached) : []), ...result.violations];
+    const tested = testSpec(spec, { update: options.has("--update"), depth });
+    for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
+    for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
+    const violations = [...(options.has("--coverage") ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
     const paths = `explored paths of up to ${count(depth, "move")} after each scenario`;
     return report(io, spec.root, violations, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
   }
-  const traces = resolve(io.cwd, traceFolder ?? "");
-  if (!isFolder(traces)) return misused(`no such folder ${traceFolder}`);
-  const result = verifyTraces(spec, traces);
-  return report(io, spec.root, result.violations, `Verified ${count(result.traces, "trace")}`);
+  const verified = verifyTraces(spec, traces);
+  return report(io, spec.root, verified.violations, `Verified ${count(verified.traces, "trace")}`);
 }

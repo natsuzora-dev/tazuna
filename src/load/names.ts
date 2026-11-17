@@ -58,3 +58,27 @@ export function reservedNames(named: readonly { readonly name: string; readonly 
         ];
   });
 }
+
+const folded = (name: string) => name.normalize("NFC").toLowerCase();
+
+/**
+ * Returns a caseCollision violation for each name that differs from an earlier one only in case or Unicode
+ * normalization: the snapshot and trace files that the two name are one file on a case-insensitive file system.
+ */
+export function caseCollisions(named: readonly { readonly name: string; readonly place: Place }[]): Found<Malformed>[] {
+  return named.flatMap(({ name, place }, i): Found<Malformed>[] => {
+    const earlier = named.slice(0, i).find((n) => n.name !== name && folded(n.name) === folded(name));
+    return earlier === undefined
+      ? []
+      : [
+          {
+            violation: {
+              kind: "Malformed.caseCollision",
+              definition: null,
+              data: { name, collidesWith: earlier.name },
+            },
+            place,
+          },
+        ];
+  });
+}

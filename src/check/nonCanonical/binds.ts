@@ -1,7 +1,7 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { AnyCommand, Automation } from "../../dsl/definition.ts";
-import type { Found } from "../found.ts";
-import { placeIn, type Spec } from "../load.ts";
+import type { Found } from "../../load/found.ts";
+import { placeIn, type Spec } from "../../load/load.ts";
 
 interface Node {
   readonly type?: string;

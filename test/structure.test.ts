@@ -6,7 +6,7 @@ import { type ChartStructure, chartStructure, stateNamed } from "../src/spec/str
 import { isDescendant, parallelBetween } from "../src/spec/tree.ts";
 import { serviceRoot } from "./examples.ts";
 
-const subject = (path: string) => loadSpec(join(serviceRoot, path));
+const subject = async (path: string) => (await loadSpec(join(serviceRoot, path))).spec;
 const chartOf = (spec: Spec, service: string, name: string): ChartStructure => {
   const chart = chartStructure(spec.structure, service, name);
   assert.ok(chart);

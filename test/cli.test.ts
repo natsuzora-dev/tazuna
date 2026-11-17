@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,6 +7,7 @@ import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { main } from "../src/cli/main.ts";
 import { traceLine } from "../src/data/trace.generated.ts";
+import { typeChecked } from "./examples.ts";
 
 const root = join(import.meta.dirname, "..");
 
@@ -24,7 +25,7 @@ async function run(...args: string[]): Promise<{ code: number; out: string[]; er
     log: (line) => out.push(line),
     error: (line) => err.push(line),
     viewer,
-    typeCheck: () => ({ kind: "ran", passed: true, output: "" }),
+    typeCheck: () => typeChecked,
   });
   return { code, out, err };
 }
@@ -32,7 +33,7 @@ async function run(...args: string[]): Promise<{ code: number; out: string[]; er
 async function runWithTsc(...args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main(args, { cwd: root, log: (line) => out.push(line), error: (line) => err.push(line) });
+  const code = await main(args, { cwd: root, log: (line) => out.push(line), error: (line) => err.push(line), viewer });
   return { code, out, err };
 }
 
@@ -99,18 +100,25 @@ test("view writes an error and exits with 2 when another program uses the port",
   }
 });
 
-test("check and test write the tsc output to stderr and exit with 1 when tsc reports errors for the nearest tsconfig.json above the spec folder", async () => {
+test("check, test, verify, and view write the tsc output to stderr and exit with 1 when tsc reports errors for the nearest tsconfig.json above the spec folder", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "type-error-"));
   writeFileSync(join(project, "tsconfig.json"), "{}\n");
   writeFileSync(join(project, "count.ts"), 'export const count: number = "one";\n');
   const folder = relative(root, project);
   try {
-    const { code, out, err } = await runWithTsc("check", folder);
-    assert.equal(code, 1);
-    assert.deepEqual(out, []);
-    assert.deepEqual(err, [
-      `${folder}/count.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`,
-    ]);
+    for (const args of [
+      ["check", folder],
+      ["test", folder, "--depth", "0"],
+      ["verify", folder, folder],
+      ["view", folder],
+    ]) {
+      const { code, out, err } = await runWithTsc(...args);
+      assert.equal(code, 1);
+      assert.deepEqual(out, []);
+      assert.deepEqual(err, [
+        `${folder}/count.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`,
+      ]);
+    }
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
@@ -185,14 +193,66 @@ test("check writes one JSON line per violation to stdout and the count, or that 
   assert.deepEqual(clean.err, [`Checked ${sourcesOf(cleanFolder).length} files. No violations found.`]);
 });
 
-test("test writes the same violation lines and count as check and runs no scenario when check reports violations", async () => {
+test("test, verify, and view write the same violation lines and count as check and do nothing else when check reports violations", async () => {
   const folder = "test/load/malformed/times/at";
   const checked = await run("check", folder);
-  const tested = await run("test", folder, "--depth", "1");
-  assert.equal(tested.code, 1);
   assert.notDeepEqual(checked.out, []);
-  assert.deepEqual(tested.out, checked.out);
-  assert.deepEqual(tested.err, checked.err);
+  for (const args of [
+    ["test", folder, "--depth", "1"],
+    ["verify", folder, folder],
+    ["view", folder],
+  ]) {
+    const { code, out, err } = await run(...args);
+    assert.equal(code, 1);
+    assert.deepEqual(out, checked.out);
+    assert.deepEqual(err, checked.err);
+  }
+});
+
+test("check reports each spec file that the program of the nearest tsconfig.json leaves out", async () => {
+  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "unlisted-"));
+  writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.base.json", "include": ["src"] }\n');
+  mkdirSync(join(project, "src"));
+  writeFileSync(join(project, "src/app.ts"), "export {};\n");
+  cpSync(join(import.meta.dirname, "service/Chart/Config/history/player"), join(project, "spec/player"), {
+    recursive: true,
+  });
+  const folder = relative(root, join(project, "spec"));
+  try {
+    const { code, out } = await runWithTsc("check", folder);
+    assert.equal(code, 1);
+    assert.deepEqual(
+      out.map((line) => JSON.parse(line)),
+      ["contract.ts", "machines.ts", "player.ts", "scenarios.ts"].map((file) => ({
+        kind: "Malformed.unlistedFile",
+        definition: null,
+        data: { tsconfig: "../tsconfig.json" },
+        location: { file: `${folder}/player/${file}`, line: 1 },
+      })),
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("check skips node_modules folders and .d.ts files, and walks a symlinked folder once", async () => {
+  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "walk-"));
+  cpSync(join(import.meta.dirname, "service/Chart/Config/history/player"), join(project, "player"), {
+    recursive: true,
+  });
+  mkdirSync(join(project, "node_modules/helper"), { recursive: true });
+  writeFileSync(join(project, "node_modules/helper/index.ts"), 'throw new Error("imported node_modules");\n');
+  writeFileSync(join(project, "player/ambient.d.ts"), 'throw new Error("imported a declaration file");\n');
+  symlinkSync("..", join(project, "player/up"));
+  const folder = relative(root, project);
+  try {
+    const { code, out, err } = await run("check", folder);
+    assert.equal(code, 0);
+    assert.deepEqual(out, []);
+    assert.deepEqual(err, ["Checked 4 files. No violations found."]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
 });
 
 test("Every line of the snapshots under samples conforms to traceLine", () => {

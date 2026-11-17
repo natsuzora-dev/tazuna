@@ -1,0 +1,8 @@
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","count"],"type":"bigint"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","tags"],"type":"set"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","owners"],"type":"map"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","ratio"],"type":"nan"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","mark"],"type":"symbol"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","length"],"type":"transform"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"taskAdded"},"data":{"path":["payload","seen"],"type":"date"},"location":{"file":"todo/todo.ts","line":6}}
+{"kind":"Malformed.unrepresentableSchema","definition":null,"data":{"name":"limits","path":["most"],"type":"bigint"},"location":{"file":"todo/todo.ts","line":22}}

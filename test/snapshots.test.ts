@@ -6,7 +6,7 @@ import { testSpec } from "../src/cli/test.ts";
 import { sameRef } from "../src/data/definitionRef.ts";
 import { snapshotPath } from "../src/data/traceFile.ts";
 import type { ReportedViolation } from "../src/data/violation.ts";
-import { loadSpec } from "../src/load/load.ts";
+import { checkedRoot } from "./examples.ts";
 
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "snapshots-"));
@@ -16,7 +16,7 @@ writeFileSync(join(copy, "todo/__snapshots__/removed.jsonl"), "");
 mkdirSync(join(copy, "todo/__snapshots__/notes"));
 
 test("test writes no snapshot, and test --update rewrites snapshots without comparing, deletes snapshots without a scenario, and keeps and reports entries that are not snapshots", async () => {
-  const spec = await loadSpec(copy);
+  const spec = await checkedRoot(copy);
   const snapshots = join(spec.root, "todo/__snapshots__");
   const entries = readdirSync(snapshots, { withFileTypes: true });
   const isSnapshot = (e: Dirent) => e.isFile() && e.name.endsWith(".jsonl");

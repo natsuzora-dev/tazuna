@@ -8,7 +8,7 @@ export interface SchemaAt {
   readonly schema: z.ZodType;
 }
 
-const isPlainObject = (value: object) => Object.getPrototypeOf(value) === Object.prototype;
+export const isPlainObject = (value: object) => Object.getPrototypeOf(value) === Object.prototype;
 
 const stopKinds = new Set<unknown>([...definitionKinds, "service"]);
 
@@ -16,7 +16,7 @@ const stopKinds = new Set<unknown>([...definitionKinds, "service"]);
  * Returns whether `value` is a definition or a service. The walk stops there, so that a schema is found under the
  * definition that declares it.
  */
-const isDefinitionOrService = (value: object) => stopKinds.has((value as { readonly kind?: unknown }).kind);
+export const isDefinitionOrService = (value: object) => stopKinds.has((value as { readonly kind?: unknown }).kind);
 
 /**
  * Returns whether `key` is an entity event's payload, which is made of its entity's fields and found under the entity.
@@ -49,7 +49,9 @@ export function schemasIn(value: unknown, path: readonly string[]): SchemaAt[] {
   return found;
 }
 
+/** The entries of the definition that declare schemas. */
+export const declaringEntries = (definition: Definition): [string, unknown][] =>
+  Object.entries(definition).filter(([key]) => !derived(definition, key));
+
 export const definitionSchemas = (definition: Definition): SchemaAt[] =>
-  Object.entries(definition)
-    .filter(([key]) => !derived(definition, key))
-    .flatMap(([key, value]) => schemasIn(value, [key]));
+  declaringEntries(definition).flatMap(([key, value]) => schemasIn(value, [key]));

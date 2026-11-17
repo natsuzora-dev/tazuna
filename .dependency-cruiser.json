@@ -83,15 +83,27 @@
       }
     },
     {
+      "name": "check",
+      "comment": "src/check imports only data, dsl, spec, load, validation, and check",
+      "severity": "error",
+      "from": {
+        "path": "^src/check/"
+      },
+      "to": {
+        "path": "^src/",
+        "pathNot": "^src/(data|dsl|spec|load|validation|check)/"
+      }
+    },
+    {
       "name": "verify",
-      "comment": "src/verify imports only data, dsl, spec, load, and verify",
+      "comment": "src/verify imports only data, dsl, spec, load, check, sim, and verify",
       "severity": "error",
       "from": {
         "path": "^src/verify/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|verify|sim)/"
+        "pathNot": "^src/(data|dsl|spec|load|check|verify|sim)/"
       }
     },
     {
@@ -158,14 +170,14 @@
     },
     {
       "name": "view",
-      "comment": "src/view imports only data, dsl, spec, load, and view",
+      "comment": "src/view imports only data, dsl, spec, load, check, and view",
       "severity": "error",
       "from": {
         "path": "^src/view/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|view)/"
+        "pathNot": "^src/(data|dsl|spec|load|check|view)/"
       }
     }
   ],

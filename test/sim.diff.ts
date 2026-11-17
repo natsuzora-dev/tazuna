@@ -17,9 +17,9 @@ const roots = [join(import.meta.dirname, "../samples/todo/spec"), ...runExamples
 
 // Every spec loads before any test runs, so that no test ends while a later one is still being registered.
 const examples = await Promise.all(
-  simExamples().map(async ({ root, scenarios }) => ({ root, scenarios, spec: await loadSpec(root) })),
+  simExamples().map(async ({ root, scenarios }) => ({ root, scenarios, spec: (await loadSpec(root)).spec })),
 );
-const rootSpecs = await Promise.all(roots.map(async (root) => ({ root, spec: await loadSpec(root) })));
+const rootSpecs = await Promise.all(roots.map(async (root) => ({ root, spec: (await loadSpec(root)).spec })));
 
 for (const { root, scenarios, spec } of examples) {
   for (const name of scenarios)
@@ -49,7 +49,7 @@ const refusedRoots = [...runGroupExamples("choiceDependent"), join(serviceRoot, 
 test("Lean and TS refuse a step order that names a step no processing takes, as unreadyStep where the processing takes a queue step and as unusedStepOrder where it takes none, clock lines included", async () => {
   const kinds = new Set<string>();
   for (const root of refusedRoots) {
-    const spec = await loadSpec(root);
+    const spec = (await loadSpec(root)).spec;
     for (const { definition } of spec.scenarios) {
       const sc = definition.scenario;
       for (const [index, line] of sc.lines.entries()) {

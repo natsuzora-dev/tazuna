@@ -2,6 +2,8 @@ import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import { stateAt, transitionAt } from "../../dsl/chart.ts";
 import type { ChartSpec } from "../../dsl/definition.ts";
+import type { Found } from "../../load/found.ts";
+import { charts, type Spec } from "../../load/load.ts";
 import {
   type ChartStructure,
   isAnswerTransition,
@@ -9,8 +11,6 @@ import {
   transitionRef,
 } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
-import type { Found } from "../found.ts";
-import { charts, type Spec } from "../load.ts";
 
 const isEmpty = (value: object | undefined) => value !== undefined && Object.keys(value).length === 0;
 

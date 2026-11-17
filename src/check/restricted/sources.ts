@@ -7,8 +7,8 @@ import {
   type Restricted,
   suppressionMarks,
 } from "../../data/restricted.ts";
-import type { Found } from "../found.ts";
-import { placeIn, type SourceFile, type Spec } from "../load.ts";
+import type { Found } from "../../load/found.ts";
+import { placeIn, type SourceFile, type Spec } from "../../load/load.ts";
 
 interface Node {
   readonly type?: string;

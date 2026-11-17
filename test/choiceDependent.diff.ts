@@ -24,7 +24,7 @@ const simRoots = [join(tests, "../samples/todo/spec"), ...runExamples()];
 // Every spec loads before any test runs, so that no test ends while a later one is still being registered.
 const simCases = await Promise.all(
   simRoots.map(async (root) => {
-    const spec = await loadSpec(root);
+    const spec = (await loadSpec(root)).spec;
     const scenarios = spec.scenarios.map(({ service, name, definition }) => {
       const searched: Searched[] = [];
       stepOrderChanges(spec, definition.scenario, simulateSpec(spec, definition.scenario), 0, (s) => searched.push(s));

@@ -52,7 +52,7 @@ test("Every folder under test/sim is a Lean Sim module path or an example direct
 const outcomes = new Map<string, readonly string[]>();
 
 for (const { root, scenarios } of examples) {
-  const spec = await loadSpec(root);
+  const spec = (await loadSpec(root)).spec;
   for (const name of scenarios)
     test(`${relative(tests, root)}/${name}: the simulation gives the outcome of ${name}${outcomeSuffix}`, (t) => {
       const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));

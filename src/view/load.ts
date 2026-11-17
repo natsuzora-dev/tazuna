@@ -1,33 +1,41 @@
 import { fork } from "node:child_process";
-import { loadSpec } from "../load/load.ts";
+import { checkSpec, reason, type SpecCheck } from "../check/spec.ts";
 import { viewModel } from "./model.ts";
 import type { ViewModel } from "./types.ts";
 
 export type Loaded = { readonly model: ViewModel } | { readonly error: string };
 
-/** Returns the header lines of Node's error and the first stack frame outside node: internals. */
-export function reason(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-  const lines = (error.stack ?? error.message).split("\n");
-  const frames = lines.findIndex((line) => line.startsWith("    at "));
-  if (frames === -1) return lines.join("\n");
-  const own = lines.slice(frames).find((line) => !line.includes("(node:") && !line.includes(" node:"));
-  return [...lines.slice(0, frames), ...(own === undefined ? [] : [own])].join("\n");
+function failure(result: Exclude<SpecCheck, { readonly kind: "checked" }>): string {
+  switch (result.kind) {
+    case "noTsconfig":
+      return "no tsconfig.json at or above the spec folder";
+    case "noTypescript":
+      return "cannot resolve typescript from the spec folder";
+    case "unfinished":
+      return `tsc did not finish: ${result.reason}`;
+    case "typeErrors":
+      return result.output;
+    case "unloadable":
+      return result.reason;
+    case "violations":
+      return result.violations.map((v) => JSON.stringify(v)).join("\n");
+  }
 }
 
 if (import.meta.main && process.send !== undefined) {
   const [root = "", path = ""] = process.argv.slice(2);
   const send = (loaded: Loaded) => process.send?.(loaded, () => process.disconnect?.());
   try {
-    send({ model: viewModel(await loadSpec(root), path) });
+    const result = await checkSpec(root);
+    send(result.kind === "checked" ? { model: viewModel(result.spec, path) } : { error: failure(result) });
   } catch (error) {
     send({ error: reason(error) });
   }
 }
 
 /**
- * Loads the view model in a forked process. Node caches imported modules and never reloads an edited spec file in the
- * same process, so each load forks.
+ * Checks the spec and loads its view model in a forked process. Node caches imported modules and never reloads an
+ * edited spec file in the same process, so each load forks.
  */
 export function loadViewModel(root: string, path: string): Promise<Loaded> {
   return new Promise((resolve) => {

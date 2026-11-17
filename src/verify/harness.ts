@@ -1,7 +1,7 @@
+import type { CheckedSpec } from "../check/spec.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import { type Bindings, substituted, type UntimedTraceLine } from "../data/trace.ts";
 import { plain } from "../data/values.ts";
-import type { Spec } from "../load/load.ts";
 import { traceName } from "../load/traceName.ts";
 import { givenRecordsOf } from "../sim/spec/simulate.ts";
 import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
@@ -64,7 +64,7 @@ function substitutedLine(bindings: Bindings, line: TraceLine): TraceLine {
  * the line as ambiguous when another binding could give the implementation different inputs. Once that comparison
  * finds the trace uncomparable, the harness gives no more lines.
  */
-export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
+export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
   const runner = run.runner ?? run.service;
   const scenarioName = runner === run.service ? run.name : run.name.slice(0, -`.${runner}`.length);
   const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === scenarioName)?.definition

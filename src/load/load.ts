@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseSync } from "oxc-parser";
@@ -21,14 +21,15 @@ import type { DefinitionStructure } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
 import { defaultSchemas } from "./defaults.ts";
 import type { Found } from "./found.ts";
-import { duplicateNames, type NamedExport, reservedNames } from "./names.ts";
+import { caseCollisions, duplicateNames, type NamedExport, reservedNames } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
 import { unexportedDefinitions } from "./references.ts";
 import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
 import { structureOf } from "./structureOf.ts";
 import { inexactDelays } from "./times.ts";
+import { unrepresentableSchemas } from "./unrepresentable.ts";
 
-export interface Constants {
+interface Constants {
   readonly schema: z.ZodObject;
   readonly values: Readonly<Record<string, unknown>>;
 }
@@ -46,7 +47,6 @@ export interface Spec {
   readonly root: string;
   /** The definitions, without the definitions and entities that no single service owns. */
   readonly definitions: readonly Named<Definition>[];
-  readonly malformed: readonly Found<Malformed>[];
   readonly contracts: readonly Contract[];
   readonly constants: readonly Named<Constants>[];
   readonly scenarios: readonly Named<LoadedScenario>[];
@@ -59,13 +59,21 @@ export interface Spec {
   readonly structure: Structure;
 }
 
-function tsFiles(dir: string): string[] {
+const skippedFolders = new Set(["__snapshots__", "node_modules"]);
+
+/** The spec files under `dir`, walking each folder once however many symlinks lead to it. */
+function tsFiles(dir: string, visited = new Set([realpathSync(dir)])): string[] {
   return readdirSync(dir)
     .sort()
     .flatMap((name) => {
       const path = join(dir, name);
-      if (statSync(path).isDirectory()) return name === "__snapshots__" ? [] : tsFiles(path);
-      return name.endsWith(".ts") ? [path] : [];
+      const stat = statSync(path, { throwIfNoEntry: false });
+      if (stat === undefined) return [];
+      if (!stat.isDirectory()) return name.endsWith(".ts") && !name.endsWith(".d.ts") ? [path] : [];
+      const real = realpathSync(path);
+      if (skippedFolders.has(name) || visited.has(real)) return [];
+      visited.add(real);
+      return tsFiles(path, visited);
     });
 }
 
@@ -180,7 +188,8 @@ function serviceImports(
   });
 }
 
-export async function loadSpec(root: string): Promise<Spec> {
+/** The spec in `root`, and what keeps the loader from reading it faithfully. */
+export async function loadSpec(root: string): Promise<{ readonly spec: Spec; readonly malformed: Found<Malformed>[] }> {
   const found: Omit<Named<Definition>, "service">[] = [];
   const foundContracts: { readonly place: Place; readonly value: Readonly<Record<string, unknown>> }[] = [];
   const foundConstants: { readonly name: string; readonly place: Place; readonly value: unknown }[] = [];
@@ -254,20 +263,10 @@ export async function loadSpec(root: string): Promise<Spec> {
     const n = names.get(d);
     return n === undefined ? undefined : { service: n.service, name: n.name };
   });
-  return {
+  const serviceNamed = [...services].map(([name, { place }]) => ({ name, place }));
+  const spec: Spec = {
     root,
     definitions,
-    malformed: [
-      ...duplicateNames(namedExports),
-      ...owned.malformed,
-      ...unknownServices,
-      ...reservedNames([...[...services].map(([name, { place }]) => ({ name, place })), ...defined]),
-      ...unexportedDefinitions(definitions, services, contracts, constants, exported),
-      ...inexactDelays(charts({ definitions, structure })),
-      ...opaque,
-      ...defaultSchemas(definitions, structure, opaque, thrownDefaults),
-      ...loaded.malformed,
-    ],
     contracts,
     constants,
     scenarios: loaded.scenarios,
@@ -278,6 +277,21 @@ export async function loadSpec(root: string): Promise<Spec> {
     services,
     structure,
   };
+  const malformed = [
+    ...duplicateNames(namedExports),
+    ...owned.malformed,
+    ...unknownServices,
+    ...reservedNames([...serviceNamed, ...defined]),
+    ...caseCollisions(serviceNamed),
+    ...[...services.keys()].flatMap((service) => caseCollisions(defined.filter((s) => s.service === service))),
+    ...unexportedDefinitions(definitions, services, contracts, constants, exported),
+    ...inexactDelays(charts({ definitions, structure })),
+    ...opaque,
+    ...unrepresentableSchemas(definitions, constants),
+    ...defaultSchemas(definitions, structure, opaque, thrownDefaults),
+    ...loaded.malformed,
+  ];
+  return { spec, malformed };
 }
 
 export function structured(spec: Pick<Spec, "definitions" | "structure">) {

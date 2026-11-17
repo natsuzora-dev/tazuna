@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { loadSpec } from "../src/load/load.ts";
 import { type Adapter, commandRequest, decodeAnswer, drive, peerSnapshots, verifyTraces } from "../src/verify/index.ts";
-import { serviceRoot } from "./examples.ts";
+import { checkedRoot, serviceRoot } from "./examples.ts";
 import { payments } from "./service/Command/command-output/payments/contract.ts";
 import { createCharge } from "./service/Command/command-output/payments/payments.ts";
 import { calendar } from "./verify/mismatch/external/assumptions/calendar/contract.ts";
 
 const commandOutput = join(serviceRoot, "Command/command-output");
-const shop = await loadSpec(commandOutput);
+const shop = await checkedRoot(commandOutput);
 const refund = { service: "shop", name: "refundCreatedCharge" };
 
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
@@ -23,13 +22,13 @@ const copyOfCommandOutput = (name: string) => {
 };
 
 test("peerSnapshots returns the peer runs that have a snapshot", async () => {
-  const spec = await loadSpec(join(import.meta.dirname, "verify/uncomparable/pairing/peer-runs"));
+  const spec = await checkedRoot(join(import.meta.dirname, "verify/uncomparable/pairing/peer-runs"));
   const snapshots = peerSnapshots(spec);
   assert.deepEqual(snapshots, [{ service: "notifier", name: "announcesAdded.todo", runner: "todo" }]);
 });
 
 test("verifyTraces reports snapshot lines that do not fit the schema as violations without throwing", async () => {
-  const broken = await loadSpec(copyOfCommandOutput("schema"));
+  const broken = await checkedRoot(copyOfCommandOutput("schema"));
   const snapshot = join(broken.root, "shop/__snapshots__/refundCreatedCharge.jsonl");
   const traces = join(copies, "schema-traces");
   mkdirSync(join(traces, "shop"), { recursive: true });
@@ -52,7 +51,7 @@ test("decodeAnswer decodes the output of an answer with the output schema and re
 });
 
 test("verifyTraces compares an external service trace under any name with the contract and reads Temporal values that JSON.stringify wrote", async () => {
-  const spec = await loadSpec(join(import.meta.dirname, "verify/mismatch/external/assumptions"));
+  const spec = await checkedRoot(join(import.meta.dirname, "verify/mismatch/external/assumptions"));
   const time = "2026-10-26T00:00:00Z";
   const monday = Temporal.Instant.from(time);
   const kinds = (name: string, day: Temporal.Instant) => {
