@@ -79,8 +79,9 @@ export function instant(time: string): string | undefined {
   try {
     const t = Temporal.Instant.from(time);
     return t.epochNanoseconds % 1_000_000n === 0n ? t.toString() : undefined;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof RangeError) return undefined;
+    throw error;
   }
 }
 
