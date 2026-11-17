@@ -20,7 +20,7 @@ import {
   type ResultOfMismatch,
   rejectionKinds,
   resultOfMismatch,
-} from "../syntax/structure.ts";
+} from "../spec/structure.ts";
 import { byLine, type Found, lineSchema } from "./lines.ts";
 
 type LineOf<T extends TraceLine["type"]> = Extract<TraceLine, { readonly type: T }>;

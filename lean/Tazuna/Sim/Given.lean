@@ -8,15 +8,15 @@ records. What Given gets wrong is reported before anything begins.
 
 namespace Tazuna.Sim
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Scenario (GivenRecord Peer)
 
 /--
 The services that the own service `own` exchanges messages with: those whose definitions its definitions name, and the
 spec services whose definitions name its definitions, in code-point order.
 -/
-def staticPeers (j : Syntax.Structure) (own : String) : List String :=
-  let named (d : Syntax.Definition) : List Syntax.Ref :=
+def staticPeers (j : Spec.Structure) (own : String) : List String :=
+  let named (d : Spec.Definition) : List Spec.Ref :=
     match d.body with
     | .automation receives command _ _ => receives.toList ++ command.toList
     | .machine c | .screen c => (c.receives ++ c.commands ++ c.queries ++ c.screens).filterMap (·.2)
@@ -39,7 +39,7 @@ def peersOf (sc : Scenario) : List (String × Peer) :=
 The world before the begin: the roles that Given lists, and each running service at the start, whose name qualifies its
 createKey values, or why the Lean model does not cover a service.
 -/
-def World.start (j : Syntax.Structure) (sc : Scenario) : Except String World := do
+def World.start (j : Spec.Structure) (sc : Scenario) : Except String World := do
   let peers := peersOf sc
   let roles := (sc.service, Role.own) :: peers.map fun (s, p) => (s, match p with
     | .run _ => Role.run
@@ -80,7 +80,7 @@ def givenRecords (sc : Scenario) (service : String) : List GivenRecord :=
 The first string of `v` of the form `<participant>/<e>-<n>` of a key of the keyed entity `e` that the running
 participant creates, with the entity.
 -/
-def World.writtenKey? (w : World) (v : Value) : Option (String × Syntax.Ref) :=
+def World.writtenKey? (w : World) (v : Value) : Option (String × Spec.Ref) :=
   v.strings.findSome? fun x => (w.keyEntity? x).map (x, ·)
 
 variable {m : Type → Type} [Monad m]
@@ -89,7 +89,7 @@ variable {m : Type → Type} [Monad m]
 Given's records of `service` as rows, each parsed by its entity's schema, with the reports of those that are invalid,
 write a created key that `written` finds, or clash with an earlier one, which no row holds.
 -/
-def givenRows (st : Service) (fs : Functions m) (written : Value → Option (String × Syntax.Ref)) (service : String)
+def givenRows (st : Service) (fs : Functions m) (written : Value → Option (String × Spec.Ref)) (service : String)
     (records : List GivenRecord) : m (Records × List Report) :=
   records.foldlM (init := ([], [])) fun (rows, reports) g => do
     let invalid := (rows, reports ++ [Report.invalidRecord service g.entity g.key])
@@ -121,7 +121,7 @@ The world with each running service's Given records, or with what Given gets wro
 service listed as one, a peer of the static peer list left out, and for each running service, invalid or clashing
 records, records that write a created key, a single entity without a record, and else failing invariants.
 -/
-def World.given (w : World) (j : Syntax.Structure) (fsOf : String → Functions m) (sc : Scenario) : m World := do
+def World.given (w : World) (j : Spec.Structure) (fsOf : String → Functions m) (sc : Scenario) : m World := do
   let listed := sc.given.peers.map (·.service)
   let repeated := (listed.zipIdx.filter fun (p, k) => p == sc.service || (listed.take k).contains p).map fun (p, _) =>
     Report.repeatedPeer p

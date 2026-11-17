@@ -1,6 +1,6 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Definition } from "../dsl/definition.ts";
-import { traceNameOfRef } from "../syntax/structure.ts";
+import { traceNameOfRef } from "../spec/structure.ts";
 import type { Spec } from "./load.ts";
 
 export function refOfDefinition(spec: Spec, definition: unknown): DefinitionRef {

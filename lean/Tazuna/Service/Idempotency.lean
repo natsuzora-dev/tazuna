@@ -1,6 +1,6 @@
 import Tazuna.Service.Message
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -33,4 +33,4 @@ def CommandAnswers.keep (table : CommandAnswers) (id : String) (request : Reques
     CommandAnswers :=
   if keepsAnswer answer then table ++ [(id, request, answer)] else table
 
-end Tazuna.Semantics
+end Tazuna.Service

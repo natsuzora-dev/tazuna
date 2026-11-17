@@ -24,26 +24,26 @@
     },
     {
       "name": "dsl",
-      "comment": "src/dsl imports only data, dsl, syntax, and scenario (the scenario definer that service() returns)",
+      "comment": "src/dsl imports only data, dsl, spec, and scenario (the scenario definer that service() returns)",
       "severity": "error",
       "from": {
         "path": "^src/dsl/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|scenario)/"
+        "pathNot": "^src/(data|dsl|spec|scenario)/"
       }
     },
     {
-      "name": "syntax",
-      "comment": "src/syntax imports only data and syntax",
+      "name": "spec",
+      "comment": "src/spec imports only data and spec",
       "severity": "error",
       "from": {
-        "path": "^src/syntax/"
+        "path": "^src/spec/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|syntax)/"
+        "pathNot": "^src/(data|spec)/"
       }
     },
     {
@@ -60,55 +60,55 @@
     },
     {
       "name": "validation",
-      "comment": "src/validation imports only data, syntax, and validation",
+      "comment": "src/validation imports only data, spec, and validation",
       "severity": "error",
       "from": {
         "path": "^src/validation/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|syntax|validation)/"
+        "pathNot": "^src/(data|spec|validation)/"
       }
     },
     {
       "name": "load",
-      "comment": "src/load imports only data, dsl, syntax, scenario, and load",
+      "comment": "src/load imports only data, dsl, spec, scenario, and load",
       "severity": "error",
       "from": {
         "path": "^src/load/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|scenario|load)/"
+        "pathNot": "^src/(data|dsl|spec|scenario|load)/"
       }
     },
     {
       "name": "verify",
-      "comment": "src/verify imports only data, dsl, syntax, load, and verify",
+      "comment": "src/verify imports only data, dsl, spec, load, and verify",
       "severity": "error",
       "from": {
         "path": "^src/verify/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|verify|sim)/"
+        "pathNot": "^src/(data|dsl|spec|load|verify|sim)/"
       }
     },
     {
       "name": "service",
-      "comment": "src/service imports only data, syntax, and service",
+      "comment": "src/service imports only data, spec, and service",
       "severity": "error",
       "from": {
         "path": "^src/service/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|syntax|service)/"
+        "pathNot": "^src/(data|spec|service)/"
       }
     },
     {
       "name": "sim",
-      "comment": "src/sim, outside src/sim/spec, imports only data, syntax, service, and sim",
+      "comment": "src/sim, outside src/sim/spec, imports only data, spec, service, and sim",
       "severity": "error",
       "from": {
         "path": "^src/sim/",
@@ -116,36 +116,24 @@
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/((data|syntax|service)/|sim/(?!spec/))"
+        "pathNot": "^src/((data|spec|service)/|sim/(?!spec/))"
       }
     },
     {
       "name": "sim/spec",
-      "comment": "src/sim/spec, which runs the spec's JS functions, imports only data, dsl, syntax, load, service, sim, and observe",
+      "comment": "src/sim/spec, which runs the spec's JS functions, imports only data, dsl, spec, load, service, sim, and explore/instrument, which collects what exploration needs from a run",
       "severity": "error",
       "from": {
         "path": "^src/sim/spec/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|service|sim|observe)/"
-      }
-    },
-    {
-      "name": "observe",
-      "comment": "src/observe imports only data, syntax, service, and observe",
-      "severity": "error",
-      "from": {
-        "path": "^src/observe/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|syntax|service|observe)/"
+        "pathNot": "^src/((data|dsl|spec|load|service|sim)/|explore/instrument\\.ts$)"
       }
     },
     {
       "name": "explore",
-      "comment": "src/explore imports only data, dsl, syntax, load, verify, service, sim, observe, and explore",
+      "comment": "src/explore imports only data, dsl, spec, load, verify, service, sim, and explore",
       "severity": "error",
       "from": {
         "path": "^src/explore/",
@@ -153,31 +141,31 @@
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|verify|service|sim|observe|explore)/"
+        "pathNot": "^src/(data|dsl|spec|load|verify|service|sim|explore)/"
       }
     },
     {
       "name": "explore/uncovered",
-      "comment": "src/explore/uncovered imports only data, dsl, syntax, load, service, sim, observe, and explore/uncovered",
+      "comment": "src/explore/uncovered imports only data, dsl, spec, load, service, sim, and explore/uncovered",
       "severity": "error",
       "from": {
         "path": "^src/explore/uncovered/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|service|sim|observe|explore/uncovered)/"
+        "pathNot": "^src/(data|dsl|spec|load|service|sim|explore/uncovered)/"
       }
     },
     {
       "name": "view",
-      "comment": "src/view imports only data, dsl, syntax, load, and view",
+      "comment": "src/view imports only data, dsl, spec, load, and view",
       "severity": "error",
       "from": {
         "path": "^src/view/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|syntax|load|view)/"
+        "pathNot": "^src/(data|dsl|spec|load|view)/"
       }
     }
   ],

@@ -16,8 +16,8 @@ import {
 } from "../dsl/definition.ts";
 import { contractService, definerService, isContract } from "../dsl/service.ts";
 import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "../scenario/define.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import type { DefinitionStructure } from "../syntax/structure.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import type { DefinitionStructure } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
 import { defaultSchemas } from "./defaults.ts";
 import type { Found } from "./found.ts";

@@ -7,7 +7,7 @@ caller's error: the service checks it before processing and rejects the request.
 error: the service checks it before answering.
 -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -25,7 +25,7 @@ structure RefCheck where
   reads : List RecordPart
   missing : Bool
 
-def missingRef (st : Service) (records : Records) (input : Value) : List (String × Syntax.Ref) → RefCheck
+def missingRef (st : Service) (records : Records) (input : Value) : List (String × Spec.Ref) → RefCheck
   | [] => { reads := [], missing := false }
   | (field, r) :: rest =>
     match input.field? field with
@@ -60,4 +60,4 @@ def commandEnsures [Monad m] (st : Service) (fs : Functions m) (name : String) (
   | .ok (some c) => pure [st.failedEnsures name c]
   | .ok none => pure []
 
-end Tazuna.Semantics
+end Tazuna.Service

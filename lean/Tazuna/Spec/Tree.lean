@@ -1,9 +1,9 @@
 import Tazuna.Data.List
-import Tazuna.Syntax.Shape
+import Tazuna.Spec.Shape
 
 /-! The exit and entry sets follow computeExitSet and computeEntrySet of W3C SCXML Appendix D. -/
 
-namespace Tazuna.Syntax
+namespace Tazuna.Spec
 
 open Tazuna.Data
 
@@ -285,4 +285,4 @@ def Tree.parallelBetween (t : Tree) (a b : String) : Option String :=
   | some p => if t.kindOf p == some .parallel then some p else none
   | none => none
 
-end Tazuna.Syntax
+end Tazuna.Spec

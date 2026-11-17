@@ -8,7 +8,7 @@ among the messages it receives, and answers it with that id.
 
 namespace Tazuna.Sim
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
 /-- The id by which the receiver of a message from `sender` names it. -/
 def receivedId (sender id : String) : String := s!"{sender}/{id}"
@@ -25,7 +25,7 @@ def senderOf? (id : String) : Option String :=
 
 /-- The name by which `receiver` names the definition that `sender` names `name`. -/
 def nameIn (sender receiver name : String) : String :=
-  (Syntax.Ref.ofTraceName sender name).traceName receiver
+  (Spec.Ref.ofTraceName sender name).traceName receiver
 
 variable {m : Type → Type} [Monad m] [MonadNote m]
 

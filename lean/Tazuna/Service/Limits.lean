@@ -1,6 +1,6 @@
 import Tazuna.Data.Names
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 /--
 An implementation limit. Exceeding a limit halts the run with the Fault named `exceeded` and the limit's name, such as
@@ -34,4 +34,4 @@ def Limit.max : Limit → Nat
 
 def Limit.name (l : Limit) : String := (constructorNames% Limit).getD l.ctorIdx ""
 
-end Tazuna.Semantics
+end Tazuna.Service

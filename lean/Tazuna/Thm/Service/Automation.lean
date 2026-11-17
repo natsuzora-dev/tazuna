@@ -3,8 +3,8 @@ import Tazuna.Thm.Service.State
 
 namespace Tazuna.Thm.Service.Automation
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic
+open Tazuna.Data Tazuna.Service
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic
 
 variable {st : Service} {s : State}
 

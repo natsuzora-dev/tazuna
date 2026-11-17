@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Select
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -47,7 +47,7 @@ where
       | none => go rest
 
 def offeringStates (st : Service) (s : State) (top : Instance) (control : String) (payload : Value) :
-    m (Except Fault (List (Instance × String × Syntax.Offer))) := do
+    m (Except Fault (List (Instance × String × Spec.Offer))) := do
   pure ((← reachedCopies fs st s top payload).map fun reached => top.documentOrder.filterMap fun (h, n) =>
     let holder := if h == top.resource then some top else if h ∈ reached then s.machine? h else none
     holder.bind fun hi =>
@@ -55,8 +55,8 @@ def offeringStates (st : Service) (s : State) (top : Instance) (control : String
       | some o => if hi.isIn n then some (hi, n, o) else none
       | none => none)
 
-def innermostOffers (c : Chart) (found : List (Instance × String × Syntax.Offer)) :
-    List (Instance × String × Syntax.Offer) :=
+def innermostOffers (c : Chart) (found : List (Instance × String × Spec.Offer)) :
+    List (Instance × String × Spec.Offer) :=
   let tree := c.tree
   found.filter fun (_, a, _) => !found.any fun (_, b, _) => b != a && tree.isDescendant b a
 
@@ -64,8 +64,8 @@ def innermostOffers (c : Chart) (found : List (Instance × String × Syntax.Offe
 The offers that apply to `control`: the innermost offering states, or else the chart's own offers. A control that
 neither names is offered nothing.
 -/
-def appliedOffers (top : Instance) (control : String) (found : List (Instance × String × Syntax.Offer)) :
-    List (Instance × Option String × Syntax.Offer) :=
+def appliedOffers (top : Instance) (control : String) (found : List (Instance × String × Spec.Offer)) :
+    List (Instance × Option String × Spec.Offer) :=
   match innermostOffers top.chart found, top.chart.offers.lookup control with
   | [], some o => [(top, none, o)]
   | innermost, _ => innermost.map fun (h, n, o) => (h, some n, o)
@@ -175,4 +175,4 @@ def operationsOf (st : Service) (s : State) (screen : String) :
 
 end Operations
 
-end Tazuna.Semantics
+end Tazuna.Service

@@ -1,6 +1,6 @@
 import Tazuna.Service.Contract
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -61,4 +61,4 @@ depends only on the values at the end of the message, so its reads are not reads
 def publish [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.subscriptions.foldlM (publishOne st fs) s
 
-end Tazuna.Semantics
+end Tazuna.Service

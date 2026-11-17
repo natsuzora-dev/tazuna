@@ -6,7 +6,7 @@ Functions answers what the semantics cannot evaluate: schema validation and spec
 hold for every function; the executable takes `m = IO` and asks TS.
 -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -107,7 +107,7 @@ schema whose refinement or codec threw. An unheld read, a call of `only()` on mo
 that fails its schema, name `owner`; a value that fails any other schema is the site's `mismatch`, an exception where
 the site checks no schema.
 -/
-def issueViolation (st : Service) (owner : Syntax.Ref) (e : Issue)
+def issueViolation (st : Service) (owner : Spec.Ref) (e : Issue)
     (mismatch : Schema → Fault := fun _ => .exception (some owner)) : Fault :=
   match e with
   | .thrown none => .exception (some owner)
@@ -204,4 +204,4 @@ structure Functions (m : Type → Type) where
   copyKey : String → String → Value → m (Except Issue (Option (Option String)))
   close : Scope → Records → m (Except Issue (Value × Option String))
 
-end Tazuna.Semantics
+end Tazuna.Service

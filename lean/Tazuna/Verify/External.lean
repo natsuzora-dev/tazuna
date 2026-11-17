@@ -8,7 +8,7 @@ allows.
 namespace Tazuna.Verify
 
 open Tazuna.Data
-open Tazuna.Syntax
+open Tazuna.Spec
 
 structure Request where
   definition : Definition

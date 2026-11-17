@@ -1,5 +1,5 @@
 import type { Illegal } from "../data/illegal.generated.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
+import type { Structure } from "../spec/structure.generated.ts";
 import * as automations from "./automations.ts";
 import * as charts from "./charts.ts";
 import * as commands from "./commands.ts";

@@ -3,8 +3,8 @@ import Tazuna.Thm.Service.Chart.Exit
 
 namespace Tazuna.Thm.Service.Chart.Done
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic
+open Tazuna.Data Tazuna.Service
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic
 
 variable {fs : Functions Id}
 

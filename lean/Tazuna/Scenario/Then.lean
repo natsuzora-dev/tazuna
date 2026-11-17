@@ -7,7 +7,7 @@ open Tazuna.Data
 /-- A request that the own service sent: its kind, its target, and its input. -/
 structure SentRequest where
   kind : RequestType
-  target : Syntax.Ref
+  target : Spec.Ref
   input : Template
 deriving BEq, Repr, Inhabited
 
@@ -15,7 +15,7 @@ derive_wire SentRequest
 
 /-- An event that the own service emitted. -/
 structure EmittedEvent where
-  event : Syntax.Ref
+  event : Spec.Ref
   payload : Template
 deriving BEq, Repr, Inhabited
 

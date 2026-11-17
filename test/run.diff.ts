@@ -6,6 +6,7 @@ import type { Line, Scenario } from "../src/data/scenario.generated.ts";
 import type { RejectionKind } from "../src/data/trace.generated.ts";
 import { canonicalJson, type Json } from "../src/data/values.ts";
 import type { Violation } from "../src/data/violation.ts";
+import { enabled } from "../src/explore/enabled.ts";
 import {
   enabledLines,
   type Move,
@@ -17,7 +18,6 @@ import {
 import { search } from "../src/explore/search.ts";
 import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
-import { enabled } from "../src/observe/enabled.ts";
 import { limits as tsLimits } from "../src/service/limits.ts";
 import { byCallerKinds } from "../src/service/message.ts";
 import { Halt } from "../src/service/state.ts";

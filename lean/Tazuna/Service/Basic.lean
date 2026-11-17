@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Basic
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -18,7 +18,7 @@ deriving DecidableEq, Repr, Inhabited
 /-- The requirements that a command or query checks before processing, in declaration order. -/
 structure Requirements where
   /-- The input ref fields, each with the entity that it points to. -/
-  refs : List (String × Syntax.Ref) := []
+  refs : List (String × Spec.Ref) := []
   binds : List String := []
   requires : List String := []
 deriving Repr, Inhabited
@@ -52,7 +52,7 @@ deriving DecidableEq, Repr, Inhabited
 /-- The values of a service read from the structure JSON; Functions evaluates the function bodies. -/
 structure Service where
   service : String
-  «structure» : Syntax.Structure
+  «structure» : Spec.Structure
   commands : List String
   queries : List String
   /-- The own events, each with how it changes records. -/
@@ -83,12 +83,12 @@ def Service.schemaOf (st : Service) (schema : Schema) : Value := (st.schemas.loo
 
 def Service.chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
 
-def Service.ref (st : Service) (name : String) : Syntax.Ref := { service := st.service, name }
+def Service.ref (st : Service) (name : String) : Spec.Ref := { service := st.service, name }
 
 /-- The ref that a trace name, as seen from the service, spells, without looking the definition up. -/
-def Service.refOf (st : Service) (traceName : String) : Syntax.Ref := Syntax.Ref.ofTraceName st.service traceName
+def Service.refOf (st : Service) (traceName : String) : Spec.Ref := Spec.Ref.ofTraceName st.service traceName
 
-def Service.schemaOwner (st : Service) : Schema → Syntax.Ref
+def Service.schemaOwner (st : Service) : Schema → Spec.Ref
   | .input d | .output d => st.refOf d
   | .payload e => st.refOf e
   | .control screen _ => st.ref screen
@@ -99,11 +99,11 @@ def Service.uniqueOf (st : Service) (entity : String) : List String := (st.uniqu
 
 def Service.requirementsOf (st : Service) (name : String) : Requirements := (st.requirements.lookup name).getD {}
 
-end Tazuna.Semantics
+end Tazuna.Service
 
-namespace Tazuna.Syntax
+namespace Tazuna.Spec
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
 /-- The service named `service`, or the reason why it has a definition that the Lean model does not cover. -/
 def Structure.service (j : Structure) (service : String) : Except String Service := do
@@ -123,7 +123,7 @@ def Structure.service (j : Structure) (service : String) : Except String Service
     c.toExec service d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)
   let mut commands := []
   let mut queries := []
-  let mut events : List (String × Semantics.Change) := []
+  let mut events : List (String × Service.Change) := []
   let mut automations := []
   let mut schemas : List (Schema × Value) := []
   let mut requirements : List (String × Requirements) := []
@@ -207,4 +207,4 @@ def Structure.service (j : Structure) (service : String) : Except String Service
   pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities, singles,
          references, uniques, requirements }
 
-end Tazuna.Syntax
+end Tazuna.Spec

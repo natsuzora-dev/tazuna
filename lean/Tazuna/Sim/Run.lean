@@ -9,7 +9,7 @@ waits for a later line, and nothing is searched.
 
 namespace Tazuna.Sim
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Scenario (Fact Origin Template RequestType Expectation GivenRecord Peer)
 
 variable {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m]
@@ -70,7 +70,7 @@ def bodyOf (type : RequestType) (name : String) (v : Value) : LineBody :=
 
 /-- The world after the client's request of line `i`, with the id of the request of line `sameIdAs`, if any. -/
 def World.clientRequest (w : World) (fsOf : String → Functions m) (i : Nat) (type : RequestType)
-    (target : Syntax.Ref) (input : Template) (sameIdAs : Option Nat) : m World := do
+    (target : Spec.Ref) (input : Template) (sameIdAs : Option Nat) : m World := do
   let receiver := target.service
   if !((w.role receiver).any (·.running)) then return w.report (.wrongRole i receiver)
   w.resolving (w.fill fsOf i input) fun v => do
@@ -302,7 +302,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         let fits (msg : Message) : m Bool :=
           match msg.body with
           | .event n x r =>
-            if msg.receiver == own && Syntax.Ref.ofTraceName peer n == event && r == resultId then
+            if msg.receiver == own && Spec.Ref.ofTraceName peer n == event && r == resultId then
               w.sameValue (fsOf peer) (.payload n) peer payload v x
             else pure false
           | _ => pure false
@@ -520,7 +520,7 @@ def World.walk (w : World) (fsOf : String → Functions m) (sc : Scenario) : m W
 The world after the lines of the scenario take place from `start`, as `simulate` runs them, without checking the end
 and Then: explore appends lines to a scenario this way, so what the appended lines leave in flight is no mistake.
 -/
-def walk (j : Syntax.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
+def walk (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
   if !w.reports.isEmpty then return w
   w.walk fsOf sc
@@ -529,7 +529,7 @@ def walk (j : Syntax.Structure) (fsOf : String → Functions m) (start : World) 
 The world after the scenario runs from `start`, each running service asking `fsOf` its spec's functions: Given is
 checked and the records placed, every running service begins, the lines take place, and the end and Then are checked.
 -/
-def simulate (j : Syntax.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
+def simulate (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
   if !w.reports.isEmpty then return w
   let w ← w.beginAll fsOf

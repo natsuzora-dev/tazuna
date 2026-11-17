@@ -1,6 +1,6 @@
 import Tazuna.Service.State
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -15,4 +15,4 @@ def automationAnswer (st : Service) (automation : String) (answer : Answer) (s :
     if RejectionKind.byCaller r.kind then s.report (.fault (.rejectedAutomationCommand (st.ref automation) r)) else s
   | _ => s
 
-end Tazuna.Semantics
+end Tazuna.Service

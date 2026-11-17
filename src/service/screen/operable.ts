@@ -1,6 +1,6 @@
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Fields, Json } from "../../data/values.ts";
-import { isDescendant } from "../../syntax/tree.ts";
+import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { reaches } from "../chart/select.ts";
 import { Failed, issueViolation } from "../functions.ts";

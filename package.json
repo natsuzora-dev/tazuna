@@ -25,7 +25,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./spec": {
+    "./load": {
       "tazuna:source": "./src/load/index.ts",
       "types": "./dist/load/index.d.ts",
       "default": "./dist/load/index.js"

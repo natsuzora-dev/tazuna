@@ -2,7 +2,7 @@ import { type Obligation, type Uncovered, uncovered } from "../../data/uncovered
 import type { Found } from "../../load/found.ts";
 import { charts, type Spec } from "../../load/load.ts";
 import type { Coverage } from "../../sim/spec/coverage.ts";
-import { type TransitionStructure, transitionRef } from "../../syntax/structure.ts";
+import { type TransitionStructure, transitionRef } from "../../spec/structure.ts";
 
 export const check = (spec: Spec, reached: Coverage): Found<Uncovered>[] =>
   charts(spec).flatMap(({ named, structure }) => {

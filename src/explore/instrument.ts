@@ -25,8 +25,8 @@ import type { Note, RegionCheck, RegionPair } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
-import { contractsListing, named } from "../syntax/structure.ts";
-import { type Causes, channelOf, leadsTo, lineSteps } from "./trace.ts";
+import { type Causes, channelOf, leadsTo, lineSteps } from "../sim/trace.ts";
+import { contractsListing, named } from "../spec/structure.ts";
 
 /** Lean's contextKey: the name of a context field, unique across the kinds of value, as recordPartName names parts. */
 export const contextKey = (resource: string, field: string): string => `context:${resource}.${field}`;

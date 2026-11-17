@@ -1,7 +1,7 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import { stateAt } from "../../dsl/chart.ts";
 import type { Automation } from "../../dsl/definition.ts";
-import { rejectionKinds } from "../../syntax/structure.ts";
+import { rejectionKinds } from "../../spec/structure.ts";
 import type { Found } from "../found.ts";
 import { charts, type Spec } from "../load.ts";
 

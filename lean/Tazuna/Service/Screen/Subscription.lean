@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Exit
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -66,4 +66,4 @@ def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : Str
 def refreshScreens [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.resource) s
 
-end Tazuna.Semantics
+end Tazuna.Service

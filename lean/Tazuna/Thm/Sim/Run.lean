@@ -3,7 +3,7 @@ import Tazuna.Thm.Data.Basic
 
 namespace Tazuna.Thm.Sim.Run
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Sim
+open Tazuna.Data Tazuna.Service Tazuna.Sim
 open Tazuna.Thm.Data.Basic
 
 variable {fsOf : String → Functions Id}
@@ -76,14 +76,14 @@ theorem step_then (w : World) (sc : Scenario) (then' : List Scenario.Expectation
     w.step fsOf { sc with expectations := then' } l i = w.step fsOf sc l i := rfl
 
 /-- What Given does with a scenario does not depend on its Then. -/
-theorem given_then (j : Syntax.Structure) (w : World) (sc : Scenario) (then' : List Scenario.Expectation) :
+theorem given_then (j : Spec.Structure) (w : World) (sc : Scenario) (then' : List Scenario.Expectation) :
     w.given j fsOf { sc with expectations := then' } = w.given j fsOf sc := rfl
 
 /--
 Then and the end checks only add reports: the world that `simulate` leaves is the one `walk` leaves, with the same
 traces, messages, and halt, and more reports.
 -/
-theorem simulate_reported (j : Syntax.Structure) (start : World) (sc : Scenario) :
+theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario) :
     Reported (walk j fsOf start sc) (simulate j fsOf start sc) := by
   unfold simulate walk World.walk
   simp only [bind, pure]
@@ -101,7 +101,7 @@ theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (foun
 Then only adds reports: the scenario leaves the same traces, messages, and halt as the scenario without its
 expectations, so a snapshot depends on Given and When alone.
 -/
-theorem then_only_reports (j : Syntax.Structure) (start : World) (sc : Scenario) :
+theorem then_only_reports (j : Spec.Structure) (start : World) (sc : Scenario) :
     Reported (simulate j fsOf start { sc with expectations := [] }) (simulate j fsOf start sc) := by
   unfold simulate
   simp only [bind, pure, given_then]
@@ -285,7 +285,7 @@ theorem keeps_deliverCarried {w w' : World} (h : KeepsInFlight e w w') (i k : Na
   all_goals first | exact keeps_setStatus (keeps_carry h _ _) _ _ hk | exact keeps_deliver (keeps_carry h _ _) _ _ hk
 
 theorem keeps_clientRequest {w w' : World} (h : KeepsInFlight e w w') (i : Nat) (type : Scenario.RequestType)
-    (target : Syntax.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
+    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
     KeepsInFlight e w (w'.clientRequest fsOf i type target input sameIdAs) := by
   unfold World.clientRequest
   simp only [bind, pure]

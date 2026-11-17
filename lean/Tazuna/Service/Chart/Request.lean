@@ -1,7 +1,7 @@
 import Tazuna.Service.Chart.Queue
 import Tazuna.Service.Contract
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -107,4 +107,4 @@ def sendEntered (st : Service) (r : Processing) : m Processing :=
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

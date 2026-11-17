@@ -3,7 +3,7 @@ import Tazuna.Validation.Illegal
 namespace Tazuna.Validation.Charts
 
 open Tazuna.Data
-open Tazuna.Syntax
+open Tazuna.Spec
 
 def parentKeys (c : Chart) : List String :=
   [("input", c.input), ("requires", c.requires), ("output", c.output), ("ensures", c.ensures)].filterMap

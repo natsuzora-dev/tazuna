@@ -8,7 +8,7 @@ place (ChoiceDependent.assignment), as TLA+ checks every value of a nondetermini
 
 namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe
+open Tazuna.Data Tazuna.Service
 open Tazuna.Scenario (Fact)
 
 /-- A group of handles of `requests`: its group (Fact.group?), the line that first names it, and its handles named. -/
@@ -46,7 +46,7 @@ def assignmentsOf : List (HandleGroup × Nat) → List (List (Fact × List Nat))
   | [] => [[]]
   | (g, size) :: rest => (injections size g.handles).flatMap fun a => (assignmentsOf rest).map ((g.group, a) :: ·)
 
-def targetOf : Fact → Syntax.Ref
+def targetOf : Fact → Spec.Ref
   | .requests _ _ target _ _ => target
   | _ => default
 

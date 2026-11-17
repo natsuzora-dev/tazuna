@@ -11,8 +11,8 @@ import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
 import { Halt, write } from "../service/state.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import { contractsListing, refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { contractsListing, refOfTraceName, traceNameOfRef } from "../spec/structure.ts";
 import { given, writtenKey } from "./given.ts";
 import {
   act,

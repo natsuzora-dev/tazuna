@@ -9,7 +9,7 @@ every string that the scenario may write, so a Given record never holds a key th
 
 namespace Tazuna.Thm.Sim.Keys
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Sim
+open Tazuna.Data Tazuna.Service Tazuna.Sim
 open Tazuna.Thm.Service.Keys Tazuna.Thm.Service.KeyGrowth
 open Tazuna.Thm.Data.Basic
 
@@ -225,7 +225,7 @@ theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i k : Na
        · exact keepsWorld_recordSent hv _ _ _)
 
 theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) (type : Scenario.RequestType)
-    (target : Syntax.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
+    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
     KeepsWorld w (w'.clientRequest fsOf i type target input sameIdAs) := by
   unfold World.clientRequest
   simp only [bind, pure]
@@ -327,7 +327,7 @@ theorem keeps_ite_records (c : Bool) (x : State) (rows : Records) :
     KeepsKeys x (if c = true then { x with records := rows } else x) := by
   cases c <;> exact .refl _
 
-theorem keepsWorld_given (w : World) (j : Syntax.Structure) (sc : Scenario) : KeepsWorld w (w.given j fsOf sc) := by
+theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : KeepsWorld w (w.given j fsOf sc) := by
   unfold World.given
   simp only [bind, pure]
   rw [foldlM_id]
@@ -353,7 +353,7 @@ theorem keepsWorld_given (w : World) (j : Syntax.Structure) (sc : Scenario) : Ke
     split <;> exact .refl _
 
 /-- The lines of a scenario keep every participant's createKey values from the start: they may only add to them. -/
-theorem walk_keepsKeys (j : Syntax.Structure) (start : World) (sc : Scenario) :
+theorem walk_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
     KeepsWorld start (walk j fsOf start sc) := by
   unfold walk World.walk
   simp only [bind, pure]
@@ -396,7 +396,7 @@ theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
 No createKey value of a running participant at the end of the lines of a scenario equals a key of a keyed entity that
 the start's writtenKey? lets the scenario write: the participant qualifies its values by its name throughout the run.
 -/
-theorem walk_unwritten_not_created (j : Syntax.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
+theorem walk_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
     (hs : (p, st) ∈ start.services) (ho : (start.state p).keyOwner = some p) {e k : String} (he : e ∈ st.entities)
     (hk : st.singles.contains e = false) (hw : start.writtenKey? (.str k) = none) :
     (e, k) ∉ ((walk j fsOf start sc).state p).created :=

@@ -3,7 +3,7 @@ import Tazuna.Service.Basic
 import Tazuna.Service.Message
 import Tazuna.Service.Limits
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -68,4 +68,4 @@ def evolve (st : Service) (records : Records) (e : Emit) : Option Evolved :=
 def Service.sorted (st : Service) (schema : Schema) (v : Value) : Value :=
   sortCollections (st.schemaOf schema) v
 
-end Tazuna.Semantics
+end Tazuna.Service

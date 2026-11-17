@@ -1,7 +1,7 @@
 import type { Illegal } from "../data/illegal.generated.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import { type ChartStructure, isOpenedByScreen, stateNamed, type TransitionStructure } from "../syntax/structure.ts";
-import { addEntrySet, domainDepth, enterable, entryOrder, historyTargets, kindOf, pathOf } from "../syntax/tree.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { type ChartStructure, isOpenedByScreen, stateNamed, type TransitionStructure } from "../spec/structure.ts";
+import { addEntrySet, domainDepth, enterable, entryOrder, historyTargets, kindOf, pathOf } from "../spec/tree.ts";
 
 function parentKeys(chart: ChartStructure): string[] {
   return (["input", "requires", "output", "ensures"] as const).filter((key) => chart[key].length > 0);

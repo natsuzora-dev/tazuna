@@ -40,7 +40,7 @@ import { canonicalJson, type Json, mapStrings, plain, type Shape, stringsOf } fr
 import { refTarget } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
-import { contractsListing } from "../syntax/structure.ts";
+import { contractsListing } from "../spec/structure.ts";
 import { byLine, type Found, lineSchema } from "./lines.ts";
 
 /** Names the entity of a key reference as `<service>/<name>`, the domain of its values. */

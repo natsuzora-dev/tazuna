@@ -3,12 +3,12 @@ import Tazuna.Thm.Data.Basic
 
 namespace Tazuna.Thm.Service.Contract
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Thm.Data.Basic
 
 variable {st : Service} {fs : Functions Id}
 
-theorem missingRef_iff (records : Records) (input : Value) (refs : List (String × Syntax.Ref)) :
+theorem missingRef_iff (records : Records) (input : Value) (refs : List (String × Spec.Ref)) :
     (missingRef st records input refs).missing = true ↔
       ∃ field r v, (field, r) ∈ refs ∧ r.service = st.service ∧ r.name ∈ st.entities ∧ input.field? field = some v ∧
         v ≠ .null ∧ records.any (fun row => row.entity == r.name && row.key == v.keyString) = false := by

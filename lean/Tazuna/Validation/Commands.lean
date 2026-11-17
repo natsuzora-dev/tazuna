@@ -3,7 +3,7 @@ import Tazuna.Validation.Illegal
 namespace Tazuna.Validation.Commands
 
 open Tazuna.Data
-open Tazuna.Syntax
+open Tazuna.Spec
 
 def foreignEvents (s : Structure) : List Illegal :=
   s.definitions.flatMap fun d =>

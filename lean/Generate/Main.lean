@@ -1,11 +1,11 @@
 import Lean.Elab.Term
 import Tazuna.Data.Names
 import Tazuna.Data.Trace
-import Tazuna.Observe.ChoiceDependent
-import Tazuna.Observe.OrderDependent
+import Tazuna.Explore.ChoiceDependent
+import Tazuna.Explore.OrderDependent
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 import Tazuna.Scenario.Given
 import Tazuna.Sim.Report
 import Tazuna.Validation.Illegal
@@ -40,17 +40,17 @@ def constArray (name : String) (values : List String) : String :=
 
 def tsTypes : List TsType :=
   [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
-   ⟨``Tazuna.Syntax.Ref, "DefinitionRef", some "./definitionRef.ts"⟩,
+   ⟨``Tazuna.Spec.Ref, "DefinitionRef", some "./definitionRef.ts"⟩,
    ⟨``Tazuna.Verify.Subject, "Subject", some "./mismatch.generated.ts"⟩,
    ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Rejection, "Rejection", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Time, "string", none⟩,
-   ⟨``Tazuna.Syntax.TransitionRef, "TransitionRef", some "./transitionRef.ts"⟩,
-   ⟨``Tazuna.Semantics.Copy, "Copy", some "./choiceDependent.generated.ts"⟩,
-   ⟨``Tazuna.Semantics.Who, "Who", some "./choiceDependent.generated.ts"⟩,
-   ⟨``Tazuna.Semantics.StepName, "StepName", some "./choiceDependent.generated.ts"⟩,
-   ⟨``Tazuna.Semantics.Violation, "ViolationValue", some "./violation.ts"⟩,
-   ⟨``Tazuna.Observe.Difference, "Difference", none⟩, ⟨``Tazuna.Observe.Assigned, "Assigned", none⟩]
+   ⟨``Tazuna.Spec.TransitionRef, "TransitionRef", some "./transitionRef.ts"⟩,
+   ⟨``Tazuna.Service.Copy, "Copy", some "./choiceDependent.generated.ts"⟩,
+   ⟨``Tazuna.Service.Who, "Who", some "./choiceDependent.generated.ts"⟩,
+   ⟨``Tazuna.Service.StepName, "StepName", some "./choiceDependent.generated.ts"⟩,
+   ⟨``Tazuna.Service.Violation, "ViolationValue", some "./violation.ts"⟩,
+   ⟨``Tazuna.Explore.Difference, "Difference", none⟩, ⟨``Tazuna.Explore.Assigned, "Assigned", none⟩]
 
 /-- The TS type of a Lean type. The state collects the imports that the TS type needs. -/
 partial def tsType : Expr → StateT (List (String × String)) MetaM String
@@ -111,8 +111,8 @@ def group (type : Name) : StateT (List (String × String)) MetaM String := do
         let ref := match type with
           | .app (.const ``Option _) a => a
           | t => t
-        unless ref.isConstOf ``Tazuna.Syntax.Ref do
-          throwError "{ctor}: the argument definition must have type Syntax.Ref or Option Syntax.Ref"
+        unless ref.isConstOf ``Tazuna.Spec.Ref do
+          throwError "{ctor}: the argument definition must have type Spec.Ref or Option Spec.Ref"
         tsType type
       | none => pure "null"
     let place ← fields.place.mapM fun (n, type) => do pure s!"      readonly {n}: {← tsType type};\n"
@@ -328,28 +328,28 @@ def files : List (String × String) :=
   [("data/illegal.generated.ts", typescript% Tazuna.Validation.Illegal),
    ("data/mismatch.generated.ts", typescript% Tazuna.Verify.Mismatch Tazuna.Verify.Subject),
    ("data/uncomparable.generated.ts", typescript% Tazuna.Verify.Uncomparable),
-   ("data/invalidInput.generated.ts", typescript% Tazuna.Semantics.InvalidInput ++
-      halting "InvalidInput" (((samples% Tazuna.Semantics.InvalidInput).filter (·.halts)).map (·.kind))),
+   ("data/invalidInput.generated.ts", typescript% Tazuna.Service.InvalidInput ++
+      halting "InvalidInput" (((samples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
    ("data/report.generated.ts", typescript% Tazuna.Sim.Report ++
       halting "Report" (((samples% Tazuna.Sim.Report).filter (·.halts)).map (·.kind))),
    ("data/scenario.generated.ts",
-    zod% Tazuna.Scenario Tazuna.Syntax.Ref Tazuna.Scenario.Origin
+    zod% Tazuna.Scenario Tazuna.Spec.Ref Tazuna.Scenario.Origin
       Tazuna.Scenario.Fact Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
       Tazuna.Scenario.Line Tazuna.Scenario.SentRequest Tazuna.Scenario.EmittedEvent
       Tazuna.Scenario.Expectation Tazuna.Scenario.GivenRecord Tazuna.Scenario.Peer Tazuna.Scenario.PeerEntry
       Tazuna.Scenario.Given),
-   ("data/fault.generated.ts", typescript% Tazuna.Semantics.Fault ++
-      halting "Fault" (((samples% Tazuna.Semantics.Fault).filter (·.halts)).map (·.kind))),
-   ("data/orderDependent.generated.ts", typescript% Tazuna.Observe.OrderDependent),
+   ("data/fault.generated.ts", typescript% Tazuna.Service.Fault ++
+      halting "Fault" (((samples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
+   ("data/orderDependent.generated.ts", typescript% Tazuna.Explore.OrderDependent),
    ("data/choiceDependent.generated.ts",
-    typescript% Tazuna.Observe.ChoiceDependent Tazuna.Semantics.Copy Tazuna.Semantics.Who Tazuna.Semantics.StepName
-      Tazuna.Observe.Difference Tazuna.Observe.Assigned),
+    typescript% Tazuna.Explore.ChoiceDependent Tazuna.Service.Copy Tazuna.Service.Who Tazuna.Service.StepName
+      Tazuna.Explore.Difference Tazuna.Explore.Assigned),
    ("data/trace.generated.ts",
     zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer),
-   ("syntax/structure.generated.ts",
-    zodType% Tazuna.Syntax.Structure Tazuna.Data.RejectionKind Tazuna.Syntax.Ref Tazuna.Syntax.Activity
-      Tazuna.Syntax.Transition Tazuna.Syntax.State Tazuna.Syntax.ChartFields Tazuna.Syntax.Reference
-      Tazuna.Syntax.Definition Tazuna.Syntax.Contract Tazuna.Syntax.ServiceInfo)]
+   ("spec/structure.generated.ts",
+    zodType% Tazuna.Spec.Structure Tazuna.Data.RejectionKind Tazuna.Spec.Ref Tazuna.Spec.Activity
+      Tazuna.Spec.Transition Tazuna.Spec.State Tazuna.Spec.ChartFields Tazuna.Spec.Reference
+      Tazuna.Spec.Definition Tazuna.Spec.Contract Tazuna.Spec.ServiceInfo)]
 
 /--
 The entry point. Without `--write`, it exits 1 when a file differs from the Lean definitions or is missing, and writes

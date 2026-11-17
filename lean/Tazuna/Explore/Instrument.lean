@@ -1,6 +1,6 @@
 import Tazuna.Service.Restart
-import Tazuna.Observe.OrderDependent
-import Tazuna.Observe.Trace
+import Tazuna.Explore.OrderDependent
+import Tazuna.Sim.Trace
 import Tazuna.Data.Binding
 
 /-!
@@ -9,9 +9,9 @@ that each step and transition reads and writes, and checks whether the answers o
 which a Bag visits its values. TS records reads as functions read records.
 -/
 
-namespace Tazuna.Observe
+namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service Tazuna.Sim
 
 /-- The name of a context field, unique across the kinds of value, as RecordPart.name names record parts. -/
 def contextKey (resource field : String) : String := s!"context:{resource}.{field}"
@@ -108,7 +108,7 @@ structure TransitionAccess where
   writes : List (String × String) := []
 deriving Repr, Inhabited
 
-def regionFindings (chart : Syntax.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List OrderDependent :=
+def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List OrderDependent :=
   let a := access p.first
   let b := access p.second
   (b.writes.filterMap fun v =>
@@ -141,7 +141,7 @@ def overlaps (a b : Footprint) : Bool :=
 
 structure Collect where
   /-- The definitions already reported by orderAudit. -/
-  reportedOrder : List Syntax.Ref := []
+  reportedOrder : List Spec.Ref := []
   transition : Option Nat := none
   transitions : List (Nat × TransitionAccess) := []
   /-- For each step that began and has not ended, innermost first, the instance or copy that it starts. -/
@@ -164,7 +164,7 @@ structure InstrumentFunctions (m : Type → Type) where
   lastEnumerated : m Bool
   reversed : Functions m
 
-def Collect.reportOrder (c : Collect) (definition : Syntax.Ref) (v : Violation) : Collect :=
+def Collect.reportOrder (c : Collect) (definition : Spec.Ref) (v : Violation) : Collect :=
   { c with reportedOrder := c.reportedOrder ++ [definition], violations := c.violations ++ [v] }
 
 def Collect.accessOf (c : Collect) (k : Nat) : TransitionAccess := (c.transitions.lookup k).getD {}
@@ -234,7 +234,7 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
     | n => { c with causes := c.causes.notice n }
 
 /-- The functions that ask `fs` and carry each answer into `n` by `f`. -/
-def _root_.Tazuna.Semantics.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where
+def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where
   parse a b := f (fs.parse a b)
   canonical a b := f (fs.canonical a b)
   unordered a b := f (fs.unordered a b)
@@ -279,7 +279,7 @@ def observe {α : Type} (x : m α) (f : α → StateT Collect m Unit) : StateT C
   f r
   pure r
 
-def reportOrder (definition : Syntax.Ref) (found : OrderDependent) : StateT Collect m Unit :=
+def reportOrder (definition : Spec.Ref) (found : OrderDependent) : StateT Collect m Unit :=
   modify (·.reportOrder definition found.toViolation)
 
 /--
@@ -288,7 +288,7 @@ OrderDependent.reversedException when an Issue stops it, or OrderDependent.rever
 from `original`. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
 answer that depends on the order only as the reversal keeps it, such as on the middle of three values, is not reported.
 -/
-def orderAudit {ε α : Type} (definition : Syntax.Ref) (function : String) (original : α) (again : m (Except ε α))
+def orderAudit {ε α : Type} (definition : Spec.Ref) (function : String) (original : α) (again : m (Except ε α))
     (same : α → α → Bool) : StateT Collect m Unit := do
   if definition ∈ (← get).reportedOrder then return
   match ← again with
@@ -300,7 +300,7 @@ Runs `collect` after the call of `call` that answered `r`, and audits the answer
 enumerated a Bag. An Issue needs no audit: the run halts with its Fault, which names the definition whatever the order,
 and the message of a thrown error, which may name the value visited first, is TS's alone and is never compared.
 -/
-def auditCollect {ε α : Type} (collect : StateT Collect m Unit) (definition : Syntax.Ref) (function : String)
+def auditCollect {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
     (call : Functions m → m (Except ε α)) (same : α → α → Bool) (r : Except ε α) : StateT Collect m Unit := do
   collect
   if let .ok answer := r then
@@ -378,7 +378,7 @@ spec functions that read records or values. The service invariants are not audit
 for a report to name.
 -/
 def instrument : Functions (StateT Collect m) :=
-  let audit {ε α : Type} (collect : StateT Collect m Unit) (definition : Syntax.Ref) (function : String)
+  let audit {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
       (call : Functions m → m (Except ε α)) (same : α → α → Bool) :=
     observe (call fs) (auditCollect ifs collect definition function call same)
   let collect (scope : Option Scope) := stepCollect ifs scope
@@ -447,12 +447,6 @@ def comparedEvent (st : Service) (l : Line) : Bool :=
     | none => false
   | _ => false
 
-def Channel.key : Channel → String
-  | .request id => s!"request {id}"
-  | .answers to => s!"answers {to}"
-  | .events (some resultOf) => s!"events {resultOf}"
-  | .events none => "events"
-
 /--
 The channels that the compared event lines of a run write, each with the step of `c.steps` that wrote it: the last that
 began at or before the line's writer, since nested steps are spans of their outer step.
@@ -474,7 +468,7 @@ def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × String
 The footprint of what step `n` stands for when the search swaps its order (one independence relation for every choice
 of order): a deadline of a tie stands for every step of its own message, since its effects run in the later steps of
 that message, and any other step for itself. Each channel that those steps wrote (channelWrites) is a write, since one
-channel keeps its order (Observe.ordered). Keys that the steps create are not in it, since test compares outcomes up
+channel keeps its order (Sim.ordered). Keys that the steps create are not in it, since test compares outcomes up
 to a renaming of created keys.
 -/
 def involved (s : State) (c : Collect) (channels : List (Nat × String)) (n : Nat) (a : StepAccess) : Footprint :=
@@ -518,4 +512,4 @@ def reportedViolations (s : State) (c : Collect) (stopped : Option Violation) : 
 
 end
 
-end Tazuna.Observe
+end Tazuna.Explore

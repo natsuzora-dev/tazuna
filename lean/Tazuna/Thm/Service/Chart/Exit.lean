@@ -3,9 +3,9 @@ import Tazuna.Thm.Service.Chart.Queue
 
 namespace Tazuna.Thm.Service.Chart.Exit
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Syntax (Tree)
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic
+open Tazuna.Data Tazuna.Service
+open Tazuna.Spec (Tree)
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic
 
 variable {st : Service} {fs : Functions Id} {s : State}
 

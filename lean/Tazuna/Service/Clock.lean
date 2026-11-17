@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Macrostep
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -50,4 +50,4 @@ def chooseDeadline (st : Service) (s : State) (first : Deadline) (due : List Dea
     | none => .error (.unreadyStep named (due.map (s.deadlineStep st)))
   | [] => .ok (first, s)
 
-end Tazuna.Semantics
+end Tazuna.Service

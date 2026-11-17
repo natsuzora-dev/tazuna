@@ -14,7 +14,7 @@ they cause are processed. No cause orders the work and commands waiting at one t
 any of them first (Queue.take).
 -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -269,4 +269,4 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
         let r ← screens.foldlM (fun r name => settleScreen st fs name r) ⟨refreshed, q⟩
         drain st fs fuel r.state r.queue
 
-end Tazuna.Semantics
+end Tazuna.Service

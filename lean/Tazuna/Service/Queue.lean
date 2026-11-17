@@ -7,7 +7,7 @@ Each message runs to completion: the service processes external messages one at 
 own message.
 -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -85,4 +85,4 @@ def message [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   let s ← drain st fs Limit.messageWork.max s q
   finish st fs s
 
-end Tazuna.Semantics
+end Tazuna.Service

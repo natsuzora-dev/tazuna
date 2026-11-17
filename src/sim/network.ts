@@ -10,7 +10,7 @@ import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
-import { isKeyOf, refOfTraceName } from "../syntax/structure.ts";
+import { isKeyOf, refOfTraceName } from "../spec/structure.ts";
 import { arriveFrom, nameIn, receivedId, senderOf } from "./participant.ts";
 
 /** Lean's Role. */

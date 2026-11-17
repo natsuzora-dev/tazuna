@@ -3,7 +3,7 @@ import Tazuna.Thm.Service.Input
 
 namespace Tazuna.Thm.Service.Restart
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Thm.Service.Records Tazuna.Thm.Service.Input
 
 variable {st : Service} {fs : Functions Id} {s t : State}

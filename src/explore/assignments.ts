@@ -5,11 +5,11 @@ import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, withExtra } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
-import { assignment, assignmentLimit } from "../observe/choiceDependent.ts";
 import type { Assignment } from "../sim/network.ts";
 import { groupOf, Reported, requestsOf } from "../sim/resolve.ts";
 import { expectationLine, expectationNamed, lineNamed } from "../sim/run.ts";
 import { type Made, walkSpec } from "../sim/spec/simulate.ts";
+import { assignment, assignmentLimit } from "./choiceDependent.ts";
 import { compareOf, outcomeFor } from "./stepOrders.ts";
 
 /** Lean's HandleGroup. */

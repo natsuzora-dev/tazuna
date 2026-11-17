@@ -4,8 +4,8 @@ import Tazuna.Thm.Service.Functions
 
 namespace Tazuna.Thm.Service.Chart.Select
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Functions Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape
+open Tazuna.Data Tazuna.Service
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Functions Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape
   Tazuna.Thm.Service.Chart.Basic
 
 variable {st : Service} {fs : Functions Id} {s : State}

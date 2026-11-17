@@ -11,7 +11,6 @@ import { pairingProblem, pairTraces, traceFolderOf } from "./pairing.ts";
 import { hasSnapshot, type SnapshotRun, snapshotRuns } from "./snapshot.ts";
 
 export type { GivenRecord } from "../data/scenario.generated.ts";
-export { drive, lineIds, type Run } from "./harness.ts";
 export {
   type Adapter,
   commandRequest,
@@ -22,7 +21,8 @@ export {
   type Outputs,
   queryRequest,
   Unsettled,
-} from "./ports.ts";
+} from "./adapter.ts";
+export { drive, lineIds, type Run } from "./harness.ts";
 
 /**
  * Compares the traces in `folder`, which `drive` wrote, with the snapshots without running the spec, and checks each

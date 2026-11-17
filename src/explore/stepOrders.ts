@@ -4,13 +4,13 @@ import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
-import { type Compare, type Outcome, outcomeOf, stepOrder, stepOrderLimit } from "../observe/choiceDependent.ts";
-import { leadsTo } from "../observe/trace.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import { created } from "../service/state.ts";
 import type { Span, StepOrder } from "../sim/network.ts";
 import { type Made, snapshotsOf, walkSpec } from "../sim/spec/simulate.ts";
+import { leadsTo } from "../sim/trace.ts";
 import { compareTrace } from "../verify/compare.ts";
+import { type Compare, type Outcome, outcomeOf, stepOrder, stepOrderLimit } from "./choiceDependent.ts";
 
 /** Lean's Tried: a step order that the search ran, refused (Walk.refused) or with the violation found, if any. */
 export type Tried =

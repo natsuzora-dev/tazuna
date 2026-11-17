@@ -18,7 +18,7 @@ inductive Line where
   A request to `target`'s service from the client, which reaches its running receiver directly, or from the peer
   `peer`, in flight. With `sameIdAs`, the client's request has the id of the request of that line.
   -/
-  | request (peer : Option String) (kind : RequestType) (target : Syntax.Ref) (input : Template)
+  | request (peer : Option String) (kind : RequestType) (target : Spec.Ref) (input : Template)
       (sameIdAs : Option Nat)
   /--
   The end of the subscription that line `subscription` opened: from the client, which reaches its receiver directly, or
@@ -40,7 +40,7 @@ inductive Line where
   The peer `peer` emits `event`, the result of the request `resultOf` or of none, to every running service that
   receives it.
   -/
-  | emit (peer : String) (event : Syntax.Ref) (payload : Template) (resultOf : Option Fact)
+  | emit (peer : String) (event : Spec.Ref) (payload : Template) (resultOf : Option Fact)
   /-- The external peer `peer` never answers the request `request`, which it received. -/
   | leaveUnanswered (peer : String) (request : Fact)
   /-- The network delivers the message `message` to its receiver. -/

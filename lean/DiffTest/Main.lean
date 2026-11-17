@@ -7,14 +7,14 @@ import Tazuna.Sim.Run
 /-!
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).
 
-Semantics asks TS for a spec function's value whenever it needs one. While computing it, TS sends `read` for each record
+Service asks TS for a spec function's value whenever it needs one. While computing it, TS sends `read` for each record
 a TS function reads; Lean serves the value from its own records and remembers the parts read, which Instrument records
 in the accesses of steps. Within one run tree, Lean reuses the reply that TS gave to the same question when the values
 that Lean serves for the reads that TS made then are the same now: a TS reply depends only on the question and those
 values.
 -/
 
-open Tazuna Tazuna.Data Tazuna.Semantics Tazuna.Observe Tazuna.Explore Tazuna.Json
+open Tazuna Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Json
 
 structure Log where
   parts : List RecordPart := []
@@ -255,7 +255,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       pure (← field r "output", ← (optional r "failed").mapM FromValue.fromValue))
 
 /-- The comparable value that verify reads, which TS computes. -/
-def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Syntax.Definition) (part : Verify.Part)
+def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Spec.Definition) (part : Verify.Part)
     (value : Value) : IO CValue := do
   let { reply, .. } ← exchange stdin stdout reads [] []
     (.obj ([("type", .str "comparableValue"),
@@ -267,8 +267,8 @@ def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Syntax.Defi
 The first violation, by line, that verify finds in `actual` with `expected` as the snapshot, as TS `compareTrace`
 returns.
 -/
-def compareOf (spec : Syntax.Structure) (service : String)
-    (ask : Syntax.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun expected actual => do
+def compareOf (spec : Spec.Structure) (service : String)
+    (ask : Spec.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun expected actual => do
   let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line)
   let numbered := compared.findings.map fun f =>
     let v : Violation := match f with
@@ -281,7 +281,7 @@ def compareOf (spec : Syntax.Structure) (service : String)
 
 /-- The reply to request `check`, which takes a structure and returns the Illegal violations. -/
 def check (request : Value) : Except String Value := do
-  let s : Syntax.Structure ← FromValue.fromValue (← field request "structure")
+  let s : Spec.Structure ← FromValue.fromValue (← field request "structure")
   pure (.obj [("type", .str "checked"), ("findings", .arr ((Validation.check s).map Validation.Illegal.toValue))])
 
 /--
@@ -291,7 +291,7 @@ binding of the set that it ends with. TS computes
 `comparableValue` for each value.
 -/
 def verify (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
-  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
+  let spec : Spec.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
   let service ← IO.ofExcept (stringField request "service")
   let snapshot ← IO.ofExcept do
     (← asList (← field request "snapshot")).mapM fun l =>
@@ -356,8 +356,8 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (Strin
       (instrument st fs ifs).hoist (focus service)
 
 /-- The scenario of a request, with the start of its world and the step orders that it names. -/
-def worldOf (request : Value) : IO (Syntax.Structure × Scenario × Sim.World) := do
-  let spec : Syntax.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
+def worldOf (request : Value) : IO (Spec.Structure × Scenario × Sim.World) := do
+  let spec : Spec.Structure ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "structure")))
   let sc : Scenario ← IO.ofExcept (FromValue.fromValue (← IO.ofExcept (field request "scenario")))
   let stepOrders ← match request.field? "stepOrders" with
     | none => pure []
@@ -385,7 +385,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (request : Value) : IO Value :
     let c := acting.collect service
     let enabled ← match walking, s.halted, w.services.lookup service with
       | true, none, some st => do
-        match ← Observe.enabled st (fsOf service) s with
+        match ← Explore.enabled st (fsOf service) s with
         | .ok e => pure [("enabled", Tazuna.Json.Enabled.toValue e)]
         | .error f => pure [("enabled", .obj [("fault", ToValue.toValue (Finding.fault f).toViolation)])]
       | _, _, _ => pure []

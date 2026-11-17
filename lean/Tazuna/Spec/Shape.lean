@@ -1,6 +1,6 @@
 import Tazuna.Data.Wire
 
-namespace Tazuna.Syntax
+namespace Tazuna.Spec
 
 open Tazuna.Data
 
@@ -100,4 +100,4 @@ theorem stateTree_of_chartTree {shapes : List Shape} {initial : String} {rootTar
   simp only [chartTree, Bool.and_eq_true] at h
   exact h.1
 
-end Tazuna.Syntax
+end Tazuna.Spec

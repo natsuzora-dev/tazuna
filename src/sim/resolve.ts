@@ -6,7 +6,7 @@ import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../dat
 import { refOf, type Schema } from "../service/basic.ts";
 import { Failed } from "../service/functions.ts";
 import { created } from "../service/state.ts";
-import { refOfTraceName } from "../syntax/structure.ts";
+import { refOfTraceName } from "../spec/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
 import { nameIn } from "./participant.ts";
 

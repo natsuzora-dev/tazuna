@@ -30,7 +30,7 @@ import {
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
-import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/syntax/structure.ts";
+import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/spec/structure.ts";
 import { refEntityOf } from "../../src/verify/compare.ts";
 import type { Message } from "./lean.ts";
 

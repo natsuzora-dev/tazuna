@@ -3,7 +3,7 @@ import Tazuna.Service.Chart.Deadline
 import Tazuna.Service.Chart.Request
 import Tazuna.Service.Note
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -124,4 +124,4 @@ def microstep (st : Service) (step : Nat) (name : String) (chosen : List (String
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

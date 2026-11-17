@@ -1,5 +1,5 @@
 import Tazuna.Data.Group
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 import Tazuna.Verify.Mismatch
 
 namespace Tazuna.Verify
@@ -21,8 +21,8 @@ inductive Uncomparable where
   /-- The answer line names no earlier request line. -/
   | unknownAnswer (line : Nat) (subject : Subject)
   | unknownEvent (line : Nat) (subject : Subject)
-  | resultOfUnknownRequest (line : Nat) (event : Syntax.Ref) (requestId : String)
-  | resultOfNonCommand (line : Nat) (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
+  | resultOfUnknownRequest (line : Nat) (event : Spec.Ref) (requestId : String)
+  | resultOfNonCommand (line : Nat) (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
   /-- An id of the line's `after` names no earlier `out` line of its group. -/
   | unknownAfter (line : Nat) (lineId : String)
   /-- The trace has an `in` line where the snapshot has none. -/
@@ -44,10 +44,10 @@ inductive Uncomparable where
   | bindingLimit (line : Nat) (subject : Subject) (snapshotLine : Nat) (limit : Nat)
   | unknownService (service : String)
   /-- A trace is named for no scenario of the service. -/
-  | unknownScenario (scenario : Syntax.Ref)
-  | missingTrace (scenario : Syntax.Ref)
+  | unknownScenario (scenario : Spec.Ref)
+  | missingTrace (scenario : Spec.Ref)
   | unknownTraceEntry
-  | missingSnapshot (scenario : Syntax.Ref)
+  | missingSnapshot (scenario : Spec.Ref)
   /-- A snapshot is named for no scenario of the service. -/
   | obsoleteSnapshot
   | unknownSnapshotEntry

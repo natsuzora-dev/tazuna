@@ -1,7 +1,7 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Illegal } from "../data/illegal.generated.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import { emitsOf } from "../syntax/structure.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { emitsOf } from "../spec/structure.ts";
 
 interface Automation {
   /** The position among the automations that send a command to their own service, in definition order. */

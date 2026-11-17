@@ -1,9 +1,9 @@
 import Tazuna.Data.List
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
-open Tazuna.Data Tazuna.Syntax
+open Tazuna.Data Tazuna.Spec
 
 /--
 A transition of a chart. `source` is the declaring state, or `none` for the machine's own `on`. `source`, `keys`, and
@@ -58,7 +58,7 @@ structure ChartState where
   /-- The activities in the order calls, sends, shows, opens. -/
   activities : List Activity
   transitions : List Transition
-  offers : List (String × Syntax.Offer) := []
+  offers : List (String × Spec.Offer) := []
 deriving Repr, Inhabited
 
 def ChartState.shape (st : ChartState) : Shape :=
@@ -79,7 +79,7 @@ structure Chart where
   screen : Bool := false
   /-- Whether another screen's opens opens the chart. -/
   opened : Bool := false
-  offers : List (String × Syntax.Offer) := []
+  offers : List (String × Spec.Offer) := []
   controls : List Control := []
 deriving Repr
 
@@ -107,13 +107,13 @@ theorem find?_shape (n : String) : c.tree.state? n = (c.state? n).map (·.shape)
 
 end Chart
 
-end Tazuna.Semantics
+end Tazuna.Service
 
-namespace Tazuna.Syntax
+namespace Tazuna.Spec
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
-def Transition.toExec (t : Transition) : Semantics.Transition :=
+def Transition.toExec (t : Transition) : Service.Transition :=
   { source := t.source, keys := t.keys, index := t.index, target := t.target, guarded := t.guarded,
     reenter := t.reenters }
 
@@ -123,7 +123,7 @@ theorem Transition.targets_toExec (ts : List Transition) :
   rfl
 
 /-- The executable form of an activity. Only a sends to the activity's own service is `own`. -/
-def Activity.toExec (service : String) : Activity → Except String Semantics.Activity
+def Activity.toExec (service : String) : Activity → Except String Service.Activity
   | .calls key (some r) =>
     pure { keyword := "calls", key, target := r.traceName service, service := r.service, name := r.name, own := false }
   | .sends key (some r) =>
@@ -139,7 +139,7 @@ def Activity.toExec (service : String) : Activity → Except String Semantics.Ac
 
 /-- The executable form of a chart. -/
 def Chart.toExec (c : Chart) (service name : String) (order : Nat) (screen opened : Bool) :
-    Except String Semantics.Chart := do
+    Except String Service.Chart := do
   let toState (st : State) : Except String ChartState := do
     pure { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
            children := st.children, activities := ← st.activities.mapM (Activity.toExec service),
@@ -164,4 +164,4 @@ def Chart.toExec (c : Chart) (service name : String) (order : Nat) (screen opene
          controls := c.controls.map fun (n, payload) =>
            { name := n, hasPayload := payload.any fun schema => !(schemaProperties schema).isEmpty } }
 
-end Tazuna.Syntax
+end Tazuna.Spec

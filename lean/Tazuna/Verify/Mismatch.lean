@@ -1,7 +1,7 @@
 import Tazuna.Data.Answer
 import Tazuna.Data.Group
 import Tazuna.Data.Trace
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
 namespace Tazuna.Verify
 
@@ -51,15 +51,15 @@ inductive Mismatch where
   /-- The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. -/
   | line (line : Nat) (snapshot trace : Option Value)
   /-- No contract of another service lists the event that the external service emits. -/
-  | unlistedEvent (line : Nat) (event : Syntax.Ref)
-  | resultOfUnacceptedRequest (line : Nat) (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
-  | resultOfUnlistedEvent (line : Nat) (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
-  | unlistedRejectionKind (line : Nat) (requestId : String) (target : Syntax.Ref) (rejection : Rejection)
-  | rejectedAssumedRequires (line : Nat) (requestId : String) (target : Syntax.Ref)
-  | failedAssumedRequires (line : Nat) (requestId : String) (target : Syntax.Ref) (condition : String)
-  | failedAssumedEnsures (line : Nat) (requestId : String) (target : Syntax.Ref) (condition : String)
-  | answerOutputSchema (line : Nat) (requestId : String) (target : Syntax.Ref)
-  | eventPayloadSchema (line : Nat) (event : Syntax.Ref)
+  | unlistedEvent (line : Nat) (event : Spec.Ref)
+  | resultOfUnacceptedRequest (line : Nat) (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
+  | resultOfUnlistedEvent (line : Nat) (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
+  | unlistedRejectionKind (line : Nat) (requestId : String) (target : Spec.Ref) (rejection : Rejection)
+  | rejectedAssumedRequires (line : Nat) (requestId : String) (target : Spec.Ref)
+  | failedAssumedRequires (line : Nat) (requestId : String) (target : Spec.Ref) (condition : String)
+  | failedAssumedEnsures (line : Nat) (requestId : String) (target : Spec.Ref) (condition : String)
+  | answerOutputSchema (line : Nat) (requestId : String) (target : Spec.Ref)
+  | eventPayloadSchema (line : Nat) (event : Spec.Ref)
 
 derive_group Mismatch
 

@@ -2,15 +2,15 @@ import type { Report } from "../../data/report.generated.ts";
 import type { GivenRecord, Scenario } from "../../data/scenario.generated.ts";
 import type { TraceLine } from "../../data/trace.generated.ts";
 import type { Violation } from "../../data/violation.ts";
+import { Collect } from "../../explore/instrument.ts";
 import type { Spec } from "../../load/load.ts";
-import { Collect } from "../../observe/instrument.ts";
-import { snapshotLines } from "../../observe/trace.ts";
 import type { Processing } from "../../service/chart/queue.ts";
 import { created } from "../../service/state.ts";
-import type { Structure } from "../../syntax/structure.generated.ts";
+import type { Structure } from "../../spec/structure.generated.ts";
 import { encodedGivenRecords, start } from "../given.ts";
 import type { Assignment, StepOrder, World } from "../network.ts";
 import { simulate, walk } from "../run.ts";
+import { snapshotLines } from "../trace.ts";
 import { instrumented, Listener } from "./listener.ts";
 import { newProcessing } from "./processing.ts";
 

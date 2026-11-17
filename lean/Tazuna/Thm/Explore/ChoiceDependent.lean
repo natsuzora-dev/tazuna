@@ -1,12 +1,12 @@
-import Tazuna.Observe.ChoiceDependent
+import Tazuna.Explore.ChoiceDependent
 
-namespace Tazuna.Thm.Observe.ChoiceDependent
+namespace Tazuna.Thm.Explore.ChoiceDependent
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe
+open Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Sim
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] (compare : Compare m)
 
-theorem difference_same (o : Observe.Outcome) (set : List Binding) (h : compare o.lines o.lines = pure (.ok set))
+theorem difference_same (o : Explore.Outcome) (set : List Binding) (h : compare o.lines o.lines = pure (.ok set))
     (hr : sameRecords set o o = true) :
     difference compare o o = pure none := by
   unfold difference
@@ -14,7 +14,7 @@ theorem difference_same (o : Observe.Outcome) (set : List Binding) (h : compare 
   · simp
   · simp [h, hr]
 
-theorem stepOrder_swap (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Observe.Outcome)
+theorem stepOrder_swap (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Explore.Outcome)
     (h : (ToValue.toValue a).canonical ≠ (ToValue.toValue b).canonical) :
     stepOrder compare a b aOrder bOrder aFirst bFirst = stepOrder compare b a bOrder aOrder bFirst aFirst := by
   unfold stepOrder
@@ -26,7 +26,7 @@ theorem stepOrder_swap (a b : StepName) (aOrder bOrder : List StepName) (aFirst 
       (String.le_total _ _).resolve_left hab
     simp [hab, hba]
 
-theorem stepOrder_of_no_difference (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Observe.Outcome)
+theorem stepOrder_of_no_difference (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Explore.Outcome)
     (ha : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical → difference compare aFirst bFirst = pure none)
     (hb : ¬ (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical →
       difference compare bFirst aFirst = pure none) :
@@ -36,4 +36,4 @@ theorem stepOrder_of_no_difference (a b : StepName) (aOrder bOrder : List StepNa
   · simp [h, ha h]
   · simp [h, hb h]
 
-end Tazuna.Thm.Observe.ChoiceDependent
+end Tazuna.Thm.Explore.ChoiceDependent

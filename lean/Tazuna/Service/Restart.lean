@@ -1,6 +1,6 @@
 import Tazuna.Service.Input
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -23,4 +23,4 @@ as at the first input. Answers to the requests of the stopped process find no wa
 def restart [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   begin st fs (s.write .in none .restart).1.stop
 
-end Tazuna.Semantics
+end Tazuna.Service

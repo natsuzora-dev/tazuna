@@ -1,5 +1,5 @@
 import type { Fields } from "../../data/values.ts";
-import { exitOrder, recordedChildren } from "../../syntax/tree.ts";
+import { exitOrder, recordedChildren } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Assignment, Failed, issueViolation } from "../functions.ts";
 import { limits } from "../limits.ts";

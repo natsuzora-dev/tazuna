@@ -3,7 +3,7 @@ import Tazuna.Service.Screen.Operable
 
 /-! Each input is one message, which the service processes to completion. -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -63,7 +63,7 @@ def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s
     else s.report (.invalidInput (.unopenedSubscription id))
   message st fs s.newMessage {}
 
-def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref) : Syntax.ResultOfMismatch → Finding
+def resultOfFinding (event : Spec.Ref) (requestId : String) (target : Spec.Ref) : Spec.ResultOfMismatch → Finding
   | .resultOfNonCommand => .invalidInput (.resultOfNonCommand event requestId target)
   | .resultOfUnacceptedRequest => .invalidInput (.resultOfUnacceptedRequest event requestId target)
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
@@ -135,15 +135,15 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
       let (s, request) := withResultOf st s name resultOf
       if s.halted.isSome then pure s else deliver st fs s name givenId payload request
 
-def assumptionFinding (requestId : String) (target : Syntax.Ref) : Syntax.AssumptionMismatch → Finding
+def assumptionFinding (requestId : String) (target : Spec.Ref) : Spec.AssumptionMismatch → Finding
   | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)
   | .failedAssumedRequires c => .invalidInput (.failedAssumedRequires requestId target c)
   | .failedAssumedEnsures c => .invalidInput (.failedAssumedEnsures requestId target c)
 
-/-- The assumption that an answer to the request `requestId` to `target` breaks (Syntax.assumptionMismatch). -/
-def brokenAssumption (requestId : String) (target : Syntax.Ref) (answer : Answer)
+/-- The assumption that an answer to the request `requestId` to `target` breaks (Spec.assumptionMismatch). -/
+def brokenAssumption (requestId : String) (target : Spec.Ref) (answer : Answer)
     (failedRequires failedEnsures : Option String) : Option Finding :=
-  (Syntax.assumptionMismatch answer failedRequires failedEnsures).map (assumptionFinding requestId target)
+  (Spec.assumptionMismatch answer failedRequires failedEnsures).map (assumptionFinding requestId target)
 
 /--
 The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported without halting.
@@ -280,4 +280,4 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
         message st fs r.state r.queue
       | .ok (.error r) => pure (s.report (r.finding st screen control decoded))
 
-end Tazuna.Semantics
+end Tazuna.Service

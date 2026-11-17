@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { loadSpec, type Spec } from "../src/load/load.ts";
-import { type ChartStructure, chartStructure, stateNamed } from "../src/syntax/structure.ts";
-import { isDescendant, parallelBetween } from "../src/syntax/tree.ts";
+import { type ChartStructure, chartStructure, stateNamed } from "../src/spec/structure.ts";
+import { isDescendant, parallelBetween } from "../src/spec/tree.ts";
 import { serviceRoot } from "./examples.ts";
 
 const subject = (path: string) => loadSpec(join(serviceRoot, path));

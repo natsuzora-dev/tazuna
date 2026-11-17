@@ -5,9 +5,9 @@ import Tazuna.Thm.Service.Functions
 
 namespace Tazuna.Thm.Service.State
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Syntax (plainName)
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Functions
+open Tazuna.Data Tazuna.Service
+open Tazuna.Spec (plainName)
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Functions
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
@@ -21,7 +21,7 @@ structure Fixed where
   started : Bool
   takenAnswers : List (String × Pending × Answer)
 
-def _root_.Tazuna.Semantics.State.fixed (s : State) : Fixed :=
+def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
   ⟨s.commandAnswers, s.records, s.now, s.started, s.takenAnswers⟩
 
 @[simp] theorem write_fixed (d : Dir) (g : Option String) (b : LineBody) :
@@ -230,7 +230,7 @@ theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t 
   | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h]
 
 /-- The parts of a state that a message never changes. -/
-def _root_.Tazuna.Semantics.State.clock (s : State) : CommandAnswers × Time := (s.commandAnswers, s.now)
+def _root_.Tazuna.Service.State.clock (s : State) : CommandAnswers × Time := (s.commandAnswers, s.now)
 
 theorem emitAll_clock (t : State) (r : Option String) (es : List Emit) : (t.emitAll r es).clock = t.clock := by
   have h := emitAll_fixed (s := t) r es

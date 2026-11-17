@@ -2,7 +2,7 @@ import type { Bag } from "../data/bag.ts";
 import type { Delay } from "../data/datetime.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
-import { definitionKinds } from "../syntax/structure.ts";
+import { definitionKinds } from "../spec/structure.ts";
 import type { Conditions } from "./conditions.ts";
 import type { AnyEntity, AnyKeyedEntity, Entities, KeyOf, KeyValue, MadeRow, Ref, Row, RowOf } from "./entity.ts";
 

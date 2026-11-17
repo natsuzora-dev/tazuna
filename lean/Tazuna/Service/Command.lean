@@ -1,7 +1,7 @@
 import Tazuna.Service.Contract
 import Tazuna.Service.Integrity
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -106,4 +106,4 @@ def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
     pure (s.emitAll id groups.flatten, .accepted none, groups.flatten)
   | .halted violations => pure (s.reportAll violations, outcome.answer, [])
 
-end Tazuna.Semantics
+end Tazuna.Service

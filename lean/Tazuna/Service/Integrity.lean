@@ -6,7 +6,7 @@ events (like SQL DEFERRABLE INITIALLY DEFERRED constraints); entity and service 
 a command (like JML visible-state semantics and Event-B invariants); and ref targets.
 -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -38,7 +38,7 @@ def applyAll (st : Service) (records : Records) (emits : List Emit) : Records :=
 
 variable {m : Type → Type}
 
-def Row.failedInvariant (st : Service) (row : Row) (condition : String) (command : Syntax.Ref) : Fault :=
+def Row.failedInvariant (st : Service) (row : Row) (condition : String) (command : Spec.Ref) : Fault :=
   match row.key with
   | some key => .failedEntityInvariant (st.ref row.entity) key condition command
   | none => .failedSingleInvariant (st.ref row.entity) condition command
@@ -70,4 +70,4 @@ def integrityViolations [Monad m] (st : Service) (fs : Functions m) (records : R
   | .ok (some c) => pure (rows.flatten ++ [.failedServiceInvariant c (st.ref name)])
   | .ok none => pure rows.flatten
 
-end Tazuna.Semantics
+end Tazuna.Service

@@ -6,7 +6,7 @@ import {
   schemaProperties,
   type TransitionStructure,
   traceNameOfRef,
-} from "../../syntax/structure.ts";
+} from "../../spec/structure.ts";
 
 /**
  * A transition of a chart. `source` is the declaring state, or null for the chart's own `on`. `source`, `keys`, and

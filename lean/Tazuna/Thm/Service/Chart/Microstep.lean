@@ -3,14 +3,14 @@ import Tazuna.Thm.Service.Chart.Deadline
 import Tazuna.Thm.Service.Chart.Done
 import Tazuna.Thm.Service.Chart.Request
 import Tazuna.Thm.Data.List
-import Tazuna.Thm.Syntax.Tree
+import Tazuna.Thm.Spec.Tree
 import Tazuna.Thm.Service.Note
 
 namespace Tazuna.Thm.Service.Chart.Microstep
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Syntax (Tree)
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Service.Note Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic
+open Tazuna.Data Tazuna.Service
+open Tazuna.Spec (Tree)
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Service.Note Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic
 
 variable {st : Service} {fs : Functions Id} {s : State}
 

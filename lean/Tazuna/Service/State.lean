@@ -3,7 +3,7 @@ import Tazuna.Service.Idempotency
 import Tazuna.Service.Chart.Config
 import Tazuna.Service.Note
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -240,7 +240,7 @@ termination_by step
 The state with a new command step, and the fault of the exceeded limit, if any; `sender` is the definition of the
 command's sender.
 -/
-def State.newCommandStep (s : State) (cause : Nat) (sender : Syntax.Ref) : (State × Nat) × Option Fault :=
+def State.newCommandStep (s : State) (cause : Nat) (sender : Spec.Ref) : (State × Nat) × Option Fault :=
   let (s, step) := s.newStep (some cause)
   let info := s.steps[step]?
   let message := (info.map (·.message)).getD s.messageCount
@@ -358,4 +358,4 @@ def State.answered (s : State) (p : Pending) : State × Bool :=
   else { s with pending := s.pending.filter (·.id != p.id) },
   (s.pending.find? (·.id == p.id)).any (!·.stale))
 
-end Tazuna.Semantics
+end Tazuna.Service

@@ -2,9 +2,9 @@ import Tazuna.Service.Restart
 
 /-! This module computes what can happen next right after an input, for the explorer. -/
 
-namespace Tazuna.Observe
+namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
 variable {m : Type → Type}
 
@@ -48,4 +48,4 @@ def enabled [Monad m] (st : Service) (fs : Functions m) (s : State) :
       | .ok ops => pure (.ok (done ++ ops))
   pure (operations.map fun operations => { operations, awaiting := awaiting s, nextDeadline := nextDeadline s })
 
-end Tazuna.Observe
+end Tazuna.Explore

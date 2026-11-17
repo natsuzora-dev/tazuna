@@ -1,14 +1,14 @@
 import { reversedBags } from "../../data/bag.ts";
 import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Obligation } from "../../data/uncovered.ts";
-import type { Spec } from "../../load/load.ts";
 import {
   type Collect,
   contextKey,
   InstrumentedFunctions,
   type InstrumentFunctions,
   shownKey,
-} from "../../observe/instrument.ts";
+} from "../../explore/instrument.ts";
+import type { Spec } from "../../load/load.ts";
 import { type Note, type RecordPart, type RegionCheck, recordPartName, stateValueName } from "../../service/note.ts";
 import type { Evaluations } from "../../service/state.ts";
 import { Cache } from "./cache.ts";

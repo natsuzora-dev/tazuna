@@ -4,7 +4,7 @@ import Tazuna.Sim.Network
 
 namespace Tazuna.Sim
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Scenario (Fact Origin ValueRef Template Fill Part)
 
 /-- The field of `v` at `path`; an array element's path entry is its index. -/
@@ -47,24 +47,24 @@ def picks (fs : Functions m) (schema : Schema) (pick : Option Value) (v : Value)
   | none => pure true
   | some p => pure ((← comparedOr fs schema (v.overlay p)).canonical == (← comparedOr fs schema v).canonical)
 
-def _root_.Tazuna.Semantics.LineBody.value? : LineBody → Option Value
+def _root_.Tazuna.Service.LineBody.value? : LineBody → Option Value
   | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => some v
   | _ => none
 
-def _root_.Tazuna.Semantics.LineBody.requestType? : LineBody → Option Scenario.RequestType
+def _root_.Tazuna.Service.LineBody.requestType? : LineBody → Option Scenario.RequestType
   | .command .. => some .command
   | .query .. => some .query
   | .subscribe .. => some .subscribe
   | _ => none
 
-def Message.target? (m : Message) : Option Syntax.Ref :=
+def Message.target? (m : Message) : Option Spec.Ref :=
   match m.body with
-  | .command name _ | .query name _ | .subscribe name _ => some (Syntax.Ref.ofTraceName m.sender name)
+  | .command name _ | .query name _ | .subscribe name _ => some (Spec.Ref.ofTraceName m.sender name)
   | _ => none
 
-def Message.event? (m : Message) : Option Syntax.Ref :=
+def Message.event? (m : Message) : Option Spec.Ref :=
   match m.body with
-  | .event name _ _ => some (Syntax.Ref.ofTraceName m.sender name)
+  | .event name _ _ => some (Spec.Ref.ofTraceName m.sender name)
   | _ => none
 
 /--
@@ -102,7 +102,7 @@ def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except Report Opened :=
   | _ => unresolved
 
 /-- The lines that `service` wrote while `origin` was processed. -/
-def World.spanLines (w : World) (o : Origin) (service : String) : List Semantics.Line :=
+def World.spanLines (w : World) (o : Origin) (service : String) : List Service.Line :=
   let lines := (w.state service).lines
   w.spans.flatMap fun sp => if sp.origin == o && sp.service == service then (lines.extract sp.from sp.to).toList else []
 

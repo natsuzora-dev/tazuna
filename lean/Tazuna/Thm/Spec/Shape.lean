@@ -1,9 +1,9 @@
 import Tazuna.Data.Value
-import Tazuna.Syntax.Shape
+import Tazuna.Spec.Shape
 
-namespace Tazuna.Thm.Syntax.Shape
+namespace Tazuna.Thm.Spec.Shape
 
-open Tazuna.Data Tazuna.Syntax
+open Tazuna.Data Tazuna.Spec
 
 theorem preorder_split (stack seen : List String) (l : List Shape) (h : preorder stack seen l = true)
     (hs : ∀ a ∈ stack, a ∈ seen) :
@@ -25,4 +25,4 @@ theorem preorder_split (stack seen : List String) (l : List Shape) (h : preorder
         · exact List.mem_append_right _ ha) x hx
       exact ⟨A, B, by simpa using hAB, hA⟩
 
-end Tazuna.Thm.Syntax.Shape
+end Tazuna.Thm.Spec.Shape

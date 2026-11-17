@@ -2,7 +2,7 @@ import Tazuna.Validation.Automations
 
 namespace Tazuna.Thm.Validation.Automations
 
-open Tazuna.Data Tazuna.Syntax Tazuna.Validation Tazuna.Validation.Automations
+open Tazuna.Data Tazuna.Spec Tazuna.Validation Tazuna.Validation.Automations
 
 /-- Whether `b` receives an event that the command of `a` emits. -/
 def Follows (s : Structure) (a b : Automation) : Prop :=

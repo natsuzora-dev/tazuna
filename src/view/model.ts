@@ -18,7 +18,7 @@ import {
   stateNamed,
   type TransitionStructure,
   transitionRef,
-} from "../syntax/structure.ts";
+} from "../spec/structure.ts";
 import type {
   ActivityView,
   DefinitionView,

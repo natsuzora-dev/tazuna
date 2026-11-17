@@ -3,7 +3,7 @@ import Tazuna.Thm.Verify.Pairing
 
 namespace Tazuna.Thm.Sim.Given
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Sim
+open Tazuna.Data Tazuna.Service Tazuna.Sim
 open Tazuna.Scenario (GivenRecord PeerEntry)
 open Tazuna.Thm.Verify.Pairing (eq_of_map_nodup)
 
@@ -69,7 +69,7 @@ The order in which Given writes the records of a running service reaches nothing
 running service, the records of another scenario in another order, with no two of them of one entity and key, simulates
 alike, with the same traces, messages, halt, and reports.
 -/
-theorem simulate_records_perm (j : Syntax.Structure) (start : World) (sc : Scenario) (records : List GivenRecord)
+theorem simulate_records_perm (j : Spec.Structure) (start : World) (sc : Scenario) (records : List GivenRecord)
     (peers : List PeerEntry) (hs : peers.map (·.service) = sc.given.peers.map (·.service))
     (hp : ∀ s, (writtenRecords { sc with given := { sc.given with records, peers } } s).Perm (writtenRecords sc s))
     (hn : ∀ s, RecordsDistinct (writtenRecords sc s)) :

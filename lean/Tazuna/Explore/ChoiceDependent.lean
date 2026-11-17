@@ -1,15 +1,15 @@
 import Tazuna.Data.Binding
 import Tazuna.Data.Group
 import Tazuna.Data.Trace
-import Tazuna.Observe.Instrument
+import Tazuna.Explore.Instrument
 import Tazuna.Service.Message
 import Tazuna.Service.Note
 import Tazuna.Service.Basic
 import Tazuna.Service.Records
 
-namespace Tazuna.Observe
+namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service Tazuna.Sim
 
 /--
 A difference between the results of two walks. `original` is the result of the walk that takes the step that the
@@ -30,7 +30,7 @@ The handles of one group of `requests` to `target`: handle `j` names the group's
 in sending order.
 -/
 structure Assigned where
-  target : Syntax.Ref
+  target : Spec.Ref
   handles : List Nat
 deriving Repr, Inhabited
 
@@ -48,7 +48,7 @@ inductive ChoiceDependent where
   One order comes from the other (stepOrderSearch), so the pair is the steps whose order they swap. `definition` is the
   definition of the first step.
   -/
-  | stepOrder (definition : Syntax.Ref) (firstStep secondStep : StepName) (originalOrder alternativeOrder : List StepName)
+  | stepOrder (definition : Spec.Ref) (firstStep secondStep : StepName) (originalOrder alternativeOrder : List StepName)
       (difference : Difference)
   /--
   The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
@@ -56,14 +56,14 @@ inductive ChoiceDependent where
   that the search swapped. The search of the assignments of one scenario stops alike at assignmentLimit, with the
   target of the first group as `definition`.
   -/
-  | searchLimit (definition : Syntax.Ref) (limit : Nat)
+  | searchLimit (definition : Spec.Ref) (limit : Nat)
   /--
   The walk in which each handle of `requests` names the message at its own place and the walk with the handles of each
   group as `assigned` lists them differ by `difference` in the outcome of the running service `service`. The requests
   are equal, so nothing outside tells which answer belongs to which. `definition` is the target of the first group that
   `assigned` changes.
   -/
-  | assignment (definition : Syntax.Ref) (service : String) (assigned : List Assigned) (difference : Difference)
+  | assignment (definition : Spec.Ref) (service : String) (assigned : List Assigned) (difference : Difference)
 deriving Repr, Inhabited
 
 derive_group ChoiceDependent
@@ -184,7 +184,7 @@ The ChoiceDependent violation, if any, for the assignment `assigned` of handles 
 in the order of `outcomes`, between the outcome of a running service in the walk with each handle at its own place and
 in the walk with `assigned`. `definition` is the target of the first group that `assigned` changes.
 -/
-def assignment (compareFor : String → Compare m) (definition : Syntax.Ref) (assigned : List Assigned)
+def assignment (compareFor : String → Compare m) (definition : Spec.Ref) (assigned : List Assigned)
     (outcomes : List (String × Outcome × Outcome)) : m (Option ChoiceDependent) :=
   outcomes.foldlM (init := none) fun found (service, original, alternative) => do
     if found.isSome then return found
@@ -192,4 +192,4 @@ def assignment (compareFor : String → Compare m) (definition : Syntax.Ref) (as
 
 end
 
-end Tazuna.Observe
+end Tazuna.Explore

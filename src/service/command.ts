@@ -2,7 +2,7 @@ import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
-import { emitsOf, named, traceNameOfRef } from "../syntax/structure.ts";
+import { emitsOf, named, traceNameOfRef } from "../spec/structure.ts";
 import { ref, refOf, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";

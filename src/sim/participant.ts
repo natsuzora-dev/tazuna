@@ -3,7 +3,7 @@ import type { Processing } from "../service/chart/queue.ts";
 import { answerRequest, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
 import { message } from "../service/queue.ts";
 import { newMessage, write } from "../service/state.ts";
-import { refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
+import { refOfTraceName, traceNameOfRef } from "../spec/structure.ts";
 
 /** Lean's receivedId. */
 export const receivedId = (sender: string, id: string): string => `${sender}/${id}`;

@@ -3,7 +3,7 @@ import Tazuna.Validation.Illegal
 namespace Tazuna.Validation.Automations
 
 open Tazuna.Data
-open Tazuna.Syntax
+open Tazuna.Spec
 
 /--
 An automation that sends a command to its own service. `index` is its position among those automations, in definition

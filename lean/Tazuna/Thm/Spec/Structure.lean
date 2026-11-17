@@ -1,8 +1,8 @@
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
-namespace Tazuna.Thm.Syntax.Structure
+namespace Tazuna.Thm.Spec.Structure
 
-open Tazuna.Data Tazuna.Syntax
+open Tazuna.Data Tazuna.Spec
 
 theorem resultOfMismatch_eq_none_iff (s : Structure) (target : Ref) (accepted : Bool) (event : Ref) :
     s.resultOfMismatch target accepted event = none ↔ accepted = true ∧
@@ -72,4 +72,4 @@ theorem rejectionKinds_internal (s : Structure) (service : String) (r : Ref) (d 
   case query rejects _ _ _ =>
     cases rejects <;> simp_all
 
-end Tazuna.Thm.Syntax.Structure
+end Tazuna.Thm.Spec.Structure

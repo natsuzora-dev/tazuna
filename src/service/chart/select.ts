@@ -1,6 +1,6 @@
 import type { Fields } from "../../data/values.ts";
-import { transitionRef } from "../../syntax/structure.ts";
-import { isInside, leaves, pathOf } from "../../syntax/tree.ts";
+import { transitionRef } from "../../spec/structure.ts";
+import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { stateValueName } from "../note.ts";

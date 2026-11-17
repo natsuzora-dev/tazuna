@@ -1,6 +1,6 @@
 import type { Fields } from "../../data/values.ts";
-import { transitionRef } from "../../syntax/structure.ts";
-import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../syntax/tree.ts";
+import { transitionRef } from "../../spec/structure.ts";
+import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { limits } from "../limits.ts";
 import type { RegionPair } from "../note.ts";

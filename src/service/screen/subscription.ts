@@ -1,5 +1,5 @@
 import type { Fields } from "../../data/values.ts";
-import { isDescendant } from "../../syntax/tree.ts";
+import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Activity, activityRef } from "../chart/basic.ts";
 import { openShows, stateEndSubscription } from "../chart/exit.ts";

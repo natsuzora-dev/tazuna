@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Exit
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -39,4 +39,4 @@ def closeFinal (st : Service) (step : Nat) (name : String) : Processing → m Pr
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

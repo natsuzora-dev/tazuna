@@ -1,4 +1,4 @@
-import { finished } from "../../syntax/tree.ts";
+import { finished } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { limits } from "../limits.ts";

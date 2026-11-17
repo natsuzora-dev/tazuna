@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Basic
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -12,4 +12,4 @@ def Chart.exitsOf (c : Chart) (entered : List String) (t : Transition) : List St
 def Chart.slots (c : Chart) : List String :=
   c.states.foldl (fun acc st => (st.activities.filter (·.keyword == "shows")).foldl (fun acc a => addName acc a.key) acc) []
 
-end Tazuna.Semantics
+end Tazuna.Service

@@ -1,7 +1,7 @@
 import Lean.Data.Json.Parser
 import Lean.Data.Json.Printer
-import Tazuna.Observe.Enabled
-import Tazuna.Observe.Instrument
+import Tazuna.Explore.Enabled
+import Tazuna.Explore.Instrument
 import Tazuna.Validation.Check
 import Tazuna.Verify.External
 import Tazuna.Verify.Pairing
@@ -14,7 +14,7 @@ field order that TS writes.
 
 namespace Tazuna.Json
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe
+open Tazuna.Data Tazuna.Service Tazuna.Explore
 open Std.Internal.Parsec Std.Internal.Parsec.String
 
 mutual
@@ -94,7 +94,7 @@ def optionalString (v : Value) (key : String) : Except String (Option String) :=
 def obj (fields : List (String × Option Value)) : Value :=
   .obj (fields.filterMap fun (k, v) => v.map (k, ·))
 
-def lineValue (line : Line) (after created : List String) : Value := ToValue.toValue (traceLineOf line after created)
+def lineValue (line : Line) (after created : List String) : Value := ToValue.toValue (Sim.traceLineOf line after created)
 
 def Enabled.toValue (e : Enabled) : Value :=
   obj [("operations", some (.arr (e.operations.map fun o => .obj [("screen", .str o.screen),
@@ -287,7 +287,7 @@ The reply to request `checkExternal`, which takes a structure, a service, and tr
 that `checkExternal` finds.
 -/
 def checkExternal (request : Value) : Except String Value := do
-  let s : Syntax.Structure ← FromValue.fromValue (← field request "structure")
+  let s : Spec.Structure ← FromValue.fromValue (← field request "structure")
   let service ← stringField request "service"
   let trace ← (← asList (← field request "trace")).mapM FileLine.decode
   pure (.obj [("type", .str "checkedExternal"),

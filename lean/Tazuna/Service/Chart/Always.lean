@@ -1,7 +1,7 @@
 import Tazuna.Service.Chart.Map
 import Tazuna.Service.Chart.Select
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -53,4 +53,4 @@ def settled (st : Service) (step : Nat) : Option String → (Processing → m Pr
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

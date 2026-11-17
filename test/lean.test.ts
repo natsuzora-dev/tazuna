@@ -9,14 +9,13 @@ const source = (folder: string, path: string) => readFileSync(join(leanRoot, fol
 /** For each folder, the folders under Tazuna whose modules its files may import. */
 const allowedImports: Readonly<Record<string, readonly string[]>> = {
   Data: ["Data"],
-  Syntax: ["Data", "Syntax"],
-  Validation: ["Data", "Syntax", "Validation"],
-  Service: ["Data", "Syntax", "Service"],
-  Scenario: ["Data", "Syntax", "Scenario"],
-  Sim: ["Data", "Syntax", "Service", "Scenario", "Sim"],
-  Observe: ["Data", "Syntax", "Service", "Observe"],
-  Explore: ["Data", "Syntax", "Service", "Scenario", "Sim", "Observe", "Explore"],
-  Verify: ["Data", "Syntax", "Verify"],
+  Spec: ["Data", "Spec"],
+  Validation: ["Data", "Spec", "Validation"],
+  Service: ["Data", "Spec", "Service"],
+  Scenario: ["Data", "Spec", "Scenario"],
+  Sim: ["Data", "Spec", "Service", "Scenario", "Sim"],
+  Explore: ["Data", "Spec", "Service", "Scenario", "Sim", "Explore"],
+  Verify: ["Data", "Spec", "Verify"],
 };
 
 for (const [folder, allowed] of Object.entries(allowedImports))

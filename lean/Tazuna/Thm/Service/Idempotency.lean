@@ -2,7 +2,7 @@ import Tazuna.Service.Idempotency
 
 namespace Tazuna.Thm.Service.Idempotency
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
 theorem first_answer_kept (table : CommandAnswers) (id : String) (r : Request) (a : Answer)
     (hk : table.find? id = none) (ha : keepsAnswer a = true) :

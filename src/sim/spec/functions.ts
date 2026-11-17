@@ -47,8 +47,8 @@ import {
 import type { Emit } from "../../service/message.ts";
 import type { Note } from "../../service/note.ts";
 import type { RecordSource, Row } from "../../service/records.ts";
-import { type ChartStructure, chartStructure, stateNamed, traceNameOfRef } from "../../syntax/structure.ts";
-import { isDescendant, pathOf } from "../../syntax/tree.ts";
+import { type ChartStructure, chartStructure, stateNamed, traceNameOfRef } from "../../spec/structure.ts";
+import { isDescendant, pathOf } from "../../spec/tree.ts";
 import { assumedEnsures } from "./contract.ts";
 import { recordsView } from "./records.ts";
 

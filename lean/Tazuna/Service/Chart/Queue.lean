@@ -2,7 +2,7 @@ import Tazuna.Service.State
 
 /-! The internal queue of one message: work caused by steps, and commands sent to its own service. -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -142,4 +142,4 @@ def reactions (st : Service) (s : State) (emits : List Emit) (recordsChanged : B
 def commandWork (st : Service) (s : State) (emits : List Emit) (cause : Nat) : List Work :=
   if emits.isEmpty then [] else reactions st s emits true cause
 
-end Tazuna.Semantics
+end Tazuna.Service

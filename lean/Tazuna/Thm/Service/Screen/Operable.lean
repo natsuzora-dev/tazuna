@@ -3,7 +3,7 @@ import Tazuna.Thm.Data.Basic
 
 namespace Tazuna.Thm.Service.Screen.Operable
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Thm.Data.Basic
 
 variable {st : Service} {fs : Functions Id} {s : State}

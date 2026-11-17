@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
 import type { Definition } from "../dsl/definition.ts";
-import { definitionKinds } from "../syntax/structure.ts";
+import { definitionKinds } from "../spec/structure.ts";
 
 export interface SchemaAt {
   readonly path: readonly string[];

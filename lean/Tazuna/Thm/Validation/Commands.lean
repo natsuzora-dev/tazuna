@@ -1,11 +1,11 @@
 import Tazuna.Validation.Commands
 import Tazuna.Thm.Service.Command
-import Tazuna.Thm.Syntax.Structure
+import Tazuna.Thm.Spec.Structure
 
 namespace Tazuna.Thm.Validation.Commands
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Validation
-open Tazuna.Syntax
+open Tazuna.Data Tazuna.Service Tazuna.Validation
+open Tazuna.Spec
 open Tazuna.Thm.Service.Command
 
 theorem commands_emit_own_events (s : Structure) :
@@ -43,7 +43,7 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
   obtain ⟨_ | r, ho, hname⟩ := hlist
   · simp at hname
   simp only [Option.any_some] at hname
-  obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Syntax.Structure.emitsOf_mem j _ r ho
+  obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Spec.Structure.emitsOf_mem j _ r ho
   have hsv : r.service = st.service := by
     cases hb : d.body with
     | command rejects input output emits references binds requires =>

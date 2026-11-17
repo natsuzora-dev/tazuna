@@ -11,7 +11,7 @@ import {
   rejectionReasons,
   requiresOf,
   resultOfMismatch,
-} from "../syntax/structure.ts";
+} from "../spec/structure.ts";
 import { ref, refOf, type Service } from "./basic.ts";
 import { settled } from "./chart/always.ts";
 import { type Activity, activityRef, type Chart } from "./chart/basic.ts";

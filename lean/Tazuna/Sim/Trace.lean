@@ -7,9 +7,9 @@ This module computes a snapshot line's `after`: every order that must hold among
 input lines).
 -/
 
-namespace Tazuna.Observe
+namespace Tazuna.Sim
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
 /--
 Whether step `earlier` leads to step `later`. Nested steps are spans of their outer step, so only steps that write
@@ -39,6 +39,12 @@ inductive Channel where
   | answers (request : String)
   | events (resultOf : Option String)
 deriving DecidableEq, Repr
+
+def Channel.key : Channel → String
+  | .request id => s!"request {id}"
+  | .answers to => s!"answers {to}"
+  | .events (some resultOf) => s!"events {resultOf}"
+  | .events none => "events"
 
 def channelOf (l : Line) : Option Channel :=
   match l.body with
@@ -142,4 +148,4 @@ def traceLineOf (line : Line) (after created : List String) : TraceLine :=
     after := if after.isEmpty then none else some after
     created := if created.isEmpty then none else some created }
 
-end Tazuna.Observe
+end Tazuna.Sim

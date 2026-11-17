@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Microstep
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -76,4 +76,4 @@ def syncCopies (st : Service) (step : Nat) (owner : String) (r : Processing) : m
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

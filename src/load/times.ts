@@ -2,7 +2,7 @@ import type { Delay } from "../data/datetime.ts";
 import type { Malformed } from "../data/malformed.ts";
 import { stateAt } from "../dsl/chart.ts";
 import type { ChartSpec, Definition, Named } from "../dsl/definition.ts";
-import type { ChartStructure } from "../syntax/structure.ts";
+import type { ChartStructure } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 
 /**

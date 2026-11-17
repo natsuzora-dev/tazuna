@@ -1,6 +1,6 @@
 import type { Illegal } from "../data/illegal.generated.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import { rejectionReasons } from "../syntax/structure.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { rejectionReasons } from "../spec/structure.ts";
 
 const foreignEvents = (structure: Structure): Illegal[] =>
   structure.definitions.flatMap((d): Illegal[] =>

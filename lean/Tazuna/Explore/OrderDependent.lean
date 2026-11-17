@@ -1,9 +1,9 @@
 import Tazuna.Data.Group
 import Tazuna.Service.Message
 
-namespace Tazuna.Observe
+namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 
 /--
 A result, found while the run evaluates, that depends on an order the spec does not fix. No OrderDependent violation
@@ -14,12 +14,12 @@ transitions.
 -/
 inductive OrderDependent where
   /-- An Issue stopped the second answer, or the check of a query's output or its comparable value. -/
-  | reversedException (definition : Syntax.Ref) (function : String)
+  | reversedException (definition : Spec.Ref) (function : String)
   /-- The second answer differs from the first. -/
-  | reversedResult (definition : Syntax.Ref) (function : String)
-  | bothAssign (definition : Syntax.Ref) (state : String) (firstTransition secondTransition : Syntax.TransitionRef)
+  | reversedResult (definition : Spec.Ref) (function : String)
+  | bothAssign (definition : Spec.Ref) (state : String) (firstTransition secondTransition : Spec.TransitionRef)
       (field : String)
-  | assignRead (definition : Syntax.Ref) (state : String) (writer reader : Syntax.TransitionRef) (field : String)
+  | assignRead (definition : Spec.Ref) (state : String) (writer reader : Spec.TransitionRef) (field : String)
 deriving DecidableEq, Repr, Inhabited
 
 derive_group OrderDependent
@@ -27,4 +27,4 @@ derive_group OrderDependent
 def OrderDependent.toViolation (m : OrderDependent) : Violation :=
   { kind := m.kind, definition := m.definition, data := m.data }
 
-end Tazuna.Observe
+end Tazuna.Explore

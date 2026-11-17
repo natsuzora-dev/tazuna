@@ -1,6 +1,6 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import { isOpenedByScreen, refOfTraceName, schemaProperties, traceNameOfRef } from "../syntax/structure.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { isOpenedByScreen, refOfTraceName, schemaProperties, traceNameOfRef } from "../spec/structure.ts";
 import { type Activity, type Chart, executableChart } from "./chart/basic.ts";
 
 type Change =

@@ -1,6 +1,6 @@
 import type { TransitionRef } from "../data/transitionRef.ts";
-import type { ChartStructure } from "../syntax/structure.ts";
-import { pathOf } from "../syntax/tree.ts";
+import type { ChartStructure } from "../spec/structure.ts";
+import { pathOf } from "../spec/tree.ts";
 import type { ChartSpec, Definition, StateSpec, TransitionSpec } from "./definition.ts";
 
 export function chartOf(d: Definition): ChartSpec | undefined {

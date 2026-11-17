@@ -9,7 +9,7 @@ import type { AnyEntity } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
 import { instant, type LoweringProblem, lower } from "../scenario/lower.ts";
-import { isKeyOf } from "../syntax/structure.ts";
+import { isKeyOf } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 
 export interface LoadedScenario {

@@ -2,7 +2,7 @@ import Tazuna.Validation.Contracts
 
 namespace Tazuna.Thm.Validation.Contracts
 
-open Tazuna.Data Tazuna.Syntax Tazuna.Validation
+open Tazuna.Data Tazuna.Spec Tazuna.Validation
 
 theorem members_of_own_service (s : Structure) :
     Contracts.check s = [] ↔ ∀ c ∈ s.contracts, ∀ key m, (key, some m) ∈ c.members → m.service = c.service := by

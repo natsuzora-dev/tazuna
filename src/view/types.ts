@@ -2,12 +2,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { MalformedLine } from "../data/trace.ts";
 import type { Json } from "../data/values.ts";
-import type {
-  ActivityStructure,
-  DefinitionStructure,
-  StateStructure,
-  TransitionStructure,
-} from "../syntax/structure.ts";
+import type { ActivityStructure, DefinitionStructure, StateStructure, TransitionStructure } from "../spec/structure.ts";
 
 /** The model that the server serves to the viewer as /model.json. */
 export interface ViewModel {

@@ -5,8 +5,8 @@ import { objectOf, type Shape } from "../data/values.ts";
 import { type ProblemError, thrown, zodError } from "../data/violation.ts";
 import { chartOf, stateAt } from "../dsl/chart.ts";
 import type { Definition, Named } from "../dsl/definition.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
-import { chartStructure } from "../syntax/structure.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { chartStructure } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 import type { ThrownDefault } from "./structureOf.ts";
 

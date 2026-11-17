@@ -14,7 +14,7 @@ import type { AssignmentSearch } from "../../src/explore/assignments.ts";
 import type { Searched } from "../../src/explore/stepOrders.ts";
 import type { Spec } from "../../src/load/load.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
-import type { Structure } from "../../src/syntax/structure.generated.ts";
+import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Folder, PairingScenario } from "../../src/verify/pairing.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
 

@@ -3,14 +3,14 @@ import { relative } from "node:path";
 import { after, test } from "node:test";
 import fc from "fast-check";
 import { loadSpec } from "../src/load/load.ts";
-import type { Structure } from "../src/syntax/structure.generated.ts";
+import type { Structure } from "../src/spec/structure.generated.ts";
 import {
   type ChartStructure,
   type DefinitionStructure,
   definitionKinds,
   type TransitionStructure,
-} from "../src/syntax/structure.ts";
-import { kindOf, pathOf } from "../src/syntax/tree.ts";
+} from "../src/spec/structure.ts";
+import { kindOf, pathOf } from "../src/spec/tree.ts";
 import { check } from "../src/validation/check.ts";
 import { groupExamples, runExamples } from "./examples.ts";
 import { Lean } from "./lean/lean.ts";

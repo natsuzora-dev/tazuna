@@ -7,8 +7,8 @@ import {
   isAnswerTransition,
   type TransitionStructure,
   transitionRef,
-} from "../../syntax/structure.ts";
-import { isDescendant } from "../../syntax/tree.ts";
+} from "../../spec/structure.ts";
+import { isDescendant } from "../../spec/tree.ts";
 import type { Found } from "../found.ts";
 import { charts, type Spec } from "../load.ts";
 

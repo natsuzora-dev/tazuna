@@ -1,6 +1,6 @@
 import Tazuna.Service.State
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -32,4 +32,4 @@ def rearm [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
 def State.takeDeadline (s : State) (t : Deadline) : State × Bool :=
   ({ s with deadlines := s.deadlines.filter (·.order != t.order) }, s.deadlines.any (·.order == t.order))
 
-end Tazuna.Semantics
+end Tazuna.Service

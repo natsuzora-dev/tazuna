@@ -1,5 +1,5 @@
 import Tazuna.Data.Trace
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
 /-!
 A scenario names an earlier fact only through a handle: what a line, or the begin at the start, caused. Handles name
@@ -40,18 +40,18 @@ inductive Fact where
   The request of kind `kind` to `target` that a participant sent while `origin` was processed, whose input has each
   field of `input`, when given, equal as the target's input schema compares it.
   -/
-  | request (origin : Origin) (kind : RequestType) (target : Syntax.Ref) (input : Option Template)
+  | request (origin : Origin) (kind : RequestType) (target : Spec.Ref) (input : Option Template)
   /--
   The handle `handle`, from 0, of the requests that `request` with the same fields names, which are equal as the
   target's input schema compares them and so interchangeable: which of them each handle names is a choice that test
   searches (World.assignments), and handles beyond their number name nothing.
   -/
-  | requests (origin : Origin) (kind : RequestType) (target : Syntax.Ref) (input : Option Template) (handle : Nat)
+  | requests (origin : Origin) (kind : RequestType) (target : Spec.Ref) (input : Option Template) (handle : Nat)
   /--
   The event `event` that a participant emitted while `origin` was processed, with each field of `payload` equal when
   given, as it travels to `receiver` when given, or to its only receiver.
   -/
-  | event (origin : Origin) (event : Syntax.Ref) (payload : Option Template) (receiver : Option String)
+  | event (origin : Origin) (event : Spec.Ref) (payload : Option Template) (receiver : Option String)
   /--
   The answer to the request that line `to` sent or delivered, which its receiver gave while `origin` was processed.
   -/
@@ -67,7 +67,7 @@ inductive Fact where
   -/
   | line (index : Nat)
   /-- The instance of screen `screen` that opened while `origin` was processed. -/
-  | screen (origin : Origin) (screen : Syntax.Ref)
+  | screen (origin : Origin) (screen : Spec.Ref)
 deriving BEq, Repr, Inhabited
 
 /--

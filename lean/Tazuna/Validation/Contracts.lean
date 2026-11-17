@@ -3,7 +3,7 @@ import Tazuna.Validation.Illegal
 namespace Tazuna.Validation.Contracts
 
 open Tazuna.Data
-open Tazuna.Syntax
+open Tazuna.Spec
 
 def check (s : Structure) : List Illegal :=
   s.contracts.flatMap fun c =>

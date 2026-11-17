@@ -1,14 +1,14 @@
-import Tazuna.Observe.Instrument
+import Tazuna.Explore.Instrument
 import Tazuna.Thm.Data.List
 
 /-!
-Semantics definitions are generic in `m`, so instrumented functions that agree with the plain ones (FunctionsAgree) make
+Service definitions are generic in `m`, so instrumented functions that agree with the plain ones (FunctionsAgree) make
 every instrumented definition agree with its plain one.
 -/
 
-namespace Tazuna.Thm.Observe.Instrument
+namespace Tazuna.Thm.Explore.Instrument
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe Tazuna.Thm.Data.List
+open Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Sim Tazuna.Thm.Data.List
 
 variable {C : Type}
 
@@ -570,11 +570,11 @@ theorem restart_agrees (s : State) : Agrees (restart st fsI s) (restart st fs s)
 
 end
 
-end Tazuna.Thm.Observe.Instrument
+end Tazuna.Thm.Explore.Instrument
 
-namespace Tazuna.Thm.Observe.Instrument
+namespace Tazuna.Thm.Explore.Instrument
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe Tazuna.Thm.Data.List
+open Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Sim Tazuna.Thm.Data.List
 
 variable {C : Type} {st : Service} {fs : Functions Id} {ifs : InstrumentFunctions Id}
 
@@ -587,7 +587,7 @@ theorem observe_agrees {α : Type} (x : Id α) (f : α → StateT Collect Id Uni
 theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) fs := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
 
-theorem reversed_result_reported {ε α : Type} (definition : Syntax.Ref) (function : String) (original answer : α)
+theorem reversed_result_reported {ε α : Type} (definition : Spec.Ref) (function : String) (original answer : α)
     (again : Id (Except ε α)) (same : α → α → Bool) (c : Collect) (ha : again = .ok answer) :
     ((orderAudit definition function original again same).run c).2 =
       if definition ∈ c.reportedOrder ∨ same original answer then c
@@ -599,7 +599,7 @@ theorem reversed_result_reported {ε α : Type} (definition : Syntax.Ref) (funct
       MonadStateOf.modifyGet, false_or]
     split <;> rfl
 
-theorem reversed_exception_reported {ε α : Type} (definition : Syntax.Ref) (function : String) (original : α)
+theorem reversed_exception_reported {ε α : Type} (definition : Spec.Ref) (function : String) (original : α)
     (again : Id (Except ε α)) (same : α → α → Bool) (e : ε) (c : Collect) (ha : again = .error e) :
     ((orderAudit definition function original again same).run c).2 =
       if definition ∈ c.reportedOrder then c
@@ -721,4 +721,4 @@ theorem candidate_unordered (st : Service) (s : State) (c : Collect) (stopped : 
   obtain ⟨⟨⟨⟨⟨hk, _⟩, hc⟩, hn⟩, hl⟩, rfl, rfl⟩ := he
   exact ⟨a, b, hia, hjb, hl, hn, hc, hk⟩
 
-end Tazuna.Thm.Observe.Instrument
+end Tazuna.Thm.Explore.Instrument

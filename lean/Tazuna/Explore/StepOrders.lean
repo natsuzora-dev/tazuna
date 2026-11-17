@@ -1,14 +1,14 @@
-import Tazuna.Observe.ChoiceDependent
+import Tazuna.Explore.ChoiceDependent
 import Tazuna.Sim.Run
 
 /-!
 The step-order search: it walks a scenario's simulation again with other orders of the steps that no cause orders, and
-compares each walk's outcome by Observe's relation (ChoiceDependent.stepOrder).
+compares each walk's outcome by ChoiceDependent.stepOrder.
 -/
 
 namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe
+open Tazuna.Data Tazuna.Service
 
 /-- A walk of a scenario, with what each running service's instrumented functions collected. -/
 structure Walk where
@@ -59,9 +59,9 @@ def Walk.refused (w : Walk) (service : String) : Bool :=
   | none => false
 
 /-- What the relation compares of the walk for the running service `st`. -/
-def Walk.outcome (w : Walk) (st : Service) : Observe.Outcome :=
+def Walk.outcome (w : Walk) (st : Service) : Explore.Outcome :=
   let s := w.world.state st.service
-  let lines := (trace s (w.collect st.service).causes).map fun (line, after, created) => traceLineOf line after created
+  let lines := (Sim.trace s (w.collect st.service).causes).map fun (line, after, created) => Sim.traceLineOf line after created
   Outcome.of st s.halted lines s.records (w.world.states.flatMap fun (q, x) =>
     x.created.map fun (entity, key) => (key, s!"{q}/{entity}"))
 
@@ -97,7 +97,7 @@ The order that runs the pair `(i, j)` of a walk's candidates the other way: the 
 then the steps between that lead to `j`, then `b` (step `j`) and `a` (step `i`).
 -/
 def pairOrder (s : State) (taken : List (Nat × StepName)) (i j : Nat) (a b : StepName) : List StepName :=
-  (taken.filter (·.1 < i)).map (·.2) ++ (taken.filter fun (n, _) => i < n && n < j && leadsTo s n j).map (·.2) ++ [b, a]
+  (taken.filter (·.1 < i)).map (·.2) ++ (taken.filter fun (n, _) => i < n && n < j && Sim.leadsTo s n j).map (·.2) ++ [b, a]
 
 /-- The state of a search: what it did, the taken-step sequences it reached, the first step it swapped, and its queue. -/
 structure Searching where
@@ -118,7 +118,7 @@ The search after the pair `(i, j)` of the walk `parent`, whose step order is `pa
 sequence of taken steps. At stepOrderLimit orders the search stops with searchLimit at the first step it swapped.
 -/
 def searchPair (compare : Compare m) (walkWith : List StepName → m Walk) (origin : Scenario.Origin) (st : Service)
-    (parent : Walk) (parentOrder : List StepName) (parentOutcome : Observe.Outcome) (taken : List (Nat × StepName))
+    (parent : Walk) (parentOrder : List StepName) (parentOutcome : Explore.Outcome) (taken : List (Nat × StepName))
     (r : Searching) (pair : Nat × Nat) : m Searching := do
   let (i, j) := pair
   if r.stopped then return r

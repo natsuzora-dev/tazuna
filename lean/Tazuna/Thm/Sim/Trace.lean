@@ -1,9 +1,9 @@
-import Tazuna.Observe.Trace
+import Tazuna.Sim.Trace
 import Tazuna.Thm.Data.Basic
 
-namespace Tazuna.Thm.Observe.Trace
+namespace Tazuna.Thm.Sim.Trace
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Observe
+open Tazuna.Data Tazuna.Service Tazuna.Sim
 open Tazuna.Thm.Data.Basic
 
 variable {s : State}
@@ -58,4 +58,4 @@ theorem sibling_steps_unordered (c i j : Nat) (ii ij : StepInfo) (hij : i < j) (
   simp only [this, ↓reduceIte]
   exact leadsTo_of_lt i c hc
 
-end Tazuna.Thm.Observe.Trace
+end Tazuna.Thm.Sim.Trace

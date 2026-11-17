@@ -3,7 +3,7 @@ import Tazuna.Verify.External
 
 namespace Tazuna.Thm.Verify.External
 
-open Tazuna.Data Tazuna.Syntax Tazuna.Thm.Data.Trace Tazuna.Verify
+open Tazuna.Data Tazuna.Spec Tazuna.Thm.Data.Trace Tazuna.Verify
 
 theorem checkExternal_after_malformed (s : Structure) (service : String) (pre post₁ post₂ : List (FileLine TraceLine)) :
     checkExternal s service (pre ++ .malformed :: post₁) = checkExternal s service (pre ++ .malformed :: post₂) := by

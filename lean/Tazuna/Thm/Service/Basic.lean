@@ -4,11 +4,11 @@ import Tazuna.Thm.Service.Chart.Basic
 
 namespace Tazuna.Thm.Service.Basic
 
-open Tazuna.Data Tazuna.Semantics Tazuna.Syntax
+open Tazuna.Data Tazuna.Service Tazuna.Spec
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Basic
 
 theorem chart_of_definition (j : Structure) (service : String) (st : Service) (h : j.service service = .ok st)
-    (c : Tazuna.Semantics.Chart) (hc : c ∈ st.charts) :
+    (c : Tazuna.Service.Chart) (hc : c ∈ st.charts) :
     ∃ d ∈ j.definitions, ∃ sc, d.chart? = some sc ∧ d.service = service ∧ c.name = d.name ∧ c.screen = d.isScreen ∧
       c.opened = (d.isScreen && j.isOpenedByScreen d.ref) := by
   unfold Structure.service at h

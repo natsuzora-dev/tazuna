@@ -1,5 +1,5 @@
 import Tazuna.Service.State
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
 /-!
 The createKey values of a state: each is `<entity>-<n>` for the entity's `n`-th value, qualified by the participant that
@@ -8,7 +8,7 @@ creates it, so no two of them are equal.
 
 namespace Tazuna.Thm.Service.Keys
 
-open Tazuna.Semantics
+open Tazuna.Service
 
 theorem cons_sep {x y p q : List Char} {c : Char} (hx : c ∉ x) (hy : c ∉ y) (h : x ++ c :: p = y ++ c :: q) :
     x = y ∧ p = q := by
@@ -119,10 +119,10 @@ theorem created_form {s : State} {e k : String} (h : (e, k) ∈ s.created) :
   exact ⟨_, Nat.succ_pos _, h₁ ▸ h₂⟩
 
 theorem keyChars_isKeyOf (p e : String) (n : Nat) (hn : 0 < n) (k : String)
-    (hk : k.toList = keyChars (some p) e n) : Syntax.isKeyOf s!"{p}/{e}" k = true := by
+    (hk : k.toList = keyChars (some p) e n) : Spec.isKeyOf s!"{p}/{e}" k = true := by
   have hh : (s!"{p}/{e}").toList ++ ['-'] = keyPrefix (some p) ++ e.toList ++ ['-'] := by
     simp [keyPrefix, String.toList_append, toString]
-  unfold Syntax.isKeyOf
+  unfold Spec.isKeyOf
   simp only [hh, hk, keyChars]
   have ht : keyPrefix (some p) ++ e.toList ++ '-' :: Nat.toDigits 10 n =
       (keyPrefix (some p) ++ e.toList ++ ['-']) ++ Nat.toDigits 10 n := by simp

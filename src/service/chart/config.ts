@@ -1,4 +1,4 @@
-import { exitSet } from "../../syntax/tree.ts";
+import { exitSet } from "../../spec/tree.ts";
 import type { Instance } from "../state.ts";
 import type { Chart, Transition } from "./basic.ts";
 

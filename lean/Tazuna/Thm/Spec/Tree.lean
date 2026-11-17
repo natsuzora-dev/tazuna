@@ -1,12 +1,12 @@
-import Tazuna.Syntax.Tree
+import Tazuna.Spec.Tree
 import Tazuna.Thm.Data.Basic
 import Tazuna.Thm.Data.List
-import Tazuna.Thm.Syntax.Shape
+import Tazuna.Thm.Spec.Shape
 
-namespace Tazuna.Thm.Syntax.Tree
+namespace Tazuna.Thm.Spec.Tree
 
-open Tazuna.Data Tazuna.Syntax
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Syntax.Shape
+open Tazuna.Data Tazuna.Spec
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Spec.Shape
 
 theorem mem_addDefaults_of_mem (t : Tree) (n : String) {acc : List String} {x : String} (hx : x ∈ acc) :
     x ∈ t.addDefaults n acc := by
@@ -494,4 +494,4 @@ theorem restores_last_children (t : Tree) (initial : String) (lastChildren : Lis
     t.historyTargets initial lastChildren target = x :: xs := by
   simp [Tree.historyTargets, hs, hk, hp, hl]
 
-end Tazuna.Thm.Syntax.Tree
+end Tazuna.Thm.Spec.Tree

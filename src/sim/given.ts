@@ -6,7 +6,7 @@ import { ref, type Service, uniqueOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { type Row, recordSource } from "../service/records.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
+import type { Structure } from "../spec/structure.generated.ts";
 import { keyEntity, noteTo, type Participant, type Role, type World } from "./network.ts";
 
 /** Lean's staticPeers. */

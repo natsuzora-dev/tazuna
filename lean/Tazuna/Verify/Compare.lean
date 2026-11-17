@@ -1,6 +1,6 @@
 import Tazuna.Data.Trace
 import Tazuna.Data.Canonical
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 import Tazuna.Data.Binding
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
@@ -32,7 +32,7 @@ values that the implementation chose in its own way are open.
 - The `out` lines after an `in` line, or before the first, are that input's group. A group's snapshot lines, in file
   order, each pair with any unpaired trace line of the group that compares equal under a binding of the set, at the same
   time and after the lines that its `after` names, keeping every way. `after` names the earlier lines on the line's
-  channel (Observe.ordered), so a group keeps each channel's order and no order across channels. test compares two
+  channel (Sim.ordered), so a group keeps each channel's order and no order across channels. test compares two
   orders of a processing alike (ChoiceDependent), so a spec without that report fixes each channel's order.
 - A snapshot line that pairs in no way pairs by place (type and name, or the answered request under the first way) to
   report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
@@ -46,7 +46,7 @@ values that the implementation chose in its own way are open.
 namespace Tazuna.Verify
 
 open Tazuna.Data
-open Tazuna.Syntax
+open Tazuna.Spec
 
 /--
 A trace line with its value read by its definition's schema, if any. `value` is the input, payload or answer output,

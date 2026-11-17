@@ -1,9 +1,9 @@
 import Tazuna.Data.Answer
 import Tazuna.Data.Value
 import Tazuna.Data.Wire
-import Tazuna.Syntax.Tree
+import Tazuna.Spec.Tree
 
-namespace Tazuna.Syntax
+namespace Tazuna.Spec
 
 open Tazuna.Data
 
@@ -357,4 +357,4 @@ def schemaProperties (schema : Value) : List String :=
   | some (.obj fields) => fields.map (·.1)
   | _ => []
 
-end Tazuna.Syntax
+end Tazuna.Spec

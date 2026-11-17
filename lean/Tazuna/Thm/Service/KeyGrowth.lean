@@ -10,7 +10,7 @@ createKey was called for, and may only add to them.
 
 namespace Tazuna.Thm.Service.KeyGrowth
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Note
 
 variable {st : Service} {fs : Functions Id}

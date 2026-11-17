@@ -2,7 +2,7 @@ import Tazuna.Service.State
 
 /-! This module selects transitions as SCXML selectTransitions and removeConflictingTransitions do. -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -133,4 +133,4 @@ def select (st : Service) (s : State) (top : Instance) (trigger : List String) (
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

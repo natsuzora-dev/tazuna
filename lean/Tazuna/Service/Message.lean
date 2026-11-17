@@ -4,9 +4,9 @@ import Tazuna.Data.Trace
 import Tazuna.Service.Limits
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -84,4 +84,4 @@ def Finding.toViolation : Finding → Violation
   | .fault f => { kind := f.kind, definition := f.definition, data := f.data }
   | .invalidInput i => { kind := i.kind, definition := i.definition, data := i.data }
 
-end Tazuna.Semantics
+end Tazuna.Service

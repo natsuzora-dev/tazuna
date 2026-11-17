@@ -9,7 +9,7 @@ running service sent to another service. A message stays in flight until a line 
 
 namespace Tazuna.Sim
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Scenario (Origin)
 
 /-- How a service takes part in a simulation. -/
@@ -144,7 +144,7 @@ def targetOf (service : String) (lines : Array Line) (id : String) : Option Stri
   lines.toList.findSome? fun l =>
     match l.dir, l.body with
     | .out, .command name _ | .out, .query name _ | .out, .subscribe name _ =>
-      if l.id == id then some (Syntax.Ref.ofTraceName service name).service else none
+      if l.id == id then some (Spec.Ref.ofTraceName service name).service else none
     | _, _ => none
 
 /-- The world with a message from `sender` to `receiver`, kept in flight, discarded, or reported as unlisted. -/
@@ -169,7 +169,7 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
     let own := receivedId service l.id
     match l.body with
     | .command name _ | .query name _ | .subscribe name _ =>
-      let target := (Syntax.Ref.ofTraceName service name).service
+      let target := (Spec.Ref.ofTraceName service name).service
       if target == service then w else w.post o service target l (some own)
     | .unsubscribe to =>
       match targetOf service (w.state service).lines to with
@@ -199,15 +199,15 @@ def checkStepOrder (s : State) : State :=
   if s.halted.isNone && !s.stepOrder.isEmpty then t.report (.invalidInput (.unusedStepOrder s.stepOrder)) else t
 
 /-- The keyed entity of a running participant whose key form `<participant>/<e>-<n>` the string `x` has. -/
-def World.keyEntity? (w : World) (x : String) : Option Syntax.Ref :=
+def World.keyEntity? (w : World) (x : String) : Option Spec.Ref :=
   w.services.findSome? fun (owner, st) =>
-    (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf s!"{owner}/{e}" x).map st.ref
+    (st.entities.find? fun e => !st.singles.contains e && Spec.isKeyOf s!"{owner}/{e}" x).map st.ref
 
 /--
 The least string, in code-point order, of the `out` lines `sent` and the records `records` that has a running
 participant's key form (keyEntity?) and that no running participant created, with the entity: a spec computed it.
 -/
-def World.computedKey? (w : World) (sent : List Line) (records : Records) : Option (String × Syntax.Ref) :=
+def World.computedKey? (w : World) (sent : List Line) (records : Records) : Option (String × Spec.Ref) :=
   let strings := (sent.filter (·.dir == .out)).flatMap (·.body.content.strings) ++
     records.flatMap fun r => r.key.toList ++ r.value.strings
   let made := w.states.flatMap fun (_, s) => s.created.map (·.2)

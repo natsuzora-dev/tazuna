@@ -1,13 +1,13 @@
 import Tazuna.Service.Input
 import Tazuna.Thm.Service.Queue
-import Tazuna.Thm.Syntax.Structure
+import Tazuna.Thm.Spec.Structure
 
 namespace Tazuna.Thm.Service.Input
 
-open Tazuna.Data Tazuna.Semantics
-open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Syntax.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Clock Tazuna.Thm.Service.Queue
+open Tazuna.Data Tazuna.Service
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Chart.Deadline Tazuna.Thm.Service.Chart.Done Tazuna.Thm.Service.Chart.Exit Tazuna.Thm.Service.Chart.Macrostep Tazuna.Thm.Service.Chart.Map Tazuna.Thm.Service.Chart.Microstep Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Chart.Request Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Screen.Subscription Tazuna.Thm.Service.Automation Tazuna.Thm.Service.Command Tazuna.Thm.Service.Integrity Tazuna.Thm.Service.Query Tazuna.Thm.Service.Records Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic Tazuna.Thm.Service.Clock Tazuna.Thm.Service.Queue
 
-open Tazuna.Thm.Syntax.Structure (resultOfMismatch_eq_none_iff resultOfMismatch_unaccepted)
+open Tazuna.Thm.Spec.Structure (resultOfMismatch_eq_none_iff resultOfMismatch_unaccepted)
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
@@ -256,11 +256,11 @@ theorem resultRequest_now (name k : String) : (resultRequest st s name k).1.now 
   repeat' split
   all_goals first | rfl | simp
 
-theorem resultOfFinding_halts (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
-    (m : Syntax.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = true := by
+theorem resultOfFinding_halts (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
+    (m : Spec.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = true := by
   cases m <;> rfl
 
-theorem brokenAssumption_finding (requestId : String) (target : Syntax.Ref) (answer : Answer)
+theorem brokenAssumption_finding (requestId : String) (target : Spec.Ref) (answer : Answer)
     (failedRequires failedEnsures : Option String) (r : Finding)
     (h : brokenAssumption requestId target answer failedRequires failedEnsures = some r) :
     r.halts = false ∧ ∃ m, r = assumptionFinding requestId target m := by

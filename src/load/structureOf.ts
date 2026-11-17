@@ -12,7 +12,7 @@ import {
   type StateSpec,
 } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
-import type { Structure } from "../syntax/structure.generated.ts";
+import type { Structure } from "../spec/structure.generated.ts";
 
 import type {
   ActivityStructure,
@@ -20,7 +20,7 @@ import type {
   DefinitionStructure,
   StateStructure,
   TransitionStructure,
-} from "../syntax/structure.ts";
+} from "../spec/structure.ts";
 
 type RefOf = (value: unknown) => DefinitionRef | null;
 

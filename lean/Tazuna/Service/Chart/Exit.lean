@@ -1,6 +1,6 @@
 import Tazuna.Service.Chart.Queue
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -100,4 +100,4 @@ def exitOne (st : Service) : Nat → String → String → Processing → m Proc
 
 end
 
-end Tazuna.Semantics
+end Tazuna.Service

@@ -5,7 +5,7 @@ import Tazuna.Thm.Service.Functions
 
 namespace Tazuna.Thm.Service.Integrity
 
-open Tazuna.Data Tazuna.Semantics
+open Tazuna.Data Tazuna.Service
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Records Tazuna.Thm.Service.Functions
 
 variable {st : Service}
@@ -158,8 +158,8 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
         · cases he
         · cases hc; exact Or.inr rfl
 
-theorem entity_invariant_reported_iff (records : Records) (name : String) (definition : Syntax.Ref) (key c : String)
-    (command : Syntax.Ref) :
+theorem entity_invariant_reported_iff (records : Records) (name : String) (definition : Spec.Ref) (key c : String)
+    (command : Spec.Ref) :
     .failedEntityInvariant definition key c command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
         row.key = some key ∧ fs.invariant row.entity row.value = .ok (some c) := by
@@ -180,8 +180,8 @@ theorem entity_invariant_reported_iff (records : Records) (name : String) (defin
   · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
 
-theorem single_invariant_reported_iff (records : Records) (name : String) (definition : Syntax.Ref) (c : String)
-    (command : Syntax.Ref) :
+theorem single_invariant_reported_iff (records : Records) (name : String) (definition : Spec.Ref) (c : String)
+    (command : Spec.Ref) :
     .failedSingleInvariant definition c command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
         row.key = none ∧ fs.invariant row.entity row.value = .ok (some c) := by
@@ -202,7 +202,7 @@ theorem single_invariant_reported_iff (records : Records) (name : String) (defin
   · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
 
-theorem service_invariant_reported_iff (records : Records) (name : String) (c : String) (command : Syntax.Ref) :
+theorem service_invariant_reported_iff (records : Records) (name : String) (c : String) (command : Spec.Ref) :
     .failedServiceInvariant c command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ fs.serviceInvariant records = .ok (some c) := by
   rw [mem_integrityViolations]
@@ -219,8 +219,8 @@ theorem service_invariant_reported_iff (records : Records) (name : String) (c : 
   · rintro ⟨rfl, hs⟩
     exact Or.inr (Or.inr ⟨c, hs, rfl⟩)
 
-theorem dangling_ref_reported_iff (records : Records) (name : String) (definition : Syntax.Ref)
-    (key field targetKey : String) (command : Syntax.Ref) :
+theorem dangling_ref_reported_iff (records : Records) (name : String) (definition : Spec.Ref)
+    (key field targetKey : String) (command : Spec.Ref) :
     .danglingRef definition key field targetKey command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
         row.key = some key ∧ ∃ targetEntity, (row.entity, field, targetEntity) ∈ st.references ∧
@@ -243,8 +243,8 @@ theorem dangling_ref_reported_iff (records : Records) (name : String) (definitio
   · rintro ⟨rfl, row, hr, rfl, he, hk, targetEntity, hm, ht, v, hv, hn, rfl, hx⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inr ⟨field, targetEntity, v, hm, hv, hn, ht, hx, by rw [hk]⟩)⟩
 
-theorem dangling_single_ref_reported_iff (records : Records) (name : String) (definition : Syntax.Ref)
-    (field targetKey : String) (command : Syntax.Ref) :
+theorem dangling_single_ref_reported_iff (records : Records) (name : String) (definition : Spec.Ref)
+    (field targetKey : String) (command : Spec.Ref) :
     .danglingSingleRef definition field targetKey command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
         row.key = none ∧ ∃ targetEntity, (row.entity, field, targetEntity) ∈ st.references ∧

@@ -4,8 +4,8 @@ import { plain } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { traceName } from "../load/traceName.ts";
 import { givenRecordsOf } from "../sim/spec/simulate.ts";
+import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
 import { compareTrace } from "./compare.ts";
-import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./ports.ts";
 import { readSnapshot } from "./snapshot.ts";
 
 /** A run that a snapshot records: a scenario of `service`, or the run of its running peer `runner`. */

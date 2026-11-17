@@ -1,9 +1,9 @@
 import Tazuna.Data.Time
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
 /-! This module defines the notes that the semantic run sends to the instrumentation. -/
 
-namespace Tazuna.Semantics
+namespace Tazuna.Service
 
 open Tazuna.Data
 
@@ -28,7 +28,7 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Copy
 
 structure Who where
-  chart : Syntax.Ref
+  chart : Spec.Ref
   copy : Option Copy := none
 deriving DecidableEq, Repr, Inhabited
 
@@ -42,9 +42,9 @@ inductive StepName where
   | opensDone (who : Who) (key : String)
   | activities (who : Who) (state : String)
   | deadline (who : Who) (name : String)
-  | reaction (automation : Syntax.Ref)
-  | command (command : Syntax.Ref) (sender : Who)
-  | answer (command : Syntax.Ref) (sender : Who)
+  | reaction (automation : Spec.Ref)
+  | command (command : Spec.Ref) (sender : Who)
+  | answer (command : Spec.Ref) (sender : Who)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
@@ -53,7 +53,7 @@ def StepName.isDeadline : StepName → Bool
   | .deadline .. => true
   | _ => false
 
-def StepName.definition : StepName → Syntax.Ref
+def StepName.definition : StepName → Spec.Ref
   | .start w | .receive w _ | .always w | .onDone w | .opensDone w _ | .activities w _ | .deadline w _ => w.chart
   | .reaction a => a
   | .command _ sender | .answer _ sender => sender.chart
@@ -61,13 +61,13 @@ def StepName.definition : StepName → Syntax.Ref
 structure RegionPair where
   first : Nat
   second : Nat
-  firstRef : Syntax.TransitionRef
-  secondRef : Syntax.TransitionRef
+  firstRef : Spec.TransitionRef
+  secondRef : Spec.TransitionRef
   state : String
 deriving DecidableEq, Repr, Inhabited
 
 structure RegionCheck where
-  chart : Syntax.Ref
+  chart : Spec.Ref
   pairs : List RegionPair
   halted : Bool
 deriving DecidableEq, Repr, Inhabited
@@ -76,7 +76,7 @@ inductive Note where
   /-- The event lines that step `step` wrote from line `start`, in groups of the lengths `groups`. -/
   | events (step start : Nat) (groups : List Nat)
   /-- The record parts that `definition` read without asking Functions. -/
-  | read (definition : Syntax.Ref) (parts : List RecordPart)
+  | read (definition : Spec.Ref) (parts : List RecordPart)
   | stepBegins (step : Nat) (name : StepName) (startedResource : Option String)
   | stepEnds
   /-- The evaluation of the always transitions of `owner` and its copies before and after the work of the open step. -/
@@ -100,4 +100,4 @@ class MonadNote (m : Type → Type) where
 instance : MonadNote Id where
   note _ := pure ()
 
-end Tazuna.Semantics
+end Tazuna.Service

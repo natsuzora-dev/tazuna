@@ -5,7 +5,7 @@ import Tazuna.Validation.Contracts
 
 namespace Tazuna.Validation
 
-open Tazuna.Syntax
+open Tazuna.Spec
 
 def check (s : Structure) : List Illegal :=
   Automations.check s ++ Charts.check s ++ Commands.check s ++ Contracts.check s

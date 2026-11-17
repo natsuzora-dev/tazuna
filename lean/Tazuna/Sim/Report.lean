@@ -1,6 +1,6 @@
 import Tazuna.Data.Group
 import Tazuna.Data.Time
-import Tazuna.Syntax.Structure
+import Tazuna.Spec.Structure
 
 namespace Tazuna.Sim
 
@@ -32,7 +32,7 @@ inductive Report where
   Given's record of `entity` with `key` of the running service `service` holds `written`, of the form of a key of
   `created` that a running service creates: a created key exists only once the run creates it.
   -/
-  | writtenGivenKey (service entity : String) (key : Option String) (written : String) (created : Syntax.Ref)
+  | writtenGivenKey (service entity : String) (key : Option String) (written : String) (created : Spec.Ref)
   /-- The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values. -/
   | duplicateRecord (service entity : String) (key : Option String)
   /--
@@ -58,7 +58,7 @@ inductive Report where
   /-- Given writes no record of the single-entity `entity` of the running service `service`. -/
   | missingRecord (service entity : String)
   /-- The external peer's line emits `event`, which no running service's definitions receive. -/
-  | unreceivedEvent (scenarioLine : Nat) (event : Syntax.Ref)
+  | unreceivedEvent (scenarioLine : Nat) (event : Spec.Ref)
   /-- The line fails `message`, which is no request: only a request has an answer that can tell its sender. -/
   | unfailable (scenarioLine : Nat) (message : Value)
   /-- The line needs `service` to take part in another way than Given says: running, external, or the own service. -/
@@ -92,13 +92,13 @@ inductive Report where
   A written value holds `key`, of the form of a key of `entity` that a running service creates: a scenario names a
   created key only through a handle.
   -/
-  | writtenKey (scenarioLine : Nat) (key : String) (entity : Syntax.Ref)
+  | writtenKey (scenarioLine : Nat) (key : String) (entity : Spec.Ref)
   /--
   The running service `service` sent `key` or holds it in a record, of the form of a key of `entity` that a running
   service creates, and no running service created it: a spec computed it, and only createKey makes a created key, so
   test could not tell it from one when it compares runs up to a renaming of created keys.
   -/
-  | computedKey (service key : String) (entity : Syntax.Ref)
+  | computedKey (service key : String) (entity : Spec.Ref)
   /-- The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick. -/
   | misplacedCreated (scenarioLine : Nat)
   /-- The screen instance `screen` that the line operates is not the one that takes operations of its screen. -/
