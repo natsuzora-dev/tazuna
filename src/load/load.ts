@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, posix, relative, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseSync } from "oxc-parser";
 import type { z } from "zod";
@@ -51,6 +51,8 @@ export interface Spec {
   readonly constants: readonly Named<Constants>[];
   readonly scenarios: readonly Named<LoadedScenario>[];
   readonly sources: readonly SourceFile[];
+  /** The local modules outside root that sources import, directly or through each other. */
+  readonly imported: readonly SourceFile[];
   readonly imports: readonly ServiceImport[];
   readonly names: ReadonlyMap<unknown, Named<Definition>>;
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
@@ -65,6 +67,39 @@ function tsFiles(dir: string): string[] {
       if (statSync(path).isDirectory()) return name === "__snapshots__" ? [] : tsFiles(path);
       return name.endsWith(".ts") ? [path] : [];
     });
+}
+
+function parsed(path: string, file: string): SourceFile {
+  const text = readFileSync(path, "utf8");
+  const { program, comments } = parseSync(path, text);
+  return { file, text, program, comments };
+}
+
+const moduleFile = /\.[cm]?[jt]sx?$/;
+
+/** The modules outside `root` that `sources` import by a relative path, directly or through each other. */
+function importedOutside(root: string, sources: readonly SourceFile[]): SourceFile[] {
+  const imported: SourceFile[] = [];
+  const visit = (source: SourceFile): void => {
+    for (const statement of source.program.body) {
+      const from =
+        (statement.type === "ImportDeclaration" && statement.importKind !== "type") ||
+        ((statement.type === "ExportNamedDeclaration" || statement.type === "ExportAllDeclaration") &&
+          statement.exportKind !== "type")
+          ? statement.source?.value
+          : undefined;
+      if (from === undefined || !from.startsWith(".")) continue;
+      const path = resolve(root, dirname(source.file), from);
+      const file = relative(root, path).split(sep).join("/");
+      if (!file.startsWith("../") || path.split(sep).includes("node_modules") || !moduleFile.test(path)) continue;
+      if (imported.some((s) => s.file === file) || !existsSync(path)) continue;
+      const module = parsed(path, file);
+      imported.push(module);
+      visit(module);
+    }
+  };
+  for (const source of sources) visit(source);
+  return imported;
 }
 
 export function placeIn(source: Pick<SourceFile, "file" | "text">, offset: number): Place {
@@ -154,10 +189,8 @@ export async function loadSpec(root: string): Promise<Spec> {
   const definerExports: DefinerExport[] = [];
   const fileExports: FileExport[] = [];
   for (const path of tsFiles(root)) {
-    const file = relative(root, path).split(sep).join("/");
-    const text = readFileSync(path, "utf8");
-    const { program, comments } = parseSync(path, text);
-    const source: SourceFile = { file, text, program, comments };
+    const source = parsed(path, relative(root, path).split(sep).join("/"));
+    const { file } = source;
     sources.push(source);
     const exports = exportsOf(source.program);
     const module: Record<string, unknown> = await import(pathToFileURL(path).href);
@@ -239,6 +272,7 @@ export async function loadSpec(root: string): Promise<Spec> {
     constants,
     scenarios: loaded.scenarios,
     sources,
+    imported: importedOutside(root, sources),
     imports: serviceImports(sources, fileExports, serviceOf),
     names,
     services,

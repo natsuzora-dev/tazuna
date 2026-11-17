@@ -109,6 +109,27 @@ function moduleState(source: SourceFile): Found<Restricted>[] {
   });
 }
 
+/** tsc's patterns for a comment that suppresses errors: a line comment, or the last line of a block comment. */
+const tsDirectives = {
+  Line: /^\/\/\/?\s*@(ts-expect-error|ts-ignore)/,
+  Block: /^(?:\/|\*)*\s*@(ts-expect-error|ts-ignore)/,
+} as const;
+
+const tsMarks: readonly string[] = ["@ts-ignore", "@ts-expect-error"];
+
+/** The suppression mark of the comment, where the two marks of tsc count as tsc reads them. */
+function suppressionMark(
+  text: string,
+  type: keyof typeof tsDirectives,
+  value: string,
+): (typeof suppressionMarks)[number] | undefined {
+  const lastLine = type === "Line" ? text : (text.split(/[\n\r\u2028\u2029]/).at(-1) ?? "");
+  const directive = tsDirectives[type].exec(lastLine.trimStart())?.[1];
+  return directive === undefined
+    ? suppressionMarks.find((s) => !tsMarks.includes(s) && value.trimStart().startsWith(s))
+    : suppressionMarks.find((s) => s === `@${directive}`);
+}
+
 function assertions(source: SourceFile): Found<Restricted>[] {
   const found: Found<Restricted>[] = [];
   const report = (start: number, violation: Restricted) => found.push({ violation, place: placeIn(source, start) });
@@ -129,15 +150,18 @@ function assertions(source: SourceFile): Found<Restricted>[] {
   };
   visit(source.program);
   for (const comment of source.comments) {
-    const mark = suppressionMarks.find((s) => comment.value.trimStart().startsWith(s));
+    const mark = suppressionMark(source.text.slice(comment.start, comment.end), comment.type, comment.value);
     if (mark !== undefined) report(comment.start, { kind: "Restricted.suppression", definition: null, data: { mark } });
   }
   return found;
 }
 
-export const check = (spec: Spec): Found<Restricted>[] => [
-  ...imports(spec),
-  ...spec.sources.flatMap(nondeterminism),
-  ...spec.sources.flatMap(moduleState),
-  ...spec.sources.flatMap(assertions),
-];
+export function check(spec: Spec): Found<Restricted>[] {
+  const files = [...spec.sources, ...spec.imported];
+  return [
+    ...imports(spec),
+    ...files.flatMap(nondeterminism),
+    ...files.flatMap(moduleState),
+    ...files.flatMap(assertions),
+  ];
+}

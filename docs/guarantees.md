@@ -119,7 +119,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Detection | What it leaves out |
 |---|---|
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
-| `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for. |
+| `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
 | `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |

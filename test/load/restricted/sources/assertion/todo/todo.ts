@@ -43,4 +43,12 @@ export const copyNoteAsserted = command({
   return [emit(noteCopied, { id: input.taskId, title: task.note! })];
 });
 
+/// @ts-expect-error
+export const ignoredTitleLength: number = titles[0];
+
+/*
+ * The title is not a number.
+ * @ts-expect-error */
+export const expectedTitleLength: number = titles[1];
+
 export const todo = contract({ addTask, copyNote, addTaskAsString, copyNoteAsserted });
