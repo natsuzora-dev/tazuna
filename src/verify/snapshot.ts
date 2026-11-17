@@ -102,12 +102,12 @@ export function pairSnapshots(
   return { compare: pairings.flatMap((p) => p.compare), problems: pairings.flatMap((p) => p.problems) };
 }
 
-/** Returns the service folders of the spec, and the entries of their snapshot folders. */
+/** Returns the services of the spec, and the entries of their snapshot folders. */
 export function snapshotFolders(spec: Spec): {
   readonly services: readonly string[];
   readonly folders: readonly Folder[];
 } {
-  const services = [...new Set(spec.sources.map((s) => s.service))];
+  const services = [...spec.services.keys()];
   return {
     services,
     folders: services.map((service) => ({ service, entries: entriesOf(snapshotFolder(spec, service)) })),

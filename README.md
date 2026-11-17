@@ -25,10 +25,11 @@ To list the commands and their options, run `npx tazuna --help`.
 
 ## Spec folder layout
 
-Each folder directly under the spec folder holds one service, and the folder name is the service name, which its `service()` or `externalService()` call writes as `name` so that types can carry it.
-For example, `spec/todo/` holds the `todo` service.
+The `name` that a `service()` or `externalService()` call writes is the service's name, and it alone tells which service a definition, contract, scenario, or `constants()` call belongs to: a definition belongs to the service of the definer that made it, and a `constants()` call names its service as its first argument.
+Folders are free, and the samples keep one folder per service, named after it, such as `spec/todo/` for the `todo` service.
+The snapshots of a service's scenarios are in `<service name>/__snapshots__/` under the spec folder.
 
-A service folder holds one file for each kind of definition:
+The samples keep one file for each kind of definition:
 
 | File | Definitions |
 |---|---|
@@ -42,8 +43,7 @@ A service folder holds one file for each kind of definition:
 | `contract.ts` | The contract |
 | `scenarios.ts` | Scenarios |
 
-Each folder has at most one `constants()` call, exported as `<folder name>Constants`.
-For example, `spec/todo/` has `todoConstants`.
+A file of one service imports from a file of another service only that service's contract (`Restricted.crossServiceImport`); a file belongs to the services whose definitions, definers, contracts, scenarios, or constants it exports.
 
 These file names are a convention, and tazuna doesn't check them.
 The `check`, `test`, and `verify` commands collect the exported definitions, contracts, constants, and scenarios from every `.ts` file in the spec folder, except the files under `__snapshots__`.

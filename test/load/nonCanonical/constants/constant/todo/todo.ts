@@ -2,6 +2,7 @@ import { constants, duration, emit, entity, service } from "@natsuzora-dev/tazun
 import { z } from "zod";
 
 export const todoConstants = constants(
+  "todo",
   z.object({ titleLengthMax: z.int(), reminderOffsets: z.array(duration), defaultLabel: z.string() }),
   { titleLengthMax: 80, reminderOffsets: ["PT10M", "PT1H"], defaultLabel: "inbox" },
 );

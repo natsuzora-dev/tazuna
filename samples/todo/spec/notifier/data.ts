@@ -3,6 +3,7 @@ import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 
 export const notifierConstants = constants(
+  "notifier",
   z.object({
     openTaskLimit: z.int(),
     warnedPeriod: duration,

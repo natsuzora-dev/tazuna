@@ -229,7 +229,7 @@ interface ExternalDefiners<N extends string> {
  * answers and events, never how they are made.
  */
 export function externalService<const N extends string>(definition: {
-  /** The service's name, the name of its folder. */
+  /** The service's name, which names it in contracts, scenarios, constants and traces. */
   name: N;
   description: string;
 }): ExternalDefiners<N> {
@@ -248,7 +248,7 @@ export function service<
   const Es extends Entities = Record<never, never>,
   const Iv extends string = never,
 >(definition: {
-  /** The service's name, the name of its folder. */
+  /** The service's name, which names it in contracts, scenarios, constants and traces. */
   name: N;
   description: string;
   entities?: Es & SomeKey<keyof Es>;
@@ -359,7 +359,7 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
   const screen = screenDefiner(owner);
   const events = eventDefiners(owner);
   const contract = contractDefiner(owner);
-  const scenario = scenarioDefiner();
+  const scenario = scenarioDefiner(owner);
   register(owner, [command, query, automation, machine, screen, contract, scenario, ...Object.values(events)]);
   return {
     command,

@@ -1,10 +1,10 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseSync } from "oxc-parser";
 import type { z } from "zod";
 import type { Malformed } from "../data/malformed.ts";
-import { constantsSchema } from "../dsl/constants.ts";
+import { constantsSchema, constantsService } from "../dsl/constants.ts";
 import {
   type ChartSpec,
   type Contract,
@@ -15,7 +15,7 @@ import {
   type ServiceDefinition,
 } from "../dsl/definition.ts";
 import { contractService, definerService, isContract } from "../dsl/service.ts";
-import { isScenarioDefinition, type ScenarioDefinition } from "../scenario/define.ts";
+import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "../scenario/define.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
 import type { DefinitionStructure } from "../syntax/structure.ts";
 import { opaqueCollections } from "./collections.ts";
@@ -37,7 +37,6 @@ type Parsed = ReturnType<typeof parseSync>;
 
 export interface SourceFile {
   readonly file: string;
-  readonly service: string;
   readonly text: string;
   readonly program: Parsed["program"];
   readonly comments: Parsed["comments"];
@@ -52,6 +51,7 @@ export interface Spec {
   readonly constants: readonly Named<Constants>[];
   readonly scenarios: readonly Named<LoadedScenario>[];
   readonly sources: readonly SourceFile[];
+  readonly imports: readonly ServiceImport[];
   readonly names: ReadonlyMap<unknown, Named<Definition>>;
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
   readonly structure: Structure;
@@ -87,33 +87,77 @@ function exportsOf(program: Parsed["program"]): Map<string, number> {
   return exports;
 }
 
-export function crossServiceImports(spec: Pick<Spec, "sources">) {
-  const serviceNames = new Set(spec.sources.map((s) => s.service));
-  return spec.sources.flatMap((source) =>
-    source.program.body.flatMap((statement) => {
-      if (statement.type !== "ImportDeclaration" || !statement.source.value.startsWith("..")) return [];
-      const parts = statement.source.value.split("/");
-      const other = parts[1];
-      if (other === undefined || !serviceNames.has(other) || other === source.service) return [];
-      return [{ source, statement, service: other, contract: parts.at(-1) === "contract.ts" }];
-    }),
-  );
+/** An import of one spec file from another that crosses into a service. */
+interface ServiceImport {
+  readonly source: SourceFile;
+  readonly statement: Parsed["program"]["body"][number];
+  /** The services that the importing file exports values of. */
+  readonly within: readonly string[];
+  /** A service that the imported file exports values of and the importing file exports none of. */
+  readonly service: string;
+  /** Whether every name that the import takes is a contract of that service. */
+  readonly contract: boolean;
+}
+
+interface FileExport {
+  readonly file: string;
+  readonly name: string;
+  readonly place: Place;
+  readonly value: unknown;
+}
+
+/**
+ * The imports across services. A file belongs to the services that its exported values belong to (definitions,
+ * definers, contracts, scenarios, and constants); a file that exports none of them belongs to no service, and its
+ * imports cross nothing. An import crosses into each service of the imported file that the importing file does not
+ * belong to.
+ */
+function serviceImports(
+  sources: readonly SourceFile[],
+  exports: readonly FileExport[],
+  serviceOf: (value: unknown) => string | undefined,
+): ServiceImport[] {
+  const servicesOf = (file: string) =>
+    new Set(exports.flatMap((e) => (e.file === file ? (serviceOf(e.value) ?? []) : [])));
+  const known = new Set(sources.map((s) => s.file));
+  return sources.flatMap((source) => {
+    const own = servicesOf(source.file);
+    if (own.size === 0) return [];
+    return source.program.body.flatMap((statement): ServiceImport[] => {
+      if (statement.type !== "ImportDeclaration" || !statement.source.value.startsWith(".")) return [];
+      const file = posix.normalize(posix.join(posix.dirname(source.file), statement.source.value));
+      if (!known.has(file)) return [];
+      const taken = statement.specifiers.map((s) =>
+        s.type === "ImportSpecifier" && s.imported.type === "Identifier" ? s.imported.name : undefined,
+      );
+      const values = (name: string | undefined) =>
+        exports.filter((e) => e.file === file && (name === undefined || e.name === name)).map((e) => e.value);
+      return [...servicesOf(file)]
+        .filter((service) => !own.has(service))
+        .map((service) => ({
+          source,
+          statement,
+          within: [...own],
+          service,
+          contract: taken.every((name) => values(name).every((v) => isContract(v) && serviceOf(v) === service)),
+        }));
+    });
+  });
 }
 
 export async function loadSpec(root: string): Promise<Spec> {
   const found: Omit<Named<Definition>, "service">[] = [];
-  const foundContracts: Contract[] = [];
-  const constants: Named<Constants>[] = [];
-  const defined: Named<ScenarioDefinition>[] = [];
+  const foundContracts: { readonly place: Place; readonly value: Readonly<Record<string, unknown>> }[] = [];
+  const foundConstants: { readonly name: string; readonly place: Place; readonly value: unknown }[] = [];
+  const foundScenarios: { readonly name: string; readonly place: Place; readonly value: ScenarioDefinition }[] = [];
   const sources: SourceFile[] = [];
   const definerExports: DefinerExport[] = [];
-  const namedExports: NamedExport[] = [];
+  const fileExports: FileExport[] = [];
   for (const path of tsFiles(root)) {
     const file = relative(root, path).split(sep).join("/");
-    const service = file.split("/")[0] ?? "";
     const text = readFileSync(path, "utf8");
     const { program, comments } = parseSync(path, text);
-    const source: SourceFile = { file, service, text, program, comments };
+    const source: SourceFile = { file, text, program, comments };
     sources.push(source);
     const exports = exportsOf(source.program);
     const module: Record<string, unknown> = await import(pathToFileURL(path).href);
@@ -121,32 +165,53 @@ export async function loadSpec(root: string): Promise<Spec> {
     const written = Object.entries(module).sort(([a], [b]) => (exports.get(a) ?? 0) - (exports.get(b) ?? 0));
     for (const [name, value] of written) {
       const place = placeIn(source, exports.get(name) ?? 0);
+      fileExports.push({ file, name, place, value });
       const definer = definerService(value);
-      const schema = constantsSchema(value);
       if (isScenarioDefinition(value)) {
-        namedExports.push({ name, service, place, value });
-        if (!defined.some((s) => s.definition === value)) defined.push({ name, service, place, definition: value });
+        if (!foundScenarios.some((s) => s.value === value)) foundScenarios.push({ name, place, value });
       } else if (isDefinition(value)) {
-        namedExports.push({ name, service, place, value });
         if (!found.some((d) => d.definition === value)) found.push({ name, place, definition: value });
-      } else if (definer !== undefined) {
-        definerExports.push({ folder: service, definition: definer, place });
-      } else if (isContract(value)) {
-        foundContracts.push({ service, place, members: value, value });
-      } else if (schema !== undefined) {
-        namedExports.push({ name, service, place, value });
-        if (!constants.some((c) => c.definition.values === value))
-          constants.push({ name, service, place, definition: { schema, values: value as Constants["values"] } });
-      }
+      } else if (definer !== undefined) definerExports.push({ definition: definer, place });
+      else if (isContract(value)) foundContracts.push({ place, value });
+      else if (constantsSchema(value) !== undefined && !foundConstants.some((c) => c.value === value))
+        foundConstants.push({ name, place, value });
     }
   }
   const owned = owners(found, definerExports);
   const { services, definitions } = owned;
   const serviceNames = new Map([...services].map(([name, s]) => [s.definition, name]));
-  // A contract belongs to the service of its definer, as a definition does, wherever its file is.
-  const contracts = foundContracts.map((c) => {
-    const owner = contractService(c.value);
-    return { ...c, service: (owner === undefined ? undefined : serviceNames.get(owner)) ?? c.service };
+  const ownerName = (definer: ServiceDefinition | undefined) =>
+    definer === undefined ? undefined : serviceNames.get(definer);
+  const contracts = foundContracts.flatMap(({ place, value }): Contract[] => {
+    const service = ownerName(contractService(value));
+    return service === undefined ? [] : [{ service, place, members: value, value }];
+  });
+  const unknownServices: Found<Malformed>[] = [];
+  const constants = foundConstants.flatMap(({ name, place, value }): Named<Constants>[] => {
+    const service = constantsService(value) ?? "";
+    const schema = constantsSchema(value);
+    if (!services.has(service) || schema === undefined) {
+      const violation: Malformed = { kind: "Malformed.unknownService", definition: null, data: { name: service } };
+      unknownServices.push({ violation, place });
+      return [];
+    }
+    return [{ name, service, place, definition: { schema, values: value as Constants["values"] } }];
+  });
+  const defined = foundScenarios.flatMap(({ name, place, value }): Named<ScenarioDefinition>[] => {
+    const service = ownerName(scenarioService(value));
+    return service === undefined ? [] : [{ name, service, place, definition: value }];
+  });
+  const definitionService = new Map<unknown, string>(definitions.map((d) => [d.definition, d.service]));
+  const serviceOf = (value: unknown): string | undefined =>
+    definitionService.get(value) ??
+    ownerName(definerService(value)) ??
+    ownerName(contractService(value)) ??
+    ownerName(scenarioService(value)) ??
+    constants.find((c) => c.definition.values === value)?.service;
+  const namedExports = fileExports.flatMap(({ name, place, value }): NamedExport[] => {
+    const service = serviceOf(value);
+    const named = isDefinition(value) || isScenarioDefinition(value) || constantsSchema(value) !== undefined;
+    return named && service !== undefined ? [{ name, service, place, value }] : [];
   });
   const names = new Map<unknown, Named<Definition>>(definitions.map((d) => [d.definition, d]));
   const { structure, thrownDefaults } = structureOf(definitions, names, services, contracts);
@@ -162,6 +227,7 @@ export async function loadSpec(root: string): Promise<Spec> {
     malformed: [
       ...duplicateNames(namedExports),
       ...owned.malformed,
+      ...unknownServices,
       ...unexportedDefinitions(definitions, services, contracts, constants, exported),
       ...inexactDelays(charts({ definitions, structure })),
       ...opaque,
@@ -172,6 +238,7 @@ export async function loadSpec(root: string): Promise<Spec> {
     constants,
     scenarios: loaded.scenarios,
     sources,
+    imports: serviceImports(sources, fileExports, serviceOf),
     names,
     services,
     structure,

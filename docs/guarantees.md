@@ -133,7 +133,7 @@ tazuna detects breaks of each assumption only partly or not at all.
   Its `settled` resolves only when the implementation has no work left that it can do before it gets a message or the clock moves; `drive` gives the next `in` line then, so an output that the implementation would still send lands in the group of a later input and compares as a mismatch.
   An adapter that can only wait for that, such as one that drives a browser, bounds the wait and rejects with `Unsettled` when the bound passes.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
-  `verify` detects a break of this assumption only on the traces of external services in its folder.
+  `verify` detects a break of this assumption only on the traces of external services in the traces folder.
 - **Opaque values.** An implementation treats the IDs and keys that it did not create as opaque: replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
   A running peer's implementation receives the values of another implementation, while its snapshot holds the values of the simulation, so its trace stands for what it does with either.
 - **Reproducible implementations.** One recorded run represents the implementation: given the same world, the implementation sends the messages of that trace.

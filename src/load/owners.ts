@@ -3,15 +3,14 @@ import type { Definition, Named, Place, ServiceDefinition } from "../dsl/definit
 import type { Found } from "./found.ts";
 
 export interface DefinerExport {
-  readonly folder: string;
   readonly definition: ServiceDefinition;
   readonly place: Place;
 }
 
 /**
  * Returns the service that owns the definition, or a Malformed violation. Returns null when the definition's definer,
- * or every definer that lists the entity, is exported but is no folder's service; serviceInSharedFolder reports the
- * cause.
+ * or every definer that lists the entity, is exported but names a service that an earlier definer names;
+ * duplicateService reports the cause.
  */
 function owner(
   { name, definition }: Omit<Named<Definition>, "service">,
@@ -32,33 +31,6 @@ function owner(
   return [...exported].some(lists) ? null : { kind: "Malformed.unlistedEntity", definition: null, data: { name } };
 }
 
-function ambiguousServices(definerExports: readonly DefinerExport[]): Found<Malformed>[] {
-  return definerExports.flatMap((e, i): Found<Malformed>[] => {
-    const earlier = definerExports.slice(0, i);
-    if (earlier.some((x) => x.folder === e.folder && x.definition === e.definition)) return [];
-    if (earlier.some((x) => x.folder === e.folder && x.definition !== e.definition))
-      return [
-        {
-          violation: { kind: "Malformed.serviceInSharedFolder", definition: null, data: { folder: e.folder } },
-          place: e.place,
-        },
-      ];
-    const elsewhere = earlier.find((x) => x.definition === e.definition && x.folder !== e.folder);
-    if (elsewhere !== undefined)
-      return [
-        {
-          violation: {
-            kind: "Malformed.splitService",
-            definition: null,
-            data: { folder: e.folder, elsewhere: elsewhere.folder },
-          },
-          place: e.place,
-        },
-      ];
-    return [];
-  });
-}
-
 function listedUnderOtherName(
   services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>,
   definitions: readonly Named<Definition>[],
@@ -75,30 +47,36 @@ function listedUnderOtherName(
   );
 }
 
-/** Reports each definer that is the service of no folder of its name, at the first folder whose service it is. */
-function misnamedServices(
-  services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>,
-): Found<Malformed>[] {
-  const named = new Set(
-    [...services].filter(([folder, s]) => folder === s.definition.name).map(([, s]) => s.definition),
-  );
-  const reported = new Set<ServiceDefinition>();
-  return [...services].flatMap(([folder, { definition, place }]): Found<Malformed>[] => {
-    if (named.has(definition) || reported.has(definition)) return [];
-    reported.add(definition);
-    return [
-      {
-        violation: { kind: "Malformed.misnamedService", definition: null, data: { folder, name: definition.name } },
+/**
+ * The services by name, each from the first export of its definer, and a duplicateService violation at the first export
+ * of each later definer with a name that an earlier definer has.
+ */
+function servicesOf(definerExports: readonly DefinerExport[]): {
+  readonly services: Map<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
+  readonly malformed: Found<Malformed>[];
+} {
+  const services = new Map<string, { readonly definition: ServiceDefinition; readonly place: Place }>();
+  const malformed: Found<Malformed>[] = [];
+  const seen = new Set<ServiceDefinition>();
+  for (const { definition, place } of definerExports) {
+    if (seen.has(definition)) continue;
+    seen.add(definition);
+    const earlier = services.get(definition.name);
+    if (earlier === undefined) services.set(definition.name, { definition, place });
+    else
+      malformed.push({
+        violation: {
+          kind: "Malformed.duplicateService",
+          definition: null,
+          data: { name: definition.name, elsewhere: earlier.place.file },
+        },
         place,
-      },
-    ];
-  });
+      });
+  }
+  return { services, malformed };
 }
 
-/**
- * Assigns each definition its service. A folder's service is the first definer exported in it, and a definer's service
- * is the folder of its name when it is that folder's service, else the first folder whose service it is.
- */
+/** Assigns each definition the service that its definer names, or, for an entity, the definer that lists it. */
 export function owners(
   found: readonly Omit<Named<Definition>, "service">[],
   definerExports: readonly DefinerExport[],
@@ -107,12 +85,8 @@ export function owners(
   readonly definitions: Named<Definition>[];
   readonly malformed: Found<Malformed>[];
 } {
-  const services = new Map<string, { readonly definition: ServiceDefinition; readonly place: Place }>();
-  for (const { folder, definition, place } of definerExports)
-    if (!services.has(folder)) services.set(folder, { definition, place });
-  const serviceNames = new Map<ServiceDefinition, string>();
-  for (const [folder, { definition }] of services)
-    if (!serviceNames.has(definition) || folder === definition.name) serviceNames.set(definition, folder);
+  const { services, malformed: duplicates } = servicesOf(definerExports);
+  const serviceNames = new Map([...services].map(([name, { definition }]) => [definition, name]));
   const exported = new Set(definerExports.map((e) => e.definition));
   const definitions: Named<Definition>[] = [];
   const malformed: Found<Malformed>[] = [];
@@ -125,11 +99,6 @@ export function owners(
   return {
     services,
     definitions,
-    malformed: [
-      ...malformed,
-      ...listedUnderOtherName(services, definitions),
-      ...ambiguousServices(definerExports),
-      ...misnamedServices(services),
-    ],
+    malformed: [...malformed, ...duplicates, ...listedUnderOtherName(services, definitions)],
   };
 }

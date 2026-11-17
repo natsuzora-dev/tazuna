@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const { machine } = service({ name: "reminder", description: "Remind after a while" });
 
-export const reminderConstants = constants(z.object({ remindAfter: duration, nudgeAfter: duration }), {
+export const reminderConstants = constants("reminder", z.object({ remindAfter: duration, nudgeAfter: duration }), {
   remindAfter: "P1D",
   nudgeAfter: "PT0.0005S",
 });

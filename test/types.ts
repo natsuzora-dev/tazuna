@@ -1047,16 +1047,16 @@ screen({
 });
 
 // @ts-expect-error constants values have the schema's input type
-constants(z.object({ limit: z.int() }), { limit: "10" });
+constants("types", z.object({ limit: z.int() }), { limit: "10" });
 
 // A contract can hold the object that a constants() call returns.
-contract({ limits: constants(z.object({ limit: z.int() }), { limit: 10 }) });
+contract({ limits: constants("types", z.object({ limit: z.int() }), { limit: 10 }) });
 
 // @ts-expect-error a contract holds no object not made by constants()
 contract({ limits: { limit: 10 } });
 
 // A bag constant stays an array, since an implementation reads constants too.
-void constants(z.object({ tags: bag(z.string()) }), { tags: ["a"] }).tags.length;
+void constants("types", z.object({ tags: bag(z.string()) }), { tags: ["a"] }).tags.length;
 
 // A sortedBy key is a number, date or datetime field.
 sortedBy(z.strictObject({ n: z.int(), at: datetime }), "at");

@@ -8,7 +8,7 @@ import {
   suppressionMarks,
 } from "../../data/restricted.ts";
 import type { Found } from "../found.ts";
-import { crossServiceImports, placeIn, type SourceFile, type Spec } from "../load.ts";
+import { placeIn, type SourceFile, type Spec } from "../load.ts";
 
 interface Node {
   readonly type?: string;
@@ -44,7 +44,7 @@ const memberRead = (object: Node | undefined, property: string | undefined) =>
   );
 
 function imports(spec: Spec): Found<Restricted>[] {
-  return crossServiceImports(spec)
+  return spec.imports
     .filter((i) => !i.contract)
     .map(({ source, statement, service }) => ({
       violation: { kind: "Restricted.crossServiceImport", definition: null, data: { service } },

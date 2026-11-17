@@ -8,7 +8,7 @@ import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Json, Shape } from "../data/values.ts";
 import type { Named } from "../dsl/definition.ts";
 import { type AnyEntity, refTarget } from "../dsl/entity.ts";
-import { crossServiceImports, type Spec, structured } from "../load/load.ts";
+import { type Spec, structured } from "../load/load.ts";
 import {
   type ActivityStructure,
   type ChartStructure,
@@ -206,7 +206,7 @@ function scenarioView(spec: Spec, scenario: Named<{ readonly description: string
 export function viewModel(spec: Spec, path: string): ViewModel {
   // A scenario file imports the contracts of the peers that its Given lists, which the service itself does not use.
   const scenarioFiles = new Set(spec.scenarios.map((s) => s.place.file));
-  const imports = crossServiceImports(spec).filter((i) => i.contract && !scenarioFiles.has(i.source.file));
+  const imports = spec.imports.filter((i) => i.contract && !scenarioFiles.has(i.source.file));
   const services = [...spec.services].map(([name, owner]): ServiceView => {
     const definitions = structured(spec)
       .filter(({ named }) => named.service === name)
@@ -227,7 +227,7 @@ export function viewModel(spec: Spec, path: string): ViewModel {
           : "service",
       name,
       description: owner.definition.description,
-      uses: [...new Set(imports.filter((i) => i.source.service === name).map((i) => i.service))].sort(),
+      uses: [...new Set(imports.filter((i) => i.within.includes(name)).map((i) => i.service))].sort(),
       invariants: fieldsJson(spec, owner.definition.invariants),
       definitions,
     };

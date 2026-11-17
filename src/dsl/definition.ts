@@ -114,7 +114,7 @@ export interface Automation {
 
 export interface ServiceDefinition {
   readonly kind: "service";
-  /** The service's name, the name of the folder that holds it (Malformed.misnamedService). */
+  /** The service's name, which alone tells the definitions, contracts, scenarios and constants of the service. */
   readonly name: string;
   readonly description: string;
   readonly entities: Entities;

@@ -3,7 +3,17 @@ import type { MarkOf } from "../data/bag.ts";
 import type { Rejection } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { Contract, RecordsOf, ServiceOf } from "../dsl/contract.ts";
-import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen, Command, Control, OwnerOf, Query } from "../dsl/definition.ts";
+import type {
+  AnyCommand,
+  AnyEvent,
+  AnyQuery,
+  AnyScreen,
+  Command,
+  Control,
+  OwnerOf,
+  Query,
+  ServiceDefinition,
+} from "../dsl/definition.ts";
 import type { EncodedPayload, PayloadShape } from "../dsl/event.ts";
 
 type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>;
@@ -605,10 +615,19 @@ export type ScenarioDefiner<R, Own extends string> = <const P extends Peers, N>(
   },
 ) => ScenarioDefinition;
 
+const scenarioOwners = new WeakMap<object, ServiceDefinition>();
+
 export const scenarioDefiner =
-  <R, Own extends string>(): ScenarioDefiner<R, Own> =>
-  (description, { given, when, then }) =>
-    ({ kind: "scenario", description, given, when, expect: then }) as unknown as ScenarioDefinition;
+  <R, Own extends string>(owner: ServiceDefinition): ScenarioDefiner<R, Own> =>
+  (description, { given, when, then }) => {
+    const definition = { kind: "scenario", description, given, when, expect: then } as unknown as ScenarioDefinition;
+    scenarioOwners.set(definition, owner);
+    return definition;
+  };
+
+/** The service whose definer defined the scenario `value`. */
+export const scenarioService = (value: unknown): ServiceDefinition | undefined =>
+  typeof value === "object" && value !== null ? scenarioOwners.get(value) : undefined;
 
 export const isScenarioDefinition = (value: unknown): value is ScenarioDefinition =>
   typeof value === "object" &&
