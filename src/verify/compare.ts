@@ -669,11 +669,11 @@ export interface Compared {
   readonly first: Bindings;
 }
 
-/** Lean's compare. */
+/** Lean's compare: `cut` tells that the trace's last group ends at the line of a finding. */
 function compare(
   snapshot: readonly (TraceLine | undefined)[],
   lines: readonly (TraceLine | undefined)[],
-  malformed: number | undefined,
+  cut: boolean,
   internal: (l: TraceLine) => boolean,
 ): readonly [Finding[], readonly Binding[]] {
   const expected = groups(snapshot);
@@ -686,8 +686,32 @@ function compare(
     valueDomains(snapshot),
     expected,
     actual,
-    malformed !== undefined,
+    cut,
   );
+}
+
+/** Lean's firstDuplicate: the first out request line with the id of an earlier out request line. */
+function firstDuplicate(lines: readonly (TraceLine | undefined)[]): Found | undefined {
+  const seen = new Map<string, number>();
+  for (const [i, l] of lines.entries()) {
+    if (l === undefined || !isOutRequest(l)) continue;
+    const first = seen.get(l.id);
+    if (first !== undefined)
+      return { kind: "Uncomparable.duplicateId", definition: null, line: i + 1, data: { id: l.id, firstLine: first } };
+    seen.set(l.id, i + 1);
+  }
+  return undefined;
+}
+
+/** Lean's comparedLines: the trace lines that verify compares, and the finding of the line that ends them, if any. */
+function comparedLines(trace: readonly FileLine[]): {
+  readonly lines: readonly (TraceLine | undefined)[];
+  readonly cut: Found | undefined;
+} {
+  const { lines, malformed } = untilMalformed(trace);
+  const duplicate = firstDuplicate(lines);
+  if (duplicate !== undefined) return { lines: lines.slice(0, (duplicate.line ?? 1) - 1), cut: duplicate };
+  return { lines, cut: malformed === undefined ? undefined : lineSchema(malformed) };
 }
 
 /**
@@ -700,17 +724,13 @@ export function verifyLines(
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly FileLine[],
 ): Compared {
-  const { lines, malformed } = untilMalformed(trace);
+  const { lines, cut } = comparedLines(trace);
   const read = readLine(spec, service);
   const expected = snapshot.map((l) => l && read(l));
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
-  const [found, set] = compare(expected, actual, malformed?.lineNumber, internalEvent(spec, service));
+  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service));
   const bindings = set.map((b) => new Map(stringPairs(b)));
-  return {
-    found: [...found, ...(malformed === undefined ? [] : [lineSchema(malformed)])],
-    bindings,
-    first: bindings[0] ?? new Map(),
-  };
+  return { found: [...found, ...(cut === undefined ? [] : [cut])], bindings, first: bindings[0] ?? new Map() };
 }
 
 /** Compares the trace with the snapshot's lines. A trace line's violation has its 1-based line number in `line`. */

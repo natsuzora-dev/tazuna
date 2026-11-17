@@ -14,6 +14,19 @@ export type Uncomparable =
       readonly line: number;
       readonly data: Readonly<Record<string, never>>;
     }
+  /**
+   * The line is an `out` request line (a command, query or subscribe line) with the id of the earlier `out` request line
+   * `firstLine`, so the answers that name that id do not tell which request they answer.
+   */
+  | {
+      readonly kind: "Uncomparable.duplicateId";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly id: string;
+        readonly firstLine: number;
+      };
+    }
   | {
       readonly kind: "Uncomparable.unknownRequest";
       readonly definition: null;
@@ -171,6 +184,7 @@ export type Uncomparable =
 
 export const uncomparableKinds = [
   "Uncomparable.lineSchema",
+  "Uncomparable.duplicateId",
   "Uncomparable.unknownRequest",
   "Uncomparable.unknownAnswer",
   "Uncomparable.unknownEvent",

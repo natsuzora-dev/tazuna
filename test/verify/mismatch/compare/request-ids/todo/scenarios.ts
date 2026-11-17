@@ -22,21 +22,6 @@ export const addTwo = scenario("Add two tasks an hour apart, and get the next da
   then: () => [],
 });
 
-export const addTwoReusedId = scenario(
-  "Add two tasks an hour apart, and get the next day for the first; the implementation trace of this scenario gives the second calendar.nextDay request the id of the first, which already stands for the first request, so verify reports the second request as Mismatch.request",
-  {
-    given,
-    when: (w) => {
-      const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
-      w.net.deliver(first);
-      w.net.deliver(w.peer.calendar.answer(first, { result: "fulfilled", output: { day: "2026-10-26T00:00:00Z" } }));
-      w.clock.at("2026-10-25T01:00:00Z");
-      w.net.inFlight(w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }).request(calendar.nextDay));
-    },
-    then: () => [],
-  },
-);
-
 export const addOneOwnAnswer = scenario(
   "Add a task; the implementation trace of this scenario gives its calendar.nextDay request the id of the addTask command, which already stands for that command, so verify reports the request as Mismatch.request",
   {

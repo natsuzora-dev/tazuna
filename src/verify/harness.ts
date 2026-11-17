@@ -72,7 +72,9 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
   if (scenario === undefined) throw new Error(`no scenario ${run.service}.${scenarioName}`);
   const snapshot = readSnapshot(spec, run);
   const lines: (TraceLine | undefined)[] = [];
+  // Keyed by who gave the id, the implementation or the harness, so that neither id hides the other.
   const waiting = new Map<string, Waiting>();
+  const waitingKey = (by: "implementation" | "harness", id: string) => `${by}\u0000${id}`;
   const subscriptions = new Map<string, AbortController>();
   let sent = 0;
   const lineId = lineIds();
@@ -87,11 +89,17 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
     type: "command" | "query" | "subscribe",
     at: ReturnType<typeof place>,
   ): string => {
-    sent += 1;
     const name = traceName(spec, request.definition);
+    const requestIds = new Set(
+      written().flatMap((l) => (l.type === "command" || l.type === "query" || l.type === "subscribe" ? [l.id] : [])),
+    );
+    do sent += 1;
+    while (id === undefined && requestIds.has(`${name}@${sent}`));
     const appId = id ?? `${name}@${sent}`;
     write({ dir: "out", type, id: appId, name, input: plain(request.input) }, at);
-    waiting.set(appId, { ...request, id: appId, subscription: type === "subscribe" });
+    // A second request with the same id stays in the trace, where verify reports it as Uncomparable.duplicateId.
+    const key = waitingKey(id === undefined ? "harness" : "implementation", appId);
+    if (!waiting.has(key)) waiting.set(key, { ...request, id: appId, subscription: type === "subscribe" });
     return appId;
   };
   const later = (): OutputSlot => {
@@ -102,7 +110,7 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
       },
       subscribe: (request) => wait(request, undefined, "subscribe", at),
       unsubscribe: (subscription) => {
-        waiting.delete(subscription);
+        waiting.delete(waitingKey("harness", subscription));
         write({ dir: "out", type: "unsubscribe", id: lineId("unsubscribe"), to: subscription }, at);
       },
       event: ({ name, payload, resultOf }) =>
@@ -137,11 +145,16 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
     const { time: _, ...untimed } = line;
     write(untimed as UntimedTraceLine);
     if (line.type === "answer") {
-      const request = waiting.get(line.to);
-      // The settled implementation sent no request with this id, and the comparison reports the snapshot's request as
-      // missing; the answer stays in the trace as its in line.
-      if (request === undefined) return;
-      if (!request.subscription) waiting.delete(line.to);
+      const keys = [waitingKey("implementation", line.to), waitingKey("harness", line.to)].filter((k) =>
+        waiting.has(k),
+      );
+      const [key] = keys;
+      const request = key === undefined ? undefined : waiting.get(key);
+      // With no request, the settled implementation sent none with this id, and the comparison reports the snapshot's
+      // request as missing; with two, verify reports the trace's duplicateId. The answer stays in the trace as its in
+      // line.
+      if (key === undefined || request === undefined || keys.length > 1) return;
+      if (!request.subscription) waiting.delete(key);
       return request.answer(line.answer);
     }
     const { id } = line;

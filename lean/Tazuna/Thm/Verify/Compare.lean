@@ -38,8 +38,8 @@ theorem bindString_binds {fresh : Bool} {b : Binding} {s t : Bound} {b' : { b' :
 Every binding that compare ends with is one-to-one within each domain: no snapshot value stands for two implementation
 values, and no two snapshot values of one domain for one implementation value of it.
 -/
-theorem compare_oneToOne (snapshot lines : List (Option Line)) (malformed : Option Nat) (internal : Line → Bool) :
-    ∀ b ∈ (compare snapshot lines malformed internal).bindings, OneToOne b.pairs :=
+theorem compare_oneToOne (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool) :
+    ∀ b ∈ (compare snapshot lines cut internal).bindings, OneToOne b.pairs :=
   fun b _ => b.pairs_oneToOne
 
 /--

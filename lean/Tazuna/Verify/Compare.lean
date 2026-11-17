@@ -38,7 +38,9 @@ values that the implementation chose in its own way are open.
   report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
   unexpected. The set keeps the ways that leave the same trace lines unpaired. Paired lines compare their time and the
   snapshot's `after` order.
-- Verify reports the trace's first malformed line, and compares neither the group of that line nor anything later.
+- Verify reports the trace's first malformed line, and the first `out` request line with the id of an earlier one
+  (duplicateId), and compares neither the group of the first of them nor anything later. Other lines' ids name no
+  line, so the ids that the harness gives the lines that the implementation gives no id never meet them.
 -/
 
 namespace Tazuna.Verify
@@ -610,26 +612,54 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (inputs : List Li
 
 /--
 The violations of comparing a trace with a snapshot, and the bindings that agree with every compared line. In
-`snapshot`, `none` is a blank line. `lines` holds the trace lines before its first malformed line, with `none` for blank
-lines and repeated subscription answers, and `malformed` is the number of that line. `internal` selects the event lines
-that verify does not compare. An `unknownAfters` id orders no line, because reading the snapshot reports it before the
-comparison.
+`snapshot`, `none` is a blank line. `lines` holds the trace lines before the line that `cut` reports, if any, with `none`
+for blank lines and repeated subscription answers. `internal` selects the event lines that verify does not compare. An
+`unknownAfters` id orders no line, because reading the snapshot reports it before the comparison.
 -/
-def compare (snapshot lines : List (Option Line)) (malformed : Option Nat) (internal : Line → Bool) : Compared :=
+def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool) : Compared :=
   let expected := groups snapshot
   let actual := groups lines
   let inputs := expected.filterMap fun g => g.input.map (·.line)
   let (found, set) :=
-    compareGroups lines.length internal inputs (actual.flatMap (·.outs)) expected actual malformed.isSome
+    compareGroups lines.length internal inputs (actual.flatMap (·.outs)) expected actual cut.isSome
       (expected.length + actual.length) { domain := valueDomains snapshot, fresh := [] } [⟨Binding.empty, .refl _⟩]
-  { findings := found ++ (malformed.map fun n => Finding.uncomparable (.lineSchema n)).toList
-    bindings := set.map (·.val) }
+  { findings := found ++ (cut.map Finding.uncomparable).toList, bindings := set.map (·.val) }
+
+def isOutRequestLine (l : TraceLine) : Bool :=
+  match l.body with
+  | .command .out .. | .query .out .. | .subscribe .out .. => true
+  | _ => false
+
+/--
+The number of the first `out` request line with the id of an earlier `out` request line, and its report. An `in` line's
+answer names an `out` request and an `out` answer an `in` one, so only `out` request ids must differ; a redelivered
+`in` request keeps its id.
+-/
+def firstDuplicate (lines : List (Option TraceLine)) : Option (Nat × Uncomparable) :=
+  go lines 1 []
+where
+  go : List (Option TraceLine) → Nat → List (String × Nat) → Option (Nat × Uncomparable)
+    | [], _, _ => none
+    | none :: ls, i, seen => go ls (i + 1) seen
+    | some l :: ls, i, seen =>
+      if !isOutRequestLine l then go ls (i + 1) seen
+      else
+        match seen.lookup l.body.id with
+        | some first => some (i, .duplicateId i l.body.id first)
+        | none => go ls (i + 1) (seen ++ [(l.body.id, i)])
+
+/-- The trace lines that verify compares, and the report of the line that ends them, if any. -/
+def comparedLines (trace : List (FileLine TraceLine)) : List (Option TraceLine) × Option Uncomparable :=
+  let (lines, malformed) := untilMalformed trace
+  match firstDuplicate lines with
+  | some (i, u) => (lines.take (i - 1), some u)
+  | none => (lines, malformed.map .lineSchema)
 
 def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
     (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : m Compared := do
-  let (lines, malformed) := untilMalformed trace
+  let (lines, cut) := comparedLines trace
   let (expected, outputByRequestId) ← readLines s service ask snapshot []
   let (actual, _) ← readLines s service ask lines outputByRequestId
-  pure (compare expected (withoutRepeatedAnswers actual) malformed (internalEvent s service))
+  pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service))
 
 end Tazuna.Verify

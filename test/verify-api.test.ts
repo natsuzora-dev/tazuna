@@ -72,9 +72,12 @@ test("verifyTraces compares an external service trace under any name with the co
 /**
  * An implementation of shop that charges through payments with its own request ids, and refunds the charge that
  * payments created, or a charge of its own when `refunds` says so. With `answersAfterCharge`, it answers placeOrder
- * only once payments answers the charge.
+ * only once payments answers the charge. `requestId` names the n-th request that it sends.
  */
-function shopAdapter(refunds: (chargeId: string) => string, { answersAfterCharge = false } = {}): Adapter {
+function shopAdapter(
+  refunds: (chargeId: string) => string,
+  { answersAfterCharge = false, requestId = (n: number) => `pay-${n}` } = {},
+): Adapter {
   let time: Temporal.Instant;
   let chargeId = "";
   let requests = 0;
@@ -100,7 +103,7 @@ function shopAdapter(refunds: (chargeId: string) => string, { answersAfterCharge
               if (output.result === "accepted") chargeId = output.output.chargeId;
               resolve();
             }),
-            id: `pay-${requests}`,
+            id: requestId(requests),
           }),
         );
         if (answersAfterCharge) await charged;
@@ -108,7 +111,7 @@ function shopAdapter(refunds: (chargeId: string) => string, { answersAfterCharge
         outputs.event({ name: "orderCancelled", payload: {}, resultOf: id });
         outputs.request({
           ...commandRequest(payments.refundCharge, { chargeId: refunds(chargeId) }, () => {}),
-          id: `pay-${requests}`,
+          id: requestId(requests),
         });
       }
       return { result: "accepted" };
@@ -150,4 +153,16 @@ test("drive does not wait for a command's answer, so an answer that comes after 
     shopAdapter((chargeId) => chargeId, { answersAfterCharge: true }),
   );
   assert.ok(kinds.includes("Mismatch.missingAnswer"), kinds.join());
+});
+
+test("drive keeps both requests that the implementation sends under one id, and verifyTraces reports the duplicate id", async () => {
+  const { trace, kinds } = await verifyDriven(
+    "reused-id",
+    shopAdapter((chargeId) => chargeId, { requestId: () => "pay-1" }),
+  );
+  assert.deepEqual(
+    trace.filter((l) => l.dir === "out" && l.type === "command").map((l) => l.id),
+    ["pay-1", "pay-1"],
+  );
+  assert.deepEqual(kinds, ["Uncomparable.duplicateId"]);
 });

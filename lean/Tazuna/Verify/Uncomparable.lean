@@ -12,6 +12,11 @@ the snapshot.
 -/
 inductive Uncomparable where
   | lineSchema (line : Nat)
+  /--
+  The line is an `out` request line (a command, query or subscribe line) with the id of the earlier `out` request line
+  `firstLine`, so the answers that name that id do not tell which request they answer.
+  -/
+  | duplicateId (line : Nat) (id : String) (firstLine : Nat)
   | unknownRequest (line : Nat) (subject : Subject)
   /-- The answer line names no earlier request line. -/
   | unknownAnswer (line : Nat) (subject : Subject)

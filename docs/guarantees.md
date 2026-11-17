@@ -75,6 +75,7 @@ A trace *matches* a snapshot when its `in` lines equal the snapshot's exactly an
 So the counts in a bag decide a binding (the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`), and keys that only a later line tells apart wait for it.
 Every binding of the set is one-to-one within each domain, the request ids and the keys of each entity (`compare_oneToOne`), so an implementation that reuses an existing request id or key of an entity for a new one differs, while one that uses a string of an input, such as an idempotency key, as a new key does not.
 The harness gives each `in` line by one binding of the set; when the bindings give a value of the line different implementation values and the snapshot's `in` lines do not use those values alike, `verify` reports the line as `Uncomparable.ambiguous`, since the route that the harness chose decided what the implementation got.
+An answer names its request by id, so `verify` reports an `out` request line with the id of an earlier one as `Uncomparable.duplicateId`, and the harness keeps the ids that it gives requests without an implementation id apart from the implementation's, so neither hides the other.
 The set holds at most 256 bindings, and a line that would make it hold more is reported as `Uncomparable.bindingLimit`; `lean/Tazuna/Verify/Compare.lean` defines the comparison.
 
 ## Who fixes a violation
