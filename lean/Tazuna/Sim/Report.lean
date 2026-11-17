@@ -62,8 +62,16 @@ inductive Report where
   it.
   -/
   | notDelivered (scenarioLine : Nat) (message : Value)
-  /-- The external peer answers the request `message` again, which is no subscription and has its answer. -/
+  /--
+  The external peer answers the request `message` again, or leaves it unanswered after answering it; it is no
+  subscription and has its answer.
+  -/
   | repeatedAnswer (scenarioLine : Nat) (message : Value)
+  /--
+  The peer's line emits an event whose resultOf names the request `fact`, which `peer` did not receive: no line
+  delivered it to `peer`.
+  -/
+  | unreceivedRequest (scenarioLine : Nat) (peer : String) (fact : Value)
   /-- The line delivers `message` while the earlier `earlier` on the same channel is in flight. -/
   | overtaking (scenarioLine : Nat) (message earlier : Value)
   /-- No message in flight from the running peer `peer` to the own service is the line's. -/
@@ -87,6 +95,8 @@ inductive Report where
   | leftInFlight (message : Value)
   /-- The message that the inFlight line names is not undelivered at the end. -/
   | unusedInFlight (scenarioLine : Nat)
+  /-- The inFlight line names `message`, which an earlier inFlight line names. -/
+  | repeatedInFlight (scenarioLine : Nat) (message : Value)
   /-- The external peer received the request `message`, and no line answers it or leaves it unanswered. -/
   | awaitingAnswer (message : Value)
   /-- The offered expectation `expectation` names the line `scenarioLine`, which is no look line. -/

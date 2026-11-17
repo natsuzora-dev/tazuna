@@ -57,7 +57,9 @@ When `test` reports no `Report` violation, the scenario stated everything that h
 
 - every message between two participants reached its receiver by a line of When, or the scenario names it as lost, failed, or in flight at the end (`Report.leftInFlight`);
 - a message never overtook an earlier one on its channel (`Report.overtaking`);
-- each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered (`Report.awaitingAnswer`);
+- each line of a running peer states a message that its run sent, and each answer of an external peer answers a request that reached it; an external peer's request that the scenario delivered is answered or left unanswered, not both (`Report.awaitingAnswer`, `Report.repeatedAnswer`);
+- an event's `resultOf` names a request that its emitter received (`Report.unreceivedRequest`), and the receiver took that request's answer before the event (`InvalidInput.resultOfUnansweredRequest`);
+- each message that the scenario names as in flight at the end, it names once (`Report.repeatedInFlight`);
 - the clock only advanced (`Report.notLater`);
 - the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>` (`Report.writtenKey`).
 

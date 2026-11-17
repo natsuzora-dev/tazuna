@@ -209,6 +209,15 @@ export type InvalidInput =
       readonly data: {
         readonly entries: readonly StepName[];
       };
+    }
+  /** The event input names as its resultOf the request `requestId`, whose answer the service has not taken. */
+  | {
+      readonly kind: "InvalidInput.resultOfUnansweredRequest";
+      readonly definition: null;
+      readonly data: {
+        readonly event: DefinitionRef;
+        readonly requestId: string;
+      };
     };
 
 export const invalidInputKinds = [
@@ -235,6 +244,7 @@ export const invalidInputKinds = [
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
+  "InvalidInput.resultOfUnansweredRequest",
 ] as const;
 
 /** The kinds whose violations halt the run. */
@@ -254,4 +264,5 @@ export const haltingInvalidInputKinds = [
   "InvalidInput.unusedDeadlineOrder",
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
+  "InvalidInput.resultOfUnansweredRequest",
 ] as const;

@@ -341,18 +341,25 @@ function deliverInOrder(w: World, i: number, k: number): void {
 }
 
 /** Lean's World.requestId. */
-function requestId(w: World, i: number, fact: Fact): string {
+function requestId(w: World, i: number, peer: string, fact: Fact): string {
+  const unreceived = (): never =>
+    reportedHere({
+      kind: "Report.unreceivedRequest",
+      definition: null,
+      data: { scenarioLine: i, peer, fact: json(fact) },
+    });
   if (fact.type === "line") {
     const s = sentBy(w, fact.index);
-    return s === undefined
-      ? reportedHere({
-          kind: "Report.unresolvedReference",
-          definition: null,
-          data: { scenarioLine: i, fact: json(fact) },
-        })
-      : s.id;
+    if (s === undefined)
+      return reportedHere({
+        kind: "Report.unresolvedReference",
+        definition: null,
+        data: { scenarioLine: i, fact: json(fact) },
+      });
+    return s.receiver === peer ? s.id : unreceived();
   }
   const m = w.messages[messageOf(w, i, fact)] as Message;
+  if (m.receiver !== peer || (m.status !== "delivered" && m.status !== "unanswered")) return unreceived();
   return receivedId(m.sender, m.id);
 }
 
@@ -573,7 +580,7 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
       return wrongRole(i, l.peer);
     }
     case "emit": {
-      const resultId = l.resultOf === undefined ? undefined : requestId(w, i, l.resultOf);
+      const resultId = l.resultOf === undefined ? undefined : requestId(w, i, l.peer, l.resultOf);
       const v = fill(w, i, l.payload);
       const role = w.roles.get(l.peer);
       if (role === "external") {
@@ -624,6 +631,12 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
       const m = w.messages[k] as Message;
       if (w.roles.get(l.peer) !== "external" || m.receiver !== l.peer) return wrongRole(i, l.peer);
       if (m.status !== "delivered") return notDelivered(i, m);
+      if (answered(w, l.peer, receivedId(m.sender, m.id)) && m.body.type !== "subscribe")
+        return reportedHere({
+          kind: "Report.repeatedAnswer",
+          definition: null,
+          data: { scenarioLine: i, message: describe(m) },
+        });
       m.status = "unanswered";
       return;
     }
@@ -637,6 +650,7 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
       const k = messageOf(w, i, l.message);
       const m = w.messages[k] as Message;
       if (m.status !== "delivered") return notDelivered(i, m);
+      if (!running(w.roles.get(m.receiver))) return wrongRole(i, m.receiver);
       return deliverCarried(w, i, k);
     }
     case "lose": {
@@ -672,7 +686,14 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
       return deliverCarried(w, i, w.messages.length - 1);
     }
     case "inFlight": {
-      w.inFlight.push([i, messageOf(w, i, l.message)]);
+      const k = messageOf(w, i, l.message);
+      if (w.inFlight.some(([, j]) => j === k))
+        return reportedHere({
+          kind: "Report.repeatedInFlight",
+          definition: null,
+          data: { scenarioLine: i, message: describe(w.messages[k] as Message) },
+        });
+      w.inFlight.push([i, k]);
       return;
     }
     case "at": {

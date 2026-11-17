@@ -50,6 +50,8 @@ inductive InvalidInput where
   | unreadyStep (named : StepName) (candidates : List StepName)
   /-- No step choice during the input used the stepOrder `entries`. -/
   | unusedStepOrder (entries : List StepName)
+  /-- The event input names as its resultOf the request `requestId`, whose answer the service has not taken. -/
+  | resultOfUnansweredRequest (event : Syntax.Ref) (requestId : String)
 
 local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 
@@ -63,7 +65,7 @@ def InvalidInput.halts : InvalidInput → Bool
   | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
   | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyDeadline ..
   | .unorderedDeadlines ..
-  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. => true
+  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .resultOfUnansweredRequest .. => true
   | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
   | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. => false

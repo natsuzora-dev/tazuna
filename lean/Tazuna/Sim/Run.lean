@@ -155,17 +155,23 @@ def World.deliverInOrder (w : World) (fsOf : String → Functions m) (i k : Nat)
     | some earlier => pure (w.report (.overtaking i msg.describe earlier.describe))
     | none => w.deliverCarried fsOf i k
 
-/-- The id by which a peer names the request that the handle `fact` of line `i` names. -/
-def World.requestId (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) : ExceptT Report m String :=
+/--
+The id by which `peer` names the request that the handle `fact` of line `i` names, which a line delivered to `peer`.
+-/
+def World.requestId (w : World) (fsOf : String → Functions m) (i : Nat) (peer : String) (fact : Fact) :
+    ExceptT Report m String :=
   match fact with
   | .line j =>
     match w.sentBy j with
-    | some s => pure s.id
+    | some s => if s.receiver == peer then pure s.id else throw (.unreceivedRequest i peer (ToValue.toValue fact))
     | none => throw (.unresolvedReference i (ToValue.toValue fact))
   | _ => do
     let k ← w.messageOf fsOf i fact
     match w.messages[k]? with
-    | some msg => pure (receivedId msg.sender msg.id)
+    | some msg =>
+      if msg.receiver == peer && (msg.status == .delivered || msg.status == .unanswered) then
+        pure (receivedId msg.sender msg.id)
+      else throw (.unreceivedRequest i peer (ToValue.toValue fact))
     | none => throw (.unresolvedReference i (ToValue.toValue fact))
 
 def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (control : String) (payload : Value) :
@@ -297,7 +303,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
   | .emit peer event payload resultOf => do
     let resultId : ExceptT Report m (Option String) := match resultOf with
       | none => pure none
-      | some f => some <$> w.requestId fsOf i f
+      | some f => some <$> w.requestId fsOf i peer f
     w.resolving resultId fun resultId =>
     w.resolving (w.fill fsOf i payload) fun v => do
       match w.role peer with
@@ -326,6 +332,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       let some msg := w.messages[k]? | return w
       if w.role peer != some .external || msg.receiver != peer then return w.report (.wrongRole i peer)
       if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
+      if w.answered peer (receivedId msg.sender msg.id) && msg.body.requestType? != some .subscribe then
+        return w.report (.repeatedAnswer i msg.describe)
       pure (w.setStatus k .unanswered)
   | .deliver message =>
     w.resolving (w.messageOf fsOf i message) fun k => do
@@ -336,6 +344,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
     w.resolving (w.messageOf fsOf i message) fun k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
+      if !((w.role msg.receiver).any (·.running)) then return w.report (.wrongRole i msg.receiver)
       w.deliverCarried fsOf i k
   | .lose message =>
     w.resolving (w.messageOf fsOf i message) fun k => do
@@ -355,7 +364,9 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       let w := { w with messages := w.messages.push reply }
       w.deliverCarried fsOf i w.messages.size.pred
   | .inFlight message =>
-    w.resolving (w.messageOf fsOf i message) fun k =>
+    w.resolving (w.messageOf fsOf i message) fun k => do
+      let some msg := w.messages[k]? | return w
+      if w.inFlight.any (·.2 == k) then return w.report (.repeatedInFlight i msg.describe)
       pure { w with inFlight := w.inFlight ++ [(i, k)] }
   | .at time order => do
     if time.time ≤ w.now then return w.report (.notLater i time.time w.now)

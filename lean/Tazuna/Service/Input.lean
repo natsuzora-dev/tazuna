@@ -69,8 +69,8 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
 
 /--
-The request `handle` whose answer the service took (State.takenAnswers), which an event names as its resultOf. It is none when
-the service took no answer to it, and after reporting that the request cannot have the event as its result
+The request `handle` whose answer the service took (State.takenAnswers), which an event names as its resultOf. It is none
+after reporting that the service took no answer to it, or that the request cannot have the event as its result
 (resultOfMismatch).
 -/
 def resultRequest (st : Service) (s : State) (name handle : String) : State × Option Pending :=
@@ -79,7 +79,7 @@ def resultRequest (st : Service) (s : State) (name handle : String) : State × O
     match st.«structure».resultOfMismatch p.activity.ref (answer matches .accepted _) (st.refOf name) with
     | some mismatch => (s.report (resultOfFinding (st.refOf name) p.id p.activity.ref mismatch), none)
     | none => (s, some p)
-  | _ => (s, none)
+  | none => (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) handle)), none)
 
 def addResult [Monad m] (st : Service) (fs : Functions m) (s : State) (id : String) (e : Emit) : m State := do
   match s.results.find? (·.id == id) with
@@ -119,6 +119,7 @@ def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : Sta
     pure (s.report (.fault (issueViolation st (st.refOf name) e)))
   | .ok payload =>
   let (s, request) := withResultOf st s name resultOf
+  if s.halted.isSome then pure s else
   let (s, _) := s.write .in givenId (.event name payload (request.map (·.id)))
   message st fs s.newMessage {}
 
@@ -132,7 +133,7 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     | .ok none => pure (s.report (.invalidInput (.eventPayloadSchema (st.refOf name))))
     | .ok (some payload) =>
       let (s, request) := withResultOf st s name resultOf
-      deliver st fs s name givenId payload request
+      if s.halted.isSome then pure s else deliver st fs s name givenId payload request
 
 def assumptionFinding (requestId : String) (target : Syntax.Ref) : Syntax.AssumptionMismatch → Finding
   | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)

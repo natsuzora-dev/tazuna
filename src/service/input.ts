@@ -89,7 +89,12 @@ export function endSubscription(r: Processing, id: string): void {
 /** Lean's resultRequest: the request `handle` whose answer the service took, which an event names as its resultOf. */
 function resultRequest(r: Processing, name: string, handle: string): Pending | undefined {
   const answered = r.state.takenAnswers.get(handle);
-  if (answered === undefined) return undefined;
+  if (answered === undefined)
+    return report(r.state, {
+      kind: "InvalidInput.resultOfUnansweredRequest",
+      definition: null,
+      data: { event: refOf(r.st, name), requestId: handle },
+    });
   const { request, answer } = answered;
   const target = activityRef(request.activity);
   const event = refOf(r.st, name);

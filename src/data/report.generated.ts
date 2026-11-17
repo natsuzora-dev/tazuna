@@ -181,13 +181,29 @@ export type Report =
         readonly message: Json;
       };
     }
-  /** The external peer answers the request `message` again, which is no subscription and has its answer. */
+  /**
+   * The external peer answers the request `message` again, or leaves it unanswered after answering it; it is no
+   * subscription and has its answer.
+   */
   | {
       readonly kind: "Report.repeatedAnswer";
       readonly definition: null;
       readonly data: {
         readonly scenarioLine: number;
         readonly message: Json;
+      };
+    }
+  /**
+   * The peer's line emits an event whose resultOf names the request `fact`, which `peer` did not receive: no line
+   * delivered it to `peer`.
+   */
+  | {
+      readonly kind: "Report.unreceivedRequest";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
+        readonly peer: string;
+        readonly fact: Json;
       };
     }
   /** The line delivers `message` while the earlier `earlier` on the same channel is in flight. */
@@ -285,6 +301,15 @@ export type Report =
         readonly scenarioLine: number;
       };
     }
+  /** The inFlight line names `message`, which an earlier inFlight line names. */
+  | {
+      readonly kind: "Report.repeatedInFlight";
+      readonly definition: null;
+      readonly data: {
+        readonly scenarioLine: number;
+        readonly message: Json;
+      };
+    }
   /** The external peer received the request `message`, and no line answers it or leaves it unanswered. */
   | {
       readonly kind: "Report.awaitingAnswer";
@@ -332,6 +357,7 @@ export const reportKinds = [
   "Report.notInFlight",
   "Report.notDelivered",
   "Report.repeatedAnswer",
+  "Report.unreceivedRequest",
   "Report.overtaking",
   "Report.unpairedPeerLine",
   "Report.ambiguousPeerLine",
@@ -342,6 +368,7 @@ export const reportKinds = [
   "Report.differentPeerAnswer",
   "Report.leftInFlight",
   "Report.unusedInFlight",
+  "Report.repeatedInFlight",
   "Report.awaitingAnswer",
   "Report.notLook",
   "Report.unmetExpectation",
@@ -361,6 +388,7 @@ export const haltingReportKinds = [
   "Report.notInFlight",
   "Report.notDelivered",
   "Report.repeatedAnswer",
+  "Report.unreceivedRequest",
   "Report.overtaking",
   "Report.unpairedPeerLine",
   "Report.ambiguousPeerLine",
@@ -368,4 +396,5 @@ export const haltingReportKinds = [
   "Report.writtenKey",
   "Report.misplacedCreated",
   "Report.unoperableScreen",
+  "Report.repeatedInFlight",
 ] as const;
