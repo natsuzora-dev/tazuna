@@ -85,7 +85,6 @@ export interface World {
   readonly inFlight: (readonly [number, number])[];
   /** Lean's World.counts. */
   readonly counts: Map<string, number>;
-  readonly looked: (readonly [number, boolean])[];
   readonly reports: Report[];
   halted: Report | undefined;
   /** Lean's World.stepOrders. */

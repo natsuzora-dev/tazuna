@@ -105,8 +105,6 @@ structure World where
   inFlight : List (Nat × Nat) := []
   /-- The number of messages of each definition that each external peer sent, by `<peer>.<name>`: their ids count. -/
   counts : List (String × Nat) := []
-  /-- What each look line found for the offered expectations of Then, by expectation. -/
-  looked : List (Nat × Bool) := []
   reports : List Report := []
   halted : Option Report := none
   /--

@@ -37,7 +37,8 @@ theorem checkEnd_reported (w : World) : Reported w w.checkEnd := by
       (repeat' split) <;> first | exact h | (apply reported_report h; rfl)
 
 theorem expect_reported (w : World) (own : String) (lines : List Scenario.Line)
-    (expectations : List Scenario.Expectation) : Reported w (w.expect fsOf own lines expectations) := by
+    (expectations : List Scenario.Expectation) (found : List (Nat × Except Report Bool)) :
+    Reported w (w.expect fsOf own lines expectations found) := by
   unfold World.expect
   rw [foldlM_id]
   refine foldl_keeps (Reported w) _ (fun w' x h => ?_) _ _ (reported_refl w)
@@ -51,19 +52,70 @@ theorem expect_reported (w : World) (own : String) (lines : List Scenario.Line)
       · exact h
       · exact reported_note h _
 
+theorem stepFinding_fst (sc : Scenario) (w : World) (found : List (Nat × Except Report Bool)) (l : Scenario.Line)
+    (i : Nat) : (World.stepFinding (m := Id) fsOf sc (w, found) l i).1 = w.step fsOf sc l i := by
+  unfold World.stepFinding World.step
+  by_cases h : w.stopped = true <;> simp [h, bind, pure]
+
+theorem foldlM_stepFinding_fst (sc : Scenario) (xs : List (Scenario.Line × Nat)) (w : World)
+    (found : List (Nat × Except Report Bool)) :
+    (xs.foldlM (m := Id) (fun wf (l, i) => World.stepFinding fsOf sc wf l i) (w, found)).1 =
+      xs.foldlM (m := Id) (fun w (l, i) => w.step fsOf sc l i) w := by
+  induction xs generalizing w found with
+  | nil => rfl
+  | cons x xs ih =>
+    obtain ⟨l, i⟩ := x
+    simp only [List.foldlM_cons, id_bind]
+    rw [← stepFinding_fst sc w found l i]
+    generalize World.stepFinding fsOf sc (w, found) l i = p
+    obtain ⟨w', found'⟩ := p
+    exact ih w' found'
+
+/-- What `step` does with a scenario does not depend on its Then. -/
+theorem step_then (w : World) (sc : Scenario) (then' : List Scenario.Expectation) (l : Scenario.Line) (i : Nat) :
+    w.step fsOf { sc with expectations := then' } l i = w.step fsOf sc l i := rfl
+
+/-- What Given does with a scenario does not depend on its Then. -/
+theorem given_then (j : Syntax.Structure) (w : World) (sc : Scenario) (then' : List Scenario.Expectation) :
+    w.given j fsOf { sc with expectations := then' } = w.given j fsOf sc := rfl
+
 /--
 Then and the end checks only add reports: the world that `simulate` leaves is the one `walk` leaves, with the same
 traces, messages, and halt, and more reports.
 -/
 theorem simulate_reported (j : Syntax.Structure) (start : World) (sc : Scenario) :
     Reported (walk j fsOf start sc) (simulate j fsOf start sc) := by
-  unfold simulate walk
+  unfold simulate walk World.walk
   simp only [bind, pure]
   split
   · exact reported_refl _
-  · split
+  · rw [← foldlM_stepFinding_fst sc _ _ []]
+    split
     · exact reported_refl _
-    · exact reported_trans (checkEnd_reported _) (expect_reported _ _ _ _)
+    · exact reported_trans (checkEnd_reported _) (expect_reported _ _ _ _ _)
+
+theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (found : List (Nat × Except Report Bool)) :
+    w.expect fsOf own lines [] found = w := rfl
+
+/--
+Then only adds reports: the scenario leaves the same traces, messages, and halt as the scenario without its
+expectations, so a snapshot depends on Given and When alone.
+-/
+theorem then_only_reports (j : Syntax.Structure) (start : World) (sc : Scenario) :
+    Reported (simulate j fsOf start { sc with expectations := [] }) (simulate j fsOf start sc) := by
+  unfold simulate
+  simp only [bind, pure, given_then]
+  split
+  · rename_i h
+    simp only [h, ite_true]
+    exact reported_refl _
+  · rename_i h
+    simp only [h, Bool.false_eq_true, ite_false]
+    simp only [foldlM_stepFinding_fst, step_then]
+    split
+    · exact reported_refl _
+    · rw [expect_nil]
+      exact expect_reported _ _ _ _ _
 
 /-- A report that halts stops the simulation. -/
 theorem halting_report_stops (w : World) (r : Report) (hr : r.halts = true) : (w.report r).stopped = true := by
@@ -195,9 +247,6 @@ theorem keeps_nextId {w w' : World} (h : KeepsInFlight e w w') (peer name : Stri
 theorem keeps_now_iff {w w' : World} (now : Time) : KeepsInFlight e w { w' with now } ↔ KeepsInFlight e w w' :=
   Iff.rfl
 
-theorem keeps_looked_iff {w w' : World} (looked : List (Nat × Bool)) :
-    KeepsInFlight e w { w' with looked } ↔ KeepsInFlight e w w' := Iff.rfl
-
 theorem keeps_inFlight_iff {w w' : World} (inFlight : List (Nat × Nat)) :
     KeepsInFlight e w { w' with inFlight } ↔ KeepsInFlight e w w' := Iff.rfl
 
@@ -213,7 +262,7 @@ macro "keeps_tac" : tactic => `(tactic| repeat' (first
   | with_reducible apply keeps_nextId
   | with_reducible apply keeps_act
   | with_reducible apply keeps_push
-  | simp only [keeps_now_iff, keeps_looked_iff, keeps_inFlight_iff]
+  | simp only [keeps_now_iff, keeps_inFlight_iff]
   | with_reducible refine keeps_resolving ?_ _ _ fun _ => ?_
   | with_reducible refine keeps_attempt ?_ _ _ fun _ => ?_
   | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
@@ -249,9 +298,9 @@ def moved : Scenario.Line → Option Scenario.Fact
   | .deliver f | .lose f | .fail f => some f
   | _ => none
 
-theorem take_keeps (w : World) (own : String) (lines : List Scenario.Line) (es : List Scenario.Expectation) (i : Nat)
+theorem take_keeps (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
     (l : Scenario.Line) (hl : moved l = none) :
-    KeepsInFlight (fun _ => False) w (w.take fsOf own lines es i l) := by
+    KeepsInFlight (fun _ => False) w (w.take fsOf own lines i l) := by
   cases l <;> simp only [moved, reduceCtorEq] at hl <;> simp only [World.take, bind, pure, foldlM_id]
   all_goals keeps_tac
   all_goals first
@@ -271,10 +320,10 @@ theorem checkWritten_halts {w : World} {i : Nat} {written picks : List Scenario.
   · obtain ⟨_, _, h⟩ := Option.map_eq_some_iff.mp h
     cases h; rfl
 
-theorem line_eq (w : World) (own : String) (lines : List Scenario.Line) (es : List Scenario.Expectation) (i : Nat)
+theorem line_eq (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
     (l : Scenario.Line) :
-    w.line fsOf own lines es i l = w.take fsOf own lines es i l ∨
-      ∃ r, r.halts = true ∧ w.line fsOf own lines es i l = w.report r := by
+    w.line fsOf own lines i l = w.take fsOf own lines i l ∨
+      ∃ r, r.halts = true ∧ w.line fsOf own lines i l = w.report r := by
   unfold World.line
   dsimp only
   (repeat' split) <;> first | exact Or.inl rfl | exact Or.inr ⟨_, checkWritten_halts ‹_›, rfl⟩
@@ -283,21 +332,21 @@ theorem line_eq (w : World) (own : String) (lines : List Scenario.Line) (es : Li
 A line that is not a deliver, lose, or fail line leaves every message in flight as it is: no message reaches its
 receiver, or is lost, unless a line names it.
 -/
-theorem line_keeps_inFlight (w : World) (own : String) (lines : List Scenario.Line) (es : List Scenario.Expectation)
+theorem line_keeps_inFlight (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (l : Scenario.Line) (hl : moved l = none) :
-    KeepsInFlight (fun _ => False) w (w.line fsOf own lines es i l) := by
-  rcases line_eq w own lines es i l with h | ⟨r, -, h⟩ <;> rw [h]
-  · exact take_keeps w own lines es i l hl
+    KeepsInFlight (fun _ => False) w (w.line fsOf own lines i l) := by
+  rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
+  · exact take_keeps w own lines i l hl
   · exact keeps_report (keeps_refl w) r
 
 /--
 A deliver, lose, or fail line leaves every message in flight as it is, except the one its handle names.
 -/
 theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenario.Line)
-    (es : List Scenario.Expectation) (i : Nat) (l : Scenario.Line) (f : Scenario.Fact) (hl : moved l = some f) (k : Nat)
+    (i : Nat) (l : Scenario.Line) (f : Scenario.Fact) (hl : moved l = some f) (k : Nat)
     (hk : (w.messageOf fsOf i f).run = .ok k) :
-    KeepsInFlight (· = k) w (w.line fsOf own lines es i l) := by
-  rcases line_eq w own lines es i l with h | ⟨r, -, h⟩ <;> rw [h]
+    KeepsInFlight (· = k) w (w.line fsOf own lines i l) := by
+  rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
   · cases l <;> simp only [moved, reduceCtorEq, Option.some.injEq] at hl <;> subst hl <;>
       simp only [World.take, World.resolving, bind, pure, hk]
     all_goals try (unfold World.deliverInOrder; simp only [pure])
@@ -317,11 +366,11 @@ A deliver line whose message has an earlier message in flight on its channel del
 simulation with a report: messages on one channel reach their receiver in sending order.
 -/
 theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
-    (es : List Scenario.Expectation) (i : Nat) (f : Scenario.Fact) (k : Nat) (msg : Message)
+    (i : Nat) (f : Scenario.Fact) (k : Nat) (msg : Message)
     (hk : (w.messageOf fsOf i f).run = .ok k) (hm : w.messages[k]? = some msg) (j : Nat) (n : Message) (hj : j < k)
     (hn : w.messages[j]? = some n) (hs : n.status = .inFlight) (hc : n.sameChannel msg = true) :
-    ∃ r, r.halts = true ∧ w.line fsOf own lines es i (.deliver f) = w.report r := by
-  rcases line_eq w own lines es i (.deliver f) with h | h
+    ∃ r, r.halts = true ∧ w.line fsOf own lines i (.deliver f) = w.report r := by
+  rcases line_eq w own lines i (.deliver f) with h | h
   · rw [h]
     simp only [World.take, World.resolving, bind, pure, hk, hm]
     split
@@ -343,11 +392,11 @@ An external peer's answer line names a request that reached that peer: otherwise
 simulation with a report.
 -/
 theorem external_answer_needs_delivery (w : World) (own : String) (lines : List Scenario.Line)
-    (es : List Scenario.Expectation) (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (k : Nat)
+    (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (k : Nat)
     (msg : Message) (hr : w.role peer = some .external) (hk : (w.messageOf fsOf i f).run = .ok k)
     (hm : w.messages[k]? = some msg) (hd : ¬(msg.receiver = peer ∧ msg.status = .delivered)) :
-    ∃ r, r.halts = true ∧ w.line fsOf own lines es i (.answer peer f a) = w.report r := by
-  rcases line_eq w own lines es i (.answer peer f a) with h | h
+    ∃ r, r.halts = true ∧ w.line fsOf own lines i (.answer peer f a) = w.report r := by
+  rcases line_eq w own lines i (.answer peer f a) with h | h
   · rw [h]
     simp only [World.take, World.resolving, bind, pure, hk, hm, hr]
     split

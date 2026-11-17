@@ -71,7 +71,6 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     carried: [],
     inFlight: [],
     counts: new Map(),
-    looked: [],
     reports: [],
     halted: undefined,
     stepOrders: [],

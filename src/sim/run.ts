@@ -406,7 +406,7 @@ const answered = (w: World, sender: string, to: string): boolean =>
   w.messages.some((n) => n.sender === sender && n.channel === to && n.body.type === "answer");
 
 /** Lean's World.take. */
-function take(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[], i: number, l: Line) {
+function take(w: World, own: string, lines: readonly Line[], i: number, l: Line) {
   const origin = { type: "line", index: i } as const;
   switch (l.type) {
     case "request": {
@@ -498,13 +498,7 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
     }
     case "look": {
       const o = screenOf(w, i, l.screen);
-      const r = processingOf(w, o.service);
-      if (r === undefined) return wrongRole(i, o.service);
-      expectations.forEach((e, k) => {
-        if (e.type !== "offered" || e.look !== i || stopped(w)) return;
-        const v = e.payload === undefined ? {} : fill(w, i, e.payload);
-        w.looked.push([k, offeredAt(r, o, e.control, v)]);
-      });
+      if (processingOf(w, o.service) === undefined) return wrongRole(i, o.service);
       return;
     }
     case "answer": {
@@ -720,13 +714,40 @@ function take(w: World, own: string, lines: readonly Line[], expectations: reado
 }
 
 /** Lean's World.line. */
-function line(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[], i: number, l: Line) {
+function line(w: World, own: string, lines: readonly Line[], i: number, l: Line) {
   const allowed =
     (l.type === "request" && l.peer !== undefined && w.roles.get(l.peer) === "run") ||
     ((l.type === "answer" || l.type === "emit") && w.roles.get(l.peer) === "run");
   const r = checkWritten(w, i, lineWritten(l), linePicks(l), allowed);
   if (r !== undefined) return reportTo(w, r);
-  return take(w, own, lines, expectations, i, l);
+  return take(w, own, lines, i, l);
+}
+
+/** What a look line found for an offered expectation: whether the screen offers it, or the report of its payload. */
+type Found = readonly [number, { readonly offers: boolean } | { readonly report: Report }];
+
+/** Lean's World.found. */
+function found(w: World, expectations: readonly Expectation[], i: number, l: Line): Found[] {
+  if (l.type !== "look") return [];
+  let o: Opened;
+  try {
+    o = screenOf(w, i, l.screen);
+  } catch (error) {
+    if (!(error instanceof Reported)) throw error;
+    return [];
+  }
+  const r = processingOf(w, o.service);
+  if (r === undefined) return [];
+  return expectations.flatMap((e, k): Found[] => {
+    if (e.type !== "offered" || e.look !== i) return [];
+    try {
+      const v = e.payload === undefined ? {} : fill(w, i, e.payload);
+      return [[k, { offers: offeredAt(r, o, e.control, v) }]];
+    } catch (error) {
+      if (!(error instanceof Reported)) throw error;
+      return [[k, { report: error.report }]];
+    }
+  });
 }
 
 /** Lean's FromValue Answer: the answer that `v` writes, or undefined when it is none. */
@@ -782,6 +803,7 @@ function compared(
   w: World,
   own: string,
   lines: readonly Line[],
+  looked: readonly Found[],
   k: number,
   e: Expectation,
 ): readonly [unknown, unknown] | undefined {
@@ -845,14 +867,22 @@ function compared(
           definition: null,
           data: { expectation: k, scenarioLine: e.look },
         });
-      const found = w.looked.find(([j]) => j === k);
-      return found === undefined ? undefined : [e.offered, found[1]];
+      const at = looked.find(([j]) => j === k)?.[1];
+      if (at === undefined) return undefined;
+      if ("report" in at) throw new Reported(at.report);
+      return [e.offered, at.offers];
     }
   }
 }
 
 /** Lean's World.expect. */
-function expect(w: World, own: string, lines: readonly Line[], expectations: readonly Expectation[]): void {
+function expect(
+  w: World,
+  own: string,
+  lines: readonly Line[],
+  expectations: readonly Expectation[],
+  looked: readonly Found[],
+): void {
   expectations.forEach((e, k) => {
     const r = checkWritten(w, expectationLine(e), expectationWritten(e), expectationPicks(e), false);
     if (r !== undefined) {
@@ -860,7 +890,7 @@ function expect(w: World, own: string, lines: readonly Line[], expectations: rea
       return;
     }
     try {
-      const both = compared(w, own, lines, k, e);
+      const both = compared(w, own, lines, looked, k, e);
       if (both === undefined) return;
       const [expected, actual] = both;
       if (canonicalJson(expected) !== canonicalJson(actual))
@@ -876,13 +906,14 @@ function expect(w: World, own: string, lines: readonly Line[], expectations: rea
   });
 }
 
-/** Lean's World.walk. */
-function walkLines(w: World, sc: Scenario): void {
+/** Lean's World.walk, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
+function walkLines(w: World, sc: Scenario, looked?: Found[]): void {
   for (const service of w.participants.keys()) if (!stopped(w)) act(w, { type: "begin" }, service, begin);
   sc.lines.forEach((l, i) => {
     if (stopped(w)) return;
+    looked?.push(...found(w, sc.expectations, i, l));
     try {
-      line(w, sc.service, sc.lines, sc.expectations, i, l);
+      line(w, sc.service, sc.lines, i, l);
     } catch (error) {
       if (!(error instanceof Reported)) throw error;
       reportTo(w, error.report);
@@ -902,9 +933,10 @@ export function walk(structure: Structure, w: World, sc: Scenario): World {
 export function simulate(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
   if (w.reports.length > 0) return w;
-  walkLines(w, sc);
+  const looked: Found[] = [];
+  walkLines(w, sc, looked);
   if (stopped(w)) return w;
   checkEnd(w);
-  expect(w, sc.service, sc.lines, sc.expectations);
+  expect(w, sc.service, sc.lines, sc.expectations, looked);
   return w;
 }

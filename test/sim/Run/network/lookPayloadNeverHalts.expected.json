@@ -1,0 +1,38 @@
+{
+  "participants": [
+    {
+      "service": "todo",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "operation",
+          "name": "listScreen.close",
+          "id": "listScreen.close#1"
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    },
+    {
+      "service": "notifier",
+      "lines": [],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "reports": [
+    {
+      "kind": "Report.unresolvedReference",
+      "definition": null,
+      "data": {
+        "scenarioLine": 0,
+        "fact": {
+          "type": "line",
+          "index": 1
+        }
+      }
+    }
+  ],
+  "halted": null
+}

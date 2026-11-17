@@ -157,7 +157,7 @@ A map state has one *copy* of its child states for each key of its items.
 
 ### Simulation
 
-- Then and the end checks only add reports: the simulation leaves the same traces, messages, and halt with or without them, so a snapshot depends on Given and When alone (`simulate_reported`).
+- Then only adds reports: a scenario leaves the same traces, messages, and halt as the same scenario without expectations, so a snapshot depends on Given and When alone (`then_only_reports`). A payload of Then that names nothing is reported and stops no line. The end checks also only add reports to what the lines leave (`simulate_reported`).
 - A line other than a deliver, lose, or fail line leaves every message in flight in place, and such a line changes no message in flight except the one its handle names: no message is delivered, lost, or failed unless a line names it (`line_keeps_inFlight`, `moving_line_keeps_others`).
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer line that names a request that has not reached that peer sends nothing and stops the simulation (`external_answer_needs_delivery`).

@@ -199,9 +199,9 @@ def World.answered (w : World) (sender to : String) : Bool :=
     | .answer .. => true
     | _ => false
 
-/-- The world after line `i` of the scenario of the own service `own`, which `expectations` follow. -/
-def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
-    (expectations : List Expectation) (i : Nat) : Scenario.Line → m World
+/-- The world after line `i` of the scenario of the own service `own`. -/
+def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (i : Nat) :
+    Scenario.Line → m World
   | .request none type target input sameIdAs => w.clientRequest fsOf i type target input sameIdAs
   | .request (some peer) type target input _ => do
     match w.role peer with
@@ -255,16 +255,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
           if top.resource != o.resource then return w.report (.unoperableScreen i o.resource)
         w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.chart control v
   | .look screen =>
-    w.attempt (w.screenOf i screen) fun o => do
-      let some st := w.services.lookup o.service | return w.report (.wrongRole i o.service)
-      expectations.zipIdx.foldlM (init := w) fun w (e, k) =>
-        match e with
-        | .offered look control payload _ =>
-          if look != i || w.stopped then pure w else
-          w.resolving ((payload.map (w.fill fsOf i)).getD (pure (.obj []))) fun v => do
-            let found ← offeredAt st (fsOf o.service) (w.state o.service) o control v
-            pure { w with looked := w.looked ++ [(k, found)] }
-        | _ => pure w
+    w.attempt (w.screenOf i screen) fun o =>
+      pure (if (w.services.lookup o.service).isNone then w.report (.wrongRole i o.service) else w)
   | .answer peer request answer =>
     w.resolving (w.messageOf fsOf i request) fun k => do
       let some msg := w.messages[k]? | return w
@@ -382,14 +374,38 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
 The world after line `i`, unless the values it writes report: a running peer's request, answer and event may write
 `created()`.
 -/
-def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
-    (expectations : List Expectation) (i : Nat) (l : Scenario.Line) : m World :=
+def World.line (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (i : Nat)
+    (l : Scenario.Line) : m World :=
   let allowed := match l with
     | .request (some p) .. | .answer p .. | .emit p .. => w.role p == some .run
     | _ => false
   match w.checkWritten i l.written l.picks allowed with
   | some r => pure (w.report r)
-  | none => w.take fsOf own lines expectations i l
+  | none => w.take fsOf own lines i l
+
+/--
+What the look line `i` finds for each offered expectation of `expectations` on it, by expectation: whether the screen
+offers the control with the payload at that point, or the report of the payload. Then reads it, and no line does, so a
+payload that reports stops nothing.
+-/
+def World.found (w : World) (fsOf : String → Functions m) (expectations : List Expectation) (i : Nat) :
+    Scenario.Line → m (List (Nat × Except Report Bool))
+  | .look screen =>
+    match w.screenOf i screen with
+    | .error _ => pure []
+    | .ok o =>
+      match w.services.lookup o.service with
+      | none => pure []
+      | some st =>
+        expectations.zipIdx.filterMapM fun (e, k) =>
+          match e with
+          | .offered look control payload _ =>
+            if look != i then pure none else do
+            match ← ((payload.map (w.fill fsOf i)).getD (pure (.obj []))).run with
+            | .error r => pure (some (k, .error r))
+            | .ok v => pure (some (k, .ok (← offeredAt st (fsOf o.service) (w.state o.service) o control v)))
+          | _ => pure none
+  | _ => pure []
 
 /--
 The world with each message left in flight reported, unless an inFlight line names it, each inFlight line whose message
@@ -410,9 +426,10 @@ def World.checkEnd (w : World) : World :=
 /-- The values in canonical form, in a bag's order: by their canonical JSON. -/
 def bag (vs : List Value) : List Value := vs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
 
-/-- The actual and expected values of the expectation `e`, which Then compares. -/
-def World.compared (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (k : Nat)
-    (e : Expectation) : ExceptT Report m (Option (Value × Value)) := do
+/-- The actual and expected values of the expectation `e`, which Then compares, with what the look lines `found`. -/
+def World.compared (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
+    (found : List (Nat × Except Report Bool)) (k : Nat) (e : Expectation) :
+    ExceptT Report m (Option (Value × Value)) := do
   let some st := w.services.lookup own | return none
   let fs := fsOf own
   let comparedOr (fs : Functions m) (schema : Schema) (v : Value) : ExceptT Report m Value :=
@@ -465,7 +482,11 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       .obj [("requests", .arr (bag actual)), ("ends", .arr (bag actualEnds))]))
   | .offered look _ _ offered =>
     match lines[look]? with
-    | some (.look _) => pure ((w.looked.lookup k).map fun found => (.bool offered, .bool found))
+    | some (.look _) =>
+      match found.lookup k with
+      | some (.ok offers) => pure (some (.bool offered, .bool offers))
+      | some (.error r) => throw r
+      | none => pure none
     | _ => throw (.notLook k look)
 
 /--
@@ -473,10 +494,10 @@ The world with each expectation of Then compared, unless the values it writes re
 others.
 -/
 def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line)
-    (expectations : List Expectation) : m World :=
+    (expectations : List Expectation) (found : List (Nat × Except Report Bool)) : m World :=
   expectations.zipIdx.foldlM (init := w) fun w (e, k) => do
     if let some r := w.checkWritten e.line e.written e.picks false then return w.note r
-    match ← (w.compared fsOf own lines k e).run with
+    match ← (w.compared fsOf own lines found k e).run with
     | .error r => pure (w.note r)
     | .ok none => pure w
     | .ok (some (expected, actual)) =>
@@ -484,12 +505,26 @@ def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lin
 
 /-- The world after the line `l` at `i` of the scenario, unless an earlier line or begin stopped the simulation. -/
 def World.step (w : World) (fsOf : String → Functions m) (sc : Scenario) (l : Scenario.Line) (i : Nat) : m World :=
-  if w.stopped then pure w else w.line fsOf sc.service sc.lines sc.expectations i l
+  if w.stopped then pure w else w.line fsOf sc.service sc.lines i l
+
+/--
+The world after the line `l` at `i`, as `step` leaves it, with what the line found for Then added to `found`: Then
+reads the world before the line, and the line does not read Then.
+-/
+def World.stepFinding (fsOf : String → Functions m) (sc : Scenario) (wf : World × List (Nat × Except Report Bool))
+    (l : Scenario.Line) (i : Nat) : m (World × List (Nat × Except Report Bool)) := do
+  let (w, found) := wf
+  if w.stopped then return (w, found)
+  let more ← w.found fsOf sc.expectations i l
+  pure (← w.step fsOf sc l i, found ++ more)
+
+/-- The world after every running service begins, until one stops it. -/
+def World.beginAll (w : World) (fsOf : String → Functions m) : m World :=
+  w.services.foldlM (init := w) fun w (s, _) => if w.stopped then pure w else w.act fsOf .begin s begin
 
 /-- The world after every running service begins and the lines take place, until one stops it. -/
 def World.walk (w : World) (fsOf : String → Functions m) (sc : Scenario) : m World := do
-  let w ← w.services.foldlM (init := w) fun w (s, _) =>
-    if w.stopped then pure w else w.act fsOf .begin s begin
+  let w ← w.beginAll fsOf
   sc.lines.zipIdx.foldlM (init := w) fun w (l, i) => w.step fsOf sc l i
 
 /--
@@ -508,8 +543,9 @@ checked and the records placed, every running service begins, the lines take pla
 def simulate (j : Syntax.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
   if !w.reports.isEmpty then return w
-  let w ← w.walk fsOf sc
-  if w.stopped then return w
-  w.checkEnd.expect fsOf sc.service sc.lines sc.expectations
+  let w ← w.beginAll fsOf
+  let wf ← sc.lines.zipIdx.foldlM (init := (w, [])) fun wf (l, i) => World.stepFinding fsOf sc wf l i
+  if wf.1.stopped then return wf.1
+  wf.1.checkEnd.expect fsOf sc.service sc.lines sc.expectations wf.2
 
 end Tazuna.Sim
