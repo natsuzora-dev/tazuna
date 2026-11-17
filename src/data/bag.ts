@@ -80,7 +80,8 @@ export function runsOf<T>(items: readonly T[], f: (value: T) => SortKey): T[][] 
 
 /**
  * Values without order, like OCL's Bag, as spec functions receive records. It has no index and no iterator, and each
- * callback receives only the value, so no result depends on an order.
+ * callback receives only the value, so no result depends on an order. A callback that changes a variable outside it
+ * makes the result depend on the order again (BagOrderDependent).
  */
 export interface Bag<T> {
   readonly size: number;

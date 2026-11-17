@@ -100,7 +100,7 @@ stops the comparison first, verify stops at the first line of a trace that the t
 reports that line: it compares no line after the last input line before that line, and checks no line of an external
 service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.
 
-<spec> is the folder whose .ts files hold the spec, in any subfolders. check and test first run tsc --noEmit, from the typescript
+<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__. check and test first run tsc --noEmit, from the typescript
 package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files,
 and write tsc's output to stderr. If tsc reports an error, check and test stop without checking the spec. If loading
 the spec finds a Malformed violation, check and test report the violations that loading finds (Malformed,

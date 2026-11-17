@@ -368,6 +368,7 @@ type PeerKeys<P extends Peers, Own extends string> = {
 /** The arrangement: every running service begins at `start`, the own service `Own` from `records`. */
 export interface Given<R, P extends Peers, Own extends string = string> {
   readonly start: Instant;
+  /** Every record of the own service; nothing defaults, so a single entity's record is written too. */
   readonly records: R;
   /** Every service that exchanges messages with the own service, keyed by its service name. */
   readonly peers: P & NoInfer<PeerKeys<P, Own>>;
@@ -395,14 +396,18 @@ interface Client<R extends string, S extends string, X extends Listed> {
     input: Value<InputOf<C>> | Raw,
     options?: { readonly sameIdAs?: ClientRequestLine },
   ): ClientRequestLine<C, S, X>;
+  /** A query to the own service or to a running peer, the owner of the definition. */
   call<Q extends AnyQuery>(query: Q & OwnedBy<Q, R>, input: Value<InputOf<Q>> | Raw): ClientRequestLine<Q, S, X>;
+  /** A subscription to a query of the own service or of a running peer, answered each time the answer changes. */
   subscribe<Q extends AnyQuery>(query: Q & OwnedBy<Q, R>, input: Value<InputOf<Q>> | Raw): ClientSubscribeLine<Q, S, X>;
+  /** The client ends the subscription of `subscription`. */
   unsubscribe(subscription: ClientSubscribeLine): ProcessingLine<S, X>;
   /** The client sends the request of `line` again with the same id. */
   resend<L extends ClientRequestLine | ClientSubscribeLine>(line: L): L;
 }
 
 interface User<S extends string, X extends Listed> {
+  /** The user uses `control` of the screen instance, with the control's payload if it has one. */
   operate<Cs extends Readonly<Record<string, Control>>, K extends keyof Cs & string>(
     screen: ScreenRef<{ readonly kind: "screen"; readonly controls: Cs }>,
     control: K,
@@ -418,27 +423,36 @@ type PeerAnswerOf<T> = PeerValue<AnswerOf<T>>;
  * What a peer sends; each line states one message in flight, which a line of the network delivers to a service of `S`.
  */
 interface PeerActor<C, W extends "run" | "external", S extends string> {
+  /** The peer answers `request`, which it received. */
   answer<T extends RequestOf<C>>(
     request: RequestMessage<T> | DeliveredRequest<T>,
     answer: W extends "run" ? PeerAnswerOf<T> : Value<AnswerOf<T>>,
   ): PeerAnswerLine<T>;
+  /**
+   * The peer emits `event`. `resultOf` names the command request whose result the event is, and the event travels on
+   * that request's channel; null names none.
+   */
   emit<Ev extends Extract<Members<C>, AnyEvent>>(
     event: Ev,
     payload: W extends "run" ? PeerValue<EncodedPayload<Ev>> : Value<EncodedPayload<Ev>>,
     options: { readonly resultOf: ResultOf },
   ): PeerEventLine;
+  /** The peer sends a command to a service that takes part in the simulation. */
   send<D extends AnyCommand>(
     command: D & OwnedBy<D, S>,
     input: W extends "run" ? PeerValue<InputOf<D>> : Value<InputOf<D>> | Raw,
   ): PeerRequestLine<D>;
+  /** The peer sends a query to a service that takes part in the simulation. */
   call<Q extends AnyQuery>(
     query: Q & OwnedBy<Q, S>,
     input: W extends "run" ? PeerValue<InputOf<Q>> : Value<InputOf<Q>> | Raw,
   ): PeerRequestLine<Q>;
+  /** The peer subscribes to a query of a service that takes part in the simulation. */
   subscribe<Q extends AnyQuery>(
     query: Q & OwnedBy<Q, S>,
     input: W extends "run" ? PeerValue<InputOf<Q>> : Value<InputOf<Q>> | Raw,
   ): PeerSubscribeLine<Q>;
+  /** The peer ends the subscription of `subscription`. */
   unsubscribe(subscription: PeerSubscribeLine): PeerEndLine;
 }
 
@@ -473,7 +487,10 @@ export interface When<
         : never;
   };
   readonly net: {
-    /** The network delivers the message in flight to its receiver. */
+    /**
+     * The network delivers the message in flight to its receiver. A message never overtakes an earlier one on its
+     * channel (InvalidScenario.overtaking).
+     */
     deliver<M extends Message>(message: M): Delivered<M, S, X>;
     /** The network delivers the delivered message again, with the same id. */
     redeliver<M extends Message>(message: M): Delivered<M, S, X>;

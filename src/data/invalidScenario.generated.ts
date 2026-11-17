@@ -224,7 +224,10 @@ export type InvalidScenario =
         readonly fact: Json;
       };
     }
-  /** The line delivers `message` while the earlier `earlier` on the same channel is in flight. */
+  /**
+   * The line delivers `message` while the earlier `earlier` on the same channel is in flight. To deliver `message`, lose or
+   * refuse `earlier` first.
+   */
   | {
       readonly kind: "InvalidScenario.overtaking";
       readonly definition: null;

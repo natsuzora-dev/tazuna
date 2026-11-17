@@ -37,7 +37,7 @@ export const rejectedBy = (definition: DefinitionRef, unmet: Unmet): Obligation 
     ? { kind: "bindsRejection", definition, data: unmet }
     : { kind: "requiresRejection", definition, data: unmet };
 
-/** A part that neither a scenario's run nor an explored path reached. */
+/** A part that neither a scenario's run nor an explored path reached, which test --coverage reports. */
 export type Uncovered = Unreached<Obligation>;
 
 export const uncovered = (o: Obligation): Uncovered => ({ ...o, kind: `Uncovered.${o.kind}` }) as Uncovered;

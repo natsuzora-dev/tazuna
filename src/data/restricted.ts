@@ -36,7 +36,8 @@ type Of<Name extends string, Data> = {
 
 /**
  * TypeScript code in a spec file that uses a restricted feature, because the feature breaks what the meaning assumes of
- * spec functions: determinism, sound types, and service boundaries.
+ * spec functions: determinism, sound types, and service boundaries. `crossServiceImport` is a file of one service that
+ * imports from the service `service` anything other than its contract.
  */
 export type Restricted =
   | Of<"global", { readonly global: (typeof nondeterministicGlobals)[number] }>

@@ -2,7 +2,7 @@
 
 Lean definitions in [`lean/Tazuna`](../lean/Tazuna) state what a spec means, and Lean theorems prove properties of that meaning.
 tazuna guarantees only what the theorems prove, under the [assumptions](#assumptions) below.
-[Write specs](writing-specs.md) shows how to write the specs and scenarios that this page refers to.
+[Concepts](concepts.md) explains the ideas that this page refers to.
 
 ## Terms
 
@@ -14,7 +14,6 @@ The sequence of these messages, each with its time, is the service's *trace*.
 A scenario's own service and its running peers (`run`) are the *running services* of one *simulation*.
 They share one clock.
 A message to or from a running service stays *in flight* until a line of `w.net` decides its fate.
-A message to a skipped peer (`skip`) is not delivered.
 The simulation is deterministic: the scenario writes every choice that no service's code makes, such as which message arrives next and when the time advances.
 
 Messages travel on *channels*.
@@ -46,18 +45,8 @@ tazuna guarantees nothing about lines that no scenario contains.
 
 ### When a scenario simulates
 
-When `test` reports no `InvalidScenario` violation, the scenario states everything that happened between the running services:
-
-- Every message to or from a running service reached its receiver by a line, or the scenario names it as lost, refused, or left in flight (`InvalidScenario.leftInFlight`).
-  No two `leaveInFlight` lines name one message (`InvalidScenario.repeatedInFlight`).
-- No message overtook an earlier one on its channel (`InvalidScenario.overtaking`).
-- Each line of a running peer states a message that its run sent.
-- Each answer of an external peer answers a request that reached it, and each such request is answered or left unanswered, not both (`InvalidScenario.awaitingAnswer`, `InvalidScenario.repeatedAnswer`).
-- An event's `resultOf` names a request that its emitter received (`InvalidScenario.unreceivedRequest`).
-- Each handle named one message, and the handles of `requests` named equal requests (`InvalidScenario.unresolvedReference`, `InvalidScenario.ambiguousReference`).
-- The clock only moved forward (`InvalidScenario.notLater`).
-- The scenario wrote no key that a running service creates (`InvalidScenario.writtenKey`, `InvalidScenario.writtenGivenKey`).
-- No spec computed a string in the form of a created key that no running service created (`InvalidScenario.computedKey`).
+When `test` reports no `InvalidScenario` violation, the scenario states everything that happened between the running services.
+Each `InvalidScenario` kind is one rule of that statement, and its doc comment states the rule.
 
 `test` searches the orders that no line writes:
 
@@ -92,11 +81,7 @@ An implementation that uses a string of its input, such as an idempotency key, a
 `verify` keeps every binding that agrees with the lines compared so far.
 The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`.
 Keys that only a later line tells apart wait for that line.
-`verify` reports these cases:
-
-- `Uncomparable.ambiguous`: the bindings give a value of an `in` line different implementation values, and the snapshot's `in` lines do not use those values alike, so the binding that `drive` chose decided what the implementation got.
-- `Uncomparable.duplicateId`: an `out` request has the id of an earlier request.
-- `Uncomparable.bindingLimit`: a line would make `verify` keep more than 256 bindings.
+When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind, and its doc comment states the case.
 
 `test` compares outcomes the same way, so a spec without a `ChoiceDependent` violation fixes the order that `verify` asks of each channel.
 Because created keys compare only up to renaming, a string that a spec computes in the form of a created key is `InvalidScenario.computedKey`.
@@ -175,14 +160,6 @@ Machines and screens are statecharts, called *charts*.
 A running chart is an *instance*.
 A map state has one *copy* of its child states for each key of its items.
 
-### Checks
-
-- `check` passes only when each contract lists only members of its own service (`members_of_own_service`).
-- `check` passes only when no chart sends a query to its own service (`queries_of_other_services`).
-- `check` passes only when no chain of automations leads back to its start (`no_automation_returns`).
-- `check` passes only when no unguarded `always` transition can reach its own source again (`unguarded_always_does_not_return`).
-- `check` passes only when each command emits only events of its own service (`commands_emit_own_events`, `accepted_command_emits_own_events`).
-
 ### Simulation
 
 - Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone (`then_only_reports`). The checks at the end of a run also only add violations (`simulate_reported`).
@@ -203,15 +180,10 @@ A map state has one *copy* of its child states for each key of its items.
 
 ### Statecharts
 
-Charts follow the SCXML (W3C) algorithm.
+Charts follow the SCXML (W3C) algorithm (`enters_initial`, `microstep_exits_in_exit_order`, `microstep_enters_in_entry_order`, `select_one_per_leaf`, `always_one_per_atomic`, `descendant_replaces_ancestor`, `leaf_selects_innermost`, `ancestor_target_exits`, `untaken_operation_changes_nothing`).
+The following items are tazuna's own:
 
-- Entering a compound state enters its initial child (`enters_initial`).
-- A transition exits states from the innermost and enters states from the outermost (`microstep_exits_in_exit_order`, `microstep_enters_in_entry_order`).
-- In each atomic state, at most one transition runs for one event (`select_one_per_leaf`, `always_one_per_atomic`).
-- When a transition of a state and a transition of its ancestor are both enabled, the transition of the state runs (`descendant_replaces_ancestor`, `leaf_selects_innermost`).
-- A transition to an ancestor exits the ancestor (`ancestor_target_exits`).
 - A transition to a descendant of its source exits the source when it reenters, and keeps it otherwise (`reenter_true_exits`, `reenter_false_not_exited`).
-- An event that enables no transition changes nothing (`untaken_operation_changes_nothing`).
 - A stopped instance processes no event (`stopped_machine_takes_no_event`).
 - An event without a key reaches every copy of a map state (`keyless_payload_reaches_all`).
 - When the copies of a map state have distinct keys, an event with a key reaches at most one copy (`keyed_payload_reaches_at_most_one`).

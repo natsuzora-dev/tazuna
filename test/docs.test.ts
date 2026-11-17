@@ -6,7 +6,7 @@ import { leanRoot } from "./examples.ts";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const docs = ["README.md", "docs/guarantees.md", "docs/writing-specs.md"].map((path) => ({ path, text: read(path) }));
+const docs = ["README.md", "docs/guarantees.md", "docs/concepts.md"].map((path) => ({ path, text: read(path) }));
 const guarantees = read("docs/guarantees.md");
 
 const leanText = readdirSync(leanRoot, { recursive: true, encoding: "utf8" })
@@ -18,6 +18,7 @@ const groups = [...read("src/data/violation.ts").matchAll(/^ {2}\| "(\w+)"/gm)].
 
 test("Each theorem that docs/guarantees.md names under Proven properties is a theorem of lean/Tazuna", () => {
   const section = guarantees.slice(guarantees.indexOf("## Proven properties"));
+  assert.ok(!section.includes("\n## "), "Proven properties is the last section");
   const names = [...section.matchAll(/\((`[\w.]+`(?:, `[\w.]+`)*)\)/g)].flatMap((m) =>
     [...(m[1] ?? "").matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? ""),
   );
@@ -29,19 +30,30 @@ test("Each theorem that docs/guarantees.md names under Proven properties is a th
   );
 });
 
+const groupSource = (group: string) => {
+  const base = join(root, "src/data", group.charAt(0).toLowerCase() + group.slice(1));
+  return existsSync(`${base}.generated.ts`)
+    ? readFileSync(`${base}.generated.ts`, "utf8")
+    : readFileSync(`${base}.ts`, "utf8");
+};
+const unknownKinds = (path: string, text: string, pattern: RegExp) =>
+  [...text.matchAll(pattern)]
+    .filter(([, group = ""]) => groups.includes(group))
+    .filter(([, group = "", kind = ""]) => !new RegExp(`\\b${kind}\\b`).test(groupSource(group)))
+    .map(([kind]) => `${path} ${kind}`);
+
 test("Each violation kind that a doc names is a kind of its group", () => {
-  const groupSource = (group: string) => {
-    const base = join(root, "src/data", group.charAt(0).toLowerCase() + group.slice(1));
-    return existsSync(`${base}.generated.ts`)
-      ? readFileSync(`${base}.generated.ts`, "utf8")
-      : readFileSync(`${base}.ts`, "utf8");
-  };
-  const unknown = docs.flatMap(({ path, text }) =>
-    [...text.matchAll(/`(\w+)\.(\w+)`/g)]
-      .filter(([, group = ""]) => groups.includes(group))
-      .filter(([, group = "", kind = ""]) => !new RegExp(`\\b${kind}\\b`).test(groupSource(group)))
-      .map(([kind]) => `${path} ${kind}`),
+  assert.deepEqual(
+    docs.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g)),
+    [],
   );
+});
+
+test("Each violation kind that a doc comment in src names is a kind of its group", () => {
+  const comments = (text: string) => [...text.matchAll(/\/\*\*[\s\S]*?\*\//g)].map((m) => m[0]).join("\n");
+  const unknown = readdirSync(join(root, "src"), { recursive: true, encoding: "utf8" })
+    .filter((f) => f.endsWith(".ts"))
+    .flatMap((f) => unknownKinds(`src/${f}`, comments(read(`src/${f}`)), /\b([A-Z]\w+)\.(\w+)\b/g));
   assert.deepEqual(unknown, []);
 });
 

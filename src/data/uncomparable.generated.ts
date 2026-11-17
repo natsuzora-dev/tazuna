@@ -113,7 +113,8 @@ export type Uncomparable =
    * The `in` line names a value that the bindings that agree with the lines so far give different implementation values,
    * `candidates` are the trace's `out` lines with those values as ids, and the snapshot's `in` lines do not use alike the
    * values that may stand for them, so the route that the harness chose decides what the implementation got
-   * (Verify/Compare).
+   * (Verify/Compare). Equal requests that get different answers cause it; give them content that tells them apart, or
+   * equal answers.
    */
   | {
       readonly kind: "Uncomparable.ambiguous";
