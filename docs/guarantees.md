@@ -64,7 +64,7 @@ When `test` reports no `Report` violation, the scenario stated everything that h
 - the clock only advanced (`Report.notLater`);
 - the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>` (`Report.writtenKey`).
 
-No Lean theorem states properties of the simulation yet.
+The [simulation section](#simulation) of the proven properties lists what Lean proves about these rules.
 
 ### When a trace matches a snapshot
 
@@ -154,6 +154,14 @@ A map state has one *copy* of its child states for each key of its items.
 - `check` passes the automations only when no chain of automations leads back to its start (`no_automation_returns`).
 - `check` passes the charts only when no unguarded `always` transition can reach its own source again (`unguarded_always_does_not_return`).
 - `check` passes the commands only when each command emits only events of its own service (`commands_emit_own_events`, `accepted_command_emits_own_events`).
+
+### Simulation
+
+- Then and the end checks only add reports: the simulation leaves the same traces, messages, and halt with or without them, so a snapshot depends on Given and When alone (`simulate_reported`).
+- A line other than a deliver, lose, or fail line leaves every message in flight in place, and such a line changes no message in flight except the one its handle names: no message is delivered, lost, or failed unless a line names it (`line_keeps_inFlight`, `moving_line_keeps_others`).
+- A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
+- An external peer's answer line that names a request that has not reached that peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
+- A report that halts stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
 
 ### Data validity
 

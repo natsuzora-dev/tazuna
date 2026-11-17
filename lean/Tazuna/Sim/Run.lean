@@ -482,12 +482,15 @@ def World.expect (w : World) (fsOf : String → Functions m) (own : String) (lin
     | .ok (some (expected, actual)) =>
       pure (if expected.canonical == actual.canonical then w else w.note (.unmetExpectation k expected actual))
 
+/-- The world after the line `l` at `i` of the scenario, unless an earlier line or begin stopped the simulation. -/
+def World.step (w : World) (fsOf : String → Functions m) (sc : Scenario) (l : Scenario.Line) (i : Nat) : m World :=
+  if w.stopped then pure w else w.line fsOf sc.service sc.lines sc.expectations i l
+
 /-- The world after every running service begins and the lines take place, until one stops it. -/
 def World.walk (w : World) (fsOf : String → Functions m) (sc : Scenario) : m World := do
   let w ← w.services.foldlM (init := w) fun w (s, _) =>
     if w.stopped then pure w else w.act fsOf .begin s begin
-  sc.lines.zipIdx.foldlM (init := w) fun w (l, i) =>
-    if w.stopped then pure w else w.line fsOf sc.service sc.lines sc.expectations i l
+  sc.lines.zipIdx.foldlM (init := w) fun w (l, i) => w.step fsOf sc l i
 
 /--
 The world after the lines of the scenario take place from `start`, as `simulate` runs them, without checking the end
