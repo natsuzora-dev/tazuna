@@ -8,3 +8,6 @@
 {"time":"2026-10-26T00:00:00Z","dir":"out","type":"event","id":"e2","name":"reminderAdded","resultOf":"c1","payload":{"reminderId":"r2"}}
 {"time":"2026-10-26T00:00:00Z","dir":"in","type":"query","id":"q3","name":"nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
 {"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"q3","answer":{"result":"fulfilled","output":{"day":"2026-10-24T00:00:00Z"}}}
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"command","id":"c2","name":"addReminder","input":{}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","id":"answer#5","to":"c2","answer":{"result":"accepted"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"event","id":"e3","name":"reminderAdded","resultOf":"c2","payload":{"reminderId":"r3"}}

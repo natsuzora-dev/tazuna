@@ -40,30 +40,12 @@ export type Fault =
       readonly definition: DefinitionRef;
       readonly data: Readonly<Record<string, never>>;
     }
+  /** The input that the chart or automation `definition` gives `target` does not match the input schema of `target`. */
   | {
-      readonly kind: "Fault.automationInputSchema";
-      readonly definition: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
-    }
-  | {
-      readonly kind: "Fault.requestInputSchema";
+      readonly kind: "Fault.inputSchema";
       readonly definition: DefinitionRef;
       readonly data: {
         readonly target: DefinitionRef;
-      };
-    }
-  | {
-      readonly kind: "Fault.showsInputSchema";
-      readonly definition: DefinitionRef;
-      readonly data: {
-        readonly slot: string;
-      };
-    }
-  | {
-      readonly kind: "Fault.screenInputSchema";
-      readonly definition: DefinitionRef;
-      readonly data: {
-        readonly screen: DefinitionRef;
       };
     }
   /** The input that the chart gives the screen it opens fails the screen's requires `condition`. */
@@ -298,10 +280,7 @@ export const faultKinds = [
   "Fault.unlistedEmittedEvent",
   "Fault.sameRecordInBag",
   "Fault.outputSchema",
-  "Fault.automationInputSchema",
-  "Fault.requestInputSchema",
-  "Fault.showsInputSchema",
-  "Fault.screenInputSchema",
+  "Fault.inputSchema",
   "Fault.failedRequires",
   "Fault.heldSchema",
   "Fault.offersSchema",
@@ -339,10 +318,7 @@ export const haltingFaultKinds = [
   "Fault.unlistedEmittedEvent",
   "Fault.sameRecordInBag",
   "Fault.outputSchema",
-  "Fault.automationInputSchema",
-  "Fault.requestInputSchema",
-  "Fault.showsInputSchema",
-  "Fault.screenInputSchema",
+  "Fault.inputSchema",
   "Fault.failedRequires",
   "Fault.heldSchema",
   "Fault.offersSchema",

@@ -1,3 +1,4 @@
+import type { Json } from "../../data/values.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Activity, activityRef } from "../chart/basic.ts";
@@ -25,20 +26,20 @@ function appliedShows(instance: Instance): (readonly [string, Activity])[] {
 function refresh(r: Processing, instance: Instance): boolean {
   if (instance.closed) return false;
   let shownChanged = false;
-  const wanted = new Map<string, { activity: Activity; encoded: unknown; text: string }>();
+  const wanted = new Map<string, { activity: Activity; input: Json; text: string }>();
   const definition = ref(r.st, instance.chart.name);
   for (const [state, activity] of appliedShows(instance)) {
     const slot = activity.key;
     const scope = scopeOf(r.state, instance, state);
     const records = new LazyRecordSource(r.state.records, r.note);
-    const encoded = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
-    if (encoded instanceof Failed) return halt(issueViolation(definition, encoded));
-    wanted.set(slot, { activity, encoded, text: JSON.stringify(encoded) });
+    const input = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
+    if (input instanceof Failed) return halt(issueViolation(definition, input));
+    wanted.set(slot, { activity, input, text: JSON.stringify(input) });
   }
   const open = openShows(r.state, instance.resource);
   for (const p of open) {
     const { slot } = p.requester;
-    if (wanted.get(slot)?.text === p.input) continue;
+    if (wanted.get(slot)?.text === JSON.stringify(p.input)) continue;
     stateEndSubscription(r, p);
     if (!wanted.has(slot)) {
       r.note.wroteShown(instance.resource, slot);
@@ -46,11 +47,11 @@ function refresh(r: Processing, instance: Instance): boolean {
       instance.shown.set(slot, null);
     }
   }
-  for (const [slot, { activity, encoded, text }] of wanted) {
-    if (open.some((p) => p.requester.slot === slot && p.input === text)) continue;
+  for (const [slot, { activity, input, text }] of wanted) {
+    if (open.some((p) => p.requester.slot === slot && JSON.stringify(p.input) === text)) continue;
     awaitAnswer(
       r.state,
-      { dir: "out", type: "subscribe", name: activity.target, input: encoded },
+      { dir: "out", type: "subscribe", name: activity.target, input },
       { kind: "slot", machine: instance.resource, slot },
       activity,
     );

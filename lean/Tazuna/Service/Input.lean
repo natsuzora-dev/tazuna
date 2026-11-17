@@ -57,31 +57,35 @@ def resultOfFinding (event : Spec.Ref) (requestId : String) (target : Spec.Ref) 
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
 
 /--
-The request `handle` whose answer arrived (State.takenAnswers), which an event names as its resultOf. It is none after
+The request `handle` whose answer arrived (State.answerTo?), which an event names as its resultOf. It is none after
 reporting that no answer to it arrived, or that the request cannot have the event as its result (resultOfMismatch).
 -/
 def resultRequest (st : Service) (s : State) (name handle : String) : State × Option String :=
-  match s.takenAnswers.lookup handle with
+  match s.answerTo? handle with
   | some (target, answer) =>
     match st.«structure».resultOfMismatch target (answer matches .accepted _) (st.refOf name) with
     | some mismatch => (s.report (resultOfFinding (st.refOf name) handle target mismatch), none)
     | none => (s, some handle)
   | none => (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) handle)), none)
 
-/-- The state after the result event `e` of the request `id`, an accepted external command, arrives. -/
+/-- The state after the result event `e` of the request `id`, an assumed peer's accepted command, arrives. -/
 def State.addResult (s : State) (id : String) (e : Emit) : State :=
-  { s with results := s.results.map fun b => if b.id == id then { b with events := b.events ++ [e] } else b }
+  { s with outgoing := s.outgoing.map fun (o : Outgoing) => if o.id == id then
+      { o with accepted := o.accepted.map fun a => { a with events := a.events ++ [e] } } else o }
 
 /--
-The state after the run ends: the ensures of each accepted external command is checked with all its result events that
-arrived, as a Pact provider verification checks a consumer's expectation against the whole interaction.
+The state after the run ends: the ensures of each command that an assumed peer accepted is checked with all its result
+events that arrived, as a Pact provider verification checks a consumer's expectation against the whole interaction.
 -/
 def checkResults [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
-  s.results.foldlM (init := s) fun s a => do
+  s.outgoing.foldlM (init := s) fun s o => do
     if s.halted.isSome then return s
-    match ← fs.resultEnsures a.activity.target a.input a.output a.events with
-    | .error issue => return s.report (.fault (issueViolation st a.activity.ref issue))
-    | .ok (some c) => return s.report (.invalidInput (.failedAssumedEnsures a.id a.activity.ref c))
+    match o.accepted with
+    | none => return s
+    | some a =>
+    match ← fs.resultEnsures o.activity.target a.input a.output a.events with
+    | .error issue => return s.report (.fault (issueViolation st o.activity.ref issue))
+    | .ok (some c) => return s.report (.invalidInput (.failedAssumedEnsures o.id o.activity.ref c))
     | .ok none => return s
 
 /-- The state after the event that arrived as `raw` and parsed as `payload` is delivered. -/
@@ -134,19 +138,17 @@ def brokenAssumption (requestId : String) (target : Spec.Ref) (answer : Answer)
   (Spec.assumptionMismatch answer failedRequires failedEnsures).map (assumptionFinding requestId target)
 
 /--
-The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported without halting.
-`written` is the answer to write, or why it is malformed. `recorded` is an external command's acceptance, recorded to
-check its ensures with its result events at the end of the run.
+The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported
+without halting. `decoded` is the answer to deliver, or why it is malformed or the sender's fault. `accepted` is an
+assumed peer's acceptance of a command, whose ensures the end of the run checks with its result events.
 -/
 structure AnswerCheck where
-  assumption : Option Finding
-  written : Except Finding Answer
-  recorded : Option Accepted := none
+  assumption : Option Finding := none
+  decoded : Except Finding Answer
+  accepted : Option Accepted := none
 
-/--
-The answer as written, with its output canonical, or none when the output does not match the target's output schema.
--/
-def writtenAnswer [Monad m] (st : Service) (fs : Functions m) (a : Activity) (answer : Answer) :
+/-- The answer with its output decoded, or none when the output does not match the target's output schema. -/
+def decodedOutput [Monad m] (st : Service) (fs : Functions m) (a : Activity) (answer : Answer) :
     m (Except Issue (Option Answer)) := do
   if !st.«structure».hasOutput a.ref then return .ok (some answer)
   match answer with
@@ -155,59 +157,71 @@ def writtenAnswer [Monad m] (st : Service) (fs : Functions m) (a : Activity) (an
   | .accepted (some output) => return (← fs.parse (.output a.target) output).map (·.map (.accepted ∘ some))
   | .fulfilled output => return (← fs.parse (.output a.target) output).map (·.map .fulfilled)
 
-/--
-The check of an answer to the request `p`. A spec service rejects an input with invalid-input only when its schema does
-not take it, which is the sender's fault. When the target is assumed, its input schema stands for the receiver's parse,
-and the answer is also checked against the target's requires over the input alone and, for a query, its ensures that
-read no records; an external command's ensures wait for the end of the run, when all its result events arrived.
--/
-def checkAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
-    m (Except Issue AnswerCheck) := do
+/-- The answer to the request `p` decoded, or why its rejection kind or output does not match the target. -/
+def decodedAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
+    m (Except Issue (Except Finding Answer)) := do
   let target := p.activity.ref
   let j := st.«structure»
-  let assumed := j.isAssumed target
-  let inputFault : AnswerCheck := { assumption := none, written := .error (.fault (s.inputFault st target p.requester)) }
-  if !assumed then
-    match answer with
-    | .rejected { kind := .invalidInput, .. } => return .ok inputFault
-    | _ => pure ()
-  let parsed ← if assumed then fs.parse (.input p.activity.target) p.input else pure (.ok (some p.input))
-  match parsed with
-  | .error e => return .error e
-  | .ok none => return .ok inputFault
-  | .ok (some input) =>
-  let required ←
-    if assumed then firstFalse (fs.inputRequirement p.activity.target · input) (j.requiresOf target)
-    else pure (.ok none)
-  match required with
-  | .error e => return .error e
-  | .ok failedRequires =>
-  let broken (failedEnsures : Option String) : Option Finding :=
-    if assumed then brokenAssumption p.id target answer failedRequires failedEnsures else none
   match answer with
   | .rejected r =>
-    let written :=
-      if !(j.rejectionKinds st.service target).contains r.kind then
-        .error (.invalidInput (.unlistedRejectionKind p.id target r))
-      else if r.kind == .requires && !(j.rejectionReasons target).contains (r.reason.getD "") then
-        .error (.invalidInput (.unlistedRejectionReason p.id target r))
-      else .ok answer
-    return .ok { assumption := broken none, written }
+    if !(j.rejectionKinds st.service target).contains r.kind then
+      return .ok (.error (.invalidInput (.unlistedRejectionKind p.id target r)))
+    if r.kind == .requires && !(j.rejectionReasons target).contains (r.reason.getD "") then
+      return .ok (.error (.invalidInput (.unlistedRejectionReason p.id target r)))
+    return .ok (.ok answer)
   | _ =>
-    match ← writtenAnswer st fs p.activity answer with
+    match ← decodedOutput st fs p.activity answer with
     | .error e => return .error e
-    | .ok none =>
-      return .ok { assumption := broken none, written := .error (.invalidInput (.answerOutputSchema p.id target)) }
-    | .ok (some written) =>
-      if !assumed || failedRequires.isSome then return .ok { assumption := broken none, written := .ok written }
-      if p.activity.keyword == "sends" then
-        return .ok { assumption := broken none, written := .ok written,
-                     recorded := some { id := p.id, activity := p.activity, input, output := written.output? } }
-      match ← fs.resultEnsures p.activity.target input written.output? [] with
-      | .error e => return .error e
-      | .ok failedEnsures => return .ok { assumption := broken failedEnsures, written := .ok written }
+    | .ok none => return .ok (.error (.invalidInput (.answerOutputSchema p.id target)))
+    | .ok (some decoded) => return .ok (.ok decoded)
 
-/-- The state after an answer input with id `givenId` answers the request `p`, as checkAnswer checks the answer. -/
+/-- The check of an answer to the request `p` from a spec service, which parsed the input itself. -/
+def specAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+    m (Except Issue AnswerCheck) := do
+  match s.rejectedInput? st p.activity.ref p.requester answer with
+  | some fault => return .ok { decoded := .error (.fault fault) }
+  | none =>
+    match ← decodedAnswer st fs p answer with
+    | .error e => return .error e
+    | .ok decoded => return .ok { decoded }
+
+/--
+The check of an answer to the request `p` from an assumed peer. Its input schema stands for the peer's parse, and the
+answer is also checked against its requires over the input alone and, for a query, its ensures that read no records; a
+command's ensures waits for the end of the run, when all its result events arrived.
+-/
+def assumedAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+    m (Except Issue AnswerCheck) := do
+  let target := p.activity.ref
+  match ← fs.parse (.input p.activity.target) p.input with
+  | .error e => return .error e
+  | .ok none => return .ok { decoded := .error (.fault (s.inputFault st target p.requester)) }
+  | .ok (some input) =>
+  match ← firstFalse (fs.inputRequirement p.activity.target · input) (st.«structure».requiresOf target) with
+  | .error e => return .error e
+  | .ok failedRequires =>
+  let broken := brokenAssumption p.id target answer failedRequires
+  match ← decodedAnswer st fs p answer with
+  | .error e => return .error e
+  | .ok (.error f) => return .ok { assumption := broken none, decoded := .error f }
+  | .ok (.ok decoded) =>
+    if decoded matches .rejected _ || failedRequires.isSome then
+      return .ok { assumption := broken none, decoded := .ok decoded }
+    if p.activity.keyword == "sends" then
+      return .ok { assumption := broken none, decoded := .ok decoded,
+                   accepted := some { input, output := decoded.output? } }
+    match ← fs.resultEnsures p.activity.target input decoded.output? [] with
+    | .error e => return .error e
+    | .ok failedEnsures => return .ok { assumption := broken failedEnsures, decoded := .ok decoded }
+
+def checkAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
+    m (Except Issue AnswerCheck) :=
+  if st.«structure».isAssumed p.activity.ref then assumedAnswer st fs s p answer else specAnswer st fs s p answer
+
+/--
+The state after an answer input with id `givenId` answers the request `p`, as checkAnswer checks the answer. The line
+holds the answer as it arrived, and the requester gets it decoded.
+-/
 def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (givenId : Option String)
     (p : Pending) (answer : Answer) : m State := do
   match ← checkAnswer st fs s p answer with
@@ -217,15 +231,29 @@ def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
   let s := match checked.assumption with
     | some f => s.report f
     | none => s
-  match checked.written with
+  match checked.decoded with
   | .error f => pure (s.report f)
-  | .ok written =>
-    let s := match checked.recorded with
-      | some a => { s with results := s.results ++ [a] }
+  | .ok decoded =>
+    let s := match checked.accepted with
+      | some a => { s with outgoing := s.outgoing.map fun (o : Outgoing) => if o.id == p.id then { o with accepted := some a } else o }
       | none => s
-    let started := (s.write .in givenId (.answer p.id written)).1.newMessage.newStep none
-    let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
+    let started := (s.write .in givenId (.answer p.id answer)).1.newMessage.newStep none
+    let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p decoded) ⟨started.1, {}⟩
     message st fs r.state r.queue
+
+/--
+The state after the answer `a` to the request `to` arrives with the id `id`. A later event's resultOf names the request,
+so the answer is kept with it, also when the request no longer waits, as after a restart; such an answer is a message
+with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
+-/
+def answerIn [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id to : String) (a : Answer) :
+    m State :=
+  if s.deliveries.contains id then message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} else
+  let s := { s with deliveries := s.deliveries ++ [id],
+                    outgoing := s.outgoing.map fun (o : Outgoing) => if o.id == to then { o with answer := some a } else o }
+  match s.pending.find? (·.id == to) with
+  | some p => answerRequest st fs s (some id) p a
+  | none => message st fs (s.write .in (some id) (.answer to a)).1.newMessage {}
 
 def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do
   if s.halted.isSome then pure s else

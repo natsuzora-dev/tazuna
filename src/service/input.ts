@@ -1,9 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import type { Fields } from "../data/values.ts";
-import { type ViolationError, withExtra } from "../data/violation.ts";
+import { withExtra } from "../data/violation.ts";
 import {
   type AssumptionMismatch,
   assumptionMismatch,
@@ -16,7 +14,7 @@ import {
 } from "../spec/structure.ts";
 import { ref, refOf, type Service } from "./basic.ts";
 import { settled } from "./chart/always.ts";
-import { type Activity, activityRef, type Chart } from "./chart/basic.ts";
+import { activityRef, type Chart } from "./chart/basic.ts";
 import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
@@ -29,15 +27,17 @@ import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
 import {
-  type Accepted,
+  type Finding,
   halt,
   inputFault,
   lineId,
   machineOf,
   newMessage,
   newStep,
+  type Outgoing,
   type Pending,
   type Run,
+  rejectedInput,
   report,
   write,
 } from "./state.ts";
@@ -93,16 +93,16 @@ export function endSubscription(r: Processing, id: string): void {
 
 /** Lean's resultRequest: the request `handle` whose answer arrived, which an event names as its resultOf. */
 function resultRequest(r: Processing, name: string, handle: string): string | undefined {
-  const answered = r.state.takenAnswers.get(handle);
-  if (answered === undefined)
+  const outgoing = r.state.outgoing.get(handle);
+  const event = refOf(r.st, name);
+  if (outgoing?.answer === undefined)
     return report(r.state, {
       kind: "InvalidInput.resultOfUnansweredRequest",
       definition: null,
-      data: { event: refOf(r.st, name), requestId: handle },
+      data: { event, requestId: handle },
     });
-  const { target, answer } = answered;
-  const event = refOf(r.st, name);
-  const mismatch = resultOfMismatch(r.st.structure, target, answer.result === "accepted", event);
+  const target = activityRef(outgoing.activity);
+  const mismatch = resultOfMismatch(r.st.structure, target, outgoing.answer.result === "accepted", event);
   if (mismatch === undefined) return handle;
   return report(r.state, {
     kind: `InvalidInput.${mismatch}`,
@@ -111,27 +111,18 @@ function resultRequest(r: Processing, name: string, handle: string): string | un
   });
 }
 
-/** Lean's State.addResult: adds the arrived result event `e` to the request `requestId` if it is an accepted external command. */
-function addResult(r: Processing, requestId: string, e: Emit): void {
-  r.state.results.get(requestId)?.events.push(e);
-}
-
 /** Lean's checkResults. */
 export function checkResults(r: Run): void {
-  for (const accepted of r.state.results.values()) {
-    const target = activityRef(accepted.activity);
-    const failed = r.functions.resultEnsures(
-      accepted.activity.target,
-      accepted.input,
-      accepted.output,
-      accepted.events,
-    );
+  for (const [requestId, { activity, accepted }] of r.state.outgoing) {
+    if (accepted === undefined) continue;
+    const target = activityRef(activity);
+    const failed = r.functions.resultEnsures(activity.target, accepted.input, accepted.output, accepted.events);
     if (failed instanceof Failed) halt(issueViolation(target, failed));
     if (failed !== undefined)
       report(r.state, {
         kind: "InvalidInput.failedAssumedEnsures",
         definition: null,
-        data: { requestId: accepted.id, target, condition: failed },
+        data: { requestId, target, condition: failed },
       });
   }
 }
@@ -193,7 +184,7 @@ export function receive(
   });
   s.deliveries.add(id);
   const e: Emit = { event: name, payload: decoded };
-  if (request !== undefined) addResult(r, request, e);
+  if (request !== undefined) s.outgoing.get(request)?.accepted?.events.push(e);
   newMessage(s);
   const step = newStep(s, undefined);
   r.queue.tasks.push(...reactions(r.st, s, [e], false, step));
@@ -223,132 +214,115 @@ function brokenAssumption(
   return m === undefined ? undefined : assumptionFinding(requestId, target, m);
 }
 
-type Malformed = Extract<
-  InvalidInput,
-  { readonly kind: `InvalidInput.${"unlistedRejectionKind" | "unlistedRejectionReason" | "answerOutputSchema"}` }
->;
-
-interface Written {
-  /** The answer to write, with its output canonical. */
-  readonly written: Answer;
-  /** The answer to deliver, with its output decoded. */
-  readonly decoded: Answer;
-}
-
 interface AnswerCheck {
   /** The assumption that the answer breaks, reported without halting. */
-  readonly assumption: Assumption | undefined;
-  /** The answer to write, the reason that it is malformed, or the sender's fault (Lean's State.inputFault). */
-  readonly written:
-    | Written
-    | { readonly malformed: Malformed; readonly error?: ViolationError }
-    | { readonly fault: Fault };
-  /** An external command's acceptance, recorded to check its ensures with its result events at the end of the run. */
-  readonly recorded?: Accepted;
+  readonly assumption?: Assumption | undefined;
+  /** The answer to deliver, decoded, or why it is malformed or the sender's fault. */
+  readonly checked: { readonly decoded: Answer } | { readonly violation: Finding };
+  /** An assumed peer's acceptance of a command, whose ensures the end of the run checks with its result events. */
+  readonly accepted?: Outgoing["accepted"];
+}
+
+/** Lean's decodedAnswer: the answer decoded, or why its rejection kind or output does not match the target. */
+function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["checked"] {
+  const target = activityRef(p.activity);
+  const structure = r.st.structure;
+  if (answer.result === "rejected") {
+    const { rejection } = answer;
+    const data = { requestId: p.id, target, rejection };
+    if (!rejectionKinds(structure, r.st.service, target).includes(rejection.kind))
+      return { violation: { kind: "InvalidInput.unlistedRejectionKind", definition: null, data } };
+    if (rejection.kind === "requires" && !rejectionReasons(structure, target).includes(rejection.reason ?? ""))
+      return { violation: { kind: "InvalidInput.unlistedRejectionReason", definition: null, data } };
+    return { decoded: answer };
+  }
+  if (!hasOutput(structure, target)) return { decoded: answer };
+  const parsed = r.functions.parse({ kind: "output", definition: target }, answer.output);
+  if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
+  if ("error" in parsed)
+    return {
+      violation: withExtra(
+        { kind: "InvalidInput.answerOutputSchema", definition: null, data: { requestId: p.id, target } },
+        { error: parsed.error },
+      ),
+    };
+  return { decoded: { ...answer, output: parsed.value } as Answer };
+}
+
+/** Lean's specAnswer: the check of an answer from a spec service, which parsed the input itself. */
+function specAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
+  const fault = rejectedInput(r, activityRef(p.activity), p.requester, p.input, answer);
+  return { checked: fault === undefined ? decodedAnswer(r, p, answer) : { violation: fault } };
 }
 
 /**
- * Returns the answer as written and decoded, or its error when the output does not match the target's output schema.
+ * Lean's assumedAnswer: the check of an answer from an assumed peer. Its input schema stands for the peer's parse, and
+ * the answer is also checked against its requires over the input alone and, for a query, its ensures that read no
+ * records; a command's ensures waits for the end of the run, when all its result events arrived.
  */
-function writtenAnswer(
-  r: Processing,
-  a: Activity,
-  answer: Answer,
-): Written | { readonly error: ViolationError } | Failed {
-  const target = activityRef(a);
-  if (!hasOutput(r.st.structure, target) || answer.result === "rejected") return { written: answer, decoded: answer };
-  const parsed = r.functions.parse({ kind: "output", definition: target }, answer.output);
-  if (parsed instanceof Failed || "error" in parsed) return parsed;
-  return {
-    written: { ...answer, output: parsed.encoded } as Answer,
-    decoded: { ...answer, output: parsed.value } as Answer,
-  };
-}
-
-/** Lean's checkAnswer. */
-function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
-  const definition = activityRef(p.activity);
+function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
+  const target = activityRef(p.activity);
   const name = p.activity.target;
-  const structure = r.st.structure;
-  const assumed = isAssumed(structure, definition);
-  const faulted = (): AnswerCheck => ({
-    assumption: undefined,
-    written: { fault: inputFault(r.st, r.state, definition, p.requester) },
-  });
-  if (!assumed && answer.result === "rejected" && answer.rejection.kind === "invalid-input") return faulted();
-  const sent = JSON.parse(p.input) as unknown;
-  let input: Fields = sent as Fields;
-  if (assumed) {
-    const parsed = r.functions.parse({ kind: "input", definition }, sent);
-    if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
-    if ("error" in parsed) return faulted();
-    input = parsed.value;
-  }
-  const requires = assumed ? requiresOf(structure, definition) : [];
-  let failedRequires: string | undefined;
-  if (requires.length > 0) {
-    const failed = firstFalse((condition) => r.functions.inputRequirement(name, condition, input), requires);
-    if (failed instanceof Failed) return halt(issueViolation(definition, failed));
-    failedRequires = failed;
-  }
-  const broken = (failedEnsures?: string): Assumption | undefined =>
-    assumed ? brokenAssumption(p.id, definition, answer, failedRequires, failedEnsures) : undefined;
-  if (answer.result === "rejected") {
-    const { rejection } = answer;
-    const data = { requestId: p.id, target: definition, rejection };
-    const listed = rejectionKinds(structure, r.st.service, definition);
-    const written: AnswerCheck["written"] = !listed.includes(rejection.kind)
-      ? { malformed: { kind: "InvalidInput.unlistedRejectionKind", definition: null, data } }
-      : rejection.kind === "requires" && !rejectionReasons(structure, definition).includes(rejection.reason ?? "")
-        ? { malformed: { kind: "InvalidInput.unlistedRejectionReason", definition: null, data } }
-        : { written: answer, decoded: answer };
-    return { assumption: broken(), written };
-  }
-  const written = writtenAnswer(r, p.activity, answer);
-  if (written instanceof Failed) return halt(issueViolation(definition, written));
-  if ("error" in written)
-    return {
-      assumption: broken(),
-      written: {
-        malformed: {
-          kind: "InvalidInput.answerOutputSchema",
-          definition: null,
-          data: { requestId: p.id, target: definition },
-        },
-        error: written.error,
-      },
-    };
-  if (!assumed || failedRequires !== undefined) return { assumption: broken(), written };
-  const output = written.decoded.result === "rejected" ? undefined : written.decoded.output;
-  if (p.activity.keyword === "sends")
-    return {
-      assumption: broken(),
-      written,
-      recorded: { id: p.id, activity: p.activity, input, output, events: [] },
-    };
+  const parsed = r.functions.parse({ kind: "input", definition: target }, p.input);
+  if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
+  if ("error" in parsed) return { checked: { violation: inputFault(r, target, p.requester, parsed.error) } };
+  const input = parsed.value;
+  const failedRequires = firstFalse(
+    (condition) => r.functions.inputRequirement(name, condition, input),
+    requiresOf(r.st.structure, target),
+  );
+  if (failedRequires instanceof Failed) return halt(issueViolation(target, failedRequires));
+  const broken = (failedEnsures?: string) => brokenAssumption(p.id, target, answer, failedRequires, failedEnsures);
+  const checked = decodedAnswer(r, p, answer);
+  if ("violation" in checked || checked.decoded.result === "rejected" || failedRequires !== undefined)
+    return { assumption: broken(), checked };
+  const { output } = checked.decoded;
+  if (p.activity.keyword === "sends") return { assumption: broken(), checked, accepted: { input, output, events: [] } };
   const failedEnsures = r.functions.resultEnsures(name, input, output, []);
-  if (failedEnsures instanceof Failed) return halt(issueViolation(definition, failedEnsures));
-  return { assumption: broken(failedEnsures), written };
+  if (failedEnsures instanceof Failed) return halt(issueViolation(target, failedEnsures));
+  return { assumption: broken(failedEnsures), checked };
 }
 
 /** Lean's answerRequest. */
-export function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answer): Pending | undefined {
+function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answer): void {
   const s = r.state;
-  const checked = checkAnswer(r, p, answer);
-  if (checked.assumption !== undefined) report(s, checked.assumption);
-  if ("fault" in checked.written) return report(s, checked.written.fault);
-  if ("malformed" in checked.written) {
-    const { malformed, error } = checked.written;
-    return report(s, withExtra(malformed, { error }));
+  const { assumption, checked, accepted } = isAssumed(r.st.structure, activityRef(p.activity))
+    ? assumedAnswer(r, p, answer)
+    : specAnswer(r, p, answer);
+  if (assumption !== undefined) report(s, assumption);
+  if ("violation" in checked) {
+    report(s, checked.violation);
+    return;
   }
-  const { written, decoded } = checked.written;
-  if (checked.recorded !== undefined) s.results.set(checked.recorded.id, checked.recorded);
-  write(s, { dir: "in", type: "answer", id: givenId, to: p.id, answer: written });
+  const outgoing = s.outgoing.get(p.id);
+  if (outgoing !== undefined && accepted !== undefined) outgoing.accepted = accepted;
+  write(s, { dir: "in", type: "answer", id: givenId, to: p.id, answer });
   newMessage(s);
   const step = newStep(s, undefined);
-  settled(r, machineOf(p.requester), step, () => deliverAnswer(r, step, p, decoded));
+  settled(r, machineOf(p.requester), step, () => deliverAnswer(r, step, p, checked.decoded));
   message(r);
-  return p;
+}
+
+/**
+ * Lean's answerIn: the answer `a` to the request `to` arrives with the id `id`. A later event's resultOf names the
+ * request, so the answer is kept with it, also when the request no longer waits, as after a restart; such an answer is a
+ * message with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
+ */
+export function answerIn(r: Processing, id: string, to: string, a: Answer): void {
+  const s = r.state;
+  if (!s.deliveries.has(id)) {
+    s.deliveries.add(id);
+    const outgoing = s.outgoing.get(to);
+    if (outgoing !== undefined) outgoing.answer = a;
+    const p = s.pending.find((q) => q.id === to);
+    if (p !== undefined) {
+      answerRequest(r, id, p, a);
+      return;
+    }
+  }
+  write(s, { dir: "in", type: "answer", id, to, answer: a });
+  newMessage(s);
+  message(r);
 }
 
 function startInstance(r: Processing, c: Chart): void {

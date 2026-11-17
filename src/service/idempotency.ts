@@ -1,6 +1,6 @@
 import type { Answer } from "../data/trace.generated.ts";
 
-/** The part of a command that two commands with the same id are compared by. `input` is canonical. */
+/** The part of a command that two commands with the same id are compared by. `input` is as the client wrote it. */
 export interface Request {
   readonly name: string;
   readonly input: unknown;

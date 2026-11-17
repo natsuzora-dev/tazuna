@@ -514,10 +514,24 @@ theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s :
 An answer to a request of the service is kept for a later result event, also when the request waits no more, as after
 a restart.
 -/
-theorem late_answer_taken (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer)
-    (target : Spec.Ref) (hd : id ∉ s.deliveries) (ht : requestTarget? st s to = some target)
-    (hp : s.pending.find? (·.id == to) = none) :
-    (answerIn st fs s id to a).takenAnswers.lookup to = some (target, a) := by
-  simp [answerIn, hd, ht, hp, Tazuna.Thm.Service.Queue.message_takenAnswers, State.write, State.newMessage]
+theorem find?_answered (l : List Outgoing) (to : String) (a : Answer) (o : Outgoing)
+    (ho : l.find? (·.id == to) = some o) :
+    ((l.map fun (x : Outgoing) => if x.id == to then { x with answer := some a } else x).filter
+      (·.answer.isSome)).find? (·.id == to) = some { o with answer := some a } := by
+  induction l with
+  | nil => simp at ho
+  | cons x xs ih =>
+    by_cases h : x.id = to
+    · simp_all
+    · simp_all
+
+theorem late_answer_taken (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer) (o : Outgoing)
+    (hd : id ∉ s.deliveries) (ho : s.outgoing.find? (·.id == to) = some o) (hp : s.pending.find? (·.id == to) = none) :
+    (answerIn st fs s id to a).answerTo? to = some (o.activity.ref, a) := by
+  simp only [answerIn, List.contains_iff_mem, hd, ↓reduceIte, hp]
+  rw [State.answerTo?, Tazuna.Thm.Service.Queue.message_answers]
+  simp only [State.answers, State.newMessage, State.write]
+  rw [find?_answered _ _ _ _ ho]
+  rfl
 
 end Tazuna.Thm.Sim.Run

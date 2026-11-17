@@ -44,7 +44,7 @@ macro "keys_leaf" : tactic => `(tactic| (refine ⟨?_, ?_⟩ <;> simp [State.hal
   State.write, State.newStep, State.newMessage, State.await, State.setMachine, State.setShown, State.removeFromStack,
   State.startQueued, State.takeQueued, State.answered, State.createKeys, State.endSubscription, State.leaveState,
   State.takeDeadline, State.answer, State.newCommandStep, Processing.report, State.stop,
-  apply_ite State.keyOwner, apply_ite State.createdEntities]
+  apply_ite State.toDurable, apply_ite Durable.keyOwner, apply_ite Durable.createdEntities]
   <;> (repeat' split) <;> (try simp)) <;> done)
 
 /-- Closes `KeepsKeys a t` from `h : KeepsKeys a b`, where `t` is `b` with fields other than the keys changed. -/
@@ -52,7 +52,7 @@ macro "keys_close " h:term : tactic => `(tactic| (obtain ⟨hk1, hk2⟩ := $h; (
   State.violate, State.write, State.newStep, State.newMessage, State.await, State.setMachine, State.setShown,
   State.removeFromStack, State.startQueued, State.takeQueued, State.answered, State.createKeys,
   State.leaveState, State.takeDeadline, State.answer, State.newCommandStep, Processing.report,
-  State.stop, apply_ite State.keyOwner, apply_ite State.createdEntities, hk1] <;> (try split) <;> (try simp [hk1]) <;> (try exact hk2) <;> exact hk2.trans (List.prefix_append _ _)))
+  State.stop, apply_ite State.toDurable, apply_ite Durable.keyOwner, apply_ite Durable.createdEntities, hk1] <;> (try split) <;> (try simp [hk1]) <;> (try exact hk2) <;> exact hk2.trans (List.prefix_append _ _)))
 
 theorem keeps_reportAll (s : State) (fs : List Fault) : KeepsKeys s (s.reportAll fs) :=
   keeps_foldl _ (fun t x => by split <;> keys_leaf) _ _
@@ -594,8 +594,8 @@ theorem keeps_message (s : State) (q : Queue) : KeepsKeys s (message st fs s q) 
 
 /-- Closes an equation between the keys of `t` and of `s`, where `t` is `s` with fields other than the keys changed. -/
 macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, State.violate,
-  State.write, State.newStep, State.newMessage, State.answer, apply_ite State.keyOwner,
-  apply_ite State.createdEntities] <;> (repeat' split) <;> (try simp)) <;> done)
+  State.write, State.newStep, State.newMessage, State.answer, apply_ite State.toDurable,
+  apply_ite Durable.keyOwner, apply_ite Durable.createdEntities] <;> (repeat' split) <;> (try simp)) <;> done)
 
 @[simp] theorem processCommand_keyOwner (name : String) (raw : Value) (id : Option String) (step : Nat) (s : State) :
     (processCommand st fs s name raw id step).1.keyOwner = s.keyOwner := (keeps_processCommand _ _ _ _ _).1

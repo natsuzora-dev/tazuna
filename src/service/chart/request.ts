@@ -69,7 +69,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
   createKeys(r.state, given.created);
-  const { encoded } = given;
+  const input = given.written;
   const requester: Requester = { kind: "state", machine: instance.resource, state };
   if (a.own) {
     r.queue.round.push({
@@ -77,13 +77,13 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
       requester,
       activity: a,
       serial: startQueued(r.state, instance.resource, state),
-      input: encoded,
+      input,
       cause: step,
     });
     return;
   }
   const type = a.keyword === "calls" ? "query" : "command";
-  awaitAnswer(r.state, { dir: "out", type, name: a.target, input: encoded }, requester, a);
+  awaitAnswer(r.state, { dir: "out", type, name: a.target, input }, requester, a);
   r.note.reached({ kind: "request", definition: target, data: {} });
 }
 
@@ -96,10 +96,10 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
-  const parsed = r.functions.parse({ kind: "input", definition: screen }, given.encoded);
+  const parsed = r.functions.parse({ kind: "input", definition: screen }, given.written);
   if (parsed instanceof Failed) halt(issueViolation(screen, parsed));
   if ("error" in parsed)
-    halt(withExtra({ kind: "Fault.screenInputSchema", definition, data: { screen } }, { error: parsed.error }));
+    halt(withExtra({ kind: "Fault.inputSchema", definition, data: { target: screen } }, { error: parsed.error }));
   const input = parsed.value;
   const condition = firstFalse(
     (c) => r.functions.inputRequirement(child.name, c, input),

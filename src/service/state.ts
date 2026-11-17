@@ -5,13 +5,14 @@ import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { UntimedTraceLine } from "../data/trace.ts";
-import { type Fields, plain } from "../data/values.ts";
-import type { Located, Location, Violation } from "../data/violation.ts";
+import { type Fields, type Json, plain } from "../data/values.ts";
+import { type Located, type Location, type Violation, type ViolationError, withExtra } from "../data/violation.ts";
 import { descendants, pathOf } from "../spec/tree.ts";
 import { ref, type Service } from "./basic.ts";
 import type { Activity, Chart, Transition } from "./chart/basic.ts";
 import {
   type Access,
+  Failed,
   type Functions,
   givenKeys,
   type Holder,
@@ -192,8 +193,7 @@ export interface Pending {
   readonly id: string;
   readonly activity: Activity;
   readonly requester: Requester;
-  /** The JSON of the input as the sender wrote it. */
-  readonly input: string;
+  readonly input: Json;
   stale: boolean;
   /** The order in which waiting began. A subscription waits again after each answer. */
   turn: number;
@@ -227,13 +227,47 @@ export interface StepInfo {
   readonly tie: Temporal.Instant | undefined;
 }
 
-/** A recorded acceptance of an external command and the result events received so far, with decoded values. */
-export interface Accepted {
-  readonly id: string;
+/**
+ * A request that the service sent with a request line. `answer` is the last answer that arrived. `accepted` is an
+ * assumed peer's acceptance of a command, with decoded values and the result events so far, whose ensures the end of the
+ * run checks.
+ */
+export interface Outgoing {
   readonly activity: Activity;
-  readonly input: Fields;
-  readonly output: unknown;
-  readonly events: Emit[];
+  answer: Answer | undefined;
+  accepted: { readonly input: Fields; readonly output: unknown; readonly events: Emit[] } | undefined;
+}
+
+/** The part of the state that the service persists; a restart keeps it, as in the Raft TLA+ spec's Restart. */
+interface Durable {
+  readonly records: Records;
+  readonly commandAnswers: CommandAnswers;
+  /** The ids of the events and answers that arrived; one that arrives again is not processed again. */
+  readonly deliveries: Set<string>;
+  /** The requests sent, by request id, so that a result event finds its request also after a restart. */
+  readonly outgoing: Map<string, Outgoing>;
+  /** Lean's State.createdEntities: the entities that createKey was called for, in call order. */
+  readonly createdEntities: string[];
+  /** Lean's State.keyOwner. */
+  keyOwner: string | undefined;
+}
+
+/** The part of the state that lives in the service process's memory; a restart drops it. */
+interface Process {
+  /** Whether service processing has started, which happens at the first input and at each restart. */
+  started: boolean;
+  /** The machine and screen instances, in creation order. */
+  readonly machines: Map<string, Instance>;
+  readonly copies: Map<string, Instance>;
+  /** The resources of the open screens, in opening order. */
+  readonly stack: string[];
+  /** The deadlines in entry order, which is also the order of the due deadlines. */
+  readonly deadlines: Deadline[];
+  /** The pending requests, in sending order. */
+  readonly pending: Pending[];
+  readonly queued: Queued[];
+  /** The subscriptions that other services opened, in opening order. */
+  readonly subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
 }
 
 /**
@@ -243,29 +277,13 @@ export interface Accepted {
  *   report throws Halt, and the run stops there.
  * - `lineCounts` is TS only: it counts `lines` per id name.
  * - `machines` and `copies` are maps by resource, in the order of Lean's lists.
- * - Records, command answers, deliveries and results are maps; `subscriptions` is the class that verify also
+ * - Records, command answers, deliveries and outgoing requests are maps; `subscriptions` is the class that verify also
  *   uses.
  */
-export interface State {
+export interface State extends Durable, Process {
   now: Temporal.Instant;
-  /** Whether service processing has started, which happens at the first input and at each restart. */
-  started: boolean;
-  readonly records: Records;
-  readonly commandAnswers: CommandAnswers;
-  /** The ids of the events and answers that arrived; one that arrives again is not processed again. */
-  readonly deliveries: Set<string>;
-  /** The machine and screen instances, in creation order. */
-  readonly machines: Map<string, Instance>;
-  readonly copies: Map<string, Instance>;
-  /** The resources of the open screens, in opening order. */
-  readonly stack: string[];
-  /** The deadlines in entry order, which is also the order of the due deadlines. */
-  readonly deadlines: Deadline[];
   /** The entries of the current input's `stepOrder` that the internal queue has not used yet. */
   stepOrder: readonly StepName[];
-  /** The pending requests, in sending order. */
-  readonly pending: Pending[];
-  readonly queued: Queued[];
   serial: number;
   /** The number of the next request to start waiting. */
   turn: number;
@@ -274,48 +292,39 @@ export interface State {
   readonly steps: StepInfo[];
   /** The number of messages begun. Messages are numbered from 1. */
   messageCount: number;
-  /** Lean's State.createdEntities: the entities that createKey was called for, in call order. */
-  readonly createdEntities: string[];
-  /** Lean's State.keyOwner. */
-  keyOwner: string | undefined;
-  /** The subscriptions that other services opened, in opening order. */
-  subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
-  readonly results: Map<string, Accepted>;
-  /**
-   * The answers that arrived to the service's requests, with the target, under the request id that a resultOf names. A
-   * restart keeps them, so a result event that comes after it still finds its request.
-   */
-  readonly takenAnswers: Map<string, { readonly target: DefinitionRef; readonly answer: Answer }>;
   readonly violations: Violation[];
 }
+
+export const newProcess = (): Process => ({
+  started: false,
+  machines: new Map(),
+  copies: new Map(),
+  stack: [],
+  deadlines: [],
+  pending: [],
+  queued: [],
+  subscriptions: new Subscriptions(),
+});
 
 export function newState(st: Service): State {
   const keyed = new Map<string, Map<string, Row>>();
   for (const name of st.entities) if (!st.singles.includes(name)) keyed.set(name, new Map());
   return {
-    now: Temporal.Instant.fromEpochMilliseconds(0),
-    started: false,
     records: { keyed, singles: new Map() },
     commandAnswers: new Map(),
     deliveries: new Set(),
-    machines: new Map(),
-    copies: new Map(),
-    stack: [],
-    deadlines: [],
+    outgoing: new Map(),
+    createdEntities: [],
+    keyOwner: undefined,
+    ...newProcess(),
+    now: Temporal.Instant.fromEpochMilliseconds(0),
     stepOrder: [],
-    pending: [],
-    queued: [],
     serial: 0,
     turn: 0,
     lines: [],
     lineCounts: new Map(),
     steps: [],
     messageCount: 0,
-    createdEntities: [],
-    keyOwner: undefined,
-    subscriptions: new Subscriptions(),
-    results: new Map(),
-    takenAnswers: new Map(),
     violations: [],
   };
 }
@@ -347,7 +356,8 @@ export function awaitAnswer(
   activity: Activity,
 ): void {
   const id = write(s, line);
-  s.pending.push({ id, activity, requester, input: JSON.stringify(line.input), stale: false, turn: s.turn });
+  s.outgoing.set(id, { activity, answer: undefined, accepted: undefined });
+  s.pending.push({ id, activity, requester, input: line.input as Json, stale: false, turn: s.turn });
   s.turn += 1;
 }
 
@@ -509,24 +519,38 @@ export function chartName(s: State, name: string): string {
   return machine(s, name)?.chart.name ?? name;
 }
 
-/** Lean's State.inputFault. */
-export function inputFault(st: Service, s: State, target: DefinitionRef, requester: Requester): Fault {
-  switch (requester.kind) {
-    case "state":
-      return {
-        kind: "Fault.requestInputSchema",
-        definition: ref(st, chartName(s, requester.machine)),
-        data: { target },
-      };
-    case "slot":
-      return {
-        kind: "Fault.showsInputSchema",
-        definition: ref(st, chartName(s, requester.machine)),
-        data: { slot: requester.slot },
-      };
-    case "automation":
-      return { kind: "Fault.automationInputSchema", definition: ref(st, requester.automation), data: {} };
-  }
+/**
+ * Lean's State.inputFault: the fault of the sender of an input to `target` that the receiver's input schema does not
+ * take. Only TS has `error`, the schema's issues.
+ */
+export function inputFault(
+  r: Run,
+  target: DefinitionRef,
+  requester: Requester,
+  error: ViolationError | undefined,
+): Finding {
+  const fault: Fault = {
+    kind: "Fault.inputSchema",
+    definition: ref(r.st, senderOf(r.state, requester)),
+    data: { target },
+  };
+  return error === undefined ? fault : withExtra(fault, { error });
+}
+
+/**
+ * Lean's State.rejectedInput?: the sender's fault when the receiver rejected its input as invalid. Only the receiver
+ * parses a message, so the sender wrote an input that the receiver's schema does not take.
+ */
+export function rejectedInput(
+  r: Run,
+  target: DefinitionRef,
+  requester: Requester,
+  input: unknown,
+  answer: Answer,
+): Finding | undefined {
+  if (answer.result !== "rejected" || answer.rejection.kind !== "invalid-input") return undefined;
+  const parsed = r.functions.parse({ kind: "input", definition: target }, input);
+  return inputFault(r, target, requester, parsed instanceof Failed || !("error" in parsed) ? undefined : parsed.error);
 }
 
 /** Returns the instance or automation that sent the request. */

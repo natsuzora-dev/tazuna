@@ -525,17 +525,17 @@ def execute (j : Spec.Structure) (fsOf : String → Functions m) (start : World)
   if !w.violations.isEmpty then return w
   w.execute fsOf sc
 
-/-- The world after the run ends: each running service checks the ensures of its accepted external commands. -/
-def World.endRuns (w : World) (fsOf : String → Functions m) : m World := do
+/--
+`w` after its run ends, unless it stopped: each running service checks the ensures of the commands that assumed peers
+accepted.
+-/
+def World.ended (w : World) (fsOf : String → Functions m) : m World := do
+  if w.stopped then return w
   let states ← w.states.mapM fun (q, s) => do
     match w.services.lookup q with
     | some st => pure (q, ← checkResults st (fsOf q) s)
     | none => pure (q, s)
   pure { w with states }
-
-/-- `w` after its run ends, unless it stopped. -/
-def World.ended (w : World) (fsOf : String → Functions m) : m World :=
-  if w.stopped then pure w else w.endRuns fsOf
 
 /--
 The world after the scenario runs from `start`, each running service asking `fsOf` its spec's functions: Given is

@@ -2,7 +2,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
-import type { Fields } from "../data/values.ts";
+import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { type Schema, schemaOwner } from "./basic.ts";
 import type { Emit } from "./message.ts";
@@ -202,7 +202,7 @@ export interface Functions {
     records: RecordSource,
     now: Temporal.Instant,
     keys: Keys,
-  ): { readonly input?: unknown; readonly created: readonly string[] } | Failed;
+  ): { readonly written?: Json; readonly created: readonly string[] } | Failed;
   /**
    * Returns a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements with
    * equal keys.
@@ -241,7 +241,7 @@ export interface Functions {
     activity: { readonly keyword: string; readonly key: string },
     keys: Keys,
     access: Access,
-  ): { readonly encoded: unknown; readonly created: readonly string[] } | Failed;
+  ): { readonly written: Json; readonly created: readonly string[] } | Failed;
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;
   /** Returns the names of a state's `after` deadlines and how each time is set, in declaration order. */
   deadlines(machine: string, state: string): readonly (readonly [string, DeadlineTime])[];
@@ -258,7 +258,7 @@ export interface Functions {
     records: RecordSource,
     activity: { readonly keyword: string; readonly key: string },
     access: Access,
-  ): unknown;
+  ): Json | Failed;
   /** Returns each item key, encoded and as canonicalJson of the encoding. The map state takes them as a set. */
   items(
     scope: Scope,

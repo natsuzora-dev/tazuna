@@ -46,7 +46,9 @@ theorem subscribeStep_fixed (opened : List Pending) (owner : String) (t : State)
     (w : Wanted) : (t.subscribeStep opened owner w).fixed = t.fixed := by
   obtain ⟨slot, a, input⟩ := w
   dsimp only [State.subscribeStep]
-  split <;> rfl
+  split
+  · rfl
+  · exact await_fixed ..
 
 theorem syncShows_fixed (owner : String) (wanted : List Wanted) :
     (s.syncShows owner wanted).fixed = s.fixed :=

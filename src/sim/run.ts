@@ -961,8 +961,9 @@ export function execute(structure: Structure, w: World, sc: Scenario): World {
   return w;
 }
 
-/** Lean's World.endRuns. */
-function endRuns(w: World): void {
+/** Lean's World.ended. */
+function ended(w: World): void {
+  if (stopped(w)) return;
   for (const p of w.services.values())
     try {
       checkResults(p.processing);
@@ -978,8 +979,7 @@ export function simulate(structure: Structure, w: World, sc: Scenario): World {
   if (w.violations.length > 0) return w;
   const looked: Found[] = [];
   executeLines(w, sc, looked);
-  if (stopped(w)) return w;
-  endRuns(w);
+  ended(w);
   if (stopped(w)) return w;
   checkEnd(w);
   expect(w, sc.service, sc.lines, sc.expectations, looked);

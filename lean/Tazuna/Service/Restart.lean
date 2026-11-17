@@ -6,15 +6,8 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-/--
-The state when the service process stops, without the part that lives in its memory: the instances, copies, open
-screens, deadlines, awaited requests, queued work, and the subscriptions that other services opened. As in the Raft
-TLA+ spec's Restart, the persisted part stays: the records, the kept command answers, the events and answers that
-arrived, the accepted external commands, the createKey values, and the trace.
--/
-def State.stop (s : State) : State :=
-  { s with started := false, machines := [], copies := [], stack := [], deadlines := [], pending := [], queued := [],
-           subscriptions := [] }
+/-- The state when the service process stops, without the part that lives in its memory. -/
+def State.stop (s : State) : State := { s with toProcess := {} }
 
 /--
 The state after a restart input. The process stops after the deadlines due by then fire, and the service begins again

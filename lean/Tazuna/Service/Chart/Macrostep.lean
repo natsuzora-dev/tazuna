@@ -184,8 +184,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     let s := s.createKeys keys
     match reacted with
     | none => pure ⟨s, q⟩
-    | some raw =>
-        let input := st.sorted (.input a.sends.target) raw
+    | some input =>
         if a.sends.own then
           pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
                                                     serial := none, input, cause := step }] }⟩
@@ -194,9 +193,9 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     let (s, live) := match c.serial with
       | some serial => s.takeQueued serial
       | none => (s, true)
-    match answer with
-    | .rejected { kind := .invalidInput, .. } => pure ⟨s.report (.fault (s.inputFault st c.activity.ref c.requester)), q⟩
-    | _ => if live then answerTo fs st step c.activity answer c.requester ⟨s, q⟩ else pure ⟨s, q⟩
+    match s.rejectedInput? st c.activity.ref c.requester answer with
+    | some fault => pure ⟨s.report (.fault fault), q⟩
+    | none => if live then answerTo fs st step c.activity answer c.requester ⟨s, q⟩ else pure ⟨s, q⟩
   | .start name _, r => startWork fs st step name r
   | .receive name received _, r => receiveWork fs st step name received r
   | .onDone name _, r => doneWork fs st step name Limit.onDoneSelections.max r

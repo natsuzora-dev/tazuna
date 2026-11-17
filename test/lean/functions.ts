@@ -491,7 +491,7 @@ export class RunFunctions implements Answering {
         return this.replied(decode(schema, event.definition.payload, message["payload"]), (payload) =>
           this.replied(
             this.functions.react(name, payload, this.records, this.now(message), keys),
-            ({ input, created }) => (input === undefined ? { created } : { input: json(input), created }),
+            ({ written, created }) => (written === undefined ? { created } : { input: written, created }),
           ),
         );
       }
@@ -551,8 +551,8 @@ export class RunFunctions implements Answering {
         const activity = message["activity"] as { keyword: string; key: string };
         const keys = keysOf(message["keys"]);
         return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.input(scope, this.records, activity, keys, access), ({ encoded, created }) => ({
-            input: encoded,
+          this.replied(this.functions.input(scope, this.records, activity, keys, access), ({ written, created }) => ({
+            input: written,
             created,
           })),
         );

@@ -16,7 +16,6 @@ import {
   createKeys,
   halt,
   type Instance,
-  inputFault,
   inStep,
   machine,
   machineOf,
@@ -25,6 +24,7 @@ import {
   nextKeys,
   type Pending,
   type Requester,
+  rejectedInput,
   report,
   sender,
   senderOf,
@@ -222,10 +222,10 @@ function workBody(r: Processing, work: Work, step: number): void {
       );
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
       createKeys(r.state, reacted.created);
-      if (reacted.input === undefined) return;
+      const input = reacted.written;
+      if (input === undefined) return;
       const activity = automation.sends;
       const requester: Requester = { kind: "automation", automation: automation.name };
-      const input = reacted.input;
       if (activity.own)
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });
       else {
@@ -237,8 +237,9 @@ function workBody(r: Processing, work: Work, step: number): void {
     case "answered": {
       const { sent, answer } = work;
       const live = sent.serial === undefined || takeQueued(r.state, sent.serial);
-      if (answer.result === "rejected" && answer.rejection.kind === "invalid-input") {
-        report(r.state, inputFault(r.st, r.state, activityRef(sent.activity), sent.requester));
+      const fault = rejectedInput(r, activityRef(sent.activity), sent.requester, sent.input, answer);
+      if (fault !== undefined) {
+        report(r.state, fault);
         return;
       }
       if (live) answerTo(r, step, sent.activity, answer, sent.requester);

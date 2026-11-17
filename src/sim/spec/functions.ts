@@ -5,7 +5,15 @@ import { bag, bagged, defaultRow, sorted, written } from "../../data/collections
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.ts";
-import { canonicalJson, encode, type Fields, objectOf, type Shape, strictObjectOf } from "../../data/values.ts";
+import {
+  canonicalJson,
+  encode,
+  type Fields,
+  type Json,
+  objectOf,
+  type Shape,
+  strictObjectOf,
+} from "../../data/values.ts";
 import { thrown, zodError } from "../../data/violation.ts";
 import { stateAt, transitionAt } from "../../dsl/chart.ts";
 import { type Conditions, firstFailing } from "../../dsl/conditions.ts";
@@ -395,7 +403,7 @@ export class SpecFunctions implements Functions {
   }
 
   /** Returns the input that `f` gives a request or screen of the input shape `shape`, as the sender writes it. */
-  private writtenInput(shape: Shape, f: ((args: never) => unknown) | undefined, args: () => Fields): unknown {
+  private writtenInput(shape: Shape, f: ((args: never) => unknown) | undefined, args: () => Fields): Json | Failed {
     return attempt(() => written(objectOf(shape), f?.(args() as never) ?? {}));
   }
 
@@ -551,12 +559,12 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     now: Temporal.Instant,
     keys: Keys,
-  ): { readonly input?: unknown; readonly created: readonly string[] } | Failed {
+  ): { readonly written?: Json; readonly created: readonly string[] } | Failed {
     const found = this.definition<Automation>(["automation"], name);
     const a = found.definition;
     const definition = { service: found.service, name: found.name };
     const { createKey, created } = this.keysFrom(keys);
-    const reacted = attempt((): { readonly input: unknown } | undefined => {
+    const reacted = attempt((): { readonly written: Json } | undefined => {
       const base = { payload, records: this.view(records), now };
       const binding = bind(a.binds, base, (b, met) =>
         this.note?.reached({
@@ -573,10 +581,10 @@ export class SpecFunctions implements Functions {
         if (!met) return undefined;
       }
       const command = Object.values(a.commands)[0];
-      return { input: written(objectOf(command?.input ?? {}), a.input?.({ ...args, createKey } as never) ?? {}) };
+      return { written: written(objectOf(command?.input ?? {}), a.input?.({ ...args, createKey } as never) ?? {}) };
     });
     if (reacted instanceof Failed) return reacted;
-    return reacted === undefined ? { created } : { input: reacted.input, created };
+    return reacted === undefined ? { created } : { written: reacted.written, created };
   }
 
   comparable(name: string, answer: Answer): unknown {
@@ -679,29 +687,29 @@ export class SpecFunctions implements Functions {
     { keyword, key }: { readonly keyword: string; readonly key: string },
     keys: Keys,
     access: Access,
-  ): { readonly encoded: unknown; readonly created: readonly string[] } | Failed {
+  ): { readonly written: Json; readonly created: readonly string[] } | Failed {
     const chart = this.chartOf(scope.machine).named.definition;
     const node = this.node(scope.machine, this.stateOf(scope));
     const { createKey, created } = this.keysFrom(keys);
     const args = () => this.args(scope, records, access);
-    let encoded: unknown;
+    let given: Json | Failed;
     switch (keyword) {
       case "calls": {
         const query = chart.queries?.[key] as AnyQuery;
-        encoded = this.writtenInput(query.input, node?.calls?.[key]?.input, args);
+        given = this.writtenInput(query.input, node?.calls?.[key]?.input, args);
         break;
       }
       case "sends":
-        encoded = this.writtenInput((chart.commands[key] as AnyCommand).input, node?.sends?.[key]?.input, () =>
+        given = this.writtenInput((chart.commands[key] as AnyCommand).input, node?.sends?.[key]?.input, () =>
           this.args(scope, records, access, { createKey }),
         );
         break;
       default: {
         const screen = chart.screens?.[key] as unknown as ChartSpec;
-        encoded = this.writtenInput(screen.input ?? {}, node?.opens?.[key]?.input, args);
+        given = this.writtenInput(screen.input ?? {}, node?.opens?.[key]?.input, args);
       }
     }
-    return encoded instanceof Failed ? encoded : { encoded, created };
+    return given instanceof Failed ? given : { written: given, created };
   }
 
   /** Checks the held values of a state, whose holds read the base arguments. */
@@ -764,7 +772,7 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     { key }: { readonly keyword: string; readonly key: string },
     access: Access,
-  ): unknown {
+  ): Json | Failed {
     const query = this.chartOf(scope.machine).named.definition.queries?.[key] as AnyQuery;
     const f = this.node(scope.machine, this.stateOf(scope))?.shows?.[key]?.input;
     return this.writtenInput(query.input, f, () => this.args(scope, records, access));

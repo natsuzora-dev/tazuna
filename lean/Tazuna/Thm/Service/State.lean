@@ -19,13 +19,17 @@ structure Fixed where
   records : Records
   now : Time
   started : Bool
-  takenAnswers : List (String × Spec.Ref × Answer)
+  answers : List Outgoing
 
 def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
-  ⟨s.commandAnswers, s.records, s.now, s.started, s.takenAnswers⟩
+  ⟨s.commandAnswers, s.records, s.now, s.started, s.outgoing.filter (·.answer.isSome)⟩
 
 @[simp] theorem write_fixed (d : Dir) (g : Option String) (b : LineBody) :
     (s.write d g b).1.fixed = s.fixed := rfl
+
+@[simp] theorem await_fixed (b : LineBody) (q : Requester) (a : Activity) (i : Value) :
+    (s.await b q a i).fixed = s.fixed := by
+  simp [State.await, State.fixed, State.write]
 
 @[simp] theorem write_commandAnswers (d : Dir) (g : Option String) (b : LineBody) :
     (s.write d g b).1.commandAnswers = s.commandAnswers := rfl
@@ -79,8 +83,8 @@ theorem report_eq (f : Finding) :
 @[simp] theorem report_stack (f : Finding) : (s.report f).stack = s.stack := by
   simp [report_eq]
 
-@[simp] theorem report_takenAnswers (f : Finding) : (s.report f).takenAnswers = s.takenAnswers := by
-  simp [report_eq]
+@[simp] theorem report_answers (f : Finding) : (s.report f).answers = s.answers := by
+  simp [report_eq, State.answers]
 
 theorem report_halted (f : Finding) (h : f.halts = true) : (s.report f).halted = some f.toViolation := by
   simp [State.report, h, State.halt]
@@ -101,26 +105,26 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 
 @[simp] theorem reportAll_commandAnswers (fs : List Fault) :
     (s.reportAll fs).commandAnswers = s.commandAnswers :=
-  reportAll_preserves State.commandAnswers (fun _ _ => report_commandAnswers ..) fs s
+  reportAll_preserves (·.commandAnswers) (fun _ _ => report_commandAnswers ..) fs s
 
 @[simp] theorem reportAll_started (fs : List Fault) : (s.reportAll fs).started = s.started :=
-  reportAll_preserves State.started (fun _ _ => report_started ..) fs s
+  reportAll_preserves (·.started) (fun _ _ => report_started ..) fs s
 
 @[simp] theorem reportAll_records (fs : List Fault) : (s.reportAll fs).records = s.records :=
-  reportAll_preserves State.records (fun _ _ => report_records ..) fs s
+  reportAll_preserves (·.records) (fun _ _ => report_records ..) fs s
 
 @[simp] theorem reportAll_lines (fs : List Fault) : (s.reportAll fs).lines = s.lines :=
   reportAll_preserves State.lines (fun _ _ => report_lines ..) fs s
 
 @[simp] theorem reportAll_subscriptions (fs : List Fault) :
     (s.reportAll fs).subscriptions = s.subscriptions :=
-  reportAll_preserves State.subscriptions (fun _ _ => by unfold State.report; split <;> rfl) fs s
+  reportAll_preserves (·.subscriptions) (fun _ _ => by unfold State.report; split <;> rfl) fs s
 
 @[simp] theorem reportAll_now (fs : List Fault) : (s.reportAll fs).now = s.now :=
   reportAll_preserves State.now (fun _ _ => report_now ..) fs s
 
-@[simp] theorem reportAll_takenAnswers (fs : List Fault) : (s.reportAll fs).takenAnswers = s.takenAnswers :=
-  reportAll_preserves State.takenAnswers (fun _ _ => report_takenAnswers ..) fs s
+@[simp] theorem reportAll_answers (fs : List Fault) : (s.reportAll fs).answers = s.answers :=
+  reportAll_preserves State.answers (fun _ _ => report_answers ..) fs s
 
 theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false) (t : State) :
     (t.reportAll fs).halted = t.halted ∧

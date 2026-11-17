@@ -519,16 +519,23 @@ theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : V
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem writtenAnswer_agrees (a : Activity) (answer : Answer) :
-    Agrees (writtenAnswer st fsI a answer) (writtenAnswer st fs a answer) := by
-  unfold writtenAnswer; agree [h.parse]
+theorem decodedOutput_agrees (a : Activity) (answer : Answer) :
+    Agrees (decodedOutput st fsI a answer) (decodedOutput st fs a answer) := by
+  unfold decodedOutput; agree [h.parse]
+
+omit [MonadNote (StateT C Id)] in
+theorem decodedAnswer_agrees (p : Pending) (answer : Answer) :
+    Agrees (decodedAnswer st fsI p answer) (decodedAnswer st fs p answer) := by
+  unfold decodedAnswer
+  dsimp only
+  agree [decodedOutput_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem checkAnswer_agrees (s : State) (p : Pending) (answer : Answer) :
     Agrees (checkAnswer st fsI s p answer) (checkAnswer st fs s p answer) := by
-  unfold checkAnswer
+  unfold checkAnswer assumedAnswer specAnswer
   dsimp only
-  agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
+  agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), decodedAnswer_agrees h, h.resultEnsures]
 
 theorem answerRequest_agrees (s : State) (id : Option String) (p : Pending) (answer : Answer) :
     Agrees (answerRequest st fsI s id p answer) (answerRequest st fs s id p answer) := by

@@ -21,5 +21,5 @@ export const reminderAdded = event({
 export const addReminder = command({
   emits: [reminderAdded],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
-  ensures: { isOnce: ({ events }) => events.length <= 1 },
+  ensures: { isOnce: ({ events }) => events.length === 1 },
 });

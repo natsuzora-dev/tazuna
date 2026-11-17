@@ -145,7 +145,7 @@ theorem operate_keysDistinct (screen control : String) (payload : Value)
 
 theorem result_is_event_of_emits (name k r : String) (s' : State)
     (h : resultRequest st s name k = (s', some r)) :
-    r = k ∧ ∃ target o, s.takenAnswers.lookup k = some (target, .accepted o) ∧
+    r = k ∧ ∃ target o, s.answerTo? k = some (target, .accepted o) ∧
       ∃ d ∈ st.«structure».definitions.find? (·.ref == target), match d.body with
         | .command _ _ _ emits .. => some (st.refOf name) ∈ emits
         | _ => False := by
@@ -241,15 +241,32 @@ theorem brokenAssumption_finding (requestId : String) (target : Spec.Ref) (answe
   obtain ⟨m, -, rfl⟩ := Option.map_eq_some_iff.mp h
   exact ⟨by cases m <;> rfl, m, rfl⟩
 
+theorem rejectedInput?_some (target : Spec.Ref) (q : Requester) (answer : Answer) (f : Fault)
+    (h : s.rejectedInput? st target q answer = some f) : f = s.inputFault st target q := by
+  unfold State.rejectedInput? at h; split at h <;> simp_all
+
+theorem decodedAnswer_findings (p : Pending) (answer : Answer) (r : Finding)
+    (h : decodedAnswer st fs p answer = .ok (.error r)) :
+    r.halts = true ∧
+      ((∃ rejection, r = .invalidInput (.unlistedRejectionKind p.id p.activity.ref rejection)) ∨
+        (∃ rejection, r = .invalidInput (.unlistedRejectionReason p.id p.activity.ref rejection)) ∨
+        r = .invalidInput (.answerOutputSchema p.id p.activity.ref)) := by
+  unfold decodedAnswer at h
+  simp only [id_bind, id_pure] at h
+  repeat' split at h
+  all_goals (try simp only [reduceCtorEq, id_ok_inj, Except.error.injEq] at h)
+  all_goals (try subst h)
+  all_goals exact ⟨rfl, by simp⟩
+
 theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCheck)
     (h : checkAnswer st fs s p answer = .ok checked) :
     (∀ r, checked.assumption = some r → r.halts = false ∧ ∃ m, r = assumptionFinding p.id p.activity.ref m) ∧
-      ∀ r, checked.written = .error r →
+      ∀ r, checked.decoded = .error r →
         r = .fault (s.inputFault st p.activity.ref p.requester) ∨ r.halts = true ∧
         ((∃ rejection, r = .invalidInput (.unlistedRejectionKind p.id p.activity.ref rejection)) ∨
           (∃ rejection, r = .invalidInput (.unlistedRejectionReason p.id p.activity.ref rejection)) ∨
           r = .invalidInput (.answerOutputSchema p.id p.activity.ref)) := by
-  unfold checkAnswer at h
+  unfold checkAnswer assumedAnswer specAnswer at h
   simp only [id_bind, id_pure] at h
   repeat' split at h
   all_goals (try simp only [reduceCtorEq, id_ok_inj] at h)
@@ -259,7 +276,9 @@ theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCh
     | (simp at hr; done)
     | exact brokenAssumption_finding _ _ _ _ _ _ (by simpa using hr)
     | (simp only [Except.error.injEq] at hr; subst hr; exact Or.inl rfl)
-    | (simp only [Except.error.injEq] at hr; subst hr; exact Or.inr ⟨rfl, by simp⟩)
+    | (simp only [Except.error.injEq] at hr; subst hr
+       exact Or.inl (congrArg Finding.fault (rejectedInput?_some _ _ _ _ ‹State.rejectedInput? _ _ _ _ _ = some _›)))
+    | (simp only [Except.error.injEq] at hr; subst hr; exact Or.inr (decodedAnswer_findings _ _ _ ‹_›))
 
 /--
 A spec service's invalid-input answer to another spec service's request is the sender's fault: only the receiver parses
@@ -268,12 +287,12 @@ a message, so the sender wrote an input that the receiver's schema does not take
 theorem invalid_input_answer_faults_sender (p : Pending) (reason : Option String)
     (ha : st.«structure».isAssumed p.activity.ref = false) :
     checkAnswer st fs s p (.rejected { kind := .invalidInput, reason }) =
-      .ok { assumption := none, written := .error (.fault (s.inputFault st p.activity.ref p.requester)) } := by
-  simp [checkAnswer, ha]
+      .ok { decoded := .error (.fault (s.inputFault st p.activity.ref p.requester)) } := by
+  simp [checkAnswer, specAnswer, State.rejectedInput?, ha]
 
 /-- An event whose resultOf names a request that cannot have the event as its result halts the run with that report. -/
 theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Spec.Ref) (a : Answer)
-    (hp : s.takenAnswers.lookup k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
+    (hp : s.answerTo? k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
     ∃ event requestId target m, s₁ = s.halt (resultOfFinding event requestId target m).toViolation := by
   unfold resultRequest at hq
   split at hq
@@ -286,7 +305,7 @@ theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Spec.Ref) (
     simp [hp] at hn
 
 /-- An event whose resultOf names a request to which no answer arrived halts the run with that report. -/
-theorem unanswered_result_halts (name k : String) (hn : s.takenAnswers.lookup k = none) :
+theorem unanswered_result_halts (name k : String) (hn : s.answerTo? k = none) :
     resultRequest st s name k =
       (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) k)), none) := by
   simp [resultRequest, hn]

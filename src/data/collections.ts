@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
 import { schemaNode } from "./schemaNode.ts";
-import { byCodePoint, canonicalJson, type Fields, objectOf, type Shape, strictObjectOf } from "./values.ts";
+import {
+  byCodePoint,
+  canonicalJson,
+  type Fields,
+  type Json,
+  objectOf,
+  plain,
+  type Shape,
+  strictObjectOf,
+} from "./values.ts";
 
 export type Collection =
   | { readonly kind: "bag" }
@@ -129,42 +138,18 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
 }
 
 /**
- * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
- * `sorted` orders it: each codec encodes its part, and no check or other transform runs, so that only the receiver
- * parses the value. A part that its codec cannot encode stays as it is.
+ * Returns a value that spec code made for `schema` as its sender writes it to a message: encoded, with each collection
+ * as `sorted` orders it. A value that does not encode is written as its JSON, and the receiver's parse rejects it.
  */
-export function written(schema: z.ZodType, value: unknown): unknown {
-  return JSON.parse(JSON.stringify(encodedParts(schema, sorted(schema, value)) ?? null)) as unknown;
-}
-
-function encodedParts(schema: z.ZodType, value: unknown): unknown {
-  const def = schema.def as { readonly type: string };
-  if (def.type === "pipe") {
-    if (!("reverseTransform" in def)) return value;
-    const encoded = z.safeEncode(schema, value as never);
-    return encoded.success ? encoded.data : value;
+export function written(schema: z.ZodType, value: unknown): Json {
+  const ordered = sorted(schema, value);
+  try {
+    const encoded = z.safeEncode(schema, ordered as never);
+    if (encoded.success) return plain(encoded.data);
+  } catch {
+    // A check that throws is the receiver's to run.
   }
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "array":
-      return Array.isArray(value) ? value.map((v) => encodedParts(node.element, v)) : value;
-    case "object":
-      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-      return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [
-          k,
-          Object.hasOwn(node.shape, k) ? encodedParts(node.shape[k] as z.ZodType, v) : v,
-        ]),
-      );
-    case "union": {
-      const option = node.options.find((o) => z.safeEncode(o, value as never).success);
-      return option === undefined ? value : encodedParts(option, value);
-    }
-    case "opaque":
-      return value;
-    default:
-      return value == null ? value : encodedParts(node.inner, value);
-  }
+  return plain(ordered);
 }
 
 /**

@@ -29,27 +29,6 @@ def nameIn (sender receiver name : String) : String :=
 
 variable {m : Type → Type} [Monad m] [MonadNote m]
 
-/-- The target of the request `to` that the service sent, read from its request line. -/
-def requestTarget? (st : Service) (s : State) (to : String) : Option Spec.Ref :=
-  s.lines.findSome? fun l => match l.dir, l.body with
-    | .out, .command name _ | .out, .query name _ | .out, .subscribe name _ => if l.id == to then some (st.refOf name) else none
-    | _, _ => none
-
-/--
-The state after the answer `a` to the request `to` arrives with the id `id`. A later event's resultOf names the request
-by its id, so the answer is kept under it, also when the request no longer waits, as after a restart; such an answer is
-a message with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
--/
-def answerIn (st : Service) (fs : Functions m) (s : State) (id to : String) (a : Answer) : m State :=
-  if s.deliveries.contains id then message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} else
-  let s := { s with deliveries := s.deliveries ++ [id],
-                    takenAnswers := match requestTarget? st s to with
-                      | some target => (to, target, a) :: s.takenAnswers
-                      | none => s.takenAnswers }
-  match s.pending.find? (·.id == to) with
-  | some p => answerRequest st fs s (some id) p a
-  | none => message st fs (s.write .in (some id) (.answer to a)).1.newMessage {}
-
 /--
 The state after the message with body `body`, which `sender` sent with id `id`, arrives at the service. An event names
 its resultOf by the id of the request, which is the service's own request when `sender` received it from the service.

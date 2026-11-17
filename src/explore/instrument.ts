@@ -579,7 +579,7 @@ export class InstrumentedFunctions implements Functions {
   react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: Keys) {
     const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
     return this.audited(ref(this.st, automation), "react", () => call(this.fs), call, {
-      same: (x, y) => sameMade(keys, [x.input ?? null, x.created], [y.input ?? null, y.created]),
+      same: (x, y) => sameMade(keys, [x.written ?? null, x.created], [y.written ?? null, y.created]),
     });
   }
   comparable(query: string, answer: Answer): unknown {
@@ -616,7 +616,7 @@ export class InstrumentedFunctions implements Functions {
     access: Access,
   ) {
     return this.chartAudited(scope, access, "input", (fs, a) => fs.input(scope, records, activity, keys, a), {
-      same: (x, y) => sameMade(keys, [x.encoded, x.created], [y.encoded, y.created]),
+      same: (x, y) => sameMade(keys, [x.written, x.created], [y.written, y.created]),
     });
   }
   holds(scope: Scope, records: RecordSource, access: Access) {
@@ -654,7 +654,7 @@ export class InstrumentedFunctions implements Functions {
       access,
       "showInput",
       (fs, a) => fs.showInput(scope, records, activity, a),
-      (encoded) => canonicalJson(encoded),
+      (written) => canonicalJson(written),
     );
   }
   items(scope: Scope, records: RecordSource, access: Access) {

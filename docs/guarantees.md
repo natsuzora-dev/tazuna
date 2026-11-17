@@ -234,14 +234,14 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - Each input keeps the keys of a keyed entity distinct (`send_keysDistinct`, `message_keysDistinct`).
 - A reference that does not resolve is a `Fault` (`dangling_ref_reported_iff`).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`, `resent_command_ignores_decide`).
-- The service rejects a command that reuses an id with a different input (`reused_id_rejected`).
+- The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
 - When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
 - The service answers a repeated query again, because a query has no identity (`query_processed_again`).
 - Equality up to a renaming of created keys, by which `test` compares two runs, is an equivalence. Every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain, as `test`'s bindings do.
 
 ### Restart
 
-- After a restart, a service keeps its records, its command answers, the events and answers that arrived, and its created keys. It discards its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
+- After a restart, a service keeps the part of its state that it persists: its records, its command answers, the events and answers that arrived, the requests it sent, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
 - A subscription lives within one process: a restart ends it, and a subscription with the same id after the restart is a new one, whose first answer `verify` expects (`restart_ends_subscriptions`).
 - A result event finds the answer to its request also when the answer arrived after a restart (`late_answer_taken`).
 - A restart reads nothing of the state that it discards (`restart_forgets`).

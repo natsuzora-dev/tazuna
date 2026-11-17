@@ -179,7 +179,7 @@ theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : S
     keys_leaf
   · dsimp only
     split
-    · exact (by keys_leaf : KeepsKeys s { s with deliveries := _, takenAnswers := _ }).trans (keeps_answerRequest _ _ _ _)
+    · exact (by keys_leaf : KeepsKeys s { s with deliveries := _, outgoing := _ }).trans (keeps_answerRequest _ _ _ _)
     · refine KeepsKeys.trans ?_ (keeps_message _ _)
       keys_leaf
 

@@ -51,9 +51,6 @@ function requestsFingerprint(r: Processing): unknown {
       lines.some((l) => "to" in l && l.to === p.id),
     ]),
     queued: s.queued.map((q) => [q.machine, q.state, q.stale]),
-    results: [...s.results.values()]
-      .toSorted((a, b) => (a.id < b.id ? -1 : 1))
-      .map((a) => [a.id, a.activity.target, a.input, a.output ?? null, a.events.map((e) => [e.event, e.payload])]),
   };
 }
 
@@ -65,7 +62,7 @@ function requestsFingerprint(r: Processing): unknown {
  * stale. The counts of line ids and of created keys decide the ids and keys that later lines and records get. Also left
  * out are the records of what happened: the trace, violations, steps, messageCount, coverage and request pairs, and the
  * write counts of values, which only decide whether a cached evaluation is reused. The sets of violations already
- * reported are left out too: they only stop a run from reporting a violation twice. The taken answers are compared as a
+ * reported are left out too: they only stop a run from reporting a violation twice. The outgoing requests are compared as a
  * set. The copies of a map state follow their owner, in the order of their keys; a closed copy that no map state lists
  * is left out, since the run reads from it only what its resource names (owner, map and key) and that it is closed. The
  * deadlines stay in entry order, which is the order of the due deadlines.
@@ -101,7 +98,18 @@ export function fingerprint(r: Processing): string {
       .toSorted(byKey)
       .map(([id, { request, answer }]) => [id, request.name, JSON.stringify(request.input), answer]),
     deliveries: [...s.deliveries].toSorted(),
-    takenAnswers: [...s.takenAnswers].map(([id, { answer }]) => canonicalJson([id, answer])).toSorted(),
+    outgoing: [...s.outgoing]
+      .map(([id, { activity, answer, accepted }]) =>
+        canonicalJson([
+          id,
+          activity.target,
+          answer ?? null,
+          accepted === undefined
+            ? null
+            : [accepted.input, accepted.output ?? null, accepted.events.map((e) => [e.event, e.payload])],
+        ]),
+      )
+      .toSorted(),
     started: s.started,
   });
 }

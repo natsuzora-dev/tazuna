@@ -25,7 +25,9 @@ theorem keeps_request (step : Nat) (name state : String) (a : Activity) : Keeps 
   try simp only [id_bind]
   split
   · simp [Processing.report]
-  · split <;> rfl
+  · split
+    · rfl
+    · exact await_fixed ..
 
 theorem keeps_openScreen (step : Nat) (name state : String) (a : Activity) :
     Keeps (openScreen fs st step name state a) := by

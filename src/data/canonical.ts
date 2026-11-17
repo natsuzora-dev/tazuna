@@ -32,12 +32,12 @@ export function tolerant(schema: z.ZodType): z.ZodType {
   return result;
 }
 
-function canonical(shape: Shape, value: unknown, options: { readonly tolerant?: boolean } = {}): unknown {
+function canonical(shape: Shape, value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const fields = value as Record<string, unknown>;
   return Object.fromEntries(
     Object.entries(shape as Record<string, z.ZodType>).flatMap(([k, field]) => {
-      const schema = options.tolerant === true ? tolerant(field) : field;
+      const schema = tolerant(field);
       const given = Object.hasOwn(fields, k);
       const parsed = schema.safeParse(given ? fields[k] : undefined);
       if (!parsed.success) return given ? [[k, fields[k]]] : [];
@@ -141,7 +141,7 @@ export function orderFree(value: unknown): unknown {
 
 /** The value read by `shape`, with its bags, runs and, when `refEntity` names entities, key references wrapped. */
 export const comparable = (shape: Shape | undefined, value: unknown, refEntity?: RefEntity): unknown =>
-  shape === undefined ? value : bagged(objectOf(shape), canonical(shape, value, { tolerant: true }), refEntity);
+  shape === undefined ? value : bagged(objectOf(shape), canonical(shape, value), refEntity);
 
 export const comparableAnswer = (answer: Answer, output: Shape | undefined, refEntity?: RefEntity): Answer =>
   answer.result === "rejected"

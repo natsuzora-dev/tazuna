@@ -44,7 +44,7 @@ def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) 
       | .ok (raw, _) =>
       match ← fs.parse (.input c.name) raw with
       | .error e => pure (r.report (.fault (issueViolation st (st.ref c.name) e)))
-      | .ok none => pure (r.report (.fault (.screenInputSchema (st.ref i.chart.name) (st.ref c.name))))
+      | .ok none => pure (r.report (.fault (.inputSchema (st.ref i.chart.name) (st.ref c.name))))
       | .ok (some input) =>
       match ← firstFalse (fs.inputRequirement c.name · input) (st.requirementsOf c.name).requires with
       | .error e => pure (r.report (.fault (issueViolation st (st.ref c.name) e)))

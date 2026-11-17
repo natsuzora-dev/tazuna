@@ -20,10 +20,8 @@ inductive Fault where
   -/
   | sameRecordInBag (definition : Spec.Ref) (entity : Spec.Ref) (recordKey : Option String)
   | outputSchema (definition : Spec.Ref)
-  | automationInputSchema (definition : Spec.Ref)
-  | requestInputSchema (definition : Spec.Ref) (target : Spec.Ref)
-  | showsInputSchema (definition : Spec.Ref) (slot : String)
-  | screenInputSchema (definition : Spec.Ref) (screen : Spec.Ref)
+  /-- The input that the chart or automation `definition` gives `target` does not match the input schema of `target`. -/
+  | inputSchema (definition : Spec.Ref) (target : Spec.Ref)
   /-- The input that the chart gives the screen it opens fails the screen's requires `condition`. -/
   | failedRequires (definition : Spec.Ref) (screen : Spec.Ref) (condition : String)
   | heldSchema (definition : Spec.Ref) (held state : String)
@@ -81,8 +79,7 @@ test could no longer compare the run with another.
 -/
 def Fault.halts : Fault → Bool
   | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .sameRecordInBag .. | .outputSchema ..
-  | .automationInputSchema .. | .requestInputSchema .. | .showsInputSchema .. | .screenInputSchema ..
-  | .failedRequires .. | .heldSchema ..
+  | .inputSchema .. | .failedRequires .. | .heldSchema ..
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
   | .itemsSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..

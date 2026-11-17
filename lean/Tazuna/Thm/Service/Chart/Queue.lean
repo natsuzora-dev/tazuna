@@ -20,8 +20,8 @@ theorem Keeps.now {f : Processing → Id Processing} (h : Keeps f) (r : Processi
 theorem Keeps.started {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.started = r.state.started :=
   congrArg Fixed.started (h r)
 
-theorem Keeps.takenAnswers {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.takenAnswers = r.state.takenAnswers :=
-  congrArg Fixed.takenAnswers (h r)
+theorem Keeps.answers {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.answers = r.state.answers :=
+  congrArg Fixed.answers (h r)
 
 theorem keeps_unlessHalted {f : Processing → Id Processing} (h : Keeps f) : Keeps (unlessHalted f) := by
   intro r

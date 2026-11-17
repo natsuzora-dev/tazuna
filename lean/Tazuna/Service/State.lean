@@ -138,36 +138,59 @@ structure Subscription where
   last : Option Value := none
 deriving DecidableEq, Repr, Inhabited
 
-/-- A recorded acceptance of an external command, and the result events received so far. -/
+/-- An assumed peer's acceptance of a command, and the result events received so far. -/
 structure Accepted where
-  id : String
-  activity : Activity
   input : Value
   output : Option Value
   events : List Emit := []
 deriving DecidableEq, Repr, Inhabited
 
-/-- The state of a run between messages, when the internal queue is empty. -/
-structure State where
-  now : Time := 0
-  /-- Whether service processing started, which it does at the first input and at each restart. -/
-  started : Bool := false
+/-- A request that the service sent with a request line. `answer` is the last answer that arrived. -/
+structure Outgoing where
+  id : String
+  activity : Activity
+  answer : Option Answer := none
+  /-- Set for an assumed peer's acceptance of a command, whose ensures the end of the run checks. -/
+  accepted : Option Accepted := none
+deriving DecidableEq, Repr, Inhabited
+
+/-- The part of the state that the service persists; a restart keeps it, as in the Raft TLA+ spec's Restart. -/
+structure Durable where
   records : Records := []
   commandAnswers : CommandAnswers := []
   /-- The ids of the events and answers that arrived; one that arrives again is not processed again. -/
   deliveries : List String := []
+  /-- The requests sent, in sending order, so that a result event finds its request also after a restart. -/
+  outgoing : List Outgoing := []
+  /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
+  createdEntities : List String := []
+  /-- The name of the service in a simulation, which qualifies its createKey values (Keys). -/
+  keyOwner : Option String := none
+deriving Repr, Inhabited
+
+/-- The part of the state that lives in the service process's memory; a restart drops it. -/
+structure Process where
+  /-- Whether service processing started, which it does at the first input and at each restart. -/
+  started : Bool := false
   /-- The machine and screen instances in creation order. -/
   machines : List Instance := []
   copies : List Instance := []
   /-- The open screen resources in opening order. -/
   stack : List String := []
   deadlines : List Deadline := []
-  deadlineCount : Nat := 0
-  /-- The entries of the current input's `stepOrder` that the internal queue has not used yet. -/
-  stepOrder : List StepName := []
   /-- The pending requests in sending order. -/
   pending : List Pending := []
   queued : List Queued := []
+  /-- The subscriptions that other services opened, in opening order. -/
+  subscriptions : List Subscription := []
+deriving Repr, Inhabited
+
+/-- The state of a run between messages, when the internal queue is empty. -/
+structure State extends Durable, Process where
+  now : Time := 0
+  deadlineCount : Nat := 0
+  /-- The entries of the current input's `stepOrder` that the internal queue has not used yet. -/
+  stepOrder : List StepName := []
   serial : Nat := 0
   /-- The number of the next request to start waiting. -/
   turn : Nat := 0
@@ -175,22 +198,17 @@ structure State where
   steps : Array StepInfo := #[]
   /-- The number of messages begun; messages are numbered from 1. -/
   messageCount : Nat := 0
-  /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
-  createdEntities : List String := []
-  /-- The name of the service in a simulation, which qualifies its createKey values (Keys). -/
-  keyOwner : Option String := none
-  /-- The subscriptions that other services opened, in opening order. -/
-  subscriptions : List Subscription := []
-  results : List Accepted := []
-  /--
-  The answers that arrived to the service's requests, latest first, with the target, under the request id that a
-  resultOf names. A restart keeps them, so a result event that comes after it still finds its request.
-  -/
-  takenAnswers : List (String × Spec.Ref × Answer) := []
   violations : List Violation := []
   /-- The halting violation; after it, no input changes the state. -/
   halted : Option Violation := none
 deriving Repr, Inhabited
+
+/-- The outgoing requests that an answer arrived to. -/
+def State.answers (s : State) : List Outgoing := s.outgoing.filter (·.answer.isSome)
+
+/-- The target of the request `id` and the last answer to it, when an answer arrived. -/
+def State.answerTo? (s : State) (id : String) : Option (Spec.Ref × Answer) :=
+  (s.answers.find? (·.id == id)).bind fun o => o.answer.map (o.activity.ref, ·)
 
 def namedCount (lines : Array Line) (name : String) : Nat := lines.countP (·.body.idName == name)
 
@@ -203,7 +221,8 @@ def State.write (s : State) (dir : Dir) (givenId : Option String) (body : LineBo
 
 def State.await (s : State) (body : LineBody) (requester : Requester) (activity : Activity) (input : Value) : State :=
   let (s, id) := s.write .out none body
-  { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }] }
+  { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }],
+           outgoing := s.outgoing ++ [{ id, activity }] }
 
 /--
 The createKey values with their entity, in creation order: the `n`-th value of an entity is `<entity>-<n>`, qualified by
@@ -285,18 +304,21 @@ def State.machine? (s : State) (name : String) : Option Instance :=
 
 def State.chartName (s : State) (name : String) : String := ((s.machine? name).map (·.chart.name)).getD name
 
-/--
-The fault of `requester`, whose request to `target` the receiver rejected as invalid input. Only the receiver parses a
-message, so the sender wrote an input that the receiver's schema does not take.
--/
-def State.inputFault (st : Service) (s : State) (target : Spec.Ref) : Requester → Fault
-  | .state m _ => .requestInputSchema (st.ref (s.chartName m)) target
-  | .slot m slot => .showsInputSchema (st.ref (s.chartName m)) slot
-  | .automation a => .automationInputSchema (st.ref a)
-
 def State.senderOf (s : State) : Requester → String
   | .state m _ | .slot m _ => s.chartName m
   | .automation a => a
+
+/-- The fault of `requester`, whose input to `target` the input schema of `target` does not take. -/
+def State.inputFault (st : Service) (s : State) (target : Spec.Ref) (requester : Requester) : Fault :=
+  .inputSchema (st.ref (s.senderOf requester)) target
+
+/--
+The fault of `requester` when the receiver rejected its input to `target` as invalid. Only the receiver parses a
+message, so the sender wrote an input that the receiver's schema does not take.
+-/
+def State.rejectedInput? (st : Service) (s : State) (target : Spec.Ref) (requester : Requester) : Answer → Option Fault
+  | .rejected { kind := .invalidInput, .. } => some (s.inputFault st target requester)
+  | _ => none
 
 def State.setMachine (s : State) (name : String) (f : Instance → Instance) : State :=
   { s with machines := s.machines.map (fun i => if i.resource == name then f i else i),

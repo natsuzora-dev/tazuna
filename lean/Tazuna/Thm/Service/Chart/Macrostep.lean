@@ -299,7 +299,7 @@ theorem keeps_workBody (step : Nat) (w : Work) : Keeps (workBody st fs step w) :
   | reaction a e c =>
     simp only [workBody, id_bind]
     repeat' split
-    all_goals first | rfl | simp [State.fixed, report_eq]
+    all_goals first | rfl | exact (await_fixed ..).trans rfl | simp [State.fixed, report_eq]
   | answered c answer cause =>
     simp only [workBody]
     repeat' split
@@ -448,11 +448,11 @@ theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : S
     (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
   rcases answer with _ | _ | ⟨kind, reason⟩
-  · simp [workBody, State.takeQueued, hc, hq, hs]
-  · simp [workBody, State.takeQueued, hc, hq, hs]
+  · simp [workBody, State.takeQueued, State.rejectedInput?, hc, hq, hs]
+  · simp [workBody, State.takeQueued, State.rejectedInput?, hc, hq, hs]
   · cases kind
     · exact absurd rfl (ha reason)
-    all_goals simp [workBody, State.takeQueued, hc, hq, hs]
+    all_goals simp [workBody, State.takeQueued, State.rejectedInput?, hc, hq, hs]
 
 /-- A spec service's invalid-input answer to an own-service command is the sender's fault (State.inputFault). -/
 theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step : Nat) (c : Sent) (cause : Nat)
@@ -462,7 +462,7 @@ theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step
         | some serial => (s.takeQueued serial).1
         | none => s
       ⟨t.report (.fault (t.inputFault st c.activity.ref c.requester)), q⟩ := by
-  cases h : c.serial <;> simp [workBody, h]
+  cases h : c.serial <;> simp [workBody, State.rejectedInput?, h]
 
 /-- Without `stepOrder` entries, the queue takes its first task. -/
 theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)
@@ -579,14 +579,14 @@ theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation)
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 
-theorem drain_takenAnswers (n : Nat) (q : Queue) : (drain st fs n s q).takenAnswers = s.takenAnswers := by
+theorem drain_answers (n : Nat) (q : Queue) : (drain st fs n s q).answers = s.answers := by
   induction n generalizing s q with
   | zero =>
     simp only [drain, id_bind]
     repeat' split
-    all_goals first | rfl | exact congrArg Fixed.takenAnswers (refreshScreens_fixed (fs := fs))
+    all_goals first | rfl | exact congrArg Fixed.answers (refreshScreens_fixed (fs := fs))
   | succ n ih =>
-    have hm : ∀ {t : State}, t.fixed = s.fixed → t.takenAnswers = s.takenAnswers := fun e => congrArg Fixed.takenAnswers e
+    have hm : ∀ {t : State}, t.fixed = s.fixed → t.answers = s.answers := fun e => congrArg Fixed.answers e
     simp only [drain, id_bind]
     repeat' split
     all_goals first
@@ -597,6 +597,6 @@ theorem drain_takenAnswers (n : Nat) (q : Queue) : (drain st fs n s q).takenAnsw
           | exact hm (runWork_fixed _ _ _)
           | exact hm (keeps_sendEntered _)
           | exact hm (settleScreens_fixed _ _)
-          | (rw [processCommand_takenAnswers]; rfl))
+          | (rw [processCommand_answers]; rfl))
 
 end Tazuna.Thm.Service.Chart.Macrostep
