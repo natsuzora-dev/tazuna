@@ -24,13 +24,6 @@ const isDefinitionOrService = (value: object) => stopKinds.has((value as { reado
 const derived = (definition: Definition, key: string) =>
   key === "payload" && definition.kind === "event" && definition.change !== "none";
 
-/** A codec's output is the parsed side, which no message carries, so the walk takes only its input. */
-function childSchemas(schema: z.ZodType): readonly z.ZodType[] {
-  const def = schema.def as { readonly type: string; readonly in?: z.ZodType };
-  if (def.type === "pipe" && "reverseTransform" in def && def.in !== undefined) return [def.in];
-  return childrenOf(schemaNode(schema));
-}
-
 /**
  * Returns each schema in `value` once per path to it, and not the schemas under one that `stop` holds for. A schema
  * that is its own descendant, through z.lazy, is walked once.
@@ -49,7 +42,9 @@ export function schemasIn(value: unknown, path: readonly string[], stop?: (schem
       if (node.type === "object") {
         for (const [key, v] of Object.entries(node.shape)) visit(v, [...path, key], inside);
         if (node.catchall !== undefined) visit(node.catchall, path, inside);
-      } else for (const child of childSchemas(value)) visit(child, path, inside);
+      }
+      // A codec's output is the parsed side, which no message carries, so the walk takes only its input.
+      else for (const child of node.type === "codec" ? [node.in] : childrenOf(node)) visit(child, path, inside);
       return;
     }
     if (seen.has(value)) return;

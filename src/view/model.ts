@@ -15,6 +15,7 @@ import {
   type ActivityStructure,
   type ChartStructure,
   type DefinitionStructure,
+  refOfTraceName,
   type StateStructure,
   stateNamed,
   type TransitionStructure,
@@ -170,8 +171,8 @@ function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, 
     if (l.type === "event") return [{ type: "message", line, from: service, to: service }];
     if (l.type === "answer") return [{ type: "message", line, from: service, to: null }];
     if (l.type === "unsubscribe") return [{ type: "message", line, from: service, to: targetOf(l.to) }];
-    const [owner] = l.name.split(".");
-    if (owner === undefined || owner === l.name) return [{ type: "message", line, from: service, to: null }];
+    const owner = refOfTraceName(service, l.name).service;
+    if (owner === service) return [{ type: "message", line, from: service, to: null }];
     if (!lifelines.includes(owner)) lifelines.push(owner);
     targets.set(l.id, owner);
     return [{ type: "message", line, from: service, to: owner }];

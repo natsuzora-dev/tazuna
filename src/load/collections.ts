@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { type Collection, collectionOf } from "../data/collections.ts";
+import { type Collection, collectionOf, sortsInside } from "../data/collections.ts";
 import type { Malformed } from "../data/malformed.ts";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
 import type { Definition, Named } from "../dsl/definition.ts";
@@ -28,7 +28,7 @@ function opaqueIn(
   const reported = new Set<string>();
   const found: { readonly path: readonly string[]; readonly collection: Collection["kind"] }[] = [];
   for (const { path, schema } of schemas) {
-    if (schemaNode(schema).type !== "opaque") continue;
+    if (sortsInside(schemaNode(schema))) continue;
     for (const collection of collectionsInside(schema)) {
       const key = JSON.stringify([path, collection.kind]);
       if (reported.has(key)) continue;

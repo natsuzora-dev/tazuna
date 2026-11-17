@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { collectionOf } from "./collections.ts";
+import { schemaNode } from "./schemaNode.ts";
 import type { Shape } from "./values.ts";
 
 export type JsonSchema = Readonly<Record<string, unknown>>;
@@ -23,8 +24,10 @@ export const unrepresentableTypes = [
 
 export type UnrepresentableType = (typeof unrepresentableTypes)[number];
 
-export const unrepresentableType = (schema: z.ZodType): UnrepresentableType | undefined =>
-  unrepresentableTypes.find((type) => type === schema.def.type);
+export function unrepresentableType(schema: z.ZodType): UnrepresentableType | undefined {
+  const node = schemaNode(schema);
+  return node.type === "opaque" ? unrepresentableTypes.find((type) => type === node.kind) : undefined;
+}
 
 export const jsonSchema = (schema: z.ZodType): JsonSchema =>
   z.toJSONSchema(schema, {

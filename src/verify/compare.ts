@@ -28,6 +28,7 @@ import {
   contentOf,
   type FileLine,
   nameOf,
+  operationParts,
   parseFileLines,
   resultOf,
   sameTime,
@@ -61,7 +62,7 @@ function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
   return (l) => {
     switch (l.type) {
       case "operation": {
-        const [screen, control = ""] = l.name.split(".");
+        const { screen, control } = operationParts(l.name);
         const def = definitionOfTraceName(spec, service, screen, "screen");
         return { ...l, payload: comparable(def?.controls?.[control]?.payload, l.payload, refEntity) };
       }

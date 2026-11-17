@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
-import { fieldSchema, schemaNode } from "./schemaNode.ts";
+import { fieldSchema, type SchemaNode, schemaNode, unionOption } from "./schemaNode.ts";
 import {
   byCodePoint,
   canonicalJson,
@@ -125,17 +125,19 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union":
-      for (const option of node.options) {
-        const candidate = sorted(option, value);
-        if (z.safeEncode(option, candidate as never).success) return candidate;
-      }
-      return value;
-    case "opaque":
-      return value;
-    default:
+      return (unionOption(node.options, (o) => sorted(o, value)) ?? { value }).value;
+    case "optional":
+    case "nullable":
+    case "default":
       return value == null ? value : sorted(node.inner, value);
+    default:
+      return value;
   }
 }
+
+/** Whether `sorted` and `bagged` walk into the node; a collection under any other node is opaque. */
+export const sortsInside = (node: SchemaNode): boolean =>
+  ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
 /**
  * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
@@ -145,56 +147,45 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
 export const written = (schema: z.ZodType, value: unknown): Json => plain(encodedParts(schema, sorted(schema, value)));
 
 function encodedParts(schema: z.ZodType, value: unknown): unknown {
-  const def = schema.def as unknown as Record<string, unknown> & { readonly type: string };
-  const at = (key: string) => def[key] as z.ZodType;
-  switch (def.type) {
-    case "pipe": {
-      const out = encodedParts(at("out"), value);
-      const reverse = def["reverseTransform"] as ((v: unknown, ctx: { issues: unknown[] }) => unknown) | undefined;
-      if (reverse === undefined) return encodedParts(at("in"), out);
-      try {
-        const ctx = { value: out, issues: [] };
-        const wire = reverse(out, ctx);
-        return wire instanceof Promise || ctx.issues.length > 0 ? value : encodedParts(at("in"), wire);
-      } catch {
-        return value;
-      }
+  const node = schemaNode(schema);
+  switch (node.type) {
+    case "codec": {
+      const wire = node.encode(encodedParts(node.out, value));
+      return wire === undefined ? value : encodedParts(node.in, wire.value);
     }
+    case "pipe":
+      return encodedParts(node.in, encodedParts(node.out, value));
     case "array":
-      return Array.isArray(value) ? value.map((v) => encodedParts(at("element"), v)) : value;
-    case "tuple": {
+      return Array.isArray(value) ? value.map((v) => encodedParts(node.element, v)) : value;
+    case "tuple":
       if (!Array.isArray(value)) return value;
-      const items = def["items"] as readonly z.ZodType[];
-      const rest = def["rest"] as z.ZodType | null;
       return value.map((v, i) => {
-        const item = items[i] ?? rest;
-        return item ? encodedParts(item, v) : v;
+        const item = node.items[i] ?? node.rest;
+        return item === undefined ? v : encodedParts(item, v);
       });
-    }
-    case "object": {
+    case "object":
       if (!isRecord(value)) return value;
-      const shape = def["shape"] as Readonly<Record<string, z.ZodType>>;
-      const catchall = def["catchall"] as z.ZodType | undefined;
       return Object.fromEntries(
         Object.entries(value).map(([k, v]) => {
-          const field = Object.hasOwn(shape, k) ? shape[k] : catchall;
-          return [k, field ? encodedParts(field, v) : v];
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : encodedParts(field, v)];
         }),
       );
-    }
     case "record":
       if (!isRecord(value)) return value;
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encodedParts(at("valueType"), v)]));
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encodedParts(node.value, v)]));
     case "union": {
-      const option = (def["options"] as readonly z.ZodType[]).find((o) => z.safeEncode(o, value as never).success);
-      return option === undefined ? value : encodedParts(option, value);
+      const chosen = unionOption(node.options, () => value);
+      return chosen === undefined ? value : encodedParts(chosen.option, value);
     }
     case "intersection":
-      return encodedParts(at("right"), encodedParts(at("left"), value));
+      return encodedParts(node.right, encodedParts(node.left, value));
     case "lazy":
-      return encodedParts((def["getter"] as () => z.ZodType)(), value);
+      return encodedParts(node.inner, value);
+    case "opaque":
+      return value == null || node.inner === undefined ? value : encodedParts(node.inner, value);
     default:
-      return value != null && def["innerType"] instanceof z.ZodType ? encodedParts(at("innerType"), value) : value;
+      return value == null ? value : encodedParts(node.inner, value);
   }
 }
 
@@ -226,13 +217,15 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union": {
-      const option = node.options.find((o) => z.safeEncode(o, value as never).success);
-      return option === undefined ? value : bagged(option, value);
+      const chosen = unionOption(node.options, () => value);
+      return chosen === undefined ? value : bagged(chosen.option, value);
     }
-    case "opaque":
-      return value;
-    default:
+    case "optional":
+    case "nullable":
+    case "default":
       return value == null ? value : bagged(node.inner, value);
+    default:
+      return value;
   }
 }
 

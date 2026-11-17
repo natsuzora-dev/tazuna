@@ -99,9 +99,7 @@ def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (a
     | some d => if d.hasOutput then setAt outputByRequestId id d else outputByRequestId
     | none => outputByRequestId
   let control (name : String) : Option Definition × Part :=
-    let (screen, control) := match name.splitOn "." with
-      | first :: second :: _ => (first, second)
-      | parts => (parts.headD "", "")
+    let (screen, control) := operationParts name
     let d := s.named service (some screen) ["screen"]
     let hasPayload := (d.bind fun d => d.chart?.bind fun c => c.controls.lookup control).any (·.isSome)
     (if hasPayload then d else none, .control control)

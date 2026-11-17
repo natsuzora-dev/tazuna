@@ -94,4 +94,13 @@ def untilMalformed {α : Type} : List (FileLine α) → List (Option α) × Opti
   | .malformed :: _ => ([], some 1)
   | .line l :: ls => (untilMalformed ls).map (some l :: ·) (·.map (· + 1))
 
+/-- The name of an operation line in a trace, the one place that joins a screen and its control. -/
+def operationName (screen control : String) : String := s!"{screen}.{control}"
+
+/-- The screen and the control that the name of an operation line joins. -/
+def operationParts (name : String) : String × String :=
+  match name.splitOn "." with
+  | screen :: control :: _ => (screen, control)
+  | parts => (parts.headD "", "")
+
 end Tazuna.Data

@@ -38,9 +38,6 @@ def LineBody.content : LineBody → Value
   | .answer _ a => ToValue.toValue a
   | .unsubscribe _ | .time | .restart => .null
 
-/-- The name of an operation line in a trace, the one place that joins a screen and its control. -/
-def operationName (screen control : String) : String := s!"{screen}.{control}"
-
 /-- The name that LineIds counts. -/
 def LineBody.idName : LineBody → String
   | .command name _ | .query name _ | .subscribe name _ | .event name _ _ => name

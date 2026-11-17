@@ -1,6 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
+import { operationName } from "../data/trace.ts";
 import type { Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import {
@@ -411,7 +412,7 @@ function writeOperation(r: Processing, resource: InstanceId, screen: string, key
       definition: null,
       data: { screen: definition, control: key },
     });
-  const name = `${screen}.${key}`;
+  const name = operationName(screen, key);
   const nth = nthOpen(r.state, resource);
   write(r.state, {
     dir: "in",

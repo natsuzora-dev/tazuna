@@ -56,6 +56,15 @@ export function senderOf(id: string): string | undefined {
   return parts.length === 2 ? parts[0] : undefined;
 }
 
+/** Lean's operationName: the name of an operation line, the one place that joins a screen and its control. */
+export const operationName = (screen: string, control: string): string => `${screen}.${control}`;
+
+/** Lean's operationParts: the screen and the control that the name of an operation line joins. */
+export function operationParts(name: string): { readonly screen: string; readonly control: string } {
+  const [screen = "", control = ""] = name.split(".");
+  return { screen, control };
+}
+
 export interface NumberedLine {
   readonly line: TraceLine;
   /** The 1-based line number. */

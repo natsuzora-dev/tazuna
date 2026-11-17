@@ -15,17 +15,18 @@ export function tolerant(schema: z.ZodType): z.ZodType {
     switch (node.type) {
       case "object": {
         const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, tolerant(v)]));
-        const catchall = (schema.def as { catchall?: unknown }).catchall;
-        return rebuilt({ shape, catchall: catchall instanceof z.ZodNever ? undefined : catchall });
+        return rebuilt({ shape, catchall: node.catchall });
       }
       case "union":
         return rebuilt({ options: node.options.map(tolerant) });
       case "array":
         return rebuilt({ element: tolerant(node.element) });
-      case "opaque":
-        return schema;
-      default:
+      case "optional":
+      case "nullable":
+      case "default":
         return rebuilt({ innerType: tolerant(node.inner) });
+      default:
+        return schema;
     }
   })();
   tolerantSchemas.set(schema, result);
@@ -117,10 +118,12 @@ function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefi
       const option = node.options.find((o) => tolerant(o).safeParse(value).success);
       return option === undefined ? value : bagged(option, value, refEntity);
     }
-    case "opaque":
-      return value;
-    default:
+    case "optional":
+    case "nullable":
+    case "default":
       return value == null ? value : bagged(node.inner, value, refEntity);
+    default:
+      return value;
   }
 }
 
