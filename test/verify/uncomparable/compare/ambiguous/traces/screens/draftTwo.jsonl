@@ -1,0 +1,4 @@
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s1","name":"todo.linked","input":{"links":[{"from":"","to":""},{"from":"","to":""}]}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"linkScreen.draft#1","name":"linkScreen.draft"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"s1"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"subscribe","id":"s2","name":"todo.linked","input":{"links":[{"from":"n1","to":"n2"},{"from":"n2","to":"n3"}]}}

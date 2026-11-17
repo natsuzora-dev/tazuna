@@ -38,7 +38,7 @@ export const addTwoReusedId = scenario(
 );
 
 export const addOneOwnAnswer = scenario(
-  "Add a task; the implementation trace of this scenario gives its calendar.nextDay request the id of the addTask command; an input id never binds, so the request id binds to it and verify reports no violation",
+  "Add a task; the implementation trace of this scenario gives its calendar.nextDay request the id of the addTask command, which already stands for that command, so verify reports the request as Mismatch.request",
   {
     given,
     when: (w) => {

@@ -1,3 +1,3 @@
-import { contract, note, notesIn, notesNamed } from "./todo.ts";
+import { contract, linked } from "./todo.ts";
 
-export const todo = contract({ notesIn, note, notesNamed });
+export const todo = contract({ linked });

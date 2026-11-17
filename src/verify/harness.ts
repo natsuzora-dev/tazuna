@@ -44,7 +44,8 @@ function required<F>(receive: F | undefined, type: string): F {
  * lines one by one: before each, the clock moves to the line's time and the harness waits until the implementation is
  * quiet. A value of the snapshot that the implementation stands for in its own way (a key it created, the id of a
  * request it sent) is renamed to the implementation's value by the bindings that verify's comparison makes of the
- * trace so far, so an answer reaches the request that the implementation sent.
+ * trace so far, so an answer reaches the request that the implementation sent; where the binding keeps several values
+ * open, it chooses by position. Once that comparison finds the trace uncomparable, the harness gives no more lines.
  */
 export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
   const runner = run.runner ?? run.service;
@@ -112,13 +113,14 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
   const outputCount = () => written().filter((l) => l.dir === "out").length;
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
-  const bindingsBefore = (k: number) => compareTrace(spec, runner, snapshot.slice(0, k), written()).bindings;
+  const comparedBefore = (k: number) => compareTrace(spec, runner, snapshot.slice(0, k), written());
 
   async function give(line: TraceLine): Promise<void> {
     const { time: _, ...untimed } = line;
     write(untimed as UntimedTraceLine);
     if (line.type === "answer") {
       const request = waiting.get(line.to);
+      // The implementation never sent the answered request, which the comparison reports as missing.
       if (request === undefined) return;
       if (!request.subscription) waiting.delete(line.to);
       return request.answer(line.answer);
@@ -170,13 +172,15 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
       await adapter.advanceTo(time);
     }
     await adapter.untilQuiet(outputCount);
-    let bindings = bindingsBefore(k);
+    let compared = comparedBefore(k);
     if (line.type === "answer")
-      for (let i = 0; i < quietPeriodsBeforeAnswer && !waiting.has(bindings.get(line.to) ?? line.to); i += 1) {
+      for (let i = 0; i < quietPeriodsBeforeAnswer && !waiting.has(compared.bindings.get(line.to) ?? line.to); i += 1) {
         await adapter.untilQuiet(outputCount);
-        bindings = bindingsBefore(k);
+        compared = comparedBefore(k);
       }
-    await give(renamed(bindings, plain(line)) as unknown as TraceLine);
+    // The comparison compares nothing after an Uncomparable finding, so the later lines would go by no binding.
+    if (compared.found.some(({ kind }) => kind.startsWith("Uncomparable."))) break;
+    await give(renamed(compared.bindings, plain(line)) as unknown as TraceLine);
   }
   await adapter.untilQuiet(outputCount);
   for (const controller of subscriptions.values()) controller.abort();

@@ -1,1 +1,1 @@
-{"kind":"Uncomparable.ambiguous","definition":null,"data":{"subject":{"type":"subscribe","name":"todo.notesIn","id":"todo.notesIn#2"},"snapshotLine":5,"candidates":[5]},"location":{"file":"traces/screens/draftAndOpen.jsonl","line":5},"scenario":{"service":"screens","name":"draftAndOpen"}}
+{"kind":"Uncomparable.ambiguous","definition":null,"data":{"subject":{"type":"subscribe","name":"todo.linked","id":"todo.linked#2"},"snapshotLine":4,"candidates":[4]},"location":{"file":"traces/screens/draftTwo.jsonl","line":4},"scenario":{"service":"screens","name":"draftTwo"}}

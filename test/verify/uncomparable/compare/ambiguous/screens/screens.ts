@@ -4,17 +4,17 @@ import { todo } from "../todo/contract.ts";
 
 export const Draft = entity({ description: "A draft note", fields: { id: z.string() }, key: "id" });
 
-export const { screen, scenario } = service({ description: "Show the notes", entities: { Draft } });
+export const { screen, scenario } = service({ description: "Show the links between notes", entities: { Draft } });
 
-export const noteScreen = screen({
-  description: "Two new drafts, all of them, and then the first one",
+export const linkScreen = screen({
+  description: "Two new drafts linked both ways",
   context: { first: z.string().default(""), second: z.string().default("") },
-  queries: { notesIn: todo.notesIn, note: todo.note, notesNamed: todo.notesNamed },
-  controls: { draft: { label: "Draft" }, open: { label: "Open" } },
+  queries: { linked: todo.linked },
+  controls: { draft: { label: "Draft" } },
   initial: "list",
-  states: { list: {}, detail: {} },
+  states: { list: {} },
 }).chart({
-  offers: { draft: any, open: any },
+  offers: { draft: any },
   states: {
     list: {
       on: {
@@ -26,13 +26,17 @@ export const noteScreen = screen({
             },
           },
         ],
-        open: [{ target: "detail" }],
       },
       shows: {
-        notesIn: { input: ({ context }) => ({ ids: [context.first, context.second] }) },
-        notesNamed: { input: () => ({ prefix: "" }) },
+        linked: {
+          input: ({ context }) => ({
+            links: [
+              { from: context.first, to: context.second },
+              { from: context.second, to: context.first },
+            ],
+          }),
+        },
       },
     },
-    detail: { shows: { note: { input: ({ context }) => ({ id: context.first }) } } },
   },
 });

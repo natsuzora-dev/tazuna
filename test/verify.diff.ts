@@ -54,8 +54,12 @@ interface Case {
 
 function violationCountOfBoth({ spec, service, snapshot }: Case, trace: readonly unknown[], at: string): number {
   const lines = parseFileLines(trace);
-  const ts = verifyLines(spec, service, snapshot, lines).found;
-  assert.deepEqual(lean.verify(spec, service, snapshot, lines, new VerifyFunctions(spec)), ts.map(value), at);
+  const { found: ts, bindings } = verifyLines(spec, service, snapshot, lines);
+  assert.deepEqual(
+    lean.verify(spec, service, snapshot, lines, new VerifyFunctions(spec)),
+    { findings: ts.map(value), bindings: [...bindings] },
+    at,
+  );
   for (const { kind } of ts) findings.set(kind, (findings.get(kind) ?? 0) + 1);
   return ts.length;
 }
@@ -430,7 +434,7 @@ describe("Content comparison", () => {
     );
   });
 
-  test("TS and Lean report a bag of keys that one group creates as ambiguous, even when a later group names one key", () => {
+  test("TS and Lean keep the keys of a bag that one group creates open until a later group names one key", () => {
     const seenIds = (id: string): Line => ({ time: at, dir: "in", type: "query", id, name: "seenIds", input: {} });
     const answer = (id: string, to: string, ids: string[], listed: string[], more: Line = {}): Line => ({
       time: at,
@@ -453,10 +457,48 @@ describe("Content comparison", () => {
       seenIds("seenIds#2"),
       answer("a2", "seenIds#2", ["x", "y"], ["y"]),
     ];
-    violationCountOfBoth(created, trace, "named later");
-    assert.deepEqual(
-      verifyLines(created.spec, "todo", created.snapshot, parseFileLines(trace)).found.map((f) => f.kind),
-      ["Uncomparable.ambiguous"],
+    assert.equal(violationCountOfBoth(created, trace, "named later"), 0);
+    const { bindings } = verifyLines(created.spec, "todo", created.snapshot, parseFileLines(trace));
+    assert.deepEqual([bindings.get("Seen-1"), bindings.get("Seen-2")], ["y", "x"]);
+  });
+
+  test("TS and Lean report an implementation that gives a created key the value of an existing key", () => {
+    const snapshot = specs.get(join(verifyRoot, "mismatch/compare/created-keys"));
+    assert.ok(snapshot !== undefined);
+    const seenOnce = bases.find((b) => b.spec === snapshot && b.name === "seenOnce");
+    assert.ok(seenOnce !== undefined);
+    const trace = JSON.parse(
+      JSON.stringify(seenOnce.snapshot.filter((l) => l !== undefined)).replaceAll("todo/Seen-1", "task-1"),
+    ) as Line[];
+    const found = verifyLines(seenOnce.spec, seenOnce.service, seenOnce.snapshot, parseFileLines(trace)).found;
+    assert.ok(violationCountOfBoth(seenOnce, trace, "reused key") > 0);
+    assert.ok(found.every((f) => f.kind === "Mismatch.output"));
+  });
+
+  test("TS and Lean pair equal lines of one group by their time and by their after order", () => {
+    const later = "2026-10-25T01:00:00Z";
+    const byTime = caseOf("compare/order", "todo", [
+      addTask("addTask#1", 1),
+      nextDay("calendar.nextDay#1"),
+      { ...nextDay("calendar.nextDay#2"), time: later },
+    ]);
+    const trace = [addTask("addTask#1", 1), { ...nextDay("r2"), time: later }, nextDay("r1")];
+    assert.equal(violationCountOfBoth(byTime, trace, "time"), 0);
+    const { bindings } = verifyLines(byTime.spec, "todo", byTime.snapshot, parseFileLines(trace));
+    assert.deepEqual([bindings.get("calendar.nextDay#1"), bindings.get("calendar.nextDay#2")], ["r1", "r2"]);
+    const byAfter = caseOf("compare/order", "todo", [
+      addTask("addTask#1", 1),
+      nextDay("calendar.nextDay#1"),
+      countChanged("taskCountChanged#1", { after: ["calendar.nextDay#1"] }),
+      countChanged("taskCountChanged#2"),
+    ]);
+    assert.equal(
+      violationCountOfBoth(
+        byAfter,
+        [addTask("addTask#1", 1), countChanged("e1"), nextDay("r1"), countChanged("e2")],
+        "after",
+      ),
+      0,
     );
   });
 

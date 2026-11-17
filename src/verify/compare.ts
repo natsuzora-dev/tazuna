@@ -20,6 +20,18 @@ import { canonicalJson, type Json, plain, type Shape } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
 import { contractsListing } from "../syntax/structure.ts";
+import {
+  type Binding,
+  bindSlots,
+  bindString,
+  emptyBinding,
+  pairsOf,
+  refine,
+  refineSlots,
+  type Slot,
+  sameSlot,
+  singletons,
+} from "./binding.ts";
 import { byLine, type Found, lineSchema } from "./lines.ts";
 
 /** Lean's readLine: the line with its input, payload or answer output read by its definition's schema. */
@@ -97,68 +109,128 @@ function groups(lines: readonly (TraceLine | undefined)[]): Group[] {
 }
 
 /** Lean's Match: `undefined` is `differ`. */
-type Match = Bindings | "ambiguous" | undefined;
-
-/** Lean's bindString. */
-function bindString(fresh: ReadonlySet<string>, b: Bindings, s: string, t: string): Bindings | undefined {
-  const bound = b.get(s);
-  if (bound !== undefined) return bound === t ? b : undefined;
-  if (fresh.has(s)) return [...b.values()].includes(t) ? undefined : new Map([...b, [s, t]]);
-  return s === t ? b : undefined;
-}
+type Match = Binding | "ambiguous" | undefined;
 
 interface Paired {
   readonly pairs: readonly (readonly [number, number])[];
-  readonly bindings: Bindings;
+  readonly bindings: Binding;
   readonly ambiguous: readonly number[];
   readonly unmatched: readonly number[];
   readonly extra: readonly number[];
 }
 
-const sameBindings = (a: Bindings, b: Bindings): boolean =>
-  a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+/** Lean's newPair. */
+function newPair(b: Binding, b2: Binding): readonly [string, string] | undefined {
+  const before = singletons(b.slots);
+  const gives = ([s, t]: readonly [string, string]) => {
+    const slots = bindSlots(b.slots, s, t);
+    return (
+      slots !== undefined && slots.length === b2.slots.length && slots.every((k, i) => sameSlot(k, b2.slots[i] as Slot))
+    );
+  };
+  return singletons(b2.slots)
+    .filter(([s, t]) => !before.some(([x, y]) => x === s && y === t))
+    .find(gives);
+}
+
+/** Lean's allSame. */
+const allSame = <T>(xs: readonly T[]): T | undefined => {
+  const [x] = xs;
+  return x !== undefined && xs.every((y) => y === x) ? x : undefined;
+};
+
+/** Lean's sameSlots. */
+const sameSlots = (a: Binding, b: Binding): boolean =>
+  a.slots.length === b.slots.length &&
+  (a.slots.every((k, i) => sameSlot(k, b.slots[i] as Slot)) ||
+    a.slots.every((k) => b.slots.some((k2) => sameSlot(k, k2))));
 
 /** Lean's pairUp. */
 function pairUp<A, B>(
-  test: (b: Bindings, s: A, t: B) => Match,
-  start: Bindings,
+  test: (b: Binding, s: A, t: B) => Match,
+  allowed: (pairs: readonly (readonly [number, number])[], i: number, j: number) => boolean,
+  start: Binding,
   left: readonly (readonly [number, A])[],
   right: readonly (readonly [number, B])[],
 ): Paired {
-  const candidates = (b: Bindings, rs: readonly (readonly [number, B])[], s: A) => {
-    const cs: [number, Bindings][] = [];
+  type Candidates = { readonly cs: (readonly [number, Binding])[]; readonly ambiguous: boolean };
+  const candidates = (
+    b: Binding,
+    pairs: readonly (readonly [number, number])[],
+    rs: readonly (readonly [number, B])[],
+    i: number,
+    s: A,
+  ): Candidates => {
+    const cs: (readonly [number, Binding])[] = [];
     let ambiguous = false;
     for (const [j, t] of rs) {
+      if (!allowed(pairs, i, j)) continue;
       const m = test(b, s, t);
       if (m === "ambiguous") ambiguous = true;
       else if (m !== undefined) cs.push([j, m]);
     }
     return { cs, ambiguous };
   };
+  type Step = readonly [readonly (readonly [number, number])[], Binding];
+  const determined = (
+    b: Binding,
+    pairs: readonly (readonly [number, number])[],
+    ls: readonly (readonly [number, A])[],
+    rs: readonly (readonly [number, B])[],
+  ): Step | undefined => {
+    for (const [i, s] of ls) {
+      const { cs, ambiguous } = candidates(b, pairs, rs, i, s);
+      const [first] = cs;
+      if (ambiguous || first === undefined) continue;
+      if (cs.every(([, c]) => sameSlots(c, first[1]))) return [[[i, first[0]]], first[1]];
+    }
+    return undefined;
+  };
+  const block = (
+    b: Binding,
+    pairs: readonly (readonly [number, number])[],
+    ls: readonly (readonly [number, A])[],
+    rs: readonly (readonly [number, B])[],
+  ): Step | undefined => {
+    for (const [i, s] of ls) {
+      const { cs, ambiguous } = candidates(b, pairs, rs, i, s);
+      if (ambiguous || cs.length < 2) continue;
+      const js = cs.map(([j]) => j);
+      const group = ls.flatMap(([k, x]) => {
+        const c = candidates(b, pairs, rs, k, x);
+        return !c.ambiguous && c.cs.length === js.length && c.cs.every(([j], n) => j === js[n])
+          ? [[k, c.cs] as const]
+          : [];
+      });
+      if (group.length !== js.length) continue;
+      const rows = group.map(([, cx]) => cx.map(([, c]) => newPair(b, c)));
+      if (rows.some((row) => row.some((p) => p === undefined))) continue;
+      const full = rows as (readonly [string, string])[][];
+      const σs = full.map((row) => allSame(row.map(([σ]) => σ)));
+      const τs = js.map((_, n) => allSame(full.map((row) => row[n]?.[1] ?? "")));
+      if (σs.some((σ) => σ === undefined) || τs.some((τ) => τ === undefined)) continue;
+      const slots = refineSlots(b.slots, σs as string[], τs as string[]);
+      const refined = slots === undefined ? undefined : refine(b, slots);
+      if (refined === undefined) continue;
+      return [group.map(([k], n) => [k, js[n] as number] as const), refined];
+    }
+    return undefined;
+  };
   let b = start;
   let ls = left;
   let rs = right;
   const pairs: (readonly [number, number])[] = [];
   for (let fuel = left.length; fuel > 0; fuel -= 1) {
-    let step: readonly [number, number, Bindings] | undefined;
-    for (const [i, s] of ls) {
-      const { cs, ambiguous } = candidates(b, rs, s);
-      const [first] = cs;
-      if (ambiguous || first === undefined) continue;
-      if (cs.every(([, c]) => sameBindings(c, first[1]))) {
-        step = [i, first[0], first[1]];
-        break;
-      }
-    }
+    const step = determined(b, pairs, ls, rs) ?? block(b, pairs, ls, rs);
     if (step === undefined) break;
-    const [i, j, next] = step;
+    const [added, next] = step;
     b = next;
-    ls = ls.filter(([k]) => k !== i);
-    rs = rs.filter(([k]) => k !== j);
-    pairs.push([i, j]);
+    ls = ls.filter(([k]) => !added.some(([i]) => i === k));
+    rs = rs.filter(([k]) => !added.some(([, j]) => j === k));
+    pairs.push(...added);
   }
   const rest = ls.map(([i, s]) => {
-    const { cs, ambiguous } = candidates(b, rs, s);
+    const { cs, ambiguous } = candidates(b, pairs, rs, i, s);
     return { i, isAmbiguous: ambiguous || cs.length >= 2 };
   });
   return {
@@ -174,7 +246,7 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Bag) && !(v instanceof Runs);
 
 /** Lean's matchValue. */
-function matchValue(fresh: ReadonlySet<string>, b: Bindings, s: unknown, t: unknown): Match {
+function matchValue(fresh: ReadonlySet<string>, b: Binding, s: unknown, t: unknown): Match {
   if (typeof s === "string" && typeof t === "string") return bindString(fresh, b, s, t);
   if (s instanceof Bag && t instanceof Bag)
     return s.items.length === t.items.length ? matchBag(fresh, b, s.items, t.items) : undefined;
@@ -195,7 +267,7 @@ function matchValue(fresh: ReadonlySet<string>, b: Bindings, s: unknown, t: unkn
   return leaf(s) && leaf(t) && typeof s !== "string" && typeof t !== "string" && s === t ? b : undefined;
 }
 
-function matchList(fresh: ReadonlySet<string>, b: Bindings, xs: readonly unknown[], ys: readonly unknown[]): Match {
+function matchList(fresh: ReadonlySet<string>, b: Binding, xs: readonly unknown[], ys: readonly unknown[]): Match {
   if (xs.length !== ys.length) return undefined;
   let m: Match = b;
   for (const [i, x] of xs.entries()) {
@@ -205,9 +277,10 @@ function matchList(fresh: ReadonlySet<string>, b: Bindings, xs: readonly unknown
   return m;
 }
 
-function matchBag(fresh: ReadonlySet<string>, b: Bindings, xs: readonly unknown[], ys: readonly unknown[]): Match {
+function matchBag(fresh: ReadonlySet<string>, b: Binding, xs: readonly unknown[], ys: readonly unknown[]): Match {
   const p = pairUp(
     (b, x: unknown, y: unknown) => matchValue(fresh, b, x, y),
+    () => true,
     b,
     xs.map((x, i) => [i, x] as const),
     ys.map((y, i) => [i, y] as const),
@@ -216,7 +289,7 @@ function matchBag(fresh: ReadonlySet<string>, b: Bindings, xs: readonly unknown[
   return p.unmatched.length === 0 ? p.bindings : undefined;
 }
 
-const and = (m: Match, f: (b: Bindings) => Match): Match => (m === undefined || m === "ambiguous" ? m : f(m));
+const and = (m: Match, f: (b: Binding) => Match): Match => (m === undefined || m === "ambiguous" ? m : f(m));
 
 const isOutRequest = (l: TraceLine): boolean =>
   l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe");
@@ -230,11 +303,11 @@ const freshOf = (l: TraceLine): string[] => [
 const sameFields = (s: TraceLine, t: TraceLine): boolean =>
   s.type === t.type && s.dir === t.dir && nameOf(s) === nameOf(t);
 
-/** Lean's matchLine. */
-function matchLine(fresh: ReadonlySet<string>, b: Bindings, s: TraceLine, t: TraceLine): Match {
+/** Lean's matchContent. */
+function matchContent(fresh: ReadonlySet<string>, b: Binding, s: TraceLine, t: TraceLine): Match {
   if (!sameFields(s, t)) return undefined;
   const ids = s.dir === "in" || isOutRequest(s) ? bindString(fresh, b, s.id, t.id) : b;
-  const opt = (x: string | undefined, y: string | undefined) => (b: Bindings) =>
+  const opt = (x: string | undefined, y: string | undefined) => (b: Binding) =>
     x === undefined && y === undefined
       ? b
       : x !== undefined && y !== undefined
@@ -250,6 +323,10 @@ function matchLine(fresh: ReadonlySet<string>, b: Bindings, s: TraceLine, t: Tra
     ),
   );
 }
+
+/** Lean's matchLine. */
+const matchLine = (fresh: ReadonlySet<string>, b: Binding, s: TraceLine, t: TraceLine): Match =>
+  sameTime(s, t) ? matchContent(fresh, b, s, t) : undefined;
 
 const json = (value: unknown): Json => plain(value);
 
@@ -342,18 +419,32 @@ const mustFollow = (outs: readonly Numbered[], o: Numbered, k: number): number[]
     return earlier === undefined ? [] : [earlier.index];
   });
 
+/** Lean's followsPaired. */
+const followsPaired =
+  (snapshot: readonly Numbered[]) =>
+  (pairs: readonly (readonly [number, number])[], i: number, j: number): boolean => {
+    const k = snapshot.findIndex((s) => s.index === i);
+    const s = snapshot[k];
+    if (s === undefined) return true;
+    return mustFollow(snapshot, s, k).every((n) => {
+      const before = pairs.find(([x]) => x === n)?.[1];
+      return before === undefined || before < j;
+    });
+  };
+
 type Finding = Mismatch | Uncomparable;
 
 /** Lean's compareGroup. */
 function compareGroup(
-  start: Bindings,
+  start: Binding,
   fresh: ReadonlySet<string>,
   snapshot: readonly Numbered[],
   trace: readonly Numbered[],
   place: number,
-): readonly [Finding[], Bindings, boolean] {
+): readonly [Finding[], Binding, boolean] {
   const p = pairUp(
     (b, s: Numbered, t: Numbered) => matchLine(fresh, b, s.line, t.line),
+    followsPaired(snapshot),
     start,
     snapshot.map((s) => [s.index, s] as const),
     trace.map((t) => [t.index, t] as const),
@@ -378,19 +469,27 @@ function compareGroup(
   if (ambiguous.length > 0) return [ambiguous, p.bindings, true];
   let b = p.bindings;
   let extra = [...p.extra];
-  const placed: (readonly [Numbered, Numbered | undefined])[] = [];
+  const placed: (readonly [Numbered, Numbered | undefined, boolean])[] = [];
   for (const i of p.unmatched) {
     const s = at(snapshot, i);
     if (s === undefined) continue;
-    const t = trace.filter((t) => extra.includes(t.index)).find((t) => samePlace(b, s.line, t.line));
-    if (t === undefined) placed.push([s, undefined]);
+    const t = trace.filter((t) => extra.includes(t.index)).find((t) => samePlace(new Map(pairsOf(b)), s.line, t.line));
+    if (t === undefined) placed.push([s, undefined, false]);
     else {
-      if (isOutRequest(s.line)) b = bindString(fresh, b, s.line.id, t.line.id) ?? b;
-      placed.push([s, t]);
       extra = extra.filter((j) => j !== t.index);
+      const m = matchContent(fresh, b, s.line, t.line);
+      if (m !== undefined && m !== "ambiguous") {
+        b = m;
+        placed.push([s, t, true]);
+      } else {
+        if (isOutRequest(s.line)) b = bindString(fresh, b, s.line.id, t.line.id) ?? b;
+        placed.push([s, t, false]);
+      }
     }
   }
-  const differences = placed.map(([s, t]) => (t === undefined ? missing(s, place) : difference(s.line, t)));
+  const differences = placed.flatMap(([s, t, equal]) =>
+    t === undefined ? [missing(s, place)] : equal ? [] : [difference(s.line, t)],
+  );
   const unexpectedLines = trace.filter((t) => extra.includes(t.index)).map(unexpected);
   const pairs: (readonly [Numbered, Numbered])[] = [
     ...p.pairs.flatMap(([i, j]) => {
@@ -433,11 +532,11 @@ function compareGroup(
 const lineValue = (l: TraceLine): Json => plain(l);
 
 /** Lean's differentInput. */
-const differentInput = (b: Bindings, s: Numbered, t: Numbered): Finding => ({
+const differentInput = (b: Binding, s: Numbered, t: Numbered): Finding => ({
   kind: "Uncomparable.differentInput",
   definition: null,
   line: t.index,
-  data: { snapshotLine: s.index, snapshot: renamed(b, lineValue(s.line)), trace: lineValue(t.line) },
+  data: { snapshotLine: s.index, snapshot: renamed(new Map(pairsOf(b)), lineValue(s.line)), trace: lineValue(t.line) },
 });
 
 /** Lean's compareGroups. */
@@ -447,9 +546,9 @@ function compareGroups(
   expected: readonly Group[],
   actual: readonly Group[],
   cut: boolean,
-): readonly [Finding[], Bindings] {
+): readonly [Finding[], Binding] {
   const found: Finding[] = [];
-  let b: Bindings = new Map();
+  let b: Binding = emptyBinding;
   const fresh = new Set<string>();
   for (let k = 0; k < Math.max(expected.length, actual.length); k += 1) {
     const [e, a] = [expected[k], actual[k]];
@@ -476,7 +575,7 @@ function compareGroups(
     if (e === undefined || a === undefined) break;
     if (s !== undefined && t !== undefined) {
       const m = matchLine(new Set(), b, s.line, t.line);
-      if (m === undefined || m === "ambiguous" || !sameTime(s.line, t.line)) {
+      if (m === undefined || m === "ambiguous") {
         found.push(differentInput(b, s, t));
         break;
       }
@@ -493,7 +592,7 @@ function compareGroups(
   return [found, b];
 }
 
-/** The violations of a comparison, and the bindings that it ends with. */
+/** The violations of a comparison, and the pairs of the binding that it ends with (Lean's Compared.bindings). */
 export interface Compared {
   readonly found: Found[];
   readonly bindings: Bindings;
@@ -505,15 +604,15 @@ function compare(
   lines: readonly (TraceLine | undefined)[],
   malformed: number | undefined,
   internal: (l: TraceLine) => boolean,
-): readonly [Finding[], Bindings] {
-  const [found, bindings] = compareGroups(
+): readonly [Finding[], Binding] {
+  const [found, binding] = compareGroups(
     lines.length,
     internal,
     groups(snapshot),
     groups(lines),
     malformed !== undefined,
   );
-  return [found, bindings];
+  return [found, binding];
 }
 
 /**
@@ -530,8 +629,11 @@ export function verifyLines(
   const read = readLine(spec, service);
   const expected = snapshot.map((l) => l && read(l));
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
-  const [found, bindings] = compare(expected, actual, malformed?.lineNumber, internalEvent(spec, service));
-  return { found: [...found, ...(malformed === undefined ? [] : [lineSchema(malformed)])], bindings };
+  const [found, binding] = compare(expected, actual, malformed?.lineNumber, internalEvent(spec, service));
+  return {
+    found: [...found, ...(malformed === undefined ? [] : [lineSchema(malformed)])],
+    bindings: new Map(pairsOf(binding)),
+  };
 }
 
 /** Compares the trace with the snapshot's lines. A trace line's violation has its 1-based line number in `line`. */

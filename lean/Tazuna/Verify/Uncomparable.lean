@@ -26,8 +26,9 @@ inductive Uncomparable where
   | missingInput (line : Nat) (snapshot : Value) (snapshotLine : Nat)
   | differentInput (line snapshotLine : Nat) (snapshot trace : Value)
   /--
-  The snapshot line, which holds a value that its group introduces, equals two or more lines of the trace's group,
-  `candidates`, which differ in the strings that would stand for it. `line` is the first candidate.
+  The snapshot line, which holds values that are not bound yet (introduced by its group or an earlier one), equals two
+  or more lines of the trace's group, `candidates`, which bind those values differently, and the binding cannot keep
+  the choice open (Verify/Compare). `line` is the first candidate.
   -/
   | ambiguous (line : Nat) (subject : Subject) (snapshotLine : Nat) (candidates : List Nat)
   | unknownService (service : String)

@@ -286,7 +286,8 @@ def check (request : Value) : Except String Value := do
 
 /--
 The reply to request `verify`, which takes a structure, a service, the snapshot lines (null for a blank line), and the
-implementation lines (as `FileLine.decode` reads them), and returns the comparison violations. TS computes
+implementation lines (as `FileLine.decode` reads them), and returns the comparison violations and the pairs of the
+binding that it ends with. TS computes
 `comparableValue` for each value.
 -/
 def verify (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
@@ -297,7 +298,8 @@ def verify (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
       if l == .null then pure none else some <$> FromValue.fromValue l
   let trace ← IO.ofExcept do (← asList (← field request "trace")).mapM FileLine.decode
   let compared ← Verify.verifyLines spec service (askComparable stdin stdout (← IO.mkRef {})) snapshot trace
-  pure (.obj [("type", .str "verified"), ("findings", .arr (compared.findings.map Verify.Finding.toValue))])
+  pure (.obj [("type", .str "verified"), ("findings", .arr (compared.findings.map Verify.Finding.toValue)),
+    ("bindings", .arr (compared.bindings.map fun (s, t) => .arr [.str s, .str t]))])
 
 /--
 The reply to request `afters`, which takes the snapshot lines (null for a blank line) and returns the `unknownAfter`
