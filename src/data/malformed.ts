@@ -20,8 +20,9 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `unexportedDefinition` and `opaqueCollection`: `path` leads from the definition, service definer, or
  *   `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema
  *   has the path of the field that holds it, and a chart holds each state's `held` under `held` by the state's name.
- * - `unparsableTime`: a time of the scenario, Given's start or a clock line `input`, is not an ISO datetime with
+ * - `unparsableTime`: a time of the scenario, Given's start or a clock line's time, is not an ISO datetime with
  *   seconds and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds.
+ *   The report is at the clock line, or at the scenario for Given's start.
  * - `unknownPeer`: Given lists as a peer the own service's contract or no contract (null).
  * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`; a peer is keyed by its
  *   service name.
@@ -51,22 +52,17 @@ export type Malformed =
   | Of<"defaultSchema", DefinitionRef, { readonly map: string }>
   | Of<"unexportedDefinition", DefinitionRef, { readonly path: readonly (string | number)[] }>
   | Of<"unexportedDefinition", null, { readonly service: string; readonly path: readonly (string | number)[] }>
-  | Of<"unexportedDefinition", null, { readonly name: string; readonly path: readonly (string | number)[] }>
+  | (Of<"unexportedDefinition", null, { readonly name: string; readonly path: readonly (string | number)[] }> & {
+      readonly scenario?: DefinitionRef;
+    })
   | Of<"unexportedDefinition", null, { readonly contract: string; readonly key: string }>
-  | (Of<"unparsableTime", null, Readonly<Record<string, never>>> & {
-      readonly scenario: DefinitionRef;
-      readonly input: number;
-    })
-  | (Of<"unknownPeer", null, { readonly service: string | null }> & {
-      readonly scenario: DefinitionRef;
-      readonly input?: number;
-    })
+  | (Of<"unparsableTime", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
+  | (Of<"unknownPeer", null, { readonly service: string | null }> & { readonly scenario: DefinitionRef })
   | (Of<"misnamedPeer", null, { readonly name: string; readonly service: string }> & {
       readonly scenario: DefinitionRef;
     })
   | (Of<"lineAfterWhen", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
   | (Of<"misusedObserved", null, { readonly use: string; readonly path: readonly string[] }> & {
       readonly scenario: DefinitionRef;
-      readonly input: number;
     })
   | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly deadline: string }>;

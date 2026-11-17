@@ -34,8 +34,6 @@ function placeInStack(root: string, stack: string | undefined): Place | undefine
   return undefined;
 }
 
-type Problem = Malformed & { readonly scenario: DefinitionRef };
-
 /**
  * The Given records of a service as data, each as written, with its key when its entity is keyed; the simulation checks
  * them (Report.invalidRecord).
@@ -51,7 +49,7 @@ function givenRecords(entities: Readonly<Record<string, AnyEntity>>, records: un
   });
 }
 
-function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Problem {
+function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Malformed {
   switch (p.kind) {
     case "unnamed":
       return {
@@ -59,21 +57,19 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Problem
         definition: null,
         scenario,
         data: { name: scenario.name, path: p.path },
-      } as Problem;
+      };
     case "lineAfterWhen":
       return { kind: "Malformed.lineAfterWhen", definition: null, scenario, data: {} };
     case "unparsableTime":
-      return { kind: "Malformed.unparsableTime", definition: null, scenario, input: p.line + 1, data: {} } as Problem;
+      return { kind: "Malformed.unparsableTime", definition: null, scenario, data: {} };
     case "misusedObserved":
-      return {
-        kind: "Malformed.misusedObserved",
-        definition: null,
-        scenario,
-        input: p.line + 1,
-        data: { use: p.use, path: p.path },
-      };
+      return { kind: "Malformed.misusedObserved", definition: null, scenario, data: { use: p.use, path: p.path } };
   }
 }
+
+/** The line of When that a lowering problem is at, when it is at one. */
+const lineOf = (p: LoweringProblem): number | undefined =>
+  p.kind === "unparsableTime" || p.kind === "misusedObserved" ? p.line : undefined;
 
 export function loadScenarios(
   root: string,
@@ -86,7 +82,7 @@ export function loadScenarios(
   const scenarios = written.map((named): Named<LoadedScenario> => {
     const { service: own, place, definition } = named;
     const ref = { service: own, name: named.name };
-    const report = (problem: Problem) => malformed.push({ violation: problem, place });
+    const report = (problem: Malformed, at: Place = place) => malformed.push({ violation: problem, place: at });
     const entitiesOf = (service: string) => services.get(service)?.definition.entities ?? {};
     const peers: PeerEntry[] = Object.entries(definition.given.peers).flatMap(([key, entry]): PeerEntry[] => {
       const owner = contractService(entry.contract);
@@ -104,13 +100,16 @@ export function loadScenarios(
       return [{ service, role: "run", records: givenRecords(entitiesOf(service), entry.records) }];
     });
     const start = instant(definition.given.start);
-    if (start === undefined)
-      report({ kind: "Malformed.unparsableTime", definition: null, scenario: ref, input: 0, data: {} } as Problem);
+    if (start === undefined) report({ kind: "Malformed.unparsableTime", definition: null, scenario: ref, data: {} });
     const lowered = lower(definition, refOf, (contract) => {
       const owner = contractService(contract);
       return owner === undefined ? undefined : serviceNames.get(owner);
     });
-    for (const p of lowered.problems) report(loweringMalformed(ref, p));
+    const linePlaces = lowered.stacks.map((s) => placeInStack(root, s));
+    for (const p of lowered.problems) {
+      const line = lineOf(p);
+      report(loweringMalformed(ref, p), (line === undefined ? undefined : linePlaces[line]) ?? place);
+    }
     return {
       ...named,
       definition: {
@@ -125,7 +124,7 @@ export function loadScenarios(
           lines: [...lowered.lines],
           expectations: [...lowered.expectations],
         },
-        linePlaces: lowered.stacks.map((s) => placeInStack(root, s)),
+        linePlaces,
       },
     };
   });

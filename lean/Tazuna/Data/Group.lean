@@ -8,11 +8,10 @@ open Lean Elab Command
 def kindName (group ctor : Name) : String := s!"{group.getString!}.{ctor.getString!}"
 
 /--
-The names of the arguments that place a violation: the scenario, the line of the compared file, and the position of the
-line of When, from 1. A report writes them beside the data, in its `scenario` and
-`location`.
+The names of the arguments that place a violation: the scenario and the line of the compared file. A report writes
+them beside the data, in its `scenario` and `location`.
 -/
-def placeNames : List String := ["scenario", "line", "input"]
+def placeNames : List String := ["scenario", "line"]
 
 structure GroupFields where
   definition : Option Expr

@@ -14,8 +14,8 @@ export interface Problem extends ViolationValue {
 }
 
 /**
- * Returns the violation as a Problem at `at`, with the scenario, the line, and the input that the violation names
- * itself in its place.
+ * Returns the violation as a Problem at `at`, with the scenario and the line that the violation names itself in its
+ * place.
  */
 export function toProblem(
   v: ViolationValue & Placed & Pick<Problem, "error">,
@@ -23,13 +23,12 @@ export function toProblem(
   extra: Pick<Problem, "scenario" | "appendedLines"> = {},
 ): Problem {
   const line = v.line ?? at.line;
-  const input = v.input ?? at.input;
   const scenario = v.scenario ?? extra.scenario;
   return {
     kind: v.kind,
     definition: v.definition,
     data: v.data,
-    location: { file: at.file, ...(line === undefined ? {} : { line }), ...(input === undefined ? {} : { input }) },
+    location: { file: at.file, ...(line === undefined ? {} : { line }) },
     ...(scenario === undefined ? {} : { scenario }),
     ...(extra.appendedLines === undefined ? {} : { appendedLines: extra.appendedLines }),
     ...(v.error === undefined ? {} : { error: v.error }),

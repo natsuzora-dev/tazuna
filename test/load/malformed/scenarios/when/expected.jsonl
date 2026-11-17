@@ -1,2 +1,2 @@
 {"kind":"Malformed.lineAfterWhen","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"placesLineInThen"}}
-{"kind":"Malformed.misusedObserved","definition":null,"data":{"use":"conversion","path":["count"]},"location":{"file":"todo/scenarios.ts","line":15,"input":2},"scenario":{"service":"todo","name":"convertsObserved"}}
+{"kind":"Malformed.misusedObserved","definition":null,"data":{"use":"conversion","path":["count"]},"location":{"file":"todo/scenarios.ts","line":15},"scenario":{"service":"todo","name":"convertsObserved"}}
