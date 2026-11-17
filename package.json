@@ -55,7 +55,7 @@
     "build": "vite build viewer",
     "check": "npm run lint && npm run typecheck && npm run test && npm run lean:check && npm run samples:check",
     "hooks": "git config core.hooksPath .githooks",
-    "lean:check": "(cd lean && PATH=\"$HOME/.elan/bin:$PATH\" lake build) && lean/.lake/build/bin/tazuna-generate src && node --test --test-randomize 'test/*.diff.ts'",
+    "lean:check": "(cd lean && export PATH=\"$HOME/.elan/bin:$PATH\" && lake build --wfail && lake exe tazuna-axioms) && lean/.lake/build/bin/tazuna-generate src && node --test --test-randomize 'test/*.diff.ts'",
     "lean:write": "(cd lean && PATH=\"$HOME/.elan/bin:$PATH\" lake build) && lean/.lake/build/bin/tazuna-generate --write src",
     "lint": "biome check . && depcruise src -T err-long && knip --no-progress",
     "lint:write": "biome check --write .",

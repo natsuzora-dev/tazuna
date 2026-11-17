@@ -541,6 +541,7 @@ theorem answerRequest_agrees (s : State) (p : Pending) (answer : Answer) :
   unfold answerRequest
   agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
+omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.singleRecord]
 

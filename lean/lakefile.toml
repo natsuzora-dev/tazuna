@@ -1,6 +1,6 @@
 name = "tazuna-lean"
 version = "0.1.0"
-defaultTargets = ["Tazuna", "tazuna-lean", "tazuna-generate"]
+defaultTargets = ["Tazuna", "tazuna-lean", "tazuna-generate", "tazuna-axioms"]
 
 [leanOptions]
 autoImplicit = false
@@ -21,3 +21,7 @@ root = "DiffTest.Main"
 [[lean_exe]]
 name = "tazuna-generate"
 root = "Generate.Main"
+
+[[lean_exe]]
+name = "tazuna-axioms"
+root = "Axioms.Main"
