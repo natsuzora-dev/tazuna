@@ -1,4 +1,4 @@
-import { type Binding, emptyBinding, matchValue } from "../data/binding.ts";
+import { type Binding, emptyBinding, matchValue, type Values } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
 import type { Assigned, ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
@@ -51,11 +51,27 @@ export function outcomeOf(
   return { halted: null, lines, records: recordsValue(records), created };
 }
 
-/** Lean's Compare: the first violation that verify finds in `actual`, with `expected` as the snapshot, or else the set of bindings. */
+/**
+ * Lean's Compare: the first violation that verify finds in `actual`, with `expected` as the snapshot, or else the set of
+ * bindings. `renamed` refines what verify knows of the values (renaming).
+ */
 export type Compare = (
+  renamed: (v: Values) => Values,
   expected: readonly TraceLine[],
   actual: readonly TraceLine[],
 ) => { readonly mismatch: ViolationValue } | { readonly set: readonly Binding[] };
+
+/** Lean's Outcome.renaming. */
+const renaming =
+  (original: Outcome, alternative: Outcome) =>
+  (v: Values): Values => ({
+    ...v,
+    domain: (s) => original.created.get(s) ?? v.domain(s),
+    image: (s, t) => {
+      const d = original.created.get(s);
+      return d === undefined ? v.image(s, t) : alternative.created.get(t) === d;
+    },
+  });
 
 /** Lean's recordsCValue: each keyed entity's rows as a Bag. */
 function recordsCValue(records: Json): unknown {
@@ -67,7 +83,10 @@ function recordsCValue(records: Json): unknown {
 
 /** Lean's sameRecords. */
 function sameRecords(set: readonly Binding[], original: Outcome, alternative: Outcome): boolean {
-  const values = { domain: (s: string) => original.created.get(s) ?? "", fresh: new Set(original.created.keys()) };
+  const values = renaming(
+    original,
+    alternative,
+  )({ domain: () => "", fresh: new Set(original.created.keys()), image: () => true });
   const [o, a] = [recordsCValue(original.records), recordsCValue(alternative.records)];
   return set.some((b) => (matchValue(values, b, o, a)?.length ?? 0) > 0);
 }
@@ -87,9 +106,9 @@ function difference(compare: Compare, original: Outcome, alternative: Outcome): 
     sameRecords(set, original, alternative)
       ? undefined
       : { aspect: "records", original: original.records, alternative: alternative.records };
-  const compared = compare(original.lines, alternative.lines);
+  const compared = compare(renaming(original, alternative), original.lines, alternative.lines);
   if (!("mismatch" in compared)) return records(compared.set);
-  return "mismatch" in compare(original.lines, original.lines)
+  return "mismatch" in compare(renaming(original, original), original.lines, original.lines)
     ? records([emptyBinding])
     : { aspect: "outputs", mismatch: compared.mismatch };
 }

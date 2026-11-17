@@ -10,6 +10,8 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Always Tazuna.Thm.Service.Ch
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
+@[simp] theorem endMessage_id : endMessage st fs s = afterMessage st fs s := rfl
+
 theorem checkHolds_fixed : (checkHolds st fs s).fixed = s.fixed := by
   unfold checkHolds
   rw [foldlM_id]
@@ -97,12 +99,12 @@ theorem fireDue_commandAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
         · simp
         · rename_i hc
           obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          try simp only [id_bind]
+          try simp only [id_bind, endMessage_id]
           rw [ih, afterMessage_commandAnswers, drain_commandAnswers, (keeps_settled _ _ (keeps_fire _ _)).commandAnswers]
           rfl
 
 theorem finish_commandAnswers : (finish st fs s).commandAnswers = s.commandAnswers := by
-  simp only [finish, id_bind, fireDue_commandAnswers, afterMessage_commandAnswers]
+  simp only [finish, id_bind, endMessage_id, fireDue_commandAnswers, afterMessage_commandAnswers]
 
 theorem message_commandAnswers (q : Queue) : (message st fs s q).commandAnswers = s.commandAnswers := by
   simp only [message, id_bind, finish_commandAnswers, drain_commandAnswers]
@@ -144,14 +146,14 @@ theorem fireDue_extends (to : Time) (fuel : Nat) (tie : Option Time) : Extends s
         · exact ⟨#[], by simp⟩
         · rename_i hc
           obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          try simp only [id_bind]
+          try simp only [id_bind, endMessage_id]
           refine Extends.trans ?_ (ih _)
           refine Extends.trans ?_ afterMessage_grows.toExtends
           refine Extends.trans ?_ (drain_grows _ _).toExtends
           exact (growsBy_settled _ _ (growsBy_fire _ _) (keeps_fire _ _) _).toExtends
 
 theorem message_extends (q : Queue) : Extends s (message st fs s q) := by
-  simp only [message, finish, id_bind]
+  simp only [message, finish, id_bind, endMessage_id]
   exact (drain_grows _ _).toExtends.trans (afterMessage_grows.toExtends.trans (fireDue_extends _ _ _))
 
 theorem afterMessage_records : (afterMessage st fs s).records = s.records := congrArg Fixed.records afterMessage_fixed
@@ -175,11 +177,11 @@ theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : K
         · simpa using h
         · rename_i hc
           obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          try simp only [id_bind]
+          try simp only [id_bind, endMessage_id]
           exact ih _ (afterMessage_keysDistinct (drain_keysDistinct _ _ (by rw [(keeps_settled _ _ (keeps_fire _ _)).records]; exact h)))
 
 theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDistinct (message st fs s q).records := by
-  simp only [message, finish, id_bind]
+  simp only [message, finish, id_bind, endMessage_id]
   exact fireDue_keysDistinct _ _ _ (afterMessage_keysDistinct (drain_keysDistinct _ _ h))
 
 theorem deadline_is_own_message (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
@@ -208,7 +210,7 @@ theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time
         fireDue st fs to fuel tie' (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q)) ∧
       s₁.now = max s'.now (t.time.getD s'.now) := by
   refine ⟨_, _, _, by simp only [fireDue, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, he, hc, Tazuna.Thm.Service.Note.note_id,
-      id_pure, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
+      id_pure, endMessage_id, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _
 
 theorem afterMessage_takenAnswers : (afterMessage st fs s).takenAnswers = s.takenAnswers :=
@@ -229,12 +231,12 @@ theorem fireDue_takenAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
         · exact congrArg Fixed.takenAnswers (report_fixed ..)
         · rename_i hc
           obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          try simp only [id_bind]
+          try simp only [id_bind, endMessage_id]
           rw [ih, afterMessage_takenAnswers, drain_takenAnswers, (keeps_settled _ _ (keeps_fire _ _)).takenAnswers]
           rfl
 
 theorem message_takenAnswers (q : Queue) : (message st fs s q).takenAnswers = s.takenAnswers := by
-  simp only [message, finish, id_bind]
+  simp only [message, finish, id_bind, endMessage_id]
   rw [fireDue_takenAnswers, afterMessage_takenAnswers, drain_takenAnswers]
 
 theorem message_outputs_at_its_time (n : Nat) (q : Queue) :

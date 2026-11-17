@@ -268,8 +268,8 @@ The first violation, by line, that verify finds in `actual` with `expected` as t
 returns.
 -/
 def compareOf (spec : Spec.Structure) (service : String)
-    (ask : Spec.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun expected actual => do
-  let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line)
+    (ask : Spec.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun renamed expected actual => do
+  let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line) renamed
   let numbered := compared.findings.map fun f =>
     let v : Violation := match f with
       | .mismatch m => { kind := m.kind, definition := m.definition, data := m.data }
@@ -297,7 +297,7 @@ def verify (stdin stdout : IO.FS.Stream) (request : Value) : IO Value := do
     (← asList (← field request "snapshot")).mapM fun l =>
       if l == .null then pure none else some <$> FromValue.fromValue l
   let trace ← IO.ofExcept do (← asList (← field request "trace")).mapM FileLine.decode
-  let compared ← Verify.verifyLines spec service (askComparable stdin stdout (← IO.mkRef {})) snapshot trace
+  let compared ← Verify.verifyLines spec service (askComparable stdin stdout (← IO.mkRef {})) snapshot trace id
   pure (.obj [("type", .str "verified"), ("findings", .arr (compared.findings.map Verify.Finding.toValue)),
     ("bindings", .arr (compared.bindings.map fun b => .arr (b.strings.map fun (s, t) => .arr [.str s, .str t])))])
 

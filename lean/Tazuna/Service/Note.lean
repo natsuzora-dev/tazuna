@@ -88,6 +88,9 @@ inductive Note where
   | wroteShown (resource slot : String)
   | transitionPart (part : Nat)
   | microstepEnds (check : RegionCheck)
+  /-- The start of the checks and subscription answers after message `message` (afterMessage), which no step runs. -/
+  | afterMessageBegins (message : Nat)
+  | afterMessageEnds
 deriving DecidableEq, Repr, Inhabited
 
 /--

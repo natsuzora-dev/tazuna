@@ -56,7 +56,8 @@ def publishOne [Monad m] (st : Service) (fs : Functions m) (s : State) (sub : Su
 
 /--
 The state after each subscription receives its new answer. It runs after the message, outside any step: an answer
-depends only on the values at the end of the message, so its reads are not reads of a step.
+depends only on the values at the end of the message, so its reads are not reads of a step. They are reads of the
+message (endMessage), which a later message may observe in another order.
 -/
 def publish [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.subscriptions.foldlM (publishOne st fs) s

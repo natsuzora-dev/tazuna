@@ -77,6 +77,12 @@ export class Listener implements Note, Evaluations {
   microstepEnds(check: RegionCheck): void {
     this.collected.microstepEnds(check);
   }
+  afterMessageBegins(message: number): void {
+    this.collected.afterMessageBegins(message);
+  }
+  afterMessageEnds(): void {
+    this.collected.afterMessageEnds();
+  }
   readRecord(part: RecordPart): void {
     if (!this.cache.quiet) this.read(recordPartName(part));
   }

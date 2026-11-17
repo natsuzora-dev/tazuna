@@ -5,7 +5,7 @@ import type { Spec } from "../load/load.ts";
 import { traceName } from "../load/traceName.ts";
 import { givenRecordsOf } from "../sim/spec/simulate.ts";
 import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
-import { compareTrace } from "./compare.ts";
+import { compareTrace, verifying } from "./compare.ts";
 import { readSnapshot } from "./snapshot.ts";
 
 /** A run that a snapshot records: a scenario of `service`, or the run of its running peer `runner`. */
@@ -139,7 +139,7 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
   const running = (work: Promise<void>) => void work.catch((error: unknown) => failures.push(error));
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
-  const comparedBefore = (k: number) => compareTrace(spec, runner, snapshot.slice(0, k), written());
+  const comparedBefore = (k: number) => compareTrace(spec, runner, snapshot.slice(0, k), written(), verifying);
 
   async function give(line: TraceLine): Promise<void> {
     const { time: _, ...untimed } = line;

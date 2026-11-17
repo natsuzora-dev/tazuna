@@ -4,6 +4,7 @@ import {
   bind,
   bindingLimit,
   bindString,
+  binds,
   bound,
   distinctBy,
   domainPart,
@@ -351,7 +352,7 @@ function compareGroup(
     states = free.map((st) => {
       const id = s.line.id;
       const c = isOutRequest(s.line)
-        ? (bindString(v.fresh.has(id), st.binding, bound(v.domain(id), id), bound(v.domain(id), t.line.id)) ??
+        ? (bindString(binds(v, id, t.line.id), st.binding, bound(v.domain(id), id), bound(v.domain(id), t.line.id)) ??
           st.binding)
         : st.binding;
       return { binding: c, pairs: [...st.pairs, [s.index, t.index] as const] };
@@ -499,7 +500,7 @@ function compareGroups(
   internal: (l: TraceLine) => boolean,
   inputs: readonly TraceLine[],
   outs: readonly Numbered[],
-  domain: (s: string) => string,
+  values: Values,
   expected: readonly Group[],
   actual: readonly Group[],
   cut: boolean,
@@ -532,7 +533,7 @@ function compareGroups(
     if (e === undefined || a === undefined) break;
     if (s !== undefined && t !== undefined) {
       const subject = subjectOf(s.line);
-      const next = expand(sameBinding, set, (b) => matchLine({ domain, fresh: new Set() }, b, s.line, t.line));
+      const next = expand(sameBinding, set, (b) => matchLine({ ...values, fresh: new Set() }, b, s.line, t.line));
       if (next === undefined) {
         found.push({
           kind: "Uncomparable.bindingLimit",
@@ -546,7 +547,7 @@ function compareGroups(
         found.push(differentInput(set[0] ?? emptyBinding, s, t));
         break;
       }
-      const images = unrouted(set, { domain, fresh }, inputs, s.line);
+      const images = unrouted(set, { ...values, fresh }, inputs, s.line);
       if (images !== undefined) {
         found.push({
           kind: "Uncomparable.ambiguous",
@@ -567,7 +568,7 @@ function compareGroups(
     for (const o of e.outs) for (const v of freshOf(o.line)) fresh.add(v);
     const [groupFound, next, stop] = compareGroup(
       set,
-      { domain, fresh },
+      { ...values, fresh },
       compared(e.outs),
       compared(a.outs),
       t?.index ?? 1,
@@ -581,8 +582,7 @@ function compareGroups(
 
 /**
  * The violations of a comparison, the bindings that agree with every compared line (Lean's Compared.bindings) as `set`
- * and as pairs of strings, and the pairs of the first, by which the harness gives its next `in` line (Lean's
- * Compared.first).
+ * and as pairs of strings, and the pairs of the first, by which the harness gives its next `in` line.
  */
 export interface Compared {
   readonly found: Found[];
@@ -597,6 +597,7 @@ function compare(
   lines: readonly (TraceLine | undefined)[],
   cut: boolean,
   internal: (l: TraceLine) => boolean,
+  renamed: (v: Values) => Values,
 ): readonly [Finding[], readonly Binding[]] {
   const expected = groups(snapshot);
   const actual = groups(lines);
@@ -605,7 +606,7 @@ function compare(
     internal,
     expected.flatMap((g) => (g.input === undefined ? [] : [g.input.line])),
     actual.flatMap((g) => g.outs),
-    valueDomains(snapshot),
+    renamed({ domain: valueDomains(snapshot), fresh: new Set(), image: () => true }),
     expected,
     actual,
     cut,
@@ -638,22 +639,27 @@ function comparedLines(trace: readonly FileLine[]): {
 
 /**
  * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
- * A trace line's violation has its 1-based line number in `line`.
+ * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Outcome.renaming, or
+ * `verifying` for verify.
  */
 export function verifyLines(
   spec: Spec,
   service: string,
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly FileLine[],
+  renamed: (v: Values) => Values,
 ): Compared {
   const { lines, cut } = comparedLines(trace);
   const read = readLine(spec, service);
   const expected = snapshot.map((l) => l && read(l));
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
-  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service));
+  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed);
   const bindings = set.map((b) => new Map(stringPairs(b)));
   return { found: [...found, ...(cut === undefined ? [] : [cut])], set, bindings, first: bindings[0] ?? new Map() };
 }
+
+/** What verify knows of the values: valueDomains, and a fresh value may stand for any string. */
+export const verifying = (v: Values): Values => v;
 
 /** Compares the trace with the snapshot's lines. A trace line's violation has its 1-based line number in `line`. */
 export function compareTrace(
@@ -661,7 +667,8 @@ export function compareTrace(
   service: string,
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly unknown[],
+  renamed: (v: Values) => Values,
 ): Compared {
-  const compared = verifyLines(spec, service, snapshot, parseFileLines(trace));
+  const compared = verifyLines(spec, service, snapshot, parseFileLines(trace), renamed);
   return { ...compared, found: compared.found.sort(byLine) };
 }

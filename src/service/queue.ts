@@ -16,7 +16,7 @@ function checkHolds(r: Processing): void {
     for (const state of instance.entered.keys()) {
       const scope = scopeOf(r.state, instance, state);
       const records = new LazyRecordSource(r.state.records, r.note);
-      const failed = r.evaluations.quietly(() => r.functions.holds(scope, records, new NoteAccess(r, scope)));
+      const failed = r.functions.holds(scope, records, new NoteAccess(r, scope));
       if (failed !== undefined) halt(issueViolation(ref(r.st, instance.chart.name), failed));
     }
   }
@@ -28,7 +28,7 @@ function checkInvariants(r: Processing): void {
     const definition = ref(r.st, instance.chart.name);
     const scope = scopeOf(r.state, instance, null);
     const records = new LazyRecordSource(r.state.records, r.note);
-    const failing = r.evaluations.quietly(() => r.functions.chartInvariant(scope, records, new NoteAccess(r, scope)));
+    const failing = r.functions.chartInvariant(scope, records, new NoteAccess(r, scope));
     if (failing instanceof Failed) halt(issueViolation(definition, failing));
     if (failing) report(r.state, { kind: "Fault.failedChartInvariant", definition, data: { condition: failing } });
   }
@@ -39,6 +39,16 @@ function afterMessage(r: Processing): void {
   checkInvariants(r);
   rearm(r);
   publish(r);
+}
+
+/** Lean's endMessage: afterMessage, noted as the end of the current message. */
+function endMessage(r: Processing): void {
+  r.note.afterMessageBegins(r.state.messageCount);
+  try {
+    afterMessage(r);
+  } finally {
+    r.note.afterMessageEnds();
+  }
 }
 
 /** Lean's fireDue: fires the deadlines due by `to`, each tie chosen by chooseDeadline. */
@@ -64,12 +74,12 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
       settled(r, deadline.machine, step, () => fire(r, deadline, step)),
     );
     drain(r);
-    afterMessage(r);
+    endMessage(r);
   }
 }
 
 function finish(r: Processing): void {
-  afterMessage(r);
+  endMessage(r);
   fireDue(r, r.state.now);
 }
 

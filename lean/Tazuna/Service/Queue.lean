@@ -46,6 +46,13 @@ def afterMessage [Monad m] (st : Service) (fs : Functions m) (s : State) : m Sta
   if s.halted.isSome then pure s else
   publish st fs s
 
+/-- afterMessage, noted as the end of the current message, whose state the next message may observe in another order. -/
+def endMessage [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
+  MonadNote.note (.afterMessageBegins s.messageCount)
+  let s ← afterMessage st fs s
+  MonadNote.note .afterMessageEnds
+  pure s
+
 /--
 The state after the deadlines due by `to` fire, each as its own message. An overdue deadline fires at the current time.
 A tie starts when two or more deadlines are due at the earliest time and lasts until no deadline is due at that time;
@@ -74,11 +81,11 @@ def fireDue [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (to : Time
       let r ← settled fs st step (some t.machine) (fire fs st step t) ⟨s, {}⟩
       MonadNote.note .stepEnds
       let s ← drain st fs Limit.messageWork.max r.state r.queue
-      let s ← afterMessage st fs s
+      let s ← endMessage st fs s
       fireDue st fs to fuel (if tied then e.time else none) s
 
 def finish [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
-  let s ← afterMessage st fs s
+  let s ← endMessage st fs s
   fireDue st fs s.now Limit.dueDeadlines.max none s
 
 def message [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (q : Queue) : m State := do

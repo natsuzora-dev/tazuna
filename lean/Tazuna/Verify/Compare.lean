@@ -215,9 +215,6 @@ structure Compared where
   findings : List Finding
   bindings : List Binding
 
-/-- The pairs of strings of the first binding of the comparison, by which the harness gives its next `in` line. -/
-def Compared.first (c : Compared) : Bindings := (c.bindings.head?.map Binding.strings).getD []
-
 def Line.isOutRequest (l : Line) : Bool :=
   match l.body with
   | .command .out .. | .query .out .. | .subscribe .out .. => true
@@ -416,7 +413,7 @@ def compareGroup {root : Binding} (set : List (From root)) (v : Values) (snapsho
             let id := s.line.body.id
             let c : From root :=
               if s.line.isOutRequest then
-                match st.binding.val.bindString (v.fresh.contains id) (v.domain id, id) (v.domain id, t.line.body.id) with
+                match st.binding.val.bindString (v.binds id t.line.body.id) (v.domain id, id) (v.domain id, t.line.body.id) with
                 | some c => ⟨c.val, st.binding.property.trans c.property⟩
                 | none => st.binding
               else st.binding
@@ -536,15 +533,18 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (inputs : List Li
 The violations of comparing a trace with a snapshot, and the bindings that agree with every compared line. In
 `snapshot`, `none` is a blank line. `lines` holds the trace lines before the line that `cut` reports, if any, with `none`
 for blank lines and repeated subscription answers. `internal` selects the event lines that verify does not compare. An
-`unknownAfters` id orders no line, because reading the snapshot reports it before the comparison.
+`unknownAfters` id orders no line, because reading the snapshot reports it before the comparison. `renamed` refines
+what the comparison knows of the values (Explore's Outcome.renaming); verify passes `id`.
 -/
-def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool) : Compared :=
+def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool)
+    (renamed : Values → Values) : Compared :=
   let expected := groups snapshot
   let actual := groups lines
   let inputs := expected.filterMap fun g => g.input.map (·.line)
   let (found, set) :=
     compareGroups lines.length internal inputs (actual.flatMap (·.outs)) expected actual cut.isSome
-      (expected.length + actual.length) { domain := valueDomains snapshot, fresh := [] } [⟨Binding.empty, .refl _⟩]
+      (expected.length + actual.length) (renamed { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true })
+      [⟨Binding.empty, .refl _⟩]
   { findings := found ++ (cut.map Finding.uncomparable).toList, bindings := set.map (·.val) }
 
 def isOutRequestLine (l : TraceLine) : Bool :=
@@ -578,10 +578,10 @@ def comparedLines (trace : List (FileLine TraceLine)) : List (Option TraceLine) 
   | none => (lines, malformed.map .lineSchema)
 
 def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
-    (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : m Compared := do
+    (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) (renamed : Values → Values) : m Compared := do
   let (lines, cut) := comparedLines trace
   let (expected, outputByRequestId) ← readLines s service ask snapshot []
   let (actual, _) ← readLines s service ask lines outputByRequestId
-  pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service))
+  pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service) renamed)
 
 end Tazuna.Verify

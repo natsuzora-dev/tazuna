@@ -113,9 +113,25 @@ def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLin
 
 /--
 The first violation that verify finds in the second lines, with the first lines as the snapshot, or else the set of
-bindings that agree with every line (Data/Binding).
+bindings that agree with every line (Data/Binding). The first argument refines what verify knows of the values
+(Outcome.renaming).
 -/
-abbrev Compare (m : Type → Type) := List TraceLine → List TraceLine → m (Except Violation (List Binding))
+abbrev Compare (m : Type → Type) :=
+  (Values → Values) → List TraceLine → List TraceLine → m (Except Violation (List Binding))
+
+/--
+What a comparison of `original` with `alternative` knows of the values beyond verify's `v`: a key that `original`
+created has its domain from `original.created` wherever it appears, in a key reference or a plain string, so the lines
+and the records bind it alike; and it may stand only for a key that `alternative` created in the same domain, never for
+"", a literal, or a Given key.
+-/
+def Outcome.renaming (original alternative : Outcome) (v : Values) : Values :=
+  { v with
+    domain := fun s => (original.created.lookup s).getD (v.domain s)
+    image := fun s t =>
+      match original.created.lookup s with
+      | some d => alternative.created.lookup t == some d
+      | none => v.image s t }
 
 /-- Records as matchValue compares them: each keyed entity's rows as a bag, since renamed keys no longer order them. -/
 def recordsCValue : Value → CValue
@@ -130,7 +146,8 @@ of the created keys of `original` (one to one within each entity's keys, created
 count as a difference, never as equal.
 -/
 def sameRecords (set : List Binding) (original alternative : Outcome) : Bool :=
-  let v : Values := { domain := fun s => (original.created.lookup s).getD "", fresh := original.created.map (·.1) }
+  let v := original.renaming alternative
+    { domain := fun _ => "", fresh := original.created.map (·.1), image := fun _ _ => true }
   set.any fun b =>
     match matchValue v b (recordsCValue original.records) (recordsCValue alternative.records) with
     | some (_ :: _) => true
@@ -159,10 +176,10 @@ def difference (compare : Compare m) (original alternative : Outcome) :
       else some (.halt original.halted alternative.halted)
   let records (set : List Binding) : Option Difference :=
     if sameRecords set original alternative then none else some (.records original.records alternative.records)
-  match ← compare original.lines alternative.lines with
+  match ← compare (original.renaming alternative) original.lines alternative.lines with
   | .ok set => return records set
   | .error mismatch =>
-    match ← compare original.lines original.lines with
+    match ← compare (original.renaming original) original.lines original.lines with
     | .ok _ => return some (.outputs mismatch)
     | .error _ => return records [.empty]
 

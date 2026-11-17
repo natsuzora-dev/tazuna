@@ -4,7 +4,7 @@ import { parseFileLines } from "../data/trace.ts";
 import { readTrace, snapshotPath } from "../data/traceFile.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
-import { compareTrace } from "./compare.ts";
+import { compareTrace, verifying } from "./compare.ts";
 import { verifyExternal } from "./external.ts";
 import { type Found, readSnapshotViolations, violationsAt } from "./lines.ts";
 import { pairingViolation, pairTraces, traceFolderOf } from "./pairing.ts";
@@ -48,7 +48,11 @@ export function verifyTraces(spec: Spec, folder: string): { traces: number; viol
   const compared = pairing.compare.flatMap((t) => {
     const snapshot = readSnapshotViolations(snapshotPath(spec, t));
     if (snapshot.violations.length > 0) return atLines(snapshotPath(spec, t), snapshot.violations, t);
-    return atLines(traceFile(t), compareTrace(spec, runnerOf(t), snapshot.lines, readTrace(traceFile(t))).found, t);
+    return atLines(
+      traceFile(t),
+      compareTrace(spec, runnerOf(t), snapshot.lines, readTrace(traceFile(t)), verifying).found,
+      t,
+    );
   });
   const checked = pairing.contract.flatMap((t) =>
     atLines(traceFile(t), verifyExternal(spec, t.service, parseFileLines(readTrace(traceFile(t))))),

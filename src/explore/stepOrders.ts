@@ -31,8 +31,8 @@ const violationValue = ({ kind, definition, data }: ViolationValue): ViolationVa
 
 export const compareOf =
   (spec: Spec, service: string): Compare =>
-  (expected, actual) => {
-    const { found, set } = compareTrace(spec, service, expected, actual);
+  (renamed, expected, actual) => {
+    const { found, set } = compareTrace(spec, service, expected, actual, renamed);
     const [mismatch] = found;
     return mismatch === undefined ? { set } : { mismatch: violationValue(mismatch) };
   };

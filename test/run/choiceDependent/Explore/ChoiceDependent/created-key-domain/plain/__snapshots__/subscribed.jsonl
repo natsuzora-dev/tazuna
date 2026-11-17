@@ -1,0 +1,11 @@
+{"time":"2026-10-25T02:00:00Z","dir":"in","type":"subscribe","id":"taskIds#1","name":"taskIds","input":{}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"taskIds#1","answer":{"result":"fulfilled","output":{"taskIds":[]}}}
+{"time":"2026-10-25T02:00:00Z","dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"arm#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"plain/Task-1","text":"a"},"created":["plain/Task-1"]}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{"n":1},"after":["taskAdded#1"]}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"taskIds#1","answer":{"result":"fulfilled","output":{"taskIds":["plain/Task-1"]}}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"plain/Task-2","text":"b"},"after":["taskAdded#1","counted#1"],"created":["plain/Task-2"]}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"counted#2","name":"counted","payload":{"n":2},"after":["taskAdded#1","counted#1","taskAdded#2"]}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"taskIds#1","answer":{"result":"fulfilled","output":{"taskIds":["plain/Task-1","plain/Task-2"]}},"after":["answer#3"]}

@@ -7,6 +7,7 @@ import { type Searched, stepOrderChanges } from "../src/explore/stepOrders.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { simulateSpec } from "../src/sim/spec/simulate.ts";
 import { runExamples, runGroupExamples } from "./examples.ts";
+import { expectedOf } from "./expected.ts";
 import { SimFunctions, VerifyFunctions } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";
 
@@ -15,7 +16,8 @@ const tests = import.meta.dirname;
 const lean = new Lean();
 after(() => lean.close());
 
-const relationExamples = new Set(runGroupExamples("choiceDependent"));
+/** The examples of a ChoiceDependent violation, which must search some processing. */
+const relationExamples = new Set(runGroupExamples("choiceDependent").filter((root) => expectedOf(root).length > 0));
 
 const simRoots = [join(tests, "../samples/todo/spec"), ...runExamples()];
 

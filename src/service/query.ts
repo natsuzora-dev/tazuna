@@ -39,25 +39,20 @@ export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
   if (output instanceof Failed) return halt(issueViolation(definition, output));
   if ("error" in output)
     return report(r.state, withExtra({ kind: "Fault.outputSchema", definition, data: {} }, { error: output.error }));
-  const failed = r.evaluations.quietly(() => r.functions.queryEnsures(name, input, output.value, records));
+  const failed = r.functions.queryEnsures(name, input, output.value, records);
   if (failed instanceof Failed) return halt(issueViolation(definition, failed));
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
   return done({ result: "fulfilled", output: output.encoded }, { kind: "successAnswer", definition, data: {} });
 }
 
-/**
- * Writes the changed answers of the open subscriptions. It runs after the message, outside any step, so its reads are
- * not step reads.
- */
+/** Writes the changed answers of the open subscriptions. */
 export function publish(r: Run): void {
   const { subscriptions } = r.state;
-  r.evaluations.quietly(() => {
-    for (const [id, s] of subscriptions.entries()) {
-      const answer = resolveChecked(r, s.query, s.input);
-      const compared = r.functions.comparable(s.query, answer);
-      if (compared instanceof Failed) return halt(issueViolation(ref(r.st, s.query), compared));
-      if (subscriptions.repeats(id, compared)) continue;
-      write(r.state, { dir: "out", type: "answer", to: id, answer });
-    }
-  });
+  for (const [id, s] of subscriptions.entries()) {
+    const answer = resolveChecked(r, s.query, s.input);
+    const compared = r.functions.comparable(s.query, answer);
+    if (compared instanceof Failed) halt(issueViolation(ref(r.st, s.query), compared));
+    if (subscriptions.repeats(id, compared)) continue;
+    write(r.state, { dir: "out", type: "answer", to: id, answer });
+  }
 }

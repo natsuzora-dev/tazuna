@@ -1,0 +1,51 @@
+import { emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { z } from "zod";
+
+export const Note = entity({ description: "A note", fields: { id: z.string() }, key: "id" });
+export const Last = singleEntity({ description: "The token set last", fields: { id: z.string().default("") } });
+
+export const { command, machine, event, updateEvent, contract, scenario } = service({
+  name: "tokens",
+  description: "One clock clears the token, the other sets a created one, at 10:00",
+  entities: { Note, Last },
+});
+
+export const armed = event({});
+export const moved = updateEvent({ entity: Last, writes: ["id"] });
+
+export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+
+export const setLast = command({
+  input: { id: z.string() },
+  emits: [moved],
+}).decide(({ input }) => [emit(moved, { id: input.id })]);
+
+const clock = (make: boolean) =>
+  machine({
+    description: make ? "Set a created token at 10:00" : "Clear the token at 10:00",
+    receives: { armed },
+    commands: { setLast },
+    initial: "idle",
+    states: { idle: {}, waiting: {}, setting: {}, done: { type: "final" } },
+  }).chart({
+    states: {
+      idle: { on: { armed: [{ target: "waiting" }] } },
+      waiting: {
+        after: { due: { at: () => Temporal.Instant.from("2026-10-25T01:00:00Z"), onFired: [{ target: "setting" }] } },
+      },
+      setting: {
+        sends: {
+          setLast: {
+            input: ({ createKey }) => ({ id: make ? createKey(ref(Note)) : "" }),
+            onAccepted: [{ target: "done" }],
+            onRejected: [{ target: "done" }],
+          },
+        },
+      },
+    },
+  });
+
+export const first = clock(false);
+export const second = clock(true);
+
+export const tokens = contract({ arm });

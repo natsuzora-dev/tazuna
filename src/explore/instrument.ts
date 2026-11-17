@@ -134,7 +134,18 @@ const reportedKey = (v: BagOrderDependent): string => JSON.stringify([v.kind, v.
  * too.
  */
 export class Collect
-  implements Pick<Note, "events" | "stepBegins" | "stepEnds" | "settlesAround" | "transitionPart" | "microstepEnds">
+  implements
+    Pick<
+      Note,
+      | "events"
+      | "stepBegins"
+      | "stepEnds"
+      | "settlesAround"
+      | "transitionPart"
+      | "microstepEnds"
+      | "afterMessageBegins"
+      | "afterMessageEnds"
+    >
 {
   /** The definitions already reported by orderAudit, as JSON. */
   private readonly reportedOrder = new Set<string>();
@@ -146,6 +157,10 @@ export class Collect
   private readonly steps = new Map<number, StepAccess>();
   /** The access of the step open outermost, which began last of `steps`. */
   private outermost: StepAccess | undefined;
+  /** The message whose afterMessage runs, while it runs. */
+  private afterMessage: number | undefined;
+  /** For each message, the values that its afterMessage read: subscription answers, holds, invariants, and rearm. */
+  private readonly afters = new Map<number, Footprint>();
   readonly violations: (BagOrderDependent & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */
   private readonly reported = new Set<string>();
@@ -159,6 +174,7 @@ export class Collect
     const copy = new Collect();
     for (const name of this.reportedOrder) copy.reportedOrder.add(name);
     for (const [step, access] of this.steps) copy.steps.set(step, access);
+    for (const [message, access] of this.afters) copy.afters.set(message, access);
     copy.violations.push(...this.violations);
     for (const key of this.reported) copy.reported.add(key);
     copy.causes.events.push(...this.causes.events);
@@ -246,23 +262,41 @@ export class Collect
     this.transitions.clear();
   }
 
+  afterMessageBegins(message: number): void {
+    this.afterMessage = message;
+  }
+
+  afterMessageEnds(): void {
+    this.afterMessage = undefined;
+  }
+
+  /** Lean's stepAccess: the outermost open step, or, while no step is open, the afterMessage that runs. */
+  private accessing(): Footprint | undefined {
+    if (this.outermost !== undefined) return this.outermost;
+    const message = this.afterMessage;
+    if (message === undefined) return undefined;
+    const after = this.afters.get(message) ?? { reads: new Set(), writes: new Set(), keyWrites: new Set() };
+    this.afters.set(message, after);
+    return after;
+  }
+
   read(key: string): void {
-    this.outermost?.reads.add(key);
+    this.accessing()?.reads.add(key);
   }
 
   /**
-   * Adds a write to the outermost open step. Writes to the instance or copy that an open step starts, or to its copies,
-   * never overlap other steps.
+   * Adds a write to the outermost open step, or to the afterMessage that runs. Writes to the instance or copy that an
+   * open step starts, or to its copies, never overlap other steps.
    */
   write(key: string, keyWrite: boolean): void {
-    const access = this.outermost;
     const started = (resource: string | undefined) =>
       resource !== undefined &&
       (key.startsWith(`context:${resource}.`) ||
         key.startsWith(`context:${resource}@`) ||
         key.startsWith(`state:${resource}@`));
-    if (access === undefined || this.openSteps.some(started)) return;
-    (keyWrite ? access.keyWrites : access.writes).add(key);
+    if (this.openSteps.some(started)) return;
+    const access = this.accessing();
+    if (access !== undefined) (keyWrite ? access.keyWrites : access.writes).add(key);
   }
 
   /** Returns the name of each step from step `from` on that began while no step was open, in the order they began. */
@@ -286,15 +320,18 @@ export class Collect
   /** Lean's involved: the footprint of what step `n` stands for when the search swaps its order. */
   private involved(s: State, channels: readonly (readonly [number, string])[], n: number, a: StepAccess): Footprint {
     const message = s.steps[n]?.message;
-    const steps: (readonly [number, StepAccess])[] =
-      s.steps[n]?.tie === undefined ? [[n, a]] : [...this.steps].filter(([k]) => s.steps[k]?.message === message);
+    const tied = s.steps[n]?.tie !== undefined;
+    const steps: (readonly [number, StepAccess])[] = tied
+      ? [...this.steps].filter(([k]) => s.steps[k]?.message === message)
+      : [[n, a]];
     const numbers = new Set(steps.map(([k]) => k));
     const f: Footprint = {
       reads: new Set(),
       writes: new Set(channels.filter(([t]) => numbers.has(t)).map(([, c]) => c)),
       keyWrites: new Set(),
     };
-    for (const [, x] of steps) {
+    const after = tied && message !== undefined ? this.afters.get(message) : undefined;
+    for (const x of [...(after === undefined ? [] : [after]), ...steps.map(([, x]) => x)]) {
       for (const v of x.reads) f.reads.add(v);
       for (const v of x.writes) f.writes.add(v);
       for (const v of x.keyWrites) f.keyWrites.add(v);
@@ -362,9 +399,13 @@ function sameMade(keys: Keys, a: readonly [unknown, readonly string[]], b: reado
   const entities = (created: readonly string[]) => canonicalJson(created.toSorted(byCodePoint));
   if (entities(a[1]) !== entities(b[1])) return false;
   if (a[1].length === 0) return text(a[0]) === text(b[0]);
-  const given = givenKeys(keys, a[1]);
-  const domains = new Map(given.map(([entity, key]) => [key, entity]));
-  const values = { domain: (s: string) => domains.get(s) ?? "", fresh: new Set(domains.keys()) };
+  const domains = new Map(givenKeys(keys, a[1]).map(([entity, key]) => [key, entity]));
+  const others = new Map(givenKeys(keys, b[1]).map(([entity, key]) => [key, entity]));
+  const values = {
+    domain: (s: string) => domains.get(s) ?? "",
+    fresh: new Set(domains.keys()),
+    image: (s: string, t: string) => others.get(t) === domains.get(s),
+  };
   const found = matchValue(values, emptyBinding, madeValue(plain(unbagged(a[0]))), madeValue(plain(unbagged(b[0]))));
   return found !== undefined && found.length > 0;
 }

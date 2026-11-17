@@ -12,7 +12,7 @@ import type { Json } from "../src/data/values.ts";
 import type { Placed, ViolationValue } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 import { simulateSpec, snapshotsOf } from "../src/sim/spec/simulate.ts";
-import { verifyLines } from "../src/verify/compare.ts";
+import { verifying, verifyLines } from "../src/verify/compare.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
 import { readSnapshotViolations, unknownAfters } from "../src/verify/lines.ts";
 import {
@@ -54,7 +54,7 @@ interface Case {
 
 function violationCountOfBoth({ spec, service, snapshot }: Case, trace: readonly unknown[], at: string): number {
   const lines = parseFileLines(trace);
-  const { found: ts, bindings } = verifyLines(spec, service, snapshot, lines);
+  const { found: ts, bindings } = verifyLines(spec, service, snapshot, lines, verifying);
   assert.deepEqual(
     lean.verify(spec, service, snapshot, lines, new VerifyFunctions(spec)),
     { findings: ts.map(value), bindings: bindings.map((b) => [...b]) },
@@ -459,7 +459,7 @@ describe("Content comparison", () => {
       answer("a2", "seenIds#2", ["x", "y"], ["y"]),
     ];
     assert.equal(violationCountOfBoth(created, trace, "named later"), 0);
-    const { bindings } = verifyLines(created.spec, "todo", created.snapshot, parseFileLines(trace));
+    const { bindings } = verifyLines(created.spec, "todo", created.snapshot, parseFileLines(trace), verifying);
     assert.deepEqual(
       bindings.map((b) => [b.get("Seen-1"), b.get("Seen-2")]),
       [["y", "x"]],
@@ -472,7 +472,7 @@ describe("Content comparison", () => {
       assert.ok(base !== undefined, name);
       const trace = readTrace(join(verifyRoot, example, "traces", base.service, `${name}.jsonl`));
       assert.equal(violationCountOfBoth(base, trace, name), 0, name);
-      return verifyLines(base.spec, base.service, base.snapshot, parseFileLines(trace)).bindings;
+      return verifyLines(base.spec, base.service, base.snapshot, parseFileLines(trace), verifying).bindings;
     };
     const keys = (example: string, name: string, ...snapshotKeys: string[]) =>
       ended(example, name).map((b) => snapshotKeys.map((k) => b.get(k)));
@@ -502,7 +502,7 @@ describe("Content comparison", () => {
       answer("a2", "seenIds#2", ["x", "x"], ["x"]),
     ];
     assert.ok(violationCountOfBoth(created, trace, "reused key") > 0);
-    const found = verifyLines(created.spec, created.service, created.snapshot, parseFileLines(trace)).found;
+    const found = verifyLines(created.spec, created.service, created.snapshot, parseFileLines(trace), verifying).found;
     assert.deepEqual(
       found.map((f) => f.kind),
       ["Mismatch.output"],
@@ -531,7 +531,7 @@ describe("Content comparison", () => {
     ]);
     const trace = [addTask("addTask#1", 1), { ...nextDay("r2"), time: later }, nextDay("r1")];
     assert.equal(violationCountOfBoth(byTime, trace, "time"), 0);
-    const { bindings } = verifyLines(byTime.spec, "todo", byTime.snapshot, parseFileLines(trace));
+    const { bindings } = verifyLines(byTime.spec, "todo", byTime.snapshot, parseFileLines(trace), verifying);
     assert.deepEqual(
       bindings.map((b) => [b.get("calendar.nextDay#1"), b.get("calendar.nextDay#2")]),
       [["r1", "r2"]],
@@ -584,6 +584,7 @@ describe("Content comparison", () => {
       "todo",
       differently.snapshot,
       parseFileLines(trace("2026-10-27T00:00:00Z")),
+      verifying,
     );
     assert.deepEqual(
       found.map((f) => [f.kind, f.line, f.data]),

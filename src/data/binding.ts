@@ -94,15 +94,22 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   !(v instanceof Runs) &&
   !(v instanceof Ref);
 
-/** Lean's Values: the domain of each snapshot value (valueDomains), and the fresh values so far. */
+/**
+ * Lean's Values: the domain of each snapshot value (valueDomains), the fresh values so far, and which values `image`
+ * lets a fresh value stand for.
+ */
 export interface Values {
   readonly domain: (s: string) => string;
   readonly fresh: ReadonlySet<string>;
+  readonly image: (s: string, t: string) => boolean;
 }
+
+/** Lean's Values.binds. */
+export const binds = (v: Values, s: string, t: string): boolean => v.fresh.has(s) && v.image(s, t);
 
 /** Lean's Values.bind. */
 export const bind = (v: Values, b: Binding, s: string, t: string): Matches => {
-  const c = bindString(v.fresh.has(s), b, bound(v.domain(s), s), bound(v.domain(s), t));
+  const c = bindString(binds(v, s, t), b, bound(v.domain(s), s), bound(v.domain(s), t));
   return c === undefined ? [] : [c];
 };
 

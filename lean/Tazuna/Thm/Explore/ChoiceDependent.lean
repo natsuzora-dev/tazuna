@@ -6,7 +6,7 @@ open Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Sim
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] (compare : Compare m)
 
-theorem difference_same (o : Explore.Outcome) (set : List Binding) (h : compare o.lines o.lines = pure (.ok set))
+theorem difference_same (o : Explore.Outcome) (set : List Binding) (h : compare (o.renaming o) o.lines o.lines = pure (.ok set))
     (hr : sameRecords set o o = true) :
     difference compare o o = pure none := by
   unfold difference

@@ -66,7 +66,7 @@ def Causes.notice (c : Causes) : Note → Causes
     { c with events := (groups.foldl (fun (events, start) n => (events.push (step, start, n), start + n))
         (c.events, start)).1 }
   | .read .. | .transitionPart _ | .microstepEnds _ | .stepBegins .. | .stepEnds | .settlesAround _ | .readStates _ | .wroteState ..
-  | .wroteCopies .. | .wroteShown .. => c
+  | .wroteCopies .. | .wroteShown .. | .afterMessageBegins _ | .afterMessageEnds => c
 
 /-- For each line, the step that wrote it and the number of its group if it is an event line. -/
 def lineSteps (s : State) (c : Causes) : Array (Option (Nat × Nat)) :=

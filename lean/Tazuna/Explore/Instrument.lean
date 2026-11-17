@@ -148,6 +148,10 @@ structure Collect where
   openSteps : List (Option String) := []
   /-- The step number and access of each step that began while no step was open, in the order they began. -/
   steps : Array (Nat × StepAccess) := #[]
+  /-- The message whose afterMessage runs, while it runs. -/
+  afterMessage : Option Nat := none
+  /-- For each message, the values that its afterMessage read: subscription answers, holds, invariants, and rearm. -/
+  afters : List (Nat × Footprint) := []
   violations : List Violation := []
   causes : Causes := {}
 deriving Repr, Inhabited
@@ -190,7 +194,16 @@ def startedValue (openSteps : List (Option String)) (key : String) : Bool :=
     | some r => key.startsWith s!"context:{r}." || key.startsWith s!"context:{r}@" || key.startsWith s!"state:{r}@"
     | none => false
 
+/--
+`c` with `f` added to the outermost open step, or, while no step is open, to the afterMessage that runs. Other accesses
+outside any step, such as answering a query input, change nothing that a later message observes.
+-/
 def Collect.stepAccess (c : Collect) (f : Footprint) : Collect :=
+  if c.openSteps.isEmpty then
+    match c.afterMessage with
+    | some m => { c with afters := (m, ((c.afters.lookup m).getD {}).union f) :: c.afters.filter (·.1 != m) }
+    | none => c
+  else
   let opened := c.openSteps
   c.modifyOutermost fun a =>
     { a with access := a.access.union { f with writes := f.writes.filter (!startedValue opened ·),
@@ -231,6 +244,8 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
     | .wroteShown r slot => c.stepAccess { writes := [shownKey r slot] }
     | .transitionPart k => { c with transition := some k }
     | .microstepEnds check => c.checkRegions check
+    | .afterMessageBegins message => { c with afterMessage := some message }
+    | .afterMessageEnds => { c with afterMessage := none }
     | n => { c with causes := c.causes.notice n }
 
 /-- The functions that ask `fs` and carry each answer into `n` by `f`. -/
@@ -358,7 +373,10 @@ def sameMade (keys : Keys) (a b : Value × List String) : Bool :=
   sortedTexts a.2 == sortedTexts b.2 &&
     if a.2.isEmpty then a.1.canonical == b.1.canonical else
     let given := givenKeys keys a.2
-    let v : Values := { domain := fun s => ((given.find? (·.2 == s)).map (·.1)).getD "", fresh := given.map (·.2) }
+    let entityOf (keys : List (String × String)) (s : String) := (keys.find? (·.2 == s)).map (·.1)
+    let other := givenKeys keys b.2
+    let v : Values := { domain := fun s => (entityOf given s).getD "", fresh := given.map (·.2),
+                        image := fun s t => entityOf other t == entityOf given s }
     match matchValue v .empty (madeValue a.1) (madeValue b.1) with
     | some (_ :: _) => true
     | _ => false
@@ -397,12 +415,12 @@ def instrument : Functions (StateT Collect m) :=
     ensures := fun name input before after now =>
       audit (pure ()) (st.ref name) "ensures" (·.ensures name input before after now) (· == ·)
     queryEnsures := fun name input output records =>
-      audit (pure ()) (st.ref name) "queryEnsures" (·.queryEnsures name input output records) (· == ·)
+      audit (collect none) (st.ref name) "queryEnsures" (·.queryEnsures name input output records) (· == ·)
     resultEnsures := fun target input output events =>
       audit (pure ()) (st.refOf target) "resultEnsures" (·.resultEnsures target input output events) (· == ·)
     invariant := fun entity record => audit (pure ()) (st.ref entity) "invariant" (·.invariant entity record) (· == ·)
     chartInvariant := fun scope records =>
-      audit (pure ()) (st.ref scope.machine) "chartInvariant" (·.chartInvariant scope records) (· == ·)
+      audit (collect (some scope)) (st.ref scope.machine) "chartInvariant" (·.chartInvariant scope records) (· == ·)
     resolve := fun name input records now =>
       observe (fs.resolve name input records now) (resolveCollect st fs ifs name input records now)
     react := fun name payload records now keys =>
@@ -417,7 +435,8 @@ def instrument : Functions (StateT Collect m) :=
         fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)
     input := fun scope records a keys =>
       audit (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
-    holds := fun scope records => audit (pure ()) (st.ref scope.machine) "holds" (·.holds scope records) fun _ _ => true
+    holds := fun scope records =>
+      audit (collect (some scope)) (st.ref scope.machine) "holds" (·.holds scope records) fun _ _ => true
     items := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
         fun a b => textSet (a.map (·.2)) == textSet (b.map (·.2))
@@ -466,19 +485,21 @@ def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × String
 
 /--
 The footprint of what step `n` stands for when the search swaps its order (one independence relation for every choice
-of order): a deadline of a tie stands for every step of its own message, since its effects run in the later steps of
-that message, and any other step for itself. Each channel that those steps wrote (channelWrites) is a write, since one
-channel keeps its order (Sim.ordered). Keys that the steps create are not in it, since test compares outcomes up
-to a renaming of created keys.
+of order): a deadline of a tie stands for its whole message, since its effects run in the later steps of that message
+and the state at the end of the message is observed before the next deadline fires, so the reads of its afterMessage
+count too; any other step stands for itself. Each channel that those steps wrote (channelWrites) is a write, since one
+channel keeps its order (Sim.ordered). Keys that the steps create are not in it, since test compares outcomes up to a
+renaming of created keys.
 -/
 def involved (s : State) (c : Collect) (channels : List (Nat × String)) (n : Nat) (a : StepAccess) : Footprint :=
   let message := s.steps[n]?.map (·.message)
-  let steps := if (s.steps[n]?.bind (·.tie)).isSome then
-      c.steps.toList.filter fun (k, _) => s.steps[k]?.map (·.message) == message
-    else [(n, a)]
+  let (steps, after) := if (s.steps[n]?.bind (·.tie)).isSome then
+      (c.steps.toList.filter fun (k, _) => s.steps[k]?.map (·.message) == message,
+        (message.bind (c.afters.lookup ·)).getD {})
+    else ([(n, a)], {})
   let numbers := steps.map (·.1)
   steps.foldl (fun f (_, x) => f.union x.access)
-    { writes := (channels.filter fun (t, _) => numbers.contains t).map (·.2) }
+    (after.union { writes := (channels.filter fun (t, _) => numbers.contains t).map (·.2) })
 
 /-- The footprint (involved) of each step of `c.steps`, by position. -/
 def footprints (st : Service) (s : State) (c : Collect) : Array Footprint :=

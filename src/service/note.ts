@@ -80,6 +80,9 @@ export interface Note {
   wroteShown(resource: string, slot: string): void;
   transitionPart(part: number): void;
   microstepEnds(check: RegionCheck): void;
+  /** Reports the start of the checks and subscription answers after message `message`, which no step runs. */
+  afterMessageBegins(message: number): void;
+  afterMessageEnds(): void;
   readRecord(part: RecordPart): void;
   /** Reports a write of `part`. `keyWrite` is true when a created or deleted record writes the entity's key set. */
   wroteRecord(part: RecordPart, keyWrite: boolean): void;
