@@ -74,6 +74,7 @@ Precedent: model checkers such as Stateright, which model the network as a set o
 A line refers to a fact of an earlier line only through the handle that the line returned and the content it picks, never by a position or a count, because a count changes whenever a line is added before it.
 When a handle matches more than one fact, pick by content, as in `add.request(calendar.nextBusinessDay, { input: { from: "2026-10-25" } })`.
 Never write a key that a participant creates: read it through a handle, such as the `output` of the answer that holds it, and write `created()` in a running peer's message where its run creates the key.
+Loading reports a value in the form of a created key (`<service>/<Entity>-<n>`) in Given or on a line as `Malformed.writtenCreatedKey`.
 Send a request again with `w.client.resend(line)`, and a new input under the id of an earlier line with `w.client.send(command, input, { sameIdAs: line })`.
 
 Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.

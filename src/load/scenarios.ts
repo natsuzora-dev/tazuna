@@ -3,12 +3,13 @@ import { fileURLToPath } from "node:url";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Malformed } from "../data/malformed.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
-import { plain } from "../data/values.ts";
+import { plain, stringsOf } from "../data/values.ts";
 import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
 import { instant, type LoweringProblem, lower } from "../scenario/lower.ts";
+import { isKeyOf } from "../syntax/structure.ts";
 import type { Found } from "./found.ts";
 
 export interface LoadedScenario {
@@ -31,6 +32,26 @@ function placeInStack(root: string, stack: string | undefined): Place | undefine
       column: Number(match[3] ?? match[6]),
     };
   }
+  return undefined;
+}
+
+/**
+ * The first string of `value` in the form of a key that a spec service creates (`<service>/<Entity>-<n>` of a keyed
+ * entity), with that entity. A scenario never writes such a key: it reads one through a handle, and a running peer's
+ * answer writes `created()`.
+ */
+function writtenKey(
+  services: Services,
+  value: unknown,
+): { readonly key: string; readonly entity: DefinitionRef } | undefined {
+  for (const key of stringsOf(value))
+    for (const [service, { definition }] of services) {
+      if (definition.external) continue;
+      const entity = Object.entries(definition.entities).find(
+        ([name, e]) => !e.single && isKeyOf(`${service}/${name}`, key),
+      )?.[0];
+      if (entity !== undefined) return { key, entity: { service, name: entity } };
+    }
   return undefined;
 }
 
@@ -106,6 +127,17 @@ export function loadScenarios(
       return owner === undefined ? undefined : serviceNames.get(owner);
     });
     const linePlaces = lowered.stacks.map((s) => placeInStack(root, s));
+    const givenKey = writtenKey(services, [definition.given.records, peers]);
+    if (givenKey !== undefined)
+      report({ kind: "Malformed.writtenCreatedKey", definition: null, scenario: ref, data: givenKey });
+    lowered.lines.forEach((line, i) => {
+      const found = writtenKey(services, line);
+      if (found !== undefined)
+        report(
+          { kind: "Malformed.writtenCreatedKey", definition: null, scenario: ref, data: found },
+          linePlaces[i] ?? place,
+        );
+    });
     for (const p of lowered.problems) {
       const line = lineOf(p);
       report(loweringMalformed(ref, p), (line === undefined ? undefined : linePlaces[line]) ?? place);

@@ -31,6 +31,9 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `unknownPeer`: Given lists as a peer the own service's contract or no contract (null).
  * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`; a peer is keyed by its
  *   service name.
+ * - `writtenCreatedKey`: the scenario writes, in Given or on a line, `key`, a value in the form of a key that a spec
+ *   service creates of `entity` (`<service>/<Entity>-<n>`); a scenario reads a created key through a handle, and a
+ *   running peer's answer writes `created()`. The report is at the line, or at the scenario for Given.
  * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
  * - `misusedObserved`: the line `input` of the scenario uses the observed value at the field `path` of a handle in the
  *   way `use` (LoweringProblem's ObservedUse) instead of placing it whole in a value; the value exists only when the
@@ -65,6 +68,9 @@ export type Malformed =
   | (Of<"unparsableTime", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
   | (Of<"unknownPeer", null, { readonly service: string | null }> & { readonly scenario: DefinitionRef })
   | (Of<"misnamedPeer", null, { readonly name: string; readonly service: string }> & {
+      readonly scenario: DefinitionRef;
+    })
+  | (Of<"writtenCreatedKey", null, { readonly key: string; readonly entity: DefinitionRef }> & {
       readonly scenario: DefinitionRef;
     })
   | (Of<"lineAfterWhen", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })

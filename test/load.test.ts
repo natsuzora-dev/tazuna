@@ -17,6 +17,7 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.duplicateService": true,
   "Malformed.unknownService": true,
   "Malformed.reservedNameCharacter": true,
+  "Malformed.writtenCreatedKey": true,
   "Malformed.duplicateName": true,
   "Malformed.alias": true,
   "Malformed.opaqueCollection": true,
