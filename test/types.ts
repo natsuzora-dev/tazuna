@@ -9,7 +9,14 @@ import { taskDetailScreen } from "../samples/todo/spec/screens/taskDetailScreen.
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
 import { addTask, completeTask, setReminder } from "../samples/todo/spec/todo/commands.ts";
 import { todo as todoPeer } from "../samples/todo/spec/todo/contract.ts";
-import { automation, command, query, Settings, Task } from "../samples/todo/spec/todo/data.ts";
+import {
+  automation,
+  command,
+  query,
+  Settings,
+  scenario as scenarioOfTodo,
+  Task,
+} from "../samples/todo/spec/todo/data.ts";
 import {
   dueChanged,
   taskAdded,
@@ -1460,4 +1467,24 @@ scenarioOfScreens("types", {
     // @ts-expect-error a requires rejection names a requires condition of the command
     answered(completing, { result: "rejected", rejection: { kind: "requires", reason: "notCompleteddd" } }),
   ],
+});
+
+// An event line's resultOf names the request of a command.
+scenarioOfTodo("types", {
+  given: {
+    start: "2026-10-25T10:00:00+09:00",
+    records: { Task: [], Settings: { shouldRemind: true } },
+    peers: { calendar: external(calendarPeer), device: external(devicePeer) },
+  },
+  when: (w) => {
+    const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
+    const asking = adding.request(devicePeer.requestNotificationPermission);
+    w.net.deliver(asking);
+    w.peer.device.emit(devicePeer.notificationPermissionGranted, {}, { resultOf: asking });
+    const asked = adding.request(calendarPeer.nextBusinessDay);
+    // @ts-expect-error a query has no result events
+    w.peer.device.emit(devicePeer.notificationPermissionGranted, {}, { resultOf: asked });
+    return {};
+  },
+  then: () => [],
 });

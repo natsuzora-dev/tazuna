@@ -359,7 +359,8 @@ type Members<C> = C[keyof C];
 export type RequestOf<C> = Extract<Members<C>, Request>;
 type PayloadArgs<Cs, K extends keyof Cs> =
   Cs[K] extends Control<infer P> ? (keyof P extends never ? [] : [payload: Value<Encoded<P>>]) : [];
-type ResultOf = OutRequest | OutSubscription | RequestLine | null;
+/** The request whose result events an event line names: a command's, since a query has no result. */
+type ResultOf = OutRequest<AnyCommand> | RequestLine<AnyCommand> | null;
 
 /** The names of the peers of `P` that run their spec. */
 type Running<P extends Peers> = { readonly [K in keyof P]: P[K] extends Run ? K : never }[keyof P] & string;

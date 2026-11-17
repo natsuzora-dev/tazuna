@@ -1,0 +1,1 @@
+{"kind":"InvalidInput.resultOfNonCommand","definition":null,"data":{"event":{"service":"calendar","name":"dayChanged"},"requestId":"calendar.nextDay#1","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"agenda/scenarios.ts","line":5},"scenario":{"service":"agenda","name":"changedByQuery"}}

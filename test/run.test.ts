@@ -39,8 +39,6 @@ const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> 
   InvalidInput: {
     "InvalidInput.unownedTarget":
       "Only a data scenario names a target that its receiver does not own (the DSL's types let the client send only the definitions of the service it names); test/sim/Run/network/unownedTarget exemplifies it",
-    "InvalidInput.resultOfNonCommand":
-      "The type of resultOf in an emit line accepts only a request handle of a command",
     "InvalidInput.unlistedRejectionReason":
       "The type of an answer accepts as the reason of a requires rejection only a requires condition of the request",
     "InvalidInput.unknownControl":
