@@ -2,7 +2,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Report } from "../data/report.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer, DeadlineId, TraceLine } from "../data/trace.generated.ts";
-import { byCodePoint, canonicalJson, stringsOf } from "../data/values.ts";
+import { byCodePoint, canonicalJson } from "../data/values.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
@@ -12,8 +12,8 @@ import { restart } from "../service/restart.ts";
 import { accepting, topOf } from "../service/screen/operable.ts";
 import { Halt, write } from "../service/state.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
-import { contractsListing, isKeyOf, refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
-import { given } from "./given.ts";
+import { contractsListing, refOfTraceName, traceNameOfRef } from "../syntax/structure.ts";
+import { given, writtenKey } from "./given.ts";
 import {
   act,
   deliver,
@@ -75,19 +75,6 @@ function reportedHere(report: Parameters<typeof reportTo>[1]): never {
 }
 
 const processingOf = (w: World, service: string): Processing | undefined => w.participants.get(service)?.processing;
-
-/** Lean's World.writtenKey?. */
-function writtenKey(w: World, v: unknown): readonly [string, DefinitionRef] | undefined {
-  for (const x of stringsOf(v)) {
-    const parts = x.split("/");
-    const [owner, key] = parts;
-    if (parts.length !== 2 || owner === undefined || key === undefined) continue;
-    const st = w.participants.get(owner)?.processing.st;
-    const entity = st?.entities.find((e) => !st.singles.includes(e) && isKeyOf(e, key));
-    if (st !== undefined && entity !== undefined) return [x, ref(st, entity)];
-  }
-  return undefined;
-}
 
 const hasCreated = (t: Template): boolean => t.holes.some((h) => h.fill.type === "created");
 

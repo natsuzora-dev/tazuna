@@ -44,6 +44,21 @@ export type Report =
         readonly key: string | null;
       };
     }
+  /**
+   * Given's record of `entity` with `key` of the running service `service` holds `written`, of the form of a key of
+   * `created` that a running service creates: a created key exists only once the run creates it.
+   */
+  | {
+      readonly kind: "Report.writtenGivenKey";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly entity: string;
+        readonly key: string | null;
+        readonly written: string;
+        readonly created: DefinitionRef;
+      };
+    }
   /** The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values. */
   | {
       readonly kind: "Report.duplicateRecord";
@@ -342,6 +357,7 @@ export const reportKinds = [
   "Report.repeatedPeer",
   "Report.unlistedPeer",
   "Report.invalidRecord",
+  "Report.writtenGivenKey",
   "Report.duplicateRecord",
   "Report.brokenGivenInvariant",
   "Report.unresolvedReference",

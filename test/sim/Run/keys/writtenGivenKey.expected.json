@@ -1,0 +1,33 @@
+{
+  "participants": [
+    {
+      "service": "notes",
+      "lines": [],
+      "violations": [],
+      "candidates": []
+    },
+    {
+      "service": "tags",
+      "lines": [],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "reports": [
+    {
+      "kind": "Report.writtenGivenKey",
+      "definition": null,
+      "data": {
+        "service": "notes",
+        "entity": "Note",
+        "key": "notes/Note-1",
+        "written": "notes/Note-1",
+        "created": {
+          "service": "notes",
+          "name": "Note"
+        }
+      }
+    }
+  ],
+  "halted": null
+}

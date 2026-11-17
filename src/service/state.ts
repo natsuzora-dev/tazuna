@@ -283,8 +283,8 @@ export interface State {
   readonly steps: StepInfo[];
   /** The number of messages begun. Messages are numbered from 1. */
   messageCount: number;
-  /** The createKey values and the names of their entities, in creation order. */
-  readonly created: (readonly [string, string])[];
+  /** Lean's State.createdEntities: the entities that createKey was called for, in call order. */
+  readonly createdEntities: string[];
   /** Lean's State.keyOwner. */
   keyOwner: string | undefined;
   /** The subscriptions that other services opened, in opening order. */
@@ -318,7 +318,7 @@ export function newState(st: Service): State {
     lineCounts: new Map(),
     steps: [],
     messageCount: 0,
-    created: [],
+    createdEntities: [],
     keyOwner: undefined,
     subscriptions: new Subscriptions(),
     results: new Map(),
@@ -359,28 +359,30 @@ export function awaitAnswer(
   s.turn += 1;
 }
 
+/** Lean's State.created: the createKey values with their entity, in creation order. */
+export function created(s: State): [string, string][] {
+  return givenKeys({ ...(s.keyOwner === undefined ? {} : { owner: s.keyOwner }), next: [] }, s.createdEntities);
+}
+
 function keyCount(s: State, entity: string): number {
-  return s.created.filter(([e]) => e === entity).length;
+  return s.createdEntities.filter((e) => e === entity).length;
 }
 
 /** Returns the number of createKey values of each entity, in first-creation order. */
 export function keyCounts(s: State): [string, number][] {
-  return [...new Set(s.created.map(([e]) => e))].map((e) => [e, keyCount(s, e)]);
+  return [...new Set(s.createdEntities)].map((e) => [e, keyCount(s, e)]);
 }
 
-/**
- * Returns what createKey returns next for each entity that has a createKey value: `<entity>-<n>` for the entity's
- * `n`-th createKey value, qualified by `keyOwner`.
- */
+/** Lean's State.nextKeys: what createKey returns next for each entity that has a createKey value. */
 export function nextKeys(s: State): Keys {
   return {
     ...(s.keyOwner === undefined ? {} : { owner: s.keyOwner }),
-    next: [...new Set(s.created.map(([e]) => e))].map((e) => [e, { count: keyCount(s, e) }] as const),
+    next: [...new Set(s.createdEntities)].map((e) => [e, { count: keyCount(s, e) }] as const),
   };
 }
 
 export function createKeys(s: State, entities: readonly string[]): void {
-  s.created.push(...givenKeys(nextKeys(s), entities));
+  s.createdEntities.push(...entities);
 }
 
 export function newMessage(s: State): void {

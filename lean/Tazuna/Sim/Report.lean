@@ -28,6 +28,11 @@ inductive Report where
   single entity or none for a keyed one, or that does not match the entity's schema.
   -/
   | invalidRecord (service entity : String) (key : Option String)
+  /--
+  Given's record of `entity` with `key` of the running service `service` holds `written`, of the form of a key of
+  `created` that a running service creates: a created key exists only once the run creates it.
+  -/
+  | writtenGivenKey (service entity : String) (key : Option String) (written : String) (created : Syntax.Ref)
   /-- The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values. -/
   | duplicateRecord (service entity : String) (key : Option String)
   /--
@@ -122,7 +127,7 @@ def Report.halts : Report → Bool
   | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight .. | .awaitingAnswer .. | .unmetExpectation ..
   | .notLook .. => false
   | .repeatedPeer .. | .unlistedPeer .. | .invalidRecord .. | .duplicateRecord .. | .brokenGivenInvariant .. => false
-  | .missingRecord .. => false
+  | .missingRecord .. | .writtenGivenKey .. => false
   | _ => true
 
 end Tazuna.Sim

@@ -1,12 +1,13 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Report } from "../data/report.generated.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
-import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, stringsOf } from "../data/values.ts";
 import { ref, type Service, uniqueOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { type Row, recordSource } from "../service/records.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
+import { isKeyOf } from "../syntax/structure.ts";
 import { noteTo, type Participant, type Role, type World } from "./network.ts";
 
 /** Lean's staticPeers. */
@@ -115,9 +116,23 @@ function clash(st: Service, a: GivenRow, b: GivenRow): boolean {
   );
 }
 
+/** Lean's World.writtenKey?. */
+export function writtenKey(w: World, v: unknown): readonly [string, DefinitionRef] | undefined {
+  for (const x of stringsOf(v))
+    for (const [owner, { processing }] of w.participants) {
+      const { st } = processing;
+      const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(`${owner}/${e}`, x));
+      if (entity !== undefined) return [x, ref(st, entity)];
+    }
+  return undefined;
+}
+
+type Written = (v: unknown) => readonly [string, DefinitionRef] | undefined;
+
 /** Lean's givenRows. */
 function givenRows(
   r: Processing,
+  written: Written,
   service: string,
   records: readonly GivenRecord[],
 ): { readonly rows: GivenRow[]; readonly reports: Report[] } {
@@ -128,6 +143,15 @@ function givenRows(
     const invalid = () => reports.push({ kind: "Report.invalidRecord", definition: null, data });
     if (!r.st.entities.includes(g.entity) || r.st.singles.includes(g.entity) !== (g.key === undefined)) {
       invalid();
+      continue;
+    }
+    const found = written([...(g.key === undefined ? [] : [g.key]), g.value]);
+    if (found !== undefined) {
+      reports.push({
+        kind: "Report.writtenGivenKey",
+        definition: null,
+        data: { ...data, written: found[0], created: found[1] },
+      });
       continue;
     }
     const checked = r.functions.parse({ kind: "record", entity: ref(r.st, g.entity) }, g.value);
@@ -169,10 +193,10 @@ function givenInvariants(r: Processing, service: string, rows: readonly GivenRow
 
 /**
  * The Given records of the running service `service`, each with its value encoded as the service's records hold it;
- * records that World.given reports are left out.
+ * records that are invalid or clash with an earlier one are left out.
  */
 export function encodedGivenRecords(r: Processing, sc: Scenario, service: string): GivenRecord[] {
-  return givenRows(r, service, givenRecords(sc, service)).rows.map(({ entity, key, row }) => ({
+  return givenRows(r, () => undefined, service, givenRecords(sc, service)).rows.map(({ entity, key, row }) => ({
     entity,
     ...(key === undefined ? {} : { key }),
     value: row.encoded,
@@ -191,7 +215,7 @@ export function given(w: World, structure: Structure, sc: Scenario): void {
       noteTo(w, { kind: "Report.unlistedPeer", definition: null, data: { service } });
   for (const [service, { processing: r }] of w.participants) {
     const written = givenRecords(sc, service);
-    const { rows, reports } = givenRows(r, service, written);
+    const { rows, reports } = givenRows(r, (v) => writtenKey(w, v), service, written);
     const { records } = r.state;
     for (const row of rows)
       if (row.key === undefined) records.singles.set(row.entity, row.row);

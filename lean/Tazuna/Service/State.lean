@@ -178,8 +178,8 @@ structure State where
   steps : Array StepInfo := #[]
   /-- The number of messages begun; messages are numbered from 1. -/
   messageCount : Nat := 0
-  /-- The createKey values with their entity, in creation order. -/
-  created : List (String × String) := []
+  /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
+  createdEntities : List String := []
   /-- The participant of a simulation that the service is, whose name qualifies its createKey values (Keys). -/
   keyOwner : Option String := none
   /-- The subscriptions that other services opened, in opening order. -/
@@ -205,18 +205,20 @@ def State.await (s : State) (body : LineBody) (requester : Requester) (activity 
   let (s, id) := s.write .out none body
   { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }] }
 
-def State.keyCount (s : State) (entity : String) : Nat := (s.created.filter (·.1 == entity)).length
-
 /--
-What createKey returns next for each entity that has a createKey value: `<entity>-<n>` for the entity's `n`-th createKey
-value, qualified by `keyOwner`.
+The createKey values with their entity, in creation order: the `n`-th value of an entity is `<entity>-<n>`, qualified by
+`keyOwner`. Deriving them from the entities alone keeps any two of them apart.
 -/
+def State.created (s : State) : List (String × String) := givenKeys { owner := s.keyOwner } s.createdEntities
+
+def State.keyCount (s : State) (entity : String) : Nat := (s.createdEntities.filter (· == entity)).length
+
+/-- What createKey returns next for each entity that has a createKey value: its value after the entity's last one. -/
 def State.nextKeys (s : State) : Keys :=
-  { owner := s.keyOwner,
-    next := (s.created.map (·.1)).eraseDups.map fun e => (e, { count := s.keyCount e }) }
+  { owner := s.keyOwner, next := s.createdEntities.eraseDups.map fun e => (e, { count := s.keyCount e }) }
 
 def State.createKeys (s : State) (entities : List String) : State :=
-  { s with created := s.created ++ givenKeys s.nextKeys entities }
+  { s with createdEntities := s.createdEntities ++ entities }
 
 def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
 

@@ -227,11 +227,11 @@ deriving Repr, Inhabited
 
 derive_wire ServiceInfo
 
-/-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e`. -/
+/-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e`: `n` > 0 in decimal digits. -/
 def isKeyOf (e v : String) : Bool :=
-  match (v.drop (e.length + 1)).toNat? with
-  | some n => 0 < n && v == s!"{e}-{n}"
-  | none => false
+  let head := e.toList ++ ['-']
+  let digits := v.toList.drop head.length
+  v.toList.take head.length == head && !digits.isEmpty && digits.all Char.isDigit && digits.head? != some '0'
 
 /-- The whole spec without function bodies and source locations, as TS `structureOf` writes it. -/
 structure Structure where

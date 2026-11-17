@@ -6,6 +6,7 @@ import type { Spec } from "../../load/load.ts";
 import { Collect } from "../../observe/instrument.ts";
 import { snapshotLines } from "../../observe/trace.ts";
 import type { Processing } from "../../service/chart/queue.ts";
+import { created } from "../../service/state.ts";
 import type { Structure } from "../../syntax/structure.generated.ts";
 import { encodedGivenRecords, start } from "../given.ts";
 import type { StepOrder, World } from "../network.ts";
@@ -67,7 +68,7 @@ export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, rea
           s.steps,
           s.messageCount,
           causes,
-          s.created.map(([, key]) => key),
+          created(s).map(([, key]) => key),
         ),
       ];
     }),

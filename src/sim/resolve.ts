@@ -5,6 +5,7 @@ import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
 import { refOf, type Schema } from "../service/basic.ts";
 import { Failed } from "../service/functions.ts";
+import { created } from "../service/state.ts";
 import { refOfTraceName } from "../syntax/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
 import { nameIn } from "./participant.ts";
@@ -329,6 +330,7 @@ export function markCreated(t: Template, v: unknown): unknown {
 /** Lean's World.maskCreated. */
 export function maskCreated(w: World, peer: string, t: Template, filled: unknown, actual: unknown): unknown {
   const named = new Set(t.holes.flatMap((h) => (h.fill.type === "ref" ? stringsOf(valueAt(filled, h.path)) : [])));
-  const created = new Set(stateOf(w, peer)?.created.map(([, key]) => key) ?? []);
-  return mapStrings(actual, (x) => (created.has(x) && !named.has(x) ? createdMark : x));
+  const s = stateOf(w, peer);
+  const keys = new Set(s === undefined ? [] : created(s).map(([, key]) => key));
+  return mapStrings(actual, (x) => (keys.has(x) && !named.has(x) ? createdMark : x));
 }

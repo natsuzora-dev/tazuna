@@ -1,0 +1,24 @@
+{
+  "service": "notes",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [
+      {
+        "entity": "Note",
+        "key": "notes/Note-1",
+        "value": {
+          "id": "notes/Note-1"
+        }
+      }
+    ],
+    "peers": [
+      {
+        "service": "tags",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [],
+  "expectations": []
+}

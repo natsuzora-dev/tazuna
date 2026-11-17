@@ -76,17 +76,27 @@ records of an entity as a bag, so the order they are written in reaches nothing.
 def givenRecords (sc : Scenario) (service : String) : List GivenRecord :=
   (writtenRecords sc service).mergeSort recordBefore
 
+/--
+The first string of `v` of the form `<participant>/<e>-<n>` of a key of the keyed entity `e` that the running
+participant creates, with the entity.
+-/
+def World.writtenKey? (w : World) (v : Value) : Option (String × Syntax.Ref) :=
+  v.strings.findSome? fun x => w.services.findSome? fun (owner, st) =>
+    (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf s!"{owner}/{e}" x).map fun e => (x, st.ref e)
+
 variable {m : Type → Type} [Monad m]
 
 /--
-Given's records of `service` as rows, each parsed by its entity's schema, with the reports of those that are invalid or
-clash with an earlier one, which no row holds.
+Given's records of `service` as rows, each parsed by its entity's schema, with the reports of those that are invalid,
+write a created key that `written` finds, or clash with an earlier one, which no row holds.
 -/
-def givenRows (st : Service) (fs : Functions m) (service : String) (records : List GivenRecord) :
-    m (Records × List Report) :=
+def givenRows (st : Service) (fs : Functions m) (written : Value → Option (String × Syntax.Ref)) (service : String)
+    (records : List GivenRecord) : m (Records × List Report) :=
   records.foldlM (init := ([], [])) fun (rows, reports) g => do
     let invalid := (rows, reports ++ [Report.invalidRecord service g.entity g.key])
     if !st.entities.contains g.entity || st.singles.contains g.entity != g.key.isNone then return invalid
+    if let some (key, e) := written (.arr ((g.key.map Value.str).toList ++ [g.value])) then
+      return (rows, reports ++ [.writtenGivenKey service g.entity g.key key e])
     match ← fs.parse (.record g.entity) g.value with
     | .ok (some value) =>
       let row : Row := { entity := g.entity, key := g.key, value }
@@ -110,7 +120,7 @@ def givenInvariants (fs : Functions m) (service : String) (rows : Records) : m (
 /--
 The world with each running service's Given records, or with what Given gets wrong: a peer listed twice or the own
 service listed as one, a peer of the static peer list left out, and for each running service, invalid or clashing
-records, a single entity without a record, and else failing invariants.
+records, records that write a created key, a single entity without a record, and else failing invariants.
 -/
 def World.given (w : World) (j : Syntax.Structure) (fsOf : String → Functions m) (sc : Scenario) : m World := do
   let listed := sc.given.peers.map (·.service)
@@ -121,7 +131,7 @@ def World.given (w : World) (j : Syntax.Structure) (fsOf : String → Functions 
   w.services.foldlM (init := w) fun w (service, st) => do
     let fs := fsOf service
     let records := givenRecords sc service
-    let (rows, reports) ← givenRows st fs service records
+    let (rows, reports) ← givenRows st fs w.writtenKey? service records
     let missing := (st.singles.filter fun e => !records.any (·.entity == e)).map (Report.missingRecord service ·)
     let broken ← if reports.isEmpty && missing.isEmpty then givenInvariants fs service rows else pure []
     let w := (reports ++ missing ++ broken).foldl World.note w

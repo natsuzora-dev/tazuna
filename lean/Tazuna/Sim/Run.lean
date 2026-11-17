@@ -37,15 +37,6 @@ def comparedAnswerValue (fs : Functions m) (target : String) (v : Value) : m Val
   | .ok a => comparedAnswer fs target a
   | .error _ => pure v
 
-/-- The first string of `v` of the form `<participant>/<key>` of a key of an entity of a running participant. -/
-def World.writtenKey? (w : World) (v : Value) : Option (String × Syntax.Ref) :=
-  v.strings.findSome? fun x =>
-    match x.splitOn "/" with
-    | [owner, key] =>
-      (w.services.lookup owner).bind fun st =>
-        (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf e key).map fun e => (x, st.ref e)
-    | _ => none
-
 /--
 What the values that a line or an expectation of `line` writes report: `created()` that is not `allowed` at the top or
 that a pick writes, or a created key written as a literal.
