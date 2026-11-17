@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "../../data/definitionRef.ts";
-import { sameTrigger, type Trigger } from "../../data/transitionRef.ts";
+import type { Trigger } from "../../data/transitionRef.generated.ts";
 import {
   type ActivityStructure,
   type ChartStructure,
@@ -138,4 +138,20 @@ export function executableChart(c: ChartStructure, service: string, order: numbe
       hasPayload: schemaProperties(payload).length > 0,
     })),
   };
+}
+
+function sameTrigger(a: Trigger, b: Trigger): boolean {
+  switch (a.type) {
+    case "always":
+    case "onDone":
+      return b.type === a.type;
+    case "after":
+      return b.type === "after" && b.deadline === a.deadline;
+    case "on":
+    case "opens":
+      return b.type === a.type && b.key === a.key;
+    case "calls":
+    case "sends":
+      return b.type === a.type && b.key === a.key && b.outcome === a.outcome;
+  }
 }

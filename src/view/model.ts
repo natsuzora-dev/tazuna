@@ -5,7 +5,7 @@ import { type JsonSchema, jsonSchema } from "../data/jsonSchema.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { type MalformedLine, senderOf } from "../data/trace.ts";
 import { parseSnapshotFile, snapshotPath } from "../data/traceFile.ts";
-import type { TransitionRef } from "../data/transitionRef.ts";
+import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Json, Shape } from "../data/values.ts";
 import { pathOfTrigger } from "../dsl/chart.ts";
 import type { Named } from "../dsl/definition.ts";
@@ -31,7 +31,6 @@ import type {
   ServiceView,
   StateView,
   TransitionView,
-  Trigger,
   ViewModel,
 } from "./types.ts";
 
@@ -63,21 +62,6 @@ const activityKind = (keyword: string): ActivityView["kind"] =>
 
 const activityView = (a: ActivityStructure): ActivityView => ({ ...a, kind: activityKind(a.keyword) });
 
-function trigger(chart: ChartStructure, t: TransitionStructure): Trigger {
-  const tr = t.trigger;
-  switch (tr.type) {
-    case "on":
-      return { type: Object.hasOwn(chart.controls, tr.key) ? "control" : "event", name: tr.key };
-    case "calls":
-    case "sends":
-      return { type: "answer", keyword: tr.type, name: tr.key, answer: tr.outcome, kind: activityKind(tr.type) };
-    case "opens":
-      return { type: "answer", keyword: "opens", name: tr.key, answer: "onDone", kind: "screen" };
-    default:
-      return tr;
-  }
-}
-
 function transitionId({ state, trigger, index }: TransitionRef): string {
   return `${pathOfTrigger(trigger).join(".")}[${index}] in ${state ?? "root"}`;
 }
@@ -86,7 +70,7 @@ function chartView(name: string, chart: ChartStructure): StateView {
   const transitionView = (t: TransitionStructure): TransitionView => ({
     ...t,
     id: transitionId(transitionRef(t)),
-    trigger: trigger(chart, t),
+    control: t.trigger.type === "on" && Object.hasOwn(chart.controls, t.trigger.key),
     path: pathOfTrigger(t.trigger),
   });
   const tree = ({ children, activities, transitions, ...state }: StateStructure): StateView => ({

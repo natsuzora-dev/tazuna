@@ -28,18 +28,6 @@ def leadsTo (s : State) (earlier later : Nat) : Bool :=
     | none => false
 termination_by later
 
-/--
-The channel that an `out` line travels on, seen from its sender (Sim's Message.sameChannel, whose receiver a trace line
-does not name): a request and its end travel to the request's receiver on the request's own channel, the answers to a
-received request travel back to its sender, and events travel to their receivers on the channel of their `resultOf`,
-or on the sender's channel when they name none. A line that no sender writes `out` travels on none.
--/
-inductive Channel where
-  | request (id : String)
-  | answers (request : String)
-  | events (resultOf : Option String)
-deriving DecidableEq, Repr
-
 def channelOf (l : Line) : Option Channel :=
   match l.body with
   | .command .. | .query .. | .subscribe .. => some (.request l.id)

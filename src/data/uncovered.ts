@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "./definitionRef.ts";
-import type { TransitionRef } from "./transitionRef.ts";
+import type { TransitionRef } from "./transitionRef.generated.ts";
 
 type Of<Kind extends string, Data> = {
   readonly kind: Kind;

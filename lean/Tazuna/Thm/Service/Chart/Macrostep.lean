@@ -18,7 +18,7 @@ theorem records_change_settles (s : State) (groups : List (List Emit)) (cause : 
     (hm : i ∈ s.machines) (hc : i.closed = false) :
     ∃ received, Work.receive i.id received cause ∈ reactions st s groups true cause := by
   refine ⟨(groups.map fun g => g.flatMap fun e =>
-      (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)).filter (!·.isEmpty),
+      (i.chart.receives.filter (·.2 == e.event)).map fun r => { key := r.1, payload := e.payload : Received }).filter (!·.isEmpty),
     List.mem_append_left _ (List.mem_filterMap.mpr ⟨i, hm, ?_⟩)⟩
   simp [machineWork, hc]
 
@@ -74,7 +74,7 @@ theorem keeps_dispatch (step : Nat) (name : InstanceId) (key : String) (payload 
         · rfl
         · exact keeps_microstep step name _ _ r
 
-theorem keeps_receiveWork (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) :
+theorem keeps_receiveWork (step : Nat) (name : InstanceId) (groups : List (List Received)) :
     Keeps (receiveWork fs st step name groups) := by
   intro r
   unfold receiveWork
@@ -195,7 +195,7 @@ theorem growsBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payloa
         · exact Grows.refl _
         · exact growsBy_microstep step name _ _ r
 
-theorem growsBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) :
+theorem growsBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List Received)) :
     GrowsBy (receiveWork fs st step name groups) := by
   intro r
   unfold receiveWork

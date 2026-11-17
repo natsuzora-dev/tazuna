@@ -199,7 +199,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       pure (← field r "context", optional r "copy", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   input scope records a keys := do
     let reply ← ask stdin stdout reads memo reversed service records
-      (.obj [("type", .str "input"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a), ("keys", nextKeys keys)])
+      (.obj [("type", .str "input"), ("scope", Scope.toValue scope), ("activity", ToValue.toValue a), ("keys", nextKeys keys)])
     IO.ofExcept (issueOr reply fun r => do
       pure (← field r "input", ← (← asList (← field r "created")).mapM FromValue.fromValue))
   holds scope records := do
@@ -225,7 +225,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     IO.ofExcept (issueOr reply fun r => do asList (← field r "payloads"))
   showInput scope records a := do
     let reply ← ask stdin stdout reads memo reversed service records
-      (.obj [("type", .str "showInput"), ("scope", Scope.toValue scope), ("activity", Activity.toValue a)])
+      (.obj [("type", .str "showInput"), ("scope", Scope.toValue scope), ("activity", ToValue.toValue a)])
     IO.ofExcept (issueOr reply (field · "input"))
   items scope records := do
     let reply ← ask stdin stdout reads memo reversed service records (.obj [("type", .str "items"), ("scope", Scope.toValue scope)])

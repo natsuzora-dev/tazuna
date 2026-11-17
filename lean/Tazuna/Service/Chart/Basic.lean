@@ -33,6 +33,8 @@ inductive Activity where
   | opens (key : String) (target : Ref) (modal : Bool)
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Tazuna.Service.Activity tag "keyword"
+
 def Activity.key : Activity → String
   | .calls key _ | .sends key _ | .shows key _ | .opens key _ _ => key
 

@@ -1,4 +1,4 @@
-import type { TransitionRef, Trigger } from "../data/transitionRef.ts";
+import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
 import type { ChartStructure } from "../spec/structure.ts";
 import { pathOf } from "../spec/tree.ts";
 import type { ChartSpec, Definition, StateSpec, TransitionSpec } from "./definition.ts";

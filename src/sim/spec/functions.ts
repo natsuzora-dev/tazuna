@@ -4,7 +4,7 @@ import { comparableAnswer, comparable as comparableOf, orderFree } from "../../d
 import { bag, bagged, defaultRow, sorted, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import type { TransitionRef } from "../../data/transitionRef.ts";
+import type { TransitionRef } from "../../data/transitionRef.generated.ts";
 import {
   canonicalJson,
   encode,
@@ -35,6 +35,7 @@ import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../../
 import type { Spec } from "../../load/load.ts";
 import { traceName } from "../../load/traceName.ts";
 import { type Schema, type Service, serviceOf } from "../../service/basic.ts";
+import type { Activity } from "../../service/chart/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -686,7 +687,7 @@ export class SpecFunctions implements Functions {
   input(
     scope: Scope,
     records: RecordSource,
-    { keyword, key }: { readonly keyword: string; readonly key: string },
+    activity: Activity,
     keys: Keys,
     access: Access,
   ): { readonly written: Json; readonly created: readonly string[] } | Failed {
@@ -694,8 +695,13 @@ export class SpecFunctions implements Functions {
     const node = this.node(chartOf(scope.id), this.stateOf(scope));
     const { createKey, created } = this.keysFrom(keys);
     const args = () => this.args(scope, records, access);
+    const { key } = activity;
     let given: Json | Failed;
-    switch (keyword) {
+    switch (activity.keyword) {
+      case "shows": {
+        const shown = this.showInput(scope, records, activity, access);
+        return shown instanceof Failed ? shown : { written: shown, created };
+      }
       case "calls": {
         const query = chart.queries?.[key] as AnyQuery;
         given = this.writtenInput(query.input, node?.calls?.[key]?.input, args);
@@ -706,7 +712,7 @@ export class SpecFunctions implements Functions {
           this.args(scope, records, access, { createKey }),
         );
         break;
-      default: {
+      case "opens": {
         const screen = chart.screens?.[key] as unknown as ChartSpec;
         given = this.writtenInput(screen.input ?? {}, node?.opens?.[key]?.input, args);
       }
@@ -769,12 +775,7 @@ export class SpecFunctions implements Functions {
     return checked;
   }
 
-  showInput(
-    scope: Scope,
-    records: RecordSource,
-    { key }: { readonly keyword: string; readonly key: string },
-    access: Access,
-  ): Json | Failed {
+  showInput(scope: Scope, records: RecordSource, { key }: Activity, access: Access): Json | Failed {
     const query = this.chartOf(chartOf(scope.id)).named.definition.queries?.[key] as AnyQuery;
     const f = this.node(chartOf(scope.id), this.stateOf(scope))?.shows?.[key]?.input;
     return this.writtenInput(query.input, f, () => this.args(scope, records, access));

@@ -1,6 +1,6 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { StepName } from "../data/step.generated.ts";
-import type { TransitionRef } from "../data/transitionRef.ts";
+import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Obligation } from "../data/uncovered.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import { chartOf, type InstanceId, instanceName } from "./instance.ts";
@@ -15,8 +15,25 @@ export interface RecordPart {
   readonly field?: string;
 }
 
+/** Lean's Channel: the channel that an `out` line travels on, seen from its sender (channelOf). */
+export type Channel =
+  | { readonly kind: "request"; readonly id: string }
+  | { readonly kind: "answers"; readonly request: string }
+  | { readonly kind: "events"; readonly resultOf: string | null };
+
+export function sameChannel(a: Channel, b: Channel): boolean {
+  switch (a.kind) {
+    case "request":
+      return b.kind === "request" && b.id === a.id;
+    case "answers":
+      return b.kind === "answers" && b.request === a.request;
+    case "events":
+      return b.kind === "events" && b.resultOf === a.resultOf;
+  }
+}
+
 /**
- * Lean's ValueKey (Explore/Instrument.lean): a value that steps read and write. Being in a state also stands for the copy set of a map state, and
+ * Lean's ValueKey: a value that steps read and write. Being in a state also stands for the copy set of a map state, and
  * a channel for the order of the lines on it.
  */
 export type ValueKey =
@@ -24,7 +41,7 @@ export type ValueKey =
   | { readonly kind: "context"; readonly id: InstanceId; readonly field: string }
   | { readonly kind: "state"; readonly id: InstanceId; readonly state: string }
   | { readonly kind: "shown"; readonly id: InstanceId; readonly slot: string }
-  | { readonly kind: "channel"; readonly channel: string };
+  | { readonly kind: "channel"; readonly channel: Channel };
 
 /** The one string form of a key, which the footprints' sets and the evaluation cache hold. It is a JSON array. */
 export function valueName(k: ValueKey): string {

@@ -1,4 +1,4 @@
-import type { Trigger } from "../../data/transitionRef.ts";
+import type { Trigger } from "../../data/transitionRef.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";

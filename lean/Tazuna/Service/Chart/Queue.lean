@@ -34,7 +34,7 @@ inductive Work where
   An evaluation of a machine. `groups` holds the key and payload of each matching `receives`, in the groups of the
   events, and is empty when only records changed. One step takes one event; the next group waits for the current one.
   -/
-  | receive (machine : InstanceId) (groups : List (List (String × Value))) (cause : Nat)
+  | receive (machine : InstanceId) (groups : List (List Received)) (cause : Nat)
   | onDone (machine : InstanceId) (cause : Nat)
   /-- The close in a final state of a screen that `opens` opened; the opener takes the `onDone` of its `opens`. -/
   | opensDone (machine : InstanceId) (state key : String) (output : Value) (serial : Nat) (cause : Nat)
@@ -164,7 +164,7 @@ def withMachine [Monad m] (name : InstanceId) (f : Instance → Processing → m
 /-- The evaluation work of instance `i`. A record change alone also causes it, since always guards may read records. -/
 def machineWork (groups : List (List Emit)) (recordsChanged : Bool) (cause : Nat) (i : Instance) : Option Work :=
   let received := (groups.map fun g => g.flatMap fun e =>
-    (i.chart.receives.filter (·.2 == e.event)).map fun r => (r.1, e.payload)).filter (!·.isEmpty)
+    (i.chart.receives.filter (·.2 == e.event)).map fun r => { key := r.1, payload := e.payload : Received }).filter (!·.isEmpty)
   if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.id received cause)
 
 /-- The reaction work of automation `a`. -/

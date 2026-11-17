@@ -31,7 +31,7 @@ import {
 import { settle, settled } from "./always.ts";
 import { type Activity, answerTrigger, isOwn, type Transition, transitionsAt } from "./basic.ts";
 import { enter, microstep } from "./microstep.ts";
-import { commandWork, type Processing, type Ready, type Received, take, type Work, workLeft } from "./queue.ts";
+import { commandWork, type Processing, type Ready, type ReceivedEvent, take, type Work, workLeft } from "./queue.ts";
 import { sendEntered } from "./request.ts";
 import { choose, leavesOf, reaches, select } from "./select.ts";
 
@@ -66,7 +66,7 @@ function workName(r: Processing, work: Work): StepName {
       const e = work.groups[0]?.[0];
       return e === undefined
         ? { kind: "always", id: work.machine }
-        : { kind: "receive", id: work.machine, received: { key: e.key, payload: e.encoded } };
+        : { kind: "receive", id: work.machine, received: { key: e.key, payload: e.payload } };
     }
     case "onDone":
       return { kind: "onDone", id: work.machine };
@@ -129,11 +129,16 @@ export function dispatch(r: Processing, name: InstanceId, key: string, payload: 
 }
 
 /** Lean's receiveWork: processes the first event of the work; without one it only settles. */
-function receiveWork(r: Processing, name: InstanceId, groups: readonly (readonly Received[])[], step: number): void {
+function receiveWork(
+  r: Processing,
+  name: InstanceId,
+  groups: readonly (readonly ReceivedEvent[])[],
+  step: number,
+): void {
   const e = groups[0]?.[0];
   if (e === undefined) return;
   settle(r, name, step);
-  dispatch(r, name, e.key, e.payload, step);
+  dispatch(r, name, e.key, e.decoded, step);
 }
 
 function done(r: Processing, name: InstanceId, n: string, step: number): void {

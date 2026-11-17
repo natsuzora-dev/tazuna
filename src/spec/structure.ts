@@ -1,6 +1,6 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Answer, RejectionKind } from "../data/trace.generated.ts";
-import type { TransitionRef, Trigger } from "../data/transitionRef.ts";
+import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
 import type { Structure } from "./structure.generated.ts";
 
 export type DefinitionStructure = Structure["definitions"][number];

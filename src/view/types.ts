@@ -1,6 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { MalformedLine } from "../data/trace.ts";
+import type { Trigger } from "../data/transitionRef.generated.ts";
 import type { Json } from "../data/values.ts";
 import type { ActivityStructure, DefinitionStructure, StateStructure, TransitionStructure } from "../spec/structure.ts";
 
@@ -67,27 +68,17 @@ export interface StateView extends Omit<StateStructure, "children" | "activities
 /** An activity whose `kind` is what it requests or opens. */
 export type ActivityView = ActivityStructure & { readonly kind: "query" | "command" | "screen" };
 
-/** A transition. `path` is the keys under which its state writes its transition array. */
-export type TransitionView = Omit<TransitionStructure, "trigger"> & {
+/**
+ * A transition. `control` is whether its trigger is an `on` key that names a control of the chart. `path` is the keys
+ * under which its state writes its transition array.
+ */
+export type TransitionView = TransitionStructure & {
   readonly id: string;
-  readonly trigger: Trigger;
+  readonly control: boolean;
   readonly path: readonly string[];
 };
 
-/** What fires a transition, as the viewer labels it. An `on` key is a control when the chart has a control of that name. */
-export type Trigger =
-  | { readonly type: "event"; readonly name: string }
-  | { readonly type: "control"; readonly name: string }
-  | { readonly type: "after"; readonly deadline: string }
-  | { readonly type: "always" }
-  | { readonly type: "onDone" }
-  | {
-      readonly type: "answer";
-      readonly keyword: string;
-      readonly name: string;
-      readonly answer: string;
-      readonly kind: ActivityView["kind"];
-    };
+export type { Trigger };
 
 export interface ScenarioView {
   readonly service: string;

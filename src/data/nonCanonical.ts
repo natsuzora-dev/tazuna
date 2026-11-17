@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "./definitionRef.ts";
-import type { TransitionRef, Trigger } from "./transitionRef.ts";
+import type { TransitionRef, Trigger } from "./transitionRef.generated.ts";
 
 type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
   readonly kind: `NonCanonical.${Name}`;

@@ -2,7 +2,7 @@ import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, sorted } from "../../src/data/collections.ts";
 import type { Answer } from "../../src/data/trace.generated.ts";
-import type { Trigger } from "../../src/data/transitionRef.ts";
+import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import {
   canonicalJson,
   encode as encodeArrays,
@@ -17,6 +17,7 @@ import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
 import { refOfDefinition } from "../../src/load/traceName.ts";
 import type { Schema } from "../../src/service/basic.ts";
+import type { Activity } from "../../src/service/chart/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -551,7 +552,7 @@ export class RunFunctions implements Answering {
         );
       }
       case "input": {
-        const activity = message["activity"] as { keyword: string; key: string };
+        const activity = message["activity"] as Activity;
         const keys = keysOf(message["keys"]);
         return this.scoped(message, (scope, access) =>
           this.replied(this.functions.input(scope, this.records, activity, keys, access), ({ written, created }) => ({
@@ -583,7 +584,7 @@ export class RunFunctions implements Answering {
           })),
         );
       case "showInput": {
-        const activity = message["activity"] as { keyword: string; key: string };
+        const activity = message["activity"] as Activity;
         return this.scoped(message, (scope, access) =>
           this.replied(this.functions.showInput(scope, this.records, activity, access), (input) => ({ input })),
         );

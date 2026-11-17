@@ -34,7 +34,7 @@ def Work.name (st : Service) : Work → StepName
   | .reaction a _ _ => .reaction a.name (st.refOf a.receives) .null
   | .answered c _ _ => .answer c.activity.ref c.requester c.input
   | .start name _ => .start name
-  | .receive name (((key, payload) :: _) :: _) _ => .receive name { key, payload }
+  | .receive name ((e :: _) :: _) _ => .receive name e
   | .receive name _ _ => .always name
   | .onDone name _ => .onDone name
   | .opensDone name state key _ _ _ => .opensDone name state key
@@ -92,10 +92,10 @@ def dispatch (st : Service) (step : Nat) (name : InstanceId) (key : String) (pay
     | .ok chosen => microstep fs st step name chosen (.payload payload) r
 
 /-- The processing of the first event of the receive work `groups` of `name`; none only settles. -/
-def receiveWork (st : Service) (step : Nat) (name : InstanceId) (groups : List (List (String × Value)))
+def receiveWork (st : Service) (step : Nat) (name : InstanceId) (groups : List (List Received))
     (r : Processing) : m Processing :=
   match groups with
-  | ((key, payload) :: _) :: _ => do dispatch fs st step name key payload (← settle fs st step name r)
+  | (e :: _) :: _ => do dispatch fs st step name e.key e.payload (← settle fs st step name r)
   | _ => pure r
 
 def done (st : Service) (step : Nat) (name : InstanceId) (n : String) : Processing → m Processing :=

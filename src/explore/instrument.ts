@@ -5,10 +5,11 @@ import { Bag } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
-import type { TransitionRef } from "../data/transitionRef.ts";
+import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
+import type { Activity } from "../service/chart/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -22,7 +23,15 @@ import {
 } from "../service/functions.ts";
 import { chartOf, type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
-import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
+import {
+  type Channel,
+  type Note,
+  type RegionCheck,
+  type RegionPair,
+  sameStep,
+  type ValueKey,
+  valueName,
+} from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
@@ -305,7 +314,7 @@ export class Collect
   }
 
   /** Lean's channelWrites: each channel that a compared event line writes, with the step of `steps` that wrote it. */
-  private channelWrites(st: Service, s: State): (readonly [number, string])[] {
+  private channelWrites(st: Service, s: State): (readonly [number, Channel])[] {
     const lines = lineSteps(s.lines.length, this.causes);
     const tops = [...this.steps.keys()];
     return s.lines.flatMap((l, i) => {
@@ -318,7 +327,7 @@ export class Collect
   }
 
   /** Lean's involved: the footprint of what step `n` stands for when the search swaps its order. */
-  private involved(s: State, channels: readonly (readonly [number, string])[], n: number, a: StepAccess): Footprint {
+  private involved(s: State, channels: readonly (readonly [number, Channel])[], n: number, a: StepAccess): Footprint {
     const message = s.steps[n]?.message;
     const tied = s.steps[n]?.tie !== undefined;
     const steps: (readonly [number, StepAccess])[] = tied
@@ -610,13 +619,7 @@ export class InstrumentedFunctions implements Functions {
       },
     );
   }
-  input(
-    scope: Scope,
-    records: RecordSource,
-    activity: { readonly keyword: string; readonly key: string },
-    keys: Keys,
-    access: Access,
-  ) {
+  input(scope: Scope, records: RecordSource, activity: Activity, keys: Keys, access: Access) {
     return this.chartAudited(scope, access, "input", (fs, a) => fs.input(scope, records, activity, keys, a), {
       same: (x, y) => sameMade(keys, [x.written, x.created], [y.written, y.created]),
     });
@@ -645,12 +648,7 @@ export class InstrumentedFunctions implements Functions {
       (payloads) => textSet(payloads.map((p) => canonicalJson(p.encoded))),
     );
   }
-  showInput(
-    scope: Scope,
-    records: RecordSource,
-    activity: { readonly keyword: string; readonly key: string },
-    access: Access,
-  ) {
+  showInput(scope: Scope, records: RecordSource, activity: Activity, access: Access) {
     return this.chartAudited(
       scope,
       access,

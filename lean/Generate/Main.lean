@@ -45,8 +45,10 @@ def tsTypes : List TsType :=
    ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Rejection, "Rejection", some "./trace.generated.ts"⟩,
    ⟨``Tazuna.Data.Time, "string", none⟩,
-   ⟨``Tazuna.Spec.TransitionRef, "TransitionRef", some "./transitionRef.ts"⟩,
-   ⟨``Tazuna.Spec.Trigger, "Trigger", some "../data/transitionRef.ts"⟩,
+   ⟨``Tazuna.Spec.CallOutcome, "CallOutcome", some "../data/transitionRef.generated.ts"⟩,
+   ⟨``Tazuna.Spec.SendOutcome, "SendOutcome", some "../data/transitionRef.generated.ts"⟩,
+   ⟨``Tazuna.Spec.TransitionRef, "TransitionRef", some "../data/transitionRef.generated.ts"⟩,
+   ⟨``Tazuna.Spec.Trigger, "Trigger", some "../data/transitionRef.generated.ts"⟩,
    ⟨``Tazuna.Service.InstanceId, "InstanceId", some "./step.generated.ts"⟩,
    ⟨``Tazuna.Service.Requester, "Requester", some "./step.generated.ts"⟩,
    ⟨``Tazuna.Service.Received, "Received", some "./step.generated.ts"⟩,
@@ -102,7 +104,8 @@ def value (type : Name) : StateT (List (String × String)) MetaM String := do
       (← ctors.mapM fun c => do object (← dataFields c.ctor c.fields) "      " [(tag.name, c.name)])
   | .object ctor fields =>
     return doc ++ s!"export type {type.getString!} = {← object (← dataFields ctor fields) "  "};\n"
-  | _ => throwError "{type}: a group's data has only untagged, tagged and object types"
+  | .enum ctors => return doc ++ s!"export type {type.getString!} = {" | ".intercalate (ctors.map fun c => s!"\"{c.name}\"")};\n"
+  | _ => throwError "{type}: a group's data has only enum, untagged, tagged and object types"
 
 def group (type : Name) : StateT (List (String × String)) MetaM String := do
   let ctors ← constructors type
@@ -356,6 +359,8 @@ def files : List (String × String) :=
    ("data/bagOrderDependent.generated.ts", typescript% Tazuna.Explore.BagOrderDependent),
    ("data/choiceDependent.generated.ts",
     typescript% Tazuna.Explore.ChoiceDependent Tazuna.Explore.Difference Tazuna.Explore.Assigned),
+   ("data/transitionRef.generated.ts",
+    types% Tazuna.Spec.CallOutcome Tazuna.Spec.SendOutcome Tazuna.Spec.Trigger Tazuna.Spec.TransitionRef),
    ("data/step.generated.ts",
     types% Tazuna.Service.InstanceId Tazuna.Service.Requester Tazuna.Service.Received Tazuna.Service.StepName),
    ("data/trace.generated.ts",

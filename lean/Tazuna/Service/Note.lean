@@ -13,6 +13,30 @@ inductive RecordPart where
   | field (entity : String) (key : Option String) (name : String)
 deriving DecidableEq, Repr, Inhabited
 
+/--
+The channel that an `out` line travels on, seen from its sender (Sim's Message.sameChannel, whose receiver a trace line
+does not name): a request and its end travel to the request's receiver on the request's own channel, the answers to a
+received request travel back to its sender, and events travel to their receivers on the channel of their `resultOf`,
+or on the sender's channel when they name none. A line that no sender writes `out` travels on none.
+-/
+inductive Channel where
+  | request (id : String)
+  | answers (request : String)
+  | events (resultOf : Option String)
+deriving DecidableEq, Repr
+
+/--
+A value that steps read and write. Being in a state also stands for the copy set of a map state, and a channel for the
+order of the lines on it.
+-/
+inductive ValueKey where
+  | record (part : RecordPart)
+  | context (id : InstanceId) (field : String)
+  | state (id : InstanceId) (state : String)
+  | shown (id : InstanceId) (slot : String)
+  | channel (c : Channel)
+deriving DecidableEq, Repr, Inhabited
+
 structure RegionPair where
   first : Nat
   second : Nat

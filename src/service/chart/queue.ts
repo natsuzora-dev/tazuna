@@ -1,6 +1,6 @@
-import type { Requester, StepName } from "../../data/step.generated.ts";
+import type { Received, Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
-import type { Fields, Json } from "../../data/values.ts";
+import type { Fields } from "../../data/values.ts";
 import type { Automation, Service } from "../basic.ts";
 import type { InstanceId } from "../instance.ts";
 import type { Emitted } from "../message.ts";
@@ -21,11 +21,8 @@ export interface Sent {
   readonly cause: number;
 }
 
-export interface Received {
-  readonly key: string;
-  readonly payload: unknown;
-  readonly encoded: Json;
-}
+/** Lean's Received, with the payload also decoded, which only TS has. */
+export type ReceivedEvent = Received & { readonly decoded: unknown };
 
 /** Work for the internal queue. `cause` is the step that caused the work. */
 export type Work =
@@ -46,7 +43,7 @@ export type Work =
   | {
       readonly kind: "receive";
       readonly machine: InstanceId;
-      readonly groups: readonly (readonly Received[])[];
+      readonly groups: readonly (readonly ReceivedEvent[])[];
       readonly cause: number;
     }
   | { readonly kind: "onDone"; readonly machine: InstanceId; readonly cause: number }
@@ -211,7 +208,7 @@ function machineWork(
       g.flatMap((e) =>
         instance.chart.receives
           .filter(([, event]) => event === e.event)
-          .map(([key]): Received => ({ key, payload: e.payload, encoded: e.encoded })),
+          .map(([key]): ReceivedEvent => ({ key, payload: e.encoded, decoded: e.payload })),
       ),
     )
     .filter((g) => g.length > 0);

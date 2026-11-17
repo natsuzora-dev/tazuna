@@ -321,7 +321,7 @@ theorem dispatch_agrees (step : Nat) (name : InstanceId) (key : String) (payload
   unfold dispatch
   agree [eventLeaves_agrees h, select_agrees h, microstep_agrees h]
 
-theorem receiveWork_agrees (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) (r : Processing) :
+theorem receiveWork_agrees (step : Nat) (name : InstanceId) (groups : List (List Received)) (r : Processing) :
     Agrees (receiveWork fsI st step name groups r) (receiveWork fs st step name groups r) := by
   unfold receiveWork; split <;> agree [dispatch_agrees h, settle_agrees h]
 

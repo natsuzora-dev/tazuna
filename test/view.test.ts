@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { viewModel } from "../src/view/model.ts";
-import type { StateView, Trigger } from "../src/view/types.ts";
+import type { StateView, TransitionView } from "../src/view/types.ts";
 import { checkedRoot } from "./examples.ts";
 
 test("The model that viewModel builds from samples/todo/spec holds, for each service, its kind, its description, the services whose contracts it uses, and the number of definitions of each kind", async () => {
@@ -108,17 +108,18 @@ function chartLines(state: StateView, depth = 0): string[] {
     state.initial === null ? "" : `initial ${state.initial}`,
     ...state.activities.map((r) => `${r.keyword} ${r.kind} ${r.name}`),
   ];
-  const trigger = (t: Trigger) => {
-    if (t.type === "event" || t.type === "control") return `${t.type} ${t.name}`;
+  const trigger = ({ trigger: t, control }: TransitionView) => {
+    if (t.type === "on") return `${control ? "control" : "event"} ${t.key}`;
     if (t.type === "after") return `after ${t.deadline}`;
-    if (t.type === "answer") return `${t.keyword} ${t.name} ${t.answer}`;
+    if (t.type === "calls" || t.type === "sends") return `${t.type} ${t.key} ${t.outcome}`;
+    if (t.type === "opens") return `opens ${t.key} onDone`;
     return t.type;
   };
   return [
     "  ".repeat(depth) + head.filter((part) => part !== "").join(" "),
     ...state.transitions.map(
       (t) =>
-        `${"  ".repeat(depth + 1)}${trigger(t.trigger)}${t.guards.map((g) => ` [${g}]`).join("")} -> ${t.target ?? "-"}${t.reenter ? " reenter" : ""} as ${t.id}`,
+        `${"  ".repeat(depth + 1)}${trigger(t)}${t.guards.map((g) => ` [${g}]`).join("")} -> ${t.target ?? "-"}${t.reenter ? " reenter" : ""} as ${t.id}`,
     ),
     ...state.states.flatMap((child) => chartLines(child, depth + 1)),
   ];

@@ -14,18 +14,6 @@ namespace Tazuna.Explore
 open Tazuna.Data Tazuna.Service Tazuna.Sim
 
 /--
-A value that steps read and write. Being in a state also stands for the copy set of a map state, and a channel for the
-order of the lines on it.
--/
-inductive ValueKey where
-  | record (part : RecordPart)
-  | context (id : InstanceId) (field : String)
-  | state (id : InstanceId) (state : String)
-  | shown (id : InstanceId) (slot : String)
-  | channel (c : Channel)
-deriving DecidableEq, Repr, Inhabited
-
-/--
 The values that a step reads and writes. `keyWrites` holds the key sets of entities, which creating or deleting a record
 writes.
 -/

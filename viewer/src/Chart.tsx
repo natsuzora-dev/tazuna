@@ -46,9 +46,10 @@ const activityId = (state: StateView, r: ActivityView) => `activity:${state.path
 
 export function transitionText(t: TransitionView): string {
   const trigger = (tr: Trigger) => {
-    if (tr.type === "event" || tr.type === "control") return tr.name;
+    if (tr.type === "on") return tr.key;
     if (tr.type === "after") return `after ${tr.deadline}`;
-    if (tr.type === "answer") return `${tr.name}.${tr.answer}`;
+    if (tr.type === "calls" || tr.type === "sends") return `${tr.key}.${tr.outcome}`;
+    if (tr.type === "opens") return `${tr.key}.onDone`;
     return tr.type;
   };
   return [trigger(t.trigger), ...(t.guards.length === 0 ? [] : [`[${t.guards.join(", ")}]`])].join(" ");
@@ -59,9 +60,19 @@ export function transitionText(t: TransitionView): string {
  */
 export const activityText = (r: ActivityView) => `${r.keyword === "shows" ? "do" : "entry"} / ${r.keyword} ${r.name}`;
 
-function labelTone(trigger: Trigger): Tone {
-  if (trigger.type === "answer") return trigger.kind;
-  return trigger.type;
+function labelTone({ trigger, control }: TransitionView): Tone {
+  switch (trigger.type) {
+    case "on":
+      return control ? "control" : "event";
+    case "calls":
+      return "query";
+    case "sends":
+      return "command";
+    case "opens":
+      return "screen";
+    default:
+      return trigger.type;
+  }
 }
 
 interface Picking {
@@ -82,12 +93,7 @@ function usePick(id: string) {
 function EdgeLabel({ data: { transition } }: NodeProps<LabelNode>) {
   const { pressed, onClick } = usePick(transitionId(transition));
   return (
-    <button
-      type="button"
-      className={`label t-${labelTone(transition.trigger)}`}
-      aria-pressed={pressed}
-      onClick={onClick}
-    >
+    <button type="button" className={`label t-${labelTone(transition)}`} aria-pressed={pressed} onClick={onClick}>
       {transitionText(transition)}
       {transition.reenter && <span className="reenter"> reenter</span>}
     </button>

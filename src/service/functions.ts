@@ -1,10 +1,11 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import type { TransitionRef } from "../data/transitionRef.ts";
+import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { type Schema, schemaOwner } from "./basic.ts";
+import type { Activity } from "./chart/basic.ts";
 import { type InstanceId, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource, Row } from "./records.ts";
@@ -235,7 +236,7 @@ export interface Functions {
   input(
     scope: Scope,
     records: RecordSource,
-    activity: { readonly keyword: string; readonly key: string },
+    activity: Activity,
     keys: Keys,
     access: Access,
   ): { readonly written: Json; readonly created: readonly string[] } | Failed;
@@ -250,12 +251,7 @@ export interface Functions {
     access: Access,
   ): readonly { readonly value: Fields; readonly encoded: unknown }[] | Failed;
   /** Returns the query input of a shows slot as the sender writes it. */
-  showInput(
-    scope: Scope,
-    records: RecordSource,
-    activity: { readonly keyword: string; readonly key: string },
-    access: Access,
-  ): Json | Failed;
+  showInput(scope: Scope, records: RecordSource, activity: Activity, access: Access): Json | Failed;
   /** Returns each item key, encoded and as canonicalJson of the encoding. The map state takes them as a set. */
   items(
     scope: Scope,

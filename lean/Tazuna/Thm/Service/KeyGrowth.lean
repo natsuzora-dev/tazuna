@@ -422,7 +422,7 @@ theorem keysBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payload
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_microstep _ _ _ _ r | keys_leaf
 
-theorem keysBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List (String × Value))) :
+theorem keysBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List Received)) :
     KeysBy (receiveWork fs st step name groups) := by
   intro r
   unfold receiveWork

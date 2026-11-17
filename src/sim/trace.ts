@@ -1,6 +1,6 @@
 import type { TraceLine } from "../data/trace.generated.ts";
 import { contentOf, steps as windows } from "../data/trace.ts";
-import { canonicalJson } from "../data/values.ts";
+import { type Channel, sameChannel } from "../service/note.ts";
 import type { StepInfo } from "../service/state.ts";
 
 /**
@@ -31,19 +31,19 @@ export function lineSteps(lineCount: number, causes: Causes): (readonly [number,
   return steps;
 }
 
-/** Returns Lean's channelOf as text: the channel that an `out` line travels on, seen from its sender. */
-export function channelOf(l: TraceLine): string | undefined {
+/** Lean's channelOf: the channel that an `out` line travels on, seen from its sender. */
+export function channelOf(l: TraceLine): Channel | undefined {
   switch (l.type) {
     case "command":
     case "query":
     case "subscribe":
-      return canonicalJson(["request", l.id]);
+      return { kind: "request", id: l.id };
     case "unsubscribe":
-      return canonicalJson(["request", l.to]);
+      return { kind: "request", id: l.to };
     case "answer":
-      return canonicalJson(["answers", l.to]);
+      return { kind: "answers", request: l.to };
     case "event":
-      return canonicalJson(["events", l.resultOf ?? null]);
+      return { kind: "events", resultOf: l.resultOf ?? null };
     default:
       return undefined;
   }
@@ -59,8 +59,8 @@ function ordered(
   a: number,
   b: number,
 ): boolean {
-  const channel = channelOf(lines[a] as TraceLine);
-  if (channel === undefined || channel !== channelOf(lines[b] as TraceLine)) return false;
+  const [channel, other] = [channelOf(lines[a] as TraceLine), channelOf(lines[b] as TraceLine)];
+  if (channel === undefined || other === undefined || !sameChannel(channel, other)) return false;
   const [writerA, writerB] = [lineSteps[a], lineSteps[b]];
   return writerA === undefined || writerB === undefined || writerA[1] !== writerB[1];
 }

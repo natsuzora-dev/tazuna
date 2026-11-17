@@ -156,14 +156,6 @@ def Extra.toValue : Extra → Value
   | .output v => .obj [("output", v)]
   | .rejection r => .obj [("rejection", .obj [("kind", ToValue.toValue r.kind)])]
 
-def Activity.toValue (a : Activity) : Value :=
-  let keyword := match a with
-    | .calls .. => "calls"
-    | .sends .. => "sends"
-    | .shows .. => "shows"
-    | .opens .. => "opens"
-  .obj [("keyword", .str keyword), ("key", .str a.key)]
-
 def Emit.decode (v : Value) : Except String Emit := do
   pure { event := ← stringField v "event", payload := ← field v "payload" }
 
