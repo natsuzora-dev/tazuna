@@ -48,6 +48,8 @@ test("tazuna writes the usage to stdout and exits with 0 when no argument, --hel
 test("tazuna writes an error and exits with 2 for an unknown command, a wrong number of arguments, an unknown option, an option without its value, or a missing required option", async () => {
   const cases: [string[], string][] = [
     [["serve", "samples/todo/spec"], "unknown command serve"],
+    [["constructor", "samples/todo/spec"], "unknown command constructor"],
+    [["__proto__", "samples/todo/spec"], "unknown command __proto__"],
     [["check"], "wrong number of arguments for check"],
     [["verify", "samples/todo/spec"], "wrong number of arguments for verify"],
     [["test", "samples/todo/spec", "--updte"], "unknown option --updte for test"],
@@ -138,6 +140,30 @@ test("check and test write an error and exit with 2 when no tsconfig.json is abo
     }
   } finally {
     rmSync(outsideRepository, { recursive: true, force: true });
+  }
+});
+
+test("check, test, and verify write one line with the error and its place and exit with 2 when a spec file throws when imported", async () => {
+  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "import-error-"));
+  writeFileSync(join(project, "broken.ts"), 'throw new Error("no spec here");\n');
+  const folder = relative(root, project);
+  try {
+    for (const args of [
+      ["check", folder],
+      ["test", folder, "--depth", "0"],
+      ["verify", folder, folder],
+    ]) {
+      const { code, out, err } = await run(...args);
+      assert.equal(code, 2);
+      assert.deepEqual(out, []);
+      assert.equal(err.length, 1);
+      assert.match(
+        err[0] ?? "",
+        new RegExp(`^tazuna: cannot load ${folder}: Error: no spec here at \\S*broken\\.ts:1:7\\.$`),
+      );
+    }
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
 });
 

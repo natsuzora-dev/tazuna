@@ -1,8 +1,9 @@
 import { statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import type { ReportedViolation } from "../data/violation.ts";
-import { loadSpec } from "../load/load.ts";
+import { loadSpec, type Spec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
+import { reason } from "../view/load.ts";
 import { check } from "./check.ts";
 import { testSpec, uncoveredOf } from "./test.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
@@ -113,7 +114,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__. check and test first run tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files, and write tsc's output to stderr. If tsc reports an error, check and test stop without checking the spec. If loading the spec finds a Malformed violation, check and test report the violations that loading finds (Malformed, NonCanonical, Restricted) and stop without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, or a tsc that does not finish, is a usage error. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none, and the paths of the snapshots that test --update writes or removes.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__. check and test first run tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files, and write tsc's output to stderr. If tsc reports an error, check and test stop without checking the spec. If loading the spec finds a Malformed violation, check and test report the violations that loading finds (Malformed, NonCanonical, Restricted) and stop without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, or a tsc that does not finish, is a usage error. A spec file that throws when check, test, or verify imports it is a usage error too, reported in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none, and the paths of the snapshots that test --update writes or removes.",
   ),
   ...wrap(
     "",
@@ -146,7 +147,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     return 2;
   };
   const usage = (message: string) => misused(`${message}. Run tazuna --help for usage`);
-  const known = commands[command];
+  const known = Object.hasOwn(commands, command) ? commands[command] : undefined;
   if (known === undefined) return usage(`unknown command ${command}`);
   const options = new Map<string, string>();
   const positional: string[] = [];
@@ -192,7 +193,12 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     if (typeChecked.output !== "") io.error(typeChecked.output.trimEnd());
     if (!typeChecked.passed) return 1;
   }
-  const spec = await loadSpec(resolve(io.cwd, root));
+  let spec: Spec;
+  try {
+    spec = await loadSpec(resolve(io.cwd, root));
+  } catch (error) {
+    return misused(`cannot load ${root}: ${reason(error).replace(/\s+/g, " ").trim()}`);
+  }
   const checked = `Checked ${count(spec.sources.length, "file")}`;
   if (command === "check") return report(io, spec.root, check(spec), checked);
   if (command === "test") {

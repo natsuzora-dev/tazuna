@@ -6,7 +6,7 @@ import type { ViewModel } from "./types.ts";
 export type Loaded = { readonly model: ViewModel } | { readonly error: string };
 
 /** Returns the header lines of Node's error and the first stack frame outside node: internals. */
-function reason(error: unknown): string {
+export function reason(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const lines = (error.stack ?? error.message).split("\n");
   const frames = lines.findIndex((line) => line.startsWith("    at "));

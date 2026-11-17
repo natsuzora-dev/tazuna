@@ -62,7 +62,11 @@ export async function serveViewer(
     timer = setTimeout(reload, settleMs);
   });
   const server = createServer((request, response) => {
-    const url = new URL(request.url ?? "/", "http://localhost");
+    const url = URL.parse(request.url ?? "/", "http://localhost");
+    if (url === null) {
+      response.writeHead(400).end();
+      return;
+    }
     if (url.pathname === "/model.json") {
       if (body === null) {
         response.writeHead(404).end();

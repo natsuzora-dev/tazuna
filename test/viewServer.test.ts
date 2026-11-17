@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { get } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
 import { loadViewModel } from "../src/view/load.ts";
@@ -96,4 +97,24 @@ test("The view server starts even when loading the spec fails at startup, return
       server.close();
     }
   });
+});
+
+test("The view server answers 400 to a request whose path is no URL path, such as //, and keeps serving", async () => {
+  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
+  const viewer = mkdtempSync(join(import.meta.dirname, ".fixtures", "viewer-"));
+  writeFileSync(join(viewer, "index.html"), "");
+  const server = await serveViewer({ root: viewer, path: "viewer", loaded: { error: "unloaded" } }, 0, viewer);
+  try {
+    const status = await new Promise<number | undefined>((resolve, reject) =>
+      get(new URL(server.url), { path: "//" }, (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      }).on("error", reject),
+    );
+    assert.equal(status, 400);
+    assert.equal((await fetch(server.url)).status, 200);
+  } finally {
+    server.close();
+    rmSync(viewer, { recursive: true, force: true });
+  }
 });
