@@ -144,8 +144,8 @@ at load) always answer.
   or a machine or screen instance. A service invariant reads only records, so it fails only by a throw, with the schema
   whose refinement or codec threw.
 - resolve: a query's output.
-- react: the input of the command that an automation sends for an event, as the sender writes it (encoded, not
-  checked), or none when a binds value is null or the guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
+- react: the input of the command that an automation sends for an event, as the sender writes it (only its codecs
+  run, encoding), or none when a binds value is null or the guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
   react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
@@ -153,7 +153,7 @@ at load) always answer.
   opens opened, or `{}` when nothing opens it).
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
-- showInput: the query input of a shows slot, as the sender writes it (encoded, not checked).
+- showInput: the query input of a shows slot, as the sender writes it (only its codecs run, encoding).
 - items: the keys that a map state's items return, encoded and as canonicalJson. The map state takes them as a set.
 - copyContext: a copy's initial context (defaults, checked at load).
 - singleRecord: the initial record of a single entity (defaults, checked at load).
@@ -164,7 +164,7 @@ at load) always answer.
 - assign: the context after the assign, unchanged where there is none. For a copy, copy context fields go to the copy
   and the rest to the owner, and assign returns both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
-  it (encoded, not checked): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
+  it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - holds: the check of a state's holds values against their held schemas.
 - deadlines: a state's `after` deadline names and how each time is set, in declaration order.
 -/

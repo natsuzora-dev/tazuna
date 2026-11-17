@@ -138,19 +138,68 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
 }
 
 /**
- * Returns a value that spec code made for `schema` as its sender writes it to a message: encoded, with each collection
- * as `sorted` orders it. A value that does not encode is written as its JSON, and the receiver's parse rejects it.
+ * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
+ * `sorted` orders it: each codec at any depth encodes its part, and no check or other transform runs, so that only the
+ * receiver parses the value. A part that its codec cannot encode stays as it is.
  */
-export function written(schema: z.ZodType, value: unknown): Json {
-  const ordered = sorted(schema, value);
-  try {
-    const encoded = z.safeEncode(schema, ordered as never);
-    if (encoded.success) return plain(encoded.data);
-  } catch {
-    // A check that throws is the receiver's to run.
+export const written = (schema: z.ZodType, value: unknown): Json => plain(encodedParts(schema, sorted(schema, value)));
+
+function encodedParts(schema: z.ZodType, value: unknown): unknown {
+  const def = schema.def as unknown as Record<string, unknown> & { readonly type: string };
+  const at = (key: string) => def[key] as z.ZodType;
+  switch (def.type) {
+    case "pipe": {
+      const out = encodedParts(at("out"), value);
+      const reverse = def["reverseTransform"] as ((v: unknown, ctx: { issues: unknown[] }) => unknown) | undefined;
+      if (reverse === undefined) return encodedParts(at("in"), out);
+      try {
+        const ctx = { value: out, issues: [] };
+        const wire = reverse(out, ctx);
+        return wire instanceof Promise || ctx.issues.length > 0 ? value : encodedParts(at("in"), wire);
+      } catch {
+        return value;
+      }
+    }
+    case "array":
+      return Array.isArray(value) ? value.map((v) => encodedParts(at("element"), v)) : value;
+    case "tuple": {
+      if (!Array.isArray(value)) return value;
+      const items = def["items"] as readonly z.ZodType[];
+      const rest = def["rest"] as z.ZodType | null;
+      return value.map((v, i) => {
+        const item = items[i] ?? rest;
+        return item ? encodedParts(item, v) : v;
+      });
+    }
+    case "object": {
+      if (!isRecord(value)) return value;
+      const shape = def["shape"] as Readonly<Record<string, z.ZodType>>;
+      const catchall = def["catchall"] as z.ZodType | undefined;
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => {
+          const field = Object.hasOwn(shape, k) ? shape[k] : catchall;
+          return [k, field ? encodedParts(field, v) : v];
+        }),
+      );
+    }
+    case "record":
+      if (!isRecord(value)) return value;
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encodedParts(at("valueType"), v)]));
+    case "union": {
+      const option = (def["options"] as readonly z.ZodType[]).find((o) => z.safeEncode(o, value as never).success);
+      return option === undefined ? value : encodedParts(option, value);
+    }
+    case "intersection":
+      return encodedParts(at("right"), encodedParts(at("left"), value));
+    case "lazy":
+      return encodedParts((def["getter"] as () => z.ZodType)(), value);
+    default:
+      return value != null && def["innerType"] instanceof z.ZodType ? encodedParts(at("innerType"), value) : value;
   }
-  return plain(ordered);
 }
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
 /**
  * Returns a value as `sorted` returns it, as spec code receives it: each bag and set as a Bag, and each sortedBy array as
