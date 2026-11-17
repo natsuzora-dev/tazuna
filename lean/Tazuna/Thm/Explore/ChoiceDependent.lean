@@ -14,9 +14,9 @@ theorem difference_same (o : Explore.Outcome) (set : List Binding) (h : compare 
   · simp
   · simp [h, hr]
 
-theorem stepOrder_swap (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Explore.Outcome)
+theorem stepOrder_swap (service : String) (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Explore.Outcome)
     (h : (ToValue.toValue a).canonical ≠ (ToValue.toValue b).canonical) :
-    stepOrder compare a b aOrder bOrder aFirst bFirst = stepOrder compare b a bOrder aOrder bFirst aFirst := by
+    stepOrder compare service a b aOrder bOrder aFirst bFirst = stepOrder compare service b a bOrder aOrder bFirst aFirst := by
   unfold stepOrder
   by_cases hab : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical
   · have hba : ¬ (ToValue.toValue b).canonical ≤ (ToValue.toValue a).canonical :=
@@ -26,11 +26,11 @@ theorem stepOrder_swap (a b : StepName) (aOrder bOrder : List StepName) (aFirst 
       (String.le_total _ _).resolve_left hab
     simp [hab, hba]
 
-theorem stepOrder_of_no_difference (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Explore.Outcome)
+theorem stepOrder_of_no_difference (service : String) (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Explore.Outcome)
     (ha : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical → difference compare aFirst bFirst = pure .same)
     (hb : ¬ (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical →
       difference compare bFirst aFirst = pure .same) :
-    stepOrder compare a b aOrder bOrder aFirst bFirst = pure none := by
+    stepOrder compare service a b aOrder bOrder aFirst bFirst = pure none := by
   unfold stepOrder
   by_cases h : (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical
   · simp [h, ha h, Comparison.violation]

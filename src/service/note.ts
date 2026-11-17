@@ -1,9 +1,9 @@
-import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { StepName } from "../data/step.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Obligation } from "../data/uncovered.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
-import { type InstanceId, instanceName } from "./instance.ts";
+import { chartOf, type InstanceId, instanceName } from "./instance.ts";
 
 /**
  * A part of the records: the entity's key set when there is no key and no field, the record's existence when there is
@@ -50,15 +50,19 @@ export const sameStep = (a: StepName, b: StepName): boolean => stepKey(a) === st
 /** The key of a sequence of steps. */
 export const stepsKey = (names: readonly StepName[]): string => names.map(stepKey).join("\n");
 
-export function stepNameDefinition(name: StepName): DefinitionRef {
+/** Lean's StepName.definition: the definition of the step, in service `service`. */
+export function stepNameDefinition(service: string, name: StepName): DefinitionRef {
   switch (name.kind) {
     case "reaction":
-      return name.automation;
+      return { service, name: name.automation };
     case "command":
     case "answer":
-      return name.sender.kind === "automation" ? name.sender.automation : name.sender.who.chart;
+      return {
+        service,
+        name: name.sender.kind === "automation" ? name.sender.automation : chartOf(name.sender.machine),
+      };
     default:
-      return name.who.chart;
+      return { service, name: chartOf(name.id) };
   }
 }
 

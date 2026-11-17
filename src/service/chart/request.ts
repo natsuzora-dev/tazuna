@@ -1,6 +1,7 @@
+import type { Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
-import { ref, requirementsOf, type Service, traceNameOf } from "../basic.ts";
+import { ref, requirementsOf, traceNameOf } from "../basic.ts";
 import { firstFalse } from "../contract.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { type InstanceId, ownerId, topId } from "../instance.ts";
@@ -12,16 +13,13 @@ import {
   halt,
   type Instance,
   inStep,
-  instanceWho,
   machine,
   NoteAccess,
   newStep,
   nextKeys,
-  type Requester,
   report,
   scopeOf,
   startQueued,
-  who,
 } from "../state.ts";
 import { type Activity, type Chart, isOwn } from "./basic.ts";
 import { slots } from "./config.ts";
@@ -39,13 +37,12 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
 }
 
 export function newInstance(
-  st: Service,
   chart: Chart,
   id: InstanceId,
   { input, context }: { readonly input: Fields; readonly context: Fields },
   opener: Instance["opener"],
 ): Instance {
-  const fields = {
+  return {
     chart,
     id,
     context,
@@ -58,7 +55,6 @@ export function newInstance(
     ...(opener === undefined ? {} : { opener }),
     copyKeys: new Map(),
   };
-  return { ...fields, who: instanceWho(fields, st) };
 }
 
 function request(r: Processing, instance: Instance, state: string, a: Activity, step: number): void {
@@ -112,7 +108,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const s = r.state;
   const opener = { parent: instance.id, state, key: a.key, modal: a.keyword === "opens" && a.modal };
   const serial = [...s.machines.values()].filter((i) => i.chart.name === child.name).length;
-  const created = newInstance(r.st, child, topId(child.name, serial), { input, context }, opener);
+  const created = newInstance(child, topId(child.name, serial), { input, context }, opener);
   s.machines.set(created.id, created);
   s.stack.push(created.id);
   r.queue.tasks.push({ kind: "start", machine: created.id, cause: step });
@@ -136,9 +132,7 @@ export function sendEntered(r: Processing): void {
       const e = entered.find((e) => e.machine === holder.id && e.state === n);
       if (e === undefined || holder.closed || !holder.entered.has(n)) continue;
       const step = newStep(r.state, e.step, { barrier: true });
-      inStep(r, step, { kind: "activities", who: who(r.state, r.st, holder.id), state: n }, undefined, () =>
-        activate(r, holder, n, step),
-      );
+      inStep(r, step, { kind: "activities", id: holder.id, state: n }, undefined, () => activate(r, holder, n, step));
     }
   }
 }

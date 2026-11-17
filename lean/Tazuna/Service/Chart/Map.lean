@@ -17,11 +17,11 @@ def setCopyKeys (copyKeys : List (String × List String)) (map : String) (cs : L
 def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (key : Value) (encodedKey : String) : Processing → m Processing :=
   withMachine owner fun o r => do
     let context ← fs.copyContext o.chart.name map
-    let id := o.id.copyOf map encodedKey
-    let copy : Instance := { chart := o.chart, id, context, input := o.input, copyOf := some { map, key } }
+    let id := .copy o.id map encodedKey
+    let copy : Instance := { chart := o.chart, id, context, input := o.input, itemKey := some key }
     let started : State := { r.state with copies := r.state.copies.filter (·.id != id) ++ [copy] }
     let (s, copyStep) := started.newStep (some step) (nested := true)
-    MonadNote.note (.stepBegins copyStep (.start (s.who st id)) (some id))
+    MonadNote.note (.stepBegins copyStep (.start id) (some id))
     let r ← match (o.chart.state? map).bind (·.initial) with
       | some initial => enter fs st copyStep id [initial] ⟨s, r.queue⟩
       | none => pure ⟨s, r.queue⟩
@@ -30,7 +30,7 @@ def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (k
 
 def exitLeftCopy (st : Service) (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
     m Processing :=
-  if k ∈ itemKeys then pure r else unlessHalted (endWith (exitOne fs st Limit.exitDepth.max) (owner.copyOf map k)) r
+  if k ∈ itemKeys then pure r else unlessHalted (endWith (exitOne fs st Limit.exitDepth.max) (.copy owner map k)) r
 
 def newKeys (current : List String) (keys : List (Value × String)) : List (Value × String) :=
   keys.filter (·.2 ∉ current)

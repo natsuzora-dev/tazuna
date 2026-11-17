@@ -1,7 +1,8 @@
+import type { Requester } from "../../data/step.generated.ts";
 import { canonicalJson } from "../../data/values.ts";
 import type { Processing } from "../../service/chart/queue.ts";
 import { copyId } from "../../service/instance.ts";
-import { type Instance, keyCounts, machine, type Requester } from "../../service/state.ts";
+import { type Instance, keyCounts, machine } from "../../service/state.ts";
 
 const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) => (a < b ? -1 : 1);
 

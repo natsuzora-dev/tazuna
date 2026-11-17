@@ -181,7 +181,7 @@ theorem foldl_startInstance_halted (cs : List Chart) (t : State) (h : t.halted.i
 
 theorem startInstances_one_per_definition (h : (startInstances st fs s).halted = none) :
     ∃ new, (startInstances st fs s).machines = s.machines ++ new ∧ new.map (·.chart) = st.starting ∧
-      ∀ i ∈ new, i.id = .top i.chart.name 0 ∧ i.opener = none ∧ i.copyOf = none := by
+      ∀ i ∈ new, i.id = .top i.chart.name 0 ∧ i.opener = none ∧ i.itemKey = none := by
   unfold startInstances at h ⊢
   rw [foldlM_id] at h ⊢
   generalize st.starting = cs at h ⊢

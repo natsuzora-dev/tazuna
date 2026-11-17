@@ -16,12 +16,6 @@ structure Opener where
   modal : Bool
 deriving DecidableEq, Repr, Inhabited
 
-/-- The item key of a copy of map state `map`; the owner and the canonical key are in the copy's id. -/
-structure CopyOf where
-  map : String
-  key : Value
-deriving DecidableEq, Repr, Inhabited
-
 /--
 An instance of a machine or screen. A machine, or a screen that no other screen opens, has one instance per definition;
 `opens` creates an instance each time it opens.
@@ -42,7 +36,8 @@ structure Instance where
   /-- The output of the last fulfilled answer of each shows slot, or null before any. -/
   shown : List (String × Value) := []
   opener : Option Opener := none
-  copyOf : Option CopyOf := none
+  /-- The decoded item key of a copy; the map state and the canonical key are in `id`. -/
+  itemKey : Option Value := none
   copyKeys : List (String × List String) := []
 deriving Repr, Inhabited
 
@@ -58,23 +53,6 @@ structure Deadline where
   name : String
 deriving DecidableEq, Repr, Inhabited
 
-
-inductive Requester where
-  /-- The machine `machine`, which sent the request on entering `state`. -/
-  | state (machine : InstanceId) (state : String)
-  /-- The screen `machine`, which subscribed the query of shows slot `slot`; answers keep coming until it ends. -/
-  | slot (machine : InstanceId) (slot : String)
-  | automation (name : String)
-deriving DecidableEq, Repr, Inhabited
-
-def Requester.machine? : Requester → Option InstanceId
-  | .state m _ | .slot m _ => some m
-  | .automation _ => none
-
-/-- The state that sent the request, none for a shows slot or an automation. -/
-def Requester.slot? : Requester → Option String
-  | .slot _ k => some k
-  | _ => none
 
 /--
 A request with a request line, awaiting an answer. `stale` is whether the sending state was exited or the
@@ -293,11 +271,6 @@ def State.emitAll (s : State) (resultOf : Option String) (emits : List Emit) : S
 def State.machine? (s : State) (id : InstanceId) : Option Instance :=
   (s.machines ++ s.copies).find? (·.id == id)
 
-/-- The definition that sent the request: the chart of the sending instance, or the automation. -/
-def Requester.sender : Requester → String
-  | .state m _ | .slot m _ => m.chart
-  | .automation a => a
-
 /-- The fault of `requester`, whose input to `target` the input schema of `target` does not take. -/
 def Requester.inputFault (requester : Requester) (st : Service) (target : Spec.Ref) : Fault :=
   .inputSchema (st.ref requester.sender) target
@@ -320,43 +293,27 @@ def Instance.active (i : Instance) : List String := i.entered.map (·.1)
 
 /-- The depth of the states that a copy enters and exits: the length of the map state's path, or 0 for a non-copy. -/
 def Instance.depth (i : Instance) : Nat :=
-  match i.copyOf with
-  | some c => (i.chart.tree.pathOf c.map).length
+  match i.id.map? with
+  | some m => (i.chart.tree.pathOf m).length
   | none => 0
 
 def Instance.copyKeysOf (i : Instance) (map : String) : List String := (i.copyKeys.lookup map).getD []
 
-def Instance.copyIds (i : Instance) : List InstanceId := i.copyKeys.flatMap fun c => c.2.map (i.id.copyOf c.1)
+def Instance.copyIds (i : Instance) : List InstanceId := i.copyKeys.flatMap fun c => c.2.map (.copy i.id c.1)
 
 def Instance.documentOrder (i : Instance) : List (InstanceId × String) :=
   let tree := i.chart.tree
   i.chart.states.flatMap fun cs =>
-    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)
-
-def Instance.who (i : Instance) (st : Service) : Who :=
-  { chart := st.ref i.chart.name, serial := i.id.serial,
-    copy := i.copyOf.map fun c => { map := c.map, itemKey := c.key } }
-
-def State.who (s : State) (st : Service) (id : InstanceId) : Who :=
-  match s.machine? id with
-  | some i => i.who st
-  | none => { chart := st.ref id.chart, serial := id.serial }
-
-def State.sender (s : State) (st : Service) : Requester → Sender
-  | .state m n => .state (s.who st m) n
-  | .slot m k => .slot (s.who st m) k
-  | .automation a => .automation (st.ref a)
+    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (.copy i.id cs.name k, ·)
 
 /-- The scope of instance `i` at `state`. A copy's expressions also read the owner's context, shown, and input. -/
 def State.scopeOf (s : State) (i : Instance) (state : Option String) : Scope :=
-  match i.copyOf.bind fun c => (s.machine? i.id.owner).map (c, ·) with
-  | some (c, o) =>
-    { resource := i.id, owner := o.id, state, context := o.context,
-      copy := some { map := c.map, key := c.key, context := i.context }, active := i.active ++ o.active,
-      shown := o.shown, input := o.input, now := s.now }
+  match i.itemKey.bind fun k => (s.machine? i.id.owner).map (k, ·) with
+  | some (key, o) =>
+    { id := i.id, state, context := o.context, copy := some { key, context := i.context },
+      active := i.active ++ o.active, shown := o.shown, input := o.input, now := s.now }
   | none =>
-    { resource := i.id, owner := i.id, state, context := i.context, active := i.active,
-      shown := i.shown, input := i.input, now := s.now }
+    { id := i.id, state, context := i.context, active := i.active, shown := i.shown, input := i.input, now := s.now }
 
 def State.running (s : State) : List Instance :=
   s.machines.flatMap fun i => i :: i.copyIds.filterMap fun c => s.copies.find? (·.id == c)

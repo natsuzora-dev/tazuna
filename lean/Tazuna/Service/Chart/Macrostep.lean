@@ -29,19 +29,19 @@ def mapStateReads (i : Instance) : List (InstanceId × String) :=
   let tree := i.chart.tree
   (i.active.filter (tree.kindOf · == some .map)).map (i.id, ·)
 
-def State.workName (s : State) (st : Service) : Work → StepName
-  | .reaction a ((e :: _) :: _) _ => .reaction (st.ref a.name) (st.refOf a.receives) e.payload
-  | .reaction a _ _ => .reaction (st.ref a.name) (st.refOf a.receives) .null
-  | .answered c _ _ => .answer c.activity.ref (s.sender st c.requester) c.input
-  | .start name _ => .start (s.who st name)
-  | .receive name (((key, payload) :: _) :: _) _ => .receive (s.who st name) { key, payload }
-  | .receive name _ _ => .always (s.who st name)
-  | .onDone name _ => .onDone (s.who st name)
-  | .opensDone name state key _ _ _ => .opensDone (s.who st name) state key
+def Work.name (st : Service) : Work → StepName
+  | .reaction a ((e :: _) :: _) _ => .reaction a.name (st.refOf a.receives) e.payload
+  | .reaction a _ _ => .reaction a.name (st.refOf a.receives) .null
+  | .answered c _ _ => .answer c.activity.ref c.requester c.input
+  | .start name _ => .start name
+  | .receive name (((key, payload) :: _) :: _) _ => .receive name { key, payload }
+  | .receive name _ _ => .always name
+  | .onDone name _ => .onDone name
+  | .opensDone name state key _ _ _ => .opensDone name state key
 
-def State.readyName (s : State) (st : Service) : Ready → StepName
-  | .work w => s.workName st w
-  | .command c => .command c.activity.ref (s.sender st c.requester) c.input
+def Ready.name (st : Service) : Ready → StepName
+  | .work w => w.name st
+  | .command c => .command c.activity.ref c.requester c.input
 
 def Work.cause : Work → Option Nat
   | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
@@ -222,7 +222,7 @@ def settleScreen [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name
     m Processing :=
   if r.halted then pure r else do
   let (s, step) := r.state.newStep none (barrier := true)
-  MonadNote.note (.stepBegins step (.always (s.who st name)) none)
+  MonadNote.note (.stepBegins step (.always name) none)
   let r ← settle fs st step name ⟨s, r.queue⟩
   MonadNote.note .stepEnds
   pure r
@@ -236,11 +236,11 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
     pure (if refreshed.halted.isNone && !(shownChanged s refreshed).isEmpty then
       refreshed.report (.fault (.exceededMessageWork Limit.messageWork.max)) else refreshed)
   | fuel + 1 =>
-    match q.take (s.readyName st) s.stepOrder with
+    match q.take (Ready.name st) s.stepOrder with
     | .error invalid => pure (s.report (.invalidInput invalid))
     | .ok (some (.work w, i, rest, stepOrder)) => do
       let (s, step) := { s with stepOrder }.newStep w.cause
-      MonadNote.note (.stepBegins step (s.workName st w) w.started)
+      MonadNote.note (.stepBegins step (w.name st) w.started)
       let r ← runWork st fs s (rest.putBack i (w.rest step)) step w
       MonadNote.note .stepEnds
       drain st fs fuel r.state r.queue
@@ -249,7 +249,7 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
       match runaway with
       | some exceeded => pure (s.report (.fault exceeded))
       | none =>
-        MonadNote.note (.stepBegins step (s.readyName st (.command c)) none)
+        MonadNote.note (.stepBegins step ((Ready.command c).name st) none)
         let pc ← processCommand st fs s (st.traceNameOf c.activity.ref) c.input none step
         MonadNote.note .stepEnds
         drain st fs fuel pc.1

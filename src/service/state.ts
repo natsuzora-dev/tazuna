@@ -1,11 +1,11 @@
-import type { Sender, StepName, Who } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
+import type { Requester, StepName } from "../data/step.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { UntimedTraceLine } from "../data/trace.ts";
-import { type Fields, type Json, plain } from "../data/values.ts";
+import type { Fields, Json } from "../data/values.ts";
 import { type Located, type Location, type Violation, type ViolationError, withExtra } from "../data/violation.ts";
 import { descendants, pathOf } from "../spec/tree.ts";
 import { ref, type Service } from "./basic.ts";
@@ -21,7 +21,7 @@ import {
   type Scope,
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
-import { chartOf, copyId, type InstanceId, ownerId, serialOf } from "./instance.ts";
+import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
 import { limits } from "./limits.ts";
 import { type Emit, type Halting, halts } from "./message.ts";
 import type { Note } from "./note.ts";
@@ -131,15 +131,10 @@ export interface Instance {
     readonly key: string;
     readonly modal: boolean;
   };
-  /** The map state of this copy and its item key; the owner and the canonical key are in the id. */
-  readonly copyOf?: {
-    readonly map: string;
-    readonly key: unknown;
-  };
+  /** The decoded item key of a copy; the map state and the canonical key are in the id. */
+  readonly itemKey?: unknown;
   /** For each map state, the encoded keys of its copies, in item order. */
   readonly copyKeys: Map<string, readonly string[]>;
-  /** Lean's State.who of the instance or copy, kept so that notes do not build it again. */
-  readonly who: Who;
 }
 
 /** The instance or copy that takes the transition, and the transition. */
@@ -156,16 +151,6 @@ export interface Deadline {
   readonly state: string;
   readonly name: string;
 }
-
-/**
- * The sender of a request. A `state` requester is machine `machine`, which sent the request on entering `state`. A
- * `slot` requester is screen `machine`, which subscribed to the query of shows slot `slot`; answers keep coming until
- * the subscription ends.
- */
-export type Requester =
-  | { readonly kind: "state"; readonly machine: InstanceId; readonly state: string }
-  | { readonly kind: "slot"; readonly machine: InstanceId; readonly slot: string }
-  | { readonly kind: "automation"; readonly automation: string };
 
 export const machineOf = (requester: Requester): InstanceId | undefined =>
   requester.kind === "automation" ? undefined : requester.machine;
@@ -470,25 +455,20 @@ export function machine(s: State, id: InstanceId): Instance | undefined {
  * input.
  */
 export function scopeOf(s: State, instance: Instance, state: string | null): Scope {
-  const copy = instance.copyOf;
-  const owner = copy === undefined ? undefined : machine(s, ownerId(instance.id));
-  if (copy !== undefined && owner !== undefined)
+  const owner = instance.id.kind === "copy" ? machine(s, ownerId(instance.id)) : undefined;
+  if (owner !== undefined)
     return {
-      machine: instance.chart.name,
-      resource: instance.id,
-      owner: owner.id,
+      id: instance.id,
       state,
       context: owner.context,
-      copy: { map: copy.map, key: copy.key, context: instance.context },
+      copy: { key: instance.itemKey, context: instance.context },
       active: { has: (n) => instance.entered.has(n) || owner.entered.has(n) },
       shown: owner.shown,
       input: owner.input,
       now: s.now,
     };
   return {
-    machine: instance.chart.name,
-    resource: instance.id,
-    owner: instance.id,
+    id: instance.id,
     state,
     context: instance.context,
     copy: undefined,
@@ -552,8 +532,8 @@ export function sender(requester: Requester): string {
  * non-copy.
  */
 export function depth(instance: Instance): number {
-  const copy = instance.copyOf;
-  return copy === undefined ? 0 : pathOf(instance.chart.tree, copy.map).length;
+  const map = mapOf(instance.id);
+  return map === undefined ? 0 : pathOf(instance.chart.tree, map).length;
 }
 
 export function copyKeysOf(instance: Instance, map: string): readonly string[] {
@@ -576,32 +556,6 @@ export function documentOrder(s: State, instance: Instance): { holder: Instance;
       return holder === undefined ? [] : descendants(tree, n).map((d) => ({ holder, n: d }));
     }),
   ]);
-}
-
-export function instanceWho(instance: Pick<Instance, "chart" | "id" | "copyOf">, st: Service): Who {
-  const copy = instance.copyOf;
-  return {
-    chart: ref(st, instance.chart.name),
-    serial: serialOf(instance.id),
-    copy: copy === undefined ? null : { map: copy.map, itemKey: plain(copy.key) },
-  };
-}
-
-/** Returns the who of `id`. Each instance and copy keeps its instanceWho. */
-export function who(s: State, st: Service, id: InstanceId): Who {
-  return machine(s, id)?.who ?? { chart: ref(st, chartOf(id)), serial: serialOf(id), copy: null };
-}
-
-/** Lean's State.sender: the sender of a request as a step names it. */
-export function stepSender(s: State, st: Service, requester: Requester): Sender {
-  switch (requester.kind) {
-    case "state":
-      return { kind: "state", who: who(s, st, requester.machine), state: requester.state };
-    case "slot":
-      return { kind: "slot", who: who(s, st, requester.machine), slot: requester.slot };
-    case "automation":
-      return { kind: "automation", automation: ref(st, requester.automation) };
-  }
 }
 
 export function* running(s: State): Generator<Instance> {

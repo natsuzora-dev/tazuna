@@ -99,7 +99,7 @@ def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except InvalidScenario 
     | [s] => .ok s
     | [] => unresolved
     | found => .error (.ambiguousReference i (ToValue.toValue fact)
-        (found.map fun s => .obj [("chart", .str s.id.chart), ("serial", .num s.id.serial)]))
+        (found.map (ToValue.toValue ·.id)))
   | _ => unresolved
 
 /-- The lines that `service` wrote while `origin` was processed. -/

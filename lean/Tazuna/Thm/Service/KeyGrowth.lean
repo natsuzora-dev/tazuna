@@ -158,7 +158,7 @@ theorem keysBy_exitOne (fuel : Nat) (name : InstanceId) (n : String) : KeysBy (e
     intro i r
     simp only [id_bind]
     have h1 := keysBy_foldlM (fun k => keysBy_unlessHalted (keysBy_endWith (fun c n => ih c n)
-      (i.id.copyOf n k))) (i.copyKeysOf n).reverse r
+      (InstanceId.copy i.id n k))) (i.copyKeysOf n).reverse r
     split
     · exact h1
     · refine KeepsKeys.trans ?_ (keysBy_leaveWith (fun c n => ih c n) _ _ _)

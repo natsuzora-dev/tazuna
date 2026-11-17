@@ -38,10 +38,10 @@ Whether an event with `payload` reaches copy `c`. As in BPMN correlation, the pa
 that an event reaches.
 -/
 def reaches (st : Service) (c : Instance) (payload : Value) : m (Except Fault Bool) := do
-  match c.copyOf with
+  match c.id.map? with
   | none => pure (.ok true)
-  | some co =>
-    match ← fs.copyKey c.chart.name co.map payload with
+  | some map =>
+    match ← fs.copyKey c.chart.name map payload with
     | .error e => pure (.error (issueViolation st (st.ref c.chart.name) e))
     | .ok none => pure (.ok true)
     | .ok (some none) => pure (.ok false)
@@ -64,7 +64,7 @@ def State.exitKeys (s : State) (c : InstanceId × Transition) : List (InstanceId
   | some i =>
     (i.chart.exitsOf i.active c.2).flatMap fun n =>
       (c.1, n) :: (i.copyKeysOf n).flatMap fun k =>
-        let cr := i.id.copyOf n k
+        let cr := InstanceId.copy i.id n k
         ((s.machine? cr).map fun ci => ci.active.map (cr, ·)).getD []
 
 /--
@@ -84,7 +84,7 @@ def leavesOf (s : State) (top : Instance) (reached : List InstanceId) : List (In
   let topLeaves := top.chart.tree.leaves top.active
   let copyLeaves := reached.filterMap fun h => (s.machine? h).map fun ci => (h, ci.chart.tree.leaves ci.active)
   let atomic := fun (h, n) =>
-    if h == top.id then n ∈ topLeaves && !(top.copyKeysOf n).any (top.id.copyOf n · ∈ reached)
+    if h == top.id then n ∈ topLeaves && !(top.copyKeysOf n).any (InstanceId.copy top.id n · ∈ reached)
     else (copyLeaves.lookup h).any (n ∈ ·)
   let found := top.documentOrder.filter atomic
   if found.isEmpty then [(top.id, none)] else found.map fun (h, n) => (h, some n)

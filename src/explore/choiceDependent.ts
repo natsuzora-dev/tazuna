@@ -9,7 +9,8 @@ import {
   type Values,
 } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
-import type { Assigned, ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
+import type { Assigned, ChoiceDependent, Difference } from "../data/choiceDependent.generated.ts";
+import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
@@ -143,6 +144,7 @@ const uncomparable = (
  */
 export function stepOrder(
   compare: Compare,
+  service: string,
   a: StepName,
   b: StepName,
   aOrder: readonly StepName[],
@@ -155,12 +157,12 @@ export function stepOrder(
       ? [a, b, aOrder, bOrder, aFirst, bFirst]
       : [b, a, bOrder, aOrder, bFirst, aFirst];
   const found = difference(compare, original, alternative);
-  if (found === "uncomparable") return uncomparable(stepNameDefinition(first));
+  if (found === "uncomparable") return uncomparable(stepNameDefinition(service, first));
   return found === undefined
     ? undefined
     : {
         kind: "ChoiceDependent.stepOrder",
-        definition: stepNameDefinition(first),
+        definition: stepNameDefinition(service, first),
         data: { firstStep: first, secondStep: second, originalOrder, alternativeOrder, difference: found },
       };
 }

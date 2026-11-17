@@ -207,13 +207,13 @@ The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFir
 the step order `aOrder`, and `bFirst` takes `b` first and is the execution with `bOrder`. The pair is in the order of their
 canonical texts.
 -/
-def stepOrder (compare : Compare m) (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Outcome) :
+def stepOrder (compare : Compare m) (service : String) (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Outcome) :
     m (Option ChoiceDependent) := do
   let (first, second, firstOrder, secondOrder, original, alternative) :=
     if (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical then (a, b, aOrder, bOrder, aFirst, bFirst)
     else (b, a, bOrder, aOrder, bFirst, aFirst)
-  return (← difference compare original alternative).violation first.definition
-    (.stepOrder first.definition first second firstOrder secondOrder)
+  return (← difference compare original alternative).violation (first.definition service)
+    (.stepOrder (first.definition service) first second firstOrder secondOrder)
 
 /--
 The ChoiceDependent violation, if any, for the assignment `assigned` of handles of `requests`: the first difference,

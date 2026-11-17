@@ -336,13 +336,7 @@ export function answerIn(r: Processing, id: string, to: string, a: Answer): void
 
 function startInstance(r: Processing, c: Chart): void {
   const s = r.state;
-  const instance = newInstance(
-    r.st,
-    c,
-    topId(c.name),
-    { input: {}, context: initialContextOf(r, c.name, {}) },
-    undefined,
-  );
+  const instance = newInstance(c, topId(c.name), { input: {}, context: initialContextOf(r, c.name, {}) }, undefined);
   s.machines.set(instance.id, instance);
   if (c.screen) s.stack.push(instance.id);
 }

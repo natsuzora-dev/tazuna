@@ -135,8 +135,8 @@ export function operationsOf(r: Run, resource: InstanceId): Operation[] {
   const copies = [...top.copyKeys].flatMap(([map, keys]) =>
     top.entered.has(map)
       ? keys.flatMap((k) => {
-          const copy = machine(r.state, copyId(top.id, map, k))?.copyOf;
-          return copy === undefined ? [] : [copy.key as Fields];
+          const copy = machine(r.state, copyId(top.id, map, k));
+          return copy === undefined ? [] : [copy.itemKey as Fields];
         })
       : [],
   );

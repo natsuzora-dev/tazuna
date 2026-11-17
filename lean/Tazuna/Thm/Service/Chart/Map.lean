@@ -241,7 +241,7 @@ theorem syncMap_copies_in_key_order (step : Nat) (owner : InstanceId) (r : Proce
     ∃ o keys pre post, r.state.machine? owner = some o ∧
       fs.items (r.state.scopeOf o (some cs.name)) r.state.records = .ok keys ∧
       o'.documentOrder = pre ++ (o'.id, cs.name) ::
-        (((sortItemKeys keys).map (·.2)).flatMap fun k => (o'.chart.tree.descendants cs.name).map (o'.id.copyOf cs.name k, ·)) ++ post := by
+        (((sortItemKeys keys).map (·.2)).flatMap fun k => (o'.chart.tree.descendants cs.name).map (InstanceId.copy o'.id cs.name k, ·)) ++ post := by
   obtain ⟨o, keys, ho, hi, he, -⟩ := syncMap_copyKeys_are_item_keys step owner cs.name r o' hh hr ho'
   obtain ⟨pre, post, hd⟩ := documentOrder_at_map o' cs hcs
   exact ⟨o, keys, pre, post, ho, hi, he ▸ hd⟩

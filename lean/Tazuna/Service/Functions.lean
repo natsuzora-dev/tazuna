@@ -39,25 +39,22 @@ def givenKeys (keys : Keys) (created : List String) : List (String × String) :=
       | some owner => s!"{owner}/{counted}"
       | none => counted)
 
-/-- The scope of a copy whose map state is `map`. -/
+/-- The scope of a copy: its decoded item key and its own context. -/
 structure CopyScope where
-  map : String
   key : Value
   context : Value
 deriving DecidableEq, Repr, Inhabited
 
 /--
 The values passed to machine and screen expressions; TS builds the expressions' arguments from them and the records.
-`resource` is the evaluating instance or copy, and `owner` is its owner (itself if it is not a copy). `state` is the
-state that declares the expression (`none` for the chart's own `on`); `held` is looked up in the holds of that state and
-its ancestors, so it depends on where the expression is written, not on the active states, and a transition can read
-the holds of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is the
+`id` is the evaluating instance or copy. `state` is the state that declares the expression (`none` for the chart's own
+`on`); `held` is looked up in the holds of that state and its ancestors, so it depends on where the expression is
+written, not on the active states, and a transition can read the holds of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is the
 context of the instance (the owner's for a copy). `shown` holds the answer of each shows slot (null if none). `input` is
 the screen's input.
 -/
 structure Scope where
-  resource : InstanceId
-  owner : InstanceId
+  id : InstanceId
   state : Option String
   context : Value
   copy : Option CopyScope := none
@@ -67,7 +64,7 @@ structure Scope where
   now : Time
 deriving DecidableEq, Repr, Inhabited
 
-def Scope.machine (s : Scope) : String := s.resource.chart
+def Scope.machine (s : Scope) : String := s.id.chart
 
 inductive Assignment where
   | transition (t : Transition)

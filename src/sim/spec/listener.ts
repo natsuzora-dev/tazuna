@@ -1,5 +1,5 @@
 import { reversedBags } from "../../data/bag.ts";
-import type { StepName } from "../../data/choiceDependent.generated.ts";
+import type { StepName } from "../../data/step.generated.ts";
 import type { Obligation } from "../../data/uncovered.ts";
 import { type Collect, InstrumentedFunctions, type InstrumentFunctions } from "../../explore/instrument.ts";
 import type { Spec } from "../../load/load.ts";

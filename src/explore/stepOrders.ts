@@ -1,5 +1,6 @@
-import type { ChoiceDependent, StepName } from "../data/choiceDependent.generated.ts";
+import type { ChoiceDependent } from "../data/choiceDependent.generated.ts";
 import type { Origin, Scenario } from "../data/scenario.generated.ts";
+import type { StepName } from "../data/step.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
@@ -135,7 +136,7 @@ function stepOrderSearch(
       if (tried.length === stepOrderLimit) {
         const limit: ChoiceDependent = {
           kind: "ChoiceDependent.searchLimit",
-          definition: stepNameDefinition(first),
+          definition: stepNameDefinition(service, first),
           data: { limit: stepOrderLimit },
         };
         return { tried, found: [...found, limit] };
@@ -146,7 +147,16 @@ function stepOrderSearch(
         tried.push({ order, refused: true });
         continue;
       }
-      const result = stepOrder(compare, a, b, parentOrder, order, parentOutcome, outcomeFor(alternative, service));
+      const result = stepOrder(
+        compare,
+        service,
+        a,
+        b,
+        parentOrder,
+        order,
+        parentOutcome,
+        outcomeFor(alternative, service),
+      );
       tried.push({ order, found: result ?? null });
       if (result !== undefined && !found.some((v) => findingKey(v) === findingKey(result))) found.push(result);
       const altSpan = spanOf(alternative, origin, service);

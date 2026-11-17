@@ -5,7 +5,7 @@ import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
 import { refOf, type Schema } from "../service/basic.ts";
 import { Failed } from "../service/functions.ts";
-import { chartOf, serialOf } from "../service/instance.ts";
+import { chartOf } from "../service/instance.ts";
 import { created } from "../service/state.ts";
 import { refOfTraceName } from "../spec/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
@@ -272,7 +272,7 @@ export function screenOf(w: World, i: number, fact: Fact): Opened {
   return reported({
     kind: "InvalidScenario.ambiguousReference",
     definition: null,
-    data: { scenarioLine: i, fact, candidates: found.map((s) => ({ chart: chartOf(s.id), serial: serialOf(s.id) })) },
+    data: { scenarioLine: i, fact, candidates: found.map((s) => s.id) },
   });
 }
 

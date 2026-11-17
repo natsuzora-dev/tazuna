@@ -186,7 +186,7 @@ theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDist
 
 theorem deadline_is_own_message (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
     (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
-    (hc : chooseDeadline st s e (s.deadlines.filter (·.time == e.time))
+    (hc : chooseDeadline s e (s.deadlines.filter (·.time == e.time))
       (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
     fireDue st fs to (fuel + 1) tie s =
       let time := t.time.getD s'.now
@@ -204,7 +204,7 @@ theorem message_keeps_earlier_lines (q : Queue) : ∃ new, (message st fs s q).l
 
 theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
     (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
-    (hc : chooseDeadline st s e (s.deadlines.filter (·.time == e.time))
+    (hc : chooseDeadline s e (s.deadlines.filter (·.time == e.time))
       (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
     ∃ s₁ q tie', fireDue st fs to (fuel + 1) tie s =
         fireDue st fs to fuel tie' (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q)) ∧

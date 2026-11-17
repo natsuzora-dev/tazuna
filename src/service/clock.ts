@@ -1,10 +1,10 @@
-import type { StepName } from "../data/choiceDependent.generated.ts";
+import type { StepName } from "../data/step.generated.ts";
 import { transitionsAt } from "./chart/basic.ts";
 import { takeDeadline } from "./chart/deadline.ts";
 import { applyCompletion } from "./chart/macrostep.ts";
 import type { Processing } from "./chart/queue.ts";
 import { sameStep } from "./note.ts";
-import { type Deadline, machine, report, who } from "./state.ts";
+import { type Deadline, machine, report } from "./state.ts";
 
 export function fire(r: Processing, due: Deadline, step: number): void {
   const waiting = takeDeadline(r.state, due);
@@ -34,10 +34,10 @@ export function earliestDeadline(
   }, undefined);
 }
 
-/** Lean's State.deadlineStep: the name of the step in which deadline `t` fires. */
-export const deadlineStep = (r: Processing, t: Deadline): StepName => ({
+/** Lean's Deadline.step: the name of the step in which deadline `t` fires. */
+export const deadlineStep = (t: Deadline): StepName => ({
   kind: "deadline",
-  who: who(r.state, r.st, t.machine),
+  id: t.machine,
   state: t.state,
   name: t.name,
 });
@@ -52,12 +52,12 @@ export function chooseDeadline<T extends Deadline>(r: Processing, first: T, due:
   if (!tied) return first;
   const [named, ...rest] = s.stepOrder;
   if (named === undefined) return first;
-  const deadline = due.find((t) => sameStep(deadlineStep(r, t), named));
+  const deadline = due.find((t) => sameStep(deadlineStep(t), named));
   if (deadline === undefined)
     return report(s, {
       kind: "InvalidInput.unreadyStep",
       definition: null,
-      data: { named, candidates: due.map((t) => deadlineStep(r, t)) },
+      data: { named, candidates: due.map(deadlineStep) },
     });
   s.stepOrder = rest;
   return deadline;

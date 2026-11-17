@@ -145,7 +145,7 @@ def operationsOf (st : Service) (s : State) (resource : InstanceId) :
   | .ok top =>
     let screen := top.chart.name
     let copies := top.copyKeys.flatMap fun (map, cs) =>
-      if top.isIn map then cs.filterMap fun k => ((s.machine? (top.id.copyOf map k)).bind (·.copyOf)).map (·.key) else []
+      if top.isIn map then cs.filterMap fun k => (s.machine? (.copy top.id map k)).bind (·.itemKey) else []
     top.chart.controls.foldlM (init := (.ok [] : Except Fault (List Operation)))
       fun acc control => do
       match acc with

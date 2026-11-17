@@ -2,6 +2,7 @@ import type { Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
+import { mapOf } from "../instance.ts";
 import { limits } from "../limits.ts";
 import type { RegionPair } from "../note.ts";
 import { type Chosen, depth, documentOrder, type Instance } from "../state.ts";
@@ -12,8 +13,8 @@ import { endWith, exitOne, recordHistory, runAssign } from "./exit.ts";
 import { enter as enterQueue, type Processing } from "./queue.ts";
 
 function sharedMap(a: Chosen, b: Chosen): string | null {
-  const [ca, cb] = [a.instance.copyOf, b.instance.copyOf];
-  return ca !== undefined && cb !== undefined && a.instance !== b.instance && ca.map === cb.map ? ca.map : null;
+  const [ma, mb] = [mapOf(a.instance.id), mapOf(b.instance.id)];
+  return ma !== undefined && a.instance !== b.instance && ma === mb ? ma : null;
 }
 
 function regionPairOf(instance: Instance, a: Chosen, b: Chosen, j: number, k: number): RegionPair | null {

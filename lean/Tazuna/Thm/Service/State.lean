@@ -169,10 +169,10 @@ theorem machine?_setMachine (c : InstanceId) (f : Instance → Instance) (hf : �
   simp only [State.machine?, State.setMachine, ← List.map_append]
   exact find_setMachine _ c f hf
 
-theorem copyOf_ne (i : InstanceId) (map key : String) : i.copyOf map key ≠ i := by
+theorem copy_ne (i : InstanceId) (map key : String) : InstanceId.copy i map key ≠ i := by
   intro h
   have := congrArg sizeOf h
-  simp only [InstanceId.copyOf, InstanceId.copy.sizeOf_spec] at this
+  simp only [InstanceId.copy.sizeOf_spec] at this
   omega
 
 theorem documentOrder_owner (i : Instance) :
@@ -183,22 +183,22 @@ theorem documentOrder_owner (i : Instance) :
   | nil => rfl
   | cons cs rest ih =>
     rw [List.flatMap_cons, List.filter_append, ih, List.filter_cons]
-    have hb : ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)).filter
+    have hb : ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (InstanceId.copy i.id cs.name k, ·)).filter
         (·.1 == i.id) = [] := by
       rw [List.filter_eq_nil_iff]
       intro a ha
       obtain ⟨k, -, ha⟩ := List.mem_flatMap.mp ha
       obtain ⟨d, -, rfl⟩ := List.mem_map.mp ha
-      simpa using copyOf_ne i.id cs.name k
+      simpa using copy_ne i.id cs.name k
     simp [hb]
 
 theorem documentOrder_at_map (i : Instance) (cs : ChartState) (hcs : cs ∈ i.chart.states) :
     ∃ pre post, i.documentOrder =
       pre ++ (i.id, cs.name) ::
-        ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)) ++ post := by
+        ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (InstanceId.copy i.id cs.name k, ·)) ++ post := by
   obtain ⟨A, B, hAB⟩ := List.append_of_mem hcs
   let f := fun cs : ChartState =>
-    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (i.id.copyOf cs.name k, ·)
+    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (InstanceId.copy i.id cs.name k, ·)
   refine ⟨A.flatMap f, B.flatMap f, ?_⟩
   unfold Instance.documentOrder
   rw [hAB, List.flatMap_append, List.flatMap_cons]
@@ -398,7 +398,7 @@ theorem nodup_map_inj (l : List Pending) (h : (l.map (·.id)).Nodup) {p q : Pend
     · exact ih h.2 h1 h2
 
 def CopiesOf (chart map : String) (cs : List Instance) : Prop :=
-  ∀ c ∈ cs, c.chart.name = chart ∧ ∃ co, c.copyOf = some co ∧ co.map = map
+  ∀ c ∈ cs, c.chart.name = chart ∧ c.id.map? = some map
 
 theorem foldl_earliest (xs : List Pending) : ∀ (best : Option Pending) (p : Pending),
     xs.foldl (fun best p => match best with

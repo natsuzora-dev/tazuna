@@ -48,20 +48,20 @@ theorem fires_only_in_active_state (step : Nat) (t : Deadline) (r : Processing) 
 
 /-- Without a tie, the earliest deadline in entry order fires. -/
 theorem chooseDeadline_untied (s : State) (first : Deadline) (due : List Deadline) :
-    chooseDeadline st s first due false = .ok (first, s) := rfl
+    chooseDeadline s first due false = .ok (first, s) := rfl
 
 /--
 In a tie, whichever line advanced the time, the next entry of the input's `stepOrder` chooses which of the tied
 deadlines fires, as it chooses the internal queue's next step.
 -/
 theorem chooseDeadline_stepOrder (s : State) (first t : Deadline) (due : List Deadline) (named : StepName)
-    (rest : List StepName) (ho : s.stepOrder = named :: rest) (h : due.find? (s.deadlineStep st · == named) = some t) :
-    chooseDeadline st s first due true = .ok (t, { s with stepOrder := rest }) := by
+    (rest : List StepName) (ho : s.stepOrder = named :: rest) (h : due.find? (·.step == named) = some t) :
+    chooseDeadline s first due true = .ok (t, { s with stepOrder := rest }) := by
   simp [chooseDeadline, ho, h]
 
 /-- Choosing a deadline changes only the step order entries left. -/
 theorem chooseDeadline_orders {s s' : State} {tied : Bool} {first t : Deadline} {due : List Deadline}
-    (h : chooseDeadline st s first due tied = .ok (t, s')) :
+    (h : chooseDeadline s first due tied = .ok (t, s')) :
     ∃ o, s' = { s with stepOrder := o } := by
   unfold chooseDeadline at h
   repeat' split at h

@@ -1,11 +1,11 @@
-import type { StepName } from "../../data/choiceDependent.generated.ts";
+import type { Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import type { Automation, Service } from "../basic.ts";
 import type { InstanceId } from "../instance.ts";
 import type { Emitted } from "../message.ts";
 import { sameStep } from "../note.ts";
-import { type Instance, type Requester, type Run, report, type State } from "../state.ts";
+import { type Instance, type Run, report, type State } from "../state.ts";
 import type { Activity } from "./basic.ts";
 
 /**
@@ -171,11 +171,6 @@ function without(queue: Queue, at: number): void {
 export function take(r: Processing, name: (ready: Ready) => StepName): Entry | undefined {
   const { state: s, queue } = r;
   const [named, ...rest] = s.stepOrder;
-  const task = queue.tasks[0];
-  if (named === undefined && task !== undefined) {
-    queue.tasks.shift();
-    return { ready: { kind: "work", work: task }, at: 0 };
-  }
   const ready = entries(queue);
   const [first] = ready;
   if (first === undefined) return undefined;

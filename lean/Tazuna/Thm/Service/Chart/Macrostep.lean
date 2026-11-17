@@ -512,7 +512,7 @@ theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c
         { tasks := commandWork st r.1 r.2.2 step ++ [.answered c r.2.1 step], round := [], commands := cs,
           entered := q.entered } := by
   cases s; subst ho
-  simp_all [drain, Queue.take, Queue.entries, Queue.without, State.readyName]
+  simp_all [drain, Queue.take, Queue.entries, Queue.without, Ready.name]
 
 /-- A ready work or command that the next `stepOrder` entry names runs before the others, whatever their order. -/
 theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready) (i : Nat)
@@ -527,8 +527,8 @@ theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (r
 theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (e : Ready × Nat)
     (es : List (Ready × Nat)) (hr : q.entries = e :: es) (h : q.entries.find? (name ·.1 == named) = none)
     (hd : named.isDeadline = false) :
-    q.take name (named :: rest) = .error (.unreadyStep named (q.ready.map name)) := by
-  simp only [Queue.take, Queue.ready]
+    q.take name (named :: rest) = .error (.unreadyStep named (q.entries.map (name ·.1))) := by
+  simp only [Queue.take]
   rw [hr] at h ⊢
   dsimp only
   rw [h]

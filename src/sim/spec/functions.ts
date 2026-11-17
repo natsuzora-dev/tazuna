@@ -47,6 +47,7 @@ import {
   type Keys,
   type Scope,
 } from "../../service/functions.ts";
+import { chartOf, mapOf } from "../../service/instance.ts";
 import type { Emit } from "../../service/message.ts";
 import type { Note } from "../../service/note.ts";
 import type { RecordSource, Row } from "../../service/records.ts";
@@ -315,7 +316,7 @@ export class SpecFunctions implements Functions {
 
   /** Returns the state that declares the expressions of a question that Lean always asks about a state. */
   private stateOf(scope: Scope): string {
-    if (scope.state === null) throw new Error(`a question about ${scope.machine} names no state`);
+    if (scope.state === null) throw new Error(`a question about ${chartOf(scope.id)} names no state`);
     return scope.state;
   }
 
@@ -361,13 +362,13 @@ export class SpecFunctions implements Functions {
    * record, so they are built only when an expression reads them.
    */
   private baseArgs(scope: Scope, records: RecordSource, access: Access): Fields {
-    const { structure } = this.chartOf(scope.machine);
+    const { structure } = this.chartOf(chartOf(scope.id));
     const copy = scope.copy;
     const context = copy === undefined ? scope.context : { ...scope.context, ...copy.context };
     const holder = (field: string): Holder =>
       copy !== undefined && Object.hasOwn(copy.context, field) ? "copy" : "owner";
-    const inCopy = (state: string) =>
-      copy !== undefined && state !== copy.map && isDescendant(structure, state, copy.map);
+    const map = mapOf(scope.id);
+    const inCopy = (state: string) => map !== undefined && state !== map && isDescendant(structure, state, map);
     return Object.defineProperties(
       {
         context: readTracked(context, (field) => access.context(holder(field), field)),
@@ -396,7 +397,7 @@ export class SpecFunctions implements Functions {
 
   /** Returns the arguments of the expressions written in `scope.state`: the base arguments, `held` and `extra`. */
   private args(scope: Scope, records: RecordSource, access: Access, extra: Fields = {}): Fields {
-    const { named, ref, structure } = this.chartOf(scope.machine);
+    const { named, ref, structure } = this.chartOf(chartOf(scope.id));
     const base = this.baseArgs(scope, records, access);
     const path = scope.state === null ? [] : pathOf(structure, scope.state);
     return extended(base, { held: heldOf(ref, named.definition, path, base), ...extra });
@@ -539,7 +540,7 @@ export class SpecFunctions implements Functions {
   }
 
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed {
-    const invariants = this.chartOf(scope.machine).named.definition.invariants;
+    const invariants = this.chartOf(chartOf(scope.id)).named.definition.invariants;
     return attempt(() => firstFailing(invariants, () => this.args(scope, records, access)));
   }
 
@@ -621,13 +622,13 @@ export class SpecFunctions implements Functions {
     extra: Fields,
     access: Access,
   ): boolean | Failed {
-    const conditions = this.transition(scope.machine, transition).guard;
+    const conditions = this.transition(chartOf(scope.id), transition).guard;
     const failing = attempt(() => firstFailing(conditions, () => this.args(scope, records, access, extra)));
     if (failing instanceof Failed) return failing;
     if (failing !== undefined)
       this.note?.reached({
         kind: "guardFalse",
-        definition: this.chartOf(scope.machine).ref,
+        definition: this.chartOf(chartOf(scope.id)).ref,
         data: { transition, condition: failing },
       });
     return failing === undefined;
@@ -647,19 +648,20 @@ export class SpecFunctions implements Functions {
   ):
     | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
     | Failed {
-    const { named, ref } = this.chartOf(scope.machine);
+    const { named, ref } = this.chartOf(chartOf(scope.id));
     const copy = scope.copy;
-    const assignments = this.assignments(scope.machine, assignment);
+    const assignments = this.assignments(chartOf(scope.id), assignment);
     if (assignments === undefined) return { context: scope.context, copyContext: copy?.context, created: [] };
     const { createKey, created } = this.keysFrom(keys);
     const args = this.args(scope, records, access, { ...extra, createKey });
     const assigned = attempt(() => Object.entries(assignments).map(([field, f]) => [field, f(args)] as const));
     if (assigned instanceof Failed) return assigned;
-    const shape = copy === undefined ? {} : (this.node(scope.machine, copy.map)?.context ?? {});
+    const map = mapOf(scope.id);
+    const shape = map === undefined ? {} : (this.node(chartOf(scope.id), map)?.context ?? {});
     const [own, outer] = [assigned.filter(([f]) => f in shape), assigned.filter(([f]) => !(f in shape))];
     let copyContext = copy?.context;
     if (copy !== undefined && own.length > 0) {
-      const checked = matching({ kind: "mapContext", chart: ref, map: copy.map }, strictObjectOf(shape), {
+      const checked = matching({ kind: "mapContext", chart: ref, map: map as string }, strictObjectOf(shape), {
         ...copy.context,
         ...Object.fromEntries(own),
       });
@@ -688,8 +690,8 @@ export class SpecFunctions implements Functions {
     keys: Keys,
     access: Access,
   ): { readonly written: Json; readonly created: readonly string[] } | Failed {
-    const chart = this.chartOf(scope.machine).named.definition;
-    const node = this.node(scope.machine, this.stateOf(scope));
+    const chart = this.chartOf(chartOf(scope.id)).named.definition;
+    const node = this.node(chartOf(scope.id), this.stateOf(scope));
     const { createKey, created } = this.keysFrom(keys);
     const args = () => this.args(scope, records, access);
     let given: Json | Failed;
@@ -714,7 +716,7 @@ export class SpecFunctions implements Functions {
 
   /** Checks the held values of a state, whose holds read the base arguments. */
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed {
-    const { named, ref } = this.chartOf(scope.machine);
+    const { named, ref } = this.chartOf(chartOf(scope.id));
     const state = this.stateOf(scope);
     const holds = named.definition.holds?.[state];
     if (holds === undefined) return undefined;
@@ -738,7 +740,7 @@ export class SpecFunctions implements Functions {
   }
 
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed {
-    const at = this.node(scope.machine, this.stateOf(scope))?.after?.[name]?.at as (args: unknown) => unknown;
+    const at = this.node(chartOf(scope.id), this.stateOf(scope))?.after?.[name]?.at as (args: unknown) => unknown;
     return attempt(() => at(this.args(scope, records, access)) as Temporal.Instant);
   }
 
@@ -749,11 +751,11 @@ export class SpecFunctions implements Functions {
     control: string,
     access: Access,
   ): readonly { readonly value: Fields; readonly encoded: unknown }[] | Failed {
-    const { named, ref } = this.chartOf(scope.machine);
+    const { named, ref } = this.chartOf(chartOf(scope.id));
     const f =
       scope.state === null
         ? named.definition.offers?.[control]
-        : this.node(scope.machine, scope.state)?.offers?.[control];
+        : this.node(chartOf(scope.id), scope.state)?.offers?.[control];
     const given = attempt(() => (typeof f === "function" ? f(this.args(scope, records, access) as never) : []));
     if (given instanceof Failed) return given;
     const payloads = bagValues(given) ?? (given as readonly unknown[]);
@@ -773,8 +775,8 @@ export class SpecFunctions implements Functions {
     { key }: { readonly keyword: string; readonly key: string },
     access: Access,
   ): Json | Failed {
-    const query = this.chartOf(scope.machine).named.definition.queries?.[key] as AnyQuery;
-    const f = this.node(scope.machine, this.stateOf(scope))?.shows?.[key]?.input;
+    const query = this.chartOf(chartOf(scope.id)).named.definition.queries?.[key] as AnyQuery;
+    const f = this.node(chartOf(scope.id), this.stateOf(scope))?.shows?.[key]?.input;
     return this.writtenInput(query.input, f, () => this.args(scope, records, access));
   }
 
@@ -784,10 +786,10 @@ export class SpecFunctions implements Functions {
     access: Access,
   ): readonly { readonly key: unknown; readonly encoded: unknown; readonly encodedKey: string }[] | Failed {
     const map = this.stateOf(scope);
-    const node = this.node(scope.machine, map);
+    const node = this.node(chartOf(scope.id), map);
     const given = attempt(() => node?.items?.(this.args(scope, records, access) as never) ?? []);
     if (given instanceof Failed) return given;
-    const chart = this.chartOf(scope.machine).ref;
+    const chart = this.chartOf(chartOf(scope.id)).ref;
     const element = objectOf(node?.key ?? {});
     const keys = matching({ kind: "mapKey", chart, map }, bag(element), given);
     if (keys instanceof Failed) return keys;
@@ -829,7 +831,7 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     access: Access,
   ): { readonly output: Fields; readonly failed: string | undefined } | Failed {
-    const { named, ref } = this.chartOf(scope.machine);
+    const { named, ref } = this.chartOf(chartOf(scope.id));
     const chart = named.definition;
     const given = attempt(() => chart.resolve?.(this.args(scope, records, access) as never) ?? {});
     if (given instanceof Failed) return given;

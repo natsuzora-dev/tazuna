@@ -70,7 +70,7 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
     }
     newMessage(s);
     const step = newStep(s, undefined, { tie });
-    inStep(r, step, deadlineStep(r, deadline), undefined, () =>
+    inStep(r, step, deadlineStep(deadline), undefined, () =>
       settled(r, deadline.machine, step, () => fire(r, deadline, step)),
     );
     drain(r);

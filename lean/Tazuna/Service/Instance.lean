@@ -1,4 +1,8 @@
+import Tazuna.Data.Wire
+
 namespace Tazuna.Service
+
+open Tazuna.Data
 
 /--
 An instance of a machine or screen, or a copy of a map state. `serial` numbers the instances of `chart` in creation
@@ -10,25 +14,26 @@ inductive InstanceId where
   | copy (owner : InstanceId) (map key : String)
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire_mutual (InstanceId tag "kind")
+
 def InstanceId.chart : InstanceId → String
   | .top c _ => c
   | .copy o _ _ => o.chart
-
-def InstanceId.serial : InstanceId → Nat
-  | .top _ n => n
-  | .copy o _ _ => o.serial
 
 /-- The instance itself, or the owner of a copy. -/
 def InstanceId.owner : InstanceId → InstanceId
   | .copy o _ _ => o
   | i => i
 
+/-- The map state of a copy. -/
+def InstanceId.map? : InstanceId → Option String
+  | .copy _ m _ => some m
+  | .top .. => none
+
 /-- The canonical item key of a copy. -/
 def InstanceId.key? : InstanceId → Option String
   | .copy _ _ k => some k
   | .top .. => none
-
-def InstanceId.copyOf (i : InstanceId) (map key : String) : InstanceId := .copy i map key
 
 /-- Whether `i` is `r` or a copy of `r`. -/
 def InstanceId.within (i r : InstanceId) : Bool := i == r || i.owner == r

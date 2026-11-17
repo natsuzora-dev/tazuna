@@ -128,12 +128,12 @@ def searchPair (compare : Compare m) (executeWith : List StepName → m Executio
   let first := r.first.getD a
   if r.search.tried.length == stepOrderLimit then
     return { r with stopped := true, first := some first,
-                    search := { r.search with found := r.search.found ++ [.searchLimit first.definition stepOrderLimit] } }
+                    search := { r.search with found := r.search.found ++ [.searchLimit (first.definition st.service) stepOrderLimit] } }
   let r := { r with first := some first }
   let alternative ← executeWith order
   if alternative.refused st.service then
     return { r with search := { r.search with tried := r.search.tried ++ [{ order, verdict := .refused }] } }
-  let found ← stepOrder compare a b parentOrder order parentOutcome (alternative.outcome st)
+  let found ← stepOrder compare st.service a b parentOrder order parentOutcome (alternative.outcome st)
   let fresh := found.filter fun v => !r.search.found.any (findingKey · == findingKey v)
   let r := { r with search := { tried := r.search.tried ++ [{ order, verdict := .decided found }],
                                 found := r.search.found ++ fresh.toList } }

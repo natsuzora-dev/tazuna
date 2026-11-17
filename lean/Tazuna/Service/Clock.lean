@@ -32,7 +32,7 @@ def earliestDeadline (deadlines : List Deadline) (to : Time) : Option Deadline :
       | some b => if time < b.time.getD time then some t else some b) none
 
 /-- The name of the step in which deadline `t` fires. -/
-def State.deadlineStep (s : State) (st : Service) (t : Deadline) : StepName := .deadline (s.who st t.machine) t.state t.name
+def Deadline.step (t : Deadline) : StepName := .deadline t.machine t.state t.name
 
 /--
 The deadline that fires among `due`, the deadlines due at the earliest time in entry order, whose first is `first`, and
@@ -40,14 +40,14 @@ the state with the order entry that chose it used. Without a tie it is `first`. 
 order of its steps is, whichever line advanced the time: the next entry of the input's `stepOrder`, which test's search
 writes, chooses it, and without entries it is `first`, one of the orders that the search compares.
 -/
-def chooseDeadline (st : Service) (s : State) (first : Deadline) (due : List Deadline) (tied : Bool) :
+def chooseDeadline (s : State) (first : Deadline) (due : List Deadline) (tied : Bool) :
     Except InvalidInput (Deadline × State) :=
   if !tied then .ok (first, s) else
   match s.stepOrder with
   | named :: rest =>
-    match due.find? (s.deadlineStep st · == named) with
+    match due.find? (·.step == named) with
     | some t => .ok (t, { s with stepOrder := rest })
-    | none => .error (.unreadyStep named (due.map (s.deadlineStep st)))
+    | none => .error (.unreadyStep named (due.map (·.step)))
   | [] => .ok (first, s)
 
 end Tazuna.Service

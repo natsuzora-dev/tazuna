@@ -110,8 +110,6 @@ def Queue.entries (q : Queue) : List (Ready × Nat) :=
   (q.tasks.zipIdx.flatMap fun (w, i) => w.choices.map (.work ·, i)) ++
     (q.commands ++ sortSent q.round).zipIdx.map fun (c, j) => (.command c, q.tasks.length + j)
 
-def Queue.ready (q : Queue) : List Ready := q.entries.map (·.1)
-
 /-- The queue without the task or command at position `i`. Taking a command joins the round to the commands. -/
 def Queue.without (q : Queue) (i : Nat) : Queue :=
   if i < q.tasks.length then { q with tasks := q.tasks.eraseIdx i }

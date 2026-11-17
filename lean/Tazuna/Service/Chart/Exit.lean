@@ -43,7 +43,7 @@ def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Optio
         | _ => .contextSchema (st.ref i.chart.name))))
     | .ok (context, copyContext, keys) =>
       let s := r.state.createKeys keys
-      match i.copyOf with
+      match i.id.map? with
       | some _ =>
         pure ⟨(s.setMachine name.owner fun o => { o with context }).setMachine name fun i =>
           { i with context := copyContext.getD i.context }, r.queue⟩
@@ -93,7 +93,7 @@ def exitOne (st : Service) : Nat → InstanceId → String → Processing → m 
     withMachine name (fun i r => do
       let r : Processing ←
         (i.copyKeysOf n).reverse.foldlM
-          (fun r k => unlessHalted (endWith (exitOne st fuel) (i.id.copyOf n k)) r) r
+          (fun r k => unlessHalted (endWith (exitOne st fuel) (.copy i.id n k)) r) r
       if r.halted then pure r else
       leaveWith fs st (exitOne st fuel) name n
         ⟨r.state.setMachine name fun i => { i with copyKeys := i.copyKeys.filter (·.1 != n) }, r.queue⟩) r

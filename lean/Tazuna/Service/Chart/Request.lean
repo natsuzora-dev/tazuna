@@ -87,7 +87,7 @@ def activateEntered (st : Service) (e : InstanceId × String × Nat) : Processin
     | none => pure r
     | some cs => do
       let (s, step) := r.state.newStep (some e.2.2) (barrier := true)
-      MonadNote.note (.stepBegins step (.activities (s.who st e.1) e.2.1) none)
+      MonadNote.note (.stepBegins step (.activities e.1 e.2.1) none)
       let r ← cs.activities.foldlM (fun r a => unlessHalted (activate fs st step e.1 e.2.1 a) r) ⟨s, r.queue⟩
       MonadNote.note .stepEnds
       pure r

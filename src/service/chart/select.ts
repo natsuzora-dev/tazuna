@@ -4,7 +4,7 @@ import { transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, issueViolation } from "../functions.ts";
-import { copyId, type InstanceId } from "../instance.ts";
+import { copyId, type InstanceId, mapOf } from "../instance.ts";
 import { valueName } from "../note.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
@@ -48,7 +48,7 @@ function passes(r: Run, instance: Instance, t: Transition, extra: Fields): boole
 }
 
 export function reaches(r: Run, copy: Instance, payload: unknown): boolean {
-  const map = copy.copyOf?.map as string;
+  const map = mapOf(copy.id) as string;
   const key = r.functions.copyKey(copy.chart.name, map, payload);
   if (key instanceof Failed) return halt(issueViolation(ref(r.st, copy.chart.name), key));
   return key === undefined || (copy.id.kind === "copy" && key === copy.id.key);
@@ -111,7 +111,7 @@ export function leavesOf(r: Run, instance: Instance, reached: (copy: Instance) =
     .filter(({ holder, n }) =>
       holder === instance
         ? isLeaf(holder, n) && (reaching.get(n) ?? []).length === 0
-        : (reaching.get(holder.copyOf?.map as string) ?? []).includes(holder) && isLeaf(holder, n),
+        : (reaching.get(mapOf(holder.id) as string) ?? []).includes(holder) && isLeaf(holder, n),
     )
     .map(({ holder, n }) => ({ holder, leaf: n }));
   return found.length === 0 ? [{ holder: instance, leaf: undefined }] : found;

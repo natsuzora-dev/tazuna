@@ -2,8 +2,8 @@ import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { bindingLimit, emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
-import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { StepName } from "../data/step.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
@@ -20,7 +20,7 @@ import {
   type Keys,
   type Scope,
 } from "../service/functions.ts";
-import { type InstanceId, within } from "../service/instance.ts";
+import { chartOf, type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
@@ -482,7 +482,7 @@ export class InstrumentedFunctions implements Functions {
     compared: Same<T>,
   ): T | Failed {
     return this.audited(
-      ref(this.st, scope.machine),
+      ref(this.st, chartOf(scope.id)),
       question,
       () => call(this.fs, this.c.collecting(scope, access)),
       (fs) => call(fs, silent),
@@ -564,7 +564,7 @@ export class InstrumentedFunctions implements Functions {
   }
   chartInvariant(scope: Scope, records: RecordSource, access: Access) {
     return this.audited(
-      ref(this.st, scope.machine),
+      ref(this.st, chartOf(scope.id)),
       "chartInvariant",
       () => this.fs.chartInvariant(scope, records, access),
       (fs) => fs.chartInvariant(scope, records, silent),
@@ -623,7 +623,7 @@ export class InstrumentedFunctions implements Functions {
   }
   holds(scope: Scope, records: RecordSource, access: Access) {
     return this.audited(
-      ref(this.st, scope.machine),
+      ref(this.st, chartOf(scope.id)),
       "holds",
       () => this.fs.holds(scope, records, access),
       (fs) => fs.holds(scope, records, silent),

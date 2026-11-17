@@ -1,4 +1,4 @@
-import type { StepName } from "../../data/choiceDependent.generated.ts";
+import type { Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
@@ -23,13 +23,10 @@ import {
   newStep,
   nextKeys,
   type Pending,
-  type Requester,
   rejectedInput,
   report,
   sender,
-  stepSender,
   takeQueued,
-  who,
 } from "../state.ts";
 import { settle, settled } from "./always.ts";
 import { type Activity, answerTrigger, isOwn, type Transition, transitionsAt } from "./basic.ts";
@@ -51,7 +48,7 @@ function workName(r: Processing, work: Work): StepName {
       const e = firstEvent(work);
       return {
         kind: "reaction",
-        automation: ref(r.st, work.automation.name),
+        automation: work.automation.name,
         event: refOf(r.st, work.automation.receives),
         payload: e.encoded,
       };
@@ -60,32 +57,32 @@ function workName(r: Processing, work: Work): StepName {
       return {
         kind: "answer",
         command: work.sent.activity.target,
-        sender: stepSender(r.state, r.st, work.sent.requester),
+        sender: work.sent.requester,
         input: work.sent.input as Json,
       };
     case "start":
-      return { kind: "start", who: who(r.state, r.st, work.machine) };
+      return { kind: "start", id: work.machine };
     case "receive": {
       const e = work.groups[0]?.[0];
       return e === undefined
-        ? { kind: "always", who: who(r.state, r.st, work.machine) }
-        : { kind: "receive", who: who(r.state, r.st, work.machine), received: { key: e.key, payload: e.encoded } };
+        ? { kind: "always", id: work.machine }
+        : { kind: "receive", id: work.machine, received: { key: e.key, payload: e.encoded } };
     }
     case "onDone":
-      return { kind: "onDone", who: who(r.state, r.st, work.machine) };
+      return { kind: "onDone", id: work.machine };
     case "opensDone":
-      return { kind: "opensDone", who: who(r.state, r.st, work.machine), state: work.state, key: work.key };
+      return { kind: "opensDone", id: work.machine, state: work.state, key: work.key };
   }
 }
 
-/** Lean's State.readyName. */
+/** Lean's Ready.name. */
 function readyName(r: Processing, ready: Ready): StepName {
   if (ready.kind === "work") return workName(r, ready.work);
   const { activity, requester } = ready.sent;
   return {
     kind: "command",
     command: activity.target,
-    sender: stepSender(r.state, r.st, requester),
+    sender: requester,
     input: ready.sent.input as Json,
   };
 }
@@ -290,7 +287,7 @@ function runWork(r: Processing, work: Work, step: number): void {
 
 function settleScreen(r: Processing, name: InstanceId): void {
   const step = newStep(r.state, undefined, { barrier: true });
-  inStep(r, step, { kind: "always", who: who(r.state, r.st, name) }, undefined, () => settle(r, name, step));
+  inStep(r, step, { kind: "always", id: name }, undefined, () => settle(r, name, step));
 }
 
 /**

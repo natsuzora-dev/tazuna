@@ -88,8 +88,8 @@ inductive Holder where
 deriving DecidableEq, Repr, Inhabited
 
 def Holder.id (scope : Scope) : Holder → InstanceId
-  | .owner => scope.owner
-  | .copy => scope.resource
+  | .owner => scope.id.owner
+  | .copy => scope.id
 
 /-- The values that a chart function reads and writes. `shown` holds the owner's shows slots that it reads. -/
 structure Access where

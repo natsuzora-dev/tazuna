@@ -73,16 +73,16 @@ theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k
     cs.filter (fun c => reaches fs st c payload matches .ok true) =
       cs.filter (fun c => c.id.key? == some k) := by
   refine List.filter_congr (fun c hc => ?_)
-  obtain ⟨hn, co, hco, hm⟩ := hcs c hc
-  simp only [reaches, hco, id_bind, hn, hm, hk, id_pure]
+  obtain ⟨hn, hm⟩ := hcs c hc
+  simp only [reaches, hm, id_bind, hn, hk, id_pure]
   cases c.id.key? == some k <;> rfl
 
 theorem keyless_payload_reaches_all (chart map : String) (payload : Value)
     (hk : fs.copyKey chart map payload = .ok none) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) = cs := by
   refine List.filter_eq_self.mpr (fun c hc => ?_)
-  obtain ⟨hn, co, hco, hm⟩ := hcs c hc
-  simp [reaches, hco, hn, hm, hk]
+  obtain ⟨hn, hm⟩ := hcs c hc
+  simp [reaches, hn, hm, hk]
 
 theorem keyed_payload_reaches_at_most_one (chart map : String) (payload : Value) (k : String)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs)

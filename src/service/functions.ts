@@ -5,7 +5,7 @@ import type { TransitionRef } from "../data/transitionRef.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { type Schema, schemaOwner } from "./basic.ts";
-import type { InstanceId } from "./instance.ts";
+import { type InstanceId, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource, Row } from "./records.ts";
 
@@ -62,24 +62,20 @@ export function issueViolation(
   }
 }
 
-/** The scope of a copy; `map` is the copy's map state. */
+/** The scope of a copy: its decoded item key and its own context. */
 export interface CopyScope {
-  readonly map: string;
   readonly key: unknown;
   readonly context: Fields;
 }
 
 /**
- * The values passed to machine and screen expressions. `resource` is the evaluating instance or copy, and `owner` is
- * its owner (itself if it is not a copy). `state` is the state that declares the expression (null for the chart's own
- * `on`). `active` holds the active state names (a copy's and its owner's), looked up when an expression reads them.
- * `context` is the instance's (the owner's for a copy). `shown` holds the answer's output for each shows slot (null if
- * none). `input` is the screen's input.
+ * The values passed to machine and screen expressions. `id` is the evaluating instance or copy. `state` is the state
+ * that declares the expression (null for the chart's own `on`). `active` holds the active state names (a copy's and its
+ * owner's), looked up when an expression reads them. `context` is the instance's (the owner's for a copy). `shown`
+ * holds the answer's output for each shows slot (null if none). `input` is the screen's input.
  */
 export interface Scope {
-  readonly machine: string;
-  readonly resource: InstanceId;
-  readonly owner: InstanceId;
+  readonly id: InstanceId;
   readonly state: string | null;
   readonly context: Fields;
   readonly copy: CopyScope | undefined;
@@ -95,7 +91,7 @@ export interface Scope {
 export type Holder = "owner" | "copy";
 
 export function holderId(scope: Scope, holder: Holder): InstanceId {
-  return holder === "copy" ? scope.resource : scope.owner;
+  return holder === "copy" ? scope.id : ownerId(scope.id);
 }
 
 /** What the expressions of a Scope question read and assign, told as they do. Only TS has it. */

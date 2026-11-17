@@ -1,3 +1,4 @@
+import type { Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
@@ -14,7 +15,6 @@ import {
   NoteAccess,
   nextKeys,
   type Pending,
-  type Requester,
   removeFromStack,
   report,
   type State,
@@ -62,8 +62,7 @@ export function runAssign(
       ),
     );
   createKeys(r.state, assigned.created);
-  const copy = instance.copyOf;
-  if (copy === undefined) {
+  if (instance.id.kind !== "copy") {
     instance.context = assigned.context;
     return;
   }

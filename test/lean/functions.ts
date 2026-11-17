@@ -28,7 +28,7 @@ import {
   type NextKeys,
   type Scope,
 } from "../../src/service/functions.ts";
-import { topId } from "../../src/service/instance.ts";
+import { chartOf, type InstanceId, idOf, mapOf } from "../../src/service/instance.ts";
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
@@ -147,12 +147,12 @@ interface Accessed {
   readonly name: string;
 }
 
-/** Lean's Scope as tazuna-lean sends it: without resource and owner; `shown` holds null before an answer. */
+/** Lean's Scope as tazuna-lean sends it; `shown` holds null before an answer. */
 interface LeanScope {
-  readonly machine: string;
+  readonly id: InstanceId;
   readonly state: string | null;
   readonly context: unknown;
-  readonly copy: { readonly map: string; readonly key: unknown; readonly context: unknown } | null;
+  readonly copy: { readonly key: unknown; readonly context: unknown } | null;
   readonly active: readonly string[];
   readonly shown: Readonly<Record<string, unknown>>;
   readonly input: unknown;
@@ -279,19 +279,20 @@ export class RunFunctions implements Answering {
   }
 
   private scopeOf(lean: LeanScope): Scope | Failed {
-    const { named, ref } = this.functions.chartOf(lean.machine);
+    const id = idOf(lean.id);
+    const { named, ref } = this.functions.chartOf(chartOf(id));
     const chart = named.definition;
     const context = decode({ kind: "context", chart: ref }, chart.context, lean.context);
     if (context instanceof Failed) return context;
     let copy: CopyScope | undefined;
-    if (lean.copy !== null) {
-      const { map } = lean.copy;
-      const node = this.functions.node(lean.machine, map);
+    const map = mapOf(id);
+    if (lean.copy !== null && map !== undefined) {
+      const node = this.functions.node(chartOf(id), map);
       const key = decode({ kind: "mapKey", chart: ref, map }, node?.key ?? {}, lean.copy.key);
       if (key instanceof Failed) return key;
       const own = decode({ kind: "mapContext", chart: ref, map }, node?.context ?? {}, lean.copy.context);
       if (own instanceof Failed) return own;
-      copy = { map, key, context: own };
+      copy = { key, context: own };
     }
     const shown = new Map<string, unknown>();
     for (const [slot, value] of Object.entries(lean.shown)) {
@@ -305,9 +306,7 @@ export class RunFunctions implements Answering {
       chart.kind === "screen" ? decode({ kind: "input", definition: ref }, chart.input ?? {}, lean.input) : {};
     if (input instanceof Failed) return input;
     return {
-      machine: lean.machine,
-      resource: topId(lean.machine),
-      owner: topId(lean.machine),
+      id,
       state: lean.state,
       context,
       copy,
@@ -517,7 +516,7 @@ export class RunFunctions implements Answering {
       case "guard": {
         const t = message["transition"] as TransitionStructure;
         return this.scoped(message, (scope, access) =>
-          this.replied(this.extraOf(scope.machine, t.trigger, message["extra"] as Fields), (extra) =>
+          this.replied(this.extraOf(chartOf(scope.id), t.trigger, message["extra"] as Fields), (extra) =>
             this.replied(this.functions.guard(scope, this.records, transitionRef(t), extra, access), (passes) => ({
               passes,
             })),
@@ -533,13 +532,14 @@ export class RunFunctions implements Answering {
         const trigger = at.kind === "transition" ? at.transition.trigger : undefined;
         const keys = keysOf(message["keys"]);
         return this.scoped(message, (scope, access) =>
-          this.replied(this.extraOf(scope.machine, trigger, message["extra"] as Fields), (extra) =>
+          this.replied(this.extraOf(chartOf(scope.id), trigger, message["extra"] as Fields), (extra) =>
             this.replied(
               this.functions.assign(scope, this.records, assignment, extra, keys, access),
               ({ context, copyContext, created }) => {
                 const { copy } = scope;
-                const chart = this.functions.chartOf(scope.machine).named.definition;
-                const shape = copy === undefined ? {} : (this.functions.node(scope.machine, copy.map)?.context ?? {});
+                const chart = this.functions.chartOf(chartOf(scope.id)).named.definition;
+                const map = mapOf(scope.id);
+                const shape = map === undefined ? {} : (this.functions.node(chartOf(scope.id), map)?.context ?? {});
                 return {
                   context: encode(chart.context, context),
                   ...(copy === undefined ? {} : { copy: encode(shape, copyContext ?? copy.context) }),
@@ -622,7 +622,7 @@ export class RunFunctions implements Answering {
       case "close":
         return this.scoped(message, (scope, access) =>
           this.replied(this.functions.close(scope, this.records, access), ({ output, failed }) => ({
-            output: encode(this.functions.chartOf(scope.machine).named.definition.output ?? {}, output),
+            output: encode(this.functions.chartOf(chartOf(scope.id)).named.definition.output ?? {}, output),
             ...(failed === undefined ? {} : { failed }),
           })),
         );

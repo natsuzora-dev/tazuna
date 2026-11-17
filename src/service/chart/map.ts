@@ -4,18 +4,7 @@ import { Failed, type Functions, issueViolation } from "../functions.ts";
 import { copyId } from "../instance.ts";
 import { limits } from "../limits.ts";
 import { LazyRecordSource } from "../records.ts";
-import {
-  copyKeysOf,
-  halt,
-  type Instance,
-  inStep,
-  instanceWho,
-  NoteAccess,
-  newStep,
-  report,
-  scopeOf,
-  who,
-} from "../state.ts";
+import { copyKeysOf, halt, type Instance, inStep, NoteAccess, newStep, report, scopeOf } from "../state.ts";
 import { endWith } from "./exit.ts";
 import { enter } from "./microstep.ts";
 import type { Processing } from "./queue.ts";
@@ -26,7 +15,7 @@ import type { Processing } from "./queue.ts";
  */
 function startCopy(r: Processing, owner: Instance, map: string, key: unknown, encodedKey: string, step: number): void {
   const id = copyId(owner.id, map, encodedKey);
-  const fields = {
+  const copy: Instance = {
     chart: owner.chart,
     id,
     context: r.functions.copyContext(owner.chart.name, map),
@@ -36,15 +25,14 @@ function startCopy(r: Processing, owner: Instance, map: string, key: unknown, en
     closed: false,
     awaitingOnDone: undefined,
     shown: new Map(),
-    copyOf: { map, key },
+    itemKey: key,
     copyKeys: new Map(),
   };
-  const copy: Instance = { ...fields, who: instanceWho(fields, r.st) };
   r.state.copies.delete(id);
   r.state.copies.set(id, copy);
   const copyStep = newStep(r.state, step, { nested: true });
   const initial = owner.chart.states.get(map)?.initial;
-  inStep(r, copyStep, { kind: "start", who: who(r.state, r.st, id) }, id, () => {
+  inStep(r, copyStep, { kind: "start", id }, id, () => {
     if (initial !== null && initial !== undefined) enter(r, copy, [initial], copyStep);
   });
 }

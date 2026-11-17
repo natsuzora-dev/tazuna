@@ -1,0 +1,3 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"board.openLeft#1","name":"board.openLeft"}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"board.openRight#1","name":"board.openRight"}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"operation","id":"panel.bump#1","name":"panel.bump","nth":1,"payload":{"row":"b"}}

@@ -1,20 +1,23 @@
-/**
- * Lean's InstanceId: an instance of a machine or screen, or a copy of a map state. `serial` numbers the instances of
- * `chart` in creation order from 0. A copy is the copy of `owner`'s map state `map` for the item whose key has the
- * canonical JSON `key`. Ids are interned, so equal ids are the same object and key maps and sets as they are.
- */
-export type InstanceId =
-  | { readonly kind: "top"; readonly chart: string; readonly serial: number }
-  | { readonly kind: "copy"; readonly owner: InstanceId; readonly map: string; readonly key: string };
+import type { InstanceId } from "../data/step.generated.ts";
 
-const interned = new Map<string, InstanceId>();
+export type { InstanceId };
+
+/*
+ * Ids are interned, so equal ids are the same object and key maps and sets as they are. The table holds them weakly,
+ * so it does not grow across runs.
+ */
+const interned = new Map<string, WeakRef<InstanceId>>();
+const released = new FinalizationRegistry<string>((name) => {
+  if (interned.get(name)?.deref() === undefined) interned.delete(name);
+});
 const names = new WeakMap<InstanceId, string>();
 
 function intern(id: InstanceId): InstanceId {
   const name = JSON.stringify(id);
-  const found = interned.get(name);
+  const found = interned.get(name)?.deref();
   if (found !== undefined) return found;
-  interned.set(name, id);
+  interned.set(name, new WeakRef(id));
+  released.register(id, name);
   names.set(id, name);
   return id;
 }
@@ -27,12 +30,17 @@ export const topId = (chart: string, serial = 0): InstanceId => intern({ kind: "
 export const copyId = (owner: InstanceId, map: string, key: string): InstanceId =>
   intern({ kind: "copy", owner, map, key });
 
-export const chartOf = (id: InstanceId): string => (id.kind === "top" ? id.chart : chartOf(id.owner));
+/** The interned id of an id read from the wire. */
+export const idOf = (id: InstanceId): InstanceId =>
+  id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, id.key);
 
-export const serialOf = (id: InstanceId): number => (id.kind === "top" ? id.serial : serialOf(id.owner));
+export const chartOf = (id: InstanceId): string => (id.kind === "top" ? id.chart : chartOf(id.owner));
 
 /** The instance itself, or the owner of a copy. */
 export const ownerId = (id: InstanceId): InstanceId => (id.kind === "copy" ? id.owner : id);
+
+/** The map state of a copy. */
+export const mapOf = (id: InstanceId): string | undefined => (id.kind === "copy" ? id.map : undefined);
 
 /** Lean's InstanceId.within: whether `i` is `r` or a copy of `r`. */
 export const within = (i: InstanceId, r: InstanceId): boolean => i === r || ownerId(i) === r;

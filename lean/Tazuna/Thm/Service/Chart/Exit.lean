@@ -48,7 +48,7 @@ theorem keeps_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Keeps (exi
     rw [exitOne]
     refine keeps_withMachine (fun i r => ?_) r
     simp only [id_bind]
-    have h1 := foldlM_keeps (fun c => keeps_unlessHalted (keeps_endWith (fun c n => ih c n) (i.id.copyOf n c)))
+    have h1 := foldlM_keeps (fun c => keeps_unlessHalted (keeps_endWith (fun c n => ih c n) (InstanceId.copy i.id n c)))
       (i.copyKeysOf n).reverse r
     split
     · exact h1
@@ -103,9 +103,9 @@ theorem growsBy_exitOne (fuel : Nat) (name : InstanceId) (n : String) : GrowsBy 
     refine growsBy_withMachine (fun i r => ?_) r
     simp only [id_bind]
     have hk : ∀ c n, Keeps (exitOne fs st fuel c n) := fun c n => keeps_exitOne fuel c n
-    have g1 := foldlM_grows (fun c => growsBy_unlessHalted (growsBy_endWith (fun c n => ih c n) hk (i.id.copyOf n c)))
-      (fun c => keeps_unlessHalted (keeps_endWith hk (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
-    have n1 := foldlM_now (fun c => keeps_unlessHalted (keeps_endWith hk (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
+    have g1 := foldlM_grows (fun c => growsBy_unlessHalted (growsBy_endWith (fun c n => ih c n) hk (InstanceId.copy i.id n c)))
+      (fun c => keeps_unlessHalted (keeps_endWith hk (InstanceId.copy i.id n c))) (i.copyKeysOf n).reverse r
+    have n1 := foldlM_now (fun c => keeps_unlessHalted (keeps_endWith hk (InstanceId.copy i.id n c))) (i.copyKeysOf n).reverse r
     split
     · exact g1
     · exact g1.trans n1 ((growsBy_leaveWith (fun c n => ih c n) hk name n _).bridge (by rfl) (by rfl))
@@ -251,8 +251,8 @@ theorem deadlinesShrink_exitOne (fuel : Nat) (name : InstanceId) (n : String) : 
     refine deadlinesShrink_withMachine (fun i r t ht => ?_) r
     simp only [id_bind] at ht
     have h1 := foldlM_deadlinesShrink (fun c => deadlinesShrink_unlessHalted
-      (deadlinesShrink_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at ht h1
+      (deadlinesShrink_endWith (fun c n => ih c n) (InstanceId.copy i.id n c))) (i.copyKeysOf n).reverse r
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (InstanceId.copy i.id n k)) r) r = X at ht h1
     split at ht
     · exact h1 t ht
     · have h2 := deadlinesShrink_leaveWith (fun c n => ih c n) name n _ t ht
@@ -345,9 +345,9 @@ theorem pendingMapped_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Pe
     refine pendingMapped_withMachine (fun i r => ?_) r
     simp only [id_bind]
     obtain ⟨a, ha, ea⟩ := foldlM_pendingMapped (fun c => pendingMapped_unlessHalted
-      (pendingMapped_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
+      (pendingMapped_endWith (fun c n => ih c n) (InstanceId.copy i.id n c))) (i.copyKeysOf n).reverse r
     dsimp only at ea
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at ea ⊢
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (InstanceId.copy i.id n k)) r) r = X at ea ⊢
     split
     · exact ⟨a, ha, ea⟩
     · obtain ⟨b, hb, eb⟩ := pendingMapped_leaveWith (st := st) (fs := fs) (fun c n => ih c n) name n
@@ -430,8 +430,8 @@ theorem machinesKept_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Mac
     refine machinesKept_withMachine (fun i r => ?_) r
     simp only [id_bind]
     have h1 := foldlM_machinesKept (fun c => machinesKept_unlessHalted
-      (machinesKept_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at h1 ⊢
+      (machinesKept_endWith (fun c n => ih c n) (InstanceId.copy i.id n c))) (i.copyKeysOf n).reverse r
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (InstanceId.copy i.id n k)) r) r = X at h1 ⊢
     split
     · exact h1
     · refine (machinesKept_leaveWith (st := st) (fs := fs) (fun c n => ih c n) name n _).trans ?_
@@ -457,7 +457,7 @@ theorem exit_stales_requests (name : InstanceId) (n : String) (r : Processing) (
       simp [Processing.halted, hh, -List.foldlM_reverse] at hx
     · rename_i hx
       simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
-      generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (i.id.copyOf n k)) r) r = X at hh ⊢
+      generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (InstanceId.copy i.id n k)) r) r = X at hh ⊢
       unfold leaveWith at hh ⊢
       simp only [id_bind] at hh ⊢
       split at hh
@@ -713,9 +713,9 @@ theorem keepsAbsent_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Keep
     refine keepsAbsent_withMachine (fun i r name' n' ha => ?_) r name' n' ha
     simp only [id_bind]
     have h1 := keepsAbsent_foldlM (fun c => keepsAbsent_unlessHalted
-      (keepsAbsent_endWith (fun c n => ih c n) (i.id.copyOf n c))) (i.copyKeysOf n).reverse r name' n' ha
+      (keepsAbsent_endWith (fun c n => ih c n) (InstanceId.copy i.id n c))) (i.copyKeysOf n).reverse r name' n' ha
     dsimp only at h1
-    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (i.id.copyOf n k)) r) r = X at h1 ⊢
+    generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (InstanceId.copy i.id n k)) r) r = X at h1 ⊢
     split
     · exact h1
     · exact keepsAbsent_leaveWith (fun c n => ih c n) name n _ name' n'
@@ -741,7 +741,7 @@ theorem exit_leaves_state (name : InstanceId) (n : String) (r : Processing) (hh 
         simp [Processing.halted, hh, -List.foldlM_reverse] at hx
       · rename_i hx
         simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
-        generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (i.id.copyOf n k)) r) r = X at hh ⊢
+        generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (InstanceId.copy i.id n k)) r) r = X at hh ⊢
         unfold leaveWith at hh ⊢
         simp only [id_bind] at hh ⊢
         split

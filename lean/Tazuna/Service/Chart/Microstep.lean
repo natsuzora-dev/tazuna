@@ -34,14 +34,14 @@ def State.entryPairsOf (s : State) (c : InstanceId × Transition) : List (Instan
 def State.entryPairs (s : State) (chosen : List (InstanceId × Transition)) : List (InstanceId × String) :=
   chosen.flatMap s.entryPairsOf
 
-def State.sharedMap (s : State) (a b : InstanceId × Transition) : Option String :=
-  match ((s.machine? a.1).bind (·.copyOf)).map (·.map), ((s.machine? b.1).bind (·.copyOf)).map (·.map) with
+def sharedMap (a b : InstanceId × Transition) : Option String :=
+  match a.1.map?, b.1.map? with
   | some ma, some mb => if a.1 != b.1 && ma == mb then some ma else none
   | _, _ => none
 
-def State.regionPairOf (s : State) (c : Chart) (a b : InstanceId × Transition) (j k : Nat) : Option RegionPair :=
+def regionPairOf (c : Chart) (a b : InstanceId × Transition) (j k : Nat) : Option RegionPair :=
   let pair (state : String) : RegionPair := { first := j, second := k, firstRef := a.2.ref, secondRef := b.2.ref, state }
-  match s.sharedMap a b with
+  match sharedMap a b with
   | some map => some (pair map)
   | none =>
     match a.2.source, b.2.source with
@@ -54,8 +54,8 @@ SCXML lets the later write win, but regions act simultaneously and copies have n
 instead, as in Statemate (two writes, or a write and a read, of one value in a step conflict) and Esterel (a
 single-valued signal emitted twice in a reaction is rejected), such pairs are conflicts.
 -/
-def State.regionPairs (s : State) (c : Chart) (chosen : List (InstanceId × Transition)) : List RegionPair :=
-  chosen.zipIdx.flatMap fun (b, k) => (chosen.zipIdx.take k).filterMap fun (a, j) => s.regionPairOf c a b j k
+def regionPairs (c : Chart) (chosen : List (InstanceId × Transition)) : List RegionPair :=
+  chosen.zipIdx.flatMap fun (b, k) => (chosen.zipIdx.take k).filterMap fun (a, j) => regionPairOf c a b j k
 
 /-- Each pair of each set with the index of its set, so that `lookup` finds the first set that contains a pair. -/
 def transitionIndexOf (sets : List (List (InstanceId × String))) : List ((InstanceId × String) × Nat) :=
@@ -104,7 +104,7 @@ def microstep (st : Service) (step : Nat) (name : InstanceId) (chosen : List (In
   withMachine name fun i r => do
     if i.closed then pure r else
     let holders := holdersOf chosen
-    let pairs := r.state.regionPairs i.chart chosen
+    let pairs := regionPairs i.chart chosen
     let exiting :=
       (indexedInOrder i.documentOrder (transitionIndexOf (chosen.map r.state.exitPairsOf))).reverse
     let s := holders.foldl (fun s h => s.setMachine h (recordHistory ((exiting.filter (·.1.1 == h)).map (·.1.2)))) r.state

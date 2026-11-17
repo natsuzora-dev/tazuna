@@ -1,8 +1,8 @@
-import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
+import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { contentOf, receivedId, senderOf } from "../data/trace.ts";
 import { byCodePoint, stringsOf } from "../data/values.ts";
