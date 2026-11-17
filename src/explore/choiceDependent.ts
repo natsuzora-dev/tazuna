@@ -1,7 +1,6 @@
 import {
   anySameness,
   type Binding,
-  bindingLimit,
   emptyBinding,
   matchesSameness,
   matchValue,
@@ -10,18 +9,13 @@ import {
 } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
 import type { Assigned, ChoiceDependent, Difference } from "../data/choiceDependent.generated.ts";
+import { bindingLimit } from "../data/limits.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import type { Records } from "../service/records.ts";
-
-/** Lean's stepOrderLimit: the number of step orders that the search of one processing runs at most. */
-export const stepOrderLimit = 64;
-
-/** Lean's assignmentLimit: the number of assignments of handles of `requests` that the search of a scenario runs at most. */
-export const assignmentLimit = 64;
 
 /**
  * Lean's Outcome: the violation that halted a run, the trace lines that verify reads, its records, and the keys that its

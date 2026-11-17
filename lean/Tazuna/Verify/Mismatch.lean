@@ -54,17 +54,13 @@ inductive Mismatch where
   | unlistedEvent (line : Nat) (event : Spec.Ref)
   | resultOfUnacceptedRequest (line : Nat) (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
   | resultOfUnlistedEvent (line : Nat) (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
-  | unlistedRejectionKind (line : Nat) (requestId : String) (target : Spec.Ref) (rejection : Rejection)
+  | assumption (line : Nat) (requestId : String) (target : Spec.Ref) (mismatch : Spec.AssumptionMismatch)
   /-- The answer has a result that the target never answers with: `fulfilled` to a command or `accepted` to a query. -/
   | answerResult (line : Nat) (requestId : String) (target : Spec.Ref) (result : String)
   /-- The answer answers a request that an earlier line answered. -/
   | repeatedAnswer (line : Nat) (requestId : String) (target : Spec.Ref)
-  | rejectedAssumedRequires (line : Nat) (requestId : String) (target : Spec.Ref)
-  | failedAssumedRequires (line : Nat) (requestId : String) (target : Spec.Ref) (condition : String)
-  | failedAssumedEnsures (line : Nat) (requestId : String) (target : Spec.Ref) (condition : String)
-  | answerOutputSchema (line : Nat) (requestId : String) (target : Spec.Ref)
   | eventPayloadSchema (line : Nat) (event : Spec.Ref)
 
-derive_group Mismatch
+derive_group Mismatch flatten mismatch
 
 end Tazuna.Verify

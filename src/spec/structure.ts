@@ -1,5 +1,7 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import type { Answer, RejectionKind } from "../data/trace.generated.ts";
+import type { InvalidInput } from "../data/invalidInput.generated.ts";
+import type { Mismatch } from "../data/mismatch.generated.ts";
+import type { Answer, Rejection, RejectionKind } from "../data/trace.generated.ts";
 import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
 import type { Structure } from "./structure.generated.ts";
 
@@ -178,10 +180,48 @@ export function resultOfMismatch(
   return definition.emits.some((e) => sameRef(e, event)) ? undefined : "resultOfUnlistedEvent";
 }
 
-/** Which assumed condition an answer to a request breaks. */
+/** Lean's AssumptionMismatch: what an answer to a request, or its result events, break of the target's contract. */
 export type AssumptionMismatch =
+  | { readonly kind: "unlistedRejectionKind"; readonly rejection: Rejection }
+  | { readonly kind: "answerOutputSchema" }
   | { readonly kind: "rejectedAssumedRequires" }
-  | { readonly kind: "failedAssumedRequires" | "failedAssumedEnsures"; readonly condition: string };
+  | { readonly kind: "failedAssumedRequires"; readonly condition: string }
+  | { readonly kind: "failedAssumedEnsures"; readonly condition: string };
+
+type Assumed<V extends { readonly kind: string }, G extends string> = Extract<
+  V,
+  { readonly kind: `${G}.${AssumptionMismatch["kind"]}` }
+>;
+
+interface RequestRef {
+  readonly requestId: string;
+  readonly target: DefinitionRef;
+}
+
+/**
+ * Lean's `assumption` constructor of InvalidInput and Mismatch, which derive_group flattens: the violation of `group`
+ * that `m` names for the answer to `request`.
+ */
+export function assumptionViolation(
+  group: "InvalidInput",
+  request: RequestRef,
+  m: AssumptionMismatch,
+): Assumed<InvalidInput, "InvalidInput">;
+export function assumptionViolation(
+  group: "Mismatch",
+  request: RequestRef,
+  m: AssumptionMismatch,
+  line: number,
+): Assumed<Mismatch, "Mismatch">;
+export function assumptionViolation(group: string, request: RequestRef, m: AssumptionMismatch, line?: number): unknown {
+  const { kind, ...data } = m;
+  return {
+    kind: `${group}.${kind}`,
+    definition: null,
+    ...(line === undefined ? {} : { line }),
+    data: { ...request, ...data },
+  };
+}
 
 /**
  * Returns the assumption that an answer breaks, given the first assumed requires that fails and, when the requires hold

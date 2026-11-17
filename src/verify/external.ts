@@ -14,8 +14,8 @@ import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
 import { assumedEnsures } from "../sim/spec/contract.ts";
 import {
-  type AssumptionMismatch,
   assumptionMismatch,
+  assumptionViolation,
   contractsListing,
   type ResultOfMismatch,
   rejectionKinds,
@@ -102,12 +102,12 @@ function checkLine(
     if (l.answer.result === "rejected")
       return rejectionKinds(spec.structure, service, target).includes(l.answer.rejection.kind)
         ? { at, line: l, request }
-        : ({
-            kind: "Mismatch.unlistedRejectionKind",
-            definition: null,
-            line: at,
-            data: { requestId: l.to, target, rejection: l.answer.rejection },
-          } satisfies Mismatch);
+        : assumptionViolation(
+            "Mismatch",
+            { requestId: l.to, target },
+            { kind: "unlistedRejectionKind", rejection: l.answer.rejection },
+            at,
+          );
     return l.answer.result === (request.definition.kind === "command" ? "accepted" : "fulfilled")
       ? { at, line: l, request }
       : ({
@@ -189,27 +189,6 @@ export function checkExternal(
 
 const parseKnown = (schema: z.ZodType, value: unknown) => tolerant(schema).safeParse(value);
 
-function assumptionFinding(line: number, request: RequestRef, m: AssumptionMismatch): Mismatch {
-  switch (m.kind) {
-    case "rejectedAssumedRequires":
-      return { kind: "Mismatch.rejectedAssumedRequires", definition: null, line, data: { ...request } };
-    case "failedAssumedRequires":
-      return {
-        kind: "Mismatch.failedAssumedRequires",
-        definition: null,
-        line,
-        data: { ...request, condition: m.condition },
-      };
-    case "failedAssumedEnsures":
-      return {
-        kind: "Mismatch.failedAssumedEnsures",
-        definition: null,
-        line,
-        data: { ...request, condition: m.condition },
-      };
-  }
-}
-
 /**
  * Runs checkExternal, and on the lines that it finds nothing on, the checks that need spec functions or Zod schemas. An
  * accepted command's ensures is checked once, at the end of the trace, with all its result events.
@@ -242,14 +221,11 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
         if (checked && definition.kind === "command") accept(line, definition, ref, decoded);
         const failedEnsures = checked && definition.kind === "query" ? assumedEnsures(definition, decoded) : undefined;
         const broken = assumptionMismatch(answer, failedRequires, failedEnsures);
-        if (broken !== undefined) violations.push(assumptionFinding(line, ref, broken));
+        if (broken !== undefined) violations.push(assumptionViolation("Mismatch", ref, broken, line));
       }
       if (out?.success === false)
         violations.push({
-          kind: "Mismatch.answerOutputSchema",
-          definition: null,
-          line,
-          data: { ...ref },
+          ...assumptionViolation("Mismatch", ref, { kind: "answerOutputSchema" }, line),
           error: zodError(out.error.issues),
         } satisfies Found & Mismatch);
       return;
@@ -272,7 +248,9 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
   for (const { line, target, request, results: accepted } of results.values()) {
     const failed = assumedEnsures(target, accepted);
     if (failed !== undefined)
-      violations.push(assumptionFinding(line, request, { kind: "failedAssumedEnsures", condition: failed }));
+      violations.push(
+        assumptionViolation("Mismatch", request, { kind: "failedAssumedEnsures", condition: failed }, line),
+      );
   }
   return violations.sort(byLine);
 }

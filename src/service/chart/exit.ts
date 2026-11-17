@@ -1,10 +1,10 @@
+import { limits } from "../../data/limits.generated.ts";
 import type { Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Assignment, Failed, issueViolation } from "../functions.ts";
 import { copyId, type InstanceId, ownerId } from "../instance.ts";
-import { limits } from "../limits.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   copyKeysOf,

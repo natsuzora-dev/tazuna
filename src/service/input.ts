@@ -5,8 +5,8 @@ import { operationName } from "../data/trace.ts";
 import type { Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import {
-  type AssumptionMismatch,
   assumptionMismatch,
+  assumptionViolation,
   hasOutput,
   isAssumed,
   rejectionKinds,
@@ -128,11 +128,10 @@ export function checkResults(r: Run): void {
     );
     if (failed instanceof Failed) halt(issueViolation(target, failed));
     if (failed !== undefined)
-      report(r.state, {
-        kind: "InvalidInput.failedAssumedEnsures",
-        definition: null,
-        data: { requestId, target, condition: failed },
-      });
+      report(
+        r.state,
+        assumptionViolation("InvalidInput", { requestId, target }, { kind: "failedAssumedEnsures", condition: failed }),
+      );
   }
 }
 
@@ -200,17 +199,6 @@ export function receive(
   message(r);
 }
 
-type Assumption = Extract<
-  InvalidInput,
-  { readonly kind: `InvalidInput.${"rejectedAssumedRequires" | "failedAssumedRequires" | "failedAssumedEnsures"}` }
->;
-
-function assumptionFinding(requestId: string, target: DefinitionRef, m: AssumptionMismatch): Assumption {
-  return m.kind === "rejectedAssumedRequires"
-    ? { kind: `InvalidInput.${m.kind}`, definition: null, data: { requestId, target } }
-    : { kind: `InvalidInput.${m.kind}`, definition: null, data: { requestId, target, condition: m.condition } };
-}
-
 /** Returns the assumption that an answer to the request `requestId` to `target` breaks (assumptionMismatch). */
 function brokenAssumption(
   requestId: string,
@@ -218,14 +206,14 @@ function brokenAssumption(
   answer: Answer,
   failedRequires: string | undefined,
   failedEnsures: string | undefined,
-): Assumption | undefined {
+): InvalidInput | undefined {
   const m = assumptionMismatch(answer, failedRequires, failedEnsures);
-  return m === undefined ? undefined : assumptionFinding(requestId, target, m);
+  return m === undefined ? undefined : assumptionViolation("InvalidInput", { requestId, target }, m);
 }
 
 interface AnswerCheck {
   /** The assumption that the answer breaks, reported without halting. */
-  readonly assumption?: Assumption | undefined;
+  readonly assumption?: InvalidInput | undefined;
   /** The answer to deliver, decoded, or why it is malformed or the sender's fault. */
   readonly checked: { readonly decoded: Answer } | { readonly violation: Finding };
   /** An assumed peer's acceptance of a command, whose ensures the end of the run checks with its result events. */
@@ -235,14 +223,18 @@ interface AnswerCheck {
 /** Lean's decodedAnswer: the answer decoded, or why its rejection kind or output does not match the target. */
 function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["checked"] {
   const target = p.activity.target;
+  const request = { requestId: p.id, target };
   const structure = r.st.structure;
   if (answer.result === "rejected") {
     const { rejection } = answer;
-    const data = { requestId: p.id, target, rejection };
     if (!rejectionKinds(structure, r.st.service, target).includes(rejection.kind))
-      return { violation: { kind: "InvalidInput.unlistedRejectionKind", definition: null, data } };
+      return {
+        violation: assumptionViolation("InvalidInput", request, { kind: "unlistedRejectionKind", rejection }),
+      };
     if (rejection.kind === "requires" && !rejectionReasons(structure, target).includes(rejection.reason ?? ""))
-      return { violation: { kind: "InvalidInput.unlistedRejectionReason", definition: null, data } };
+      return {
+        violation: { kind: "InvalidInput.unlistedRejectionReason", definition: null, data: { ...request, rejection } },
+      };
     return { decoded: answer };
   }
   if (!hasOutput(structure, target)) return { decoded: answer };
@@ -250,10 +242,9 @@ function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["
   if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
   if ("error" in parsed)
     return {
-      violation: withExtra(
-        { kind: "InvalidInput.answerOutputSchema", definition: null, data: { requestId: p.id, target } },
-        { error: parsed.error },
-      ),
+      violation: withExtra(assumptionViolation("InvalidInput", request, { kind: "answerOutputSchema" }), {
+        error: parsed.error,
+      }),
     };
   return { decoded: { ...answer, output: parsed.value } as Answer };
 }

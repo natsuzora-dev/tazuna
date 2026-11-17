@@ -2,7 +2,6 @@ import {
   andThen,
   type Binding,
   bind,
-  bindingLimit,
   bindString,
   binds,
   bound,
@@ -20,6 +19,7 @@ import {
   valuePart,
 } from "../data/binding.ts";
 import { Bag, comparable, comparableAnswer, orderFree, Ref, type RefEntity, Runs } from "../data/canonical.ts";
+import { bindingLimit } from "../data/limits.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { TraceLine } from "../data/trace.generated.ts";

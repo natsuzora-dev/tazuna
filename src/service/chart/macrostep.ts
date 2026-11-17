@@ -1,3 +1,4 @@
+import { limits } from "../../data/limits.generated.ts";
 import type { Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
@@ -6,8 +7,7 @@ import { ref, refOf, traceNameOf } from "../basic.ts";
 import { processCommand } from "../command.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { chartOf, type InstanceId } from "../instance.ts";
-import { limits } from "../limits.ts";
-import { byCallerKinds, type Emitted } from "../message.ts";
+import { byCaller, type Emitted } from "../message.ts";
 import { recordSource } from "../records.ts";
 import { refreshScreens } from "../screen/subscription.ts";
 import {
@@ -181,7 +181,7 @@ function startWork(r: Processing, name: InstanceId, step: number): void {
 function showAnswer(r: Processing, name: InstanceId, slot: string, answer: Answer): void {
   const instance = machine(r.state, name);
   if (instance === undefined) return;
-  if (answer.result === "rejected" && byCallerKinds.has(answer.rejection.kind))
+  if (answer.result === "rejected" && byCaller.has(answer.rejection.kind))
     report(r.state, {
       kind: "Fault.rejectedShows",
       definition: ref(r.st, chartOf(name)),

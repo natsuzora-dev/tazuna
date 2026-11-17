@@ -342,8 +342,11 @@ def Structure.isAssumed (s : Structure) (r : Ref) : Bool :=
 
 /-- Why an event cannot be the result (resultOf) of a request. -/
 inductive ResultOfMismatch where
+  /-- The resultOf of the event names a request to a target that is not a command. -/
   | resultOfNonCommand
+  /-- The resultOf of the event names a request that the answer did not accept. -/
   | resultOfUnacceptedRequest
+  /-- The resultOf of the event names a request to a command whose emits do not list the event. -/
   | resultOfUnlistedEvent
 deriving DecidableEq, Repr, Inhabited
 
@@ -360,10 +363,15 @@ def Structure.resultOfMismatch (s : Structure) (target : Ref) (accepted : Bool) 
     else some .resultOfUnlistedEvent
   | _ => some .resultOfNonCommand
 
-/-- Which assumed condition an answer to a request breaks. -/
+/-- What an answer to a request, or its result events, break of the target's contract. -/
 inductive AssumptionMismatch where
+  | unlistedRejectionKind (rejection : Rejection)
+  | answerOutputSchema
+  /-- The answer rejects the request for requires, although the input meets the target's assumed requires. -/
   | rejectedAssumedRequires
+  /-- The answer is no rejection, although the input fails the target's assumed requires `condition`. -/
   | failedAssumedRequires (condition : String)
+  /-- The answer, or the result events so far, fail the target's assumed ensures `condition`. -/
   | failedAssumedEnsures (condition : String)
 deriving DecidableEq, Repr, Inhabited
 

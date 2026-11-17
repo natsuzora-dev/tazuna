@@ -21,22 +21,10 @@ inductive InvalidInput where
   | reusedSubscriptionId (subscriptionId : String)
   /-- The unsubscribe input names a subscription that is not open. -/
   | unopenedSubscription (subscriptionId : String)
-  | unlistedRejectionKind (requestId : String) (target : Spec.Ref) (rejection : Rejection)
+  | assumption (requestId : String) (target : Spec.Ref) (mismatch : Spec.AssumptionMismatch)
   /-- The answer rejects the request for a requires reason that the target does not list. -/
   | unlistedRejectionReason (requestId : String) (target : Spec.Ref) (rejection : Rejection)
-  | answerOutputSchema (requestId : String) (target : Spec.Ref)
-  /-- The answer rejects the request for requires, although the input meets the target's assumed requires. -/
-  | rejectedAssumedRequires (requestId : String) (target : Spec.Ref)
-  /-- The answer is no rejection, although the input fails the target's assumed requires `condition`. -/
-  | failedAssumedRequires (requestId : String) (target : Spec.Ref) (condition : String)
-  /-- The answer, or the result events so far, fail the target's assumed ensures `condition`. -/
-  | failedAssumedEnsures (requestId : String) (target : Spec.Ref) (condition : String)
-  /-- The resultOf of the event input names a request to a target that is not a command. -/
-  | resultOfNonCommand (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
-  /-- The resultOf of the event input names a request that the answer did not accept. -/
-  | resultOfUnacceptedRequest (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
-  /-- The resultOf of the event input names a request to a command whose emits do not list the event. -/
-  | resultOfUnlistedEvent (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
+  | resultOf (event : Spec.Ref) (requestId : String) (target : Spec.Ref) (mismatch : Spec.ResultOfMismatch)
   | unknownControl (screen : Spec.Ref) (control : String)
   /-- The operation input operates a screen that is not open. -/
   | unopenedScreen (screen : Spec.Ref) (control : String)
@@ -54,7 +42,7 @@ deriving Repr
 
 local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 
-derive_group InvalidInput
+derive_group InvalidInput flatten mismatch
 
 /--
 Whether the violation halts the run, which it does when the scenario as written describes no run, or not one run, from
@@ -66,10 +54,10 @@ id it reuses on a retry or an answer that breaks the receiver's assumption, is w
 -/
 def InvalidInput.halts : InvalidInput → Bool
   | .unownedTarget .. | .eventPayloadSchema .. | .controlPayloadSchema ..
-  | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
-  | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyStep .. | .unusedStepOrder .. | .resultOfUnansweredRequest ..
-  | .resultOfNonCommand .. | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. => true
-  | .reusedSubscriptionId .. | .unopenedSubscription ..
-  | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. => false
+  | .assumption _ _ (.unlistedRejectionKind _) | .assumption _ _ .answerOutputSchema | .unlistedRejectionReason ..
+  | .unknownControl .. | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyStep ..
+  | .unusedStepOrder .. | .resultOfUnansweredRequest .. | .resultOf .. => true
+  | .reusedSubscriptionId .. | .unopenedSubscription .. | .assumption _ _ .rejectedAssumedRequires
+  | .assumption _ _ (.failedAssumedRequires _) | .assumption _ _ (.failedAssumedEnsures _) => false
 
 end Tazuna.Service

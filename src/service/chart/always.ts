@@ -1,6 +1,6 @@
+import { limits } from "../../data/limits.generated.ts";
 import { ref } from "../basic.ts";
 import { type InstanceId, ownerId } from "../instance.ts";
-import { limits } from "../limits.ts";
 import { valueName } from "../note.ts";
 import { type Chosen, copiesOf, type Instance, machine, report } from "../state.ts";
 import { transitionsAt } from "./basic.ts";

@@ -37,7 +37,7 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
       match answer, r.definition.kind with
       | .rejected rejection, _ =>
         (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none
-         else some (.mismatch (.unlistedRejectionKind line to r.definition.ref rejection)), answered)
+         else some (.mismatch (.assumption line to r.definition.ref (.unlistedRejectionKind rejection))), answered)
       | .accepted _, "command" | .fulfilled _, "query" => (none, answered)
       | .accepted _, _ => (some (.mismatch (.answerResult line to r.definition.ref "accepted")), answered)
       | .fulfilled _, _ => (some (.mismatch (.answerResult line to r.definition.ref "fulfilled")), answered)

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { type AssignmentSearch, assignmentSearch } from "../src/explore/assignments.ts";
-import { assignmentLimit, stepOrderLimit } from "../src/explore/choiceDependent.ts";
 import { type Searched, stepOrderChanges } from "../src/explore/stepOrders.ts";
 import { loadSpec } from "../src/load/load.ts";
 import { simulateSpec } from "../src/sim/spec/simulate.ts";
@@ -58,10 +57,6 @@ for (const { root, spec, scenarios } of simCases) {
   });
 }
 
-test("stepOrderLimit is Lean's", () => {
-  assert.equal(stepOrderLimit, lean.names().stepOrderLimit);
-});
-
 for (const { root, spec, scenarios } of simCases) {
   if (assignedOf(scenarios).length === 0) continue;
   test(`${relative(tests, root)}: TS and Lean run the same assignment searches of the handles of requests, with the same assignments and violations`, () => {
@@ -75,7 +70,3 @@ for (const { root, spec, scenarios } of simCases) {
     }
   });
 }
-
-test("assignmentLimit is Lean's", () => {
-  assert.equal(assignmentLimit, lean.names().assignmentLimit);
-});

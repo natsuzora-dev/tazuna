@@ -1,8 +1,8 @@
+import { limits } from "../../data/limits.generated.ts";
 import { byCodePoint, plain } from "../../data/values.ts";
 import { ref } from "../basic.ts";
 import { Failed, type Functions, issueViolation } from "../functions.ts";
 import { copyId } from "../instance.ts";
-import { limits } from "../limits.ts";
 import { LazyRecordSource } from "../records.ts";
 import { copyKeysOf, halt, type Instance, inStep, NoteAccess, newStep, report, scopeOf } from "../state.ts";
 import { endWith } from "./exit.ts";

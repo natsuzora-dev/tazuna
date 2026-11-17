@@ -51,11 +51,6 @@ def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s
     else s.report (.invalidInput (.unopenedSubscription id))
   message st fs s.newMessage {}
 
-def resultOfFinding (event : Spec.Ref) (requestId : String) (target : Spec.Ref) : Spec.ResultOfMismatch → Finding
-  | .resultOfNonCommand => .invalidInput (.resultOfNonCommand event requestId target)
-  | .resultOfUnacceptedRequest => .invalidInput (.resultOfUnacceptedRequest event requestId target)
-  | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
-
 /--
 The request `handle` whose answer arrived (State.answerTo?), which an event names as its resultOf. It is none after
 reporting that no answer to it arrived, or that the request cannot have the event as its result (resultOfMismatch).
@@ -64,7 +59,7 @@ def resultRequest (st : Service) (s : State) (name handle : String) : State × O
   match s.answerTo? handle with
   | some (target, answer) =>
     match st.«structure».resultOfMismatch target (answer matches .accepted _) (st.refOf name) with
-    | some mismatch => (s.report (resultOfFinding (st.refOf name) handle target mismatch), none)
+    | some mismatch => (s.report (.invalidInput (.resultOf (st.refOf name) handle target mismatch)), none)
     | none => (s, some handle)
   | none => (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) handle)), none)
 
@@ -85,7 +80,7 @@ def checkResults [Monad m] (st : Service) (fs : Functions m) (s : State) : m Sta
     | some a =>
     match ← fs.resultEnsures (st.traceNameOf o.activity.ref) a.input a.output a.events with
     | .error issue => return s.report (.fault (issueViolation st o.activity.ref issue))
-    | .ok (some c) => return s.report (.invalidInput (.failedAssumedEnsures o.id o.activity.ref c))
+    | .ok (some c) => return s.report (.invalidInput (.assumption o.id o.activity.ref (.failedAssumedEnsures c)))
     | .ok none => return s
 
 /-- The state after the event that arrived as `raw` and parsed as `payload` is delivered. -/
@@ -127,15 +122,10 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
       let (s, request) := withResultOf st s name resultOf
       if s.halted.isSome then pure s else deliver st fs s name givenId raw payload request
 
-def assumptionFinding (requestId : String) (target : Spec.Ref) : Spec.AssumptionMismatch → Finding
-  | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)
-  | .failedAssumedRequires c => .invalidInput (.failedAssumedRequires requestId target c)
-  | .failedAssumedEnsures c => .invalidInput (.failedAssumedEnsures requestId target c)
-
 /-- The assumption that an answer to the request `requestId` to `target` breaks (Spec.assumptionMismatch). -/
 def brokenAssumption (requestId : String) (target : Spec.Ref) (answer : Answer)
     (failedRequires failedEnsures : Option String) : Option Finding :=
-  (Spec.assumptionMismatch answer failedRequires failedEnsures).map (assumptionFinding requestId target)
+  (Spec.assumptionMismatch answer failedRequires failedEnsures).map (.invalidInput ∘ .assumption requestId target)
 
 /--
 The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported
@@ -165,14 +155,14 @@ def decodedAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (ans
   match answer with
   | .rejected r =>
     if !(j.rejectionKinds st.service target).contains r.kind then
-      return .ok (.error (.invalidInput (.unlistedRejectionKind p.id target r)))
+      return .ok (.error (.invalidInput (.assumption p.id target (.unlistedRejectionKind r))))
     if r.kind == .requires && !(j.rejectionReasons target).contains (r.reason.getD "") then
       return .ok (.error (.invalidInput (.unlistedRejectionReason p.id target r)))
     return .ok (.ok answer)
   | _ =>
     match ← decodedOutput st fs p.activity answer with
     | .error e => return .error e
-    | .ok none => return .ok (.error (.invalidInput (.answerOutputSchema p.id target)))
+    | .ok none => return .ok (.error (.invalidInput (.assumption p.id target .answerOutputSchema)))
     | .ok (some decoded) => return .ok (.ok decoded)
 
 /-- The check of an answer to the request `p` from a spec service, which parsed the input itself. -/

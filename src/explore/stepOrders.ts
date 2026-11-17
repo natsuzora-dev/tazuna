@@ -1,4 +1,5 @@
 import type { ChoiceDependent } from "../data/choiceDependent.generated.ts";
+import { stepOrderLimit } from "../data/limits.generated.ts";
 import type { Origin, Scenario } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
@@ -11,7 +12,7 @@ import type { Span, StepOrder } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
 import { leadsTo } from "../sim/trace.ts";
 import { compareTrace } from "../verify/compare.ts";
-import { type Compare, type Outcome, outcomeOf, stepOrder, stepOrderLimit } from "./choiceDependent.ts";
+import { type Compare, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
 
 /** Lean's Tried: a step order that the search ran, refused (Execution.refused) or with the violation found, if any. */
 export type Tried =

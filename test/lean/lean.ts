@@ -45,13 +45,6 @@ export type VerifyViolation = Mismatch | Uncomparable;
 const fileLines = (lines: readonly FileLine[]) =>
   lines.map((l) => (l === undefined ? null : isMalformed(l) ? "malformed" : l));
 
-interface LeanNames {
-  readonly byCaller: Readonly<Record<string, boolean>>;
-  readonly limits: Readonly<Record<string, number>>;
-  readonly stepOrderLimit: number;
-  readonly assignmentLimit: number;
-}
-
 /**
  * The tazuna-lean process. The spec functions are called synchronously and read records midway, so talking to Lean
  * must be synchronous too: stdin and stdout go through two named pipes, and readSync waits for each answer.
@@ -233,18 +226,6 @@ export class Lean {
       functions,
     );
     return { tried, found } as AssignmentSearch;
-  }
-
-  names(): LeanNames {
-    this.send({ type: "names" });
-    const message = this.receive();
-    if (message["type"] !== "names") throw new Error(`tazuna-lean answered names with ${JSON.stringify(message)}`);
-    return {
-      byCaller: message["byCaller"] as Record<string, boolean>,
-      limits: message["limits"] as Record<string, number>,
-      stepOrderLimit: message["stepOrderLimit"] as number,
-      assignmentLimit: message["assignmentLimit"] as number,
-    };
   }
 
   /** Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables. */

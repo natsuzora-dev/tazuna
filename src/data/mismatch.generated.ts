@@ -214,6 +214,47 @@ export type Mismatch =
         readonly rejection: Rejection;
       };
     }
+  | {
+      readonly kind: "Mismatch.answerOutputSchema";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
+    }
+  /** The answer rejects the request for requires, although the input meets the target's assumed requires. */
+  | {
+      readonly kind: "Mismatch.rejectedAssumedRequires";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
+    }
+  /** The answer is no rejection, although the input fails the target's assumed requires `condition`. */
+  | {
+      readonly kind: "Mismatch.failedAssumedRequires";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+        readonly condition: string;
+      };
+    }
+  /** The answer, or the result events so far, fail the target's assumed ensures `condition`. */
+  | {
+      readonly kind: "Mismatch.failedAssumedEnsures";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+        readonly condition: string;
+      };
+    }
   /** The answer has a result that the target never answers with: `fulfilled` to a command or `accepted` to a query. */
   | {
       readonly kind: "Mismatch.answerResult";
@@ -228,44 +269,6 @@ export type Mismatch =
   /** The answer answers a request that an earlier line answered. */
   | {
       readonly kind: "Mismatch.repeatedAnswer";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-      };
-    }
-  | {
-      readonly kind: "Mismatch.rejectedAssumedRequires";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-      };
-    }
-  | {
-      readonly kind: "Mismatch.failedAssumedRequires";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-        readonly condition: string;
-      };
-    }
-  | {
-      readonly kind: "Mismatch.failedAssumedEnsures";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-        readonly condition: string;
-      };
-    }
-  | {
-      readonly kind: "Mismatch.answerOutputSchema";
       readonly definition: null;
       readonly line: number;
       readonly data: {
@@ -302,11 +305,11 @@ export const mismatchKinds = [
   "Mismatch.resultOfUnacceptedRequest",
   "Mismatch.resultOfUnlistedEvent",
   "Mismatch.unlistedRejectionKind",
-  "Mismatch.answerResult",
-  "Mismatch.repeatedAnswer",
+  "Mismatch.answerOutputSchema",
   "Mismatch.rejectedAssumedRequires",
   "Mismatch.failedAssumedRequires",
   "Mismatch.failedAssumedEnsures",
-  "Mismatch.answerOutputSchema",
+  "Mismatch.answerResult",
+  "Mismatch.repeatedAnswer",
   "Mismatch.eventPayloadSchema",
 ] as const;

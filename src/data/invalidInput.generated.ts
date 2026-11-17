@@ -58,16 +58,6 @@ export type InvalidInput =
         readonly rejection: Rejection;
       };
     }
-  /** The answer rejects the request for a requires reason that the target does not list. */
-  | {
-      readonly kind: "InvalidInput.unlistedRejectionReason";
-      readonly definition: null;
-      readonly data: {
-        readonly requestId: string;
-        readonly target: DefinitionRef;
-        readonly rejection: Rejection;
-      };
-    }
   | {
       readonly kind: "InvalidInput.answerOutputSchema";
       readonly definition: null;
@@ -105,7 +95,17 @@ export type InvalidInput =
         readonly condition: string;
       };
     }
-  /** The resultOf of the event input names a request to a target that is not a command. */
+  /** The answer rejects the request for a requires reason that the target does not list. */
+  | {
+      readonly kind: "InvalidInput.unlistedRejectionReason";
+      readonly definition: null;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+        readonly rejection: Rejection;
+      };
+    }
+  /** The resultOf of the event names a request to a target that is not a command. */
   | {
       readonly kind: "InvalidInput.resultOfNonCommand";
       readonly definition: null;
@@ -115,7 +115,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
-  /** The resultOf of the event input names a request that the answer did not accept. */
+  /** The resultOf of the event names a request that the answer did not accept. */
   | {
       readonly kind: "InvalidInput.resultOfUnacceptedRequest";
       readonly definition: null;
@@ -125,7 +125,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
-  /** The resultOf of the event input names a request to a command whose emits do not list the event. */
+  /** The resultOf of the event names a request to a command whose emits do not list the event. */
   | {
       readonly kind: "InvalidInput.resultOfUnlistedEvent";
       readonly definition: null;
@@ -206,11 +206,11 @@ export const invalidInputKinds = [
   "InvalidInput.reusedSubscriptionId",
   "InvalidInput.unopenedSubscription",
   "InvalidInput.unlistedRejectionKind",
-  "InvalidInput.unlistedRejectionReason",
   "InvalidInput.answerOutputSchema",
   "InvalidInput.rejectedAssumedRequires",
   "InvalidInput.failedAssumedRequires",
   "InvalidInput.failedAssumedEnsures",
+  "InvalidInput.unlistedRejectionReason",
   "InvalidInput.resultOfNonCommand",
   "InvalidInput.resultOfUnacceptedRequest",
   "InvalidInput.resultOfUnlistedEvent",
@@ -229,8 +229,8 @@ export const haltingInvalidInputKinds = [
   "InvalidInput.eventPayloadSchema",
   "InvalidInput.controlPayloadSchema",
   "InvalidInput.unlistedRejectionKind",
-  "InvalidInput.unlistedRejectionReason",
   "InvalidInput.answerOutputSchema",
+  "InvalidInput.unlistedRejectionReason",
   "InvalidInput.resultOfNonCommand",
   "InvalidInput.resultOfUnacceptedRequest",
   "InvalidInput.resultOfUnlistedEvent",

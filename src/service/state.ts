@@ -1,6 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
+import { limits } from "../data/limits.generated.ts";
 import type { Requester, StepName } from "../data/step.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
@@ -22,7 +23,6 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import { limits } from "./limits.ts";
 import { type Emit, type Halting, halts } from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";

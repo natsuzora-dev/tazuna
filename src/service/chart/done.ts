@@ -1,7 +1,7 @@
+import { limits } from "../../data/limits.generated.ts";
 import { finished } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, issueViolation } from "../functions.ts";
-import { limits } from "../limits.ts";
 import { LazyRecordSource } from "../records.ts";
 import { failedEnsures, halt, type Instance, NoteAccess, reportAll, scopeOf, startQueued } from "../state.ts";
 import { endWith } from "./exit.ts";

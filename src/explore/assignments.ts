@@ -1,5 +1,6 @@
 import type { Assigned, ChoiceDependent } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { assignmentLimit } from "../data/limits.generated.ts";
 import type { Fact, Scenario } from "../data/scenario.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, withExtra } from "../data/violation.ts";
@@ -9,7 +10,7 @@ import type { Assignment } from "../sim/network.ts";
 import { groupOf, Reported, requestsOf } from "../sim/resolve.ts";
 import { expectationLine, expectationNamed, lineNamed } from "../sim/run.ts";
 import { executeSpec, type Made } from "../sim/spec/simulate.ts";
-import { assignment, assignmentLimit } from "./choiceDependent.ts";
+import { assignment } from "./choiceDependent.ts";
 import { compareOf, outcomeFor } from "./stepOrders.ts";
 
 /** Lean's HandleGroup. */

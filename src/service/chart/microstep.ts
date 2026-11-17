@@ -1,9 +1,9 @@
+import { limits } from "../../data/limits.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { mapOf } from "../instance.ts";
-import { limits } from "../limits.ts";
 import type { RegionPair } from "../note.ts";
 import { type Chosen, depth, documentOrder, type Instance } from "../state.ts";
 import { exitsOf } from "./config.ts";

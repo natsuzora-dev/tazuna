@@ -1,3 +1,4 @@
+import { limits } from "../data/limits.generated.ts";
 import { ref } from "./basic.ts";
 import { settled } from "./chart/always.ts";
 import { rearm } from "./chart/deadline.ts";
@@ -5,7 +6,6 @@ import { drain } from "./chart/macrostep.ts";
 import type { Processing } from "./chart/queue.ts";
 import { chooseDeadline, deadlineStep, earliestDeadline, fire } from "./clock.ts";
 import { Failed, issueViolation } from "./functions.ts";
-import { limits } from "./limits.ts";
 import { publish } from "./query.ts";
 import { LazyRecordSource } from "./records.ts";
 import { type Deadline, halt, inStep, NoteAccess, newMessage, newStep, report, running, scopeOf } from "./state.ts";

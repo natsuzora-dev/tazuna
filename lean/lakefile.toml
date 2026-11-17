@@ -12,7 +12,7 @@ globs = ["Tazuna.+"]
 
 [[lean_lib]]
 name = "DiffTest"
-roots = ["DiffTest.Json", "DiffTest.Names"]
+roots = ["DiffTest.Json"]
 
 [[lean_exe]]
 name = "tazuna-lean"

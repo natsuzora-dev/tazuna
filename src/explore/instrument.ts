@@ -1,8 +1,9 @@
 import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
-import { bindingLimit, emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
+import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { bindingLimit } from "../data/limits.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";

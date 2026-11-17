@@ -1,5 +1,6 @@
 import Lean.Elab.Term
 import Tazuna.Data.Names
+import Tazuna.Service.Limits
 import Tazuna.Data.Trace
 import Tazuna.Explore.ChoiceDependent
 import Tazuna.Explore.BagOrderDependent
@@ -53,7 +54,7 @@ def tsTypes : List TsType :=
    ⟨``Tazuna.Service.Requester, "Requester", some "./step.generated.ts"⟩,
    ⟨``Tazuna.Service.Received, "Received", some "./step.generated.ts"⟩,
    ⟨``Tazuna.Service.StepName, "StepName", some "./step.generated.ts"⟩,
-   ⟨``Tazuna.Service.Violation, "ViolationValue", some "./violation.ts"⟩,
+   ⟨``Tazuna.Data.Violation, "ViolationValue", some "./violation.ts"⟩,
    ⟨``Tazuna.Explore.Difference, "Difference", none⟩, ⟨``Tazuna.Explore.Assigned, "Assigned", none⟩]
 
 /-- The TS type of a Lean type. The state collects the imports that the TS type needs. -/
@@ -108,28 +109,28 @@ def value (type : Name) : StateT (List (String × String)) MetaM String := do
   | _ => throwError "{type}: a group's data has only enum, untagged, tagged and object types"
 
 def group (type : Name) : StateT (List (String × String)) MetaM String := do
-  let ctors ← constructors type
-  let members ← ctors.mapM fun ctor => do
-    let fields ← groupFields ctor
+  let kinds ← Tazuna.Data.members type
+  let members ← kinds.mapM fun member => do
+    let fields ← groupFields member
     let definition ← match fields.definition with
       | some type =>
         let ref := match type with
           | .app (.const ``Option _) a => a
           | t => t
         unless ref.isConstOf ``Tazuna.Spec.Ref do
-          throwError "{ctor}: the argument definition must have type Spec.Ref or Option Spec.Ref"
+          throwError "{member.ctor}: the argument definition must have type Spec.Ref or Option Spec.Ref"
         tsType type
       | none => pure "null"
     let place ← fields.place.mapM fun (n, type) => do pure s!"      readonly {n}: {← tsType type};\n"
-    let doc := ((← findDocString? (← getEnv) ctor).map (jsdoc "  ")).getD ""
-    pure (doc, "{\n" ++ s!"      readonly kind: \"{kindName type ctor}\";\n" ++
+    let doc := ((← findDocString? (← getEnv) member.named).map (jsdoc "  ")).getD ""
+    pure (doc, "{\n" ++ s!"      readonly kind: \"{kindName type member}\";\n" ++
       s!"      readonly definition: {definition};\n" ++ String.join place ++
       s!"      readonly data: {← object fields.data "        "};\n" ++ "    }")
   let name := type.getString!
   let typeDoc := (← findDocString? (← getEnv) type).map (jsdoc "") |>.getD ""
   return typeDoc ++ s!"export type {name} =\n" ++
     "\n".intercalate (members.map fun (doc, m) => doc ++ "  | " ++ m) ++ ";\n\n" ++
-    constArray s!"{lowerFirst name}Kinds" (ctors.map (kindName type ·))
+    constArray s!"{lowerFirst name}Kinds" (kinds.map (kindName type ·))
 
 /-- The `import type` lines, one per module, for the TS types that `imports` names. -/
 def importLines (imports : List (String × String)) : List String :=
@@ -333,21 +334,75 @@ elab "zodType% " t:ident parts:ident* : term => do
     return declarations ++ [← declaration listed false root]
   return toExpr (← zodFile (parts ++ [root]) true declarations)
 
+/-- `groupSamples% T` elaborates to one value per kind of group `T`, with `default` arguments, in declaration order. -/
+elab "groupSamples% " t:ident : term => do
+  let group ← realizeGlobalConstNoOverloadWithInfo t
+  let sample (ctor : Name) (flattened : Option (String × Expr)) : MetaM Expr := do
+    forallTelescope (← getConstInfoCtor ctor).type fun args _ => do
+      let values ← args.mapM fun a => do
+        if let some (field, value) := flattened then
+          if (← a.fvarId!.getUserName).toString == field then return value
+        mkAppOptM ``Inhabited.default #[← inferType a, none]
+      pure (mkAppN (mkConst ctor) values)
+  let values ← (← members group).mapM fun m => do
+    match m.inner with
+    | none => sample m.ctor none
+    | some (field, inner) => sample m.ctor (some (field, ← sample inner none))
+  mkListLit (mkConst group) values
+
 /--
 The TS constant `halting<type>Kinds`: the kinds, in declaration order, whose violations halt the run. `halts` depends
-only on the constructor, so one sample per constructor decides it.
+only on the kind, so one sample per kind decides it.
 -/
 def halting (type : String) (kinds : List String) : String :=
   "\n/** The kinds whose violations halt the run. */\n" ++ constArray s!"halting{type}Kinds" kinds
+
+/-- `doc% c` elaborates to the docstring of `c`. -/
+elab "doc% " c:ident : term => do
+  let name ← realizeGlobalConstNoOverloadWithInfo c
+  let some doc ← findDocString? (← getEnv) name | throwError "{name} has no docstring"
+  return toExpr doc
+
+/-- `constructorDocs% T` elaborates to the docstrings of the constructors of `T`, in declaration order. -/
+elab "constructorDocs% " t:ident : term => do
+  let type ← realizeGlobalConstNoOverloadWithInfo t
+  let docs ← (← constructors type).mapM fun c => do
+    let some doc ← findDocString? (← getEnv) c | throwError "{c} has no docstring"
+    pure doc
+  return toExpr docs
+
+/-- `sources% c+` elaborates to the Lean files that declare `c`, as a generated file's header names them. -/
+elab "sources% " cs:ident+ : term => do
+  return toExpr (← modulePaths (← cs.toList.mapM fun c => realizeGlobalConstNoOverloadWithInfo c.raw))
+
+/-- The TS limits: `limits`, Limit.max by limit name, and the limits of the searches and of a comparison. -/
+def limitsFile : String :=
+  let constant (name doc : String) (value : Nat) := "\n" ++ jsdoc "" doc ++ s!"export const {name} = {value};\n"
+  "// Generated by npm run lean:write (lean/Generate/Main.lean) from " ++
+    sources% Tazuna.Service.Limit Tazuna.Explore.stepOrderLimit Tazuna.Data.bindingLimit ++ ". Do not edit.\n" ++
+    jsdoc "" (doc% Tazuna.Service.Limit) ++ "export const limits = {\n" ++
+    String.join (((samples% Tazuna.Service.Limit).zip (constructorDocs% Tazuna.Service.Limit)).map fun (l, doc) =>
+      jsdoc "  " doc ++ s!"  {l.name}: {l.max},\n") ++ "} as const;\n" ++
+    constant "stepOrderLimit" (doc% Tazuna.Explore.stepOrderLimit) Tazuna.Explore.stepOrderLimit ++
+    constant "assignmentLimit" (doc% Tazuna.Explore.assignmentLimit) Tazuna.Explore.assignmentLimit ++
+    constant "bindingLimit" (doc% Tazuna.Data.bindingLimit) Tazuna.Data.bindingLimit
+
+/-- The TS constant `byCallerKinds`: the rejection kinds, in declaration order, that blame the request. -/
+def byCallerKinds : String :=
+  "\n/** The rejection kinds that blame the request, not the target's availability. */\n" ++
+    constArray "byCallerKinds" ((samples% Tazuna.Data.RejectionKind).filterMap fun k =>
+      match ToValue.toValue k with
+      | .str s => if k.byCaller then some s else none
+      | _ => none)
 
 def files : List (String × String) :=
   [("data/illegal.generated.ts", typescript% Tazuna.Validation.Illegal),
    ("data/mismatch.generated.ts", typescript% Tazuna.Verify.Mismatch Tazuna.Verify.Subject),
    ("data/uncomparable.generated.ts", typescript% Tazuna.Verify.Uncomparable),
    ("data/invalidInput.generated.ts", typescript% Tazuna.Service.InvalidInput ++
-      halting "InvalidInput" (((samples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
+      halting "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
    ("data/invalidScenario.generated.ts", typescript% Tazuna.Sim.InvalidScenario ++
-      halting "InvalidScenario" (((samples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind))),
+      halting "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind))),
    ("data/scenario.generated.ts",
     zod% Tazuna.Scenario Tazuna.Spec.Ref Tazuna.Scenario.Origin
       Tazuna.Scenario.Fact Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
@@ -355,7 +410,7 @@ def files : List (String × String) :=
       Tazuna.Scenario.Expectation Tazuna.Scenario.GivenRecord Tazuna.Scenario.Peer Tazuna.Scenario.PeerEntry
       Tazuna.Scenario.Given),
    ("data/fault.generated.ts", typescript% Tazuna.Service.Fault ++
-      halting "Fault" (((samples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
+      halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
    ("data/bagOrderDependent.generated.ts", typescript% Tazuna.Explore.BagOrderDependent),
    ("data/choiceDependent.generated.ts",
     typescript% Tazuna.Explore.ChoiceDependent Tazuna.Explore.Difference Tazuna.Explore.Assigned),
@@ -364,7 +419,8 @@ def files : List (String × String) :=
    ("data/step.generated.ts",
     types% Tazuna.Service.InstanceId Tazuna.Service.Requester Tazuna.Service.Received Tazuna.Service.StepName),
    ("data/trace.generated.ts",
-    zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer),
+    zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer ++ byCallerKinds),
+   ("data/limits.generated.ts", limitsFile),
    ("spec/structure.generated.ts",
     zodType% Tazuna.Spec.Structure Tazuna.Data.RejectionKind Tazuna.Spec.Ref Tazuna.Spec.Activity
       Tazuna.Spec.Transition Tazuna.Spec.State Tazuna.Spec.ChartFields Tazuna.Spec.Reference

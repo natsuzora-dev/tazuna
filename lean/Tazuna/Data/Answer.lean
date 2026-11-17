@@ -14,6 +14,11 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire RejectionKind rename_all "kebab-case"
 
+/-- Whether a rejection of this kind blames the request, not the target's availability. -/
+def RejectionKind.byCaller : RejectionKind → Bool
+  | .unavailable => false
+  | _ => true
+
 /-- The rejection of a request. verify compares `kind`, not `reason`. -/
 structure Rejection where
   kind : RejectionKind

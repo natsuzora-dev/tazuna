@@ -16,7 +16,7 @@ theorem addResult_records (id : String) (e : Emit) : (s.addResult id e).records 
 theorem resultRequest_records (name k : String) : (resultRequest st s name k).1.records = s.records := by
   unfold resultRequest
   repeat' split
-  all_goals first | rfl | simp
+  all_goals rfl
 
 theorem startRecords_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (startRecords st fs s).records := by
   unfold startRecords
@@ -221,25 +221,27 @@ theorem begin_starts_starting_without_parent (h : s.started = false) :
 theorem resultRequest_lines (name k : String) : (resultRequest st s name k).1.lines = s.lines := by
   unfold resultRequest
   repeat' split
-  all_goals first | rfl | simp
+  all_goals rfl
 
 theorem addResult_lines (id : String) (e : Emit) : (s.addResult id e).lines = s.lines := rfl
 
 theorem resultRequest_now (name k : String) : (resultRequest st s name k).1.now = s.now := by
   unfold resultRequest
   repeat' split
-  all_goals first | rfl | simp
-
-theorem resultOfFinding_halts (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
-    (m : Spec.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = true := by
-  cases m <;> rfl
+  all_goals rfl
 
 theorem brokenAssumption_finding (requestId : String) (target : Spec.Ref) (answer : Answer)
     (failedRequires failedEnsures : Option String) (r : Finding)
     (h : brokenAssumption requestId target answer failedRequires failedEnsures = some r) :
-    r.halts = false ∧ ∃ m, r = assumptionFinding requestId target m := by
-  obtain ⟨m, -, rfl⟩ := Option.map_eq_some_iff.mp h
-  exact ⟨by cases m <;> rfl, m, rfl⟩
+    r.halts = false ∧ ∃ m, r = .invalidInput (.assumption requestId target m) := by
+  obtain ⟨m, hm, rfl⟩ := Option.map_eq_some_iff.mp h
+  refine ⟨?_, m, rfl⟩
+  unfold Spec.assumptionMismatch at hm
+  repeat' split at hm
+  all_goals first
+    | (simp at hm; done)
+    | (obtain rfl := Option.some.inj hm; rfl)
+    | (obtain ⟨c, -, rfl⟩ := Option.map_eq_some_iff.mp hm; rfl)
 
 theorem rejectedInput?_some (target : Spec.Ref) (q : Requester) (answer : Answer) (f : Fault)
     (h : q.rejectedInput? st target answer = some f) : f = q.inputFault st target := by
@@ -248,9 +250,9 @@ theorem rejectedInput?_some (target : Spec.Ref) (q : Requester) (answer : Answer
 theorem decodedAnswer_findings (p : Pending) (answer : Answer) (r : Finding)
     (h : decodedAnswer st fs p answer = .ok (.error r)) :
     r.halts = true ∧
-      ((∃ rejection, r = .invalidInput (.unlistedRejectionKind p.id p.activity.ref rejection)) ∨
+      ((∃ rejection, r = .invalidInput (.assumption p.id p.activity.ref (.unlistedRejectionKind rejection))) ∨
         (∃ rejection, r = .invalidInput (.unlistedRejectionReason p.id p.activity.ref rejection)) ∨
-        r = .invalidInput (.answerOutputSchema p.id p.activity.ref)) := by
+        r = .invalidInput (.assumption p.id p.activity.ref .answerOutputSchema)) := by
   unfold decodedAnswer at h
   simp only [id_bind, id_pure] at h
   repeat' split at h
@@ -260,12 +262,12 @@ theorem decodedAnswer_findings (p : Pending) (answer : Answer) (r : Finding)
 
 theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCheck)
     (h : checkAnswer st fs p answer = .ok checked) :
-    (∀ r, checked.assumption = some r → r.halts = false ∧ ∃ m, r = assumptionFinding p.id p.activity.ref m) ∧
+    (∀ r, checked.assumption = some r → r.halts = false ∧ ∃ m, r = .invalidInput (.assumption p.id p.activity.ref m)) ∧
       ∀ r, checked.decoded = .error r →
         r = .fault (p.requester.inputFault st p.activity.ref) ∨ r.halts = true ∧
-        ((∃ rejection, r = .invalidInput (.unlistedRejectionKind p.id p.activity.ref rejection)) ∨
+        ((∃ rejection, r = .invalidInput (.assumption p.id p.activity.ref (.unlistedRejectionKind rejection))) ∨
           (∃ rejection, r = .invalidInput (.unlistedRejectionReason p.id p.activity.ref rejection)) ∨
-          r = .invalidInput (.answerOutputSchema p.id p.activity.ref)) := by
+          r = .invalidInput (.assumption p.id p.activity.ref .answerOutputSchema)) := by
   unfold checkAnswer assumedAnswer specAnswer at h
   simp only [id_bind, id_pure] at h
   repeat' split at h
@@ -293,13 +295,13 @@ theorem invalid_input_answer_faults_sender (p : Pending) (reason : Option String
 /-- An event whose resultOf names a request that cannot have the event as its result halts the run with that report. -/
 theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Spec.Ref) (a : Answer)
     (hp : s.answerTo? k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
-    ∃ event requestId target m, s₁ = s.halt (resultOfFinding event requestId target m) := by
+    ∃ event requestId target m, s₁ = s.halt (.invalidInput (.resultOf event requestId target m)) := by
   unfold resultRequest at hq
   split at hq
   · repeat' split at hq
     all_goals first
       | (simp at hq; done)
-      | (simp only [Prod.mk.injEq, State.report, resultOfFinding_halts, ↓reduceIte] at hq
+      | (simp only [Prod.mk.injEq, State.report, Finding.halts, InvalidInput.halts, ↓reduceIte] at hq
          exact ⟨_, _, _, _, hq.1.symm⟩)
   · rename_i hn
     simp [hp] at hn

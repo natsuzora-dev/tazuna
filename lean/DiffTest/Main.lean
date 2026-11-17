@@ -1,6 +1,5 @@
 import Std.Data.HashMap
 import DiffTest.Json
-import DiffTest.Names
 import Tazuna.Explore.Assignments
 import Tazuna.Sim.Run
 
@@ -268,10 +267,9 @@ def compareOf (spec : Spec.Structure) (service : String)
     (ask : Spec.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun renamed expected actual => do
   let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line) renamed
   let numbered := compared.findings.map fun f =>
-    let v : Violation := match f with
-      | .mismatch m => { kind := m.kind, definition := m.definition, data := m.data }
-      | .uncomparable u => { kind := u.kind, definition := u.definition, data := u.data }
-    (f.line, v)
+    (f.line, match f with
+      | .mismatch m => m.toViolation
+      | .uncomparable u => u.toViolation)
   pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
     | some (_, v) => .error v
     | none => .ok compared.bindings)
@@ -461,14 +459,6 @@ partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
       | some (.str "simulate") => simulateRequest stdin stdout request
       | some (.str "stepOrderChanges") => stepOrderChangesRequest stdin stdout request
       | some (.str "assignmentChanges") => assignmentChangesRequest stdin stdout request
-      | some (.str "names") =>
-        pure (.obj [("type", .str "names"),
-          ("byCaller", .obj (rejectionKinds.filterMap fun k =>
-            match ToValue.toValue k with
-            | .str s => some (s, .bool (RejectionKind.byCaller k))
-            | _ => none)),
-          ("limits", .obj (limits.map fun l => (l.name, .num (.fromInt l.max)))),
-          ("stepOrderLimit", .num stepOrderLimit), ("assignmentLimit", .num assignmentLimit)])
       | _ => throw (IO.userError s!"unknown request {line.trimAscii}")
     catch e => pure (.obj [("type", .str "error"), ("message", .str (toString e))])
   send stdout reply

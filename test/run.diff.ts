@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
-import { haltingFaultKinds } from "../src/data/fault.generated.ts";
 import type { Line, Scenario } from "../src/data/scenario.generated.ts";
-import type { RejectionKind } from "../src/data/trace.generated.ts";
 import { canonicalJson, type Json } from "../src/data/values.ts";
 import type { Violation } from "../src/data/violation.ts";
 import { enabled } from "../src/explore/enabled.ts";
@@ -18,8 +16,6 @@ import {
 import { search } from "../src/explore/search.ts";
 import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
-import { limits as tsLimits } from "../src/service/limits.ts";
-import { byCallerKinds } from "../src/service/message.ts";
 import { Halt } from "../src/service/state.ts";
 import type { RunningService } from "../src/sim/network.ts";
 import { outcomeOf } from "../src/sim/spec/simulate.ts";
@@ -37,22 +33,6 @@ const roots = runExamples();
 const specs = await Promise.all(
   roots.map(async (root) => ({ name: relative(tazuna, root), spec: await checkedRoot(root) })),
 );
-
-test("byCallerKinds matches RejectionKind.byCaller of Lean, the limit values match Limit.max, and haltingFaultKinds has the Fault kind named exceeded and each limit's name", () => {
-  const names = lean.names();
-  assert.deepEqual(
-    Object.fromEntries(Object.keys(names.byCaller).map((kind) => [kind, byCallerKinds.has(kind as RejectionKind)])),
-    names.byCaller,
-  );
-  assert.deepEqual({ ...tsLimits }, names.limits);
-  const halting: ReadonlySet<string> = new Set(haltingFaultKinds);
-  assert.deepEqual(
-    Object.keys(names.limits).filter(
-      (limit) => !halting.has(`Fault.exceeded${limit.charAt(0).toUpperCase()}${limit.slice(1)}`),
-    ),
-    [],
-  );
-});
 
 /** What an execution shows, as Lean's reply to `simulate` with `execute` gives it. */
 function executedOutcome(executed: Executed) {

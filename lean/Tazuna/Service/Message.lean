@@ -10,10 +10,6 @@ namespace Tazuna.Service
 
 open Tazuna.Data
 
-def RejectionKind.byCaller : RejectionKind → Bool
-  | .unavailable => false
-  | _ => true
-
 inductive LineBody where
   | command (name : String) (input : Value)
   | query (name : String) (input : Value)
@@ -62,18 +58,6 @@ structure Emit where
   payload : Value
 deriving DecidableEq, Repr, Inhabited
 
-/--
-A violation. `kind` is the group and the constructor, such as `Fault.exception`, and `definition` is the definition
-that caused the violation, or null when the subject is no definition.
--/
-structure Violation where
-  kind : String
-  definition : Value
-  data : Value
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Violation
-
 /-- What the run reports: a fault of the spec, or a message that the service takes and that is invalid. -/
 inductive Finding where
   | fault (fault : Fault)
@@ -85,7 +69,7 @@ def Finding.halts : Finding → Bool
   | .invalidInput i => i.halts
 
 def Finding.toViolation : Finding → Violation
-  | .fault f => { kind := f.kind, definition := f.definition, data := f.data }
-  | .invalidInput i => { kind := i.kind, definition := i.definition, data := i.data }
+  | .fault f => f.toViolation
+  | .invalidInput i => i.toViolation
 
 end Tazuna.Service

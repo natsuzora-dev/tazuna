@@ -29,7 +29,4 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_group BagOrderDependent
 
-def BagOrderDependent.toViolation (m : BagOrderDependent) : Violation :=
-  { kind := m.kind, definition := m.definition, data := m.data }
-
 end Tazuna.Explore

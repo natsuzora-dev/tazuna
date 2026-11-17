@@ -1,4 +1,5 @@
 import { Bag, Ref, Runs } from "./canonical.ts";
+import { bindingLimit } from "./limits.generated.ts";
 
 /** Lean's Bound: a value with its domain, written as one string, the domain first. */
 export type Bound = string;
@@ -27,9 +28,6 @@ export const imageOf = (b: Binding, s: Bound): string => {
   const t = b.forward.get(s);
   return t === undefined ? valuePart(s) : valuePart(t);
 };
-
-/** Lean's bindingLimit. */
-export const bindingLimit = 256;
 
 /** Lean's Binding.bindString. */
 export function bindString(fresh: boolean, b: Binding, s: Bound, t: Bound): Binding | undefined {
