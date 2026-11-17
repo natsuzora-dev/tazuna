@@ -252,7 +252,7 @@ def State.newCommandStep (s : State) (cause : Nat) (sender : Spec.Ref) : (State 
     else if count > Limit.messageCommands.max then some (.exceededMessageCommands sender Limit.messageCommands.max)
     else none)
 
-def Service.failedEnsures (st : Service) (name c : String) : Fault := .failedEnsures (st.ref name) c
+def failedEnsures (st : Service) (name c : String) : Fault := .failedEnsures (st.ref name) c
 
 def State.violate (s : State) (v : Violation) : State :=
   { s with violations := s.violations ++ [v] }

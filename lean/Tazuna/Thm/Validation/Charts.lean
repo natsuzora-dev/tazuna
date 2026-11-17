@@ -13,8 +13,8 @@ theorem parentKeys_eq_nil (c : Chart) :
   unfold parentKeys
   cases c.input <;> cases c.requires <;> cases c.output <;> cases c.ensures <;> simp
 
-theorem starting_screen_has_no_parent_keys (j : Structure) (service : String) (st : Tazuna.Service.Service)
-    (hs : j.service service = .ok st) (h : missingParents j = []) (c : Tazuna.Service.Chart)
+theorem starting_screen_has_no_parent_keys (j : Structure) (service : String) (st : Tazuna.Service)
+    (hs : Tazuna.Service.ofStructure j service = .ok st) (h : missingParents j = []) (c : Tazuna.Service.Chart)
     (hc : c ∈ st.starting) (hscr : c.screen = true) :
     ∃ d ∈ j.definitions, ∃ sc, d.body = .screen sc ∧ d.service = service ∧ d.name = c.name ∧
       sc.input = [] ∧ sc.requires = [] ∧ sc.output = [] ∧ sc.ensures = [] := by

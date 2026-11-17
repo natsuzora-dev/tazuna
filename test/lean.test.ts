@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { test } from "node:test";
-import { leanModulePaths, leanRoot } from "./examples.ts";
+import { leanDefinitionPaths, leanModulePaths, leanRoot } from "./examples.ts";
 
 const source = (folder: string, path: string) => readFileSync(join(leanRoot, folder, `${path}.lean`), "utf8");
 
@@ -34,6 +34,23 @@ test("The namespace of each Thm file is its path (Tazuna.Thm.Service.Chart.Exit 
     const namespaces = [...source("Thm", path).matchAll(/^namespace (\S+)$/gm)].map((m) => m[1]);
     assert.deepEqual([...new Set(namespaces)], [expected], `Thm/${path}.lean`);
   }
+});
+
+test("Each file outside Thm opens only Tazuna and the namespaces under its folder (Tazuna.Service.* for Service/Basic.lean)", () => {
+  const outside = leanDefinitionPaths().flatMap((path) => {
+    const folder = path.split(sep)[0] ?? "";
+    const open: string[] = [];
+    const found: string[] = [];
+    for (const [, keyword, name = ""] of source("", path).matchAll(/^(namespace|end) (\S+)$/gm))
+      if (keyword === "namespace") {
+        open.push(name);
+        found.push(open.join("."));
+      } else if (open.at(-1) === name) open.pop();
+    return found
+      .filter((n) => n !== "Tazuna" && n !== `Tazuna.${folder}` && !n.startsWith(`Tazuna.${folder}.`))
+      .map((n) => `${path}.lean ${n}`);
+  });
+  assert.deepEqual(outside, []);
 });
 
 test("Each Validation file except Check.lean and Illegal.lean has a file of the same name in Thm/Validation, and the other way around", () => {

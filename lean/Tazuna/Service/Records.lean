@@ -65,7 +65,7 @@ def evolve (st : Service) (records : Records) (e : Emit) : Option Evolved :=
     some { records := records.filter fun r => !isRow entity key r, change := .delete, entity, key }
   | _ => none
 
-def Service.sorted (st : Service) (schema : Schema) (v : Value) : Value :=
+def sorted (st : Service) (schema : Schema) (v : Value) : Value :=
   sortCollections (st.schemaOf schema) v
 
 end Tazuna.Service

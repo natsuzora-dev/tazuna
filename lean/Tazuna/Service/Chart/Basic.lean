@@ -107,23 +107,17 @@ theorem find?_shape (n : String) : c.tree.state? n = (c.state? n).map (·.shape)
 
 end Chart
 
-end Tazuna.Service
-
-namespace Tazuna.Spec
-
-open Tazuna.Data Tazuna.Service
-
-def Transition.toExec (t : Transition) : Service.Transition :=
+def Transition.ofSpec (t : Spec.Transition) : Transition :=
   { source := t.source, keys := t.keys, index := t.index, target := t.target, guarded := t.guarded,
     reenter := t.reenters }
 
-theorem Transition.targets_toExec (ts : List Transition) :
-    (ts.map Transition.toExec).filterMap (·.target) = ts.filterMap (·.target) := by
+theorem Transition.targets_ofSpec (ts : List Spec.Transition) :
+    (ts.map Transition.ofSpec).filterMap (·.target) = ts.filterMap (·.target) := by
   simp only [List.filterMap_map]
   rfl
 
 /-- The executable form of an activity. Only a sends to the activity's own service is `own`. -/
-def Activity.toExec (service : String) : Activity → Except String Service.Activity
+def Activity.ofSpec (service : String) : Spec.Activity → Except String Activity
   | .calls key (some r) =>
     pure { keyword := "calls", key, target := r.traceName service, service := r.service, name := r.name, own := false }
   | .sends key (some r) =>
@@ -138,30 +132,30 @@ def Activity.toExec (service : String) : Activity → Except String Service.Acti
     throw s!"the activity {key}, which names no definition, is outside the Lean model"
 
 /-- The executable form of a chart. -/
-def Chart.toExec (c : Chart) (service name : String) (order : Nat) (screen opened : Bool) :
-    Except String Service.Chart := do
-  let toState (st : State) : Except String ChartState := do
+def Chart.ofSpec (c : Spec.Chart) (service name : String) (order : Nat) (screen opened : Bool) :
+    Except String Chart := do
+  let toState (st : Spec.State) : Except String ChartState := do
     pure { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
-           children := st.children, activities := ← st.activities.mapM (Activity.toExec service),
-           transitions := st.transitions.map Transition.toExec, offers := st.offers }
+           children := st.children, activities := ← st.activities.mapM (Activity.ofSpec service),
+           transitions := st.transitions.map Transition.ofSpec, offers := st.offers }
   let ⟨states, shaped⟩ ← match h : c.states.mapM toState with
     | .error e => (throw e : Except String _)
     | .ok states =>
       pure (⟨states, by
-        rw [mapM_ok_map toState ChartState.shape State.shape (fun a b hb => by
+        rw [mapM_ok_map toState ChartState.shape Spec.State.shape (fun a b hb => by
           simp only [toState, bind, Except.bind, pure, Except.pure] at hb
           split at hb
           · cases hb
-          · cases hb; simp only [ChartState.shape, State.shape, Transition.targets_toExec]) c.states states h,
-          Transition.targets_toExec]
+          · cases hb; simp only [ChartState.shape, Spec.State.shape, Transition.targets_ofSpec]) c.states states h,
+          Transition.targets_ofSpec]
         exact c.shaped⟩ :
-        { states : List ChartState // chartTree (states.map (·.shape)) c.initial ((c.on.map Transition.toExec).filterMap (·.target)) = true })
+        { states : List ChartState // chartTree (states.map (·.shape)) c.initial ((c.on.map Transition.ofSpec).filterMap (·.target)) = true })
   let receives ← c.receives.mapM fun
     | (key, some r) => pure (key, r.traceName service)
     | (key, none) => throw s!"the chart {name} receives {key}, which is no event"
-  pure { name, order, initial := c.initial, on := c.on.map Transition.toExec, states, shaped, receives, screen, opened,
+  pure { name, order, initial := c.initial, on := c.on.map Transition.ofSpec, states, shaped, receives, screen, opened,
          offers := c.offers,
          controls := c.controls.map fun (n, payload) =>
            { name := n, hasPayload := payload.any fun schema => !(schemaProperties schema).isEmpty } }
 
-end Tazuna.Spec
+end Tazuna.Service

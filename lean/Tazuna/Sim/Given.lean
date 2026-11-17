@@ -48,7 +48,7 @@ def World.start (j : Spec.Structure) (sc : Scenario) : Except String World := do
   let running := sc.service :: peers.filterMap fun (s, p) => match p with
     | .run _ => some s
     | _ => none
-  let services ← running.mapM fun s => do pure (s, ← j.service s)
+  let services ← running.mapM fun s => do pure (s, ← Service.ofStructure j s)
   let now := sc.given.start.time
   pure { now, roles, services, states := running.map fun s => (s, { now, keyOwner := some s }) }
 

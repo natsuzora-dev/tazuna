@@ -237,7 +237,7 @@ def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : C
                   stack := if c.screen then s.stack ++ [c.name] else s.stack }
 
 /-- The charts that start when the service begins. A screen that another screen opens does not. -/
-def Service.starting (st : Service) : List Chart := st.charts.filter (!·.opened)
+def starting (st : Service) : List Chart := st.charts.filter (!·.opened)
 
 def startInstances [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   st.starting.foldlM (startInstance st fs) s

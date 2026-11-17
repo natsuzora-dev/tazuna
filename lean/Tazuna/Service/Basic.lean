@@ -49,6 +49,12 @@ inductive Schema where
   | record (entity : String)
 deriving DecidableEq, Repr, Inhabited
 
+end Tazuna.Service
+
+namespace Tazuna
+
+open Tazuna.Data Tazuna.Service
+
 /-- The values of a service read from the structure JSON; Functions evaluates the function bodies. -/
 structure Service where
   service : String
@@ -78,35 +84,36 @@ structure Service where
   requirements : List (String × Requirements) := []
 deriving Repr, Inhabited
 
+end Tazuna
+
+namespace Tazuna.Service
+
+open Tazuna.Data
+
 /-- The JSON Schema of `schema`. A schema missing from the structure reads nothing. -/
-def Service.schemaOf (st : Service) (schema : Schema) : Value := (st.schemas.lookup schema).getD (.obj [])
+def schemaOf (st : Service) (schema : Schema) : Value := (st.schemas.lookup schema).getD (.obj [])
 
-def Service.chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
+def chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
 
-def Service.ref (st : Service) (name : String) : Spec.Ref := { service := st.service, name }
+def ref (st : Service) (name : String) : Spec.Ref := { service := st.service, name }
 
 /-- The ref that a trace name, as seen from the service, spells, without looking the definition up. -/
-def Service.refOf (st : Service) (traceName : String) : Spec.Ref := Spec.Ref.ofTraceName st.service traceName
+def refOf (st : Service) (traceName : String) : Spec.Ref := Spec.Ref.ofTraceName st.service traceName
 
-def Service.schemaOwner (st : Service) : Schema → Spec.Ref
+def schemaOwner (st : Service) : Schema → Spec.Ref
   | .input d | .output d => st.refOf d
   | .payload e => st.refOf e
   | .control screen _ => st.ref screen
   | .held chart .. | .context chart | .mapContext chart _ | .mapKey chart _ => st.ref chart
   | .record entity => st.ref entity
 
-def Service.uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
+def uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
 
-def Service.requirementsOf (st : Service) (name : String) : Requirements := (st.requirements.lookup name).getD {}
+def requirementsOf (st : Service) (name : String) : Requirements := (st.requirements.lookup name).getD {}
 
-end Tazuna.Service
-
-namespace Tazuna.Spec
-
-open Tazuna.Data Tazuna.Service
-
+open Tazuna.Spec in
 /-- The service named `service`, or the reason why it has a definition that the Lean model does not cover. -/
-def Structure.service (j : Structure) (service : String) : Except String Service := do
+def ofStructure (j : Spec.Structure) (service : String) : Except String Service := do
   let own := j.definitions.zipIdx.filter (·.1.service == service)
   let entity (r : Ref) : Except String (String × List String) :=
     match j.definitions.findSome? fun d =>
@@ -120,10 +127,10 @@ def Structure.service (j : Structure) (service : String) : Except String Service
       | .entity none .. => true
       | _ => false
   let charts ← (own.filterMap fun (d, order) => d.chart?.map (d, ·, order)).mapM fun (d, c, order) =>
-    c.toExec service d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)
+    Chart.ofSpec c service d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)
   let mut commands := []
   let mut queries := []
-  let mut events : List (String × Service.Change) := []
+  let mut events : List (String × Change) := []
   let mut automations := []
   let mut schemas : List (Schema × Value) := []
   let mut requirements : List (String × Requirements) := []
@@ -207,4 +214,4 @@ def Structure.service (j : Structure) (service : String) : Except String Service
   pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities, singles,
          references, uniques, requirements }
 
-end Tazuna.Spec
+end Tazuna.Service

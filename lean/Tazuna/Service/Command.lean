@@ -42,7 +42,7 @@ def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) 
     firstDuplicate (fun (entity, key) => s!"{entity}#{key}") rows
 
 /-- Whether the command `command` lists the event of `e` in its emits. -/
-def Service.lists (st : Service) (command : String) (e : Emit) : Bool :=
+def lists (st : Service) (command : String) (e : Emit) : Bool :=
   (st.«structure».emitsOf (some (st.ref command))).any (·.any (·.traceName st.service == e.event))
 
 inductive Outcome where
