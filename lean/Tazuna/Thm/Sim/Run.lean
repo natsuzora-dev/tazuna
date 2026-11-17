@@ -408,4 +408,85 @@ theorem external_answer_needs_delivery (w : World) (own : String) (lines : List 
         exact absurd ⟨hne, hst⟩ hd
   · exact h
 
+/-- `w'` holds every participant's state as `w` holds it. -/
+def SameStates (w w' : World) : Prop := w'.states = w.states
+
+theorem same_refl (w : World) : SameStates w w := rfl
+
+theorem same_report {w w' : World} (h : SameStates w w') (r : Report) : SameStates w (w'.report r) := by
+  unfold SameStates World.report; split <;> exact h
+
+theorem same_carry {w w' : World} (h : SameStates w w') (i k : Nat) : SameStates w (w'.carry i k) := h
+
+theorem same_setStatus {w w' : World} (h : SameStates w w') (k : Nat) (status : Status) :
+    SameStates w (w'.setStatus k status) := h
+
+theorem same_stated {w w' : World} (h : SameStates w w') (i : Nat) (msg : Message) : SameStates w (w'.stated i msg) := by
+  unfold World.stated; split
+  · exact same_report h _
+  · exact h
+
+theorem same_nextId {w w' : World} (h : SameStates w w') (peer name : String) : SameStates w (w'.nextId peer name).1 := h
+
+theorem same_inFlight_iff {w w' : World} (inFlight : List (Nat × Nat)) :
+    SameStates w { w' with inFlight } ↔ SameStates w w' := Iff.rfl
+
+theorem same_resolving {α : Type} {w w' : World} (h : SameStates w w') (r : ExceptT Report Id α)
+    (k : α → Id World) (hk : ∀ a, SameStates w (k a)) : SameStates w (w'.resolving r k) := by
+  unfold World.resolving; simp only [bind]; split
+  · exact same_report h _
+  · exact hk _
+
+theorem same_attempt {α : Type} {w w' : World} (h : SameStates w w') (r : Except Report α)
+    (k : α → Id World) (hk : ∀ a, SameStates w (k a)) : SameStates w (w'.attempt r k) := by
+  unfold World.attempt; split
+  · exact same_report h _
+  · exact hk _
+
+/-- Closes `SameStates w x` where `x` is built from `w` by steps that change no participant's state. -/
+macro "same_tac" : tactic => `(tactic| repeat' (first
+  | contradiction
+  | with_reducible assumption
+  | with_reducible exact same_refl _
+  | with_reducible apply same_report
+  | with_reducible apply same_carry
+  | with_reducible apply same_stated
+  | with_reducible apply same_nextId
+  | with_reducible apply same_setStatus
+  | simp only [same_inFlight_iff]
+  | with_reducible refine same_resolving ?_ _ _ fun _ => ?_
+  | with_reducible refine same_attempt ?_ _ _ fun _ => ?_
+  | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
+  | dsimp only
+  | split))
+
+/--
+Whether the line gives a participant something to process: a request or end of the client, a resend, an operation, the
+clock, a restart, or a message that a deliver, redeliver, or fail line names.
+-/
+def reaches : Scenario.Line → Bool
+  | .request none .. | .unsubscribe none _ | .resend _ | .operate .. | .at .. | .restart
+  | .deliver _ | .redeliver _ | .fail _ => true
+  | _ => false
+
+/--
+A line that gives no participant anything to process changes no participant's state: a peer's message, an answer, an
+event, a lost message, or an inFlight or look line leaves every receiver as it was until a line delivers the message.
+-/
+theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line)
+    (hl : reaches l = false) : (w.line fsOf own lines i l).states = w.states := by
+  rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
+  · show SameStates w _
+    cases l with
+    | request peer =>
+      cases peer with
+      | none => simp [reaches] at hl
+      | some p => simp only [World.take, bind, pure]; same_tac
+    | unsubscribe peer =>
+      cases peer with
+      | none => simp [reaches] at hl
+      | some p => simp only [World.take, bind, pure]; same_tac
+    | _ => simp only [reaches, reduceCtorEq] at hl <;> simp only [World.take, bind, pure] <;> same_tac
+  · exact same_report (same_refl w) r
+
 end Tazuna.Thm.Sim.Run
