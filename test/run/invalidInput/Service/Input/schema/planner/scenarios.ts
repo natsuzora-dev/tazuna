@@ -25,11 +25,11 @@ export const rejectAddNotFound = scenario(
   },
 );
 
-export const rejectUnknownReason = scenario(
-  "Reject the task with the reason long; long is not a requires of addTask, so test reports unlistedRejectionReason, and the title meets the assumed requires short, so it also reports rejectedAssumedRequires",
+export const rejectMetRequires = scenario(
+  "Reject the task for the requires short, which its title meets, so test reports rejectedAssumedRequires",
   {
     given,
-    when: (w) => answered(w, { result: "rejected", rejection: { kind: "requires", reason: "long" } }),
+    when: (w) => answered(w, { result: "rejected", rejection: { kind: "requires", reason: "short" } }),
     then: () => [],
   },
 );

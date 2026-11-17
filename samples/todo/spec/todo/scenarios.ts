@@ -24,7 +24,8 @@ const noTasks = {
 
 const accepted = { result: "accepted" } as const;
 const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
-const requires = (reason: string) => ({ result: "rejected", rejection: { kind: "requires", reason } }) as const;
+const requires = <R extends string>(reason: R) =>
+  ({ result: "rejected", rejection: { kind: "requires", reason } }) as const;
 const day = (d: string) => ({ result: "fulfilled", output: { day: d } }) as const;
 const fulfilled = <O>(output: O) => ({ result: "fulfilled", output }) as const;
 

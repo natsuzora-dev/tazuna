@@ -32,18 +32,25 @@ type InputOf<D> = Encoded<InputShape<D>>;
 
 /** An answer to the request `T`, in trace form. */
 export type AnswerOf<T> =
-  T extends Query<Shape, infer O>
-    ? { readonly result: "fulfilled"; readonly output: Encoded<O> } | Rejected
-    : T extends Command<Shape, AnyEvent, string, string, infer O>
+  T extends Query<Shape, infer O, infer Rq>
+    ? { readonly result: "fulfilled"; readonly output: Encoded<O> } | Rejected<Rq>
+    : T extends Command<Shape, AnyEvent, string, infer Rq, infer O>
       ?
           | ([O] extends [undefined]
               ? { readonly result: "accepted" }
               : O extends Shape
                 ? { readonly result: "accepted"; readonly output: Encoded<O> }
                 : never)
-          | Rejected
+          | Rejected<Rq>
       : never;
-type Rejected = { readonly result: "rejected"; readonly rejection: Rejection };
+
+/** A rejection whose reason, for the kind `requires`, is one of the request's requires conditions `Rq`. */
+type Rejected<Rq extends string> = {
+  readonly result: "rejected";
+  readonly rejection:
+    | { readonly kind: "requires"; readonly reason?: Rq }
+    | (Rejection & { readonly kind: Exclude<Rejection["kind"], "requires"> });
+};
 
 declare const observedBrand: unique symbol;
 declare const createdBrand: unique symbol;

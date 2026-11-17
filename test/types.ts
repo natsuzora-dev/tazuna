@@ -18,6 +18,7 @@ import {
 } from "../samples/todo/spec/todo/events.ts";
 import { tasks } from "../samples/todo/spec/todo/queries.ts";
 import {
+  answered,
   any,
   type Bag,
   bag,
@@ -1334,13 +1335,17 @@ scenarioOfScreens("types", {
     // @ts-expect-error a bag's elements have no position: name one by content or by the line that sent it
     w.client.send(todoPeer.completeTask, { taskId: listed.output.tasks[0].taskId });
     w.client.send(todoPeer.addTask, raw({ taskId: "task-3", title: 7 }));
-    return { look, watching, adding };
+    const completing = w.client.send(todoPeer.completeTask, { taskId: "task-1" });
+    return { look, watching, adding, completing };
   },
-  then: ({ look, watching, adding }) => [
+  then: ({ look, watching, adding, completing }) => [
     // @ts-expect-error a look line's processing emits nothing
     emitted(look, []),
     // @ts-expect-error endOf takes a subscription, not a command
     requested(adding, [endOf(adding.request(calendarPeer.nextBusinessDay))]),
     requested(adding, [endOf(watching)]),
+    answered(completing, { result: "rejected", rejection: { kind: "requires", reason: "notCompleted" } }),
+    // @ts-expect-error a requires rejection names a requires condition of the command
+    answered(completing, { result: "rejected", rejection: { kind: "requires", reason: "notCompleteddd" } }),
   ],
 });
