@@ -38,6 +38,7 @@ Each violation has a kind, such as `Fault.failedEnsures`.
 The part of the kind before the dot is the violation's *group*.
 A kind's name and data, with its doc comment where they do not suffice, state what the kind means.
 A run stops at a violation of a *halting* kind, because the behavior after that violation is undefined.
+A line whose input cannot take place halts: its input cannot be written as a trace line, or it states a cause that did not occur, such as an event whose `resultOf` names a request that cannot have that event as its result (`halts` in `lean/Tazuna/Service/InvalidInput.lean`).
 
 ## What a passing tool means
 

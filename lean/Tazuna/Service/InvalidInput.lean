@@ -58,16 +58,20 @@ local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
 derive_group InvalidInput
 
 /--
-Whether the violation halts the run, which it does when the input cannot be written as a trace line.
+Whether the violation halts the run, which it does when the input cannot take place: it cannot be written as a trace
+line, or it states a cause that did not occur (an event's resultOf naming a request that cannot have the event as its
+result), so that later inputs would build on a history no run has. An input that a sender can give, such as a
+subscription id it reuses on a retry or an answer that breaks the receiver's assumption, is written as given and the
+run goes on.
 -/
 def InvalidInput.halts : InvalidInput → Bool
   | .unownedTarget .. | .eventPayloadSchema .. | .controlPayloadSchema ..
   | .unlistedRejectionKind .. | .unlistedRejectionReason .. | .answerOutputSchema .. | .unknownControl ..
   | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyDeadline ..
   | .unorderedDeadlines ..
-  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .resultOfUnansweredRequest .. => true
+  | .unusedDeadlineOrder .. | .unreadyStep .. | .unusedStepOrder .. | .resultOfUnansweredRequest ..
+  | .resultOfNonCommand .. | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. => true
   | .reusedSubscriptionId .. | .unopenedSubscription ..
-  | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. | .resultOfNonCommand ..
-  | .resultOfUnacceptedRequest .. | .resultOfUnlistedEvent .. => false
+  | .rejectedAssumedRequires .. | .failedAssumedRequires .. | .failedAssumedEnsures .. => false
 
 end Tazuna.Semantics

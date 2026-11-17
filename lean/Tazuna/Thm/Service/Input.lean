@@ -269,7 +269,7 @@ theorem resultRequest_now (name k : String) : (resultRequest st s name k).1.now 
   all_goals first | rfl | simp
 
 theorem resultOfFinding_halts (event : Syntax.Ref) (requestId : String) (target : Syntax.Ref)
-    (m : Syntax.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = false := by
+    (m : Syntax.ResultOfMismatch) : (resultOfFinding event requestId target m).halts = true := by
   cases m <;> rfl
 
 theorem brokenAssumption_finding (requestId : String) (target : Syntax.Ref) (answer : Answer)
@@ -297,15 +297,16 @@ theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCh
     | exact brokenAssumption_finding _ _ _ _ _ _ (by simpa using hr)
     | (simp only [Except.error.injEq] at hr; subst hr; exact ⟨rfl, by simp⟩)
 
-theorem unmatched_result_violates (name k : String) (s₁ : State) (q : Pending) (a : Answer)
+/-- An event whose resultOf names a request that cannot have the event as its result halts the run with that report. -/
+theorem unmatched_result_halts (name k : String) (s₁ : State) (q : Pending) (a : Answer)
     (hp : s.takenAnswers.lookup k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
-    ∃ event requestId target m, s₁ = s.violate (resultOfFinding event requestId target m).toViolation := by
+    ∃ event requestId target m, s₁ = s.halt (resultOfFinding event requestId target m).toViolation := by
   unfold resultRequest at hq
   split at hq
   · repeat' split at hq
     all_goals first
       | (simp at hq; done)
-      | (simp only [Prod.mk.injEq, State.report, resultOfFinding_halts, Bool.false_eq_true, ↓reduceIte] at hq
+      | (simp only [Prod.mk.injEq, State.report, resultOfFinding_halts, ↓reduceIte] at hq
          exact ⟨_, _, _, _, hq.1.symm⟩)
   · rename_i hn
     simp [hp] at hn
