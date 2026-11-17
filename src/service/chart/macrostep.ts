@@ -1,7 +1,6 @@
 import type { StepName } from "../../data/choiceDependent.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields } from "../../data/values.ts";
-import { withExtra } from "../../data/violation.ts";
 import { automationAnswer } from "../automation.ts";
 import { ref, refOf } from "../basic.ts";
 import { processCommand } from "../command.ts";
@@ -17,6 +16,7 @@ import {
   createKeys,
   halt,
   type Instance,
+  inputFault,
   inStep,
   machine,
   machineOf,
@@ -225,24 +225,11 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (reacted.input === undefined) return;
       const activity = automation.sends;
       const requester: Requester = { kind: "automation", automation: automation.name };
-      const normalized = r.functions.normalize({ kind: "input", definition: activityRef(activity) }, reacted.input);
-      if (normalized instanceof Failed) halt(issueViolation(definition, normalized));
-      if ("error" in normalized)
-        report(
-          r.state,
-          withExtra({ kind: "Fault.automationInputSchema", definition, data: {} }, { error: normalized.error }),
-        );
-      const input = normalized.encoded;
+      const input = reacted.input;
       if (activity.own)
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });
       else {
-        awaitAnswer(
-          r.state,
-          { dir: "out", type: "command", name: activity.target, input },
-          requester,
-          activity,
-          normalized.value,
-        );
+        awaitAnswer(r.state, { dir: "out", type: "command", name: activity.target, input }, requester, activity);
         r.note.reached({ kind: "request", definition: activityRef(activity), data: {} });
       }
       return;
@@ -250,6 +237,10 @@ function workBody(r: Processing, work: Work, step: number): void {
     case "answered": {
       const { sent, answer } = work;
       const live = sent.serial === undefined || takeQueued(r.state, sent.serial);
+      if (answer.result === "rejected" && answer.rejection.kind === "invalid-input") {
+        report(r.state, inputFault(r.st, r.state, activityRef(sent.activity), sent.requester));
+        return;
+      }
       if (live) answerTo(r, step, sent.activity, answer, sent.requester);
       return;
     }

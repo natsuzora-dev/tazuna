@@ -192,10 +192,8 @@ export interface Pending {
   readonly id: string;
   readonly activity: Activity;
   readonly requester: Requester;
-  /** The JSON of the encoded input. */
+  /** The JSON of the input as the sender wrote it. */
   readonly input: string;
-  /** The decoded input. */
-  readonly value: Fields;
   stale: boolean;
   /** The order in which waiting began. A subscription waits again after each answer. */
   turn: number;
@@ -347,10 +345,9 @@ export function awaitAnswer(
   line: Extract<UnwrittenLine, { readonly type: "command" | "query" | "subscribe" }>,
   requester: Requester,
   activity: Activity,
-  value: Fields,
 ): void {
   const id = write(s, line);
-  s.pending.push({ id, activity, requester, input: JSON.stringify(line.input), value, stale: false, turn: s.turn });
+  s.pending.push({ id, activity, requester, input: JSON.stringify(line.input), stale: false, turn: s.turn });
   s.turn += 1;
 }
 
@@ -510,6 +507,26 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
 
 export function chartName(s: State, name: string): string {
   return machine(s, name)?.chart.name ?? name;
+}
+
+/** Lean's State.inputFault. */
+export function inputFault(st: Service, s: State, target: DefinitionRef, requester: Requester): Fault {
+  switch (requester.kind) {
+    case "state":
+      return {
+        kind: "Fault.requestInputSchema",
+        definition: ref(st, chartName(s, requester.machine)),
+        data: { target },
+      };
+    case "slot":
+      return {
+        kind: "Fault.showsInputSchema",
+        definition: ref(st, chartName(s, requester.machine)),
+        data: { slot: requester.slot },
+      };
+    case "automation":
+      return { kind: "Fault.automationInputSchema", definition: ref(st, requester.automation), data: {} };
+  }
 }
 
 /** Returns the instance or automation that sent the request. */

@@ -262,9 +262,8 @@ def Structure.contractsListing (s : Structure) (r : Ref) : List String :=
 The kinds that an answer to the command or query `r` may be rejected with when a definition of `service` sends it: for
 an external `r`, the kinds it declares. Otherwise `requires` needs a requires condition or a binds value, `notFound` an
 input ref field, and `alreadyExists` an emitted event that creates or updates a record, and a request to another
-service may also be rejected with `unavailable`, and a command to another service with `reusedId`. No answer is
-rejected with `invalidInput`, because the sender checks the input against the input schema of `r` before it sends
-(Fault.requestInputSchema).
+service may also be rejected with `unavailable`, and a command to another service with `reusedId`. An answer
+rejected with `invalidInput` is the sender's fault (State.inputFault), so it is not listed.
 -/
 def Structure.rejectionKinds (s : Structure) (service : String) (r : Ref) : List RejectionKind :=
   let other (kinds : List RejectionKind) := if r.service == service then [] else kinds

@@ -22,9 +22,7 @@ variable [Monad m] [MonadNote m] (fs : Functions m)
 def request (st : Service) (step : Nat) (name state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
     match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
-    | .error e =>
-      pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
-        .requestInputSchema (st.ref i.chart.name) a.ref)))
+    | .error e => pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e)))
     | .ok (input, keys) =>
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
       if a.own then
@@ -42,10 +40,12 @@ def openScreen (st : Service) (step : Nat) (name state : String) (a : Activity) 
     | none => pure r
     | some c =>
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
-      | .error e =>
-        pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
-          .screenInputSchema (st.ref i.chart.name) (st.ref c.name))))
-      | .ok (input, _) =>
+      | .error e => pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+      | .ok (raw, _) =>
+      match ← fs.parse (.input c.name) raw with
+      | .error e => pure (r.report (.fault (issueViolation st (st.ref c.name) e)))
+      | .ok none => pure (r.report (.fault (.screenInputSchema (st.ref i.chart.name) (st.ref c.name))))
+      | .ok (some input) =>
       match ← firstFalse (fs.inputRequirement c.name · input) (st.requirementsOf c.name).requires with
       | .error e => pure (r.report (.fault (issueViolation st (st.ref c.name) e)))
       | .ok (some condition) =>

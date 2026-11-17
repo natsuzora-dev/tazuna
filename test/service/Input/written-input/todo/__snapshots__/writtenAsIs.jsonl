@@ -1,0 +1,3 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addItem#1","name":"addItem","input":{"note":"  MILK ","qty":"5"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addItem#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"itemAdded#1","name":"itemAdded","payload":{"note":"milk","qty":5},"resultOf":"addItem#1"}

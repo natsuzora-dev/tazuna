@@ -1,1 +1,1 @@
-{"kind":"Fault.showsInputSchema","definition":{"service":"feed","name":"recentScreen"},"data":{"slot":"recent"},"location":{"file":"feed/feed.ts","line":6},"scenario":{"service":"feed","name":"start"},"error":{"type":"zod","issues":[{"origin":"number","code":"too_small","minimum":0,"inclusive":false,"path":["limit"],"message":"Too small: expected number to be >0"}]}}
+{"kind":"Fault.showsInputSchema","definition":{"service":"feed","name":"recentScreen"},"data":{"slot":"recent"},"location":{"file":"feed/feed.ts","line":6},"scenario":{"service":"feed","name":"start"}}

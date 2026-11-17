@@ -6,7 +6,7 @@ import { byCodePoint, canonicalJson } from "../data/values.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
-import { begin, call, endSubscription, operate, send, subscribe } from "../service/input.ts";
+import { begin, call, checkResults, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { publish } from "../service/query.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
@@ -961,12 +961,25 @@ export function execute(structure: Structure, w: World, sc: Scenario): World {
   return w;
 }
 
+/** Lean's World.endRuns. */
+function endRuns(w: World): void {
+  for (const p of w.services.values())
+    try {
+      checkResults(p.processing);
+    } catch (error) {
+      if (!(error instanceof Halt)) throw error;
+      p.halted = error.violation;
+    }
+}
+
 /** Lean's simulate. */
 export function simulate(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
   if (w.violations.length > 0) return w;
   const looked: Found[] = [];
   executeLines(w, sc, looked);
+  if (stopped(w)) return w;
+  endRuns(w);
   if (stopped(w)) return w;
   checkEnd(w);
   expect(w, sc.service, sc.lines, sc.expectations, looked);

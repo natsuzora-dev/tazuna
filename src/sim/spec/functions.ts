@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
-import {
-  canonical as canonicalOf,
-  comparableAnswer,
-  comparable as comparableOf,
-  orderFree,
-} from "../../data/canonical.ts";
-import { bag, bagged, defaultRow, sorted } from "../../data/collections.ts";
+import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
+import { bag, bagged, defaultRow, sorted, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.ts";
@@ -30,7 +25,7 @@ import type {
 } from "../../dsl/definition.ts";
 import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../../dsl/entity.ts";
 import type { Spec } from "../../load/load.ts";
-import { refOfDefinition, traceName } from "../../load/traceName.ts";
+import { traceName } from "../../load/traceName.ts";
 import { type Schema, type Service, serviceOf } from "../../service/basic.ts";
 import {
   type Access,
@@ -399,16 +394,9 @@ export class SpecFunctions implements Functions {
     return extended(base, { held: heldOf(ref, named.definition, path, base), ...extra });
   }
 
-  /** Returns the input that `f` gives the request or screen `target`, checked against its input schema and encoded. */
-  private checkedInput(
-    target: DefinitionRef,
-    shape: Shape,
-    f: ((args: never) => unknown) | undefined,
-    args: () => Fields,
-  ): { readonly value: Fields; readonly encoded: unknown } | Failed {
-    const given = attempt(() => f?.(args() as never) ?? {});
-    if (given instanceof Failed) return given;
-    return matching({ kind: "input", definition: target }, strictObjectOf(shape), given as Fields);
+  /** Returns the input that `f` gives a request or screen of the input shape `shape`, as the sender writes it. */
+  private writtenInput(shape: Shape, f: ((args: never) => unknown) | undefined, args: () => Fields): unknown {
+    return attempt(() => written(objectOf(shape), f?.(args() as never) ?? {}));
   }
 
   /** Returns the binds values, which every binding answered non-null before. */
@@ -426,11 +414,6 @@ export class SpecFunctions implements Functions {
     const encoded = attempt(() => z.encode(object, parsed.data as never), schema);
     if (encoded instanceof Failed) return encoded;
     return { value: bagged(object, parsed.data) as Fields, encoded };
-  }
-
-  canonical(schema: Schema, value: unknown): unknown {
-    const shape = this.shape(schema);
-    return attempt(() => canonicalOf(shape, value), schema);
   }
 
   unordered(schema: Schema, value: unknown): unknown {
@@ -590,7 +573,7 @@ export class SpecFunctions implements Functions {
         if (!met) return undefined;
       }
       const command = Object.values(a.commands)[0];
-      return { input: sortedFields(command?.input, a.input?.({ ...args, createKey } as never) ?? {}) };
+      return { input: written(objectOf(command?.input ?? {}), a.input?.({ ...args, createKey } as never) ?? {}) };
     });
     if (reacted instanceof Failed) return reacted;
     return reacted === undefined ? { created } : { input: reacted.input, created };
@@ -696,36 +679,29 @@ export class SpecFunctions implements Functions {
     { keyword, key }: { readonly keyword: string; readonly key: string },
     keys: Keys,
     access: Access,
-  ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed {
+  ): { readonly encoded: unknown; readonly created: readonly string[] } | Failed {
     const chart = this.chartOf(scope.machine).named.definition;
     const node = this.node(scope.machine, this.stateOf(scope));
     const { createKey, created } = this.keysFrom(keys);
     const args = () => this.args(scope, records, access);
-    let checked: { readonly value: Fields; readonly encoded: unknown } | Failed;
+    let encoded: unknown;
     switch (keyword) {
       case "calls": {
         const query = chart.queries?.[key] as AnyQuery;
-        checked = this.checkedInput(refOfDefinition(this.spec, query), query.input, node?.calls?.[key]?.input, args);
+        encoded = this.writtenInput(query.input, node?.calls?.[key]?.input, args);
         break;
       }
-      case "sends": {
-        const command = chart.commands[key] as AnyCommand;
-        checked = this.checkedInput(refOfDefinition(this.spec, command), command.input, node?.sends?.[key]?.input, () =>
+      case "sends":
+        encoded = this.writtenInput((chart.commands[key] as AnyCommand).input, node?.sends?.[key]?.input, () =>
           this.args(scope, records, access, { createKey }),
         );
         break;
-      }
       default: {
         const screen = chart.screens?.[key] as unknown as ChartSpec;
-        checked = this.checkedInput(
-          refOfDefinition(this.spec, screen),
-          screen.input ?? {},
-          node?.opens?.[key]?.input,
-          args,
-        );
+        encoded = this.writtenInput(screen.input ?? {}, node?.opens?.[key]?.input, args);
       }
     }
-    return checked instanceof Failed ? checked : { ...checked, created };
+    return encoded instanceof Failed ? encoded : { encoded, created };
   }
 
   /** Checks the held values of a state, whose holds read the base arguments. */
@@ -788,12 +764,10 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     { key }: { readonly keyword: string; readonly key: string },
     access: Access,
-  ): { readonly value: Fields; readonly encoded: unknown } | Failed {
+  ): unknown {
     const query = this.chartOf(scope.machine).named.definition.queries?.[key] as AnyQuery;
     const f = this.node(scope.machine, this.stateOf(scope))?.shows?.[key]?.input;
-    return this.checkedInput(refOfDefinition(this.spec, query), query.input, f, () =>
-      this.args(scope, records, access),
-    );
+    return this.writtenInput(query.input, f, () => this.args(scope, records, access));
   }
 
   items(

@@ -515,9 +515,6 @@ export class InstrumentedFunctions implements Functions {
   parse(schema: Schema, value: unknown) {
     return this.fs.parse(schema, value);
   }
-  canonical(schema: Schema, value: unknown): unknown {
-    return this.fs.canonical(schema, value);
-  }
   unordered(schema: Schema, value: unknown): unknown {
     return this.fs.unordered(schema, value);
   }
@@ -657,7 +654,7 @@ export class InstrumentedFunctions implements Functions {
       access,
       "showInput",
       (fs, a) => fs.showInput(scope, records, activity, a),
-      ({ encoded }) => canonicalJson(encoded),
+      (encoded) => canonicalJson(encoded),
     );
   }
   items(scope: Scope, records: RecordSource, access: Access) {

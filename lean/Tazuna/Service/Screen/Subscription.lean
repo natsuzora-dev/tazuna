@@ -33,9 +33,7 @@ def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Ins
     | .error v => pure (.error v)
     | .ok wanted =>
       match ← fs.showInput (s.scopeOf i (some n)) s.records a with
-      | .error e =>
-        pure (.error (issueViolation st (st.ref i.chart.name) e fun _ =>
-          .showsInputSchema (st.ref i.chart.name) a.key))
+      | .error e => pure (.error (issueViolation st (st.ref i.chart.name) e))
       | .ok input => pure (.ok (setWanted wanted { slot := a.key, activity := a, input }))) (.ok [])
 
 def inputOf (wanted : List Wanted) (slot : String) : Option Value := (wanted.find? (·.slot == slot)).map (·.input)

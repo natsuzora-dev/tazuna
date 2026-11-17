@@ -285,6 +285,15 @@ def State.machine? (s : State) (name : String) : Option Instance :=
 
 def State.chartName (s : State) (name : String) : String := ((s.machine? name).map (·.chart.name)).getD name
 
+/--
+The fault of `requester`, whose request to `target` the receiver rejected as invalid input. Only the receiver parses a
+message, so the sender wrote an input that the receiver's schema does not take.
+-/
+def State.inputFault (st : Service) (s : State) (target : Spec.Ref) : Requester → Fault
+  | .state m _ => .requestInputSchema (st.ref (s.chartName m)) target
+  | .slot m slot => .showsInputSchema (st.ref (s.chartName m)) slot
+  | .automation a => .automationInputSchema (st.ref a)
+
 def State.senderOf (s : State) : Requester → String
   | .state m _ | .slot m _ => s.chartName m
   | .automation a => a

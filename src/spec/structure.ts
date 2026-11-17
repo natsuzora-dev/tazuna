@@ -92,8 +92,7 @@ export function contractsListing(structure: Structure, ref: DefinitionRef): stri
  * sends it: for an external `target`, the kinds it declares. Otherwise `requires` needs a requires condition or a binds
  * value, `not-found` an input ref field, and `already-exists` an emitted event that creates or updates a record, and a
  * request to another service may also be rejected with `unavailable`, and a command to another service with
- * `reused-id`. No answer is rejected with `invalid-input`, because the sender checks the input against the input schema
- * of `target` before it sends (Fault.requestInputSchema).
+ * `reused-id`. An answer rejected with `invalid-input` is the sender's fault (inputFault), so it is not listed.
  */
 export function rejectionKinds(structure: Structure, service: string, target: DefinitionRef): RejectionKind[] {
   const definition = structure.definitions.find((d) => sameRef(d, target));

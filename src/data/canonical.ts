@@ -32,7 +32,7 @@ export function tolerant(schema: z.ZodType): z.ZodType {
   return result;
 }
 
-export function canonical(shape: Shape, value: unknown, options: { readonly tolerant?: boolean } = {}): unknown {
+function canonical(shape: Shape, value: unknown, options: { readonly tolerant?: boolean } = {}): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const fields = value as Record<string, unknown>;
   return Object.fromEntries(

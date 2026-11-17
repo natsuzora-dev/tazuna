@@ -379,10 +379,6 @@ export class RunFunctions implements Answering {
           "error" in parsed ? {} : { value: parsed.encoded },
         );
       }
-      case "canonical": {
-        const schema = this.schemaOf(message["schema"] as LeanSchema);
-        return this.replied(this.functions.canonical(schema, value), (written) => ({ value: written }));
-      }
       case "unordered": {
         const schema = this.schemaOf(message["schema"] as LeanSchema);
         return this.replied(this.functions.unordered(schema, value), (compared) => ({ value: compared }));
@@ -586,9 +582,7 @@ export class RunFunctions implements Answering {
       case "showInput": {
         const activity = message["activity"] as { keyword: string; key: string };
         return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.showInput(scope, this.records, activity, access), ({ encoded }) => ({
-            input: encoded,
-          })),
+          this.replied(this.functions.showInput(scope, this.records, activity, access), (input) => ({ input })),
         );
       }
       case "items":

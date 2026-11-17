@@ -299,12 +299,11 @@ theorem keeps_workBody (step : Nat) (w : Work) : Keeps (workBody st fs step w) :
   | reaction a e c =>
     simp only [workBody, id_bind]
     repeat' split
-    all_goals first | rfl | simp [State.createKeys, State.fixed, report_eq]
+    all_goals first | rfl | simp [State.fixed, report_eq]
   | answered c answer cause =>
     simp only [workBody]
-    split
-    all_goals split
-    all_goals first | exact keeps_answerTo _ _ _ _ _ | rfl
+    repeat' split
+    all_goals first | exact keeps_answerTo _ _ _ _ _ | rfl | simp [State.fixed, State.takeQueued, report_eq]
   | start name c => exact keeps_startWork _ _ _
   | receive name received c => exact keeps_receiveWork _ _ _ _
   | onDone name c => exact keeps_doneWork _ _ _ _
@@ -324,12 +323,11 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
     all_goals first
       | exact Grows.of_lines rfl
       | exact ⟨#[_], Array.push_eq_append, by simp [State.createKeys]⟩
-      | (apply Grows.of_lines; simp [State.createKeys])
+      | (apply Grows.of_lines; simp)
   | answered c answer cause =>
     simp only [workBody]
-    split
-    all_goals split
-    all_goals first | exact growsBy_answerTo _ _ _ _ _ | exact Grows.of_lines rfl
+    repeat' split
+    all_goals first | exact growsBy_answerTo _ _ _ _ _ | exact Grows.of_lines rfl | exact Grows.of_lines (report_lines ..)
   | start name c => exact growsBy_startWork _ _ _
   | receive name received c => exact growsBy_receiveWork _ _ _ _
   | onDone name c => exact growsBy_doneWork _ _ _ _
@@ -444,11 +442,27 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
       | exact ih _ (hr (settleScreens_fixed _ _))
       | exact ih _ (processCommand_keysDistinct _ _ _ _ h)
 
+/-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (inputFault). -/
 theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : Sent) (serial cause : Nat)
     (answer : Answer) (sent : Queued) (hc : c.serial = some serial) (hq : s.queued.find? (·.serial == serial) = some sent)
-    (hs : sent.stale = true) :
+    (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
-  simp [workBody, State.takeQueued, hc, hq, hs]
+  rcases answer with _ | _ | ⟨kind, reason⟩
+  · simp [workBody, State.takeQueued, hc, hq, hs]
+  · simp [workBody, State.takeQueued, hc, hq, hs]
+  · cases kind
+    · exact absurd rfl (ha reason)
+    all_goals simp [workBody, State.takeQueued, hc, hq, hs]
+
+/-- A spec service's invalid-input answer to an own-service command is the sender's fault (State.inputFault). -/
+theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step : Nat) (c : Sent) (cause : Nat)
+    (reason : Option String) :
+    workBody st fs step (.answered c (.rejected { kind := .invalidInput, reason }) cause) ⟨s, q⟩ =
+      let t := match c.serial with
+        | some serial => (s.takeQueued serial).1
+        | none => s
+      ⟨t.report (.fault (t.inputFault st c.activity.ref c.requester)), q⟩ := by
+  cases h : c.serial <;> simp [workBody, h]
 
 /-- Without `stepOrder` entries, the queue takes its first task. -/
 theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)

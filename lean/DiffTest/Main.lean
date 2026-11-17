@@ -117,9 +117,6 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
   parse schema value := do
     let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "parse" schema value)
     IO.ofExcept (issueOr reply fun r => pure (optional r "value"))
-  canonical schema value := do
-    let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "canonical" schema value)
-    IO.ofExcept (issueOr reply (field · "value"))
   unordered schema value := do
     let reply ← ask stdin stdout reads memo reversed service [] (schemaRequest "unordered" schema value)
     IO.ofExcept (issueOr reply (field · "value"))

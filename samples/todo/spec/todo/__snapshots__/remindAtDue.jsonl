@@ -5,7 +5,7 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextBusinessDay#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminderDecisionFailed#1","name":"reminderDecisionFailed","payload":{"id":"task-1","reminderDecision":"failed"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"task-1","dueAt":"2026-10-26T09:00:00Z"}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"task-1","dueAt":"2026-10-26T18:00:00+09:00"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"changeDue#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"id":"task-1","dueAt":"2026-10-26T09:00:00Z","remindAt":"2026-10-26T09:00:00Z","reminderDecision":"decided"},"resultOf":"changeDue#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"taskDetail#1","name":"taskDetail","input":{"taskId":"task-1"}}

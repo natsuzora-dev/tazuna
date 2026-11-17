@@ -81,19 +81,18 @@ theorem given_then (j : Spec.Structure) (w : World) (sc : Scenario) (then' : Lis
     w.given j fsOf { sc with expectations := then' } = w.given j fsOf sc := rfl
 
 /--
-Then and the end checks only add violations: the world that `simulate` leaves is the one `execute` leaves, with the same
-traces, messages, and halt, and more violations.
+Then and the end checks only add violations: the world that `simulate` leaves is the one `execute` leaves after the run
+ends, with the same traces, messages, and halt, and more violations.
 -/
-theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario) :
-    Reported (execute j fsOf start sc) (simulate j fsOf start sc) := by
+theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario)
+    (h : (start.given j fsOf sc).violations = []) :
+    Reported ((execute j fsOf start sc).ended fsOf) (simulate j fsOf start sc) := by
   unfold simulate execute World.execute
-  simp only [bind, pure]
+  simp only [bind, pure, h, List.isEmpty_nil, Bool.not_true, Bool.false_eq_true, ite_false]
+  rw [← foldlM_stepFinding_fst sc _ _ []]
   split
   · exact reported_refl _
-  · rw [← foldlM_stepFinding_fst sc _ _ []]
-    split
-    · exact reported_refl _
-    · exact reported_trans (checkEnd_reported _) (expect_reported _ _ _ _ _)
+  · exact reported_trans (checkEnd_reported _) (expect_reported _ _ _ _ _)
 
 theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (found : List (Nat × Except InvalidScenario Bool)) :
     w.expect fsOf own lines [] found = w := rfl

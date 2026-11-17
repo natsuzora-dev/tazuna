@@ -58,18 +58,4 @@ theorem rejectionKinds_own (s : Structure) (r : Ref) (k : RejectionKind) (hk : k
     case query rejects _ _ _ =>
       cases rejects <;> simp_all
 
-/-- No answer to a request to a spec service is rejected with `invalidInput`: the sender checks the input first. -/
-theorem rejectionKinds_internal (s : Structure) (service : String) (r : Ref) (d : Definition)
-    (h : s.definitions.find? (·.ref == r) = some d) (hd : match d.body with
-      | .command none .. | .query none .. => True
-      | _ => False) :
-    .invalidInput ∉ s.rejectionKinds service r := by
-  unfold Structure.rejectionKinds
-  simp only [h, Option.map_some]
-  cases hb : d.body <;> simp only [hb] at hd ⊢ <;> try contradiction
-  case command rejects _ _ _ _ _ _ =>
-    cases rejects <;> simp_all
-  case query rejects _ _ _ =>
-    cases rejects <;> simp_all
-
 end Tazuna.Thm.Spec.Structure

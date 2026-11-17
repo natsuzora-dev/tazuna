@@ -1,4 +1,5 @@
 import type { Fields } from "../../data/values.ts";
+import { withExtra } from "../../data/violation.ts";
 import { ref, requirementsOf, type Service } from "../basic.ts";
 import { firstFalse } from "../contract.ts";
 import { Failed, issueViolation } from "../functions.ts";
@@ -65,13 +66,10 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const target = activityRef(a);
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
-  const checked = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
-  if (checked instanceof Failed)
-    halt(
-      issueViolation(definition, checked, () => ({ kind: "Fault.requestInputSchema", definition, data: { target } })),
-    );
-  createKeys(r.state, checked.created);
-  const { value, encoded } = checked;
+  const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
+  if (given instanceof Failed) halt(issueViolation(definition, given));
+  createKeys(r.state, given.created);
+  const { encoded } = given;
   const requester: Requester = { kind: "state", machine: instance.resource, state };
   if (a.own) {
     r.queue.round.push({
@@ -85,7 +83,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
     return;
   }
   const type = a.keyword === "calls" ? "query" : "command";
-  awaitAnswer(r.state, { dir: "out", type, name: a.target, input: encoded }, requester, a, value);
+  awaitAnswer(r.state, { dir: "out", type, name: a.target, input: encoded }, requester, a);
   r.note.reached({ kind: "request", definition: target, data: {} });
 }
 
@@ -97,9 +95,12 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
-  if (given instanceof Failed)
-    halt(issueViolation(definition, given, () => ({ kind: "Fault.screenInputSchema", definition, data: { screen } })));
-  const input = given.value;
+  if (given instanceof Failed) halt(issueViolation(definition, given));
+  const parsed = r.functions.parse({ kind: "input", definition: screen }, given.encoded);
+  if (parsed instanceof Failed) halt(issueViolation(screen, parsed));
+  if ("error" in parsed)
+    halt(withExtra({ kind: "Fault.screenInputSchema", definition, data: { screen } }, { error: parsed.error }));
+  const input = parsed.value;
   const condition = firstFalse(
     (c) => r.functions.inputRequirement(child.name, c, input),
     requirementsOf(r.st, child.name).requires,

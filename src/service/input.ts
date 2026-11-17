@@ -1,6 +1,8 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
+import type { Fields } from "../data/values.ts";
 import { type ViolationError, withExtra } from "../data/violation.ts";
 import {
   type AssumptionMismatch,
@@ -26,15 +28,24 @@ import type { Emit } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
-import { type Accepted, halt, lineId, machineOf, newMessage, newStep, type Pending, report, write } from "./state.ts";
+import {
+  type Accepted,
+  halt,
+  inputFault,
+  lineId,
+  machineOf,
+  newMessage,
+  newStep,
+  type Pending,
+  type Run,
+  report,
+  write,
+} from "./state.ts";
 
 export function send(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
   if (!r.st.commands.includes(name)) unownedTarget(r, name);
-  const definition = ref(r.st, name);
-  const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
-  if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
-  const request: Request = { name, input: canonicalInput };
+  const request: Request = { name, input };
   const id = write(s, { dir: "in", type: "command", ...given, ...request });
   newMessage(s);
   const step = newStep(s, undefined);
@@ -54,10 +65,7 @@ function unownedTarget(r: Processing, name: string): never {
 export function call(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
   if (!r.st.queries.includes(name)) unownedTarget(r, name);
-  const definition = ref(r.st, name);
-  const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
-  if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
-  const id = write(s, { dir: "in", type: "query", ...given, name, input: canonicalInput });
+  const id = write(s, { dir: "in", type: "query", ...given, name, input });
   newMessage(s);
   write(s, { dir: "out", type: "answer", to: id, answer: resolveChecked(r, name, input) });
   message(r);
@@ -66,10 +74,7 @@ export function call(r: Processing, name: string, input: unknown, given: { reado
 export function subscribe(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
   if (!r.st.queries.includes(name)) unownedTarget(r, name);
-  const definition = ref(r.st, name);
-  const canonicalInput = r.functions.canonical({ kind: "input", definition }, input);
-  if (canonicalInput instanceof Failed) halt(issueViolation(definition, canonicalInput));
-  const id = write(s, { dir: "in", type: "subscribe", ...given, name, input: canonicalInput });
+  const id = write(s, { dir: "in", type: "subscribe", ...given, name, input });
   if (!s.subscriptions.subscribe(id, { query: name, input }))
     report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
   newMessage(s);
@@ -106,23 +111,29 @@ function resultRequest(r: Processing, name: string, handle: string): string | un
   });
 }
 
-/**
- * Adds the arrived result event `e` to the request `requestId`, an accepted request to an external service's command,
- * and checks the assumed ensures of its result.
- */
+/** Lean's State.addResult: adds the arrived result event `e` to the request `requestId` if it is an accepted external command. */
 function addResult(r: Processing, requestId: string, e: Emit): void {
-  const accepted = r.state.results.get(requestId);
-  if (accepted === undefined) return;
-  accepted.events.push(e);
-  const target = activityRef(accepted.activity);
-  const failed = r.functions.resultEnsures(accepted.activity.target, accepted.input, accepted.output, accepted.events);
-  if (failed instanceof Failed) halt(issueViolation(target, failed));
-  if (failed !== undefined)
-    report(r.state, {
-      kind: "InvalidInput.failedAssumedEnsures",
-      definition: null,
-      data: { requestId: accepted.id, target, condition: failed },
-    });
+  r.state.results.get(requestId)?.events.push(e);
+}
+
+/** Lean's checkResults. */
+export function checkResults(r: Run): void {
+  for (const accepted of r.state.results.values()) {
+    const target = activityRef(accepted.activity);
+    const failed = r.functions.resultEnsures(
+      accepted.activity.target,
+      accepted.input,
+      accepted.output,
+      accepted.events,
+    );
+    if (failed instanceof Failed) halt(issueViolation(target, failed));
+    if (failed !== undefined)
+      report(r.state, {
+        kind: "InvalidInput.failedAssumedEnsures",
+        definition: null,
+        data: { requestId: accepted.id, target, condition: failed },
+      });
+  }
 }
 
 /** Lean's redeliver. */
@@ -134,16 +145,13 @@ function redeliver(
   resultOf?: string,
 ): void {
   const s = r.state;
-  const event = refOf(r.st, name);
-  const written = r.functions.canonical({ kind: "payload", event }, payload);
-  if (written instanceof Failed) halt(issueViolation(event, written));
   const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
   write(s, {
     dir: "in",
     type: "event",
     ...given,
     name,
-    payload: written,
+    payload,
     ...(request === undefined ? {} : { resultOf: request }),
   });
   newMessage(s);
@@ -173,14 +181,14 @@ export function receive(
         { error: parsed.error },
       ),
     );
-  const { value: decoded, encoded } = parsed;
+  const decoded = parsed.value;
   const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
   const id = write(s, {
     dir: "in",
     type: "event",
     ...given,
     name,
-    payload: encoded,
+    payload,
     ...(request === undefined ? {} : { resultOf: request }),
   });
   s.deliveries.add(id);
@@ -230,9 +238,12 @@ interface Written {
 interface AnswerCheck {
   /** The assumption that the answer breaks, reported without halting. */
   readonly assumption: Assumption | undefined;
-  /** The answer to write, or the reason that it is malformed. */
-  readonly written: Written | { readonly malformed: Malformed; readonly error?: ViolationError };
-  /** An external command's acceptance, recorded to check its result events later. */
+  /** The answer to write, the reason that it is malformed, or the sender's fault (Lean's State.inputFault). */
+  readonly written:
+    | Written
+    | { readonly malformed: Malformed; readonly error?: ViolationError }
+    | { readonly fault: Fault };
+  /** An external command's acceptance, recorded to check its ensures with its result events at the end of the run. */
   readonly recorded?: Accepted;
 }
 
@@ -254,19 +265,29 @@ function writtenAnswer(
   };
 }
 
-/**
- * Checks an answer to the request `p`. When the target is assumed, it also checks the answer against the target's
- * requires over the input alone and its ensures that read no records.
- */
+/** Lean's checkAnswer. */
 function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
   const definition = activityRef(p.activity);
   const name = p.activity.target;
   const structure = r.st.structure;
   const assumed = isAssumed(structure, definition);
+  const faulted = (): AnswerCheck => ({
+    assumption: undefined,
+    written: { fault: inputFault(r.st, r.state, definition, p.requester) },
+  });
+  if (!assumed && answer.result === "rejected" && answer.rejection.kind === "invalid-input") return faulted();
+  const sent = JSON.parse(p.input) as unknown;
+  let input: Fields = sent as Fields;
+  if (assumed) {
+    const parsed = r.functions.parse({ kind: "input", definition }, sent);
+    if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
+    if ("error" in parsed) return faulted();
+    input = parsed.value;
+  }
   const requires = assumed ? requiresOf(structure, definition) : [];
   let failedRequires: string | undefined;
   if (requires.length > 0) {
-    const failed = firstFalse((condition) => r.functions.inputRequirement(name, condition, p.value), requires);
+    const failed = firstFalse((condition) => r.functions.inputRequirement(name, condition, input), requires);
     if (failed instanceof Failed) return halt(issueViolation(definition, failed));
     failedRequires = failed;
   }
@@ -299,15 +320,15 @@ function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
     };
   if (!assumed || failedRequires !== undefined) return { assumption: broken(), written };
   const output = written.decoded.result === "rejected" ? undefined : written.decoded.output;
-  const failedEnsures = r.functions.resultEnsures(name, p.value, output, []);
+  if (p.activity.keyword === "sends")
+    return {
+      assumption: broken(),
+      written,
+      recorded: { id: p.id, activity: p.activity, input, output, events: [] },
+    };
+  const failedEnsures = r.functions.resultEnsures(name, input, output, []);
   if (failedEnsures instanceof Failed) return halt(issueViolation(definition, failedEnsures));
-  return {
-    assumption: broken(failedEnsures),
-    written,
-    ...(p.activity.keyword === "sends"
-      ? { recorded: { id: p.id, activity: p.activity, input: p.value, output, events: [] } }
-      : {}),
-  };
+  return { assumption: broken(failedEnsures), written };
 }
 
 /** Lean's answerRequest. */
@@ -315,6 +336,7 @@ export function answerRequest(r: Processing, givenId: string, p: Pending, answer
   const s = r.state;
   const checked = checkAnswer(r, p, answer);
   if (checked.assumption !== undefined) report(s, checked.assumption);
+  if ("fault" in checked.written) return report(s, checked.written.fault);
   if ("malformed" in checked.written) {
     const { malformed, error } = checked.written;
     return report(s, withExtra(malformed, { error }));

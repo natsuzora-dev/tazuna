@@ -1,4 +1,3 @@
-import type { Fields } from "../../data/values.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Activity, activityRef } from "../chart/basic.ts";
@@ -26,18 +25,15 @@ function appliedShows(instance: Instance): (readonly [string, Activity])[] {
 function refresh(r: Processing, instance: Instance): boolean {
   if (instance.closed) return false;
   let shownChanged = false;
-  const wanted = new Map<string, { activity: Activity; value: Fields; encoded: unknown; text: string }>();
+  const wanted = new Map<string, { activity: Activity; encoded: unknown; text: string }>();
   const definition = ref(r.st, instance.chart.name);
   for (const [state, activity] of appliedShows(instance)) {
     const slot = activity.key;
     const scope = scopeOf(r.state, instance, state);
     const records = new LazyRecordSource(r.state.records, r.note);
-    const shown = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
-    if (shown instanceof Failed)
-      return halt(
-        issueViolation(definition, shown, () => ({ kind: "Fault.showsInputSchema", definition, data: { slot } })),
-      );
-    wanted.set(slot, { activity, value: shown.value, encoded: shown.encoded, text: JSON.stringify(shown.encoded) });
+    const encoded = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
+    if (encoded instanceof Failed) return halt(issueViolation(definition, encoded));
+    wanted.set(slot, { activity, encoded, text: JSON.stringify(encoded) });
   }
   const open = openShows(r.state, instance.resource);
   for (const p of open) {
@@ -50,14 +46,13 @@ function refresh(r: Processing, instance: Instance): boolean {
       instance.shown.set(slot, null);
     }
   }
-  for (const [slot, { activity, value, encoded, text }] of wanted) {
+  for (const [slot, { activity, encoded, text }] of wanted) {
     if (open.some((p) => p.requester.slot === slot && p.input === text)) continue;
     awaitAnswer(
       r.state,
       { dir: "out", type: "subscribe", name: activity.target, input: encoded },
       { kind: "slot", machine: instance.resource, slot },
       activity,
-      value,
     );
     r.note.reached({ kind: "request", definition: activityRef(activity), data: {} });
   }

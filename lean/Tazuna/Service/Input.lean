@@ -12,13 +12,9 @@ variable {m : Type → Type}
 def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) : m State := do
   if name ∈ st.commands then
-    match ← fs.canonical (.input name) raw with
-    | .error e =>
-      pure (s.report (.fault (issueViolation st (st.ref name) e)))
-    | .ok input =>
-    let (s, id) := s.write .in givenId (.command name input)
+    let (s, id) := s.write .in givenId (.command name raw)
     let (s, step) := s.newMessage.newStep none
-    let request : Request := { name, input }
+    let request : Request := { name, input := raw }
     match s.commandAnswers.find? id with
     | some known => message st fs (s.answer (some id) (answerAgain known request)) {}
     | none =>
@@ -30,11 +26,7 @@ def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
 def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) : m State := do
   if name ∈ st.queries then
-    match ← fs.canonical (.input name) raw with
-    | .error e =>
-      pure (s.report (.fault (issueViolation st (st.ref name) e)))
-    | .ok input =>
-    let (s, id) := s.write .in givenId (.query name input)
+    let (s, id) := s.write .in givenId (.query name raw)
     let s := s.newMessage
     match ← resolveChecked st fs s name raw with
     | .answered answer violations => message st fs ((s.reportAll violations).answer (some id) answer) {}
@@ -45,11 +37,7 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
 def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) : m State := do
   if name ∈ st.queries then
-    match ← fs.canonical (.input name) raw with
-    | .error e =>
-      pure (s.report (.fault (issueViolation st (st.ref name) e)))
-    | .ok input =>
-    let (s, id) := s.write .in givenId (.subscribe name input)
+    let (s, id) := s.write .in givenId (.subscribe name raw)
     let s := if s.subscriptions.any (·.id == id) then
         s.report (.invalidInput (.reusedSubscriptionId id))
       else { s with subscriptions := s.subscriptions ++ [{ id, query := name, input := raw }] }
@@ -80,25 +68,30 @@ def resultRequest (st : Service) (s : State) (name handle : String) : State × O
     | none => (s, some handle)
   | none => (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) handle)), none)
 
-def addResult [Monad m] (st : Service) (fs : Functions m) (s : State) (id : String) (e : Emit) : m State := do
-  match s.results.find? (·.id == id) with
-  | none => pure s
-  | some a =>
-    let events := a.events ++ [e]
-    let s := { s with results := s.results.map fun b => if b.id == id then { b with events } else b }
-    match ← fs.resultEnsures a.activity.target a.input a.output events with
-    | .error issue =>
-      pure (s.report (.fault (issueViolation st a.activity.ref issue)))
-    | .ok (some c) => pure (s.report (.invalidInput (.failedAssumedEnsures id a.activity.ref c)))
-    | .ok none => pure s
+/-- The state after the result event `e` of the request `id`, an accepted external command, arrives. -/
+def State.addResult (s : State) (id : String) (e : Emit) : State :=
+  { s with results := s.results.map fun b => if b.id == id then { b with events := b.events ++ [e] } else b }
 
+/--
+The state after the run ends: the ensures of each accepted external command is checked with all its result events that
+arrived, as a Pact provider verification checks a consumer's expectation against the whole interaction.
+-/
+def checkResults [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
+  s.results.foldlM (init := s) fun s a => do
+    if s.halted.isSome then return s
+    match ← fs.resultEnsures a.activity.target a.input a.output a.events with
+    | .error issue => return s.report (.fault (issueViolation st a.activity.ref issue))
+    | .ok (some c) => return s.report (.invalidInput (.failedAssumedEnsures a.id a.activity.ref c))
+    | .ok none => return s
+
+/-- The state after the event that arrived as `raw` and parsed as `payload` is delivered. -/
 def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
-    (payload : Value) (request : Option String) : m State := do
-  let (s, id) := s.write .in givenId (.event name payload request)
+    (raw payload : Value) (request : Option String) : m State := do
+  let (s, id) := s.write .in givenId (.event name raw request)
   let s := { s with deliveries := s.deliveries ++ [id] }
-  let s ← match request with
-    | some r => addResult st fs s r { event := name, payload }
-    | none => pure s
+  let s := match request with
+    | some r => s.addResult r { event := name, payload }
+    | none => s
   let (s, step) := s.newMessage.newStep none
   message st fs s { tasks := reactions st s [{ event := name, payload }] false step }
 
@@ -113,13 +106,9 @@ simulation redelivers a message as it was, so the name and payload are those of 
 -/
 def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
     (raw : Value) (resultOf : Option String) : m State := do
-  match ← fs.canonical (.payload name) raw with
-  | .error e =>
-    pure (s.report (.fault (issueViolation st (st.refOf name) e)))
-  | .ok payload =>
   let (s, request) := withResultOf st s name resultOf
   if s.halted.isSome then pure s else
-  let (s, _) := s.write .in givenId (.event name payload request)
+  let (s, _) := s.write .in givenId (.event name raw request)
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (givenId : Option String)
@@ -132,7 +121,7 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     | .ok none => pure (s.report (.invalidInput (.eventPayloadSchema (st.refOf name))))
     | .ok (some payload) =>
       let (s, request) := withResultOf st s name resultOf
-      if s.halted.isSome then pure s else deliver st fs s name givenId payload request
+      if s.halted.isSome then pure s else deliver st fs s name givenId raw payload request
 
 def assumptionFinding (requestId : String) (target : Spec.Ref) : Spec.AssumptionMismatch → Finding
   | .rejectedAssumedRequires => .invalidInput (.rejectedAssumedRequires requestId target)
@@ -146,13 +135,13 @@ def brokenAssumption (requestId : String) (target : Spec.Ref) (answer : Answer)
 
 /--
 The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported without halting.
-`written` is the answer to write, or why it is malformed. `recorded` is whether the answer is an external command's
-acceptance, recorded to check its result events later.
+`written` is the answer to write, or why it is malformed. `recorded` is an external command's acceptance, recorded to
+check its ensures with its result events at the end of the run.
 -/
 structure AnswerCheck where
   assumption : Option Finding
   written : Except Finding Answer
-  recorded : Bool := false
+  recorded : Option Accepted := none
 
 /--
 The answer as written, with its output canonical, or none when the output does not match the target's output schema.
@@ -167,16 +156,28 @@ def writtenAnswer [Monad m] (st : Service) (fs : Functions m) (a : Activity) (an
   | .fulfilled output => return (← fs.parse (.output a.target) output).map (·.map .fulfilled)
 
 /--
-The check of an answer to the request `p`. When the target is assumed, the answer is also checked against the
-target's requires over the input alone and its ensures that read no records.
+The check of an answer to the request `p`. A spec service rejects an input with invalid-input only when its schema does
+not take it, which is the sender's fault. When the target is assumed, its input schema stands for the receiver's parse,
+and the answer is also checked against the target's requires over the input alone and, for a query, its ensures that
+read no records; an external command's ensures wait for the end of the run, when all its result events arrived.
 -/
-def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
+def checkAnswer [Monad m] (st : Service) (fs : Functions m) (s : State) (p : Pending) (answer : Answer) :
     m (Except Issue AnswerCheck) := do
   let target := p.activity.ref
-  let s := st.«structure»
-  let assumed := s.isAssumed target
+  let j := st.«structure»
+  let assumed := j.isAssumed target
+  let inputFault : AnswerCheck := { assumption := none, written := .error (.fault (s.inputFault st target p.requester)) }
+  if !assumed then
+    match answer with
+    | .rejected { kind := .invalidInput, .. } => return .ok inputFault
+    | _ => pure ()
+  let parsed ← if assumed then fs.parse (.input p.activity.target) p.input else pure (.ok (some p.input))
+  match parsed with
+  | .error e => return .error e
+  | .ok none => return .ok inputFault
+  | .ok (some input) =>
   let required ←
-    if assumed then firstFalse (fs.inputRequirement p.activity.target · p.input) (s.requiresOf target)
+    if assumed then firstFalse (fs.inputRequirement p.activity.target · input) (j.requiresOf target)
     else pure (.ok none)
   match required with
   | .error e => return .error e
@@ -186,9 +187,9 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
   match answer with
   | .rejected r =>
     let written :=
-      if !(s.rejectionKinds st.service target).contains r.kind then
+      if !(j.rejectionKinds st.service target).contains r.kind then
         .error (.invalidInput (.unlistedRejectionKind p.id target r))
-      else if r.kind == .requires && !(s.rejectionReasons target).contains (r.reason.getD "") then
+      else if r.kind == .requires && !(j.rejectionReasons target).contains (r.reason.getD "") then
         .error (.invalidInput (.unlistedRejectionReason p.id target r))
       else .ok answer
     return .ok { assumption := broken none, written }
@@ -199,16 +200,17 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
       return .ok { assumption := broken none, written := .error (.invalidInput (.answerOutputSchema p.id target)) }
     | .ok (some written) =>
       if !assumed || failedRequires.isSome then return .ok { assumption := broken none, written := .ok written }
-      match ← fs.resultEnsures p.activity.target p.input written.output? [] with
+      if p.activity.keyword == "sends" then
+        return .ok { assumption := broken none, written := .ok written,
+                     recorded := some { id := p.id, activity := p.activity, input, output := written.output? } }
+      match ← fs.resultEnsures p.activity.target input written.output? [] with
       | .error e => return .error e
-      | .ok failedEnsures =>
-        return .ok { assumption := broken failedEnsures, written := .ok written,
-                     recorded := p.activity.keyword == "sends" }
+      | .ok failedEnsures => return .ok { assumption := broken failedEnsures, written := .ok written }
 
 /-- The state after an answer input with id `givenId` answers the request `p`, as checkAnswer checks the answer. -/
 def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (givenId : Option String)
     (p : Pending) (answer : Answer) : m State := do
-  match ← checkAnswer st fs p answer with
+  match ← checkAnswer st fs s p answer with
   | .error e =>
     pure (s.report (.fault (issueViolation st p.activity.ref e)))
   | .ok checked =>
@@ -218,10 +220,9 @@ def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
   match checked.written with
   | .error f => pure (s.report f)
   | .ok written =>
-    let s := if checked.recorded then
-        { s with results := s.results ++ [{ id := p.id, activity := p.activity, input := p.input,
-                                             output := written.output? }] }
-      else s
+    let s := match checked.recorded with
+      | some a => { s with results := s.results ++ [a] }
+      | none => s
     let started := (s.write .in givenId (.answer p.id written)).1.newMessage.newStep none
     let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p written) ⟨started.1, {}⟩
     message st fs r.state r.queue

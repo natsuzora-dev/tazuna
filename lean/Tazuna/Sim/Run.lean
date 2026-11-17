@@ -525,16 +525,30 @@ def execute (j : Spec.Structure) (fsOf : String → Functions m) (start : World)
   if !w.violations.isEmpty then return w
   w.execute fsOf sc
 
+/-- The world after the run ends: each running service checks the ensures of its accepted external commands. -/
+def World.endRuns (w : World) (fsOf : String → Functions m) : m World := do
+  let states ← w.states.mapM fun (q, s) => do
+    match w.services.lookup q with
+    | some st => pure (q, ← checkResults st (fsOf q) s)
+    | none => pure (q, s)
+  pure { w with states }
+
+/-- `w` after its run ends, unless it stopped. -/
+def World.ended (w : World) (fsOf : String → Functions m) : m World :=
+  if w.stopped then pure w else w.endRuns fsOf
+
 /--
 The world after the scenario runs from `start`, each running service asking `fsOf` its spec's functions: Given is
-checked and the records placed, every running service begins, the lines take place, and the end and Then are checked.
+checked and the records placed, every running service begins, the lines take place, the run ends, and the end and
+Then are checked.
 -/
 def simulate (j : Spec.Structure) (fsOf : String → Functions m) (start : World) (sc : Scenario) : m World := do
   let w ← start.given j fsOf sc
   if !w.violations.isEmpty then return w
   let w ← w.beginAll fsOf
   let wf ← sc.lines.zipIdx.foldlM (init := (w, [])) fun wf (l, i) => World.stepFinding fsOf sc wf l i
-  if wf.1.stopped then return wf.1
-  wf.1.checkEnd.expect fsOf sc.service sc.lines sc.expectations wf.2
+  let w ← wf.1.ended fsOf
+  if w.stopped then return w
+  w.checkEnd.expect fsOf sc.service sc.lines sc.expectations wf.2
 
 end Tazuna.Sim

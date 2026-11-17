@@ -489,8 +489,7 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
     all_goals keys_leaf
   | answered c answer cause =>
     simp only [workBody]
-    split
-    all_goals split
+    repeat' split
     all_goals first
       | (refine KeepsKeys.trans ?_ (keysBy_answerTo _ _ _ _ _); keys_leaf)
       | keys_leaf
@@ -606,14 +605,11 @@ macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, S
   simp only [processCommand, id_bind, note_id]
   split <;> keys_same
 
-@[simp] theorem addResult_keyOwner (id : String) (e : Emit) (s : State) : (addResult st fs s id e).keyOwner = s.keyOwner := by
-  simp only [addResult, id_bind]
-  keys_same
+@[simp] theorem addResult_keyOwner (id : String) (e : Emit) (s : State) : (s.addResult id e).keyOwner = s.keyOwner :=
+  rfl
 
 @[simp] theorem addResult_createdEntities (id : String) (e : Emit) (s : State) :
-    (addResult st fs s id e).createdEntities = s.createdEntities := by
-  simp only [addResult, id_bind]
-  keys_same
+    (s.addResult id e).createdEntities = s.createdEntities := rfl
 
 @[simp] theorem withResultOf_keyOwner (name : String) (k : Option String) (s : State) :
     (withResultOf st s name k).1.keyOwner = s.keyOwner := by
@@ -645,7 +641,7 @@ theorem keeps_call (name : String) (id : Option String) (raw : Value) (s : State
 
 theorem keeps_subscribe (name : String) (id : Option String) (raw : Value) (s : State) :
     KeepsKeys s (subscribe st fs s name id raw) := by
-  simp only [subscribe, id_bind]
+  simp only [subscribe]
   repeat' split
   all_goals first
     | keys_leaf
@@ -656,10 +652,11 @@ theorem keeps_endSubscription (id : String) (s : State) : KeepsKeys s (endSubscr
   refine KeepsKeys.trans ?_ (keeps_message _ _)
   keys_leaf
 
-theorem keeps_deliver (name : String) (id : Option String) (payload : Value) (request : Option String) (s : State) :
-    KeepsKeys s (deliver st fs s name id payload request) := by
-  simp only [deliver, id_bind]
-  split <;> (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
+theorem keeps_deliver (name : String) (id : Option String) (raw payload : Value) (request : Option String)
+    (s : State) : KeepsKeys s (deliver st fs s name id raw payload request) := by
+  simp only [deliver]
+  refine KeepsKeys.trans ?_ (keeps_message _ _)
+  cases request <;> keys_leaf
 
 theorem keeps_receive (name : String) (id : Option String) (raw : Value) (resultOf : Option String) (s : State) :
     KeepsKeys s (receive st fs s name id raw resultOf) := by
@@ -668,7 +665,6 @@ theorem keeps_receive (name : String) (id : Option String) (raw : Value) (result
   all_goals first
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
-    | (refine KeepsKeys.trans ?_ (keeps_deliver _ _ _ _ _); keys_leaf)
 
 theorem keeps_answerRequest (id : Option String) (p : Pending) (answer : Answer) (s : State) :
     KeepsKeys s (answerRequest st fs s id p answer) := by

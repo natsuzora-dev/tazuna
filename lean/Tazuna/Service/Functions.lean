@@ -123,12 +123,11 @@ value or the Issue that stopped the code; deadlines (no author code), copyContex
 at load) always answer.
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and re-encoded if it
   matches the schema (the canonical value), or none otherwise.
-- canonical: an outside value as written to a trace line; fields that do not match the schema stay as they are.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.
-- normalize: a value that a spec function made (a decide payload, a resolve output, or a react input), canonical if it
-  matches the schema, or none otherwise. Extra fields do not match.
+- normalize: a value that a spec function made (a decide payload or a resolve output), canonical if it matches the
+  schema, or none otherwise. Extra fields do not match.
 - binding: whether one binds value of a command is non-null.
 - requirement: whether one requires condition of a command holds.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
@@ -145,16 +144,16 @@ at load) always answer.
   or a machine or screen instance. A service invariant reads only records, so it fails only by a throw, with the schema
   whose refinement or codec threw.
 - resolve: a query's output.
-- react: the input of the command that an automation sends for an event, or none when a binds value is null or the
-  guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
+- react: the input of the command that an automation sends for an event, as the sender writes it (encoded, not
+  checked), or none when a binds value is null or the guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
   react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
-- initialContext: the initial context of a machine or screen started with the input (the input that `input` checked for
-  a screen that opens opened, or `{}` when nothing opens it).
+- initialContext: the initial context of a machine or screen started with the input (the parsed input of a screen that
+  opens opened, or `{}` when nothing opens it).
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
-- showInput: the query input of a shows slot, schema-checked and encoded.
+- showInput: the query input of a shows slot, as the sender writes it (encoded, not checked).
 - items: the keys that a map state's items return, encoded and as canonicalJson. The map state takes them as a set.
 - copyContext: a copy's initial context (defaults, checked at load).
 - singleRecord: the initial record of a single entity (defaults, checked at load).
@@ -164,14 +163,13 @@ at load) always answer.
   first failing ensures.
 - assign: the context after the assign, unchanged where there is none. For a copy, copy context fields go to the copy
   and the rest to the owner, and assign returns both. `keys` and the returned entities are as in react.
-- input: the schema-checked, encoded input of the request that a state sends, or of the screen that it opens, on entry.
-  A sends input may call createKey; `keys` is as in react.
+- input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
+  it (encoded, not checked): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - holds: the check of a state's holds values against their held schemas.
 - deadlines: a state's `after` deadline names and how each time is set, in declaration order.
 -/
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
-  canonical : Schema → Value → m (Except Issue Value)
   unordered : Schema → Value → m (Except Issue Value)
   normalize : Schema → Value → m (Except Issue (Option Value))
   binding : String → String → Value → Records → Time → m (Except Issue Bool)

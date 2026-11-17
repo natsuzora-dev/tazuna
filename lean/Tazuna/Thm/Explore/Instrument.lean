@@ -74,7 +74,6 @@ theorem Agrees.modifyThen {α : Type} {g : C → C} {x : StateT C Id α} {a : α
 
 structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : Prop where
   parse : ∀ a b, Agrees (fsI.parse a b) (fs.parse a b)
-  canonical : ∀ a b, Agrees (fsI.canonical a b) (fs.canonical a b)
   unordered : ∀ a b, Agrees (fsI.unordered a b) (fs.unordered a b)
   normalize : ∀ a b, Agrees (fsI.normalize a b) (fs.normalize a b)
   binding : ∀ a b c d e, Agrees (fsI.binding a b c d e) (fs.binding a b c d e)
@@ -198,7 +197,7 @@ theorem initialContextOf_agrees (chart : String) (input : Value) :
 omit [MonadNote (StateT C Id)] in
 theorem openScreen_agrees (step : Nat) (name state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
-  unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
+  unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem activate_agrees (step : Nat) (name state : String) (a : Activity) (r : Processing) :
@@ -429,9 +428,8 @@ theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterM
   agree [refreshScreens_agrees h, checkHolds_agrees h, checkInvariants_agrees h, rearm_agrees h, publish_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem addResult_agrees (s : State) (id : String) (e : Emit) :
-    Agrees (addResult st fsI s id e) (addResult st fs s id e) := by
-  unfold addResult; agree [h.resultEnsures]
+theorem checkResults_agrees (s : State) : Agrees (checkResults st fsI s) (checkResults st fs s) := by
+  unfold checkResults; agree [h.resultEnsures]
 
 omit [MonadNote (StateT C Id)] in
 theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st fsI s c) (startInstance st fs s c) := by
@@ -493,32 +491,28 @@ theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (me
 
 theorem send_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
     Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
-  unfold send; agree [h.canonical, message_agrees h, processCommand_agrees h]
+  unfold send; agree [message_agrees h, processCommand_agrees h]
 
 theorem call_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
-  unfold call; agree [h.canonical, resolveChecked_agrees h, message_agrees h]
+  unfold call; agree [resolveChecked_agrees h, message_agrees h]
 
 theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
     Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
-  unfold subscribe; agree [h.canonical, message_agrees h]
+  unfold subscribe; agree [message_agrees h]
 
 theorem endSubscription_agrees (s : State) (id : String) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
 
-theorem deliver_agrees (s : State) (name : String) (id : Option String) (payload : Value) (request : Option String) :
-    Agrees (deliver st fsI s name id payload request) (deliver st fs s name id payload request) := by
-  unfold deliver
-  split
-  dsimp only
-  cases request
-  · exact Agrees.bind (Agrees.pure _) (fun _ => message_agrees h _ _)
-  · exact Agrees.bind (addResult_agrees h _ _ _) (fun _ => message_agrees h _ _)
+theorem deliver_agrees (s : State) (name : String) (id : Option String) (raw payload : Value)
+    (request : Option String) :
+    Agrees (deliver st fsI s name id raw payload request) (deliver st fs s name id raw payload request) := by
+  unfold deliver; exact message_agrees h _ _
 
 theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :
     Agrees (redeliver st fsI s name id raw resultOf) (redeliver st fs s name id raw resultOf) := by
-  unfold redeliver; agree [h.canonical, message_agrees h]
+  unfold redeliver; agree [message_agrees h]
 
 theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
@@ -530,11 +524,11 @@ theorem writtenAnswer_agrees (a : Activity) (answer : Answer) :
   unfold writtenAnswer; agree [h.parse]
 
 omit [MonadNote (StateT C Id)] in
-theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
-    Agrees (checkAnswer st fsI p answer) (checkAnswer st fs p answer) := by
+theorem checkAnswer_agrees (s : State) (p : Pending) (answer : Answer) :
+    Agrees (checkAnswer st fsI s p answer) (checkAnswer st fs s p answer) := by
   unfold checkAnswer
   dsimp only
-  agree [firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
+  agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), writtenAnswer_agrees h, h.resultEnsures]
 
 theorem answerRequest_agrees (s : State) (id : Option String) (p : Pending) (answer : Answer) :
     Agrees (answerRequest st fsI s id p answer) (answerRequest st fs s id p answer) := by

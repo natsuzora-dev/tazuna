@@ -34,8 +34,9 @@ interface Request {
 
 type RequestRef = { readonly requestId: string; readonly target: DefinitionRef };
 
-/** An accepted command of the trace and its results so far, which its ensures check. */
+/** An accepted command of the trace, at the line of its answer, and its results, which its ensures check at the end. */
 interface Accepted {
+  readonly line: number;
   readonly target: AnyCommand;
   readonly request: RequestRef;
   readonly results: { readonly input: unknown; readonly output?: unknown; readonly events: Emit[] };
@@ -210,17 +211,19 @@ function assumptionFinding(line: number, request: RequestRef, m: AssumptionMisma
 }
 
 /**
- * Runs checkExternal, and on the lines that it finds nothing on, the checks that need spec functions or Zod schemas.
+ * Runs checkExternal, and on the lines that it finds nothing on, the checks that need spec functions or Zod schemas. An
+ * accepted command's ensures is checked once, at the end of the trace, with all its result events.
  */
 export function verifyExternal(spec: Spec, service: string, trace: readonly FileLine[]): Found[] {
   const { found, resolved } = checkExternal(spec, service, trace);
   const violations: Found[] = [...found];
   const results = new Map<string, Accepted>();
-  const accept = (target: AnyCommand, request: RequestRef, decoded: Omit<Accepted["results"], "events">) => {
-    const accepted = { target, request, results: { ...decoded, events: [] } };
-    results.set(request.requestId, accepted);
-    return accepted.results;
-  };
+  const accept = (
+    line: number,
+    target: AnyCommand,
+    request: RequestRef,
+    decoded: Omit<Accepted["results"], "events">,
+  ) => results.set(request.requestId, { line, target, request, results: { ...decoded, events: [] } });
   resolved.forEach((r): void => {
     const line = r.at;
     if ("request" in r) {
@@ -235,10 +238,9 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
       if (input.success) {
         const decoded = { input: input.data, ...(out?.success === true ? { output: out.data } : {}) };
         const failedRequires = assumedRequires(definition, input.data);
-        const failedEnsures =
-          answer.result === "rejected" || failedRequires !== undefined || out?.success === false
-            ? undefined
-            : assumedEnsures(definition, definition.kind === "command" ? accept(definition, ref, decoded) : decoded);
+        const checked = answer.result !== "rejected" && failedRequires === undefined && out?.success !== false;
+        if (checked && definition.kind === "command") accept(line, definition, ref, decoded);
+        const failedEnsures = checked && definition.kind === "query" ? assumedEnsures(definition, decoded) : undefined;
         const broken = assumptionMismatch(answer, failedRequires, failedEnsures);
         if (broken !== undefined) violations.push(assumptionFinding(line, ref, broken));
       }
@@ -266,9 +268,11 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
     const accepted = r.line.resultOf === undefined ? undefined : results.get(r.line.resultOf);
     if (accepted === undefined) return;
     accepted.results.events.push(emit(r.event, parsed.data as never));
-    const failed = assumedEnsures(accepted.target, accepted.results);
-    if (failed !== undefined)
-      violations.push(assumptionFinding(line, accepted.request, { kind: "failedAssumedEnsures", condition: failed }));
   });
+  for (const { line, target, request, results: accepted } of results.values()) {
+    const failed = assumedEnsures(target, accepted);
+    if (failed !== undefined)
+      violations.push(assumptionFinding(line, request, { kind: "failedAssumedEnsures", condition: failed }));
+  }
   return violations.sort(byLine);
 }

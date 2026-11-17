@@ -147,6 +147,7 @@ tazuna detects a break of each assumption only partly or not at all.
   An adapter that can only wait, such as one that drives a browser, bounds the wait and rejects with `Unsettled`.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
+  An external command's `ensures` is checked once, at the end of the scenario or trace, with all its result events.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
   Replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
   A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so `verify` assumes that the implementation behaves the same with either set of values.
@@ -177,7 +178,7 @@ A map state has one *copy* of its child states for each key of its items.
 - The service normalizes the payload of each event that a command emits and the output of each query answer with the declared schema before it sends them (`decide_payloads_sorted_before_normalize`, `resolve_output_sorted_before_normalize`).
 - An accepted command emits only events that its `decide` returned and its `emits` lists. An unlisted event halts the run (`accepted_emits_decided`, `unlisted_emitted_event_halts`).
 - When the input of a command or query does not fit its schema, the service rejects it with `invalid-input` (`command_invalid_input_rejected`, `query_invalid_input_rejected`).
-- A spec service never rejects a request from another spec service with `invalid-input` unless the definition declares it, because the sender checks the input first (`rejectionKinds_internal`).
+- Only the receiver of a message parses its value. A spec service's `invalid-input` answer to another spec service is the sender's `Fault` (`invalid_input_answer_faults_sender`, `invalid_input_command_answer_faults_sender`).
 
 ### Statecharts
 

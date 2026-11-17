@@ -129,6 +129,45 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
 }
 
 /**
+ * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
+ * `sorted` orders it: each codec encodes its part, and no check or other transform runs, so that only the receiver
+ * parses the value. A part that its codec cannot encode stays as it is.
+ */
+export function written(schema: z.ZodType, value: unknown): unknown {
+  return JSON.parse(JSON.stringify(encodedParts(schema, sorted(schema, value)) ?? null)) as unknown;
+}
+
+function encodedParts(schema: z.ZodType, value: unknown): unknown {
+  const def = schema.def as { readonly type: string };
+  if (def.type === "pipe") {
+    if (!("reverseTransform" in def)) return value;
+    const encoded = z.safeEncode(schema, value as never);
+    return encoded.success ? encoded.data : value;
+  }
+  const node = schemaNode(schema);
+  switch (node.type) {
+    case "array":
+      return Array.isArray(value) ? value.map((v) => encodedParts(node.element, v)) : value;
+    case "object":
+      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [
+          k,
+          Object.hasOwn(node.shape, k) ? encodedParts(node.shape[k] as z.ZodType, v) : v,
+        ]),
+      );
+    case "union": {
+      const option = node.options.find((o) => z.safeEncode(o, value as never).success);
+      return option === undefined ? value : encodedParts(option, value);
+    }
+    case "opaque":
+      return value;
+    default:
+      return value == null ? value : encodedParts(node.inner, value);
+  }
+}
+
+/**
  * Returns a value as `sorted` returns it, as spec code receives it: each bag and set as a Bag, and each sortedBy array as
  * Runs.
  */

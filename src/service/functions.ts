@@ -146,7 +146,6 @@ export type Checked = { readonly value: Fields; readonly encoded: unknown } | { 
  */
 export interface Functions {
   parse(schema: Schema, value: unknown): Checked | Failed;
-  canonical(schema: Schema, value: unknown): unknown;
   /**
    * Returns a value from outside or of a trace line as a simulation compares it: canonical, with every bag and the
    * sortedBy elements with equal keys in canonical order.
@@ -192,7 +191,8 @@ export interface Functions {
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed;
   resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown;
   /**
-   * Returns the input of the automation's command, undefined when a binds value is null or the guard fails. `keys`
+   * Returns the input of the automation's command as the sender writes it, undefined when a binds value is null or the
+   * guard fails. `keys`
    * holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and `created` holds the
    * entities that react called createKey for, in call order.
    */
@@ -232,8 +232,8 @@ export interface Functions {
     | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
     | Failed;
   /**
-   * Returns the input of the request that a state sends, or of the screen it opens. `keys` and `created` are as in
-   * react.
+   * Returns the input of the request that a state sends, or of the screen it opens, as the sender writes it. `keys`
+   * and `created` are as in react.
    */
   input(
     scope: Scope,
@@ -241,7 +241,7 @@ export interface Functions {
     activity: { readonly keyword: string; readonly key: string },
     keys: Keys,
     access: Access,
-  ): { readonly value: Fields; readonly encoded: unknown; readonly created: readonly string[] } | Failed;
+  ): { readonly encoded: unknown; readonly created: readonly string[] } | Failed;
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;
   /** Returns the names of a state's `after` deadlines and how each time is set, in declaration order. */
   deadlines(machine: string, state: string): readonly (readonly [string, DeadlineTime])[];
@@ -252,12 +252,13 @@ export interface Functions {
     control: string,
     access: Access,
   ): readonly { readonly value: Fields; readonly encoded: unknown }[] | Failed;
+  /** Returns the query input of a shows slot as the sender writes it. */
   showInput(
     scope: Scope,
     records: RecordSource,
     activity: { readonly keyword: string; readonly key: string },
     access: Access,
-  ): { readonly value: Fields; readonly encoded: unknown } | Failed;
+  ): unknown;
   /** Returns each item key, encoded and as canonicalJson of the encoding. The map state takes them as a set. */
   items(
     scope: Scope,
