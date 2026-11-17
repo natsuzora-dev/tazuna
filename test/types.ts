@@ -30,6 +30,7 @@ import {
   deadline,
   emit,
   emitted,
+  event as emittedEvent,
   endOf,
   entity,
   external,
@@ -38,6 +39,7 @@ import {
   type RowOf,
   raw,
   ref,
+  request,
   requested,
   run,
   service,
@@ -1390,9 +1392,12 @@ scenarioOfScreens("types", {
     w.client.send(devicePeer.requestNotificationPermission, {});
     // @ts-expect-error a running peer sends only to the own service and the listed peers
     w.peer.todo.send(devicePeer.showNotification, { text: "Due" });
-    return {};
+    return { adding };
   },
-  then: () => [],
+  then: ({ adding }) => [
+    // Then states a request to a skipped peer: the own service sends it, though nobody receives it.
+    requested(adding, [request(devicePeer.requestNotificationPermission, {})]),
+  ],
 });
 
 // The scenario grammar: what a line names and writes.
@@ -1445,6 +1450,11 @@ scenarioOfScreens("types", {
     emitted(look, []),
     // @ts-expect-error endOf takes a subscription, not a command
     requested(adding, [endOf(adding.request(calendarPeer.nextBusinessDay))]),
+    requested(adding, [request(calendarPeer.nextBusinessDay, { from: "2026-10-25" })]),
+    // @ts-expect-error Then states requests only to the peers that Given lists
+    requested(adding, [request(devicePeer.requestNotificationPermission, {})]),
+    // @ts-expect-error Then states only the own service's events
+    emitted(adding, [emittedEvent(todoPeer.taskAdded, { taskId: "task-1" })]),
     requested(adding, [endOf(watching)]),
     answered(completing, { result: "rejected", rejection: { kind: "requires", reason: "notCompleted" } }),
     // @ts-expect-error a requires rejection names a requires condition of the command
