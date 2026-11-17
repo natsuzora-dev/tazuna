@@ -13,7 +13,8 @@ The sequence of these messages, each with its time, is the service's *trace*.
 
 A scenario's own service and its running peers (`run`) are the *running services* of one *simulation*.
 They share one clock.
-A message between two of them stays *in flight* until a line of `w.net` decides its fate.
+A message to or from a running service stays *in flight* until a line of `w.net` decides its fate.
+A message to a skipped peer (`skip`) is not delivered.
 The simulation is deterministic: the scenario writes every choice that no service's code makes, such as which message arrives next and when the time advances.
 
 Messages travel on *channels*.
@@ -26,16 +27,17 @@ The trace of the own service in a scenario is the scenario's *snapshot*, and the
 A *violation* is what a command reports.
 Each violation has a kind, such as `Fault.failedEnsures`, and the part before the dot is its *group*.
 The doc comment of a kind states what it means.
-A run stops at a violation of a *halting* kind, because the behavior after it is undefined.
-`halts` in `lean/Tazuna/Service/InvalidInput.lean` and `lean/Tazuna/Sim/InvalidScenario.lean` defines which kinds halt.
+A run stops at a violation of a *halting* kind, because after it the spec's behavior is undefined or the scenario describes no run.
+`halts` in `lean/Tazuna/Service/Fault.lean`, `lean/Tazuna/Service/InvalidInput.lean`, and `lean/Tazuna/Sim/InvalidScenario.lean` defines which kinds halt.
 
 ## What a passing command means
 
 A command *passes* when it reports no violation.
-tazuna reports each mistake with the earliest tool that can detect it, in this order: the TypeScript type checker, `check`, the simulation in `test`, the exploration in `test`, and `verify`.
+tazuna aims to report each mistake with the earliest tool that can find it, in this order: the TypeScript type checker, `check`, the simulation in `test`, the exploration in `test`, and `verify`.
 
 - When `check` passes, the spec type-checks and has no violation of the groups that `check` reports.
 - When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
+  No path that appends up to `--depth` moves reports a violation.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
   This holds for the own service and for each running peer that has an implementation.
 
@@ -46,7 +48,8 @@ tazuna guarantees nothing about lines that no scenario contains.
 
 When `test` reports no `InvalidScenario` violation, the scenario states everything that happened between the running services:
 
-- Every message between two running services reached its receiver by a line, or the scenario names it as lost, refused, or left in flight (`InvalidScenario.leftInFlight`).
+- Every message to or from a running service reached its receiver by a line, or the scenario names it as lost, refused, or left in flight (`InvalidScenario.leftInFlight`).
+  No two `leaveInFlight` lines name one message (`InvalidScenario.repeatedInFlight`).
 - No message overtook an earlier one on its channel (`InvalidScenario.overtaking`).
 - Each line of a running peer states a message that its run sent.
 - Each answer of an external peer answers a request that reached it, and each such request is answered or left unanswered, not both (`InvalidScenario.awaitingAnswer`, `InvalidScenario.repeatedAnswer`).
@@ -60,11 +63,13 @@ When `test` reports no `InvalidScenario` violation, the scenario states everythi
 
 - Deadlines of one service due at the same time, and the steps of one processing that no cause orders.
   Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
+  A tied deadline fires as a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
 - Which of the equal requests of one processing each handle of `requests` names.
   `test` runs every assignment.
 
 When an order or an assignment changes the outcome, `test` reports `ChoiceDependent`.
-Two outcomes are the same when each channel carries the same messages in the same order and the records are equal up to a renaming of created keys.
+Two outcomes are the same when both halt with the same violation, or when neither halts, each channel carries the same messages in the same order, and the records are equal up to a renaming of created keys.
+The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike wherever the key appears.
 
 ### When a trace matches a snapshot
 
@@ -89,12 +94,12 @@ The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against 
 Keys that only a later line tells apart wait for that line.
 `verify` reports these cases:
 
-- `Uncomparable.ambiguous`: the bindings give a value of an `in` line different implementation values, so the binding that `drive` chose decided what the implementation got.
+- `Uncomparable.ambiguous`: the bindings give a value of an `in` line different implementation values, and the snapshot's `in` lines do not use those values alike, so the binding that `drive` chose decided what the implementation got.
 - `Uncomparable.duplicateId`: an `out` request has the id of an earlier request.
 - `Uncomparable.bindingLimit`: a line would make `verify` keep more than 256 bindings.
 
 `test` compares outcomes the same way, so a spec without a `ChoiceDependent` violation fixes the order that `verify` asks of each channel.
-Created keys are compared only up to renaming, so a spec must not compute a string in the form of a created key.
+Because created keys compare only up to renaming, a string that a spec computes in the form of a created key is `InvalidScenario.computedKey`.
 
 ## Who fixes a violation
 
@@ -114,11 +119,11 @@ The side that breaks a contract is at fault: the caller for a precondition, and 
 | `ChoiceDependent` | `test` | The spec. |
 | `Uncovered` | `test --coverage` | The scenarios. |
 | `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's simulation. |
-| `Uncomparable` | `test`, `verify` | The trace whose `in` lines differ from the snapshot's or that pairs with it in more than one way, or, for `test`, the snapshot that has no scenario. |
+| `Uncomparable` | `test`, `verify` | The trace whose `in` lines differ from the snapshot's or that pairs with it in more than one way, or, for `test`, a snapshot without a scenario or a scenario without a snapshot. |
 
 ## Detections
 
-A *detection* does not cover every case.
+A *detection* is a check that can miss violations.
 When a detection reports a violation, the violation is real.
 When it reports nothing, the violation can still exist.
 
@@ -144,20 +149,21 @@ tazuna detects a break of each assumption only partly or not at all.
   Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths that append up to two moves to the example scenarios.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
-- **Types.** Each value in spec code has the type that the code declares.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
-  `test` detects a dependence on `Bag` order only partly: it runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and reports `BagOrderDependent` when the two results differ up to a renaming of created keys.
+  `test` detects a dependence on `Bag` order only partly.
+  It runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and reports `BagOrderDependent` when the two results differ up to a renaming of created keys.
+- **Types.** Each value in spec code has the type that the code declares.
 - **Adapter.** The `Adapter` that `drive` drives the implementation through controls the implementation's whole world.
   The implementation reads the time only from the clock that `advanceTo` moves, and receives messages only through the adapter.
   The adapter reports only messages that the implementation received or sent, with the values that the implementation used.
   Its `settled` resolves only when the implementation has no work left that it can do before it gets a message or the clock moves.
-  `drive` gives the next `in` line then, so an output that the implementation sends later falls in the group of a later input and does not match.
+  `drive` gives the next `in` line then, so an output that the implementation sends after that is compared with the outputs of a later input, and does not match.
   An adapter that can only wait, such as one that drives a browser, bounds the wait and rejects with `Unsettled`.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
   Replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
-  A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so its trace stands for both.
+  A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so `verify` assumes that the implementation behaves the same with either set of values.
 - **Reproducible implementations.** Given the same world, an implementation sends the messages of its recorded trace.
   `verify` compares each implementation's trace with its own snapshot, so the claim that several implementations together produce the simulated run rests on this assumption and the previous one.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
@@ -181,7 +187,7 @@ A map state has one *copy* of its child states for each key of its items.
 
 - Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone (`then_only_reports`). The checks at the end of a run also only add violations (`simulate_reported`).
 - A line changes no message in flight except the one that its handle names, and only a deliver, lose, or refuse line removes one (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
-- A message reaches its receiver only through a deliver, redeliver, or refuse line. Another line changes no running service's state unless it gives that service something to process (`line_keeps_states`).
+- Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line. A refuse line gives the sender the `unavailable` answer (`line_keeps_states`).
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer to a request that has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A halting violation stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).

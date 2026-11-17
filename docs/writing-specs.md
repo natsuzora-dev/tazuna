@@ -29,17 +29,21 @@ The samples keep one folder per service, named after it, and one file per kind o
 | `contract.ts` | The contract |
 | `scenarios.ts` | Scenarios |
 
-## Write each meaning in its one form
+## Use the one form for each meaning
 
-tazuna has one form for each meaning, so that the author of a spec, often an LLM, has no variant to choose and no step to leave out.
+tazuna accepts one form for each meaning.
 Write even the choice to do nothing, such as ignoring a rejection.
 `check` reports a form that has a canonical alternative as `NonCanonical`.
 
 ## Handle or ignore each declared rejection
 
 Each command and query declares the rejections that it can return.
-When you send a request that can be rejected, handle each of its rejections or ignore it explicitly.
-The TypeScript type checker rejects a handler that the types show to be unreachable, and `check` reports the others as `NonCanonical`.
+
+- A state that `calls` or `sends` a request writes `onRejected` exactly when the answer can be rejected.
+  To ignore the rejection, write `onRejected: []`.
+- An automation writes `onRejected: []` exactly when its command can be rejected as `unavailable`.
+  Any other rejection is a `Fault` of the automation.
+- `check` reports a missing `onRejected` as `NonCanonical.missingOnRejected` and an unreachable one as `NonCanonical.unreachableOnRejected`.
 
 ## State every order that matters
 
@@ -47,33 +51,19 @@ A result must not depend on an order that nobody controls.
 
 - Spec functions receive the records of an entity as a `Bag`, which has no order.
   Find one record with `get(key)`, or with `filter(...).only()` when another field identifies it.
-- To order records, use `sortedBy` with a number or time key.
-  Records with equal keys form a run that has no order inside, and a page of the result takes whole runs.
+- To order records, use `sortedBy` with a number, instant, or date key.
+  It returns an array of runs.
+  Records with equal keys form one run, which has no order inside.
+  Slicing the array never splits a run.
 - `decide` returns its events for a `Bag` of records as one `Bag` of events.
-- Do not let a callback change a variable outside it.
-  The variable would show the callback the order of the `Bag`.
+- Don't change a variable outside a callback.
+  Through that variable, the result can depend on the order of the `Bag`.
 
 ## Write a scenario as Given, When, and Then
 
 Write each scenario with the `scenario` definer of its service, the *own* service, and export it.
 The export name is the scenario's name.
-
-```ts
-export const completeTwice = scenario("Complete a task twice; todo rejects the second completeTask", {
-	given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [], Settings: { shouldRemind: true } }, peers },
-	when: (w) => {
-		const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-		w.net.deliver(add.request(calendar.nextBusinessDay));
-		w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), day("2026-10-26")));
-		const first = w.client.send(completeTask, { taskId: "task-1" });
-		const second = w.client.send(completeTask, { taskId: "task-1" });
-		return { first, second };
-	},
-	then: ({ first, second }) => [answered(first, accepted), answered(second, requires("notCompleted"))],
-});
-```
-
-[samples/todo/spec/todo/scenarios.ts](../samples/todo/spec/todo/scenarios.ts) defines this scenario and its helpers `peers`, `day`, `accepted`, and `requires`.
+For a complete scenario, see [Test a first scenario](../README.md#test-a-first-scenario).
 
 ### Given
 
@@ -82,6 +72,7 @@ export const completeTwice = scenario("Complete a task twice; todo rejects the s
   Nothing defaults, so write the record of each single entity too.
 - `peers` lists every service that the own service exchanges messages with, keyed by its service name:
   - `run(contract, records)` runs the peer's spec beside the own service.
+    Each `w.peer.<name>` line states a message that the peer's run sent (`InvalidScenario.unpairedPeerLine`).
   - `external(contract)` makes the scenario write what the peer sends.
     The peer's contract checks those lines.
   - `skip(contract, because)` leaves the peer out and says why.
@@ -94,11 +85,13 @@ The lines run in the order of the calls.
 - `w.client` sends to the own service or to a running peer: `send`, `call`, `subscribe`, `unsubscribe`, and `resend`.
 - `w.user` acts on a screen: `operate` uses a control, and `look` names the screen for Then's `offered` and `notOffered`.
 - `w.peer.<name>` writes what a running or external peer sends: `answer`, `emit`, `send`, `call`, `subscribe`, and `unsubscribe`.
+  `emit(event, payload, { resultOf })` names the command whose result the event is, or `null`.
   An external peer also has `leaveUnanswered`.
+  A `w.peer` line puts its message in flight, and a `w.net` line delivers it.
 - `w.net` decides the fate of a message in flight: `deliver`, `redeliver`, `lose`, `refuse`, and `leaveInFlight`.
 - `w.clock.at(time)` moves the clock forward and fires the deadlines due by then.
 - `w.host.restart()` restarts the own service.
-- `w.startup` names what the startup of the running services caused, such as `w.startup.screen(taskListScreen)`.
+- `w.startup` names what the startup of the running services caused, as a line's handle does.
 
 To repeat lines, write a plain TypeScript function that takes `w`, such as a function that adds a task and delivers the calendar's answer.
 
@@ -111,11 +104,14 @@ Then returns what the own service did on the lines of When:
 - `requested(line, [request(definition, input)])` for the requests that it sent, with `subscription` and `endOf` for subscriptions.
 - `offered(look, control)` and `notOffered(look, control)` for what a screen offers.
 
+Then states only the facts that you want to check, and the snapshot records the rest.
+`emitted` and `requested` compare their lists as bags.
 The types reject a `requested` request to a service that `peers` does not list, and an `emitted` event of another service.
 
 ## Write the fate of every message
 
-A message between two running services arrives only by a line of the scenario.
+Every message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario.
+A message to a skipped peer is not delivered and needs no line.
 
 - Deliver it with `w.net.deliver(message)`, deliver it again with `redeliver`, or drop it with `lose`.
 - To make the sender get the transport's `unavailable` rejection, use `refuse(request)`.
@@ -125,22 +121,34 @@ A message between two running services arrives only by a line of the scenario.
 - A message never overtakes an earlier one on its channel.
   To deliver the later one, lose or refuse the earlier one first.
 
-Deadlines of one service due at the same time have no written order.
-`test` fires them in every order that can change the result, and reports `ChoiceDependent` when the result differs.
-To fix that, make the definition order them, for example by guarding one transition on the state of the other chart.
+## Order the steps that change the result
+
+`test` reports `ChoiceDependent.stepOrder` when two steps that no line orders give different results in their two orders.
+The steps are deadlines of one service due at the same time, or steps of one processing that write what the other reads.
+[Guarantees](guarantees.md#when-a-scenario-simulates) states which orders `test` runs and when two results are the same.
+
+To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
+Order across channels does not count.
+Two tied deadlines whose only effect is to send one request each give the same result.
+Two tied deadlines that each emit an event without `resultOf` to the same receiver do not, because the events share one channel.
+Neither do two tied deadlines that each add a task that a subscription returns, because the answer after the first deadline shows which one fired first.
 
 ## Refer to an earlier line through its handle
 
 A line refers to an earlier line only through that line's handle, never by position or count.
 
+- A line's handle names what processing the line caused: `request(target, pick?)`, `requests(target, pick?)`, `subscription(query, pick?)`, `event(definition, { payload?, to? })`, `answer(requestLine)`, `end(subscription)`, and `screen(screen)`.
+  Use `to` when an event has more than one receiver.
 - When a handle matches more than one message, pick by content, as in `add.request(calendar.nextBusinessDay, { input: { from: "2026-10-25" } })`.
 - When one processing sends equal requests, name them one by one with `requests`, as in `const [first, second] = add.requests(calendar.nextBusinessDay)`.
+  Name every request.
+  A request that no handle names is `InvalidScenario.leftInFlight`, and a handle beyond their number is `InvalidScenario.unresolvedReference`.
   `test` runs every assignment of the handles and reports `ChoiceDependent` when one changes the result.
   To tell the requests apart, put an id in the input and pick by it.
 - Never write a key that a running service creates, of the form `<service>/<Entity>-<n>` (`Malformed.writtenCreatedKey`).
   Read it through a handle, such as the `output` of the answer that holds it.
   In a running peer's message, write `created()` where its run creates the key.
-- Do not compute a string of that form in a spec function either (`InvalidScenario.computedKey`).
+- Don't compute a string of that form in a spec function either (`InvalidScenario.computedKey`).
 - To send a request again with the same id, use `w.client.resend(line)`.
   To send a new input under the id of an earlier line, use `w.client.send(command, input, { sameIdAs: line })`.
 - To send an input that its schema rejects, wrap it in `raw(value)`.
