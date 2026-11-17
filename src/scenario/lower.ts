@@ -68,7 +68,6 @@ export type LoweringProblem =
       readonly path: readonly string[];
     };
 
-/** The lines and expectations of a scenario as data, with the call stack of each line. */
 export interface Lowered {
   readonly lines: readonly DataLine[];
   readonly expectations: readonly DataExpectation[];
@@ -76,7 +75,6 @@ export interface Lowered {
   readonly problems: readonly LoweringProblem[];
 }
 
-/** The instant `time` in the trace's form, or undefined when it is none in whole milliseconds. */
 export function instant(time: string): string | undefined {
   try {
     const t = Temporal.Instant.from(time);
@@ -111,7 +109,6 @@ const isRecord = (v: unknown): v is Record<PropertyKey, unknown> => typeof v ===
 /** The schema of a value: an object of shape `Shape` at the top, a Zod schema below, or unknown. */
 type Schema = { readonly shape: Shape } | z.ZodType | undefined;
 
-/** The schema of the field `key` of a value of `schema`, or whether `key` is no field of it. */
 function fieldOf(schema: Schema, key: string): { readonly schema: Schema } | ObservedUse {
   if (schema === undefined) return { schema: undefined };
   if ("shape" in schema && !("def" in schema))
@@ -183,7 +180,6 @@ const factOfHandle = (handle: unknown): Fact => {
 
 const indexOf = (handle: unknown): number => (handle as Line)[lineIndex];
 
-/** The shapes of a request definition: its input, and its output when it has one. */
 interface RequestShapes {
   readonly kind: "command" | "query";
   readonly input: Shape;
@@ -223,7 +219,6 @@ export function lower(
   };
   const outputOf = (fact: Fact, target: unknown) =>
     observed({ fact, part: "output", path: [] }, shapeOf((target as RequestShapes | undefined)?.output));
-  /** The request message `fact` of `target`, as a handle names it. */
   const requestMessage = (fact: Fact, target: unknown) => ({
     [factOf]: fact,
     target,
@@ -277,14 +272,12 @@ export function lower(
     };
   };
 
-  /** Places `line` and returns its index. */
   const place = (line: DataLine): number => {
     if (closed) throw new LineAfterWhen();
     lines.push(line);
     stacks.push(new Error().stack);
     return lines.length - 1;
   };
-  /** Places `line`, whose processing by a running service names what it caused. */
   const processingLine = (line: DataLine) => {
     const index = place(line);
     return { [lineIndex]: index, ...caused({ type: "line", index }) };
@@ -309,7 +302,6 @@ export function lower(
   };
 
   const peerActor = (peer: string) => {
-    /** Places the peer's line `line`, which states the message that its handle names. */
     const stated = (line: DataLine) => {
       const index = place(line);
       return { [lineIndex]: index, [factOf]: self(index) };
@@ -362,7 +354,6 @@ export function lower(
     };
   };
 
-  /** Places the network's line `line` about `message`, which names the same message. */
   const delivery = (line: DataLine, message: unknown) => {
     const handle = processingLine(line);
     const target = isRecord(message) ? message["target"] : undefined;

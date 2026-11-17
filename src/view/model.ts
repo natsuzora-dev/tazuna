@@ -157,8 +157,8 @@ function senderOf(id: string): string | undefined {
 
 /**
  * Returns the lifelines and messages of a trace. A message from another service of the simulation comes from its
- * sender's lifeline and any other scenario input from the scenario lifeline, a request goes to the service that its
- * name starts with, and an answer or a subscription end goes back between the request's two lifelines.
+ * sender's lifeline, and any other `in` line from the scenario lifeline; a request goes to the service that its name
+ * starts with, and an answer or a subscription end goes back between the request's two lifelines.
  */
 function flow(service: string, trace: readonly TraceLine[]): Pick<ScenarioView, "participants" | "entries"> {
   const participants = [service];

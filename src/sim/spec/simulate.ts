@@ -22,11 +22,9 @@ function processingFor(spec: Spec, service: string, listener: Listener): Process
   return newProcessing(functions.st, functions, listener, undefined);
 }
 
-/** The Given records of the running service `service`, encoded as its records hold them, from which it begins. */
 export const givenRecordsOf = (spec: Spec, sc: Scenario, service: string): GivenRecord[] =>
   encodedGivenRecords(processingFor(spec, service, new Listener(spec, new Collect())), sc, service);
 
-/** A world that a run made from the scenario's start, with the listener of each running service. */
 export interface Made {
   readonly world: World;
   readonly listeners: ReadonlyMap<string, Listener>;

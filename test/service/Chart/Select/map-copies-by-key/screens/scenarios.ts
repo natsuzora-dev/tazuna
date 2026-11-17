@@ -6,10 +6,6 @@ import { listScreen } from "./listScreen.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 type W = When<typeof given.peers>;
 
-/**
- * The list screen that begin opens, after the network delivers its subscription to todo and todo's answer of
- * `taskIds`.
- */
 const deliveredList = (w: W, ...taskIds: string[]) => {
   const tasks = w.begin.subscription(todo.tasks);
   w.net.deliver(tasks);

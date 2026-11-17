@@ -7,7 +7,7 @@ import { refOf, type Schema } from "../service/basic.ts";
 import { Failed } from "../service/functions.ts";
 import { refOfTraceName } from "../syntax/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
-import { renamed } from "./participant.ts";
+import { nameIn } from "./participant.ts";
 
 /** A report that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
@@ -80,8 +80,8 @@ function schemaOf(w: World, m: Message): readonly [string, Schema] | undefined {
   if (st === undefined) return undefined;
   const b = m.body;
   if (b.type === "command" || b.type === "query" || b.type === "subscribe")
-    return [side, { kind: "input", definition: refOf(st, renamed(m.sender, side, b.name)) }];
-  if (b.type === "event") return [side, { kind: "payload", event: refOf(st, renamed(m.sender, side, b.name)) }];
+    return [side, { kind: "input", definition: refOf(st, nameIn(m.sender, side, b.name)) }];
+  if (b.type === "event") return [side, { kind: "payload", event: refOf(st, nameIn(m.sender, side, b.name)) }];
   return undefined;
 }
 

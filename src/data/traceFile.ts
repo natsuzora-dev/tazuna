@@ -11,7 +11,6 @@ export const snapshotFolder = (spec: { readonly root: string }, service: string)
 export const snapshotPath = (spec: { readonly root: string }, scenario: DefinitionRef) =>
   join(snapshotFolder(spec, scenario.service), `${scenario.name}.jsonl`);
 
-/** The name of the snapshot of a peer's run of the inputs that test derives from a scenario's run. */
 export const peerSnapshotName = (scenario: string, peer: string) => `${scenario}.${peer}`;
 
 export const snapshotEntryPath = (

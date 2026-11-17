@@ -47,25 +47,21 @@ def picks (fs : Functions m) (schema : Schema) (pick : Option Value) (v : Value)
   | none => pure true
   | some p => pure ((← comparedOr fs schema (v.overlay p)).canonical == (← comparedOr fs schema v).canonical)
 
-/-- The input of a request line, or the payload of an event line. -/
 def _root_.Tazuna.Semantics.LineBody.value? : LineBody → Option Value
   | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => some v
   | _ => none
 
-/-- The kind of a request line. -/
 def _root_.Tazuna.Semantics.LineBody.requestType? : LineBody → Option Scenario.RequestType
   | .command .. => some .command
   | .query .. => some .query
   | .subscribe .. => some .subscribe
   | _ => none
 
-/-- The target of a message that is a request. -/
 def Message.target? (m : Message) : Option Syntax.Ref :=
   match m.body with
   | .command name _ | .query name _ | .subscribe name _ => some (Syntax.Ref.ofTraceName m.sender name)
   | _ => none
 
-/-- The event of a message that is an event. -/
 def Message.event? (m : Message) : Option Syntax.Ref :=
   match m.body with
   | .event name _ _ => some (Syntax.Ref.ofTraceName m.sender name)
@@ -78,8 +74,8 @@ an event's payload. The sender is that end when it runs, and the receiver otherw
 def World.schemaOf? (w : World) (msg : Message) : Option (String × Schema) :=
   let side := if (w.role msg.sender).any (·.running) then msg.sender else msg.receiver
   match msg.body with
-  | .command name _ | .query name _ | .subscribe name _ => some (side, .input (renamed msg.sender side name))
-  | .event name _ _ => some (side, .payload (renamed msg.sender side name))
+  | .command name _ | .query name _ | .subscribe name _ => some (side, .input (nameIn msg.sender side name))
+  | .event name _ _ => some (side, .payload (nameIn msg.sender side name))
   | _ => none
 
 def World.sentBy (w : World) (line : Nat) : Option Sent := w.sent.find? (·.line == line)

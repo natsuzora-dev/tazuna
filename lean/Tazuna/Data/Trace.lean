@@ -82,11 +82,11 @@ def isEventLine (l : TraceLine) : Bool :=
   | .event .. => true
   | _ => false
 
-/-- Each createKey value of a snapshot (`created`), with the value of a compared trace that stands for it. -/
+/-- Pairs of a snapshot string and the trace string that stands for it. -/
 abbrev Bindings := List (String × String)
 
 /-- `v` with each string that `bindings` binds replaced by its bound value. -/
-def Bindings.rename (bindings : Bindings) (v : Value) : Value :=
+def Bindings.substitute (bindings : Bindings) (v : Value) : Value :=
   v.mapStrings fun s => (bindings.lookup s).getD s
 
 inductive FileLine (α : Type) where

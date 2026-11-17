@@ -19,10 +19,10 @@ structure Fixed where
   records : Records
   now : Time
   started : Bool
-  mocks : List (String × Pending × Answer)
+  takenAnswers : List (String × Pending × Answer)
 
 def _root_.Tazuna.Semantics.State.fixed (s : State) : Fixed :=
-  ⟨s.commandAnswers, s.records, s.now, s.started, s.mocks⟩
+  ⟨s.commandAnswers, s.records, s.now, s.started, s.takenAnswers⟩
 
 @[simp] theorem write_fixed (d : Dir) (g : Option String) (b : LineBody) :
     (s.write d g b).1.fixed = s.fixed := rfl
@@ -79,7 +79,7 @@ theorem report_eq (f : Finding) :
 @[simp] theorem report_stack (f : Finding) : (s.report f).stack = s.stack := by
   simp [report_eq]
 
-@[simp] theorem report_mocks (f : Finding) : (s.report f).mocks = s.mocks := by
+@[simp] theorem report_takenAnswers (f : Finding) : (s.report f).takenAnswers = s.takenAnswers := by
   simp [report_eq]
 
 theorem report_halted (f : Finding) (h : f.halts = true) : (s.report f).halted = some f.toViolation := by
@@ -119,8 +119,8 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 @[simp] theorem reportAll_now (fs : List Fault) : (s.reportAll fs).now = s.now :=
   reportAll_preserves State.now (fun _ _ => report_now ..) fs s
 
-@[simp] theorem reportAll_mocks (fs : List Fault) : (s.reportAll fs).mocks = s.mocks :=
-  reportAll_preserves State.mocks (fun _ _ => report_mocks ..) fs s
+@[simp] theorem reportAll_takenAnswers (fs : List Fault) : (s.reportAll fs).takenAnswers = s.takenAnswers :=
+  reportAll_preserves State.takenAnswers (fun _ _ => report_takenAnswers ..) fs s
 
 theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false) (t : State) :
     (t.reportAll fs).halted = t.halted ∧

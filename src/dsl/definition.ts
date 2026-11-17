@@ -212,7 +212,6 @@ type Keyed<T> = Readonly<Record<string, T>>;
 
 declare const anyOffer: unique symbol;
 
-/** The type of `any`. */
 export type AnyOffer = { readonly [anyOffer]: true };
 
 /** The offers entry that offers every payload that matches the control's schema (`[{}]` without payload fields). */
@@ -311,7 +310,6 @@ export interface Screen<I extends Shape = Shape, O extends Shape = Shape, Cs ext
 // biome-ignore lint/suspicious/noExplicitAny: a screen of any shape
 export type AnyScreen = Screen<any, any, any>;
 
-/** A contract: its members and the object that `contract()` returned. */
 export interface Contract {
   readonly service: string;
   readonly place: Place;

@@ -9,7 +9,7 @@ def kindName (group ctor : Name) : String := s!"{group.getString!}.{ctor.getStri
 
 /--
 The names of the arguments that place a violation: the scenario, the line of the compared file, and the position of the
-scenario input as written, from 1 with `at` included. A report writes them beside the data, in its `scenario` and
+line of When, from 1. A report writes them beside the data, in its `scenario` and
 `location`.
 -/
 def placeNames : List String := ["scenario", "line", "input"]

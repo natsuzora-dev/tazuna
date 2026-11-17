@@ -38,13 +38,8 @@ const milkDetail = {
 } as const;
 const showMilk = request(device.showNotification, { text: "Buy milk" });
 
-/** client adds task-1; calendar has not answered yet. */
 const addMilkUnanswered = (w: W) => w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
 
-/**
- * client adds task-1; the network delivers todo's business-day request to calendar, and calendar's answer, that the
- * next business day is `nextBusinessDay`, to todo.
- */
 const addMilk = (w: W, nextBusinessDay: string) => {
   const add = addMilkUnanswered(w);
   w.net.deliver(add.request(calendar.nextBusinessDay));

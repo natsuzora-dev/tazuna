@@ -206,7 +206,7 @@ export function schemaProperties(schema: unknown): string[] {
   return properties !== null && typeof properties === "object" ? Object.keys(properties) : [];
 }
 
-/** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value that no `keys` name gives. */
+/** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value of the entity. */
 export function isKeyOf(entity: string, value: string): boolean {
   return value.startsWith(`${entity}-`) && /^[1-9][0-9]*$/.test(value.slice(entity.length + 1));
 }

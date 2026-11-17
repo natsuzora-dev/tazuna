@@ -64,7 +64,7 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Violation
 
-/-- What the run reports: a fault of the spec, or a scenario input that is invalid. -/
+/-- What the run reports: a fault of the spec, or a message that the service takes and that is invalid. -/
 inductive Finding where
   | fault (fault : Fault)
   | invalidInput (invalid : InvalidInput)

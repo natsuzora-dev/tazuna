@@ -12,7 +12,7 @@ export type ViolationValue = {
 
 /**
  * The place that a violation names beside its data, as Lean's derive_group writes it: the scenario, the line of the
- * compared file, and the position of the scenario input. A report moves them to `scenario` and `location`.
+ * compared file, and the position of the line of When. A report moves them to `scenario` and `location`.
  */
 export interface Placed {
   readonly scenario?: DefinitionRef;
@@ -60,8 +60,7 @@ export type Kind = `${Group}.${string}`;
 
 /**
  * The location of a violation. `file` is relative to the spec folder. Without `line`, the location is a whole file or a
- * folder entry. `input` is the position of a scenario input as written, from 1 with `at` included; the inputs that test
- * appends to the scenario continue the count.
+ * folder entry. `input` is the position of a line of When, from 1.
  */
 export interface Location {
   readonly file: string;

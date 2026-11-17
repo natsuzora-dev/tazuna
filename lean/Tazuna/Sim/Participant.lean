@@ -24,7 +24,7 @@ def senderOf? (id : String) : Option String :=
   | _ => none
 
 /-- The name by which `receiver` names the definition that `sender` names `name`. -/
-def renamed (sender receiver name : String) : String :=
+def nameIn (sender receiver name : String) : String :=
   (Syntax.Ref.ofTraceName sender name).traceName receiver
 
 variable {m : Type → Type} [Monad m] [MonadNote m]
@@ -36,7 +36,7 @@ effect.
 -/
 def answerIn (st : Service) (fs : Functions m) (s : State) (to : String) (a : Answer) : m State :=
   match s.pending.find? (·.id == to) with
-  | some p => answerRequest st fs { s with mocks := (to, p, a) :: s.mocks } p a
+  | some p => answerRequest st fs { s with takenAnswers := (to, p, a) :: s.takenAnswers } p a
   | none => message st fs (s.write .in none (.answer to a)).1.newMessage {}
 
 /--
@@ -44,7 +44,7 @@ The state after the message with body `body`, which `sender` sent with id `id`, 
 its resultOf by the id of the request, which is the service's own request when `sender` received it from the service.
 -/
 def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender id : String) (body : LineBody) : m State :=
-  let name := renamed sender st.service
+  let name := nameIn sender st.service
   let given := some (receivedId sender id)
   match body with
   | .command n input => send st fs s (name n) given input

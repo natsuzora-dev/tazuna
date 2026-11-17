@@ -7,7 +7,7 @@ namespace Tazuna.Semantics
 
 open Tazuna.Data
 
-/-- A scenario input that no caller or external service gives. The input is the subject, so `definition` is null. -/
+/-- A message that the service takes and that no sender could give it. The message is the subject, so `definition` is null. -/
 inductive InvalidInput where
   /-- The input names a command, query, or screen that the service does not own. -/
   | unownedTarget (target : Syntax.Ref)

@@ -63,15 +63,15 @@ export function steps(lines: readonly (TraceLine | undefined)[]): Steps {
   return result;
 }
 
-/** Each createKey value of a snapshot (`created`), with the value of a compared trace that stands for it. */
+/** Pairs of a snapshot string and the trace string that stands for it. */
 export type Bindings = ReadonlyMap<string, string>;
 
 /** Returns `value` with each string that `bindings` binds replaced by its bound value. */
-export const renamed = (bindings: Bindings, value: Json): Json => {
+export const substituted = (bindings: Bindings, value: Json): Json => {
   if (typeof value === "string") return bindings.get(value) ?? value;
-  if (Array.isArray(value)) return value.map((v: Json) => renamed(bindings, v));
+  if (Array.isArray(value)) return value.map((v: Json) => substituted(bindings, v));
   if (value !== null && typeof value === "object")
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, renamed(bindings, v)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substituted(bindings, v)]));
   return value;
 };
 

@@ -6,12 +6,10 @@ import { listScreen } from "./listScreen.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } } as const;
 type W = When<typeof given.peers>;
 
-/** The network delivers the subscription to todo; todo's first answer on it stays in flight. */
 const deliverSubscription = (w: W, sub: OutSubscription) => {
   const reached = w.net.deliver(sub);
   w.net.inFlight(reached.answer(reached));
 };
-/** The network delivers the subscriptions that begin opened to todo. */
 const deliverBeginSubscriptions = (w: W) => {
   const tasksSub = w.begin.subscription(todo.tasks);
   const countSub = w.begin.subscription(todo.taskCount);
@@ -19,10 +17,8 @@ const deliverBeginSubscriptions = (w: W) => {
   w.net.deliver(countSub);
   return { list: w.begin.screen(listScreen), tasksSub, countSub };
 };
-/** The network delivers todo's answer to the tasks subscription. */
 const deliverTasksShown = (w: W, sub: OutSubscription<typeof todo.tasks>) =>
   w.net.deliver(w.peer.todo.answer(sub, { result: "fulfilled", output: { taskIds: [] } }));
-/** The network delivers todo's answer to the taskCount subscription. */
 const deliverCountShown = (w: W, sub: OutSubscription<typeof todo.taskCount>) =>
   w.net.deliver(w.peer.todo.answer(sub, { result: "fulfilled", output: { count: 0 } }));
 

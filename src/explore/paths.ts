@@ -19,7 +19,6 @@ import { search } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
 import { stringsIn, valuesFor } from "./values.ts";
 
-/** The world after a scenario's lines and the lines appended to them, with the listener of each running service. */
 export interface Walked {
   readonly world: World;
   readonly listeners: ReadonlyMap<string, Listener>;
@@ -72,7 +71,6 @@ const reject: Answer = { result: "rejected", rejection: { kind: "unavailable" } 
 const isAnswer = (v: unknown): v is Answer =>
   typeof v === "object" && v !== null && "result" in v && typeof (v as { result: unknown }).result === "string";
 
-/** The request message that the own service sent to an external peer with its id `id`, in flight or delivered. */
 function awaitedMessage(w: World, own: string, id: string): Message | undefined {
   return w.messages.find(
     (m) =>
@@ -250,7 +248,6 @@ export function enabledLines(
   };
 }
 
-/** Walks the scenario's lines followed by `appended`. */
 export const walkAppended = (spec: Spec, sc: Scenario, appended: readonly Line[]): Walked =>
   walkSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] });
 
@@ -316,7 +313,6 @@ function worldFingerprint(w: World): string {
   ]);
 }
 
-/** The number of values tried for each payload, input, and answer. */
 export const valuesPerPayload = 2;
 
 export interface Bounds {
@@ -325,7 +321,6 @@ export interface Bounds {
   readonly valuesPerPayload: number;
 }
 
-/** A violation that a path found, with the lines the path appended. */
 interface FoundOnPath {
   readonly violation: Violation;
   readonly appended: readonly Line[];

@@ -6,7 +6,7 @@ import type { Violation } from "../data/violation.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Halt, report, type State } from "../service/state.ts";
 import { refOfTraceName } from "../syntax/structure.ts";
-import { arriveFrom, receivedId, renamed, senderOf } from "./participant.ts";
+import { arriveFrom, nameIn, receivedId, senderOf } from "./participant.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -66,7 +66,6 @@ export interface Sent {
   readonly position: number;
 }
 
-/** A running service: its processing, and the violation that halted it. */
 export interface Participant {
   readonly processing: Processing;
   halted: Violation | undefined;
@@ -171,7 +170,7 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
       }
       case "event":
         for (const [r, p] of w.participants)
-          if (r !== service && p.processing.st.receives.includes(renamed(service, r, l.name)))
+          if (r !== service && p.processing.st.receives.includes(nameIn(service, r, l.name)))
             post(w, o, service, r, l, l.resultOf);
         break;
       default:

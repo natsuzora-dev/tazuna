@@ -110,10 +110,6 @@ export type Assignment =
   | { readonly kind: "transition"; readonly transition: TransitionRef }
   | { readonly kind: "entry" | "exit"; readonly state: string };
 
-/**
- * How the time of a deadline is set: `delay` is milliseconds after entering the state, and an `atExpression` time is
- * recomputed whenever a message finishes.
- */
 /** What createKey returns next for an entity: `<entity>-<n>` for its `n`-th createKey value, after `count` so far. */
 export interface NextKeys {
   readonly count: number;

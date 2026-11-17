@@ -153,7 +153,6 @@ structure State where
   started : Bool := false
   records : Records := []
   commandAnswers : CommandAnswers := []
-  /-- The ids of the events delivered so far. -/
   eventDeliveries : List String := []
   /-- The machine and screen instances in creation order. -/
   machines : List Instance := []
@@ -185,8 +184,8 @@ structure State where
   /-- The subscriptions that other services opened, in opening order. -/
   subscriptions : List Subscription := []
   results : List Accepted := []
-  /-- The processed mocks that have a handle, latest first: the handle, the request answered, and the answer. -/
-  mocks : List (String × Pending × Answer) := []
+  /-- The answers that the service took to its requests, latest first, under the request id that a resultOf names. -/
+  takenAnswers : List (String × Pending × Answer) := []
   violations : List Violation := []
   /-- The halting violation; after it, no input changes the state. -/
   halted : Option Violation := none
@@ -282,7 +281,6 @@ def State.machine? (s : State) (name : String) : Option Instance :=
 
 def State.chartName (s : State) (name : String) : String := ((s.machine? name).map (·.chart.name)).getD name
 
-/-- The chart or automation that a mock's `sender` names. -/
 def State.senderOf (s : State) : Requester → String
   | .state m _ | .slot m _ => s.chartName m
   | .automation a => a

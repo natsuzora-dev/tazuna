@@ -273,12 +273,10 @@ def refineSlots (slots : List Slot) (σs τs : List String) : Option (List Slot)
       let rest : Slot := (k.1.filter (· ∉ σs), k.2.filter (· ∉ τs))
       some (slots.flatMap fun k' => if k' == k then (σs, τs) :: (if rest.1.isEmpty then [] else [rest]) else [k'])
 
-/-- The one value of the list, when all its items are equal. -/
 def allSame {α : Type} [BEq α] : List α → Option α
   | x :: xs => if xs.all (· == x) then some x else none
   | [] => none
 
-/-- Whether two bindings have the same slots. -/
 def sameSlots (a b : Binding) : Bool :=
   a.slots == b.slots || (a.slots.length == b.slots.length && a.slots.all b.slots.contains)
 
@@ -457,7 +455,6 @@ def unexpected (t : Numbered) : Mismatch :=
   | .subscribe .out .. => .unexpectedSubscription t.index subject (json t.line.content)
   | _ => .unexpectedLine t.index subject
 
-/-- The latest of the earlier lines with the id. -/
 def earlierWithId (earlier : List Numbered) (id : String) : Option Numbered :=
   earlier.reverse.find? fun o => o.line.body.id == id
 
@@ -559,7 +556,7 @@ def Finding.line : Finding → Nat
     | _ => 0
 
 def differentInput (b : Binding) (s t : Numbered) : Finding :=
-  .uncomparable (.differentInput t.index s.index (Bindings.rename b.pairs (lineValue s.line)) (lineValue t.line))
+  .uncomparable (.differentInput t.index s.index (Bindings.substitute b.pairs (lineValue s.line)) (lineValue t.line))
 
 /--
 Compares the groups in order, carrying the binding. When `cut`, the trace's last group ends at a malformed line, and

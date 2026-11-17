@@ -1,6 +1,6 @@
 import type { ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
-import { type Bindings, renamed } from "../data/trace.ts";
+import { type Bindings, substituted } from "../data/trace.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
 import { stepNameDefinition } from "../service/note.ts";
@@ -53,7 +53,7 @@ export type Compare = (
  * their order.
  */
 function recordsText(bindings: Bindings, records: Json): string {
-  const value = renamed(bindings, records);
+  const value = substituted(bindings, records);
   if (value === null || typeof value !== "object" || Array.isArray(value)) return canonicalJson(value);
   return canonicalJson(
     Object.fromEntries(

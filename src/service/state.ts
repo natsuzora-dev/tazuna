@@ -258,7 +258,6 @@ export interface State {
   started: boolean;
   readonly records: Records;
   readonly commandAnswers: CommandAnswers;
-  /** The ids of the events delivered so far. */
   readonly eventDeliveries: Set<string>;
   /** The machine and screen instances, in creation order. */
   readonly machines: Map<string, Instance>;
@@ -291,8 +290,8 @@ export interface State {
   /** The subscriptions that other services opened, in opening order. */
   subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
   readonly results: Map<string, Accepted>;
-  /** For each handle of a processed mock input, the request that the latest such input answered and the answer. */
-  readonly mocks: Map<string, { readonly request: Pending; readonly answer: Answer }>;
+  /** The answers that the service took to its requests, under the request id that a resultOf names. */
+  readonly takenAnswers: Map<string, { readonly request: Pending; readonly answer: Answer }>;
   readonly violations: Violation[];
 }
 
@@ -324,7 +323,7 @@ export function newState(st: Service): State {
     tieOrderRequired: false,
     subscriptions: new Subscriptions(),
     results: new Map(),
-    mocks: new Map(),
+    takenAnswers: new Map(),
     violations: [],
   };
 }
@@ -514,7 +513,6 @@ export function sender(requester: Requester): string {
   return requester.kind === "automation" ? requester.automation : requester.machine;
 }
 
-/** Returns the chart or automation that a mock's `sender` names. */
 export function senderOf(s: State, requester: Requester): string {
   return requester.kind === "automation" ? requester.automation : chartName(s, requester.machine);
 }

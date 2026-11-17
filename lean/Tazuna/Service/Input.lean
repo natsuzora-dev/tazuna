@@ -69,12 +69,12 @@ def resultOfFinding (event : Syntax.Ref) (requestId : String) (target : Syntax.R
   | .resultOfUnlistedEvent => .invalidInput (.resultOfUnlistedEvent event requestId target)
 
 /--
-The request `handle` whose answer the service took (State.mocks), which an event names as its resultOf. It is none when
+The request `handle` whose answer the service took (State.takenAnswers), which an event names as its resultOf. It is none when
 the service took no answer to it, and after reporting that the request cannot have the event as its result
 (resultOfMismatch).
 -/
 def resultRequest (st : Service) (s : State) (name handle : String) : State × Option Pending :=
-  match s.mocks.lookup handle with
+  match s.takenAnswers.lookup handle with
   | some (p, answer) =>
     match st.«structure».resultOfMismatch p.activity.ref (answer matches .accepted _) (st.refOf name) with
     | some mismatch => (s.report (resultOfFinding (st.refOf name) p.id p.activity.ref mismatch), none)
@@ -139,13 +139,13 @@ def assumptionFinding (requestId : String) (target : Syntax.Ref) : Syntax.Assump
   | .failedAssumedRequires c => .invalidInput (.failedAssumedRequires requestId target c)
   | .failedAssumedEnsures c => .invalidInput (.failedAssumedEnsures requestId target c)
 
-/-- The assumption that a mock's answer to the request `requestId` to `target` breaks (Syntax.assumptionMismatch). -/
+/-- The assumption that an answer to the request `requestId` to `target` breaks (Syntax.assumptionMismatch). -/
 def brokenAssumption (requestId : String) (target : Syntax.Ref) (answer : Answer)
     (failedRequires failedEnsures : Option String) : Option Finding :=
   (Syntax.assumptionMismatch answer failedRequires failedEnsures).map (assumptionFinding requestId target)
 
 /--
-The check of a mock's answer. `assumption` is the assumption that the answer breaks, reported without halting.
+The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported without halting.
 `written` is the answer to write, or why it is malformed. `recorded` is whether the answer is an external command's
 acceptance, recorded to check its result events later.
 -/
@@ -167,7 +167,7 @@ def writtenAnswer [Monad m] (st : Service) (fs : Functions m) (a : Activity) (an
   | .fulfilled output => return (← fs.parse (.output a.target) output).map (·.map .fulfilled)
 
 /--
-The check of a mock's answer to the request `p`. When the target is assumed, the answer is also checked against the
+The check of an answer to the request `p`. When the target is assumed, the answer is also checked against the
 target's requires over the input alone and its ensures that read no records.
 -/
 def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :

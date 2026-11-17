@@ -54,7 +54,6 @@ export const leanModulePaths = (folder: string): string[] =>
 /** Returns the paths relative to Tazuna of the Lean modules outside Thm, such as Service/Chart/Always. */
 export const leanSemanticsPaths = (): string[] => leanModulePaths("").filter((path) => !path.startsWith("Thm/"));
 
-/** Returns the folders directly under <root>/<path>, for each path. */
 const atPaths = (root: string, paths: readonly string[]): string[] =>
   paths.flatMap((path) => folders(join(root, path)));
 
@@ -79,7 +78,6 @@ export function maskedStack<T extends { readonly error?: ProblemError }>(value: 
   return error !== undefined && "stack" in error ? { ...value, error: { ...error, stack: "<stack>" } } : value;
 }
 
-/** The suffix of a scenario file of a simulation example, and of the outcome that it expects. */
 export const scenarioSuffix = ".scenario.json";
 export const outcomeSuffix = ".expected.json";
 

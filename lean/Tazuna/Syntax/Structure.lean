@@ -224,7 +224,7 @@ deriving Repr, Inhabited
 
 derive_wire ServiceInfo
 
-/-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e` that no `keys` name gives. -/
+/-- Whether `v` has the form `<e>-<n>` of the `n`-th createKey value of entity `e`. -/
 def isKeyOf (e v : String) : Bool :=
   match (v.drop (e.length + 1)).toNat? with
   | some n => 0 < n && v == s!"{e}-{n}"

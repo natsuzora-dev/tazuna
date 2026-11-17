@@ -110,15 +110,10 @@ type SomeFields<T> = T extends readonly unknown[]
     ? { readonly [K in keyof T]?: SomeFields<T[K]> }
     : Value<T>;
 
-/** The index of the line that a line handle names. */
 export const lineIndex: unique symbol = Symbol("lineIndex");
-/** The fact that a handle names. */
 export const factOf: unique symbol = Symbol("factOf");
-/** The observed value that an observed placeholder stands for. */
 export const observedRef: unique symbol = Symbol("observedRef");
-/** Marks the `created()` placeholder. */
 export const createdMark: unique symbol = Symbol("created");
-/** Marks a value written by `raw`. */
 export const rawMark: unique symbol = Symbol("raw");
 declare const messageKind: unique symbol;
 declare const processing: unique symbol;
@@ -317,7 +312,6 @@ type PayloadArgs<Cs, K extends keyof Cs> =
   Cs[K] extends Control<infer P> ? (keyof P extends never ? [] : [payload: Value<Encoded<P>>]) : [];
 type ResultOf = OutRequest | OutSubscription | RequestLine | null;
 
-/** The commands and queries of the external peers of `P`, which only an external peer's line answers. */
 type ExternalRequests<P extends Peers> = {
   readonly [K in keyof P]: P[K] extends External<infer C> ? RequestOf<C> : never;
 }[keyof P];
@@ -348,7 +342,6 @@ interface User {
   look<Sc extends AnyScreen>(screen: ScreenRef<Sc>): Look<Sc>;
 }
 
-/** The answer `T` in trace form, as a running peer's line writes it: a key it creates is `created()`. */
 type PeerAnswerOf<T> = PeerValue<AnswerOf<T>>;
 
 /** What a peer sends; each line states one message in flight, which a line of the network delivers. */

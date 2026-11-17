@@ -121,7 +121,7 @@ def issueViolation (st : Service) (owner : Syntax.Ref) (e : Issue)
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code; deadlines (no author code), copyContext, and singleRecord (defaults, checked
 at load) always answer.
-- parse: a value from outside (a scenario input or another service's event payload), decoded and re-encoded if it
+- parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and re-encoded if it
   matches the schema (the canonical value), or none otherwise.
 - canonical: an outside value as written to a trace line; fields that do not match the schema stay as they are.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
@@ -132,7 +132,7 @@ at load) always answer.
 - binding: whether one binds value of a command is non-null.
 - requirement: whether one requires condition of a command holds.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
-  read only the input, or for the external command or query that a mock answers.
+  read only the input, or for an external peer's answer to the service's command or query.
 - decide: the events of a command whose binds are all non-null and whose requires all hold, in groups: the groups are in
   order, and the events of one group have none.
 - ensures: the name of the first failing ensures of an accepted command. Binds read the records before the event write

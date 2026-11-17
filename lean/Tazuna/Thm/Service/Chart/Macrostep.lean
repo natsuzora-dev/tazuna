@@ -552,14 +552,14 @@ theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation)
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 
-theorem drain_mocks (n : Nat) (q : Queue) : (drain st fs n s q).mocks = s.mocks := by
+theorem drain_takenAnswers (n : Nat) (q : Queue) : (drain st fs n s q).takenAnswers = s.takenAnswers := by
   induction n generalizing s q with
   | zero =>
     simp only [drain, id_bind]
     repeat' split
-    all_goals first | rfl | exact congrArg Fixed.mocks (refreshScreens_fixed (fs := fs))
+    all_goals first | rfl | exact congrArg Fixed.takenAnswers (refreshScreens_fixed (fs := fs))
   | succ n ih =>
-    have hm : ∀ {t : State}, t.fixed = s.fixed → t.mocks = s.mocks := fun e => congrArg Fixed.mocks e
+    have hm : ∀ {t : State}, t.fixed = s.fixed → t.takenAnswers = s.takenAnswers := fun e => congrArg Fixed.takenAnswers e
     simp only [drain, id_bind]
     repeat' split
     all_goals first
@@ -570,6 +570,6 @@ theorem drain_mocks (n : Nat) (q : Queue) : (drain st fs n s q).mocks = s.mocks 
           | exact hm (runWork_fixed _ _ _)
           | exact hm (keeps_sendEntered _)
           | exact hm (settleScreens_fixed _ _)
-          | (rw [processCommand_mocks]; rfl))
+          | (rw [processCommand_takenAnswers]; rfl))
 
 end Tazuna.Thm.Service.Chart.Macrostep

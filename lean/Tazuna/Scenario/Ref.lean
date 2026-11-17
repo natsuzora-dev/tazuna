@@ -95,7 +95,6 @@ end
 
 derive_wire_mutual (Fact tag "type" skip_serializing_none) (ValueRef) (Fill tag "type") (Hole) (Template)
 
-/-- Whether the template writes `created()`. -/
 def Template.created (t : Template) : Bool := t.holes.any (·.fill == .created)
 
 mutual

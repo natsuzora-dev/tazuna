@@ -174,7 +174,7 @@ theorem result_is_event_of_emits (name k : String) (s' : State) (p : Pending)
     (∃ d ∈ st.«structure».definitions.find? (·.ref == p.activity.ref), match d.body with
       | .command _ _ _ emits .. => some (st.refOf name) ∈ emits
       | _ => False) ∧
-      ∃ o, s.mocks.lookup k = some (p, .accepted o) := by
+      ∃ o, s.takenAnswers.lookup k = some (p, .accepted o) := by
   unfold resultRequest at h
   split at h
   · rename_i q a hk
@@ -294,7 +294,7 @@ theorem checkAnswer_findings (p : Pending) (answer : Answer) (checked : AnswerCh
     | (simp only [Except.error.injEq] at hr; subst hr; exact ⟨rfl, by simp⟩)
 
 theorem unmatched_result_violates (name k : String) (s₁ : State) (q : Pending) (a : Answer)
-    (hp : s.mocks.lookup k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
+    (hp : s.takenAnswers.lookup k = some (q, a)) (hq : resultRequest st s name k = (s₁, none)) :
     ∃ event requestId target m, s₁ = s.violate (resultOfFinding event requestId target m).toViolation := by
   unfold resultRequest at hq
   split at hq

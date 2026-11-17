@@ -8,10 +8,10 @@ import {
   type FileLine,
   nameOf,
   parseFileLines,
-  renamed,
   resultOf,
   sameTime,
   subjectOf,
+  substituted,
   toOf,
   untilMalformed,
 } from "../data/trace.ts";
@@ -536,7 +536,11 @@ const differentInput = (b: Binding, s: Numbered, t: Numbered): Finding => ({
   kind: "Uncomparable.differentInput",
   definition: null,
   line: t.index,
-  data: { snapshotLine: s.index, snapshot: renamed(new Map(pairsOf(b)), lineValue(s.line)), trace: lineValue(t.line) },
+  data: {
+    snapshotLine: s.index,
+    snapshot: substituted(new Map(pairsOf(b)), lineValue(s.line)),
+    trace: lineValue(t.line),
+  },
 });
 
 /** Lean's compareGroups. */

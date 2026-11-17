@@ -7,17 +7,13 @@ import { taskScreen } from "./taskScreen.ts";
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 type W = When<typeof given.peers>;
 
-/** The network delivers the task subscription of the task screen that begin opened to todo. */
 const deliverTaskSubscription = (w: W) => w.net.deliver(w.begin.subscription(todo.task));
-/** todo answers the task subscription, and the network delivers the answer. */
 const deliverShown = (w: W, isCompleted: boolean) =>
   w.net.deliver(w.peer.todo.answer(w.begin.subscription(todo.task), { result: "fulfilled", output: { isCompleted } }));
-/** The network delivers the task subscription to todo, which never answers it. */
 const deliverNeverShown = (w: W) => {
   deliverTaskSubscription(w);
   w.peer.todo.leaveUnanswered(w.begin.subscription(todo.task));
 };
-/** The network delivers the completeTask that `line` caused to todo, and todo's acceptance back. */
 const deliverAccepted = (w: W, line: ProcessingLine) => {
   const complete = line.request(todo.completeTask);
   w.net.deliver(complete);

@@ -44,11 +44,9 @@ deriving BEq, Repr, Inhabited
 
 derive_wire Expectation tag "type" skip_serializing_none
 
-/-- The line that the expectation is about. -/
 def Expectation.line : Expectation → Nat
   | .answered line _ | .emitted line _ | .requested line _ _ | .offered line _ _ _ => line
 
-/-- The values that the expectation writes. -/
 def Expectation.written : Expectation → List Template
   | .answered _ answers => answers
   | .emitted _ events => events.map (·.payload)

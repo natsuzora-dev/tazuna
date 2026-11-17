@@ -375,7 +375,6 @@ const contractDefiner =
     return members;
   };
 
-/** The service whose definer defined the contract `value`. */
 export const contractService = (value: unknown): ServiceDefinition | undefined =>
   typeof value === "object" && value !== null ? contractOwners.get(value) : undefined;
 

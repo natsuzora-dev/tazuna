@@ -231,7 +231,6 @@ export class Lean {
     };
   }
 
-  /** Returns Lean's simulation of the scenario: each running service's trace and violations, and the reports. */
   /** Simulates the scenario, or with `walk` runs its lines as explore does and returns what each service enables. */
   simulate(
     spec: Spec,

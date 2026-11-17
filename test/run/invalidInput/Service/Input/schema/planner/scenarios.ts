@@ -4,7 +4,6 @@ import { scenario } from "./planner.ts";
 
 const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
 
-/** The network delivers the addTask that adder sent at the begin, and todo's answer back. */
 const answered = (w: When<typeof given.peers>, answer: Parameters<typeof w.peer.todo.answer>[1]) => {
   const adding = w.begin.request(todo.addTask);
   w.net.deliver(adding);

@@ -6,7 +6,7 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-/-- The state with subscription `p` ended. Only a stale mock can answer an ended subscription. -/
+/-- The state with subscription `p` ended: `p` is stale, so an answer that arrives for it later changes nothing. -/
 def State.endSubscription (s : State) (p : Pending) : State :=
   let s : State := { s with pending := s.pending.map fun q => if q.id == p.id then { q with stale := true } else q }
   (s.write .out none (.unsubscribe p.id)).1

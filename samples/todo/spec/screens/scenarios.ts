@@ -73,10 +73,6 @@ type Rows = Extract<AnswerOf<typeof todo.tasks>, { readonly result: "fulfilled" 
 type List = ScreenRef<typeof taskListScreen>;
 type Detail = ScreenRef<typeof taskDetailScreen>;
 
-/**
- * The list screen that begin opens, and its two subscriptions: the network delivers each to todo, and todo's first
- * answer back, which shows `tasks` and reminders on. The deliver lines name todo's later answers.
- */
 const openList = (w: W, tasks: Rows = [milkRow]) => {
   const list: List = w.begin.screen(taskListScreen);
   const tasksSub = w.begin.subscription(todo.tasks);
@@ -88,14 +84,12 @@ const openList = (w: W, tasks: Rows = [milkRow]) => {
   return { list, tasksSub, tasksReached, settingsSub, settingsReached };
 };
 
-/** The user opens task-1 from `list`; returns the detail screen and its subscription, not yet delivered. */
 const openTask = (w: W, list: List) => {
   const opening = w.user.operate(list, "openTask", { taskId: "task-1", title: "Buy milk" });
   const detail: Detail = opening.screen(taskDetailScreen);
   return { detail, detailSub: opening.subscription(todo.taskDetail) };
 };
 
-/** openList, then the detail screen of task-1, whose subscription the network delivers with todo's answer back. */
 const openDetail = (w: W) => {
   const opened = openList(w);
   const { detail, detailSub } = openTask(w, opened.list);
@@ -116,7 +110,6 @@ export const addTask = scenario(
       w.net.deliver(w.peer.todo.answer(sent, accepted));
       w.net.deliver(addingReached.request(calendar.nextBusinessDay));
       w.peer.calendar.leaveUnanswered(addingReached.request(calendar.nextBusinessDay));
-      // What is still in flight at the end:
       w.net.inFlight(addingReached.event(todo.taskAdded));
       w.net.inFlight(addingReached.answer(tasksReached));
       return { adding, sent };
@@ -145,7 +138,6 @@ export const completeAddedTask = scenario(
       const completing = w.user.operate(list, "complete", { taskId: sent.input.taskId });
       const completingReached = w.net.deliver(completing.request(todo.completeTask));
       w.net.deliver(w.peer.todo.answer(completing.request(todo.completeTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(addingReached.event(todo.taskAdded));
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
@@ -166,7 +158,6 @@ export const completeFromList = scenario(
       const completing = w.user.operate(list, "complete", { taskId: "task-1" });
       const completingReached = w.net.deliver(completing.request(todo.completeTask));
       w.net.deliver(w.peer.todo.answer(completing.request(todo.completeTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
       return { completing };
@@ -192,7 +183,6 @@ export const ignoresListOperationsWhileCompleting = scenario(
       const reopening = w.user.operate(list, "reopen", { taskId: "task-2" });
       const reopeningReached = w.net.deliver(reopening.request(todo.reopenTask));
       w.net.deliver(w.peer.todo.answer(reopening.request(todo.reopenTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(filtering.end(tasksSub));
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
@@ -220,7 +210,6 @@ export const reopenFromList = scenario(
     when: (w) => {
       const { list, tasksSub, tasksReached } = openList(w);
       const completing = w.client.send(todo.completeTask, { taskId: "task-1" });
-      // todo's taskCompleted, the result of the client's completeTask, is still in flight.
       w.net.inFlight(completing.event(todo.taskCompleted));
       const filtering = w.user.operate(list, "filter", { filter: "completed" });
       const completedSub = filtering.subscription(todo.tasks);
@@ -229,7 +218,6 @@ export const reopenFromList = scenario(
       const reopening = w.user.operate(list, "reopen", { taskId: "task-1" });
       const reopeningReached = w.net.deliver(reopening.request(todo.reopenTask));
       w.net.deliver(w.peer.todo.answer(reopening.request(todo.reopenTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(completing.answer(tasksReached));
       w.net.inFlight(filtering.end(tasksSub));
       w.net.inFlight(reopeningReached.event(todo.taskReopened));
@@ -253,7 +241,6 @@ export const offersCompletionOnList = scenario(
         w.peer.todo.answer(filtering.subscription(todo.tasks), fulfilled({ tasks: [completedEggsRow, milkRow] })),
       );
       const look = w.user.look(list);
-      // What is still in flight at the end:
       w.net.inFlight(filtering.end(tasksSub));
       return { look };
     },
@@ -277,7 +264,6 @@ export const keepsFilter = scenario(
       w.net.deliver(w.peer.todo.answer(filtering.subscription(todo.tasks), fulfilled({ tasks: [milkRow] })));
       const { detail, detailSub } = openTask(w, list);
       const closing = w.user.operate(detail, "close");
-      // What is still in flight at the end:
       w.net.inFlight(filtering.end(tasksSub));
       w.net.inFlight(detailSub);
       w.net.inFlight(closing.end(detailSub));
@@ -301,7 +287,6 @@ export const completeAndReopenFromDetail = scenario(
       const reopening = w.user.operate(detail, "reopen");
       const reopeningReached = w.net.deliver(reopening.request(todo.reopenTask));
       w.net.deliver(w.peer.todo.answer(reopening.request(todo.reopenTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
       w.net.inFlight(reopeningReached.event(todo.taskReopened));
@@ -323,13 +308,11 @@ export const completedTaskNotCompleted = scenario(
     when: (w) => {
       const { list, tasksReached } = openList(w);
       const completing = w.client.send(todo.completeTask, { taskId: "task-1" });
-      // todo's taskCompleted, the result of the client's completeTask, is still in flight.
       w.net.inFlight(completing.event(todo.taskCompleted));
       const { detail, detailSub } = openTask(w, list);
       w.net.deliver(detailSub);
       w.net.deliver(w.peer.todo.answer(detailSub, fulfilled({ task: { ...milkDetail, isCompleted: true } })));
       const look = w.user.look(detail);
-      // What is still in flight at the end:
       w.net.inFlight(completing.answer(tasksReached));
       return { look };
     },
@@ -347,7 +330,6 @@ export const renameFromDetail = scenario(
       const changed = w.user.operate(detail, "rename", { title: "Buy soy milk" });
       const changedReached = w.net.deliver(changed.request(todo.renameTask));
       w.net.deliver(w.peer.todo.answer(changed.request(todo.renameTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(changedReached.answer(tasksReached));
       w.net.inFlight(changedReached.answer(detailReached));
       return { same, changed };
@@ -370,7 +352,6 @@ export const keepsOpenWhileRenaming = scenario(
       const renamingReached = w.net.deliver(renaming.request(todo.renameTask));
       w.net.deliver(w.peer.todo.answer(renaming.request(todo.renameTask), accepted));
       const closing = w.user.operate(detail, "close");
-      // What is still in flight at the end:
       w.net.inFlight(renamingReached.answer(tasksReached));
       w.net.inFlight(renamingReached.answer(detailReached));
       w.net.inFlight(closing.end(detailSub));
@@ -398,7 +379,6 @@ export const changeDueFromDetail = scenario(
       const futureReached = w.net.deliver(future.request(todo.changeDue));
       w.net.deliver(w.peer.todo.answer(future.request(todo.changeDue), accepted));
       const after = w.user.look(detail);
-      // What is still in flight at the end:
       w.net.inFlight(futureReached.answer(tasksReached));
       w.net.inFlight(futureReached.answer(detailReached));
       return { collapsed, past, future, busy, after };
@@ -429,7 +409,6 @@ export const clearDueFromDetail = scenario(
       w.net.deliver(w.peer.todo.answer(clearingRequest, accepted));
       w.net.deliver(clearingReached.request(calendar.nextBusinessDay));
       w.peer.calendar.leaveUnanswered(clearingReached.request(calendar.nextBusinessDay));
-      // What is still in flight at the end:
       w.net.inFlight(clearingReached.answer(tasksReached));
       w.net.inFlight(clearingReached.answer(detailReached));
       return { collapse, clearing };
@@ -473,7 +452,6 @@ export const clearsOnlyDue = scenario(
       w.net.deliver(w.peer.todo.answer(detailSub, fulfilled({ task: { ...milkDetail, dueAt: null, remindAt: null } })));
       w.user.operate(detail, "dueToggle");
       const look = w.user.look(detail);
-      // What is still in flight at the end:
       w.net.inFlight(clear.answer(tasksReached));
       return { look };
     },
@@ -497,7 +475,6 @@ export const completeWhileDueExpanded = scenario(
       w.net.deliver(w.peer.todo.answer(clearingRequest, accepted));
       w.net.deliver(clearingReached.request(calendar.nextBusinessDay));
       w.peer.calendar.leaveUnanswered(clearingReached.request(calendar.nextBusinessDay));
-      // What is still in flight at the end:
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
       w.net.inFlight(completingReached.answer(detailReached));
@@ -519,8 +496,6 @@ export const deleteFromDetail = scenario(
       const deleteReq = deleting.request(todo.deleteTask);
       const deleteReached = w.net.deliver(deleteReq);
       w.net.deliver(w.peer.todo.answer(deleteReq, accepted));
-      // todo's taskDeleted, the result of deleteReq, is still in flight.
-      // What is still in flight at the end:
       w.net.inFlight(deleting.end(detailSub));
       w.net.inFlight(deleteReached.event(todo.taskDeleted));
       w.net.inFlight(deleteReached.answer(tasksReached));
@@ -543,7 +518,6 @@ export const closesDeletedTask = scenario("Receive taskDeleted for the task on t
     const { detailSub } = openTask(w, list);
     const del = w.client.send(todo.deleteTask, { taskId: "task-1" });
     const deleted = w.net.deliver(w.peer.todo.emit(todo.taskDeleted, { taskId: "task-1" }, { resultOf: del }));
-    // What is still in flight at the end:
     w.net.inFlight(detailSub);
     w.net.inFlight(del.answer(tasksReached));
     w.net.inFlight(deleted.end(detailSub));
@@ -562,7 +536,6 @@ export const changesReminders = scenario(
       const togglingReached = w.net.deliver(toggling.request(todo.changeReminders));
       w.net.deliver(w.peer.todo.answer(toggling.request(todo.changeReminders), accepted));
       const filtering = w.user.operate(list, "filter", { filter: "all" });
-      // What is still in flight at the end:
       w.net.inFlight(togglingReached.answer(settingsReached));
       w.net.inFlight(filtering.end(tasksSub));
       w.net.inFlight(filtering.subscription(todo.tasks));
@@ -593,7 +566,6 @@ export const ignoresListOperationsWhileSending = scenario(
       const whileToggling = w.user.look(list);
       const togglingReached = w.net.deliver(toggling.request(todo.changeReminders));
       w.net.deliver(w.peer.todo.answer(toggling.request(todo.changeReminders), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(addingReached.event(todo.taskAdded));
       w.net.inFlight(addingReached.answer(tasksReached));
       w.net.inFlight(togglingReached.answer(settingsReached));
@@ -627,7 +599,6 @@ export const retriesAfterListRejections = scenario(
       const toggle2 = w.user.operate(list, "remindersToggle", { shouldRemind: false });
       const toggle2Reached = w.net.deliver(toggle2.request(todo.changeReminders));
       w.net.deliver(w.peer.todo.answer(toggle2.request(todo.changeReminders), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(add2Reached.event(todo.taskAdded));
       w.net.inFlight(add2Reached.answer(tasksReached));
       w.net.inFlight(toggle2Reached.answer(settingsReached));
@@ -660,7 +631,6 @@ export const retriesAfterRowRejections = scenario(
       const reopen2 = w.user.operate(list, "reopen", { taskId: "task-2" });
       const reopen2Reached = w.net.deliver(reopen2.request(todo.reopenTask));
       w.net.deliver(w.peer.todo.answer(reopen2.request(todo.reopenTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(filtering.end(tasksSub));
       w.net.inFlight(complete2Reached.event(todo.taskCompleted));
       w.net.inFlight(complete2Reached.answer(tasksReached));
@@ -695,7 +665,6 @@ export const retriesAfterRenameAndDueRejections = scenario(
       const due2 = w.user.operate(detail, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" });
       const due2Reached = w.net.deliver(due2.request(todo.changeDue));
       w.net.deliver(w.peer.todo.answer(due2.request(todo.changeDue), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(rename2Reached.answer(tasksReached));
       w.net.inFlight(rename2Reached.answer(detailReached));
       w.net.inFlight(due2Reached.answer(tasksReached));
@@ -727,7 +696,6 @@ export const retriesAfterCompletionRejections = scenario(
       const reopen2 = w.user.operate(detail, "reopen");
       const reopen2Reached = w.net.deliver(reopen2.request(todo.reopenTask));
       w.net.deliver(w.peer.todo.answer(reopen2.request(todo.reopenTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(complete2Reached.event(todo.taskCompleted));
       w.net.inFlight(complete2Reached.answer(tasksReached));
       w.net.inFlight(reopen2Reached.event(todo.taskReopened));
@@ -752,14 +720,12 @@ export const keepsEditingAfterDeleteRejected = scenario(
       const { tasksReached, detail, detailSub, detailReached } = openDetail(w);
       const deleting = w.user.operate(detail, "delete");
       const rejected = w.net.fail(deleting.request(todo.deleteTask));
-      // The screen subscribes again after the rejection.
       const resubscribed = rejected.subscription(todo.taskDetail);
       const resubscribedReached = w.net.deliver(resubscribed);
       w.net.deliver(w.peer.todo.answer(resubscribed, fulfilled({ task: milkDetail })));
       const completing = w.user.operate(detail, "complete");
       const completingReached = w.net.deliver(completing.request(todo.completeTask));
       w.net.deliver(w.peer.todo.answer(completing.request(todo.completeTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(deleting.end(detailSub));
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
@@ -782,7 +748,6 @@ export const keepsDetailWhenOtherTaskDeleted = scenario(
       const completing = w.user.operate(detail, "complete");
       const completingReached = w.net.deliver(completing.request(todo.completeTask));
       w.net.deliver(w.peer.todo.answer(completing.request(todo.completeTask), accepted));
-      // What is still in flight at the end:
       w.net.inFlight(completingReached.event(todo.taskCompleted));
       w.net.inFlight(completingReached.answer(tasksReached));
       w.net.inFlight(completingReached.answer(detailReached));

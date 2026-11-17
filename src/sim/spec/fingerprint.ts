@@ -65,12 +65,10 @@ function requestsFingerprint(r: Processing): unknown {
  * stale. The counts of line ids and of created keys decide the ids and keys that later lines and records get. Also left
  * out are the records of what happened: the trace, violations, steps, messageCount, coverage and request pairs, and the
  * write counts of values, which only decide whether a cached evaluation is reused. The sets of violations already
- * reported are left out too: they only stop a run from reporting a violation twice. Paths compared by fingerprint share
- * the scenario, and a later input can name only a mock input of the scenario, so the answered mocks are compared as a
- * set, without their handles. The copies of a map state follow their owner, in the order of
- * their keys; a closed copy that no map state lists is left out, since the run reads from it only what its resource
- * names (owner, map and key) and that it is closed. The deadlines stay in entry order, which is the order of the due
- * deadlines.
+ * reported are left out too: they only stop a run from reporting a violation twice. The taken answers are compared as a
+ * set. The copies of a map state follow their owner, in the order of their keys; a closed copy that no map state lists
+ * is left out, since the run reads from it only what its resource names (owner, map and key) and that it is closed. The
+ * deadlines stay in entry order, which is the order of the due deadlines.
  */
 export function fingerprint(r: Processing): string {
   const s = r.state;
@@ -103,7 +101,9 @@ export function fingerprint(r: Processing): string {
       .toSorted(byKey)
       .map(([id, { request, answer }]) => [id, request.name, JSON.stringify(request.input), answer]),
     eventDeliveries: [...s.eventDeliveries].toSorted(),
-    mocks: [...s.mocks.values()].map(({ request, answer }) => canonicalJson([request.id, answer])).toSorted(),
+    takenAnswers: [...s.takenAnswers.values()]
+      .map(({ request, answer }) => canonicalJson([request.id, answer]))
+      .toSorted(),
     started: s.started,
   });
 }

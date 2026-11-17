@@ -91,7 +91,7 @@ The text of records as the relation compares them, with each string that `bindin
 value, and each keyed entity's rows in the order of their texts, since the replaced keys no longer give their order.
 -/
 def recordsText (bindings : Bindings) (records : Value) : String :=
-  match bindings.rename records with
+  match bindings.substitute records with
   | .obj entities =>
     objectText (entities.map fun (entity, rows) => (entity, match rows with
       | .arr rows => arrayText ((rows.map (·.canonical)).mergeSort fun a b => decide (a ≤ b))

@@ -27,7 +27,6 @@ const peers = {
   device: external(device),
 } as const;
 
-/** The lowered lines, expectations and problems of a scenario whose When is `when`. */
 function lowered(when: (w: When<typeof peers>) => unknown, then: (lines: never) => readonly never[] = () => []) {
   const definition = scenario("lowered", {
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers },

@@ -116,12 +116,11 @@ export function snapshotFolders(spec: Spec): {
 
 /**
  * A run that can have a snapshot in the snapshot folder of `service`: a scenario's run, or, named by peerSnapshotName,
- * the run of another spec service on the inputs that test derives from a scenario's run. `runner` is the service that
+ * the run of a running peer in a scenario. `runner` is the service that
  * makes the run, whose implementation records its trace.
  */
 export type SnapshotRun = DefinitionRef & { readonly runner: string };
 
-/** Returns each scenario's run, followed by the runs of each other service that is not external on its derived inputs. */
 export function snapshotRuns(spec: Spec): SnapshotRun[] {
   const peers = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
   return spec.scenarios.flatMap(({ service, name }) => [

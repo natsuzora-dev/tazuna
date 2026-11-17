@@ -88,7 +88,7 @@ export function endSubscription(r: Processing, id: string): void {
 
 /** Lean's resultRequest: the request `handle` whose answer the service took, which an event names as its resultOf. */
 function resultRequest(r: Processing, name: string, handle: string): Pending | undefined {
-  const answered = r.state.mocks.get(handle);
+  const answered = r.state.takenAnswers.get(handle);
   if (answered === undefined) return undefined;
   const { request, answer } = answered;
   const target = activityRef(request.activity);
@@ -199,7 +199,7 @@ function assumptionFinding(requestId: string, target: DefinitionRef, m: Assumpti
     : { kind: `InvalidInput.${m.kind}`, definition: null, data: { requestId, target, condition: m.condition } };
 }
 
-/** Returns the assumption that a mock's answer to the request `requestId` to `target` breaks (assumptionMismatch). */
+/** Returns the assumption that an answer to the request `requestId` to `target` breaks (assumptionMismatch). */
 function brokenAssumption(
   requestId: string,
   target: DefinitionRef,
@@ -251,7 +251,7 @@ function writtenAnswer(
 }
 
 /**
- * Checks a mock's answer to the request `p`. When the target is assumed, it also checks the answer against the target's
+ * Checks an answer to the request `p`. When the target is assumed, it also checks the answer against the target's
  * requires over the input alone and its ensures that read no records.
  */
 function checkAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {

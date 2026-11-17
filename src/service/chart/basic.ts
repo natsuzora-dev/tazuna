@@ -53,7 +53,6 @@ interface ChartState {
   /** The activities in the order calls, sends, shows, opens. */
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
-  /** The offers that this state declares, by control. */
   readonly offers: StateStructure["offers"];
 }
 
@@ -72,7 +71,6 @@ export interface Chart {
   readonly screen: boolean;
   /** Whether another screen's opens opens the chart. */
   readonly opened: boolean;
-  /** The offers that the chart itself declares, by control. */
   readonly offers: StateStructure["offers"];
   readonly controls: readonly Control[];
 }

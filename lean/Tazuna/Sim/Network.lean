@@ -132,7 +132,6 @@ def World.note (w : World) (r : Report) : World := { w with reports := w.reports
 def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
   { w with messages := w.messages.modify k fun m => { m with status } }
 
-/-- The screen instances of the state, by chart and resource. -/
 def screensOf (s : State) : List (String × String) :=
   (s.machines.filter (·.chart.screen)).map fun i => (i.chart.name, i.resource)
 
@@ -178,7 +177,7 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
       | none => w
     | .event name _ resultOf =>
       w.services.foldl (init := w) fun w (r, st) =>
-        if r != service && st.receives.contains (renamed service r name) then w.post o service r l resultOf else w
+        if r != service && st.receives.contains (nameIn service r name) then w.post o service r l resultOf else w
     | _ => w
 
 /--

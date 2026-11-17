@@ -5,7 +5,6 @@ import { addTask, completeTask, scenario, swapTitles, titledCount } from "./todo
 const peers = { device: external(device) } as const;
 const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers } as const;
 
-/** The network delivers the notification that `line` caused to device, and device's acceptance back. */
 const deliverAndAccept = (w: When<typeof peers>, line: Caused) => {
   const notification = line.request(device.showNotification);
   w.net.deliver(notification);

@@ -207,13 +207,13 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                     obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl (mem_orderedGroups _ _ e he)
                     exact ⟨x, (List.of_mem_zip hx).1, (hz _ hx).1⟩
 
-theorem processCommand_mocks (name : String) (raw : Value) (id : Option String) (n : Nat) :
-    (processCommand st fs s name raw id n).1.mocks = s.mocks := by
+theorem processCommand_takenAnswers (name : String) (raw : Value) (id : Option String) (n : Nat) :
+    (processCommand st fs s name raw id n).1.takenAnswers = s.takenAnswers := by
   simp only [processCommand, id_bind]
   split
   · cases id <;> rfl
-  · exact (congrArg Fixed.mocks (emitAll_fixed _ _)).trans (by cases id <;> exact congrArg Fixed.mocks (reportAll_fixed _))
-  · exact congrArg Fixed.mocks (reportAll_fixed ..)
+  · exact (congrArg Fixed.takenAnswers (emitAll_fixed _ _)).trans (by cases id <;> exact congrArg Fixed.takenAnswers (reportAll_fixed _))
+  · exact congrArg Fixed.takenAnswers (reportAll_fixed ..)
 
 theorem emitAll_violations (t : State) (r : Option String) (emits : List Emit) :
     (t.emitAll r emits).violations = t.violations := by

@@ -24,4 +24,4 @@ npm run check
 ## How the app uses tazuna
 
 The app reads only schemas and constants from `@todo/spec`.
-The tests replay the snapshots of the spec's scenarios against the app, and `tazuna verify` checks the traces that the app records.
+The tests drive the app through the snapshots of the spec's scenarios with `drive` from `@natsuzora-dev/tazuna/verify`, and `tazuna verify` compares the traces that the app records with the snapshots.

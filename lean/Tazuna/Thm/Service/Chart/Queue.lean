@@ -20,8 +20,8 @@ theorem Keeps.now {f : Processing → Id Processing} (h : Keeps f) (r : Processi
 theorem Keeps.started {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.started = r.state.started :=
   congrArg Fixed.started (h r)
 
-theorem Keeps.mocks {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.mocks = r.state.mocks :=
-  congrArg Fixed.mocks (h r)
+theorem Keeps.takenAnswers {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.takenAnswers = r.state.takenAnswers :=
+  congrArg Fixed.takenAnswers (h r)
 
 theorem keeps_unlessHalted {f : Processing → Id Processing} (h : Keeps f) : Keeps (unlessHalted f) := by
   intro r

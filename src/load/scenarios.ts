@@ -11,7 +11,6 @@ import type { ScenarioDefinition } from "../scenario/define.ts";
 import { instant, type LoweringProblem, lower } from "../scenario/lower.ts";
 import type { Found } from "./found.ts";
 
-/** A scenario as data, with the place in the scenario file of each of its lines. */
 export interface LoadedScenario {
   readonly description: string;
   readonly scenario: Scenario;
@@ -20,7 +19,6 @@ export interface LoadedScenario {
 
 type Services = ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
 
-/** The first frame of `stack` in a file under `root` outside node_modules, as a place relative to `root`. */
 function placeInStack(root: string, stack: string | undefined): Place | undefined {
   for (const match of (stack ?? "").matchAll(/\((file:\/\/[^)]+):(\d+):(\d+)\)|at (file:\/\/\S+):(\d+):(\d+)/g)) {
     const url = match[1] ?? match[4];
@@ -77,7 +75,6 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringProblem): Problem
   }
 }
 
-/** Reads each scenario as data: Given's records, its peers by service, and When and Then lowered. */
 export function loadScenarios(
   root: string,
   written: readonly Named<ScenarioDefinition>[],

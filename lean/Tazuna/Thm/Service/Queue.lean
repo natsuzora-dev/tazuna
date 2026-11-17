@@ -204,11 +204,11 @@ theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time
       id_pure, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _
 
-theorem afterMessage_mocks : (afterMessage st fs s).mocks = s.mocks :=
-  congrArg Fixed.mocks afterMessage_fixed
+theorem afterMessage_takenAnswers : (afterMessage st fs s).takenAnswers = s.takenAnswers :=
+  congrArg Fixed.takenAnswers afterMessage_fixed
 
-theorem fireDue_mocks (to : Time) (fuel : Nat) (tie : Option Time) :
-    (fireDue st fs to fuel tie s).mocks = s.mocks := by
+theorem fireDue_takenAnswers (to : Time) (fuel : Nat) (tie : Option Time) :
+    (fireDue st fs to fuel tie s).takenAnswers = s.takenAnswers := by
   induction fuel generalizing s tie with
   | zero => simp only [fireDue]; split <;> rfl
   | succ fuel ih =>
@@ -219,14 +219,14 @@ theorem fireDue_mocks (to : Time) (fuel : Nat) (tie : Option Time) :
       · rfl
       · dsimp only
         split
-        · exact congrArg Fixed.mocks (report_fixed ..)
+        · exact congrArg Fixed.takenAnswers (report_fixed ..)
         · try simp only [id_bind]
-          rw [ih, afterMessage_mocks, drain_mocks, (keeps_settled _ _ (keeps_fire _ _)).mocks]
+          rw [ih, afterMessage_takenAnswers, drain_takenAnswers, (keeps_settled _ _ (keeps_fire _ _)).takenAnswers]
           rfl
 
-theorem message_mocks (q : Queue) : (message st fs s q).mocks = s.mocks := by
+theorem message_takenAnswers (q : Queue) : (message st fs s q).takenAnswers = s.takenAnswers := by
   simp only [message, finish, id_bind]
-  rw [fireDue_mocks, afterMessage_mocks, drain_mocks]
+  rw [fireDue_takenAnswers, afterMessage_takenAnswers, drain_takenAnswers]
 
 theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
     ∃ new, (afterMessage st fs (drain st fs n s q)).lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now :=

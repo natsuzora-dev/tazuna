@@ -42,7 +42,7 @@ const commands: Readonly<Record<string, Command>> = {
         value: "n",
         required: true,
         description:
-          "Append up to n inputs to each scenario. test compares the two orders of a pair of appended inputs only on paths of at most n - 2 appended inputs, because each order appends both inputs.",
+          "Append up to n moves to each scenario. A move is one act that faces the own service, with the network lines it needs, such as a client request, or an external peer's answer with the lines that deliver the request and the answer.",
       },
       "--update": {
         description:
@@ -57,7 +57,7 @@ const commands: Readonly<Record<string, Command>> = {
   verify: {
     positionals: ["spec", "traces"],
     description:
-      "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of another spec service <peer> on the inputs that test derives from the scenario, which verify compares with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace; any other entry of it is a violation. verify checks a trace of an external service against the service's contract. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
+      "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of another spec service <peer> that runs as a peer in the scenario, which verify compares with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace; any other entry of it is a violation. verify checks a trace of an external service against the service's contract. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
     options: {},
   },
   view: {
@@ -91,14 +91,14 @@ const help = [
   "Options:",
   ...entry("  ", "-h, --help", "Print this help."),
   "",
-  `A violation after which the spec's behavior is undefined, or an error in a scenario input that no trace line can
-record, stops the run: test neither writes nor compares that scenario's snapshot. test --update leaves an existing
-snapshot of that scenario as it is, and verify still compares traces with it. test and verify compare nothing with a
-snapshot that has a line that the trace line schema cannot read or an after field that names no earlier out line of
-its window. verify compares no line of a trace after an input line that differs from the snapshot's. Unless such an input
-line stops the comparison first, verify stops at the first line of a trace that the trace line schema cannot read and
-reports that line: it compares no line after the last input line before that line, and checks no line of an external
-service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.
+  `A violation after which the spec's behavior is undefined, or a scenario line that cannot take place, stops the run:
+test neither writes nor compares that scenario's snapshot. test --update leaves an existing snapshot of that scenario
+as it is, and verify still compares traces with it. test and verify compare nothing with a snapshot that has a line
+that the trace line schema cannot read or an after field that names no earlier out line of its window. verify
+compares no line of a trace after an input line that differs from the snapshot's. Unless such an input line stops the
+comparison first, verify stops at the first line of a trace that the trace line schema cannot read and reports that
+line: it compares no line after the last input line before that line, and checks no line of an external service's
+trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.
 
 <spec> is a folder whose direct subfolders are services. check and test first run tsc --noEmit, from the typescript
 package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, which must include the spec's files,

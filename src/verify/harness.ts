@@ -1,5 +1,5 @@
 import type { TraceLine } from "../data/trace.generated.ts";
-import { renamed, type UntimedTraceLine } from "../data/trace.ts";
+import { substituted, type UntimedTraceLine } from "../data/trace.ts";
 import { plain } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { traceName } from "../load/traceName.ts";
@@ -43,7 +43,7 @@ function required<F>(receive: F | undefined, type: string): F {
  * boundary. The implementation starts at the scenario's start from the Given records, then gets the snapshot's `in`
  * lines one by one: before each, the clock moves to the line's time and the harness waits until the implementation is
  * quiet. A value of the snapshot that the implementation stands for in its own way (a key it created, the id of a
- * request it sent) is renamed to the implementation's value by the bindings that verify's comparison makes of the
+ * request it sent) is substituted to the implementation's value by the bindings that verify's comparison makes of the
  * trace so far, so an answer reaches the request that the implementation sent; where the binding keeps several values
  * open, it chooses by position. Once that comparison finds the trace uncomparable, the harness gives no more lines.
  */
@@ -180,7 +180,7 @@ export async function drive(spec: Spec, run: Run, adapter: Adapter): Promise<Tra
       }
     // The comparison compares nothing after an Uncomparable finding, so the later lines would go by no binding.
     if (compared.found.some(({ kind }) => kind.startsWith("Uncomparable."))) break;
-    await give(renamed(compared.bindings, plain(line)) as unknown as TraceLine);
+    await give(substituted(compared.bindings, plain(line)) as unknown as TraceLine);
   }
   await adapter.untilQuiet(outputCount);
   for (const controller of subscriptions.values()) controller.abort();

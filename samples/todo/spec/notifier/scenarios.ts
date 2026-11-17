@@ -32,11 +32,6 @@ const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } a
 const show = (openTasks: number) => request(device.showNotification, { text: `You have ${openTasks} open tasks` });
 const askPermission = request(device.requestNotificationPermission, {});
 
-/**
- * Another caller adds task-n in todo. todo's run asks calendar, which receives the question and never answers it, and
- * the network delivers todo's taskAdded, the result of that addTask, to notifier. Returns the delivering line, whose
- * processing in notifier names what notifier sent.
- */
 function taskAddedReaches(w: W, n: number): Delivered<PeerEventLine> {
   const adding = w.client.send(todo.addTask, { taskId: `task-${n}`, title: `Task ${n}` });
   const asking = adding.request(calendar.nextBusinessDay);
@@ -45,16 +40,13 @@ function taskAddedReaches(w: W, n: number): Delivered<PeerEventLine> {
   return w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: `task-${n}` }, { resultOf: adding }));
 }
 
-/** Another caller completes task-n in todo, and the network delivers todo's taskCompleted to notifier. */
 function taskCompletedReaches(w: W, n: number): ProcessingLine {
   const completing = w.client.send(todo.completeTask, { taskId: `task-${n}` });
   return w.net.deliver(w.peer.todo.emit(todo.taskCompleted, { taskId: `task-${n}` }, { resultOf: completing }));
 }
 
-/** The permission request that `line`'s processing in notifier sent. */
 const asked = (line: ProcessingLine) => line.request(device.requestNotificationPermission);
 
-/** The notification request that `line`'s processing in notifier sent, which device receives and never answers. */
 function shownUnanswered(w: W, line: ProcessingLine): void {
   const showing = line.request(device.showNotification);
   w.net.deliver(showing);
@@ -63,7 +55,6 @@ function shownUnanswered(w: W, line: ProcessingLine): void {
 
 type DeviceEvent = typeof device.notificationPermissionGranted | typeof device.notificationPermissionDenied;
 
-/** device emits `event`, the result of `resultOf` or of none, and the network delivers it to notifier. */
 function deviceTells(
   w: W,
   event: DeviceEvent,
@@ -72,14 +63,12 @@ function deviceTells(
   w.net.deliver(w.peer.device.emit(event, {}, { resultOf }));
 }
 
-/** device receives the permission request, accepts it, and the user's grant reaches notifier as its result. */
 function deviceGrants(w: W, asking: OutRequest<typeof device.requestNotificationPermission>): void {
   w.net.deliver(asking);
   w.net.deliver(w.peer.device.answer(asking, accepted));
   deviceTells(w, device.notificationPermissionGranted, asking);
 }
 
-/** device receives the request of `asking` and answers it with `answer`, which reaches notifier. */
 function deviceAnswers(
   w: W,
   asking: OutRequest<typeof device.requestNotificationPermission | typeof device.showNotification>,
