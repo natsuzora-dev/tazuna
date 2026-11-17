@@ -52,7 +52,7 @@ export const leanModulePaths = (folder: string): string[] =>
     .sort();
 
 /** Returns the paths relative to Tazuna of the Lean modules outside Thm, such as Service/Chart/Always. */
-export const leanSemanticsPaths = (): string[] => leanModulePaths("").filter((path) => !path.startsWith("Thm/"));
+export const leanDefinitionPaths = (): string[] => leanModulePaths("").filter((path) => !path.startsWith("Thm/"));
 
 const atPaths = (root: string, paths: readonly string[]): string[] =>
   paths.flatMap((path) => folders(join(root, path)));
@@ -61,7 +61,7 @@ const atPaths = (root: string, paths: readonly string[]): string[] =>
 export const subjects = (): string[] => atPaths(serviceRoot, leanModulePaths("Service"));
 
 /** Returns the examples test/run/<group>/<path of a Lean module under Tazuna, outside Thm>/<example>. */
-export const runGroupExamples = (group: string): string[] => atPaths(join(runRoot, group), leanSemanticsPaths());
+export const runGroupExamples = (group: string): string[] => atPaths(join(runRoot, group), leanDefinitionPaths());
 
 /** Returns the roots that run.test compares with their expected.jsonl and that run.diff and step.test run. */
 export const runExamples = (): string[] => [

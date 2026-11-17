@@ -70,8 +70,8 @@ function comparedAnswerValue(r: Processing, target: string, v: unknown): unknown
   return a === undefined ? v : comparedAnswer(r, target, a);
 }
 
-function reportedHere(report: Parameters<typeof reportTo>[1]): never {
-  throw new Reported(report);
+function reportedHere(violation: Parameters<typeof reportTo>[1]): never {
+  throw new Reported(violation);
 }
 
 const processingOf = (w: World, service: string): Processing | undefined => w.services.get(service)?.processing;
@@ -753,8 +753,8 @@ function line(w: World, own: string, lines: readonly Line[], i: number, l: Line)
   return take(w, own, lines, i, l);
 }
 
-/** What a look line found for an offered expectation: whether the screen offers it, or the report of its payload. */
-type Found = readonly [number, { readonly offers: boolean } | { readonly report: InvalidScenario }];
+/** What a look line found for an offered expectation: whether the screen offers it, or the violation of its payload. */
+type Found = readonly [number, { readonly offers: boolean } | { readonly violation: InvalidScenario }];
 
 /** Lean's World.found. */
 function found(w: World, expectations: readonly Expectation[], i: number, l: Line): Found[] {
@@ -775,7 +775,7 @@ function found(w: World, expectations: readonly Expectation[], i: number, l: Lin
       return [[k, { offers: offeredAt(r, o, e.control, v) }]];
     } catch (error) {
       if (!(error instanceof Reported)) throw error;
-      return [[k, { report: error.report }]];
+      return [[k, { violation: error.violation }]];
     }
   });
 }
@@ -899,7 +899,7 @@ function compared(
         });
       const at = looked.find(([j]) => j === k)?.[1];
       if (at === undefined) return undefined;
-      if ("report" in at) throw new Reported(at.report);
+      if ("violation" in at) throw new Reported(at.violation);
       return [e.offered, at.offers];
     }
   }
@@ -931,7 +931,7 @@ function expect(
         });
     } catch (error) {
       if (!(error instanceof Reported)) throw error;
-      noteTo(w, error.report);
+      noteTo(w, error.violation);
     }
   });
 }
@@ -946,7 +946,7 @@ function executeLines(w: World, sc: Scenario, looked?: Found[]): void {
       line(w, sc.service, sc.lines, i, l);
     } catch (error) {
       if (!(error instanceof Reported)) throw error;
-      reportTo(w, error.report);
+      reportTo(w, error.violation);
     }
   });
 }

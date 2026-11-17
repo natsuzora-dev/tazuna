@@ -263,8 +263,8 @@ def State.halt (s : State) (v : Violation) : State :=
 def State.report (s : State) (f : Finding) : State :=
   if f.halts then s.halt f.toViolation else s.violate f.toViolation
 
-def State.reportAll (s : State) (reports : List Fault) : State :=
-  reports.foldl (fun s fault => if s.halted.isSome then s else s.report (.fault fault)) s
+def State.reportAll (s : State) (faults : List Fault) : State :=
+  faults.foldl (fun s fault => if s.halted.isSome then s else s.report (.fault fault)) s
 
 /-- The state with the answer line to `to` written. An own-service command has no id and writes no answer line. -/
 def State.answer (s : State) (to : Option String) (answer : Answer) : State :=

@@ -12,10 +12,10 @@ import { nameIn } from "./receive.ts";
 
 /** A violation that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
-  readonly report: InvalidScenario;
-  constructor(report: InvalidScenario) {
-    super(report.kind);
-    this.report = report;
+  readonly violation: InvalidScenario;
+  constructor(violation: InvalidScenario) {
+    super(violation.kind);
+    this.violation = violation;
   }
 }
 
@@ -24,8 +24,8 @@ type Part = ValueRef["part"];
 /** The JSON that Lean's ToValue writes of a scenario value, which is JSON already. */
 export const json = (v: unknown): Json => v as Json;
 
-function reported(report: InvalidScenario): never {
-  throw new Reported(report);
+function reported(violation: InvalidScenario): never {
+  throw new Reported(violation);
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);

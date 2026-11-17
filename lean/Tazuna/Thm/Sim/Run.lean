@@ -80,8 +80,8 @@ theorem given_then (j : Spec.Structure) (w : World) (sc : Scenario) (then' : Lis
     w.given j fsOf { sc with expectations := then' } = w.given j fsOf sc := rfl
 
 /--
-Then and the end checks only add reports: the world that `simulate` leaves is the one `execute` leaves, with the same
-traces, messages, and halt, and more reports.
+Then and the end checks only add violations: the world that `simulate` leaves is the one `execute` leaves, with the same
+traces, messages, and halt, and more violations.
 -/
 theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario) :
     Reported (execute j fsOf start sc) (simulate j fsOf start sc) := by
@@ -98,7 +98,7 @@ theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (foun
     w.expect fsOf own lines [] found = w := rfl
 
 /--
-Then only adds reports: the scenario leaves the same traces, messages, and halt as the scenario without its
+Then only adds violations: the scenario leaves the same traces, messages, and halt as the scenario without its
 expectations, so a snapshot depends on Given and When alone.
 -/
 theorem then_only_reports (j : Spec.Structure) (start : World) (sc : Scenario) :
@@ -370,7 +370,7 @@ theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenar
 
 /--
 A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the
-simulation with a report: messages on one channel reach their receiver in sending order.
+simulation with a violation: messages on one channel reach their receiver in sending order.
 -/
 theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (f : Scenario.Fact) (k : Nat) (msg : Message)

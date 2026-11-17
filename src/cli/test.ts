@@ -103,7 +103,7 @@ export function testSpec(spec: Spec, options: { readonly update: boolean; readon
     reported.add(key);
     violations.push(violation);
   };
-  for (const p of simulated.violations) report(p);
+  for (const violation of simulated.violations) report(violation);
   const seenInLines = seenLines(spec);
   for (const named of spec.scenarios) {
     const explored = exploreLines(spec, named as Named<LoadedScenario>, seenInLines, bounds);
@@ -143,9 +143,9 @@ function simulateScenarios(spec: Spec): {
     const snapshots = snapshotsOf(simulated);
     const at = (line: number | null | undefined) =>
       line === null || line === undefined ? undefined : linePlaces[line];
-    for (const report of [...world.violations, ...(world.halted === undefined ? [] : [world.halted])]) {
-      const line = "scenarioLine" in report.data ? report.data.scenarioLine : undefined;
-      violations.push(toReported(report, at(line) ?? named.place, { scenario: ref }));
+    for (const violation of [...world.violations, ...(world.halted === undefined ? [] : [world.halted])]) {
+      const line = "scenarioLine" in violation.data ? violation.data.scenarioLine : undefined;
+      violations.push(toReported(violation, at(line) ?? named.place, { scenario: ref }));
     }
     const halted = world.halted !== undefined || [...world.services.values()].some((p) => p.halted !== undefined);
     for (const v of [...stepOrderChanges(spec, scenario, simulated, 0), ...assignmentChanges(spec, scenario)])

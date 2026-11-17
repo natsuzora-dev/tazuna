@@ -9,8 +9,8 @@ import { invalidInputKinds } from "../src/data/invalidInput.generated.ts";
 import {
   folders,
   isServiceFolder,
+  leanDefinitionPaths,
   leanModulePaths,
-  leanSemanticsPaths,
   runExamples,
   runGroupExamples,
   runRoot,
@@ -82,7 +82,7 @@ test("The folder names directly under test/run are the group names of groups wit
 test("Every folder under test/service and test/run/<group> is a Lean module path, an ancestor of one, or an example directly under one or inside it, and every file is inside an example. The modules are those of lean/Tazuna/Service for test/service and of lean/Tazuna outside Thm for test/run/<group>", () => {
   const roots = [
     { root: serviceRoot, modules: leanModulePaths("Service") },
-    ...folders(runRoot).map((root) => ({ root, modules: leanSemanticsPaths() })),
+    ...folders(runRoot).map((root) => ({ root, modules: leanDefinitionPaths() })),
   ];
   for (const { root, modules } of roots) {
     const inExample = (path: string) => modules.some((module) => path.startsWith(`${module}/`));
