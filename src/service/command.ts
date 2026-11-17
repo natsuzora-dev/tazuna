@@ -30,8 +30,9 @@ function orderedGroups(decided: readonly (readonly unknown[])[], events: readonl
 function twiceWritten(st: Service, groups: readonly (readonly Encoded[])[]) {
   for (const group of groups) {
     const rows = group.flatMap((e) => writtenRecord(st, e) ?? []);
-    const name = (row: (typeof rows)[number]) => `${row.entity}#${row.key}`;
-    const twice = rows.find((row, i) => rows.findIndex((other) => name(other) === name(row)) < i);
+    const twice = rows.find(
+      (row, i) => rows.findIndex((other) => other.entity === row.entity && other.key === row.key) < i,
+    );
     if (twice !== undefined) return twice;
   }
   return undefined;

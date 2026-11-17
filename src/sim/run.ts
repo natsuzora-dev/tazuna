@@ -287,9 +287,10 @@ function stated(w: World, i: number, m: Message): void {
 
 /** Lean's World.nextId. */
 function nextId(w: World, peer: string, name: string): string {
-  const key = `${peer}.${name}`;
-  const n = (w.counts.get(key) ?? 0) + 1;
-  w.counts.set(key, n);
+  const byName = w.counts.get(peer) ?? new Map<string, number>();
+  w.counts.set(peer, byName);
+  const n = (byName.get(name) ?? 0) + 1;
+  byName.set(name, n);
   return `${name}#${n}`;
 }
 

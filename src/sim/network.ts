@@ -93,7 +93,7 @@ export interface World {
   /** The messages that leaveInFlight lines name: the line, and the message. */
   readonly leftInFlight: (readonly [number, number])[];
   /** Lean's World.counts. */
-  readonly counts: Map<string, number>;
+  readonly counts: Map<string, Map<string, number>>;
   readonly violations: InvalidScenario[];
   halted: InvalidScenario | undefined;
   /** Lean's World.stepOrders. */

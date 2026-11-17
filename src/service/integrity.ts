@@ -10,8 +10,8 @@ import type { Run } from "./state.ts";
 
 type Written = {
   rows: Map<string, string[]>;
-  /** The `entity#key` of each record created again with an existing key and not deleted since. */
-  duplicated: Set<string>;
+  /** For each entity, the keys of the records created again with an existing key and not deleted since. */
+  duplicated: Map<string, Set<string>>;
 };
 
 function uniqueTaken(r: Run, written: ReadonlyMap<string, readonly string[]>): boolean {
@@ -73,10 +73,13 @@ function apply(r: Run, { emit: emitted, encoded }: Encoded, written: Written): v
   written.rows.set(name, keys);
   if (change.kind === "delete") {
     rows.delete(key);
-    written.duplicated.delete(`${name}#${key}`);
+    written.duplicated.get(name)?.delete(key);
     return;
   }
-  if (change.kind === "create" && rows.has(key)) written.duplicated.add(`${name}#${key}`);
+  if (change.kind === "create" && rows.has(key)) {
+    const again = written.duplicated.get(name) ?? new Set<string>();
+    written.duplicated.set(name, again.add(key));
+  }
   if (!keys.includes(key)) keys.push(key);
   const old = change.kind === "create" ? undefined : rows.get(key);
   rows.set(key, { value: { ...old?.value, ...payload }, encoded: { ...old?.encoded, ...encoded } });
@@ -94,9 +97,10 @@ export function applyAll(r: Run, events: readonly Encoded[]): "already-exists" |
     keyed: new Map([...records.keyed].map(([k, v]) => [k, new Map(v)])),
     singles: new Map(records.singles),
   };
-  const written: Written = { rows: new Map(), duplicated: new Set() };
+  const written: Written = { rows: new Map(), duplicated: new Map() };
   for (const e of events) apply(r, e, written);
-  if (written.duplicated.size === 0 && !uniqueTaken(r, written.rows)) return undefined;
+  if ([...written.duplicated.values()].every((keys) => keys.size === 0) && !uniqueTaken(r, written.rows))
+    return undefined;
   records.keyed.clear();
   for (const [k, v] of saved.keyed) records.keyed.set(k, v);
   records.singles.clear();
