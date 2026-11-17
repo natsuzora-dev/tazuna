@@ -1,3 +1,23 @@
+import {
+  andThen,
+  type Binding,
+  bind,
+  bindingLimit,
+  bindString,
+  bound,
+  distinctBy,
+  domainPart,
+  emptyBinding,
+  expand,
+  imageOf,
+  type Matches,
+  matchValue,
+  sameBinding,
+  sameSet,
+  stringPairs,
+  type Values,
+  valuePart,
+} from "../data/binding.ts";
 import { Bag, comparable, comparableAnswer, orderFree, Ref, type RefEntity, Runs } from "../data/canonical.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
@@ -21,21 +41,6 @@ import { refTarget } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
 import { contractsListing } from "../syntax/structure.ts";
-import {
-  type Binding,
-  bindingLimit,
-  bindString,
-  bound,
-  distinctBy,
-  domainPart,
-  emptyBinding,
-  expand,
-  imageOf,
-  limited,
-  sameBinding,
-  stringPairs,
-  valuePart,
-} from "./binding.ts";
 import { byLine, type Found, lineSchema } from "./lines.ts";
 
 /** Names the entity of a key reference as `<service>/<name>`, the domain of its values. */
@@ -121,91 +126,6 @@ function groups(lines: readonly (TraceLine | undefined)[]): Group[] {
     else result.push({ input: { line, index: i + 1 }, outs: [] });
   });
   return result;
-}
-
-/** Lean's Matches: the bindings under which two values compare equal, or `undefined` when over bindingLimit. */
-type Matches = readonly Binding[] | undefined;
-
-/** Lean's Matches.andThen. */
-const andThen = (m: Matches, f: (b: Binding) => Matches): Matches =>
-  m === undefined ? undefined : expand(sameBinding, m, f);
-
-/** Lean's sameSet. */
-const sameSet = <T>(a: readonly T[], b: readonly T[], eq: (x: T, y: T) => boolean = (x, y) => x === y): boolean =>
-  a.length === b.length && a.every((x) => b.some((y) => eq(x, y)));
-
-const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-  v !== null &&
-  typeof v === "object" &&
-  !Array.isArray(v) &&
-  !(v instanceof Bag) &&
-  !(v instanceof Runs) &&
-  !(v instanceof Ref);
-
-/** Lean's Values: the domain of each snapshot value (valueDomains), and the fresh values so far. */
-interface Values {
-  readonly domain: (s: string) => string;
-  readonly fresh: ReadonlySet<string>;
-}
-
-/** Lean's Values.bind. */
-const bind = (v: Values, b: Binding, s: string, t: string): Matches => {
-  const c = bindString(v.fresh.has(s), b, bound(v.domain(s), s), bound(v.domain(s), t));
-  return c === undefined ? [] : [c];
-};
-
-/** Lean's matchValue. */
-function matchValue(v: Values, b: Binding, s: unknown, t: unknown): Matches {
-  if (typeof s === "string" && typeof t === "string") return bind(v, b, s, t);
-  if (s instanceof Ref && t instanceof Ref) return bind(v, b, s.value, t.value);
-  if (s instanceof Bag && t instanceof Bag)
-    return s.items.length === t.items.length ? matchBag(v, b, s.items, t.items) : [];
-  if (s instanceof Runs && t instanceof Runs) return matchList(v, b, s.runs, t.runs);
-  if (Array.isArray(s) && Array.isArray(t)) return matchList(v, b, s, t);
-  if (isPlainObject(s) && isPlainObject(t)) {
-    const ks = Object.keys(s);
-    const kt = Object.keys(t);
-    if (ks.length !== kt.length || !ks.every((k) => kt.includes(k))) return [];
-    const fields = (c: Binding, k: number): Matches => {
-      const key = ks[k];
-      return key === undefined ? [c] : andThen(matchValue(v, c, s[key], t[key]), (d) => fields(d, k + 1));
-    };
-    return fields(b, 0);
-  }
-  const leaf = (x: unknown) => x === null || typeof x !== "object";
-  return leaf(s) && leaf(t) && typeof s !== "string" && typeof t !== "string" && s === t ? [b] : [];
-}
-
-/** Lean's matchList. */
-function matchList(v: Values, b: Binding, xs: readonly unknown[], ys: readonly unknown[]): Matches {
-  if (xs.length !== ys.length) return [];
-  const from = (c: Binding, i: number): Matches =>
-    i === xs.length ? [c] : andThen(matchValue(v, c, xs[i], ys[i]), (d) => from(d, i + 1));
-  return from(b, 0);
-}
-
-/** Lean's matchBag. */
-function matchBag(v: Values, b: Binding, xs: readonly unknown[], ys: readonly unknown[]): Matches {
-  type Way = readonly [Binding, readonly number[]];
-  const same = (p: Way, q: Way) => sameBinding(p[0], q[0]) && sameSet(p[1], q[1]);
-  let ways: readonly Way[] | undefined = [[b, []]];
-  for (const x of xs) {
-    ways = expand(same, ways, ([c, used]) => {
-      const next: Way[] = [];
-      for (const [j, y] of ys.entries()) {
-        if (used.includes(j)) continue;
-        const ds = matchValue(v, c, x, y);
-        if (ds === undefined) return undefined;
-        for (const d of ds) next.push([d, [...used, j]]);
-      }
-      return next;
-    });
-    if (ways === undefined) return undefined;
-  }
-  return limited(
-    sameBinding,
-    ways.map(([c]) => c),
-  );
 }
 
 const isOutRequest = (l: TraceLine): boolean =>
@@ -660,11 +580,13 @@ function compareGroups(
 }
 
 /**
- * The violations of a comparison, the pairs of each binding that agrees with every compared line (Lean's
- * Compared.bindings), and those of the first, by which the harness gives its next `in` line (Lean's Compared.first).
+ * The violations of a comparison, the bindings that agree with every compared line (Lean's Compared.bindings) as `set`
+ * and as pairs of strings, and the pairs of the first, by which the harness gives its next `in` line (Lean's
+ * Compared.first).
  */
 export interface Compared {
   readonly found: Found[];
+  readonly set: readonly Binding[];
   readonly bindings: readonly Bindings[];
   readonly first: Bindings;
 }
@@ -730,7 +652,7 @@ export function verifyLines(
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
   const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service));
   const bindings = set.map((b) => new Map(stringPairs(b)));
-  return { found: [...found, ...(cut === undefined ? [] : [cut])], bindings, first: bindings[0] ?? new Map() };
+  return { found: [...found, ...(cut === undefined ? [] : [cut])], set, bindings, first: bindings[0] ?? new Map() };
 }
 
 /** Compares the trace with the snapshot's lines. A trace line's violation has its 1-based line number in `line`. */

@@ -277,7 +277,7 @@ def compareOf (spec : Syntax.Structure) (service : String)
     (f.line, v)
   pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
     | some (_, v) => .error v
-    | none => .ok compared.first)
+    | none => .ok compared.bindings)
 
 /-- The reply to request `check`, which takes a structure and returns the Illegal violations. -/
 def check (request : Value) : Except String Value := do

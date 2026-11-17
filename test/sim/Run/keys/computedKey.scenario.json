@@ -1,0 +1,29 @@
+{
+  "service": "notes",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [],
+    "peers": [
+      {
+        "service": "tags",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "request",
+      "kind": "query",
+      "target": {
+        "service": "notes",
+        "name": "guess"
+      },
+      "input": {
+        "value": {},
+        "holes": []
+      }
+    }
+  ],
+  "expectations": []
+}

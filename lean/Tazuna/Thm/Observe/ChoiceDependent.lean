@@ -6,8 +6,8 @@ open Tazuna.Data Tazuna.Semantics Tazuna.Observe
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] (compare : Compare m)
 
-theorem difference_same (o : Observe.Outcome) (bindings : Bindings) (h : compare o.lines o.lines = pure (.ok bindings))
-    (hr : recordsText bindings o.records = recordsText [] o.records) :
+theorem difference_same (o : Observe.Outcome) (set : List Binding) (h : compare o.lines o.lines = pure (.ok set))
+    (hr : sameRecords set o o = true) :
     difference compare o o = pure none := by
   unfold difference
   split

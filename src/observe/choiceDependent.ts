@@ -1,6 +1,7 @@
+import { type Binding, emptyBinding, matchValue } from "../data/binding.ts";
+import { Bag } from "../data/canonical.ts";
 import type { Assigned, ChoiceDependent, Difference, StepName } from "../data/choiceDependent.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
-import { type Bindings, substituted } from "../data/trace.ts";
 import { byCodePoint, canonicalJson, type Json } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
 import { stepNameDefinition } from "../service/note.ts";
@@ -12,11 +13,15 @@ export const stepOrderLimit = 64;
 /** Lean's assignmentLimit: the number of assignments of handles of `requests` that the search of a scenario runs at most. */
 export const assignmentLimit = 64;
 
-/** What a run gives the relation: the violation that halted it, the trace lines that verify reads, and its records. */
+/**
+ * Lean's Outcome: the violation that halted a run, the trace lines that verify reads, its records, and the keys that its
+ * participants created, each with its domain.
+ */
 export interface Outcome {
   readonly halted: ViolationValue | null;
   readonly lines: readonly TraceLine[];
   readonly records: Json;
+  readonly created: ReadonlyMap<string, string>;
 }
 
 /**
@@ -36,36 +41,35 @@ function recordsValue(records: Records): Json {
 }
 
 /** Returns what the relation compares of a run: the violation that halted it, or its trace lines and records. */
-export function outcomeOf(halted: ViolationValue | null, lines: readonly TraceLine[], records: Records): Outcome {
-  if (halted !== null) return { halted, lines: [], records: null };
-  return { halted: null, lines, records: recordsValue(records) };
+export function outcomeOf(
+  halted: ViolationValue | null,
+  lines: readonly TraceLine[],
+  records: Records,
+  created: ReadonlyMap<string, string>,
+): Outcome {
+  if (halted !== null) return { halted, lines: [], records: null, created: new Map() };
+  return { halted: null, lines, records: recordsValue(records), created };
 }
 
-/**
- * A comparison that returns the first violation that verify finds in `actual`, with `expected` as the snapshot, or else
- * the bindings of the createKey values of `expected` to those of `actual`.
- */
+/** Lean's Compare: the first violation that verify finds in `actual`, with `expected` as the snapshot, or else the set of bindings. */
 export type Compare = (
   expected: readonly TraceLine[],
   actual: readonly TraceLine[],
-) => { readonly mismatch: ViolationValue } | { readonly bindings: Bindings };
+) => { readonly mismatch: ViolationValue } | { readonly set: readonly Binding[] };
 
-/**
- * Returns the text of records as the relation compares them, with each string that `bindings` binds replaced by its
- * first bound value, and each keyed entity's rows in the order of their texts, since the replaced keys no longer give
- * their order.
- */
-function recordsText(bindings: Bindings, records: Json): string {
-  const value = substituted(bindings, records);
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return canonicalJson(value);
-  return canonicalJson(
-    Object.fromEntries(
-      Object.entries(value).map(([entity, rows]) => [
-        entity,
-        Array.isArray(rows) ? rows.map(canonicalJson).toSorted(byCodePoint) : rows,
-      ]),
-    ),
+/** Lean's recordsCValue: each keyed entity's rows as a Bag. */
+function recordsCValue(records: Json): unknown {
+  if (records === null || typeof records !== "object" || Array.isArray(records)) return records;
+  return Object.fromEntries(
+    Object.entries(records).map(([entity, rows]) => [entity, Array.isArray(rows) ? new Bag(rows) : rows]),
   );
+}
+
+/** Lean's sameRecords. */
+function sameRecords(set: readonly Binding[], original: Outcome, alternative: Outcome): boolean {
+  const values = { domain: (s: string) => original.created.get(s) ?? "", fresh: new Set(original.created.keys()) };
+  const [o, a] = [recordsCValue(original.records), recordsCValue(alternative.records)];
+  return set.some((b) => (matchValue(values, b, o, a)?.length ?? 0) > 0);
 }
 
 type Of<K extends ChoiceDependent["kind"]> = Extract<ChoiceDependent, { readonly kind: K }>;
@@ -73,25 +77,20 @@ type Of<K extends ChoiceDependent["kind"]> = Extract<ChoiceDependent, { readonly
 /** Returns the identity of a halting violation; two halting violations differ when their kinds or data differ. */
 const haltIdentity = (v: ViolationValue | null): string | null => (v === null ? null : canonicalJson([v.kind, v.data]));
 
-/**
- * Returns the first difference: the halting violations, then the outputs as `compare` finds them with `original` as the
- * snapshot, then the records, which later inputs read, with the createKey values of `original` replaced by the values
- * of `alternative` that the outputs bind them to. Outputs that `compare` cannot compare with themselves, as when equal
- * requests get different answers, tell no choice apart, so only the records are compared then.
- */
+/** Lean's difference. */
 function difference(compare: Compare, original: Outcome, alternative: Outcome): Difference | undefined {
   if (original.halted !== null || alternative.halted !== null)
     return haltIdentity(original.halted) === haltIdentity(alternative.halted)
       ? undefined
       : { aspect: "halt", original: original.halted, alternative: alternative.halted };
-  const records = (bindings: Bindings): Difference | undefined =>
-    recordsText(bindings, original.records) === recordsText(new Map(), alternative.records)
+  const records = (set: readonly Binding[]): Difference | undefined =>
+    sameRecords(set, original, alternative)
       ? undefined
       : { aspect: "records", original: original.records, alternative: alternative.records };
   const compared = compare(original.lines, alternative.lines);
-  if (!("mismatch" in compared)) return records(compared.bindings);
+  if (!("mismatch" in compared)) return records(compared.set);
   return "mismatch" in compare(original.lines, original.lines)
-    ? records(new Map())
+    ? records([emptyBinding])
     : { aspect: "outputs", mismatch: compared.mismatch };
 }
 

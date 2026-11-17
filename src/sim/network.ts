@@ -1,11 +1,16 @@
 import type { StepName } from "../data/choiceDependent.generated.ts";
+import type { DefinitionRef } from "../data/definitionRef.ts";
 import { haltingReportKinds, type Report } from "../data/report.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
+import { contentOf } from "../data/trace.ts";
+import { byCodePoint, stringsOf } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
+import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
-import { Halt, report, type State } from "../service/state.ts";
-import { refOfTraceName } from "../syntax/structure.ts";
+import type { Records } from "../service/records.ts";
+import { created, Halt, report, type State } from "../service/state.ts";
+import { isKeyOf, refOfTraceName } from "../syntax/structure.ts";
 import { arriveFrom, nameIn, receivedId, senderOf } from "./participant.ts";
 
 /** Lean's Role. */
@@ -183,6 +188,43 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
   }
 }
 
+/** Lean's World.keyEntity?: the keyed entity of a running participant whose key form the string `x` has. */
+export function keyEntity(w: World, x: string): DefinitionRef | undefined {
+  for (const [owner, { processing }] of w.participants) {
+    const { st } = processing;
+    const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(`${owner}/${e}`, x));
+    if (entity !== undefined) return ref(st, entity);
+  }
+  return undefined;
+}
+
+/** Lean's World.computedKey?. */
+function computedKey(
+  w: World,
+  sent: readonly TraceLine[],
+  records: Records,
+): readonly [string, DefinitionRef] | undefined {
+  const strings = [
+    ...sent.filter((l) => l.dir === "out").flatMap((l) => stringsOf(contentOf(l))),
+    ...[...records.keyed.values()].flatMap((rows) =>
+      [...rows].flatMap(([key, row]) => [key, ...stringsOf(row.encoded)]),
+    ),
+    ...[...records.singles.values()].flatMap((row) => stringsOf(row.encoded)),
+  ];
+  const made = new Set([...w.participants.values()].flatMap((p) => created(p.processing.state).map(([, key]) => key)));
+  const [least] = strings.filter((x) => !made.has(x) && keyEntity(w, x) !== undefined).toSorted(byCodePoint);
+  const entity = least === undefined ? undefined : keyEntity(w, least);
+  return least === undefined || entity === undefined ? undefined : [least, entity];
+}
+
+/** Lean's World.checkComputed. */
+function checkComputed(w: World, service: string, sent: readonly TraceLine[], records: Records): void {
+  if (w.halted !== undefined) return;
+  const found = computedKey(w, sent, records);
+  if (found !== undefined)
+    reportTo(w, { kind: "Report.computedKey", definition: null, data: { service, key: found[0], entity: found[1] } });
+}
+
 /** Lean's World.act. */
 export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
   const p = w.participants.get(service);
@@ -211,7 +253,9 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
     w.opened.push({ origin: o, service, chart, resource });
   }
   w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
-  route(w, o, service, s.lines.slice(before));
+  const sent = s.lines.slice(before);
+  route(w, o, service, sent);
+  checkComputed(w, service, sent, s.records);
 }
 
 /** Lean's World.deliver. */

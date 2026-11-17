@@ -81,8 +81,7 @@ The first string of `v` of the form `<participant>/<e>-<n>` of a key of the keye
 participant creates, with the entity.
 -/
 def World.writtenKey? (w : World) (v : Value) : Option (String × Syntax.Ref) :=
-  v.strings.findSome? fun x => w.services.findSome? fun (owner, st) =>
-    (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf s!"{owner}/{e}" x).map fun e => (x, st.ref e)
+  v.strings.findSome? fun x => (w.keyEntity? x).map (x, ·)
 
 variable {m : Type → Type} [Monad m]
 

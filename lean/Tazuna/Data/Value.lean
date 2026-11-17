@@ -215,22 +215,4 @@ def canonicalFields : List (String × Value) → List (String × String)
 
 end
 
-mutual
-
-/-- The canonical text with the elements of each array in text order, as TS `unorderedJson` gives it. -/
-def Value.unorderedText : Value → String
-  | .arr vs => arrayText ((unorderedList vs).mergeSort fun a b => decide (a ≤ b))
-  | .obj fs => objectText (unorderedFields fs)
-  | v => v.canonical
-
-def unorderedList : List Value → List String
-  | [] => []
-  | v :: vs => v.unorderedText :: unorderedList vs
-
-def unorderedFields : List (String × Value) → List (String × String)
-  | [] => []
-  | (k, v) :: fs => (k, v.unorderedText) :: unorderedFields fs
-
-end
-
 end Tazuna.Data

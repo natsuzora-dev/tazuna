@@ -198,6 +198,32 @@ def checkStepOrder (s : State) : State :=
   let t := { s with stepOrder := [] }
   if s.halted.isNone && !s.stepOrder.isEmpty then t.report (.invalidInput (.unusedStepOrder s.stepOrder)) else t
 
+/-- The keyed entity of a running participant whose key form `<participant>/<e>-<n>` the string `x` has. -/
+def World.keyEntity? (w : World) (x : String) : Option Syntax.Ref :=
+  w.services.findSome? fun (owner, st) =>
+    (st.entities.find? fun e => !st.singles.contains e && Syntax.isKeyOf s!"{owner}/{e}" x).map st.ref
+
+/--
+The least string, in code-point order, of the `out` lines `sent` and the records `records` that has a running
+participant's key form (keyEntity?) and that no running participant created, with the entity: a spec computed it.
+-/
+def World.computedKey? (w : World) (sent : List Line) (records : Records) : Option (String × Syntax.Ref) :=
+  let strings := (sent.filter (·.dir == .out)).flatMap (·.body.content.strings) ++
+    records.flatMap fun r => r.key.toList ++ r.value.strings
+  let made := w.states.flatMap fun (_, s) => s.created.map (·.2)
+  let computed := strings.filter fun x => !made.contains x && (w.keyEntity? x).isSome
+  ((computed.mergeSort fun a b => decide (a ≤ b)).head?).bind fun x => (w.keyEntity? x).map (x, ·)
+
+/--
+The world with the computed key (computedKey?) that `service` sent in `sent` or holds in `records` reported, unless the
+world halted already: one cause, one report.
+-/
+def World.checkComputed (w : World) (service : String) (sent : List Line) (records : Records) : World :=
+  if w.halted.isSome then w else
+  match w.computedKey? sent records with
+  | some (key, entity) => w.report (.computedKey service key entity)
+  | none => w
+
 /--
 The world after `service` processes what `f` gives it while `origin` is processed, taking first the steps of its entry
 of `stepOrders`, which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages it sent.
@@ -221,7 +247,8 @@ def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : 
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
                       spans := w.spans ++ [span], opened := w.opened ++ opened,
                       stepOrders := w.stepOrders.filter fun (o', q, _) => !(o' == o && q == service) }
-    pure (w.route o service (t.lines.extract before t.lines.size).toList)
+    let sent := (t.lines.extract before t.lines.size).toList
+    pure ((w.route o service sent).checkComputed service sent t.records)
 
 /-- The world after the message `k` arrives at its running receiver while `origin` is processed. -/
 def World.deliver {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (w : World) (fsOf : String → Functions m)

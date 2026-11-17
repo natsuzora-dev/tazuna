@@ -61,7 +61,8 @@ def Walk.refused (w : Walk) (service : String) : Bool :=
 def Walk.outcome (w : Walk) (st : Service) : Observe.Outcome :=
   let s := w.world.state st.service
   let lines := (trace s (w.collect st.service).causes).map fun (line, after, created) => traceLineOf line after created
-  Outcome.of st s.halted lines s.records
+  Outcome.of st s.halted lines s.records (w.world.states.flatMap fun (q, x) =>
+    x.created.map fun (entity, key) => (key, s!"{q}/{entity}"))
 
 /-- The verdict of the search on one step order: refused (Walk.refused), or the violation found, if any. -/
 inductive Verdict where

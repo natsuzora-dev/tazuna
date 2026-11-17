@@ -7,8 +7,7 @@ import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { type Row, recordSource } from "../service/records.ts";
 import type { Structure } from "../syntax/structure.generated.ts";
-import { isKeyOf } from "../syntax/structure.ts";
-import { noteTo, type Participant, type Role, type World } from "./network.ts";
+import { keyEntity, noteTo, type Participant, type Role, type World } from "./network.ts";
 
 /** Lean's staticPeers. */
 function staticPeers(structure: Structure, own: string): string[] {
@@ -119,12 +118,10 @@ function clash(st: Service, a: GivenRow, b: GivenRow): boolean {
 
 /** Lean's World.writtenKey?. */
 export function writtenKey(w: World, v: unknown): readonly [string, DefinitionRef] | undefined {
-  for (const x of stringsOf(v))
-    for (const [owner, { processing }] of w.participants) {
-      const { st } = processing;
-      const entity = st.entities.find((e) => !st.singles.includes(e) && isKeyOf(`${owner}/${e}`, x));
-      if (entity !== undefined) return [x, ref(st, entity)];
-    }
+  for (const x of stringsOf(v)) {
+    const entity = keyEntity(w, x);
+    if (entity !== undefined) return [x, entity];
+  }
   return undefined;
 }
 

@@ -276,6 +276,20 @@ export type Report =
         readonly entity: DefinitionRef;
       };
     }
+  /**
+   * The running service `service` sent `key` or holds it in a record, of the form of a key of `entity` that a running
+   * service creates, and no running service created it: a spec computed it, and only createKey makes a created key, so
+   * test could not tell it from one when it compares runs up to a renaming of created keys.
+   */
+  | {
+      readonly kind: "Report.computedKey";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly key: string;
+        readonly entity: DefinitionRef;
+      };
+    }
   /** The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick. */
   | {
       readonly kind: "Report.misplacedCreated";
@@ -382,6 +396,7 @@ export const reportKinds = [
   "Report.ambiguousPeerLine",
   "Report.notLater",
   "Report.writtenKey",
+  "Report.computedKey",
   "Report.misplacedCreated",
   "Report.unoperableScreen",
   "Report.differentPeerAnswer",
@@ -413,6 +428,7 @@ export const haltingReportKinds = [
   "Report.ambiguousPeerLine",
   "Report.notLater",
   "Report.writtenKey",
+  "Report.computedKey",
   "Report.misplacedCreated",
   "Report.unoperableScreen",
   "Report.repeatedInFlight",

@@ -24,10 +24,11 @@ theorem unwritten_not_created {w : World} {p : String} {st : Service} (hs : (p, 
   obtain ⟨n, hn, hc⟩ := created_form h
   rw [ho] at hc
   have hkey := keyChars_isKeyOf p e n hn k hc
-  simp only [World.writtenKey?, Value.strings, List.findSome?_cons, List.findSome?_nil] at hw
+  simp only [World.writtenKey?, World.keyEntity?, Value.strings, List.findSome?_cons, List.findSome?_nil] at hw
   split at hw
   · cases hw
   · rename_i hnone
+    simp only [Option.map_eq_none_iff] at hnone
     have := List.findSome?_eq_none_iff.mp hnone (p, st) hs
     simp only [Option.map_eq_none_iff, List.find?_eq_none] at this
     exact this e he (by simp only [hkey, Bool.and_true, Bool.not_eq_eq_eq_not, Bool.not_true]; exact hk)
@@ -104,6 +105,12 @@ theorem keeps_stepOrder (x : State) (o : List StepName) : KeepsKeys x { x with s
 theorem keeps_checkStepOrder (x : State) : KeepsKeys x (checkStepOrder x) := by
   unfold checkStepOrder; split <;> keys_leaf
 
+theorem keepsWorld_checkComputed {w w' : World} (h : KeepsWorld w w') (service : String) (sent : List Line)
+    (records : Records) : KeepsWorld w (w'.checkComputed service sent records) := by
+  unfold World.checkComputed
+  repeat' split
+  all_goals first | exact h | exact keepsWorld_report h _
+
 theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
     (f : Service → Functions Id → State → Id State) (hf : ∀ st s, KeepsKeys s (f st (fsOf service) s))
     (reopen : Bool) : KeepsWorld w (w'.act fsOf o service f reopen) := by
@@ -111,6 +118,7 @@ theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin
   split
   · exact h
   · rename_i st _
+    apply keepsWorld_checkComputed
     refine keepsWorld_route ?_ _ _ _
     intro p
     refine (h p).trans ?_

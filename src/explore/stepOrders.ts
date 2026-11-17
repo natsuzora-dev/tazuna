@@ -7,6 +7,7 @@ import type { Spec } from "../load/load.ts";
 import { type Compare, type Outcome, outcomeOf, stepOrder, stepOrderLimit } from "../observe/choiceDependent.ts";
 import { leadsTo } from "../observe/trace.ts";
 import { stepNameDefinition } from "../service/note.ts";
+import { created } from "../service/state.ts";
 import type { Span, StepOrder } from "../sim/network.ts";
 import { type Made, snapshotsOf, walkSpec } from "../sim/spec/simulate.ts";
 import { compareTrace } from "../verify/compare.ts";
@@ -31,9 +32,9 @@ const violationValue = ({ kind, definition, data }: ViolationValue): ViolationVa
 export const compareOf =
   (spec: Spec, service: string): Compare =>
   (expected, actual) => {
-    const { found, first } = compareTrace(spec, service, expected, actual);
+    const { found, set } = compareTrace(spec, service, expected, actual);
     const [mismatch] = found;
-    return mismatch === undefined ? { bindings: first } : { mismatch: violationValue(mismatch) };
+    return mismatch === undefined ? { set } : { mismatch: violationValue(mismatch) };
   };
 
 /** Lean's Walk.outcome. */
@@ -41,7 +42,15 @@ export function outcomeFor(m: Made, service: string): Outcome {
   const p = m.world.participants.get(service);
   if (p === undefined) throw new Error(`${service} does not run`);
   const lines = snapshotsOf(m).get(service) ?? [];
-  return outcomeOf(p.halted === undefined ? null : violationValue(p.halted), lines, p.processing.state.records);
+  const keys = [...m.world.participants].flatMap(([q, r]) =>
+    created(r.processing.state).map(([entity, key]) => [key, `${q}/${entity}`] as const),
+  );
+  return outcomeOf(
+    p.halted === undefined ? null : violationValue(p.halted),
+    lines,
+    p.processing.state.records,
+    new Map(keys),
+  );
 }
 
 /** Lean's Walk.refused. */

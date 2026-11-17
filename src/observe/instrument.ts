@@ -1,10 +1,12 @@
 import { bagValues, enumerations } from "../data/bag.ts";
+import { emptyBinding, matchValue } from "../data/binding.ts";
+import { Bag } from "../data/canonical.ts";
 import type { StepName } from "../data/choiceDependent.generated.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { OrderDependent } from "../data/orderDependent.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.ts";
-import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
 import { type Located, type ProblemError, withExtra } from "../data/violation.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
 import {
@@ -302,30 +304,26 @@ function unbagged(value: unknown): unknown {
 /** Lean's canonical: the canonical JSON of a value whose Bags are arrays. */
 const text = (value: unknown): string => canonicalJson(unbagged(value));
 
-/** Lean's Value.unorderedText of `value` with each string renamed by `rename`. */
-function unorderedJson(value: unknown, rename: (s: string) => string): string {
-  if (value !== null && typeof value === "object" && "toJSON" in value && typeof value.toJSON === "function")
-    return unorderedJson(value.toJSON(), rename);
-  if (typeof value === "string") return JSON.stringify(rename(value));
-  if (Array.isArray(value)) return `[${value.map((v) => unorderedJson(v, rename)).toSorted(byCodePoint)}]`;
-  if (value === null || typeof value !== "object") return canonicalJson(value);
-  const fields = value as Record<string, unknown>;
-  return `{${Object.keys(fields)
-    .filter((k) => fields[k] !== undefined)
-    .toSorted(byCodePoint)
-    .map((k) => `${JSON.stringify(k)}:${unorderedJson(fields[k], rename)}`)}}`;
+/** Lean's madeValue: a value with each array as a Bag. */
+function madeValue(value: unknown): unknown {
+  if (Array.isArray(value)) return new Bag(value.map(madeValue));
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, madeValue(v)]));
 }
 
-/** Lean's madeText and sameMade: the text that compares a value that one call made and the keys that it created. */
-function madeJson(keys: Keys, created: readonly string[], value: unknown): string {
-  const entities = canonicalJson(created.toSorted(byCodePoint));
-  if (created.length === 0) return `${entities}${text(value)}`;
-  const given = givenKeys(keys, created);
-  const rename = (s: string) => {
-    const entity = given.find(([, key]) => key === s)?.[0];
-    return entity === undefined ? s : `${entity}-*`;
-  };
-  return `${entities}${unorderedJson(unbagged(value), rename)}`;
+/** What an audit compares of two answers: the texts that a function gives them, or a relation (Lean's `same`). */
+type Same<T> = ((answer: T) => string) | { readonly same: (a: T, b: T) => boolean };
+
+/** Lean's sameMade: whether two values that calls made are equal up to a renaming of the keys that they created. */
+function sameMade(keys: Keys, a: readonly [unknown, readonly string[]], b: readonly [unknown, readonly string[]]) {
+  const entities = (created: readonly string[]) => canonicalJson(created.toSorted(byCodePoint));
+  if (entities(a[1]) !== entities(b[1])) return false;
+  if (a[1].length === 0) return text(a[0]) === text(b[0]);
+  const given = givenKeys(keys, a[1]);
+  const domains = new Map(given.map(([entity, key]) => [key, entity]));
+  const values = { domain: (s: string) => domains.get(s) ?? "", fresh: new Set(domains.keys()) };
+  const found = matchValue(values, emptyBinding, madeValue(plain(unbagged(a[0]))), madeValue(plain(unbagged(b[0]))));
+  return found !== undefined && found.length > 0;
 }
 
 /** Lean's textSet: the texts without order or repetition. */
@@ -355,7 +353,7 @@ export class InstrumentedFunctions implements Functions {
     question: string,
     answer: () => T | Failed,
     again: (fs: Functions) => T | Failed,
-    compared: (answer: T) => string,
+    compared: Same<T>,
   ): T | Failed {
     const before = enumerations();
     const answered = answer();
@@ -367,7 +365,9 @@ export class InstrumentedFunctions implements Functions {
         definition,
         withExtra({ kind: "OrderDependent.reversedException", definition, data }, { error: reversed.error }),
       );
-    else if (compared(answered) !== compared(reversed))
+    else if (
+      !(typeof compared === "function" ? compared(answered) === compared(reversed) : compared.same(answered, reversed))
+    )
       this.c.reportOrder(definition, { kind: "OrderDependent.reversedResult", definition, data });
     return answered;
   }
@@ -378,7 +378,7 @@ export class InstrumentedFunctions implements Functions {
     access: Access,
     question: string,
     call: (fs: Functions, access: Access) => T | Failed,
-    compared: (answer: T) => string,
+    compared: Same<T>,
   ): T | Failed {
     return this.audited(
       ref(this.st, scope.machine),
@@ -482,13 +482,9 @@ export class InstrumentedFunctions implements Functions {
   }
   react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: Keys) {
     const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
-    return this.audited(
-      ref(this.st, automation),
-      "react",
-      () => call(this.fs),
-      call,
-      ({ input, created }) => madeJson(keys, created, input ?? null),
-    );
+    return this.audited(ref(this.st, automation), "react", () => call(this.fs), call, {
+      same: (x, y) => sameMade(keys, [x.input ?? null, x.created], [y.input ?? null, y.created]),
+    });
   }
   comparable(query: string, answer: Answer): unknown {
     return this.fs.comparable(query, answer);
@@ -506,7 +502,14 @@ export class InstrumentedFunctions implements Functions {
       access,
       "assign",
       (fs, a) => fs.assign(scope, records, assignment, extra, keys, a),
-      ({ context, copyContext, created }) => madeJson(keys, created, [context, copyContext ?? null]),
+      {
+        same: (x, y) =>
+          sameMade(
+            keys,
+            [[x.context, x.copyContext ?? null], x.created],
+            [[y.context, y.copyContext ?? null], y.created],
+          ),
+      },
     );
   }
   input(
@@ -516,13 +519,9 @@ export class InstrumentedFunctions implements Functions {
     keys: Keys,
     access: Access,
   ) {
-    return this.chartAudited(
-      scope,
-      access,
-      "input",
-      (fs, a) => fs.input(scope, records, activity, keys, a),
-      ({ encoded, created }) => madeJson(keys, created, encoded),
-    );
+    return this.chartAudited(scope, access, "input", (fs, a) => fs.input(scope, records, activity, keys, a), {
+      same: (x, y) => sameMade(keys, [x.encoded, x.created], [y.encoded, y.created]),
+    });
   }
   holds(scope: Scope, records: RecordSource, access: Access) {
     return this.audited(

@@ -80,6 +80,7 @@ Each request still needs its line, so a request that no handle names is `Report.
 When the requests must be told apart, put an id in the input, such as the task's id, and pick by it.
 Never write a key that a participant creates: read it through a handle, such as the `output` of the answer that holds it, and write `created()` in a running peer's message where its run creates the key.
 Loading reports a value in the form of a created key (`<service>/<Entity>-<n>`) in Given or on a line as `Malformed.writtenCreatedKey`.
+A spec does not compute such a string either: `test` compares runs up to a renaming of created keys, so the simulation reports one that no participant created as `Report.computedKey`.
 Send a request again with `w.client.resend(line)`, and a new input under the id of an earlier line with `w.client.send(command, input, { sameIdAs: line })`.
 
 Precedent: Hypothesis's stateful testing, whose rules refer to values that earlier rules made through named Bundles.

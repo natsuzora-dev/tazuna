@@ -1,3 +1,4 @@
+import Tazuna.Data.Binding
 import Tazuna.Data.Group
 import Tazuna.Data.Trace
 import Tazuna.Observe.Instrument
@@ -79,11 +80,15 @@ bounds the assignments of many equal requests, whose count grows factorially.
 -/
 def assignmentLimit : Nat := 64
 
-/-- The result of a run: the violation that halted it, the trace lines that verify reads, and its records. -/
+/--
+The result of a run: the violation that halted it, the trace lines that verify reads, its records, and the keys that its
+participants created, each with its domain `<participant>/<entity>` as verify's valueDomains names a key reference's.
+-/
 structure Outcome where
   halted : Option Violation
   lines : List TraceLine
   records : Value
+  created : List (String × String)
 
 /--
 The records as the relation compares them: each keyed entity as its encoded rows in key order, and each single entity
@@ -100,28 +105,36 @@ def recordsValue (st : Service) (records : Records) : Value :=
 The outcome of a run as the relation compares it: only the violation that halted the run, or else its trace lines and
 its records.
 -/
-def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLine) (records : Records) : Outcome :=
+def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLine) (records : Records)
+    (created : List (String × String)) : Outcome :=
   match halted with
-  | some v => { halted := some v, lines := [], records := .null }
-  | none => { halted := none, lines, records := recordsValue st records }
+  | some v => { halted := some v, lines := [], records := .null, created := [] }
+  | none => { halted := none, lines, records := recordsValue st records, created }
 
 /--
-The first violation that verify finds in the second lines, with the first lines as the snapshot, or else the bindings
-of the createKey values of the first lines to those of the second.
+The first violation that verify finds in the second lines, with the first lines as the snapshot, or else the set of
+bindings that agree with every line (Data/Binding).
 -/
-abbrev Compare (m : Type → Type) := List TraceLine → List TraceLine → m (Except Violation Bindings)
+abbrev Compare (m : Type → Type) := List TraceLine → List TraceLine → m (Except Violation (List Binding))
+
+/-- Records as matchValue compares them: each keyed entity's rows as a bag, since renamed keys no longer order them. -/
+def recordsCValue : Value → CValue
+  | .obj entities => .obj (entities.map fun (entity, rows) => (entity, match rows with
+      | .arr rows => .bag (rows.map CValue.ofValue)
+      | row => CValue.ofValue row))
+  | other => CValue.ofValue other
 
 /--
-The text of records as the relation compares them, with each string that `bindings` binds replaced by its first bound
-value, and each keyed entity's rows in the order of their texts, since the replaced keys no longer give their order.
+Whether the records of `original` and `alternative` are equal under one of the bindings `set`, extended by a renaming
+of the created keys of `original` (one to one within each entity's keys, created keys only). Matches over bindingLimit
+count as a difference, never as equal.
 -/
-def recordsText (bindings : Bindings) (records : Value) : String :=
-  match bindings.substitute records with
-  | .obj entities =>
-    objectText (entities.map fun (entity, rows) => (entity, match rows with
-      | .arr rows => arrayText ((rows.map (·.canonical)).mergeSort fun a b => decide (a ≤ b))
-      | row => row.canonical))
-  | other => other.canonical
+def sameRecords (set : List Binding) (original alternative : Outcome) : Bool :=
+  let v : Values := { domain := fun s => (original.created.lookup s).getD "", fresh := original.created.map (·.1) }
+  set.any fun b =>
+    match matchValue v b (recordsCValue original.records) (recordsCValue alternative.records) with
+    | some (_ :: _) => true
+    | _ => false
 
 /-- The identity of a halting violation. Two halting violations differ when their kinds or data differ. -/
 def haltIdentity : Option Violation → Option (String × String)
@@ -134,24 +147,24 @@ variable {m : Type → Type} [Monad m]
 
 /--
 The first difference: the halting violations, then the outputs as `compare` finds them with `original` as the
-snapshot, then the records, which later inputs read, with the createKey values of `original` replaced by the values of
-`alternative` that the outputs bind them to. Outputs that `compare` cannot compare with themselves, as when equal
-requests get different answers, tell no choice apart, so only the records are compared then.
+snapshot, then the records, which later inputs read, under the bindings of the outputs (sameRecords). Two outcomes
+without a difference are equal up to a renaming of their created keys (symmetry, as TLA+ symmetry sets reduce states).
+Outputs that `compare` cannot compare with themselves, as when equal requests get different answers, tell no choice
+apart, so only the records are compared then.
 -/
 def difference (compare : Compare m) (original alternative : Outcome) :
     m (Option Difference) := do
   if original.halted.isSome || alternative.halted.isSome then
     return if haltIdentity original.halted == haltIdentity alternative.halted then none
       else some (.halt original.halted alternative.halted)
-  let records (bindings : Bindings) : Option Difference :=
-    if recordsText bindings original.records == recordsText [] alternative.records then none
-    else some (.records original.records alternative.records)
+  let records (set : List Binding) : Option Difference :=
+    if sameRecords set original alternative then none else some (.records original.records alternative.records)
   match ← compare original.lines alternative.lines with
-  | .ok bindings => return records bindings
+  | .ok set => return records set
   | .error mismatch =>
     match ← compare original.lines original.lines with
     | .ok _ => return some (.outputs mismatch)
-    | .error _ => return records []
+    | .error _ => return records [.empty]
 
 /--
 The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFirst` takes `a` first and is the walk with

@@ -1,6 +1,7 @@
 import Tazuna.Service.Restart
 import Tazuna.Observe.OrderDependent
 import Tazuna.Observe.Trace
+import Tazuna.Data.Binding
 
 /-!
 This module defines the instrumented run. It wraps Functions without changing the semantic run, collects the values
@@ -338,23 +339,29 @@ def decideCollect (name : String) (records : Records) (decided : Except Issue (L
   | .ok normalized => modify (·.stepAccess (writesOf st records (orderedGroups decided normalized).flatten).values)
   | .error _ => pure ()
 
-/--
-The text that compares a value that one call made, as TS madeJson gives it. When the call created keys, each created
-key becomes its entity and arrays lose their order, so that values equal up to a renaming of these keys compare equal.
--/
-def madeText (keys : Keys) (created : List String) (v : Value) : String :=
-  if created.isEmpty then v.canonical else
-  let given := givenKeys keys created
-  (v.mapStrings fun s => match given.find? (·.2 == s) with
-    | some (e, _) => s!"{e}-*"
-    | none => s).unorderedText
-
 /-- The texts in code-point order, which compare two lists as multisets. -/
 def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
 
-/-- Whether two answers that made a value and created keys are equal up to a renaming of the created keys. -/
+/-- A value that one call made, with each array as a bag, since the call may build an array in the order of its keys. -/
+def madeValue : Value → CValue
+  | .arr vs => .bag (vs.map madeValue)
+  | .obj fs => .obj (fs.map fun p => (p.1, madeValue p.2))
+  | v => .leaf v
+decreasing_by all_goals nested_decreasing
+
+/--
+Whether two answers that made a value and created keys are equal up to a renaming of the created keys: one to one
+within each entity's keys, and of the created keys only (matchValue). Arrays compare as bags then, since a renaming
+reorders an array that the keys order. Matches over bindingLimit count as a difference, never as equal.
+-/
 def sameMade (keys : Keys) (a b : Value × List String) : Bool :=
-  sortedTexts a.2 == sortedTexts b.2 && madeText keys a.2 a.1 == madeText keys b.2 b.1
+  sortedTexts a.2 == sortedTexts b.2 &&
+    if a.2.isEmpty then a.1.canonical == b.1.canonical else
+    let given := givenKeys keys a.2
+    let v : Values := { domain := fun s => ((given.find? (·.2 == s)).map (·.1)).getD "", fresh := given.map (·.2) }
+    match matchValue v .empty (madeValue a.1) (madeValue b.1) with
+    | some (_ :: _) => true
+    | _ => false
 
 /-- The texts without order or repetition, which compare two lists as sets. -/
 def textSet (texts : List String) : List String := (sortedTexts texts).eraseDups

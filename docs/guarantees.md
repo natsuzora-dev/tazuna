@@ -66,7 +66,8 @@ When `test` reports no `Report` violation, the scenario stated everything that h
 - each handle named one fact, and the handles of `requests` named equal requests (`Report.unresolvedReference`, `Report.ambiguousReference`);
 - each message that the scenario names as in flight at the end, it names once (`Report.repeatedInFlight`);
 - the clock only advanced (`Report.notLater`);
-- the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>`, in a line or in a Given record (`Report.writtenKey`, `Report.writtenGivenKey`).
+- the scenario wrote no key that a participant creates, of the form `<participant>/<Entity>-<n>`, in a line or in a Given record (`Report.writtenKey`, `Report.writtenGivenKey`);
+- no spec computed a string of that form that no participant created, in a record or an `out` line (`Report.computedKey`).
 
 The [simulation section](#simulation) of the proven properties lists what Lean proves about these rules.
 
@@ -77,6 +78,8 @@ A trace *matches* a snapshot when its `in` lines equal the snapshot's exactly an
 The `out` lines after one `in` line keep the order of the snapshot on each channel and no order across channels; a trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel (`ordered_same_channel`).
 The lines of one group of events that `decide` returns have no order, even on one channel.
 `test` compares the outcomes of two orders or assignments the same way, together with the records, so a spec without a `ChoiceDependent` report fixes the order that `verify` asks of each channel.
+The records compare under the bindings of the outputs, so two outcomes are the same when some renaming of their created keys makes them equal: one-to-one within each entity's keys, and of created keys only, never of Given keys or other strings (symmetry, as in TLA+ symmetry sets).
+That is why a spec may not compute a string in the form of a created key.
 `verify` carries the set of every binding that agrees with the lines compared so far: each line keeps the bindings under which it compares equal, a line that would keep none is reported, and bindings that no line tells apart all stay, since each of them is fine.
 So the counts in a bag decide a binding (the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`), and keys that only a later line tells apart wait for it.
 Every binding of the set is one-to-one within each domain, the request ids and the keys of each entity (`compare_oneToOne`), so an implementation that reuses an existing request id or key of an entity for a new one differs, while one that uses a string of an input, such as an idempotency key, as a new key does not.
@@ -138,7 +141,7 @@ tazuna detects breaks of each assumption only partly or not at all.
 - **Spec functions.** Spec functions are deterministic: they read no clock, random source, or mutable global state, and receive the current time as an argument.
 - **Types.** Each value in spec code has the type that the code declares.
   A result of a spec function does not depend on the order in which a `Bag` visits its values, which a callback can still see through a variable that it changes, nor on the order of keys, which a comparison such as `a.id < b.id` sees.
-  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers, each key that a call creates by its entity alone.
+  `test` detects a dependence on the order of a `Bag` only partly, as `OrderDependent`: it asks a spec function whose call ran a callback of a `Bag` with two or more values again, with every `Bag` visiting its values in reverse order, and compares the two answers up to a renaming of the keys that the call creates.
 - **Adapter.** The adapter that `drive` drives the implementation through reports only messages that the implementation received or sent, with the values that the implementation used, and it controls the implementation's whole world: the implementation reads the time only from the clock that `advanceTo` moves, and receives messages only through the adapter.
   Its `settled` resolves only when the implementation has no work left that it can do before it gets a message or the clock moves; `drive` gives the next `in` line then, so an output that the implementation would still send lands in the group of a later input and compares as a mismatch.
   An adapter that can only wait for that, such as one that drives a browser, bounds the wait and rejects with `Unsettled` when the bound passes.

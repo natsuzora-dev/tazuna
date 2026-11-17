@@ -1,0 +1,61 @@
+{
+  "participants": [
+    {
+      "service": "notes",
+      "lines": [
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "name": "tags.register",
+          "input": {
+            "noteId": "notes/Note-1"
+          },
+          "id": "tags.register#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "query",
+          "name": "guess",
+          "input": {},
+          "id": "guess#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "to": "guess#1",
+          "answer": {
+            "result": "fulfilled",
+            "output": {
+              "noteId": "notes/Note-9"
+            }
+          },
+          "id": "answer#1"
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    },
+    {
+      "service": "tags",
+      "lines": [],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "reports": [],
+  "halted": {
+    "kind": "Report.computedKey",
+    "definition": null,
+    "data": {
+      "service": "notes",
+      "key": "notes/Note-9",
+      "entity": {
+        "service": "notes",
+        "name": "Note"
+      }
+    }
+  }
+}

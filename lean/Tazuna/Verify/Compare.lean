@@ -1,7 +1,7 @@
 import Tazuna.Data.Trace
 import Tazuna.Data.Canonical
 import Tazuna.Syntax.Structure
-import Tazuna.Verify.Binding
+import Tazuna.Data.Binding
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
 
@@ -11,7 +11,7 @@ lines one by one under one deterministic simulation, so the lines align without 
 values that the implementation chose in its own way are open.
 
 - Values are read by their definition's schema (the `ask` parameter) and compare as CValue.
-- A binding (Verify/Binding) maps snapshot strings to implementation strings, one to one within each domain
+- A binding (Data/Binding) maps snapshot strings to implementation strings, one to one within each domain
   (valueDomains): request ids, the keys of each entity, and the other strings. A value that a snapshot line introduces
   (the id of an `out` request, a `created` key) is fresh until bound and binds to the implementation string at the same
   place of a compared line that holds it, maybe in a later group; a request id or key that is not fresh binds to itself;
@@ -215,86 +215,8 @@ structure Compared where
   findings : List Finding
   bindings : List Binding
 
-/-- The pairs of strings of the binding. -/
-def Binding.strings (b : Binding) : Bindings := b.pairs.map fun (s, t) => (s.2, t.2)
-
 /-- The pairs of strings of the first binding of the comparison, by which the harness gives its next `in` line. -/
 def Compared.first (c : Compared) : Bindings := (c.bindings.head?.map Binding.strings).getD []
-
-/-- A binding that keeps every pair of `root`. -/
-abbrev From (root : Binding) := { b : Binding // root.Extends b }
-
-def From.same {root : Binding} (a b : From root) : Bool := a.val.same b.val
-
-/--
-The bindings under which a snapshot value or line compares equal with an implementation one, each extending `b`:
-none when they differ, and `none` (no list) when they are more than `bindingLimit`.
--/
-abbrev Matches (b : Binding) := Option (List (From b))
-
-def Matches.one {b : Binding} : Option (From b) → Matches b
-  | some c => some [c]
-  | none => some []
-
-def lift {root b : Binding} (h : root.Extends b) (cs : List (From b)) : List (From root) :=
-  cs.map fun c => ⟨c.val, h.trans c.property⟩
-
-def Matches.andThen {b : Binding} (m : Matches b) (f : (c : Binding) → Matches c) : Matches b := do
-  expand From.same (← m) fun c => (f c.val).map (lift c.property)
-
-/-- Whether two lists hold the same items, as sets. -/
-def sameSet {α : Type} [BEq α] (a b : List α) : Bool := a.length == b.length && a.all b.contains
-
-/-- What the comparison knows of the snapshot's values: the domain of each (valueDomains), and the fresh ones so far. -/
-structure Values where
-  domain : String → String
-  fresh : List String
-
-/-- The binding with snapshot string `s` standing for implementation string `t`, both in the domain of `s`. -/
-def Values.bind (v : Values) (b : Binding) (s t : String) : Matches b :=
-  .one (b.bindString (v.fresh.contains s) (v.domain s, s) (v.domain s, t))
-
-mutual
-
-/-- The bindings under which snapshot value `s` compares equal with implementation value `t`, extending `b`. -/
-partial def matchValue (v : Values) (b : Binding) : CValue → CValue → Matches b
-  | .leaf (.str s), .leaf (.str t) | .ref _ s, .ref _ t => v.bind b s t
-  | .leaf x, .leaf y => some (if x == y then [⟨b, .refl b⟩] else [])
-  | .arr xs, .arr ys | .runs xs, .runs ys => matchList v b xs ys
-  | .obj fs, .obj gs => if sameKeys fs gs then matchFields v b fs gs else some []
-  | .bag xs, .bag ys => if xs.length == ys.length then matchBag v b xs ys else some []
-  | _, _ => some []
-
-partial def matchList (v : Values) (b : Binding) : List CValue → List CValue → Matches b
-  | [], [] => some [⟨b, .refl b⟩]
-  | x :: xs, y :: ys => (matchValue v b x y).andThen fun c => matchList v c xs ys
-  | _, _ => some []
-
-partial def matchFields (v : Values) (b : Binding) :
-    List (String × CValue) → List (String × CValue) → Matches b
-  | [], _ => some [⟨b, .refl b⟩]
-  | (k, x) :: fs, gs =>
-    match gs.lookup k with
-    | some y => (matchValue v b x y).andThen fun c => matchFields v c fs gs
-    | none => some []
-
-/-- Each element of `xs`, in order, pairs with each unpaired element of `ys` that it compares equal with. -/
-partial def matchBag (v : Values) (b : Binding) (xs ys : List CValue) : Matches b := do
-  let same (p q : From b × List Nat) : Bool := p.1.same q.1 && sameSet p.2 q.2
-  let step (states : List (From b × List Nat)) (x : CValue) : Option (List (From b × List Nat)) :=
-    expand same states fun (c, used) => do
-      let next ← ((ys.zipIdx.filter fun (_, j) => !used.contains j).mapM fun (y, j) =>
-        (matchValue v c.val x y).map fun ds => (lift c.property ds).map ((·, used ++ [j])))
-      pure next.flatten
-  let paired ← xs.foldlM step [(⟨b, .refl b⟩, [])]
-  limited From.same (paired.map (·.1))
-
-end
-
-def matchOption (v : Values) (b : Binding) : Option CValue → Option CValue → Matches b
-  | none, none => some [⟨b, .refl b⟩]
-  | some s, some t => matchValue v b s t
-  | _, _ => some []
 
 def Line.isOutRequest (l : Line) : Bool :=
   match l.body with

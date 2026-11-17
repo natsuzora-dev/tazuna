@@ -29,6 +29,13 @@ inductive LineBody where
   | operation (name : String) (payload : Option Value)
 deriving DecidableEq, Repr, Inhabited
 
+/-- What the line carries, as TS contentOf gives it: a request's input, an event's or operation's payload, an answer. -/
+def LineBody.content : LineBody → Value
+  | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => v
+  | .operation _ p => p.getD .null
+  | .answer _ a => ToValue.toValue a
+  | .unsubscribe _ | .time | .restart => .null
+
 /-- The name that LineIds counts. -/
 def LineBody.idName : LineBody → String
   | .command name _ | .query name _ | .subscribe name _ | .event name _ _ | .operation name _ => name
