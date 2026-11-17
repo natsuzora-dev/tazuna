@@ -39,7 +39,7 @@ def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) 
     Option (String × Option String) :=
   groups.findSome? fun g =>
     let rows := g.filterMap fun e => (evolve st records e).map fun ev => (ev.entity, ev.key)
-    firstDuplicate (fun (entity, key) => s!"{entity}#{key}") rows
+    firstDuplicate id rows
 
 /-- Whether the command `command` lists the event of `e` in its emits. -/
 def lists (st : Service) (command : String) (e : Emit) : Bool :=

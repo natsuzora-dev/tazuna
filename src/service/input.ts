@@ -28,6 +28,7 @@ import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
 import {
+  chartName,
   type Finding,
   halt,
   inputFault,
@@ -35,6 +36,7 @@ import {
   machineOf,
   newMessage,
   newStep,
+  nthOpen,
   type Outgoing,
   type Pending,
   type Run,
@@ -361,8 +363,10 @@ export function begin(r: Processing): void {
   message(r);
 }
 
-export function operate(r: Processing, screen: string, key: string, payload: unknown): void {
-  const { decoded, found } = writeOperation(r, screen, key, payload);
+/** Lean's operate: an operation on the screen instance `resource`. */
+export function operate(r: Processing, resource: string, key: string, payload: unknown): void {
+  const screen = chartName(r.state, resource);
+  const { decoded, found } = writeOperation(r, resource, screen, key, payload);
   const data = { screen: ref(r.st, screen), control: key };
   const top =
     "top" in found
@@ -390,7 +394,7 @@ export function operate(r: Processing, screen: string, key: string, payload: unk
 /**
  * Writes the operation line and reads its payload; returns undefined for a name that is not a control of the screen.
  */
-function writeOperation(r: Processing, screen: string, key: string, payload: unknown) {
+function writeOperation(r: Processing, resource: string, screen: string, key: string, payload: unknown) {
   const chart = r.st.charts.get(screen);
   if (chart === undefined) return unownedTarget(r, screen);
   const definition = ref(r.st, screen);
@@ -402,7 +406,14 @@ function writeOperation(r: Processing, screen: string, key: string, payload: unk
       data: { screen: definition, control: key },
     });
   const name = `${screen}.${key}`;
-  write(r.state, { dir: "in", type: "operation", name, ...(control.hasPayload ? { payload } : {}) });
+  const nth = nthOpen(r.state, resource);
+  write(r.state, {
+    dir: "in",
+    type: "operation",
+    name,
+    ...(nth === undefined ? {} : { nth }),
+    ...(control.hasPayload ? { payload } : {}),
+  });
   const parsed = r.functions.parse({ kind: "control", screen: definition, control: key }, payload);
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
   if ("error" in parsed)
@@ -413,5 +424,5 @@ function writeOperation(r: Processing, screen: string, key: string, payload: unk
         { error: parsed.error },
       ),
     );
-  return { decoded: parsed.value, found: accepting(r, screen, key, parsed) };
+  return { decoded: parsed.value, found: accepting(r, resource, key, parsed) };
 }

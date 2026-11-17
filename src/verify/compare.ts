@@ -139,8 +139,10 @@ const freshOf = (l: TraceLine): string[] => [
   ...("created" in l ? (l.created ?? []) : []),
 ];
 
+const nthOf = (l: TraceLine): number | undefined => (l.type === "operation" ? l.nth : undefined);
+
 const sameFields = (s: TraceLine, t: TraceLine): boolean =>
-  s.type === t.type && s.dir === t.dir && nameOf(s) === nameOf(t);
+  s.type === t.type && s.dir === t.dir && nameOf(s) === nameOf(t) && nthOf(s) === nthOf(t);
 
 /** Lean's matchContent. */
 function matchContent(v: Values, b: Binding, s: TraceLine, t: TraceLine): Matches {

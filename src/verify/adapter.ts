@@ -5,12 +5,16 @@ import type { Answer } from "../data/trace.generated.ts";
 import { objectOf, type Shape } from "../data/values.ts";
 import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
 
-/** A message that the harness gives the implementation. `name` is the name in the spec. */
+/**
+ * A message that the harness gives the implementation. `name` is the name in the spec. An operation names its screen
+ * instance by `nth`, its index among the open instances of the screen in opening order, only when more than one is open.
+ */
 export interface InputMessage {
   readonly id: string;
   readonly name: string;
   readonly input: unknown;
   readonly payload: unknown;
+  readonly nth?: number;
 }
 
 /**

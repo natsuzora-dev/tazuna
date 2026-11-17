@@ -6,9 +6,13 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-/-- An operation that a screen accepts. `payloads = none` accepts every payload that matches the schema. -/
+/--
+An operation that the screen instance `resource` of chart `screen` accepts. `payloads = none` accepts every payload that
+matches the schema.
+-/
 structure Operation where
   screen : String
+  resource : String
   control : String
   payloads : Option (List Value)
 deriving DecidableEq, Repr, Inhabited
@@ -29,10 +33,10 @@ def Refusal.finding (st : Service) (screen control : String) (payload : Value) :
   | .notOffered => .invalidInput (.unofferedPayload (st.ref screen) control payload)
 
 /--
-The instance of `screen` that accepts operations, or the refusal. As with HTML `dialog.showModal()`, a modal blocks the
-rest of the page.
+The open screen instance `resource` when it accepts operations, or the refusal. As with HTML `dialog.showModal()`, a
+modal opened after it blocks it; several instances of one screen are each operable.
 -/
-def State.accepting (s : State) (screen : String) : Except Refusal Instance :=
+def State.accepting (s : State) (resource : String) : Except Refusal Instance :=
   go s.stack.reverse
 where
   go : List String → Except Refusal Instance
@@ -40,7 +44,7 @@ where
     | r :: rest =>
       match s.machine? r with
       | some i =>
-        if i.chart.name == screen then .ok i else
+        if r == resource then .ok i else
         match i.opener with
         | some o => if o.modal then .error (.covered i.chart.name) else go rest
         | none => go rest
@@ -117,9 +121,9 @@ def offered (st : Service) (s : State) (top : Instance) (control : String) (payl
 The instance that accepts the operation, or the refusal. `payload` is encoded. The operation is accepted if any applying
 offers admits the payload, as in SCXML, where an event is handled if any region handles it.
 -/
-def acceptsOperation (st : Service) (s : State) (screen control : String) (payload : Value) :
+def acceptsOperation (st : Service) (s : State) (resource control : String) (payload : Value) :
     m (Except Fault (Except Refusal Instance)) := do
-  match s.accepting screen with
+  match s.accepting resource with
   | .error r => pure (.ok (.error r))
   | .ok top =>
     match ← offered fs st s top control payload with
@@ -129,16 +133,17 @@ def acceptsOperation (st : Service) (s : State) (screen control : String) (paylo
 def addValue (acc : List Value) (v : Value) : List Value := if v ∈ acc then acc else acc ++ [v]
 
 /--
-The operations that `screen` accepts. Offers are evaluated for the payload sent to all copies (without key fields)
+The operations that the screen instance `resource` accepts. Offers are evaluated for the payload sent to all copies (without key fields)
 and for each copy's key payload, since the key decides which copy receives it. If an applying offers of any of them is
 `any`, every payload that matches the schema is accepted (`[{}]` without payload fields); otherwise only offered payloads
 that are accepted are listed.
 -/
-def operationsOf (st : Service) (s : State) (screen : String) :
+def operationsOf (st : Service) (s : State) (resource : String) :
     m (Except Fault (List Operation)) := do
-  match s.accepting screen with
+  match s.accepting resource with
   | .error _ => pure (.ok [])
   | .ok top =>
+    let screen := top.chart.name
     let copies := top.copyKeys.flatMap fun (map, cs) =>
       if top.isIn map then cs.filterMap fun k => ((s.machine? (copyName top.resource map k)).bind (·.copyOf)).map (·.key) else []
     top.chart.controls.foldlM (init := (.ok [] : Except Fault (List Operation)))
@@ -159,7 +164,7 @@ def operationsOf (st : Service) (s : State) (screen : String) :
         | .error v => pure (.error v)
         | .ok applied =>
           if applied.any (·.any (·.2 == .any)) then
-            pure (.ok (done ++ [{ screen, control := control.name,
+            pure (.ok (done ++ [{ screen, resource, control := control.name,
                                   payloads := if control.hasPayload then none else some [.obj []] }]))
           else
             let listed := (applied.flatMap fun o => o.flatMap (·.2.payloads)).foldl addValue []
@@ -169,14 +174,15 @@ def operationsOf (st : Service) (s : State) (screen : String) :
               | .error v => pure (.error v)
               | .ok kept =>
                 if copies.isEmpty then pure (.ok (kept ++ [o])) else
-                match ← acceptsOperation fs st s screen control.name o with
+                match ← acceptsOperation fs st s resource control.name o with
                 | .error v => pure (.error v)
                 | .ok (.error _) => pure (.ok kept)
                 | .ok (.ok _) => pure (.ok (kept ++ [o]))
             match kept with
             | .error v => pure (.error v)
             | .ok [] => pure (.ok done)
-            | .ok payloads => pure (.ok (done ++ [{ screen, control := control.name, payloads := some payloads }]))
+            | .ok payloads =>
+              pure (.ok (done ++ [{ screen, resource, control := control.name, payloads := some payloads }]))
 
 end Operations
 

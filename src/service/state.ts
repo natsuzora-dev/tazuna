@@ -519,6 +519,16 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
   };
 }
 
+/**
+ * Lean's State.nthOpen: which of the open instances of the screen of `resource`, in opening order, it is, when more
+ * than one is open.
+ */
+export function nthOpen(s: State, resource: string): number | undefined {
+  const screen = chartName(s, resource);
+  const open = s.stack.filter((r) => chartName(s, r) === screen);
+  return open.length > 1 ? open.indexOf(resource) : undefined;
+}
+
 export function chartName(s: State, name: string): string {
   return machine(s, name)?.chart.name ?? name;
 }

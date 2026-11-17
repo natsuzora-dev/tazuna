@@ -287,15 +287,6 @@ export type InvalidScenario =
         readonly scenarioLine: number;
       };
     }
-  /** The screen instance `screen` that the line operates is not the one that takes operations of its screen. */
-  | {
-      readonly kind: "InvalidScenario.unoperableScreen";
-      readonly definition: null;
-      readonly data: {
-        readonly scenarioLine: number;
-        readonly screen: string;
-      };
-    }
   /** The running peer's answer `actual`, which the line delivers, is not the line's `expected`. */
   | {
       readonly kind: "InvalidScenario.differentPeerAnswer";
@@ -386,7 +377,6 @@ export const invalidScenarioKinds = [
   "InvalidScenario.notLater",
   "InvalidScenario.writtenKey",
   "InvalidScenario.misplacedCreated",
-  "InvalidScenario.unoperableScreen",
   "InvalidScenario.differentPeerAnswer",
   "InvalidScenario.leftInFlight",
   "InvalidScenario.unusedInFlight",
@@ -417,6 +407,5 @@ export const haltingInvalidScenarioKinds = [
   "InvalidScenario.notLater",
   "InvalidScenario.writtenKey",
   "InvalidScenario.misplacedCreated",
-  "InvalidScenario.unoperableScreen",
   "InvalidScenario.repeatedInFlight",
 ] as const;

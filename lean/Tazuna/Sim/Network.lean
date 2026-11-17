@@ -103,8 +103,8 @@ structure World where
   carried : List (Nat × Nat) := []
   /-- The messages that leaveInFlight lines name: the line, and the message. -/
   leftInFlight : List (Nat × Nat) := []
-  /-- The number of messages of each definition that each external peer sent, by `<peer>.<name>`: their ids count. -/
-  counts : List (String × Nat) := []
+  /-- The number of messages of each definition that each external peer sent, by peer and name: their ids count. -/
+  counts : List ((String × String) × Nat) := []
   violations : List InvalidScenario := []
   halted : Option InvalidScenario := none
   /--

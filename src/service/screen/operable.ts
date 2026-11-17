@@ -18,26 +18,31 @@ import {
 } from "../state.ts";
 
 /**
- * An operation that a screen accepts. When `payloads` is undefined, it accepts every payload that matches the schema.
+ * An operation that the screen instance `resource` of chart `screen` accepts. When `payloads` is undefined, it accepts
+ * every payload that matches the schema.
  */
 export interface Operation {
   readonly screen: string;
+  readonly resource: string;
   readonly control: string;
   readonly payloads: readonly unknown[] | undefined;
 }
 
-/** Returns the open screen instance that takes an operation on `screen`, or the reason that none does. */
-export function topOf(
+/**
+ * Returns the open screen instance `resource` when it takes operations, or the reason that it does not: a modal opened
+ * after it covers it. Several open instances of one screen are each operable.
+ */
+function acceptingInstance(
   s: State,
-  screen: string,
+  resource: string,
 ):
   | { readonly kind: "notOpen" }
   | { readonly kind: "covered"; readonly child: Instance }
   | { readonly kind: "ok"; readonly instance: Instance } {
-  for (const resource of s.stack.toReversed()) {
-    const instance = machine(s, resource);
+  for (const r of s.stack.toReversed()) {
+    const instance = machine(s, r);
     if (instance === undefined) continue;
-    if (instance.chart.name === screen) return { kind: "ok", instance };
+    if (r === resource) return { kind: "ok", instance };
     const opener = instance.opener;
     if (opener === undefined) continue;
     if (opener.modal) return { kind: "covered", child: instance };
@@ -57,7 +62,6 @@ type Offered = "any" | readonly Payload[];
  */
 function offered(
   r: Run,
-  screen: string,
   top: Instance,
   key: string,
   payload: unknown,
@@ -80,7 +84,7 @@ function offered(
   const own = chart.offers[key];
   const applied: { readonly holder: Instance; readonly state: string | null; readonly offer: "any" | "listed" }[] =
     innermost.length === 0 && own !== undefined ? [{ holder: top, state: null, offer: own }] : innermost;
-  const definition = ref(r.st, screen);
+  const definition = ref(r.st, chart.name);
   return applied.map(({ holder, state, offer }) => {
     if (offer === "any") return { state, offered: "any" };
     const scope = scopeOf(r.state, holder, state);
@@ -106,7 +110,7 @@ function offered(
  */
 export function accepting(
   r: Run,
-  screen: string,
+  resource: string,
   key: string,
   payload: { readonly value: Fields; readonly encoded: unknown },
 ):
@@ -114,27 +118,28 @@ export function accepting(
   | { readonly child: DefinitionRef }
   | { readonly payload: Json }
   | { readonly closed: true } {
-  const found = topOf(r.state, screen);
+  const found = acceptingInstance(r.state, resource);
   if (found.kind === "notOpen") return { closed: true };
   if (found.kind === "covered") return { child: ref(r.st, found.child.chart.name) };
   const top = { top: found.instance };
   const asked = JSON.stringify(payload.encoded);
-  const admits = offered(r, screen, found.instance, key, payload.value).some(
+  const admits = offered(r, found.instance, key, payload.value).some(
     ({ offered }) => offered === "any" || offered.some((o) => JSON.stringify(o.encoded) === asked),
   );
   return admits ? top : { payload: payload.encoded as Json };
 }
 
 /**
- * Returns the operations that `screen` accepts now. Offers are evaluated for the payload sent to all copies (without
+ * Returns the operations that the screen instance `resource` accepts now. Offers are evaluated for the payload sent to all copies (without
  * key fields) and for each copy's key payload, since the key decides which copy receives it. If an applying offers of
  * any of them is "any", every payload that matches the schema is accepted (`[{}]` without payload fields); otherwise,
  * only the offered payloads that are accepted are listed.
  */
-export function operationsOf(r: Run, screen: string): Operation[] {
-  const found = topOf(r.state, screen);
+export function operationsOf(r: Run, resource: string): Operation[] {
+  const found = acceptingInstance(r.state, resource);
   if (found.kind !== "ok") return [];
   const top = found.instance;
+  const screen = top.chart.name;
   const copies = [...top.copyKeys].flatMap(([map, keys]) =>
     top.entered.has(map)
       ? keys.flatMap((k) => {
@@ -144,15 +149,15 @@ export function operationsOf(r: Run, screen: string): Operation[] {
       : [],
   );
   return top.chart.controls.flatMap(({ name: key, hasPayload }): Operation[] => {
-    const applied = [{}, ...copies].map((reach) => offered(r, screen, top, key, reach));
+    const applied = [{}, ...copies].map((reach) => offered(r, top, key, reach));
     if (applied.flat().some(({ offered }) => offered === "any"))
-      return [{ screen, control: key, payloads: hasPayload ? undefined : [{}] }];
+      return [{ screen, resource, control: key, payloads: hasPayload ? undefined : [{}] }];
     const listed = new Map<string, Payload>();
     for (const { offered } of applied.flat())
       if (offered !== "any") for (const o of offered) listed.set(JSON.stringify(o.encoded), o);
     const payloads = [...listed.values()]
-      .filter((o) => copies.length === 0 || "top" in accepting(r, screen, key, o))
+      .filter((o) => copies.length === 0 || "top" in accepting(r, resource, key, o))
       .map((o) => o.encoded);
-    return payloads.length === 0 ? [] : [{ screen, control: key, payloads }];
+    return payloads.length === 0 ? [] : [{ screen, resource, control: key, payloads }];
   });
 }

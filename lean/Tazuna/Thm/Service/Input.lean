@@ -310,15 +310,15 @@ theorem unanswered_result_halts (name k : String) (hn : s.answerTo? k = none) :
       (s.report (.invalidInput (.resultOfUnansweredRequest (st.refOf name) k)), none) := by
   simp [resultRequest, hn]
 
-theorem refused_operation_reported (screen control : String) (payload : Value) (c : Chart)
-    (ctl : Control) (decoded : Value) (r : Refusal) (hc : st.chart? screen = some c)
+theorem refused_operation_reported (resource control : String) (payload : Value) (c : Chart)
+    (ctl : Control) (decoded : Value) (r : Refusal) (hc : st.chart? (s.chartName resource) = some c)
     (hctl : c.controls.find? (·.name == control) = some ctl)
-    (hp : fs.parse (.control screen control) payload = .ok (some decoded))
-    (ha : acceptsOperation fs st (s.write .in none (.operation s!"{screen}.{control}"
-      (if ctl.hasPayload then some payload else none))).1 screen control decoded = .ok (.error r)) :
-    let s₁ :=
-      (s.write .in none (.operation s!"{screen}.{control}" (if ctl.hasPayload then some payload else none))).1
-    operate st fs s screen control payload = s₁.halt (r.finding st screen control decoded) := by
+    (hp : fs.parse (.control (s.chartName resource) control) payload = .ok (some decoded))
+    (ha : acceptsOperation fs st (s.write .in none (.operation (s.chartName resource) control (s.nthOpen resource)
+      (if ctl.hasPayload then some payload else none))).1 resource control decoded = .ok (.error r)) :
+    let s₁ := (s.write .in none (.operation (s.chartName resource) control (s.nthOpen resource)
+      (if ctl.hasPayload then some payload else none))).1
+    operate st fs s resource control payload = s₁.halt (r.finding st (s.chartName resource) control decoded) := by
   simp only [operate, hc, hctl, id_bind, hp, ha]
   cases r <;> simp [State.report, Finding.halts, InvalidInput.halts, Refusal.finding]
 

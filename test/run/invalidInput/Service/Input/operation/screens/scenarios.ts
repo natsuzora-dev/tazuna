@@ -1,5 +1,5 @@
-import { notOffered } from "@natsuzora-dev/tazuna";
-import { confirmDialog, listScreen, scenario } from "./screens.ts";
+import { notOffered, offered } from "@natsuzora-dev/tazuna";
+import { board, confirmDialog, listScreen, panel, scenario } from "./screens.ts";
 
 const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} } as const;
 
@@ -63,3 +63,19 @@ export const pickUnoffered = scenario("Pick a task that the list does not show; 
   },
   then: () => [],
 });
+
+export const closeEarlierPanel = scenario(
+  "Open a panel from each region and close the earlier one by its handle; both are open, so the operation line names it by nth; no violation",
+  {
+    given,
+    when: (w) => {
+      const boardScreen = w.startup.screen(board);
+      const left = w.user.operate(boardScreen, "openLeft").screen(panel);
+      w.user.operate(boardScreen, "openRight");
+      const looked = w.user.look(left);
+      w.user.operate(left, "close");
+      return { looked };
+    },
+    then: ({ looked }) => [offered(looked, "close")],
+  },
+);

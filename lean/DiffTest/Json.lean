@@ -98,7 +98,7 @@ def lineValue (line : Line) (after created : List String) : Value := ToValue.toV
 
 def Enabled.toValue (e : Enabled) : Value :=
   obj [("operations", some (.arr (e.operations.map fun o => .obj [("screen", .str o.screen),
-          ("control", .str o.control), ("payloads", (o.payloads.map .arr).getD (.str "any"))]))),
+          ("resource", .str o.resource), ("control", .str o.control), ("payloads", (o.payloads.map .arr).getD (.str "any"))]))),
        ("awaiting", some (.arr (e.awaiting.map fun a => .obj [("id", .str a.id), ("name", .str a.name),
           ("target", .str a.target), ("sender", .str a.sender)]))),
        ("nextDeadline", e.nextDeadline.map (.str ∘ renderTime))]

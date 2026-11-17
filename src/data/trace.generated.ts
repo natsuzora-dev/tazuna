@@ -94,12 +94,17 @@ export const traceLine = z.discriminatedUnion("type", [
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),
   }),
+  /**
+   * `nth` is the operated instance's index among the open instances of its screen in opening order, written only when
+   * more than one is open.
+   */
   z.object({
     time: z.iso.datetime({ offset: true }),
     dir: z.enum(["in", "out"]),
     type: z.literal("operation"),
     id: z.string(),
     name: z.string(),
+    nth: z.int().nonnegative().exactOptional(),
     payload: z.unknown().exactOptional(),
     after: z.array(z.string()).exactOptional(),
     created: z.array(z.string()).exactOptional(),

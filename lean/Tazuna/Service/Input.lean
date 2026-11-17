@@ -282,25 +282,35 @@ def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) 
   message st fs s { tasks := st.starting.map (.start ·.name none) }
 
 /--
-The state after an operate input. As Playwright's click fails on a covered or missing element, operate reports an
-operation that the screen does not accept.
+Which of the open instances of the screen of `resource`, in opening order, it is, when more than one is open: an
+operation line names its instance only then, as Playwright's strict locator needs `nth` only for several matches.
 -/
-def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (screen control : String) (payload : Value) :
-    m State := do
-  let name := s!"{screen}.{control}"
+def State.nthOpen (s : State) (resource : String) : Option Nat :=
+  let screen := s.chartName resource
+  let open_ := s.stack.filter fun r => s.chartName r == screen
+  if open_.length > 1 then open_.idxOf? resource else none
+
+/--
+The state after an operate input on the screen instance `resource`. As Playwright's click fails on a covered or missing
+element, operate reports an operation that the instance does not accept.
+-/
+def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (resource control : String)
+    (payload : Value) : m State := do
+  let screen := s.chartName resource
   match st.chart? screen with
   | none => pure (s.report (.invalidInput (.unownedTarget (st.refOf screen))))
   | some c =>
   match c.controls.find? (·.name == control) with
   | none => pure (s.report (.invalidInput (.unknownControl (st.ref screen) control)))
   | some ctl =>
-    let s := (s.write .in none (.operation name (if ctl.hasPayload then some payload else none))).1
+    let s := (s.write .in none
+      (.operation screen control (s.nthOpen resource) (if ctl.hasPayload then some payload else none))).1
     match ← fs.parse (.control screen control) payload with
     | .error e =>
       pure (s.report (.fault (issueViolation st (st.ref screen) e)))
     | .ok none => pure (s.report (.invalidInput (.controlPayloadSchema (st.ref screen) control)))
     | .ok (some decoded) =>
-      match ← acceptsOperation fs st s screen control decoded with
+      match ← acceptsOperation fs st s resource control decoded with
       | .error fault => pure (s.report (.fault fault))
       | .ok (.ok i) =>
         let (s, step) := s.newMessage.newStep none

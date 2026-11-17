@@ -98,8 +98,6 @@ inductive InvalidScenario where
   | writtenKey (scenarioLine : Nat) (key : String) (entity : Spec.Ref)
   /-- The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick. -/
   | misplacedCreated (scenarioLine : Nat)
-  /-- The screen instance `screen` that the line operates is not the one that takes operations of its screen. -/
-  | unoperableScreen (scenarioLine : Nat) (screen : String)
   /-- The running peer's answer `actual`, which the line delivers, is not the line's `expected`. -/
   | differentPeerAnswer (scenarioLine : Nat) (expected actual : Value)
   /-- The message `message` is undelivered at the end, and no leaveInFlight line names it. -/

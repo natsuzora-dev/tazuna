@@ -204,7 +204,7 @@ The following items are tazuna's own:
 - The service sends no answer to an ended subscription (`ended_subscription_not_answered`).
 - Opening a screen creates one child instance of the opened screen (`entering_opens_one_child`).
 - An operation reaches a screen only when no modal screen that was opened later is still open, as in the WAI-ARIA modal dialog (`modal_child_covers`).
-- A non-modal child screen leaves its parent operable (`nonmodal_child_lets_parent`).
+- A non-modal child screen leaves its parent operable, and several open instances of one screen are each operable: an operation names its instance by the line that opened it (`nonmodal_child_lets_parent`).
 
 ### Time
 

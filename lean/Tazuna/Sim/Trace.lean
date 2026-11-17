@@ -116,7 +116,7 @@ def bodyStrings : LineBody → List String
     | .fulfilled o => "fulfilled" :: o.strings
     | .rejected r => "rejected" :: r.reason.toList
   | .unsubscribe _ | .time | .restart => []
-  | .operation _ payload => (payload.map Value.strings).getD []
+  | .operation _ _ _ payload => (payload.map Value.strings).getD []
 
 /-- The first `out` line where createKey value `v` appears. -/
 def firstOut (s : State) (v : String) : Option Nat :=
@@ -142,7 +142,7 @@ def traceLineOf (line : Line) (after created : List String) : TraceLine :=
     | .unsubscribe to => .unsubscribe dir id to
     | .time => .time .in id
     | .restart => .restart .in id
-    | .operation name payload => .operation dir id name payload
+    | .operation screen control nth payload => .operation dir id (operationName screen control) nth payload
   { time := { text := renderTime line.time, time := line.time }
     body
     after := if after.isEmpty then none else some after

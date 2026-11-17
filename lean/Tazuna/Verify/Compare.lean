@@ -106,10 +106,10 @@ def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (a
     let hasPayload := (d.bind fun d => d.chart?.bind fun c => c.controls.lookup control).any (·.isSome)
     (if hasPayload then d else none, .control control)
   match l.body with
-  | .operation dir id name payload =>
+  | .operation dir id name nth payload =>
     let (d, part) := control name
     let value ← payload.mapM (read d part)
-    pure (line (.operation dir id name (value.map (·.flatten))) value, outputByRequestId)
+    pure (line (.operation dir id name nth (value.map (·.flatten))) value, outputByRequestId)
   | .answer dir id to answer =>
     let (answer, value) ← comparableAnswer ask (outputByRequestId.lookup to) answer
     pure (line (.answer dir id to answer) value, outputByRequestId)
@@ -227,7 +227,7 @@ def Line.fresh (l : Line) : List String :=
 
 def Line.fields (l : Line) : Value :=
   match ToValue.toValue l.body with
-  | .obj fs => .obj (fs.filter fun (k, _) => k == "type" || k == "dir" || k == "name")
+  | .obj fs => .obj (fs.filter fun (k, _) => k == "type" || k == "dir" || k == "name" || k == "nth")
   | v => v
 
 /--

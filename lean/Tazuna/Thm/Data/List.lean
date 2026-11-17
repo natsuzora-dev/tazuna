@@ -38,7 +38,7 @@ theorem not_mem_path_foldl (entered : List String) (n : String) (hn : n ∈ ente
       · exact ha h
       · subst h; exact hm hn
 
-theorem firstDuplicateFrom_eq_none_iff {α : Type} (key : α → String) : ∀ (seen : List String) (l : List α),
+theorem firstDuplicateFrom_eq_none_iff {α β : Type} [DecidableEq β] (key : α → β) : ∀ (seen : List β) (l : List α),
     firstDuplicateFrom key seen l = none ↔ (l.map key).Nodup ∧ ∀ x ∈ l, key x ∉ seen
   | seen, [] => by simp [firstDuplicateFrom]
   | seen, x :: xs => by

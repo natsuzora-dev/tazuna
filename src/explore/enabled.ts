@@ -1,6 +1,6 @@
 import type { Processing } from "../service/chart/queue.ts";
 import { operationsOf } from "../service/screen/operable.ts";
-import { machine, type State, senderOf } from "../service/state.ts";
+import { type State, senderOf } from "../service/state.ts";
 
 /**
  * What a run accepts next: the operations of the open screens, the requests that await answers, and the next deadline.
@@ -9,6 +9,8 @@ import { machine, type State, senderOf } from "../service/state.ts";
 export interface Enabled {
   readonly operations: readonly {
     readonly screen: string;
+    /** The open screen instance. */
+    readonly resource: string;
     readonly control: string;
     /**
      * The payloads encoded as in the trace, or "any" when no offers apply and every payload that matches the schema is
@@ -38,9 +40,9 @@ export function enabled(r: Processing): Enabled {
   return r.evaluations.quietly(() => {
     const next = nextDeadline(r.state);
     return {
-      operations: openScreens(r.state)
-        .flatMap((screen) => operationsOf(r, screen))
-        .map(({ screen, control, payloads }) => ({ screen, control, payloads: payloads ?? "any" })),
+      operations: [...new Set(r.state.stack)]
+        .flatMap((resource) => operationsOf(r, resource))
+        .map(({ screen, resource, control, payloads }) => ({ screen, resource, control, payloads: payloads ?? "any" })),
       awaiting: r.state.pending.map((p) => ({
         id: p.id,
         name: p.activity.target.name,
@@ -50,8 +52,4 @@ export function enabled(r: Processing): Enabled {
       ...(next === undefined ? {} : { nextDeadline: next.toString() }),
     };
   });
-}
-
-function openScreens(s: State): string[] {
-  return [...new Set(s.stack.flatMap((resource) => machine(s, resource)?.chart.name ?? []))];
 }

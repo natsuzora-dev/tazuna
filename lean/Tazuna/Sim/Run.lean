@@ -92,7 +92,7 @@ def World.stated (w : World) (i : Nat) (msg : Message) : World :=
 
 /-- The world with the next id of the messages of `name` that the external peer `peer` sends. -/
 def World.nextId (w : World) (peer name : String) : World × String :=
-  let key := s!"{peer}.{name}"
+  let key := (peer, name)
   let n := (w.counts.lookup key).getD 0 + 1
   ({ w with counts := (key, n) :: w.counts.filter (·.1 != key) }, s!"{name}#{n}")
 
@@ -169,8 +169,8 @@ def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (contro
     m Bool := do
   match ← fs.parse (.control o.chart control) payload with
   | .ok (some decoded) =>
-    match ← acceptsOperation fs st s o.chart control decoded with
-    | .ok (.ok top) => pure (top.resource == o.resource)
+    match ← acceptsOperation fs st s o.resource control decoded with
+    | .ok (.ok _) => pure true
     | _ => pure false
   | _ => pure false
 
@@ -241,10 +241,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
   | .operate screen control payload =>
     w.attempt (w.screenOf i screen) fun o => do
       if w.role o.service != some .own then return w.report (.wrongRole i o.service)
-      w.resolving (w.fill fsOf i payload) fun v => do
-        if let .ok top := (w.state o.service).accepting o.chart then
-          if top.resource != o.resource then return w.report (.unoperableScreen i o.resource)
-        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.chart control v
+      w.resolving (w.fill fsOf i payload) fun v =>
+        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.resource control v
   | .look screen =>
     w.attempt (w.screenOf i screen) fun o =>
       pure (if (w.services.lookup o.service).isNone then w.report (.wrongRole i o.service) else w)

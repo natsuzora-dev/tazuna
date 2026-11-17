@@ -27,7 +27,11 @@ inductive TraceLine.Body where
   | answer (dir : Dir) (id : String) (to : String) (answer : Answer)
   | unsubscribe (dir : Dir) (id : String) (to : String)
   | event (dir : Dir) (id : String) (name : String) (payload : Value) (resultOf : Option String)
-  | operation (dir : Dir) (id : String) (name : String) (payload : Option Value)
+  /--
+  `nth` is the operated instance's index among the open instances of its screen in opening order, written only when
+  more than one is open.
+  -/
+  | operation (dir : Dir) (id : String) (name : String) (nth : Option Nat) (payload : Option Value)
   | time (dir : InDir) (id : String)
   | restart (dir : InDir) (id : String)
 deriving DecidableEq, Repr, Inhabited
@@ -44,7 +48,7 @@ def TraceLine.Body.id : TraceLine.Body → String
   | .operation _ id .. | .time _ id | .restart _ id => id
 
 def TraceLine.Body.name? : TraceLine.Body → Option String
-  | .command _ _ name _ | .query _ _ name _ | .subscribe _ _ name _ | .event _ _ name _ _ | .operation _ _ name _ => some name
+  | .command _ _ name _ | .query _ _ name _ | .subscribe _ _ name _ | .event _ _ name _ _ | .operation _ _ name _ _ => some name
   | .answer .. | .unsubscribe .. | .time .. | .restart .. => none
 
 def TraceLine.Body.to? : TraceLine.Body → Option String

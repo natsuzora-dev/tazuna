@@ -8,44 +8,48 @@ open Tazuna.Thm.Data.Basic
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem accepting_skips (screen : String) (pre rest : List String)
-    (hp : ∀ r ∈ pre, ∀ i, s.machine? r = some i → i.chart.name ≠ screen ∧ ∀ o, i.opener = some o → o.modal = false) :
-    State.accepting.go s screen (pre ++ rest) = State.accepting.go s screen rest := by
+theorem accepting_skips (resource : String) (pre rest : List String)
+    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → ∀ o, i.opener = some o → o.modal = false) :
+    State.accepting.go s resource (pre ++ rest) = State.accepting.go s resource rest := by
   induction pre with
   | nil => rfl
   | cons r pre ih =>
     simp only [List.cons_append]
-    have hr := hp r List.mem_cons_self
+    obtain ⟨hn, ho⟩ := hp r List.mem_cons_self
     conv => lhs; rw [State.accepting.go]
     rw [ih (fun x hx => hp x (List.mem_cons_of_mem _ hx))]
     cases hm : s.machine? r with
     | none => rfl
     | some i =>
-      obtain ⟨hn, ho⟩ := hr i hm
-      have hn' : (i.chart.name == screen) = false := by simpa using hn
+      have hn' : (r == resource) = false := by simpa using hn
       simp only [hn', Bool.false_eq_true, ↓reduceIte]
       cases hop : i.opener with
       | none => rfl
-      | some o => simp [ho o hop]
+      | some o => simp [ho i hm o hop]
 
-theorem modal_child_covers (screen : String) (pre rest : List String) (c : String) (ci : Instance) (o : Opener)
-    (hp : ∀ r ∈ pre, ∀ i, s.machine? r = some i → i.chart.name ≠ screen ∧ ∀ o, i.opener = some o → o.modal = false)
-    (hc : s.machine? c = some ci) (hn : ci.chart.name ≠ screen) (ho : ci.opener = some o) (hm : o.modal = true) :
-    State.accepting.go s screen (pre ++ c :: rest) = .error (.covered ci.chart.name) := by
-  rw [accepting_skips screen pre (c :: rest) hp, State.accepting.go]
-  have hn' : (ci.chart.name == screen) = false := by simpa using hn
+/-- An instance that a modal `opens` opened after the operated instance `resource` covers it. -/
+theorem modal_child_covers (resource : String) (pre rest : List String) (c : String) (ci : Instance) (o : Opener)
+    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → ∀ o, i.opener = some o → o.modal = false)
+    (hc : s.machine? c = some ci) (hn : c ≠ resource) (ho : ci.opener = some o) (hm : o.modal = true) :
+    State.accepting.go s resource (pre ++ c :: rest) = .error (.covered ci.chart.name) := by
+  rw [accepting_skips resource pre (c :: rest) hp, State.accepting.go]
+  have hn' : (c == resource) = false := by simpa using hn
   simp [hc, hn', ho, hm]
 
-theorem nonmodal_child_lets_parent (screen : String) (pre rest : List String) (p : String) (pi : Instance)
-    (hp : ∀ r ∈ pre, ∀ i, s.machine? r = some i → i.chart.name ≠ screen ∧ ∀ o, i.opener = some o → o.modal = false)
-    (hpi : s.machine? p = some pi) (hn : pi.chart.name = screen) :
-    State.accepting.go s screen (pre ++ p :: rest) = .ok pi := by
-  rw [accepting_skips screen pre (p :: rest) hp, State.accepting.go]
-  simp [hpi, hn]
+/--
+The operated instance `resource` accepts when only non-modal instances were opened after it, whatever their charts, so
+several open instances of one screen are each operable (B13).
+-/
+theorem nonmodal_child_lets_parent (resource : String) (pre rest : List String) (pi : Instance)
+    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → ∀ o, i.opener = some o → o.modal = false)
+    (hpi : s.machine? resource = some pi) :
+    State.accepting.go s resource (pre ++ resource :: rest) = .ok pi := by
+  rw [accepting_skips resource pre (resource :: rest) hp, State.accepting.go]
+  simp [hpi]
 
-theorem accepts_iff (screen control : String) (payload : Value) (top : Instance) :
-    acceptsOperation fs st s screen control payload = .ok (.ok top) ↔
-      s.accepting screen = .ok top ∧ ∃ applied, offered fs st s top control payload = .ok applied ∧
+theorem accepts_iff (resource control : String) (payload : Value) (top : Instance) :
+    acceptsOperation fs st s resource control payload = .ok (.ok top) ↔
+      s.accepting resource = .ok top ∧ ∃ applied, offered fs st s top control payload = .ok applied ∧
         applied.any (·.2.admits payload) = true := by
   unfold acceptsOperation
   constructor

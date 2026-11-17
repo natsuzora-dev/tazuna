@@ -24,21 +24,27 @@ inductive LineBody where
   | unsubscribe (to : String)
   | time
   | restart
-  /-- An operation of a screen's control. `name` is `screen.control`, and `payload` is written only when the control's
-  payload schema has fields. -/
-  | operation (name : String) (payload : Option Value)
+  /--
+  An operation of `control` of an instance of `screen`: the `nth` of its open instances in opening order when more than
+  one is open. `payload` is written only when the control's payload schema has fields.
+  -/
+  | operation (screen control : String) (nth : Option Nat) (payload : Option Value)
 deriving DecidableEq, Repr, Inhabited
 
 /-- What the line carries, as TS contentOf gives it: a request's input, an event's or operation's payload, an answer. -/
 def LineBody.content : LineBody → Value
   | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => v
-  | .operation _ p => p.getD .null
+  | .operation _ _ _ p => p.getD .null
   | .answer _ a => ToValue.toValue a
   | .unsubscribe _ | .time | .restart => .null
 
+/-- The name of an operation line in a trace, the one place that joins a screen and its control. -/
+def operationName (screen control : String) : String := s!"{screen}.{control}"
+
 /-- The name that LineIds counts. -/
 def LineBody.idName : LineBody → String
-  | .command name _ | .query name _ | .subscribe name _ | .event name _ _ | .operation name _ => name
+  | .command name _ | .query name _ | .subscribe name _ | .event name _ _ => name
+  | .operation screen control _ _ => operationName screen control
   | .answer _ _ => "answer"
   | .unsubscribe _ => "unsubscribe"
   | .time => "time"

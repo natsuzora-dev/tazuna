@@ -19,10 +19,7 @@ import {
 const tests = import.meta.dirname;
 const examples = simExamples();
 
-const unexemplified: Readonly<Record<string, string>> = {
-  "InvalidScenario.unoperableScreen":
-    "Two open instances of one screen chart need a screen that opens it twice; the simulation's example spec has one root screen",
-};
+const unexemplified: Readonly<Record<string, string>> = {};
 
 test("Every folder under test/sim is a Lean Sim module path or an example directly under one, and each example holds only service folders and pairs of <name>.scenario.json and <name>.expected.json", () => {
   const modules = leanModulePaths("Sim");

@@ -8,11 +8,11 @@ def addName (acc : List String) (n : String) : List String := if n ∈ acc then 
 def dedupe (names : List String) : List String := names.foldl addName []
 
 /-- The first element whose key is in `seen` or is the key of an earlier element. -/
-def firstDuplicateFrom {α : Type} (key : α → String) (seen : List String) : List α → Option α
+def firstDuplicateFrom {α β : Type} [DecidableEq β] (key : α → β) (seen : List β) : List α → Option α
   | [] => none
   | x :: xs => if key x ∈ seen then some x else firstDuplicateFrom key (key x :: seen) xs
 
-def firstDuplicate {α : Type} (key : α → String) (xs : List α) : Option α := firstDuplicateFrom key [] xs
+def firstDuplicate {α β : Type} [DecidableEq β] (key : α → β) (xs : List α) : Option α := firstDuplicateFrom key [] xs
 
 theorem mapM_ok_map {ε α β γ : Type} (g : α → Except ε β) (p : β → γ) (q : α → γ)
     (hg : ∀ a b, g a = .ok b → p b = q a) : ∀ (l : List α) (l' : List β), l.mapM g = .ok l' → l'.map p = l.map q

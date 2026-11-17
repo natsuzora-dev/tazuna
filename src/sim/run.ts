@@ -10,7 +10,7 @@ import { begin, call, checkResults, endSubscription, operate, send, subscribe } 
 import { publish } from "../service/query.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
-import { accepting, topOf } from "../service/screen/operable.ts";
+import { accepting } from "../service/screen/operable.ts";
 import { Halt, write } from "../service/state.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import { contractsListing, refOfTraceName, traceNameOfRef } from "../spec/structure.ts";
@@ -396,8 +396,7 @@ function offeredAt(r: Processing, o: Opened, control: string, payload: unknown):
   const parsed = r.functions.parse({ kind: "control", screen: ref(r.st, o.chart), control }, payload);
   if (parsed instanceof Failed || "error" in parsed) return false;
   try {
-    const found = accepting(r, o.chart, control, parsed);
-    return "top" in found && found.top.resource === o.resource;
+    return "top" in accepting(r, o.resource, control, parsed);
   } catch (error) {
     if (error instanceof Halt) return false;
     throw error;
@@ -521,15 +520,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const o = screenOf(w, i, l.screen);
       if (w.roles.get(o.service) !== "own") return wrongRole(i, o.service);
       const v = fill(w, i, l.payload);
-      const s = stateOf(w, o.service);
-      const top = s === undefined ? undefined : topOf(s, o.chart);
-      if (top?.kind === "ok" && top.instance.resource !== o.resource)
-        return reportedHere({
-          kind: "InvalidScenario.unoperableScreen",
-          definition: null,
-          data: { scenarioLine: i, screen: o.resource },
-        });
-      return act(w, origin, o.service, (r) => operate(r, o.chart, l.control, v));
+      return act(w, origin, o.service, (r) => operate(r, o.resource, l.control, v));
     }
     case "look": {
       const o = screenOf(w, i, l.screen);
