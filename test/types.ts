@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { calendar as calendarPeer } from "../samples/todo/spec/calendar/contract.ts";
 import { contract as externalContract, query as externalQuery } from "../samples/todo/spec/calendar/data.ts";
+import { device as devicePeer } from "../samples/todo/spec/device/contract.ts";
 import { command as externalCommand } from "../samples/todo/spec/device/data.ts";
+import { screens as screensPeer } from "../samples/todo/spec/screens/contract.ts";
 import { scenario as scenarioOfScreens } from "../samples/todo/spec/screens/data.ts";
 import { taskDetailScreen } from "../samples/todo/spec/screens/taskDetailScreen.ts";
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
@@ -41,10 +43,12 @@ import {
   service,
   set,
   singleEntity,
+  skip,
   sortedBy,
 } from "../src/index.ts";
 
 const { machine, screen, createEvent, updateEvent, deleteEvent, event, contract } = service({
+  name: "test",
   description: "",
   entities: { Task, Settings },
 });
@@ -370,7 +374,7 @@ externalQuery({
 command({ description: "", emits: [] });
 
 // @ts-expect-error a service has a description
-service({});
+service({ name: "test" });
 
 // @ts-expect-error send has input when the command has input fields
 automation({ receives: { taskAddedRecorded }, commands: { setReminder } }).send({});
@@ -957,7 +961,7 @@ machine({
 // @ts-expect-error event fields
 event({ payload: {} });
 // @ts-expect-error service entities
-service({ description: "", entities: {} });
+service({ name: "test", description: "", entities: {} });
 // @ts-expect-error entity invariants
 entity({ description: "", fields: { id: z.string() }, key: "id", invariants: {} });
 // @ts-expect-error single entity invariants
@@ -1339,6 +1343,57 @@ deadline(timer, "a", "soon");
 deadline(timer, "a", "late");
 // @ts-expect-error the chart has no state with deadlines of that name
 deadline(timer, "c", "soon");
+
+// Given keys each peer by its service's name, and the own service is no peer.
+scenarioOfScreens("types", {
+  given: {
+    start: "2026-10-25T10:00:00+09:00",
+    records: {},
+    // @ts-expect-error a peer is keyed by its service name (misnamedPeer)
+    peers: { cal: external(calendarPeer) },
+  },
+  when: () => ({}),
+  then: () => [],
+});
+scenarioOfScreens("types", {
+  given: {
+    start: "2026-10-25T10:00:00+09:00",
+    records: {},
+    // @ts-expect-error the own service is no peer (unknownPeer)
+    peers: { screens: skip(screensPeer, "the own service") },
+  },
+  when: () => ({}),
+  then: () => [],
+});
+
+// A line names only messages between the own service and the peers that Given lists as running or external.
+scenarioOfScreens("types", {
+  given: {
+    start: "2026-10-25T10:00:00+09:00",
+    records: {},
+    peers: {
+      todo: run(todoPeer, { Task: [], Settings: { shouldRemind: true } }),
+      calendar: external(calendarPeer),
+      device: skip(devicePeer, "the screens never reach the device in this scenario"),
+    },
+  },
+  when: (w) => {
+    const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
+    adding.request(calendarPeer.nextBusinessDay);
+    // @ts-expect-error the device is skipped: no message to it is named
+    adding.request(devicePeer.requestNotificationPermission);
+    // @ts-expect-error a skipped peer has no actor
+    w.peer.device;
+    // @ts-expect-error a peer that Given does not list has no actor
+    w.peer.notifier;
+    // @ts-expect-error the client reaches the own service and running peers only
+    w.client.send(devicePeer.requestNotificationPermission, {});
+    // @ts-expect-error a running peer sends only to the own service and the listed peers
+    w.peer.todo.send(devicePeer.showNotification, { text: "Due" });
+    return {};
+  },
+  then: () => [],
+});
 
 // The scenario grammar: what a line names and writes.
 scenarioOfScreens("types", {

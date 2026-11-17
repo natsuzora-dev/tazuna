@@ -1,7 +1,7 @@
 import { externalService } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, query, contract } = externalService({ description: "Keep tasks" });
+export const { command, query, contract } = externalService({ name: "todo", description: "Keep tasks" });
 
 export const completeTask = command({
   input: { taskId: z.string() },

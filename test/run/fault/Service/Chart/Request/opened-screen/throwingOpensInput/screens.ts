@@ -1,7 +1,10 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen, scenario } = service({ description: "Open a picker with an input that throws" });
+export const { screen, scenario } = service({
+  name: "throwingOpensInput",
+  description: "Open a picker with an input that throws",
+});
 
 export const pickScreen = screen({
   description: "Pick a number below the count",

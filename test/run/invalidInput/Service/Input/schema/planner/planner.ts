@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
-export const { machine, scenario } = service({ description: "Plan the tasks" });
+export const { machine, scenario } = service({ name: "planner", description: "Plan the tasks" });
 
 export const adder = machine({
   description: "Add a task when the service starts",

@@ -15,6 +15,7 @@ export const Pin = singleEntity({
 });
 
 export const { command, createEvent, deleteEvent, updateEvent, contract, scenario } = service({
+  name: "todo",
   description: "Keep the tasks",
   entities: { Task, Comment, Pin },
 });

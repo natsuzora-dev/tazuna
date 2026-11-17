@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, scenario } = service({ description: "Ping in chains" });
+export const { command, machine, scenario } = service({ name: "chains", description: "Ping in chains" });
 
 export const ping = command({ emits: [] }).decide(() => []);
 

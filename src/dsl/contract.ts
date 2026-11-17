@@ -19,11 +19,11 @@ export type RecordsData<Es extends Entities> = {
 declare const contractFacts: unique symbol;
 
 /**
- * A contract: its members, and, as types only, the records of its service and whether tazuna runs the service's spec
- * (`spec`) or takes the service as contract only (`external`).
+ * A contract: its members, and, as types only, the records of its service, whether tazuna runs the service's spec
+ * (`spec`) or takes the service as contract only (`external`), and the service's name `N`.
  */
-export type Contract<M, R, K extends "spec" | "external"> = M & {
-  readonly [contractFacts]: { readonly records: R; readonly kind: K };
+export type Contract<M, R, K extends "spec" | "external", N extends string = string> = M & {
+  readonly [contractFacts]: { readonly records: R; readonly kind: K; readonly service: N };
 };
 
 /** The records of the service of contract `C`. */
@@ -31,3 +31,6 @@ export type RecordsOf<C> = C extends Contract<unknown, infer R, "spec" | "extern
 
 /** Whether tazuna runs the spec of the service of contract `C` (`spec`) or takes it as contract only (`external`). */
 export type KindOf<C> = C extends Contract<unknown, unknown, infer K> ? K : never;
+
+/** The name of the service of contract `C`. */
+export type ServiceOf<C> = C extends Contract<unknown, unknown, "spec" | "external", infer N> ? N : never;

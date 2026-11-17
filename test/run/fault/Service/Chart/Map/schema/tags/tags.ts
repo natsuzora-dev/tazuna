@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { machine, scenario } = service({ description: "Watch the tags" });
+export const { machine, scenario } = service({ name: "tags", description: "Watch the tags" });
 
 export const tagWatcher = machine({
   description: "Watch each tag, one of which is empty",

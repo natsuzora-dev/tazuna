@@ -15,6 +15,7 @@ export const Tally = singleEntity({
 });
 
 export const { command, createEvent, updateEvent, contract, scenario } = service({
+  name: "invariantsBreakingTodo",
   description: "Keep the tasks while breaking the invariants of Task, Tally, and the service",
   entities: { Task, Tally },
   invariants: {

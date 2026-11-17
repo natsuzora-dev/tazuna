@@ -1,7 +1,7 @@
 import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen, scenario } = service({ description: "Search the tasks" });
+export const { screen, scenario } = service({ name: "search", description: "Search the tasks" });
 
 export const searchScreen = screen({
   description: "Search with a query",

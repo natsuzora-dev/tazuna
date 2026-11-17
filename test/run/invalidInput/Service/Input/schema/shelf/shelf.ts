@@ -2,7 +2,10 @@ import { any, service, set } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { catalog } from "../catalog/contract.ts";
 
-export const { machine, screen, scenario } = service({ description: "Show numbered items and pick names" });
+export const { machine, screen, scenario } = service({
+  name: "shelf",
+  description: "Show numbered items and pick names",
+});
 
 export const stocker = machine({
   description: "Ask for the numbered items when the service starts",

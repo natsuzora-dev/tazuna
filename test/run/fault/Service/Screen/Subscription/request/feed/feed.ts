@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
-export const { screen, scenario } = service({ description: "Show the recent tasks" });
+export const { screen, scenario } = service({ name: "feed", description: "Show the recent tasks" });
 
 export const recentScreen = screen({
   description: "The recent tasks",

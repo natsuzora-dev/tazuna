@@ -1,7 +1,7 @@
 import { service, set } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { machine, scenario } = service({ description: "Keep the picked tags" });
+export const { machine, scenario } = service({ name: "picks", description: "Keep the picked tags" });
 
 export const picker = machine({
   description: "Pick tags when the service starts",

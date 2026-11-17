@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 
-export const { machine, scenario } = service({ description: "Plan the days" });
+export const { machine, scenario } = service({ name: "agenda", description: "Plan the days" });
 
 export const planner = machine({
   description: "Ask whether today is a holiday, then whether an hour later is",

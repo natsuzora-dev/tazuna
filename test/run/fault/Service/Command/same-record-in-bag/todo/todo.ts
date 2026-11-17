@@ -10,6 +10,7 @@ export const Archive = entity({
 });
 
 export const { command, createEvent, contract, scenario } = service({
+  name: "todo",
   description: "Keep the tasks",
   entities: { Task, Archive },
 });

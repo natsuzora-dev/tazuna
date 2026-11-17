@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Flag = singleEntity({ description: "A flag", fields: { isOn: z.boolean().default(false) } });
 
 export const { command, query, machine, event, updateEvent, contract, scenario } = service({
+  name: "flags",
   description: "Raise and lower a flag for each added task",
   entities: { Flag },
 });

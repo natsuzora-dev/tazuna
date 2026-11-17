@@ -10,6 +10,7 @@ export const Note = entity({
 });
 
 export const { automation, command, createEvent, event, machine, contract, scenario } = service({
+  name: "tasks",
   description: "Keep tasks, their notes and their ranks",
   entities: { Task, Note },
 });

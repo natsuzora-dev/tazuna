@@ -7,4 +7,8 @@ export const Settings = singleEntity({
 });
 export const Task = entity({ description: "A task", fields: { id: z.string() }, key: "id" });
 
-export const { command } = service({ description: "Keep the tasks", entities: { settings: Settings, Task } });
+export const { command } = service({
+  name: "todo",
+  description: "Keep the tasks",
+  entities: { settings: Settings, Task },
+});

@@ -114,6 +114,8 @@ export interface Automation {
 
 export interface ServiceDefinition {
   readonly kind: "service";
+  /** The service's name, the name of the folder that holds it (Malformed.misnamedService). */
+  readonly name: string;
   readonly description: string;
   readonly entities: Entities;
   readonly invariants: Conditions<never>;
@@ -270,6 +272,14 @@ export interface ChartSpec {
 }
 
 export type Events = Readonly<Record<string, AnyEvent>>;
+
+declare const ownerOf: unique symbol;
+
+/** A definition of the service `N`, which it holds as a type only; see `OwnerOf`. */
+export type Owned<N extends string> = { readonly [ownerOf]?: N };
+
+/** The name of the service that owns the definition `D`, or never when `D` does not hold it. */
+export type OwnerOf<D> = D extends { readonly [ownerOf]?: infer N } ? (unknown extends N ? never : N) : never;
 
 declare const deadlinesOf: unique symbol;
 

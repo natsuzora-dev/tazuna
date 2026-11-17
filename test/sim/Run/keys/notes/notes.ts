@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Note = entity({ description: "A note", fields: { id: z.string() }, key: "id" });
 
 export const { command, machine, contract } = service({
+  name: "notes",
   description: "Register a new note with tags, then ask for its labels",
   entities: { Note },
 });

@@ -2,6 +2,7 @@ import { datetime, externalService } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, query, contract } = externalService({
+  name: "calendar",
   description: "Answer questions about days and book them",
 });
 

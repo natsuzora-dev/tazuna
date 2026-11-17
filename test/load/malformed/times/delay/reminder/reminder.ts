@@ -1,7 +1,7 @@
 import { constants, duration, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { machine } = service({ description: "Remind after a while" });
+export const { machine } = service({ name: "reminder", description: "Remind after a while" });
 
 export const reminderConstants = constants(z.object({ remindAfter: duration, nudgeAfter: duration }), {
   remindAfter: "P1D",

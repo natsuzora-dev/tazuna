@@ -17,6 +17,7 @@ export const Settings = singleEntity({
 });
 
 export const { automation, command, createEvent, event, machine, query, screen, updateEvent, contract } = service({
+  name: "todo",
   description: "Keep the tasks and book a slot for each",
   entities: { Task, Booking, Settings },
 });

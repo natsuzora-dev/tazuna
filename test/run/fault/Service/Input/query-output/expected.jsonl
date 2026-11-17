@@ -1,1 +1,1 @@
-{"kind":"Fault.exception","definition":{"service":"todo","name":"taskCount"},"data":{},"location":{"file":"todo/todo.ts","line":8},"scenario":{"service":"todo","name":"countNone"},"error":{"type":"thrownError","name":"Error","message":"there is no task to count","stack":"<stack>"}}
+{"kind":"Fault.exception","definition":{"service":"todo","name":"taskCount"},"data":{},"location":{"file":"todo/todo.ts","line":12},"scenario":{"service":"todo","name":"countNone"},"error":{"type":"thrownError","name":"Error","message":"there is no task to count","stack":"<stack>"}}

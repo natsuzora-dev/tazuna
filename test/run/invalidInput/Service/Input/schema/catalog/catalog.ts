@@ -1,7 +1,10 @@
 import { externalService, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { query, contract } = externalService({ description: "Answer questions about numbered items" });
+export const { query, contract } = externalService({
+  name: "catalog",
+  description: "Answer questions about numbered items",
+});
 
 export const Item = z.strictObject({ n: z.int(), name: z.string() });
 

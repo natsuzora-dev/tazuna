@@ -75,9 +75,29 @@ function listedUnderOtherName(
   );
 }
 
+/** Reports each definer that is the service of no folder of its name, at the first folder whose service it is. */
+function misnamedServices(
+  services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>,
+): Found<Malformed>[] {
+  const named = new Set(
+    [...services].filter(([folder, s]) => folder === s.definition.name).map(([, s]) => s.definition),
+  );
+  const reported = new Set<ServiceDefinition>();
+  return [...services].flatMap(([folder, { definition, place }]): Found<Malformed>[] => {
+    if (named.has(definition) || reported.has(definition)) return [];
+    reported.add(definition);
+    return [
+      {
+        violation: { kind: "Malformed.misnamedService", definition: null, data: { folder, name: definition.name } },
+        place,
+      },
+    ];
+  });
+}
+
 /**
- * Assigns each definition its service. A folder's service is the first definer exported in it, and a definer's name is
- * the first folder whose service it is.
+ * Assigns each definition its service. A folder's service is the first definer exported in it, and a definer's service
+ * is the folder of its name when it is that folder's service, else the first folder whose service it is.
  */
 export function owners(
   found: readonly Omit<Named<Definition>, "service">[],
@@ -92,7 +112,7 @@ export function owners(
     if (!services.has(folder)) services.set(folder, { definition, place });
   const serviceNames = new Map<ServiceDefinition, string>();
   for (const [folder, { definition }] of services)
-    if (!serviceNames.has(definition)) serviceNames.set(definition, folder);
+    if (!serviceNames.has(definition) || folder === definition.name) serviceNames.set(definition, folder);
   const exported = new Set(definerExports.map((e) => e.definition));
   const definitions: Named<Definition>[] = [];
   const malformed: Found<Malformed>[] = [];
@@ -105,6 +125,11 @@ export function owners(
   return {
     services,
     definitions,
-    malformed: [...malformed, ...listedUnderOtherName(services, definitions), ...ambiguousServices(definerExports)],
+    malformed: [
+      ...malformed,
+      ...listedUnderOtherName(services, definitions),
+      ...ambiguousServices(definerExports),
+      ...misnamedServices(services),
+    ],
   };
 }

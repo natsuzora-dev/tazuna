@@ -1,6 +1,6 @@
 import { service } from "@natsuzora-dev/tazuna";
 
-export const { machine, scenario } = service({ description: "Keep the tasks" });
+export const { machine, scenario } = service({ name: "todo", description: "Keep the tasks" });
 
 export const ticker = machine({
   description: "Tick every minute",

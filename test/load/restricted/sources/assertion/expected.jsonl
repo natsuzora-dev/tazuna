@@ -1,4 +1,4 @@
-{"kind":"Restricted.as","definition":null,"data":{"type":"string"},"location":{"file":"todo/todo.ts","line":34}}
-{"kind":"Restricted.as","definition":null,"data":{"type":"{ note: string | null }"},"location":{"file":"todo/todo.ts","line":40}}
-{"kind":"Restricted.suppression","definition":null,"data":{"mark":"biome-ignore"},"location":{"file":"todo/todo.ts","line":41}}
-{"kind":"Restricted.nonNull","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":42}}
+{"kind":"Restricted.as","definition":null,"data":{"type":"string"},"location":{"file":"todo/todo.ts","line":35}}
+{"kind":"Restricted.as","definition":null,"data":{"type":"{ note: string | null }"},"location":{"file":"todo/todo.ts","line":41}}
+{"kind":"Restricted.suppression","definition":null,"data":{"mark":"biome-ignore"},"location":{"file":"todo/todo.ts","line":42}}
+{"kind":"Restricted.nonNull","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":43}}

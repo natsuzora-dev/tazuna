@@ -8,6 +8,7 @@ export const ArchivedTask = entity({
 });
 
 export const { command, query, createEvent, contract } = service({
+  name: "archive",
   description: "Keep the archived tasks",
   entities: { ArchivedTask },
 });

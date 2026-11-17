@@ -2,6 +2,7 @@ import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, machine, event, contract, scenario } = service({
+  name: "unguardedTicker",
   description: "Count ticks without a guard on the countdown",
 });
 

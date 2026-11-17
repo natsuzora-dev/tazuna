@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
 export const { command, machine, createEvent, contract, scenario } = service({
+  name: "invariantsBreakingCounter",
   description: "Keep the tasks while breaking the invariant of counter",
   entities: { Task },
 });

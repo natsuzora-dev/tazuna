@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { MarkOf } from "../data/bag.ts";
 import type { Rejection } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
-import type { Contract, RecordsOf } from "../dsl/contract.ts";
+import type { Contract, RecordsOf, ServiceOf } from "../dsl/contract.ts";
 import type {
   AnyCommand,
   AnyEvent,
@@ -13,6 +13,7 @@ import type {
   Command,
   Control,
   Deadlines,
+  OwnerOf,
   Query,
 } from "../dsl/definition.ts";
 import type { EncodedPayload, PayloadShape } from "../dsl/event.ts";
@@ -175,14 +176,26 @@ export interface ScreenRef<Sc = AnyScreen> {
   readonly screen: Sc;
 }
 
-/** What a line's processing, or the begin, caused, named by content; none or several matches are reported. */
-export interface Caused {
-  request<T extends Request>(target: T, pick?: { readonly input?: SomeFields<InputOf<T>> }): OutRequest<T>;
-  subscription<Q extends AnyQuery>(query: Q, pick?: { readonly input?: SomeFields<InputOf<Q>> }): OutSubscription<Q>;
+/** Nothing that `D` lacks, unless a service of `S` owns the definition `D`. */
+type OwnedBy<D, S extends string> = OwnerOf<D> extends S ? unknown : never;
+
+/**
+ * What a line's processing, or the begin, caused, named by content; none or several matches are reported. A message
+ * travels between services of `S`: the own service and the peers that Given lists as running or external.
+ */
+export interface Caused<S extends string = string> {
+  request<T extends Request>(
+    target: T & OwnedBy<T, S>,
+    pick?: { readonly input?: SomeFields<InputOf<T>> },
+  ): OutRequest<T>;
+  subscription<Q extends AnyQuery>(
+    query: Q & OwnedBy<Q, S>,
+    pick?: { readonly input?: SomeFields<InputOf<Q>> },
+  ): OutSubscription<Q>;
   /** The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. */
   event<Ev extends AnyEvent>(
-    event: Ev,
-    pick?: { readonly payload?: SomeFields<EncodedPayload<Ev>>; readonly to?: Contract<unknown, unknown, "spec"> },
+    event: Ev & OwnedBy<Ev, S>,
+    pick?: { readonly payload?: SomeFields<EncodedPayload<Ev>>; readonly to?: Contract<unknown, unknown, "spec", S> },
   ): EventMessage<Ev>;
   screen<Sc extends AnyScreen>(screen: Sc): ScreenRef<Sc>;
   /**
@@ -195,10 +208,13 @@ export interface Caused {
   end(subscription: OutSubscription | PeerSubscribeLine): EndRef;
 }
 
-/** A line whose processing by a running service may cause messages, which `Caused` names and Then states. */
-export interface ProcessingLine extends Line, Caused {
+/** A line that a running service processes, which Then's `emitted` and `requested` state. */
+export interface Processed extends Line {
   readonly [processing]: true;
 }
+
+/** A line whose processing by a running service may cause messages, which `Caused` names and Then states. */
+export interface ProcessingLine<S extends string = string> extends Processed, Caused<S> {}
 
 /** A request line of the client or a peer. `output` is the output of the first answer, observed when the scenario runs. */
 export interface RequestLine<T = Request> extends Line {
@@ -219,12 +235,16 @@ export interface SubscribeLine<T = Request> extends RequestLine<T> {
 }
 
 /** A request line of the client, whose request reaches its running receiver directly. */
-export interface ClientRequestLine<T = Request> extends SingleRequestLine<T>, ProcessingLine {
+export interface ClientRequestLine<T = Request, S extends string = string>
+  extends SingleRequestLine<T>,
+    ProcessingLine<S> {
   readonly [sentByClient]: true;
 }
 
 /** A subscribe line of the client. */
-export interface ClientSubscribeLine<T = Request> extends SubscribeLine<T>, ProcessingLine {
+export interface ClientSubscribeLine<T = Request, S extends string = string>
+  extends SubscribeLine<T>,
+    ProcessingLine<S> {
   readonly [sentByClient]: true;
 }
 
@@ -249,17 +269,19 @@ export interface PeerEventLine extends Line, Message<"event"> {
 export interface PeerEndLine extends Line, Message<"end"> {}
 
 /** A line that delivered a request, which names the request and whose processing names what it caused. */
-export interface DeliveredRequest<T = Request> extends ProcessingLine, Message<"request" | "subscription"> {
+export interface DeliveredRequest<T = Request, S extends string = string>
+  extends ProcessingLine<S>,
+    Message<"request" | "subscription"> {
   readonly target: T;
   /** The output of the first answer to the delivered request, observed when the scenario runs. */
   readonly output: ObservedShape<OutputShape<T>>;
 }
 
 /** The line that delivered the message `M`: it names `M`, and its processing names what `M` caused. */
-export type Delivered<M extends Message> =
+export type Delivered<M extends Message, S extends string = string> =
   M extends RequestMessage<infer T>
-    ? DeliveredRequest<T>
-    : ProcessingLine & Message<M extends Message<infer K> ? K : never>;
+    ? DeliveredRequest<T, S>
+    : ProcessingLine<S> & Message<M extends Message<infer K> ? K : never>;
 
 /** A look line: the screen instance that the user looked at, whose offers Then states. */
 export interface Look<Sc = AnyScreen> extends Line {
@@ -305,12 +327,24 @@ export const skip = <C extends Contract<unknown, unknown, "spec" | "external">>(
   because: string,
 ): Skip<C> => ({ role: "skip", contract, because });
 
-/** The arrangement: every running service begins at `start`, the own service from `records`. */
-export interface Given<R, P extends Peers> {
+/**
+ * Each peer of `P` keyed by the name of its contract's service, which is not the own service `Own`
+ * (Malformed.misnamedPeer, Malformed.unknownPeer).
+ */
+type PeerKeys<P extends Peers, Own extends string> = {
+  readonly [K in keyof P]: K extends Own
+    ? "the own service is no peer"
+    : ServiceOf<P[K]["contract"]> extends K
+      ? unknown
+      : `key the peer by its service name ${ServiceOf<P[K]["contract"]>}`;
+};
+
+/** The arrangement: every running service begins at `start`, the own service `Own` from `records`. */
+export interface Given<R, P extends Peers, Own extends string = string> {
   readonly start: Instant;
   readonly records: R;
   /** Every service that exchanges messages with the own service, keyed by its service name. */
-  readonly peers: P;
+  readonly peers: P & NoInfer<PeerKeys<P, Own>>;
 }
 
 type Members<C> = C[keyof C];
@@ -321,40 +355,42 @@ type PayloadArgs<Cs, K extends keyof Cs> =
   Cs[K] extends Control<infer P> ? (keyof P extends never ? [] : [payload: Value<Encoded<P>>]) : [];
 type ResultOf = OutRequest | OutSubscription | RequestLine | null;
 
-type ExternalRequests<P extends Peers> = {
-  readonly [K in keyof P]: P[K] extends External<infer C> ? RequestOf<C> : never;
-}[keyof P];
-/** Nothing that `D` lacks, unless an external peer of `P` owns `D`: the client reaches running services only. */
-type Reachable<P extends Peers, D> = D extends ExternalRequests<P> ? never : unknown;
+/** The names of the peers of `P` that run their spec. */
+type Running<P extends Peers> = { readonly [K in keyof P]: P[K] extends Run ? K : never }[keyof P] & string;
+/** The names of the peers of `P` that take part in the simulation: running and external ones. */
+type Taking<P extends Peers> = { readonly [K in keyof P]: P[K] extends Skip ? never : K }[keyof P] & string;
 
-interface Client<P extends Peers> {
+/** The client, which reaches the services of `R` directly; its lines' messages travel between services of `S`. */
+interface Client<R extends string, S extends string> {
   /** A command to the own service or to a running peer, the owner of the definition. */
   send<C extends AnyCommand>(
-    command: C & Reachable<P, C>,
+    command: C & OwnedBy<C, R>,
     input: Value<InputOf<C>> | Raw,
     options?: { readonly sameIdAs?: ClientRequestLine },
-  ): ClientRequestLine<C>;
-  call<Q extends AnyQuery>(query: Q & Reachable<P, Q>, input: Value<InputOf<Q>> | Raw): ClientRequestLine<Q>;
-  subscribe<Q extends AnyQuery>(query: Q & Reachable<P, Q>, input: Value<InputOf<Q>> | Raw): ClientSubscribeLine<Q>;
-  unsubscribe(subscription: ClientSubscribeLine): ProcessingLine;
+  ): ClientRequestLine<C, S>;
+  call<Q extends AnyQuery>(query: Q & OwnedBy<Q, R>, input: Value<InputOf<Q>> | Raw): ClientRequestLine<Q, S>;
+  subscribe<Q extends AnyQuery>(query: Q & OwnedBy<Q, R>, input: Value<InputOf<Q>> | Raw): ClientSubscribeLine<Q, S>;
+  unsubscribe(subscription: ClientSubscribeLine): ProcessingLine<S>;
   /** The client sends the request of `line` again with the same id. */
   resend<L extends ClientRequestLine | ClientSubscribeLine>(line: L): L;
 }
 
-interface User {
+interface User<S extends string> {
   operate<Cs extends Readonly<Record<string, Control>>, K extends keyof Cs & string>(
     screen: ScreenRef<{ readonly kind: "screen"; readonly controls: Cs }>,
     control: K,
     ...payload: PayloadArgs<Cs, K>
-  ): ProcessingLine;
+  ): ProcessingLine<S>;
   /** The user looks at the screen instance; Then states what it offers at this point. */
   look<Sc extends AnyScreen>(screen: ScreenRef<Sc>): Look<Sc>;
 }
 
 type PeerAnswerOf<T> = PeerValue<AnswerOf<T>>;
 
-/** What a peer sends; each line states one message in flight, which a line of the network delivers. */
-interface PeerActor<C, W extends "run" | "external"> {
+/**
+ * What a peer sends; each line states one message in flight, which a line of the network delivers to a service of `S`.
+ */
+interface PeerActor<C, W extends "run" | "external", S extends string> {
   answer<T extends RequestOf<C>>(
     request: RequestMessage<T> | DeliveredRequest<T>,
     answer: W extends "run" ? PeerAnswerOf<T> : Value<AnswerOf<T>>,
@@ -365,54 +401,57 @@ interface PeerActor<C, W extends "run" | "external"> {
     options: { readonly resultOf: ResultOf },
   ): PeerEventLine;
   send<D extends AnyCommand>(
-    command: D,
+    command: D & OwnedBy<D, S>,
     input: W extends "run" ? PeerValue<InputOf<D>> : Value<InputOf<D>> | Raw,
   ): PeerRequestLine<D>;
   call<Q extends AnyQuery>(
-    query: Q,
+    query: Q & OwnedBy<Q, S>,
     input: W extends "run" ? PeerValue<InputOf<Q>> : Value<InputOf<Q>> | Raw,
   ): PeerRequestLine<Q>;
   subscribe<Q extends AnyQuery>(
-    query: Q,
+    query: Q & OwnedBy<Q, S>,
     input: W extends "run" ? PeerValue<InputOf<Q>> : Value<InputOf<Q>> | Raw,
   ): PeerSubscribeLine<Q>;
   unsubscribe(subscription: PeerSubscribeLine): PeerEndLine;
 }
 
 /** An external peer: the scenario writes what it sends, which its contract checks. */
-interface ExternalPeer<C> extends PeerActor<C, "external"> {
+interface ExternalPeer<C, S extends string> extends PeerActor<C, "external", S> {
   /** The peer never answers `request`, which it received. */
   leaveUnanswered(request: RequestMessage<RequestOf<C>> | DeliveredRequest<RequestOf<C>>): Line;
 }
 
 /** A running peer: each line states what its run sent, which must equal what the line writes. */
-type RunningPeer<C> = PeerActor<C, "run">;
+type RunningPeer<C, S extends string> = PeerActor<C, "run", S>;
 
-/** The actors of When. Each call places one line in call order and returns its handle. */
-export interface When<P extends Peers> {
+/**
+ * The actors of When for the own service `Own` and the peers `P`. Each call places one line in call order and returns
+ * its handle.
+ */
+export interface When<P extends Peers, Own extends string = string, S extends string = Own | Taking<P>> {
   /** What the begin of every running service at Given's start caused. */
-  readonly begin: Caused;
-  readonly client: Client<P>;
-  readonly user: User;
+  readonly begin: Caused<S>;
+  readonly client: Client<Own | Running<P>, S>;
+  readonly user: User<S>;
   readonly peer: {
     readonly [K in keyof P as P[K] extends Skip ? never : K]: P[K] extends Run<infer C>
-      ? RunningPeer<C>
+      ? RunningPeer<C, S>
       : P[K] extends External<infer C>
-        ? ExternalPeer<C>
+        ? ExternalPeer<C, S>
         : never;
   };
   readonly net: {
     /** The network delivers the message in flight to its receiver. */
-    deliver<M extends Message>(message: M): Delivered<M>;
+    deliver<M extends Message>(message: M): Delivered<M, S>;
     /** The network delivers the delivered message again, with the same id. */
-    redeliver<M extends Message>(message: M): Delivered<M>;
+    redeliver<M extends Message>(message: M): Delivered<M, S>;
     /** The network loses the message: its receiver never gets it, and nothing tells its sender. */
     lose(message: Message): Line;
     /**
      * The network fails to deliver the request: its receiver never gets it, and its sender gets the transport's answer,
      * rejected as unavailable.
      */
-    fail(request: RequestMessage): ProcessingLine;
+    fail(request: RequestMessage): ProcessingLine<S>;
     /** The message is undelivered at the end. */
     inFlight(message: Message): Line;
   };
@@ -421,11 +460,11 @@ export interface When<P extends Peers> {
      * The clock advances to `time`, and every running service fires its deadlines due by then; in a tie of deadlines of
      * one service, the next of `order` that names one of them fires.
      */
-    at(time: Instant, options?: { readonly order?: readonly DeadlineOf[] }): ProcessingLine;
+    at(time: Instant, options?: { readonly order?: readonly DeadlineOf[] }): ProcessingLine<S>;
   };
   readonly host: {
     /** The host restarts the own service, which reopens its screens as new instances. */
-    restart(): ProcessingLine;
+    restart(): ProcessingLine<S>;
   };
 }
 
@@ -464,14 +503,14 @@ export function answered(line: RequestLine, answers: unknown): Expectation {
 }
 
 /** The events, listed by a contract, that the own service emitted while `line` was processed, as a bag. */
-export const emitted = (line: ProcessingLine, events: readonly Emitted[]): Expectation => ({
+export const emitted = (line: Processed, events: readonly Emitted[]): Expectation => ({
   kind: "emitted",
   line,
   events,
 });
 
 /** The requests that the own service sent, and the subscriptions it ended, while `line` was processed, as a bag. */
-export const requested = (line: ProcessingLine, requests: readonly Sent[]): Expectation => ({
+export const requested = (line: Processed, requests: readonly Sent[]): Expectation => ({
   kind: "requested",
   line,
   requests,
@@ -563,17 +602,17 @@ export interface ScenarioDefinition {
  * Defines a scenario of the own service: Given arranges, When places the lines in order, and Then states what the own
  * service did. The export name of the scenario is its name.
  */
-export type ScenarioDefiner<R> = <const P extends Peers, N>(
+export type ScenarioDefiner<R, Own extends string> = <const P extends Peers, N>(
   description: string,
   sections: {
-    readonly given: Given<R, P>;
-    readonly when: (w: When<P>) => N;
+    readonly given: Given<R, P, Own>;
+    readonly when: (w: When<P, Own>) => N;
     readonly then: (lines: N) => readonly Expectation[];
   },
 ) => ScenarioDefinition;
 
 export const scenarioDefiner =
-  <R>(): ScenarioDefiner<R> =>
+  <R, Own extends string>(): ScenarioDefiner<R, Own> =>
   (description, { given, when, then }) =>
     ({ kind: "scenario", description, given, when, expect: then }) as unknown as ScenarioDefinition;
 

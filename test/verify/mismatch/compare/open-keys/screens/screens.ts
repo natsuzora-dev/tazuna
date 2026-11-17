@@ -4,7 +4,7 @@ import { todo } from "../todo/contract.ts";
 
 export const Draft = entity({ description: "A draft note", fields: { id: z.string() }, key: "id" });
 
-export const { screen, scenario } = service({ description: "Show the notes", entities: { Draft } });
+export const { screen, scenario } = service({ name: "screens", description: "Show the notes", entities: { Draft } });
 
 export const noteScreen = screen({
   description: "Two new drafts, all of them, and then the first one",

@@ -7,6 +7,7 @@ export const Counter = singleEntity({
 });
 
 export const { automation, command, event, updateEvent, contract, scenario } = service({
+  name: "counter",
   description: "Bump one counter from five automations",
   entities: { Counter },
 });

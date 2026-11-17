@@ -9,6 +9,7 @@ export const Seen = entity({
 });
 
 export const { automation, command, query, createEvent, deleteEvent, event, contract, scenario } = service({
+  name: "todo",
   description: "Keep the tasks and the tasks seen",
   entities: { Task, Seen },
 });

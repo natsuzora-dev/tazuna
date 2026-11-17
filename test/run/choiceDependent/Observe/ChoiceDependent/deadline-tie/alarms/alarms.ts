@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Alarm = singleEntity({ description: "Who rang the alarm last", fields: { by: z.string().default("") } });
 
 export const { command, machine, event, updateEvent, contract, scenario } = service({
+  name: "alarms",
   description: "Ring an alarm at 10:00 from two clocks",
   entities: { Alarm },
 });

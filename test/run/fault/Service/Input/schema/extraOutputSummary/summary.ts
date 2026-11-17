@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Item = entity({ description: "An item", fields: { id: z.string() }, key: "id" });
 
 export const { query, contract, scenario } = service({
+  name: "extraOutputSummary",
   description: "Count items, returning the input with the count",
   entities: { Item },
 });

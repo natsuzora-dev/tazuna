@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
 export const { command, machine, createEvent, contract, scenario } = service({
+  name: "noTaskWatcher",
   description: "Keep the tasks and watch the first task before any task exists",
   entities: { Task },
 });

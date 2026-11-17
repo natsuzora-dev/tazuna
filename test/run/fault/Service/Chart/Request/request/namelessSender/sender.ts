@@ -1,7 +1,10 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event, scenario } = service({ description: "Send greetings with an empty name" });
+export const { command, machine, event, scenario } = service({
+  name: "namelessSender",
+  description: "Send greetings with an empty name",
+});
 
 export const greeted = event({ payload: { name: z.string() } });
 

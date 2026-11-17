@@ -2,6 +2,7 @@ import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { screen, scenario } = service({
+  name: "fractionalCountOpener",
   description: "Pick a number, opening the picker with a fractional count",
 });
 

@@ -15,6 +15,7 @@ export const Board = singleEntity({
 });
 
 export const { command, query, createEvent, updateEvent, contract, scenario } = service({
+  name: "todo",
   description: "Keep tasks",
   entities: { Task, Board },
   invariants: {

@@ -7,7 +7,7 @@ export const Task = entity({
   key: "id",
 });
 
-export const { query, contract } = service({ description: "Keep the tasks", entities: { Task } });
+export const { query, contract } = service({ name: "todo", description: "Keep the tasks", entities: { Task } });
 
 export const recent = query({
   input: { limit: z.number().int().positive() },

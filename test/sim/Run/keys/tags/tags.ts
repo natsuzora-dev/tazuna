@@ -9,6 +9,7 @@ export const Label = entity({
 });
 
 export const { automation, command, createEvent, event, query, contract } = service({
+  name: "tags",
   description: "Label each registered note, and tell notes the label",
   entities: { Label },
 });

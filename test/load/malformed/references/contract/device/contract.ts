@@ -1,6 +1,7 @@
 import { externalService } from "@natsuzora-dev/tazuna";
 
 export const { command, contract } = externalService({
+  name: "device",
   description: "Play sounds and mute the device, whose mute command is not exported",
 });
 

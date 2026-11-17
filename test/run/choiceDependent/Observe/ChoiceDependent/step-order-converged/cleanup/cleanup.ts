@@ -8,6 +8,7 @@ export const Task = entity({
 });
 
 export const { automation, command, createEvent, deleteEvent, updateEvent, contract, scenario } = service({
+  name: "cleanup",
   description: "Keep the tasks, and mark each added task done and drop it",
   entities: { Task },
 });

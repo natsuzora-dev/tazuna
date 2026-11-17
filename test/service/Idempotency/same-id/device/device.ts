@@ -1,6 +1,7 @@
 import { externalService } from "@natsuzora-dev/tazuna";
 
 export const { command, event, contract } = externalService({
+  name: "device",
   description: "Ask the user for notification permission",
 });
 

@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen } = service({ description: "Pick a task" });
+export const { screen } = service({ name: "screens", description: "Pick a task" });
 
 export const pickerScreen = screen({
   description: "A picker, which no screen opens, so no screen reads its output",

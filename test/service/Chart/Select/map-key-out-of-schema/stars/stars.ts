@@ -1,7 +1,7 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event, scenario } = service({ description: "Mark per task" });
+export const { command, machine, event, scenario } = service({ name: "stars", description: "Mark per task" });
 
 export const taskStarred = event({ payload: { taskId: z.string() } });
 export const noted = event({ payload: { taskId: z.string() } });

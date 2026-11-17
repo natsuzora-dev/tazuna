@@ -9,6 +9,7 @@ export const OpenTask = entity({
 });
 
 export const { automation, command, createEvent, contract, scenario } = service({
+  name: "notifier",
   description: "Notify tasks",
   entities: { OpenTask },
 });

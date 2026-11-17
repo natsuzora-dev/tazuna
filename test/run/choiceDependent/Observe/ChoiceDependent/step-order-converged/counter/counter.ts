@@ -5,6 +5,7 @@ export const Mark = entity({ description: "A mark", fields: { id: z.string() }, 
 export const Flag = singleEntity({ description: "A flag", fields: { isOn: z.boolean().default(false) } });
 
 export const { automation, command, machine, event, createEvent, updateEvent, contract, scenario } = service({
+  name: "counter",
   description: "Mark each added task, raise a flag, and notice when there is a mark",
   entities: { Mark, Flag },
 });

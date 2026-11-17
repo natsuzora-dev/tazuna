@@ -1,1 +1,1 @@
-{"kind":"Illegal.indexReason","definition":{"service":"todo","name":"renameTask"},"data":{"reason":"1"},"location":{"file":"todo/todo.ts","line":16}}
+{"kind":"Illegal.indexReason","definition":{"service":"todo","name":"renameTask"},"data":{"reason":"1"},"location":{"file":"todo/todo.ts","line":20}}

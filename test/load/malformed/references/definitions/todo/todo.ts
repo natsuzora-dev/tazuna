@@ -10,6 +10,7 @@ export const Mark = entity({
 });
 
 export const { automation, command, createEvent, event, machine, query, contract } = service({
+  name: "todo",
   description: "Keep the tasks, whose entity and two definitions are not exported",
   entities: { Task, Mark },
 });
@@ -26,7 +27,7 @@ const markSeen = command({ emits: [] }).decide(() => []);
 
 export const seenMarked = automation({ receives: { taskSeen }, commands: { markSeen } }).send({});
 
-const { event: noteEvent } = service({ description: "Keep the notes" });
+const { event: noteEvent } = service({ name: "todo", description: "Keep the notes" });
 
 export const noted = noteEvent({});
 

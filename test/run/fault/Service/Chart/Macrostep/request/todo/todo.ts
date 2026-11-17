@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
-export const { query, contract } = service({ description: "Keep the tasks", entities: { Task } });
+export const { query, contract } = service({ name: "todo", description: "Keep the tasks", entities: { Task } });
 
 export const titled = query({
   input: { prefix: z.string() },

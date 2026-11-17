@@ -9,6 +9,7 @@ import type {
   DeleteEvent,
   Emit,
   FieldsEvent,
+  Owned,
   Payload,
   ServiceDefinition,
   UpdateEvent,
@@ -24,26 +25,26 @@ type WritableField<E extends AnyEntity> =
 
 type KeyedIn<Es extends Entities> = Extract<Es[keyof Es], AnyKeyedEntity>;
 
-export type CreateEventDefiner<Es extends Entities> = <const E extends KeyedIn<Es>>(definition: {
+export type CreateEventDefiner<Es extends Entities, N extends string> = <const E extends KeyedIn<Es>>(definition: {
   entity: E;
-}) => CreateEvent<E>;
+}) => CreateEvent<E> & Owned<N>;
 
-export type UpdateEventDefiner<Es extends Entities> = <
+export type UpdateEventDefiner<Es extends Entities, N extends string> = <
   const E extends Es[keyof Es],
   const W extends WritableField<E>,
 >(definition: {
   entity: E;
   /** The fields that the event writes, never the key. */
   writes: readonly W[];
-}) => UpdateEvent<E, W>;
+}) => UpdateEvent<E, W> & Owned<N>;
 
-export type DeleteEventDefiner<Es extends Entities> = <const E extends KeyedIn<Es>>(definition: {
+export type DeleteEventDefiner<Es extends Entities, N extends string> = <const E extends KeyedIn<Es>>(definition: {
   entity: E;
-}) => DeleteEvent<E>;
+}) => DeleteEvent<E> & Owned<N>;
 
-export type EventDefiner = <const S extends Shape = Record<never, never>>(definition: {
+export type EventDefiner<N extends string> = <const S extends Shape = Record<never, never>>(definition: {
   payload?: S & SomeKey<keyof S>;
-}) => FieldsEvent<S>;
+}) => FieldsEvent<S> & Owned<N>;
 
 type EventOptions = {
   entity?: AnyEntity;

@@ -25,7 +25,7 @@ To list the commands and their options, run `npx tazuna --help`.
 
 ## Spec folder layout
 
-Each folder directly under the spec folder holds one service, and the folder name is the service name.
+Each folder directly under the spec folder holds one service, and the folder name is the service name, which its `service()` or `externalService()` call writes as `name` so that types can carry it.
 For example, `spec/todo/` holds the `todo` service.
 
 A service folder holds one file for each kind of definition:

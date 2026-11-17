@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { machine, scenario } = service({ description: "Count per tag" });
+export const { machine, scenario } = service({ name: "counters", description: "Count per tag" });
 
 export const tagCounter = machine({
   description: "Count the visits of each tag, and set the count below the minimum when a copy starts",

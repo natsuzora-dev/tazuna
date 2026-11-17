@@ -12,7 +12,11 @@ export const Task = entity({
   key: "id",
 });
 
-export const { command, createEvent, event } = service({ description: "Keep the tasks", entities: { Task } });
+export const { command, createEvent, event } = service({
+  name: "todo",
+  description: "Keep the tasks",
+  entities: { Task },
+});
 
 export const taskAdded = createEvent({ entity: Task });
 export const noteAdded = event({ payload: { text: z.string() } });

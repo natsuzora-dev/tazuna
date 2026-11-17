@@ -2,7 +2,7 @@ import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 
-export const { automation, command, event } = service({ description: "Notify about tasks" });
+export const { automation, command, event } = service({ name: "notifier", description: "Notify about tasks" });
 
 export const followUpAdded = event({ payload: { taskId: z.string() } });
 

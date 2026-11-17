@@ -5,7 +5,7 @@ import { todo } from "./contract.ts";
 import { addTask, scenario } from "./todo.ts";
 
 export const listsPeerUnderOtherName = scenario("List calendar under the key cal; check reports misnamedPeer for cal", {
-  given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: { cal: external(calendar) } },
+  given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: { cal: unchecked(external(calendar)) } },
   when: (w) => ({ add: w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }) }),
   then: () => [],
 });
@@ -19,7 +19,7 @@ export const listsUnknownPeers = scenario(
       peers: {
         calendar: external(calendar),
         notifier: skip(notifier, "notifier's reactions are its own scenarios"),
-        todo: skip(todo, "todo is the own service"),
+        todo: unchecked(skip(todo, "todo is the own service")),
         nobody: skip(unchecked({}), "no service"),
       },
     },

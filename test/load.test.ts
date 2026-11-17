@@ -16,6 +16,7 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.listedUnderOtherName": true,
   "Malformed.serviceInSharedFolder": true,
   "Malformed.splitService": true,
+  "Malformed.misnamedService": true,
   "Malformed.duplicateName": true,
   "Malformed.alias": true,
   "Malformed.opaqueCollection": true,

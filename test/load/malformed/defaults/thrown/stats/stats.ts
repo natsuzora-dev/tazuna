@@ -10,4 +10,4 @@ export const Stats = singleEntity({
   },
 });
 
-export const { command } = service({ description: "Keep the statistics", entities: { Stats } });
+export const { command } = service({ name: "stats", description: "Keep the statistics", entities: { Stats } });

@@ -4,6 +4,7 @@ import { z } from "zod";
 export const Counter = singleEntity({ description: "A counter", fields: { value: z.number().default(0) } });
 
 export const { command, machine, updateEvent, scenario } = service({
+  name: "tally",
   description: "Keep a tally",
   entities: { Counter },
 });

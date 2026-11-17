@@ -2,6 +2,7 @@ import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, machine, event, contract, scenario } = service({
+  name: "echo",
   description: "Ping in a chain for each added task",
 });
 

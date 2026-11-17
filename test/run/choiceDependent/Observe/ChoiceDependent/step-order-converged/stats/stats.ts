@@ -9,6 +9,7 @@ export const Stats = singleEntity({
 });
 
 export const { automation, command, createEvent, updateEvent, contract, scenario } = service({
+  name: "stats",
   description: "Keep the tasks and their statistics",
   entities: { Task, Stats },
 });

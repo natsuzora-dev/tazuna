@@ -1,6 +1,6 @@
 import { any, service, unchecked } from "@natsuzora-dev/tazuna";
 
-export const { screen, contract } = service({ description: "Show a list" });
+export const { screen, contract } = service({ name: "screens", description: "Show a list" });
 
 export const listScreen = screen({
   description: "A list whose own offers leave out the control close",

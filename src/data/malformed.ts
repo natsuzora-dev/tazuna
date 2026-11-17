@@ -14,6 +14,8 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `missingDefiner`: the definer that the definition names is not exported.
  * - `listedUnderOtherName`: a service definer lists the entity under `key`, not under its export name, which also names
  *   its records.
+ * - `misnamedService`: the service definer whose folder is `folder` has the name `name`; a service's name is its
+ *   folder's name, which contracts and scenarios carry as a type.
  * - `duplicateName`: `name` also names another definition, scenario, or `constants()` call of the service in the file
  *   `elsewhere`.
  * - `alias`: the definition, scenario, or `constants()` call is already exported as `name`.
@@ -40,6 +42,7 @@ export type Malformed =
   | Of<"listedUnderOtherName", DefinitionRef, { readonly key: string }>
   | Of<"serviceInSharedFolder", null, { readonly folder: string }>
   | Of<"splitService", null, { readonly folder: string; readonly elsewhere: string }>
+  | Of<"misnamedService", null, { readonly folder: string; readonly name: string }>
   | Of<"duplicateName", null, { readonly name: string; readonly elsewhere: string }>
   | Of<"alias", null, { readonly name: string; readonly alias: string }>
   | Of<"opaqueCollection", DefinitionRef, { readonly path: readonly string[]; readonly collection: Collection["kind"] }>

@@ -1,7 +1,7 @@
 import { bag, constants, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { query, contract } = service({ description: "Answer the marks" });
+export const { query, contract } = service({ name: "todo", description: "Answer the marks" });
 
 export const marksWithVisibleCollections = query({
   output: {

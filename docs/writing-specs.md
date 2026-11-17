@@ -54,6 +54,7 @@ export const completeTwice = scenario("Complete a task twice; todo rejects the s
 
 Write every record that a running service starts from: nothing defaults, and a single entity needs its record.
 List in `peers` every service that the own service exchanges messages with, as `run(contract, records)`, `external(contract)`, or `skip(contract, because)`.
+Key each by its service name; the types reject another key, the own service as a peer, and a line that names a message to a service that is neither the own service nor a running or external peer.
 Repeat lines with a plain TypeScript function, such as a function that adds a task and delivers the calendar's answer.
 
 Precedent: Given-When-Then (Behavior-Driven Development).

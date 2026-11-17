@@ -2,6 +2,7 @@ import { service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
 export const { automation, contract, machine } = service({
+  name: "notifier",
   description: "Mark each added task seen, ping todo, and follow todo's notes",
 });
 

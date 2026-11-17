@@ -9,6 +9,7 @@ export const Winner = singleEntity({
 });
 
 export const { command, machine, createEvent, updateEvent, contract, scenario } = service({
+  name: "claims",
   description: "Let each added task claim the winner",
   entities: { Task, Winner },
 });

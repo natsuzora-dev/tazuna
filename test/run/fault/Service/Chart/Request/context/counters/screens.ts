@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen, scenario } = service({ description: "Open a counter from a negative start" });
+export const { screen, scenario } = service({ name: "counters", description: "Open a counter from a negative start" });
 
 export const counterScreen = screen({
   description: "Count up from the given start",

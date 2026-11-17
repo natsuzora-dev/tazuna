@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 
-export const { machine } = service({ description: "Play a sound, then mute the device" });
+export const { machine } = service({ name: "app", description: "Play a sound, then mute the device" });
 
 export const player = machine({
   description: "Play a sound, then mute the device",

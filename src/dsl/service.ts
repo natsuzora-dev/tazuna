@@ -17,6 +17,7 @@ import type {
   Emits,
   FieldsEvent,
   Now,
+  Owned,
   Payload,
   Query,
   ServiceDefinition,
@@ -36,7 +37,7 @@ import type { IsUnion } from "./tree.ts";
 type Input<I extends Shape> = Row<I>;
 type Bound<B> = { readonly [K in keyof B]: NonNullable<B[K]> };
 
-interface Definers<Es extends Entities> {
+interface Definers<Es extends Entities, N extends string> {
   /** Defines a command: a request to change records. */
   command<
     const I extends Shape = Record<never, never>,
@@ -58,7 +59,7 @@ interface Definers<Es extends Entities> {
     requires?: Named<Rq, { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now>;
     /** `records` holds the records after the events; `bound` holds the values from before them. */
     ensures?: Named<En, { input: Input<I>; records: Records<Es>; bound: Bound<B> }>;
-  }): CommandSetup<I, Ev, B, Rq, Es>;
+  }): CommandSetup<I, Ev, B, Rq, Es, N>;
   /** Defines a query: a request to read records. */
   query<
     const I extends Shape = Record<never, never>,
@@ -72,7 +73,7 @@ interface Definers<Es extends Entities> {
     /** Checked as a command's `requires`. */
     requires?: Named<Rq, { input: Input<I> }>;
     ensures?: Named<En, { input: Input<I>; output: Row<O>; records: Records<Es> }>;
-  }): QuerySetup<I, O, Rq, Es>;
+  }): QuerySetup<I, O, Rq, Es, N>;
   /**
    * Defines an automation: on each received event it sends one command and keeps no context. Waiting for an answer or a
    * deadline, or reacting to a rejection, needs a machine (NonCanonical.statelessMachine).
@@ -93,30 +94,39 @@ interface Definers<Es extends Entities> {
   /** Defines a machine driven by user operations that shows query answers. */
   screen: ScreenDefiner<Es>;
   /** Defines an event that creates a record; the payload is the whole record. */
-  createEvent: CreateEventDefiner<Es>;
+  createEvent: CreateEventDefiner<Es, N>;
   /**
    * Defines an event that updates the `writes` fields; the payload is the key (none for a single entity) and those
    * fields.
    */
-  updateEvent: UpdateEventDefiner<Es>;
+  updateEvent: UpdateEventDefiner<Es, N>;
   /** Defines an event that deletes a record; the payload is the key. */
-  deleteEvent: DeleteEventDefiner<Es>;
+  deleteEvent: DeleteEventDefiner<Es, N>;
   /** Defines an event that changes no record, with the fields of `payload`. */
-  event: EventDefiner;
+  event: EventDefiner<N>;
   /** Defines the contract of the service, whose spec tazuna runs. */
-  contract: ContractDefiner<RecordsData<Es>, "spec">;
+  contract: ContractDefiner<RecordsData<Es>, "spec", N>;
   /** Defines a scenario of the service (ScenarioDefiner). */
-  scenario: ScenarioDefiner<RecordsData<Es>>;
+  scenario: ScenarioDefiner<RecordsData<Es>, N>;
 }
 
-interface CommandSetup<I extends Shape, Ev extends AnyEvent, B, Rq extends string, Es extends Entities> {
+interface CommandSetup<
+  I extends Shape,
+  Ev extends AnyEvent,
+  B,
+  Rq extends string,
+  Es extends Entities,
+  N extends string,
+> {
   decide(
     decide: (args: { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now) => Emits<Ev>,
-  ): Command<I, Ev, keyof B & string, Rq, undefined, undefined>;
+  ): Command<I, Ev, keyof B & string, Rq, undefined, undefined> & Owned<N>;
 }
 
-interface QuerySetup<I extends Shape, O extends Shape, Rq extends string, Es extends Entities> {
-  resolve(resolve: (args: { input: Input<I>; records: Records<Es> } & Now) => MadeRow<O>): Query<I, O, Rq, undefined>;
+interface QuerySetup<I extends Shape, O extends Shape, Rq extends string, Es extends Entities, N extends string> {
+  resolve(
+    resolve: (args: { input: Input<I>; records: Records<Es> } & Now) => MadeRow<O>,
+  ): Query<I, O, Rq, undefined> & Owned<N>;
 }
 
 type AutomationArgs<Ev extends AnyEvent, Es extends Entities> = Now & {
@@ -168,7 +178,7 @@ interface AutomationSetup<Ev extends AnyEvent, Cs extends Readonly<Record<string
 type Emitted<Ev> = Ev extends AnyEvent ? Emit<Ev> : never;
 type OutputArgs<O extends Shape> = [keyof O] extends [never] ? unknown : { output: Row<O> };
 
-interface ExternalDefiners {
+interface ExternalDefiners<N extends string> {
   /** Defines a command whose answers and `emits` events the external implementation makes. */
   command<
     const I extends Shape = Record<never, never>,
@@ -189,7 +199,7 @@ interface ExternalDefiners {
     requires?: Named<Rq, { input: Input<I> }>;
     /** `events` are the events that have arrived as results of the request (resultOf). */
     ensures?: Named<En, { input: Input<I>; events: readonly Emitted<Ev>[] } & OutputArgs<O>>;
-  }): Command<I, Ev, never, Rq, [keyof O] extends [never] ? undefined : O, Rj>;
+  }): Command<I, Ev, never, Rq, [keyof O] extends [never] ? undefined : O, Rj> & Owned<N>;
   /** Defines a query whose answers the external implementation makes. */
   query<
     const I extends Shape = Record<never, never>,
@@ -207,40 +217,50 @@ interface ExternalDefiners {
     /** The external implementation rejects with `requires` when one fails. */
     requires?: Named<Rq, { input: Input<I> }>;
     ensures?: Named<En, { input: Input<I>; output: Row<O> }>;
-  }): Query<I, O, Rq, Rj>;
+  }): Query<I, O, Rq, Rj> & Owned<N>;
   /** Defines an event that the external implementation emits, with the fields of `payload`. */
-  event: EventDefiner;
+  event: EventDefiner<N>;
   /** Defines the contract of the service, which tazuna takes as contract only. */
-  contract: ContractDefiner<Record<never, never>, "external">;
+  contract: ContractDefiner<Record<never, never>, "external", N>;
 }
 
 /**
  * Defines an external service (for example an OS calendar): the spec states only `requires` and `ensures` of its
  * answers and events, never how they are made.
  */
-export function externalService(definition: { description: string }): ExternalDefiners {
-  const owner = serviceDefinition({ description: definition.description, entities: {} }, true);
+export function externalService<const N extends string>(definition: {
+  /** The service's name, the name of its folder. */
+  name: N;
+  description: string;
+}): ExternalDefiners<N> {
+  const owner = serviceDefinition({ name: definition.name, description: definition.description, entities: {} }, true);
   const command = (d: CommandOptions) => commandOf(owner, d, undefined);
   const query = (d: QueryOptions) => queryOf(owner, d, undefined);
   const { event } = eventDefiners(owner);
   const contract = contractDefiner(owner);
   register(owner, [command, query, event, contract]);
-  return { command, query, event, contract } as unknown as ExternalDefiners;
+  return { command, query, event, contract } as unknown as ExternalDefiners<N>;
 }
 
 /** Defines a service that owns `entities` and returns its definers. */
-export function service<const Es extends Entities = Record<never, never>, const Iv extends string = never>(definition: {
+export function service<
+  const N extends string,
+  const Es extends Entities = Record<never, never>,
+  const Iv extends string = never,
+>(definition: {
+  /** The service's name, the name of its folder. */
+  name: N;
   description: string;
   entities?: Es & SomeKey<keyof Es>;
   /** The conditions over all records (Fault.failedServiceInvariant). */
   invariants?: Named<Iv, { records: Records<Es> }>;
-}): Definers<Es> {
+}): Definers<Es, N> {
   return definers(
     serviceDefinition(
-      definition as { description: string; entities?: Entities; invariants?: Conditions<never> },
+      definition as { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },
       false,
     ),
-  ) as unknown as Definers<Es>;
+  ) as unknown as Definers<Es, N>;
 }
 
 type CommandOptions = {
@@ -261,11 +281,12 @@ type QueryOptions = {
 };
 
 function serviceDefinition(
-  definition: { description: string; entities?: Entities; invariants?: Conditions<never> },
+  definition: { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },
   external: boolean,
 ): ServiceDefinition {
   return {
     kind: "service",
+    name: definition.name,
     description: definition.description,
     entities: definition.entities ?? {},
     invariants: definition.invariants ?? {},
@@ -309,7 +330,7 @@ function register(owner: ServiceDefinition, definers: readonly object[]): void {
   for (const definer of definers) definerOwners.set(definer, owner);
 }
 
-function definers(owner: ServiceDefinition): Definers<Entities> {
+function definers(owner: ServiceDefinition): Definers<Entities, string> {
   const command = (d: CommandOptions) => ({
     decide: (decide: (args: never) => Emits) => commandOf(owner, d, decide),
   });
@@ -349,7 +370,7 @@ function definers(owner: ServiceDefinition): Definers<Entities> {
     contract,
     scenario,
     ...events,
-  } as unknown as Definers<Entities>;
+  } as unknown as Definers<Entities, string>;
 }
 
 type Member = FieldsEvent | AnyCommand | AnyQuery | z.ZodType | ConstantsGroup;
@@ -366,7 +387,9 @@ type Members<M> = { readonly [K in keyof M]: Member };
 /**
  * Marks the members that other services may refer to (Restricted.crossServiceImport), possibly none.
  */
-type ContractDefiner<R, K extends "spec" | "external"> = <const M extends Members<M>>(members: M) => Contract<M, R, K>;
+type ContractDefiner<R, K extends "spec" | "external", N extends string> = <const M extends Members<M>>(
+  members: M,
+) => Contract<M, R, K, N>;
 
 const contractDefiner =
   (owner: ServiceDefinition) =>

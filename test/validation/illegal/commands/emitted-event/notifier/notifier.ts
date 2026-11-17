@@ -1,7 +1,7 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 
-export const { command, event, contract } = service({ description: "Notify about tasks" });
+export const { command, event, contract } = service({ name: "notifier", description: "Notify about tasks" });
 
 export const announced = event({});
 

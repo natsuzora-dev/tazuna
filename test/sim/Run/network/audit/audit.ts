@@ -1,7 +1,7 @@
 import { service } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 
-export const { machine, contract } = service({ description: "Follow calendar's confirmations" });
+export const { machine, contract } = service({ name: "audit", description: "Follow calendar's confirmations" });
 
 export const confirmations = machine({
   description: "Take calendar's confirmations",

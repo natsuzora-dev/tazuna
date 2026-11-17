@@ -4,7 +4,11 @@ import { todo } from "../todo/contract.ts";
 
 export const Draft = entity({ description: "A draft note", fields: { id: z.string() }, key: "id" });
 
-export const { screen, scenario } = service({ description: "Show the links between notes", entities: { Draft } });
+export const { screen, scenario } = service({
+  name: "screens",
+  description: "Show the links between notes",
+  entities: { Draft },
+});
 
 export const linkScreen = screen({
   description: "Two new drafts linked both ways",

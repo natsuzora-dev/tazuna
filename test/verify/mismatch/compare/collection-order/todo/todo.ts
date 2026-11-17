@@ -1,7 +1,10 @@
 import { any, bag, datetime, emit, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, query, screen, event, contract, scenario } = service({ description: "Keep tasks" });
+export const { command, query, screen, event, contract, scenario } = service({
+  name: "todo",
+  description: "Keep tasks",
+});
 
 export const Entry = z.object({ day: z.int(), title: z.string() });
 

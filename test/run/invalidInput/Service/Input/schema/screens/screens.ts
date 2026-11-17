@@ -1,7 +1,7 @@
 import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen, scenario } = service({ description: "Show the tasks" });
+export const { screen, scenario } = service({ name: "screens", description: "Show the tasks" });
 
 export const counterScreen = screen({
   description: "A counter the user sets",

@@ -25,6 +25,7 @@ export const NotificationPermission = singleEntity({
 
 export const { command, automation, machine, event, createEvent, deleteEvent, updateEvent, contract, scenario } =
   service({
+    name: "notifier",
     description: "Notify the user about open tasks, with the notification permission that it requests",
     entities: { OpenTask, NotificationPermission },
   });
