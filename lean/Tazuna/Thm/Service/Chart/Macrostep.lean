@@ -421,17 +421,6 @@ theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : S
   · cases kind
     · exact absurd rfl (ha reason)
     all_goals simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
-
-/-- A spec service's invalid-input answer to an own-service command is the sender's fault (Requester.inputFault). -/
-theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step : Nat) (c : Sent) (cause : Nat)
-    (reason : Option String) :
-    workBody st fs step (.answered c (.rejected { kind := .invalidInput, reason }) cause) ⟨s, q⟩ =
-      let t := match c.serial with
-        | some serial => (s.takeQueued serial).1
-        | none => s
-      ⟨t.report (.fault (c.requester.inputFault st c.activity.ref)), q⟩ := by
-  cases h : c.serial <;> simp [workBody, Requester.rejectedInput?, h]
-
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 

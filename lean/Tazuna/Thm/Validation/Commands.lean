@@ -36,8 +36,10 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
     ∀ e ∈ groups.flatten,
       ∃ r, some r ∈ j.emitsOf (some (st.ref name)) ∧ r.service = st.service ∧ e.event = r.name := by
   intro e he
-  obtain ⟨_, decided, _, _, hl, hdec⟩ := accepted_emits_decided records now name raw written groups vs ha
-  obtain ⟨e', he', hev⟩ := hdec e he
+  obtain ⟨_, decided, _, _, hl, out, -, hlen, hz, rfl⟩ := accepted_emits_decided records now name raw written groups vs ha
+  obtain ⟨e', hx⟩ := Tazuna.Thm.Data.Basic.exists_zip_of_mem_right hlen (mem_orderedGroups _ _ e he)
+  have he' := (List.of_mem_zip hx).1
+  have hev := (hz _ hx).1
   have hlist := hl e' he'
   simp only [Service.lists, hj, List.any_eq_true] at hlist
   obtain ⟨_ | r, ho, hname⟩ := hlist

@@ -20,17 +20,6 @@ theorem send_keysDistinct (name : String) (id : Option String) (raw : Value) (h 
     · exact message_keysDistinct _ (by rw [answer_records]; exact h)
     · exact message_keysDistinct _ (processCommand_keysDistinct _ _ _ _ h)
   · exact h
-
-/--
-A spec service's invalid-input answer to another spec service's request is the sender's fault: only the receiver parses
-a message, so the sender wrote an input that the receiver's schema does not take.
--/
-theorem invalid_input_answer_faults_sender (p : Pending) (reason : Option String)
-    (ha : st.«structure».isAssumed p.activity.ref = false) :
-    checkAnswer st fs p (.rejected { kind := .invalidInput, reason }) =
-      .ok { decoded := .error (.fault (p.requester.inputFault st p.activity.ref)) } := by
-  simp [checkAnswer, specAnswer, Requester.rejectedInput?, ha]
-
 theorem resent_command_gets_first_answer (name id : String) (raw : Value)
     (known : Request × Answer) (hc : name ∈ st.commands)
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 = { name, input := raw }) :
@@ -51,12 +40,4 @@ theorem redelivered_event_not_processed (name id : String) (raw : Value) (hh : s
     (hd : id ∈ s.deliveries) :
     receive st fs s name (some id) raw none = message st fs (delivered s name id raw).newMessage {} := by
   simp [receive, redeliver, withResultOf, hh, hd, delivered, State.lineId]
-
-theorem send_is_one_message (name : String) (id : Option String) (raw : Value) (hc : name ∈ st.commands) :
-    ∃ s' q, send st fs s name id raw = message st fs s' q := by
-  simp only [send, hc, ↓reduceIte, id_bind]
-  split
-  · exact ⟨_, _, rfl⟩
-  · exact ⟨_, _, rfl⟩
-
 end Tazuna.Thm.Service.Input

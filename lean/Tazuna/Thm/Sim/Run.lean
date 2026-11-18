@@ -495,15 +495,6 @@ theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line
       | some p => simp only [World.take, bind, pure]; same_tac
     | _ => simp only [reaches, reduceCtorEq] at hl <;> simp only [World.take, bind, pure] <;> same_tac
   · exact same_report (same_refl w) r
-
-/-- A clock line sends each subscription answer that the new time changes, after its time line. -/
-theorem clock_line_publishes (time : Time) (st : Service) (fs : Functions Id) (s : State)
-    (h : (fireDue st fs time Limit.dueDeadlines.max none s).halted = none) :
-    fireTo time st fs s =
-      let t := fireDue st fs time Limit.dueDeadlines.max none s
-      publish st fs ({ t with now := max t.now time }.write .in none .time).1 := by
-  simp [fireTo, h]
-
 /-- An answer that arrives again with the id of an earlier one is written and not processed again. -/
 theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer)
     (hd : id ∈ s.deliveries) :

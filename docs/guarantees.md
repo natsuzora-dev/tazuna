@@ -124,7 +124,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
-| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, the order of two steps with equal step names, which the search takes as one step (it relies on equal names running equal work, which no theorem states yet), and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
+| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, the order of two steps with equal step names, which the search takes as one step although their work can differ (two answers to equal commands, or two event groups for one machine whose first events are equal), and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 
@@ -135,6 +135,8 @@ tazuna detects a break of each assumption only partly or not at all.
 
 - **Runtime.** The TypeScript runtime returns the same traces and violations as the Lean definitions.
   Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
+  The theorems are about the Lean definitions with pure spec functions (`Functions Id`), and about a scenario's start only through hypotheses such as distinct Given keys.
+  `test` runs the definitions with the spec functions of the TypeScript runtime and passes `verify`'s comparison to the exploration, so its runs rest on this assumption.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
@@ -164,6 +166,14 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 
 - Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit (`drain` in `lean/Tazuna/Service/Chart/Macrostep.lean`, `settle` in `lean/Tazuna/Service/Chart/Always.lean`, `exitOne` in `lean/Tazuna/Service/Chart/Exit.lean`, `fireDue` in `lean/Tazuna/Service/Queue.lean`).
 - The service answers a repeated query again, because a query has no identity (`call` in `lean/Tazuna/Service/Input.lean`).
+- A refuse line gives the sender the `unavailable` answer (`take` in `lean/Tazuna/Sim/Run.lean`).
+- A halting `Fault` or `InvalidInput` stops the simulation (`stopped` in `lean/Tazuna/Sim/Network.lean`).
+- A clock line publishes the subscription answers that the new time changes (`fireTo` in `lean/Tazuna/Sim/Run.lean`).
+- Only a clock line moves the current time (`fireTo` in `lean/Tazuna/Sim/Run.lean`).
+- A command is processed as one message (`send` in `lean/Tazuna/Service/Input.lean`).
+- Several open instances of one screen are each operable: an operation names its instance by the line that opened it (`operate` in `lean/Tazuna/Service/Input.lean`).
+- Only the receiver of a message parses its value, and a spec service's `invalid-input` answer to another spec service is the sender's `Fault` (`checkAnswer` in `lean/Tazuna/Service/Input.lean`).
+- A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it (`withoutRepeatedAnswers` in `lean/Tazuna/Verify/Compare.lean`).
 - Spec functions read the keys of an entity in one order, whatever order the records were written in.
   Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
 
@@ -178,30 +188,28 @@ A map state has one *copy* of its child states for each key of its items.
 
 - Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone (`then_only_reports`). The checks at the end of a run also only add violations (`simulate_reported`).
 - A line changes no message in flight except the one that its handle names, and only a deliver, lose, or refuse line removes one (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
-- Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line. A refuse line gives the sender the `unavailable` answer (`line_keeps_states`).
+- Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line (`line_keeps_states`).
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer to a request that has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
-- A halting violation stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
-- No two createKey calls of the running services return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<service>/<Entity>-<n>` (`created_distinct`), and no key that the scenario may write, such as a Given key, is ever created (`unwritten_not_created`, `execute_unwritten_not_created`).
-- The order in which Given writes the records does not matter: a scenario that writes the same records in another order simulates alike (`simulate_records_perm`).
-- The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no run: a service whose spec functions are audited starts, processes each input, and checks the end of a run as it does without the audit (`instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkResults_agrees`).
+- A halting `InvalidScenario` violation stops the simulation, and once the simulation stops, the steps of the later lines take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
+- No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created, provided the key names the service as its owner (`unwritten_not_created`, `execute_unwritten_not_created`).
+- The order in which Given writes the records does not matter: a scenario that writes the same records, no two with one key, in another order simulates alike (`simulate_records_perm`).
+- The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no run of the pure definitions: a service whose spec functions are audited starts, processes each input, and checks the end of a run as it does without the audit (`instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkResults_agrees`).
 
 ### Data validity
 
-- The service normalizes the payload of each event that a command emits and the output of each query answer with the declared schema before it sends them (`decide_payloads_sorted_before_normalize`, `resolve_output_sorted_before_normalize`).
-- An accepted command emits only events that its `decide` returned and its `emits` lists. An unlisted event halts the run (`accepted_emits_decided`, `unlisted_emitted_event_halts`).
+- An accepted command emits exactly the events that its `decide` returned, each once, with its payload normalized by the declared schema, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run (`accepted_emits_decided`, `unlisted_emitted_event_halts`).
+- The service normalizes the output of each query answer with the declared schema (`resolve_output_sorted_before_normalize`).
 - When the input of a command or query does not fit its schema, the service rejects it with `invalid-input` (`command_invalid_input_rejected`, `query_invalid_input_rejected`).
-- Only the receiver of a message parses its value. A spec service's `invalid-input` answer to another spec service is the sender's `Fault` (`invalid_input_answer_faults_sender`, `invalid_input_command_answer_faults_sender`).
 
 ### Statecharts
 
-Charts follow the SCXML (W3C) algorithm (`enters_initial`, `microstep_exits_in_exit_order`, `exitOrder_descendants_first`, `microstep_enters_in_entry_order`, `entryOrder_ancestors_first`, `select_one_per_leaf`, `always_one_per_atomic`, `descendant_replaces_ancestor`, `leaf_selects_innermost`, `ancestor_target_exits`, `untaken_operation_changes_nothing`).
+Charts have these properties of the SCXML (W3C) algorithm: a chart enters its initial states, a microstep exits descendants before ancestors and enters ancestors before descendants, it takes only transitions that active leaves pick, in leaf order, a leaf picks a transition of its innermost state that takes the event, and a transition to an ancestor exits it (`enters_initial`, `microstep_exits_in_exit_order`, `exitOrder_descendants_first`, `microstep_enters_in_entry_order`, `entryOrder_ancestors_first`, `select_follows_leaves`, `select_picked_by_leaf`, `leaf_selects_innermost`, `ancestor_target_exits`, `untaken_operation_changes_nothing`).
 The following items are tazuna's own:
 
 - A transition to a descendant of its source exits the source when it reenters, and keeps it otherwise (`reenter_true_exits`, `reenter_false_not_exited`).
 - A stopped instance processes no event (`stopped_machine_takes_no_event`).
-- An event without a key reaches every copy of a map state (`keyless_payload_reaches_all`).
-- When the copies of a map state have distinct keys, an event with a key reaches at most one copy (`keyed_payload_reaches_at_most_one`).
+- Of the copies of a map state, the reach filter keeps every copy for an event without a key (`keyless_payload_reaches_all`), and at most one copy for an event with a key when the copies have distinct keys (`keyed_payload_reaches_at_most_one`).
 
 ### Requests and deadlines of a state
 
@@ -209,29 +217,27 @@ The following items are tazuna's own:
 - Leaving a state makes its awaited requests and queued commands stale (`leave_makes_requests_stale`, `leave_makes_queued_stale`).
 - An answer to a stale request only ends the wait for it (`stale_answer_ignored`, `stale_command_answer_ignored`).
 - A state that is exited before it sends its requests sends nothing (`exited_state_sends_nothing`).
-- Stopping an instance cancels the deadlines and requests of its active states (`endWith_cancels_deadlines_and_requests`).
+- When every deadline and live request of an instance belongs to one of its active states, stopping the instance cancels them all (`endWith_cancels_deadlines_and_requests`).
 
 ### Subscriptions and screens
 
-- The service sends a new answer to a subscription only when the answer changes, also when a clock line changes it (`changed_answer_sent`, `unchanged_answer_not_sent`, `clock_line_publishes`).
-- The service sends no answer to an ended subscription (`ended_subscription_not_answered`).
+- When the service publishes, it sends a new answer to a subscription only when the answer changes (`changed_answer_sent`, `unchanged_answer_not_sent`).
+- Publishing sends no answer to a subscription id that no open subscription has (`ended_subscription_not_answered`).
 - Opening a screen creates one child instance of the opened screen (`entering_opens_one_child`).
-- An operation reaches a screen only when no modal screen that was opened later is still open, as in the WAI-ARIA modal dialog (`modal_child_covers`).
-- A non-modal child screen leaves its parent operable, and several open instances of one screen are each operable: an operation names its instance by the line that opened it (`nonmodal_child_lets_parent`).
+- Among the screens open above an operated screen, a modal one covers it, as in the WAI-ARIA modal dialog (`modal_child_covers`), and non-modal ones leave it operable (`nonmodal_child_lets_parent`).
 
 ### Time
 
-- Processing a message never changes the current time. Only a clock line moves it (`drain_keeps_now`).
-- Every line that processing a message writes carries the current time (`message_outputs_at_its_time`).
+- The steps of a message never change the current time (`drain_keeps_now`).
+- Every line that the steps of a message and the checks after them write carries the current time (`message_outputs_at_its_time`).
 - A deadline due by the time that the clock moves to fires as a message of its own, at its time (`deadline_message_at_its_time`).
 - Deadlines of one service due at the same time fire in the step order that `test` searches, whichever line moved the time (`chooseDeadline_stepOrder`).
 
 ### Processing and completion
 
-- A command takes exactly one message to completion (`send_is_one_message`).
 - A failed postcondition or invariant is a `Fault` of the command after which it fails (`failed_ensures_blames_command`, `entity_invariant_reported_iff`, `service_invariant_reported_iff`).
 - A rejected command writes no record and emits no event (`rejected_command_changes_nothing`).
-- An accepted command writes its records before any reaction to its events runs (`accepted_command_writes_then_queues_reactions`).
+- An accepted command leaves exactly the records that applying its emitted events gives (`accepted_command_writes_then_queues_reactions`).
 
 ### Ordering
 
@@ -246,13 +252,12 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - A reference that does not resolve is a `Fault` (`dangling_ref_reported_iff`).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
 - The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
-- When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
+- When an event without `resultOf` or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
 - Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each string or key as the binding pairs it, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain (`matchValue_strRenamed`).
 
 ### Restart
 
-- After a restart, a service keeps the part of its state that it persists: its records, its command answers, the events and answers that arrived, the requests it sent, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
-- A subscription lives within one process: a restart ends it, and a subscription with the same id after the restart is a new one, whose first answer `verify` expects (`restart_ends_subscriptions`).
+- A restart begins the service again from the part of its state that it persists: its records, its command answers, the events and answers that arrived, the requests it sent, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
 - A result event finds the answer to its request also when the answer arrived after a restart (`late_answer_taken`).
 - A restart reads nothing of the state that it discards (`restart_forgets`).
 

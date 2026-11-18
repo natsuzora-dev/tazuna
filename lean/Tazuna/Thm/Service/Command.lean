@@ -145,7 +145,9 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
     ∃ input decided, fs.parse (.input name) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
       (∀ e ∈ decided.flatten, st.lists name e = true) ∧
-      ∀ e ∈ groups.flatten, ∃ e' ∈ decided.flatten, e.event = e'.event := by
+      ∃ normalized, normalizeEmits st fs name decided.flatten = .ok normalized ∧
+        normalized.length = decided.flatten.length ∧
+        (∀ p ∈ decided.flatten.zip normalized, NormalizedEmit st fs p.1 p.2) ∧ groups = orderedGroups decided normalized := by
   simp only [evaluate, id_bind] at h
   split at h
   · cases h
@@ -171,11 +173,9 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                 · cases h
                 · injection h with _ h₂ _
                   subst h₂
-                  refine ⟨input, decided, hp, hd, fun e he => ?_, fun e he => ?_⟩
-                  · simpa using List.find?_eq_none.mp hf e he
-                  · obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
-                    obtain ⟨x, hx⟩ := exists_zip_of_mem_right hl (mem_orderedGroups _ _ e he)
-                    exact ⟨x, (List.of_mem_zip hx).1, (hz _ hx).1⟩
+                  obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
+                  refine ⟨input, decided, hp, hd, fun e he => ?_, out, hn, hl, hz, rfl⟩
+                  simpa using List.find?_eq_none.mp hf e he
 
 theorem processCommand_answers (name : String) (raw : Value) (id : Option String) (n : Nat) :
     (processCommand st fs s name raw id n).1.answers = s.answers := by
