@@ -2,7 +2,7 @@ import Tazuna.Data.Binding
 import Tazuna.Thm.Data.Renaming
 import Tazuna.Thm.Data.List
 
-namespace Tazuna.Thm.Data.Match
+namespace Tazuna.Thm.Data.Binding
 
 open Tazuna.Data
 open Tazuna.Thm.Data.Renaming
@@ -414,4 +414,4 @@ theorem matchValue_strRenamed {v : Values} {b : Binding} {x y : CValue} (hx : Di
     (hblank : ∀ p ∈ c.val.pairs, p.1.1 ≠ "" ∧ p.2.1 ≠ "") : Renamed (StrRenames v.domain c.val.pairs) x y :=
   Renamed.mono (fun _ _ => boundBy_strRenames hblank) (matchValue_renamed v b x y hx hy h c hc)
 
-end Tazuna.Thm.Data.Match
+end Tazuna.Thm.Data.Binding

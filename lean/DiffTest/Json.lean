@@ -71,11 +71,6 @@ partial def render : Value → String
   | .arr vs => "[" ++ ",".intercalate (vs.map render) ++ "]"
   | .obj fs => "{" ++ ",".intercalate (fs.map fun (k, v) => Lean.Json.renderString k ++ ":" ++ render v) ++ "}"
 
-def field (v : Value) (key : String) : Except String Value :=
-  match v.field? key with
-  | some x => pure x
-  | none => throw s!"missing field {key}"
-
 def asList : Value → Except String (List Value)
   | .arr vs => pure vs
   | v => throw s!"expected an array, got {render v}"

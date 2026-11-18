@@ -30,10 +30,6 @@ export const topId = (chart: string, serial = 0): InstanceId => intern({ kind: "
 export const copyId = (owner: InstanceId, map: string, key: string): InstanceId =>
   intern({ kind: "copy", owner, map, key });
 
-/** The interned id of an id read from the wire. */
-export const idOf = (id: InstanceId): InstanceId =>
-  id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, id.key);
-
 export const chartOf = (id: InstanceId): string => (id.kind === "top" ? id.chart : chartOf(id.owner));
 
 /** The instance itself, or the owner of a copy. */

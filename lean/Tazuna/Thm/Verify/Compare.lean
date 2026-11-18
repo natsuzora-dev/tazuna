@@ -1,36 +1,18 @@
 import Tazuna.Verify.Compare
-import Tazuna.Thm.Data.Match
+import Tazuna.Thm.Data.Binding
+import Tazuna.Thm.Data.Basic
 
 /-!
 What compareGroup decides: a group of `out` lines without a finding pairs every snapshot line with a trace line, one to
 one, each pair comparing equal under the binding that the comparison carries on.
 -/
 
-namespace Tazuna.Thm.Verify.Group
+namespace Tazuna.Thm.Verify.Compare
 
 open Tazuna.Data Tazuna.Verify
-open Tazuna.Thm.Data.Match
+open Tazuna.Thm.Data.Binding
+open Tazuna.Thm.Data.Basic (foldl_bind_error foldl_bind_inv)
 open Tazuna.Thm.Data.Renaming (Renamed Renamed.mono)
-
-theorem foldl_bind_error {α β ε : Type} (g : β → α → Except ε β) (e : ε) :
-    ∀ (l : List α), l.foldl (fun (acc : Except ε β) x => acc.bind fun a => g a x) (.error e) = .error e
-  | [] => rfl
-  | _ :: l => foldl_bind_error g e l
-
-theorem foldl_bind_inv {α β ε : Type} (g : β → α → Except ε β) (I : List α → List α → β → Prop)
-    (hstep : ∀ pre x rest a a', I pre (x :: rest) a → g a x = .ok a' → I (pre ++ [x]) rest a') :
-    ∀ (rest pre : List α) (a a' : β), I pre rest a →
-      rest.foldl (fun (acc : Except ε β) x => acc.bind fun a => g a x) (.ok a) = .ok a' → I (pre ++ rest) [] a'
-  | [], pre, a, a', hi, h => by cases h; simpa using hi
-  | x :: rest, pre, a, a', hi, h => by
-    simp only [List.foldl_cons] at h
-    cases hg : g a x with
-    | error e =>
-      rw [show (Except.ok a : Except ε β).bind (fun a => g a x) = g a x from rfl, hg, foldl_bind_error] at h
-      cases h
-    | ok a₁ =>
-      rw [show (Except.ok a : Except ε β).bind (fun a => g a x) = g a x from rfl, hg] at h
-      simpa using foldl_bind_inv g I hstep rest (pre ++ [x]) a₁ a' (hstep pre x rest a a₁ hi hg) h
 
 /-- Snapshot line `s` compares equal with trace line `t`, apart from their time, under a binding that `b` extends. -/
 def ContentMatch (dom : String → String) (b : Binding) (s t : Line) : Prop :=
@@ -792,4 +774,4 @@ theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Unco
   obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hb
   exact ⟨c.val.pairs_oneToOne, (hall c hc).2⟩
 
-end Tazuna.Thm.Verify.Group
+end Tazuna.Thm.Verify.Compare

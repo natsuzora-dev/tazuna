@@ -37,17 +37,6 @@ type Immutable<T> = T extends readonly (infer U)[]
     ? { readonly [K in keyof T]: Immutable<T[K]> }
     : T;
 
-interface Ref {
-  readonly service: string;
-  readonly name: string;
-}
-
-export interface LeanViolation {
-  readonly kind: string;
-  readonly definition: Ref | null;
-  readonly data: unknown;
-}
-
 export type VerifyViolation = Mismatch | Uncomparable;
 
 const fileLines = (lines: readonly FileLine[]) =>

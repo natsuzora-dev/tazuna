@@ -1,7 +1,7 @@
 import Tazuna.Thm.Verify.Pairing
 import Tazuna.Data.Canonical
 
-namespace Tazuna.Thm.Verify.Canonical
+namespace Tazuna.Thm.Data.Canonical
 
 open Tazuna.Data Tazuna.Thm.Verify.Pairing Tazuna.Verify
 
@@ -70,4 +70,4 @@ theorem ReorderedFields.canonical_eq {fs gs : List (String × Value)} :
 
 end
 
-end Tazuna.Thm.Verify.Canonical
+end Tazuna.Thm.Data.Canonical

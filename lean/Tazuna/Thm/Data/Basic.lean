@@ -55,4 +55,24 @@ theorem exists_zip_of_mem_right {α β : Type} {l₁ : List α} {l₂ : List β}
       · obtain ⟨x, hx⟩ := ih (Nat.succ.inj hl) hy
         exact ⟨x, List.mem_cons_of_mem _ hx⟩
 
+theorem foldl_bind_error {α β ε : Type} (g : β → α → Except ε β) (e : ε) :
+    ∀ (l : List α), l.foldl (fun (acc : Except ε β) x => acc.bind fun a => g a x) (.error e) = .error e
+  | [] => rfl
+  | _ :: l => foldl_bind_error g e l
+
+theorem foldl_bind_inv {α β ε : Type} (g : β → α → Except ε β) (I : List α → List α → β → Prop)
+    (hstep : ∀ pre x rest a a', I pre (x :: rest) a → g a x = .ok a' → I (pre ++ [x]) rest a') :
+    ∀ (rest pre : List α) (a a' : β), I pre rest a →
+      rest.foldl (fun (acc : Except ε β) x => acc.bind fun a => g a x) (.ok a) = .ok a' → I (pre ++ rest) [] a'
+  | [], pre, a, a', hi, h => by cases h; simpa using hi
+  | x :: rest, pre, a, a', hi, h => by
+    simp only [List.foldl_cons] at h
+    cases hg : g a x with
+    | error e =>
+      rw [show (Except.ok a : Except ε β).bind (fun a => g a x) = g a x from rfl, hg, foldl_bind_error] at h
+      cases h
+    | ok a₁ =>
+      rw [show (Except.ok a : Except ε β).bind (fun a => g a x) = g a x from rfl, hg] at h
+      simpa using foldl_bind_inv g I hstep rest (pre ++ [x]) a₁ a' (hstep pre x rest a a₁ hi hg) h
+
 end Tazuna.Thm.Data.Basic

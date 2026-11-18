@@ -1,11 +1,11 @@
 import Tazuna.Thm.Data.Pairing
-import Tazuna.Thm.Verify.Canonical
+import Tazuna.Thm.Data.Canonical
 import Tazuna.Thm.Verify.Pairing
 import Tazuna.Verify.Snapshot
 
 namespace Tazuna.Thm.Verify.Snapshot
 
-open Tazuna.Data Tazuna.Thm.Data.Pairing Tazuna.Thm.Verify.Canonical Tazuna.Thm.Verify.Pairing Tazuna.Verify
+open Tazuna.Data Tazuna.Thm.Data.Pairing Tazuna.Thm.Data.Canonical Tazuna.Thm.Verify.Pairing Tazuna.Verify
 
 theorem numbered_values (snapshot : List (Option Value)) :
     (numbered snapshot).map (·.2) = snapshot.filterMap id := by

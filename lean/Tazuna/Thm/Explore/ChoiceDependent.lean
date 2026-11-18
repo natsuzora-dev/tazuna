@@ -1,10 +1,10 @@
 import Tazuna.Explore.ChoiceDependent
-import Tazuna.Thm.Data.Match
+import Tazuna.Thm.Data.Binding
 
-namespace Tazuna.Thm.Explore.Records
+namespace Tazuna.Thm.Explore.ChoiceDependent
 
 open Tazuna.Data Tazuna.Explore
-open Tazuna.Thm.Data.Match
+open Tazuna.Thm.Data.Binding
 open Tazuna.Thm.Data.Renaming (Renamed)
 
 /--
@@ -31,4 +31,4 @@ theorem sameRecords_renamed {set : List Binding} {original alternative : Outcome
     · cases e
   · split at h <;> cases h
 
-end Tazuna.Thm.Explore.Records
+end Tazuna.Thm.Explore.ChoiceDependent

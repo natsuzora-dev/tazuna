@@ -26,7 +26,7 @@ import {
   type NextKeys,
   type Scope,
 } from "../../src/service/functions.ts";
-import { chartOf, idOf, mapOf } from "../../src/service/instance.ts";
+import { chartOf, copyId, type InstanceId, mapOf, topId } from "../../src/service/instance.ts";
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
@@ -53,6 +53,10 @@ const keysOf = ({ owner, next }: LeanKeys): Keys => ({
   ...(owner === undefined ? {} : { owner }),
   next: Object.entries(next) as [string, NextKeys][],
 });
+
+/** The interned id of an id that Lean sent. */
+const idOf = (id: InstanceId): InstanceId =>
+  id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, id.key);
 
 const json = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
