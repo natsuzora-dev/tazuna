@@ -189,11 +189,9 @@ function route(w: World, o: Origin, service: string, lines: readonly Line[]): vo
         if (request !== undefined) post(w, o, service, request.service, l, request);
         break;
       }
-      case "answer": {
-        const request = requestDefinition(stateOf(w, service)?.lines ?? [], "in", l.to);
-        if (l.to.kind === "received" && request !== undefined) post(w, o, service, l.to.sender, l, request);
+      case "answer":
+        if (l.to.kind === "received") post(w, o, service, l.to.sender, l, l.request);
         break;
-      }
       case "event":
         for (const [r, p] of w.services)
           if (r !== service && p.processing.st.receives.some((e) => sameRef(e, l.event)))

@@ -23,10 +23,10 @@ theorem processCommand_grows (name : String) (raw : Value) (id : Option LineId) 
     Grows s (processCommand st fs s name raw id n).1 := by
   simp only [processCommand, id_bind]
   split
-  · exact answer_grows s _ _
+  · exact answer_grows s _ _ _
   · rename_i records emits vs _
     exact ((Grows.of_lines (reportAll_lines (s := { s with records }) vs)).trans (reportAll_now (s := { s with records }) vs)
-      (answer_grows _ id (.accepted none))).trans (by simp) (emitAll_grows _ _ _)
+      (answer_grows _ id _ (.accepted none))).trans (by simp) (emitAll_grows _ _ _)
   · exact Grows.of_lines (reportAll_lines ..)
 
 theorem evaluate_accepted_applies (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
@@ -67,10 +67,10 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option L
   · cases id <;> exact h
   · rename_i written groups vs he
     have hr := congrArg Fixed.records
-      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) id (emittedBy n groups))
+      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (st.ref name) (.accepted none)) id (emittedBy n groups))
     show KeysDistinct (State.emitAll _ id (emittedBy n groups)).records
     rw [show (State.emitAll _ id (emittedBy n groups)).records = _ from hr]
-    show KeysDistinct ((State.answer _ id _).records)
+    show KeysDistinct ((State.answer _ id _ _).records)
     rw [answer_records, reportAll_records]
     exact keysDistinct_of_not_duplicated (evaluate_accepted_applies _ _ _ _ _ _ _ he).2.1
   · show KeysDistinct (State.reportAll _ _).records
@@ -80,11 +80,11 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option L
 /-- A rejected command writes no record and emits no event: the state only gains the answer line. -/
 theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option LineId) (n : Nat) (r : Rejection)
     (h : evaluate st fs s.records s.now name raw = .rejected r) :
-    processCommand st fs s name raw id n = (s.answer id (.rejected r), .rejected r, []) ∧
+    processCommand st fs s name raw id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) ∧
       (processCommand st fs s name raw id n).1.records = s.records := by
-  have hp : processCommand st fs s name raw id n = (s.answer id (.rejected r), .rejected r, []) := by
+  have hp : processCommand st fs s name raw id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) := by
     simp only [processCommand, id_bind, h]; rfl
-  exact ⟨hp, by rw [hp]; exact answer_records s id _⟩
+  exact ⟨hp, by rw [hp]; exact answer_records s id _ _⟩
 
 theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option LineId) (n : Nat)
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
@@ -95,8 +95,8 @@ theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Val
   refine ⟨(evaluate_accepted_applies _ _ _ _ _ _ _ h).1, ?_, ?_⟩
   · simp only [processCommand, id_bind, h]
     exact (congrArg Fixed.records (emitAll_fixed
-      (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) _ _)).trans
-      (by show (State.answer _ id _).records = _; rw [answer_records, reportAll_records])
+      (s := ({ s with records := written }.reportAll vs).answer id (st.ref name) (.accepted none)) _ _)).trans
+      (by show (State.answer _ id _ _).records = _; rw [answer_records, reportAll_records])
   · simp [processCommand, h]
 
 theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value)

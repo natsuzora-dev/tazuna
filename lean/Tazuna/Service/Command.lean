@@ -99,9 +99,9 @@ def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
     (id : Option LineId) (step : Nat) : m (State × Answer × List (List Emit)) := do
   let outcome ← evaluate st fs s.records s.now name raw
   match outcome with
-  | .rejected r => pure (s.answer id (.rejected r), .rejected r, [])
+  | .rejected r => pure (s.answer id (st.ref name) (.rejected r), .rejected r, [])
   | .accepted records groups violations =>
-    let s := ({ s with records }.reportAll violations).answer id (.accepted none)
+    let s := ({ s with records }.reportAll violations).answer id (st.ref name) (.accepted none)
     pure (s.emitAll id (emittedBy step groups), .accepted none, groups)
   | .halted violations => pure (s.reportAll violations, outcome.answer, [])
 

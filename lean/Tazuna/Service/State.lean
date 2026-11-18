@@ -177,13 +177,13 @@ def State.lineId (s : State) (givenId : Option LineId) (name : String) : LineId 
   givenId.getD (.own s!"{name}#{namedCount s.service s.lines name + 1}")
 
 def State.write (s : State) (dir : Dir) (givenId : Option LineId) (body : LineBody) (emitted : Option EmittedBy := none)
-    (sender : SenderOf dir body := by exact ()) : State × LineId :=
+    (sender : SenderOf dir body := by exact ()) (request : RequestOf dir body := by exact ()) : State × LineId :=
   let id := s.lineId givenId (body.idName s.service)
-  ({ s with lines := s.lines.push { time := s.now, dir, id, body, emitted, sender } }, id)
+  ({ s with lines := s.lines.push { time := s.now, dir, id, body, emitted, sender, request } }, id)
 
 /-- The state after the request `body`, which `requester` sends, is written and awaits its answer. -/
 def State.await (s : State) (body : LineBody) (requester : Requester) (activity : Activity) (input : Value) : State :=
-  let (s, id) := s.write .out none body none (.given requester.sender .out body)
+  let (s, id) := s.write .out none body none (.given requester.sender .out body) (.given activity.ref .out body)
   { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }] }
 
 /--
@@ -251,10 +251,13 @@ def State.report (s : State) (f : Finding) : State :=
 def State.reportAll (s : State) (faults : List Fault) : State :=
   faults.foldl (fun s fault => if s.halted.isSome then s else s.report (.fault fault)) s
 
-/-- The state with the answer line to `to` written. An own-service command has no id and writes no answer line. -/
-def State.answer (s : State) (to : Option LineId) (answer : Answer) : State :=
+/--
+The state with the answer line to the request `to` of `definition` written. An own-service command has no id and writes
+no answer line.
+-/
+def State.answer (s : State) (to : Option LineId) (definition : Spec.Ref) (answer : Answer) : State :=
   match to with
-  | some to => (s.write .out none (.answer to answer)).1
+  | some to => (s.write .out none (.answer to answer) none () definition).1
   | none => s
 
 /-- Each event of `groups`, which step `step` decided, with the step and the place of its group. -/

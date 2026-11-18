@@ -50,7 +50,7 @@ export function processCommand(
   const definition = ref(r.st, name);
   r.note.reached({ kind: "request", definition, data: {} });
   const done = (answer: Answer, reached?: Obligation, groups: readonly (readonly Encoded[])[] = []) => {
-    if (id !== undefined) write(s, { dir: "out", type: "answer", to: id, answer });
+    if (id !== undefined) write(s, { dir: "out", type: "answer", to: id, answer, request: definition });
     groups.forEach((g, group) => {
       for (const e of g)
         write(s, {

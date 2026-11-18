@@ -53,6 +53,6 @@ export function publish(r: Run): void {
     const compared = r.functions.comparable(s.query, answer);
     if (compared instanceof Failed) halt(issueViolation(ref(r.st, s.query), compared));
     if (subscriptions.repeats(id, compared)) continue;
-    write(r.state, { dir: "out", type: "answer", to: id, answer });
+    write(r.state, { dir: "out", type: "answer", to: id, answer, request: ref(r.st, s.query) });
   }
 }

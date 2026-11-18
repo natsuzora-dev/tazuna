@@ -25,7 +25,7 @@ theorem resent_command_gets_first_answer (name : Spec.Ref) (id : LineId) (raw : 
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 = { name := name.name, input := raw }) :
     send st fs s name (some id) raw =
       let s' := (sent s name id raw).1
-      message st fs (s'.answer (some id) known.2) {} := by
+      message st fs (s'.answer (some id) name known.2) {} := by
   simp [send, hs, hc, hk, answerAgain, hr, sent]
 
 theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value)
@@ -33,7 +33,7 @@ theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value)
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 ≠ { name := name.name, input := raw }) :
     send st fs s name (some id) raw =
       let s' := (sent s name id raw).1
-      message st fs (s'.answer (some id) (.rejected { kind := .reusedId })) {} := by
+      message st fs (s'.answer (some id) name (.rejected { kind := .reusedId })) {} := by
   simp [send, hs, hc, hk, answerAgain, hr, sent]
 
 theorem redelivered_event_not_processed (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId)

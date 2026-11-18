@@ -63,7 +63,7 @@ export function send(r: Processing, target: DefinitionRef, input: unknown, given
     const { answer, groups } = processCommand(r, name, input, id, step);
     r.queue.tasks.push(...commandWork(r.st, s, groups, step));
     keep(s.commandAnswers, id, request, answer);
-  } else write(s, { dir: "out", type: "answer", to: id, answer: answerAgain(known, request) });
+  } else write(s, { dir: "out", type: "answer", to: id, answer: answerAgain(known, request), request: target });
   message(r);
 }
 
@@ -76,7 +76,7 @@ export function call(r: Processing, target: DefinitionRef, input: unknown, given
   if (!owns(r.st, r.st.queries, target)) unownedTarget(r, target);
   const id = write(s, { dir: "in", type: "query", ...given, target, input });
   newMessage(s);
-  write(s, { dir: "out", type: "answer", to: id, answer: resolveChecked(r, target.name, input) });
+  write(s, { dir: "out", type: "answer", to: id, answer: resolveChecked(r, target.name, input), request: target });
   message(r);
 }
 

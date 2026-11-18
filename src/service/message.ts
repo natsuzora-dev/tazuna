@@ -67,15 +67,24 @@ export interface EmittedBy {
 
 export type RequestBody = Extract<LineBody, { readonly type: "command" | "query" | "subscribe" }>;
 
+type AnswerBody = Extract<LineBody, { readonly type: "answer" }>;
+
 /**
- * A line's direction and body, with Lean's SenderOf: an `out` request line names `sender`, the definition of the service
- * that sent the request, which a check of the request at the end of the run blames after a restart forgot who waits for
- * it. No other line names one.
+ * A line's direction and body, with Lean's SenderOf and RequestOf: an `out` request line names `sender`, the definition
+ * of the service that sent the request, which a check of the request at the end of the run blames after a restart forgot
+ * who waits for it, and an `out` answer line names `request`, the definition of the request that it answers, which the
+ * answer travels as. No other line names either.
  */
 export type LineKind =
-  | (RequestBody & { readonly dir: "out"; readonly sender: string })
-  | (RequestBody & { readonly dir: "in"; readonly sender?: never })
-  | (Exclude<LineBody, RequestBody> & { readonly dir: "in" | "out"; readonly sender?: never });
+  | (RequestBody & { readonly dir: "out"; readonly sender: string; readonly request?: never })
+  | (RequestBody & { readonly dir: "in"; readonly sender?: never; readonly request?: never })
+  | (AnswerBody & { readonly dir: "out"; readonly sender?: never; readonly request: DefinitionRef })
+  | (AnswerBody & { readonly dir: "in"; readonly sender?: never; readonly request?: never })
+  | (Exclude<LineBody, RequestBody | AnswerBody> & {
+      readonly dir: "in" | "out";
+      readonly sender?: never;
+      readonly request?: never;
+    });
 
 /** Lean's Line: a line of a run, which traceLineOf turns into a trace line. */
 export type Line = LineKind & {

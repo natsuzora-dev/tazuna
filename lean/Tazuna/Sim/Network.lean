@@ -178,20 +178,16 @@ subscription, an answer to another service, and an event to each running service
 -/
 def World.route (w : World) (o : Origin) (service : String) (lines : List Line) : World :=
   lines.foldl (init := w) fun w l =>
-    if l.dir != .out || w.stopped then w else
-    match l.body with
-    | .command r _ | .query r _ | .subscribe r _ =>
-      let target := r.service
-      if target == service then w else w.post o service target l r
-    | .unsubscribe to =>
+    if w.stopped then w else
+    match l with
+    | ⟨_, .out, _, .command r _, _, _, _⟩ | ⟨_, .out, _, .query r _, _, _, _⟩ | ⟨_, .out, _, .subscribe r _, _, _, _⟩ =>
+      if r.service == service then w else w.post o service r.service l r
+    | ⟨_, .out, _, .unsubscribe to, _, _, _⟩ =>
       match requestDefinition? (w.state service).lines .out to with
       | some r => w.post o service r.service l r
       | none => w
-    | .answer to _ =>
-      match to, requestDefinition? (w.state service).lines .in to with
-      | .received requester _, some r => w.post o service requester l r
-      | _, _ => w
-    | .event event _ _ =>
+    | ⟨_, .out, _, .answer (.received requester _) _, _, _, r⟩ => w.post o service requester l r
+    | ⟨_, .out, _, .event event _ _, _, _, _⟩ =>
       w.services.foldl (init := w) fun w (r, st) =>
         if r != service && st.receives.contains event then w.post o service r l event else w
     | _ => w

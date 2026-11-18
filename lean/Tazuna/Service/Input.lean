@@ -16,7 +16,7 @@ def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     let (s, step) := s.newMessage.newStep none
     let request : Request := { name := target.name, input := raw }
     match s.commandAnswers.find? id with
-    | some known => message st fs (s.answer (some id) (answerAgain known request)) {}
+    | some known => message st fs (s.answer (some id) target (answerAgain known request)) {}
     | none =>
       let pc ← processCommand st fs s target.name raw (some id) step
       message st fs { pc.1 with commandAnswers := pc.1.commandAnswers.keep id request pc.2.1 }
@@ -29,7 +29,7 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     let (s, id) := s.write .in givenId (.query target raw)
     let s := s.newMessage
     match ← resolveChecked st fs s target.name raw with
-    | .answered answer violations => message st fs ((s.reportAll violations).answer (some id) answer) {}
+    | .answered answer violations => message st fs ((s.reportAll violations).answer (some id) target answer) {}
     | .halted fault => pure (s.report (.fault fault))
   else pure (s.report (.invalidInput (.unownedTarget target)))
 
@@ -183,8 +183,8 @@ def State.exchanges (s : State) : List Exchange :=
         | .event e p (some r) => if r == id then some (e, p) else none
         | _ => none }
   s.lines.toList.filterMap fun
-    | ⟨_, .out, id, .command r input, _, sender⟩ | ⟨_, .out, id, .query r input, _, sender⟩
-    | ⟨_, .out, id, .subscribe r input, _, sender⟩ => some (sent id r input sender)
+    | ⟨_, .out, id, .command r input, _, sender, _⟩ | ⟨_, .out, id, .query r input, _, sender, _⟩
+    | ⟨_, .out, id, .subscribe r input, _, sender, _⟩ => some (sent id r input sender)
     | _ => none
 
 /--
