@@ -47,7 +47,7 @@ theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) 
     (hc : fs.comparable sub.query a = .ok c) (hl : sub.last ≠ some c) :
     publishOne st fs s sub =
       ({ s.reportAll vs with subscriptions := s.subscriptions.map fun (u : Subscription) =>
-          if u.id == sub.id then { u with last := some c } else u }.write .out none (.answer sub.id a) none () (st.ref sub.query)).1 := by
+          if u.id == sub.id then { u with last := some c } else u }.write .out none (.answer sub.id a) () () (st.ref sub.query)).1 := by
   simp [publishOne, hh, hr, hc, hl]
 
 theorem unchanged_answer_not_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)

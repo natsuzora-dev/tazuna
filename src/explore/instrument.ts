@@ -26,7 +26,7 @@ import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
-import { type State, type StepInfo, sameTie } from "../service/state.ts";
+import { causeOf, type State, type StepInfo, sameTie, tieOf } from "../service/state.ts";
 
 /**
  * The values that a step reads and writes, each by its valueName. `keyWrites` holds the key sets of entities that a
@@ -127,18 +127,19 @@ export function leadsTo(steps: readonly StepInfo[], earlier: number, later: numb
   if (earlier < later && first?.barrier === true && first.message === last?.message) return true;
   if (last === undefined) return false;
   if (last.barrier && earlier < later && first?.message === last.message) return true;
-  return last.cause !== undefined && last.cause < later && leadsTo(steps, earlier, last.cause);
+  const cause = causeOf(last.origin);
+  return cause !== undefined && cause < later && leadsTo(steps, earlier, cause);
 }
 
 /** Lean's tied: whether steps `i` and `j` are of one tie. */
 function tied(steps: readonly StepInfo[], i: number, j: number): boolean {
-  const [a, b] = [steps[i]?.tie, steps[j]?.tie];
+  const [a, b] = [tieOf(steps[i]), tieOf(steps[j])];
   return a !== undefined && b !== undefined && sameTie(a, b);
 }
 
 /** Lean's sameMessage: whether steps `i` and `j` are steps of one message that no tie chose. */
 const sameMessage = (steps: readonly StepInfo[], i: number, j: number): boolean =>
-  steps[i]?.tie === undefined && steps[j]?.tie === undefined && steps[i]?.message === steps[j]?.message;
+  tieOf(steps[i]) === undefined && tieOf(steps[j]) === undefined && steps[i]?.message === steps[j]?.message;
 
 const reportedKey = (v: BagOrderDependent): string => JSON.stringify([v.kind, v.definition, v.data]);
 
@@ -322,7 +323,7 @@ export class Collect
   /** Lean's involved: the footprint of what step `n` stands for when the search swaps its order. */
   private involved(s: State, n: number, a: StepAccess): Footprint {
     const message = s.steps[n]?.message;
-    const tied = s.steps[n]?.tie !== undefined;
+    const tied = tieOf(s.steps[n]) !== undefined;
     const steps: (readonly [number, StepAccess])[] = tied
       ? [...this.steps].filter(([k]) => s.steps[k]?.message === message)
       : [[n, a]];

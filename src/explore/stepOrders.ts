@@ -9,7 +9,7 @@ import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import { type Line, sameLineId } from "../service/message.ts";
 import { sameStep, stepNameDefinition, stepsKey } from "../service/note.ts";
-import { created } from "../service/state.ts";
+import { created, tieOf } from "../service/state.ts";
 import { type Span, type StepOrder, sameOrigin } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
 import { snapshotLines } from "../sim/trace.ts";
@@ -125,7 +125,7 @@ function swapIds(x: LineId, y: LineId, l: Line): Line {
 function arrivals(m: Made, span: Span): (readonly [StepName, LineId])[] {
   const steps = m.world.services.get(span.service)?.processing.state.steps ?? [];
   const names = (m.listeners.get(span.service)?.collected.names(span.stepsFrom) ?? []).filter(
-    ([n]) => n < span.stepsTo && steps[n]?.tie?.kind === "arrivals",
+    ([n]) => n < span.stepsTo && tieOf(steps[n])?.kind === "arrivals",
   );
   const ids = inIds(linesOf(m, span.service), span);
   return names.flatMap(([, name], n) => {
@@ -161,7 +161,7 @@ function taken(m: Made, span: Span): (readonly [number, StepName])[] {
   const collected = m.listeners.get(span.service)?.collected;
   return (collected?.names(span.stepsFrom) ?? []).filter(
     ([n, name]) =>
-      n < span.stepsTo && (name.kind !== "deadline" || steps[n]?.tie !== undefined) && steps[n]?.barrier !== true,
+      n < span.stepsTo && (name.kind !== "deadline" || tieOf(steps[n]) !== undefined) && steps[n]?.barrier !== true,
   );
 }
 

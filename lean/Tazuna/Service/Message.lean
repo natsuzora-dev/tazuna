@@ -49,6 +49,21 @@ structure EmittedBy where
   group : Nat
 deriving DecidableEq, Repr, Inhabited
 
+/-- What a line with direction `dir` and body `body` carries of its writer: an `out` event line its EmittedBy. -/
+abbrev EmittedOf (dir : Dir) (body : LineBody) : Type :=
+  match body, dir with
+  | .event .., .out => EmittedBy
+  | _, _ => Unit
+
+instance (dir : Dir) (body : LineBody) : DecidableEq (EmittedOf dir body) := by
+  unfold EmittedOf; split <;> infer_instance
+
+instance (dir : Dir) (body : LineBody) : Repr (EmittedOf dir body) := by
+  unfold EmittedOf; split <;> infer_instance
+
+instance (dir : Dir) (body : LineBody) : Inhabited (EmittedOf dir body) := by
+  unfold EmittedOf; split <;> infer_instance
+
 /--
 What a line with direction `dir` and body `body` names besides: an `out` request line names the definition of the
 service that sent the request (Requester.sender), which a check of the request at the end of the run blames after a
@@ -102,8 +117,7 @@ structure Line where
   dir : Dir
   id : LineId
   body : LineBody
-  /-- Set on the `out` event lines that a command writes, and on no other line. -/
-  emitted : Option EmittedBy := none
+  emitted : EmittedOf dir body := by exact ()
   sender : SenderOf dir body := by exact ()
   request : RequestOf dir body := by exact ()
 deriving DecidableEq, Repr

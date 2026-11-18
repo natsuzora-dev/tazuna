@@ -154,3 +154,32 @@ export function holdsCodec(schema: z.ZodType, seen = new Set<z.ZodType>()): bool
   const node = schemaNode(schema);
   return node.type === "codec" || childrenOf(node).some((child) => holdsCodec(child, seen));
 }
+
+const tolerantSchemas = new WeakMap<z.ZodType, z.ZodType>();
+
+export function tolerant(schema: z.ZodType): z.ZodType {
+  const known = tolerantSchemas.get(schema);
+  if (known !== undefined) return known;
+  const node = schemaNode(schema);
+  const rebuilt = (changes: Record<string, unknown>) => schema.clone({ ...schema.def, ...changes } as never);
+  const result = ((): z.ZodType => {
+    switch (node.type) {
+      case "object": {
+        const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, tolerant(v)]));
+        return rebuilt({ shape, catchall: node.catchall });
+      }
+      case "union":
+        return rebuilt({ options: node.options.map(tolerant) });
+      case "array":
+        return rebuilt({ element: tolerant(node.element) });
+      case "optional":
+      case "nullable":
+      case "default":
+        return rebuilt({ innerType: tolerant(node.inner) });
+      default:
+        return schema;
+    }
+  })();
+  tolerantSchemas.set(schema, result);
+  return result;
+}

@@ -1,37 +1,8 @@
 import type { z } from "zod";
 import { collectionOf, toJson, unionOption } from "./collections.ts";
-import { fieldSchema, schemaNode } from "./schemaNode.ts";
+import { fieldSchema, schemaNode, tolerant } from "./schemaNode.ts";
 import type { Answer } from "./trace.generated.ts";
 import { canonicalJson, objectOf, type Shape } from "./values.ts";
-
-const tolerantSchemas = new WeakMap<z.ZodType, z.ZodType>();
-
-export function tolerant(schema: z.ZodType): z.ZodType {
-  const known = tolerantSchemas.get(schema);
-  if (known !== undefined) return known;
-  const node = schemaNode(schema);
-  const rebuilt = (changes: Record<string, unknown>) => schema.clone({ ...schema.def, ...changes } as never);
-  const result = ((): z.ZodType => {
-    switch (node.type) {
-      case "object": {
-        const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, tolerant(v)]));
-        return rebuilt({ shape, catchall: node.catchall });
-      }
-      case "union":
-        return rebuilt({ options: node.options.map(tolerant) });
-      case "array":
-        return rebuilt({ element: tolerant(node.element) });
-      case "optional":
-      case "nullable":
-      case "default":
-        return rebuilt({ innerType: tolerant(node.inner) });
-      default:
-        return schema;
-    }
-  })();
-  tolerantSchemas.set(schema, result);
-  return result;
-}
 
 function canonical(shape: Shape, value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -115,7 +86,7 @@ function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefi
         }),
       );
     case "union": {
-      const option = unionOption(node, value, (o) => tolerant(o).safeParse(value).success);
+      const option = unionOption(node, value);
       return option === undefined ? value : bagged(option, value, refEntity);
     }
     case "optional":

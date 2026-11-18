@@ -43,10 +43,11 @@ def Ready.name : Ready → StepName
   | .work w => w.name
   | .command c => .command c.activity c.requester c.input
 
-def Work.cause : Work → Option Nat
+def Work.origin : Work → StepOrigin
   | .reaction _ _ _ cause | .answered _ _ cause | .receive _ _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
-    some cause
-  | .start _ cause => cause
+    .caused cause
+  | .start _ (some cause) => .caused cause
+  | .start _ none => .root
 
 def Work.started : Work → Option InstanceId
   | .start name _ => some name
@@ -230,7 +231,7 @@ subscriptions that change `shown` is not a step, so the step has no cause.
 def settleScreen [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : InstanceId) (r : Processing) :
     m Processing :=
   if r.halted then pure r else do
-  let (s, step) := r.state.newStep none (barrier := true)
+  let (s, step) := r.state.newStep .root (barrier := true)
   MonadNote.note (.stepBegins step (.always name) none)
   let r ← settle fs st step name ⟨s, r.queue⟩
   MonadNote.note .stepEnds
@@ -248,7 +249,7 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
     match q.take Ready.name s.stepOrder with
     | .error invalid => pure (s.report (.invalidInput invalid))
     | .ok (some (.work w, i, rest, stepOrder)) => do
-      let (s, step) := { s with stepOrder }.newStep w.cause
+      let (s, step) := { s with stepOrder }.newStep w.origin
       MonadNote.note (.stepBegins step w.name w.started)
       let r ← runWork st fs s (rest.putBack i (w.rest step)) step w
       MonadNote.note .stepEnds

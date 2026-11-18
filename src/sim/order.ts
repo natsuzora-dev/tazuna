@@ -13,10 +13,20 @@ type Channel =
 function causes(steps: readonly StepInfo[], later: number): number[] {
   const step = steps[later];
   if (step === undefined) return [];
-  const direct = step.cause ?? step.armedBy;
-  const { timedIn } = step;
-  const timed = timedIn === undefined ? [] : steps.flatMap((s, i) => (i < later && s.message === timedIn ? [i] : []));
-  return [...(direct === undefined ? [] : [direct]), ...timed];
+  const { origin } = step;
+  switch (origin.kind) {
+    case "caused":
+      return [origin.cause];
+    case "deadline": {
+      const { armedBy, timedIn } = origin;
+      return [
+        armedBy,
+        ...steps.flatMap((s, i) => (i < later && timedIn !== undefined && s.message === timedIn ? [i] : [])),
+      ];
+    }
+    default:
+      return [];
+  }
 }
 
 /** Lean's causedBy. */
@@ -52,8 +62,8 @@ export function ordered(lines: readonly Line[], steps: readonly StepInfo[], a: n
   const [la, lb] = [lines[a] as Line, lines[b] as Line];
   const [channel, other] = [channelOf(la.id, la), channelOf(lb.id, lb)];
   if (channel === undefined || other === undefined || !sameJson(channel, other)) return false;
+  if (la.type !== "event" || la.dir !== "out" || lb.type !== "event" || lb.dir !== "out") return true;
   const [ea, eb] = [la.emitted, lb.emitted];
-  if (ea === undefined || eb === undefined) return true;
   if (Temporal.Instant.compare(la.time, lb.time) < 0) return true;
   return ea.step === eb.step ? ea.group !== eb.group : causedBy(steps, ea.step, eb.step);
 }

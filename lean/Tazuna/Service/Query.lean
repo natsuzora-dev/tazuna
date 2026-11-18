@@ -52,7 +52,7 @@ def publishOne [Monad m] (st : Service) (fs : Functions m) (s : State) (sub : Su
     if sub.last == some c then pure s else
     let s := { s with subscriptions := s.subscriptions.map fun (u : Subscription) =>
       if u.id == sub.id then { u with last := some c } else u }
-    pure (s.write .out none (.answer sub.id answer) none () (st.ref sub.query)).1
+    pure (s.write .out none (.answer sub.id answer) () () (st.ref sub.query)).1
 
 /--
 The state after each subscription receives its new answer. It runs after the message, outside any step: an answer

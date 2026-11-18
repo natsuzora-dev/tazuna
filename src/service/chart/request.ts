@@ -131,7 +131,7 @@ export function sendEntered(r: Processing): void {
     for (const { holder, n } of documentOrder(r.state, instance)) {
       const e = entered.find((e) => e.machine === holder.id && e.state === n);
       if (e === undefined || holder.closed || !holder.entered.has(n)) continue;
-      const step = newStep(r.state, e.step, { barrier: true });
+      const step = newStep(r.state, { kind: "caused", cause: e.step }, { barrier: true });
       inStep(r, step, { kind: "activities", id: holder.id, state: n }, undefined, () => activate(r, holder, n, step));
     }
   }

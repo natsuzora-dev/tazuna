@@ -29,10 +29,13 @@ def causes (s : State) (later : Nat) : List Nat :=
   match s.steps[later]? with
   | none => []
   | some i =>
-    (i.cause <|> i.armedBy).toList ++
-      match i.timedIn with
-      | some m => (List.range later).filter fun c => s.steps[c]?.map (·.message) == some m
-      | none => []
+    match i.origin with
+    | .caused c => [c]
+    | .deadline armedBy timedIn _ =>
+      armedBy :: match timedIn with
+        | some m => (List.range later).filter fun c => s.steps[c]?.map (·.message) == some m
+        | none => []
+    | .root | .arrival _ => []
 
 /-- Whether step `later` is step `earlier` or one that it caused, following `causes`. -/
 def causedBy (s : State) (earlier later : Nat) : Bool :=
@@ -64,9 +67,9 @@ def ordered (s : State) (a b : Nat) : Bool :=
   match s.lines[a]?, s.lines[b]? with
   | some la, some lb =>
     (channelOf la).isSome && channelOf la == channelOf lb &&
-      match la.emitted, lb.emitted with
-      | some ea, some eb =>
-        la.time < lb.time || if ea.step == eb.step then ea.group != eb.group else causedBy s ea.step eb.step
+      match la, lb with
+      | ⟨ta, .out, _, .event .., ea, _, _⟩, ⟨tb, .out, _, .event .., eb, _, _⟩ =>
+        ta < tb || if ea.step == eb.step then ea.group != eb.group else causedBy s ea.step eb.step
       | _, _ => true
   | _, _ => false
 

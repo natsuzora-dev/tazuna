@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
-import { fieldSchema, namedOption, type SchemaNode, schemaNode } from "./schemaNode.ts";
+import { fieldSchema, namedOption, type SchemaNode, schemaNode, tolerant } from "./schemaNode.ts";
 import {
   byCodePoint,
   canonicalJson,
@@ -125,7 +125,7 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union": {
-      const option = unionOption(node, value, (o) => z.safeEncode(o, sorted(o, value) as never).success);
+      const option = unionOption(node, value);
       return option === undefined ? value : sorted(option, value);
     }
     case "optional":
@@ -143,16 +143,13 @@ export const sortsInside = (node: SchemaNode): boolean =>
 
 /**
  * Returns the option of a union that `value` takes: the option that its discriminator names, or in a plain union the
- * first option that `accepts`, as in Zod, else the first option. Walks that only change what they recognise use it, so
- * a value that no option accepts still has its collections written.
+ * first option that the receiver parses `value` with, its collections as `sorted` writes them, else the first option.
+ * Walks that only change what they recognise use it, so a value that no option accepts still has its collections
+ * written.
  */
-export function unionOption(
-  node: Extract<SchemaNode, { type: "union" }>,
-  value: unknown,
-  accepts: (option: z.ZodType) => boolean,
-): z.ZodType | undefined {
+export function unionOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
   if (node.discriminator !== undefined) return namedOption(node, value);
-  return node.options.find(accepts) ?? node.options[0];
+  return node.options.find((o) => tolerant(o).safeParse(sorted(o, value)).success) ?? node.options[0];
 }
 
 /**
@@ -284,7 +281,7 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union": {
-      const option = unionOption(node, value, (o) => z.safeEncode(o, value as never).success);
+      const option = unionOption(node, value);
       return option === undefined ? value : bagged(option, value);
     }
     case "optional":

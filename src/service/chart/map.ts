@@ -30,7 +30,7 @@ function startCopy(r: Processing, owner: Instance, map: string, key: unknown, en
   };
   r.state.copies.delete(id);
   r.state.copies.set(id, copy);
-  const copyStep = newStep(r.state, step, { nested: true });
+  const copyStep = newStep(r.state, { kind: "caused", cause: step });
   const initial = owner.chart.states.get(map)?.initial;
   inStep(r, copyStep, { kind: "start", id }, id, () => {
     if (initial !== null && initial !== undefined) enter(r, copy, [initial], copyStep);

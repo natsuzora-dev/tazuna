@@ -298,7 +298,7 @@ function runWork(r: Processing, work: Work, step: number): void {
 }
 
 function settleScreen(r: Processing, name: InstanceId): void {
-  const step = newStep(r.state, undefined, { barrier: true });
+  const step = newStep(r.state, { kind: "root" }, { barrier: true });
   inStep(r, step, { kind: "always", id: name }, undefined, () => settle(r, name, step));
 }
 
@@ -335,7 +335,7 @@ export function drain(r: Processing): void {
     countWork();
     if (next.ready.kind === "work") {
       const w = next.ready.work;
-      const step = newStep(s, w.cause);
+      const step = newStep(s, w.cause === undefined ? { kind: "root" } : { kind: "caused", cause: w.cause });
       const left = workLeft(w, step);
       if (left !== undefined) queue.tasks.splice(next.at, 0, left);
       inStep(r, step, workName(w), started(w), () => runWork(r, w, step));

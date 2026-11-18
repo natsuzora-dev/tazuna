@@ -17,20 +17,21 @@ theorem ordered_same_channel (a b : Nat) (la lb : Line) (ha : s.lines[a]? = some
   exact ⟨h.1.1, h.1.2⟩
 
 /-- Two lines of one group of a decide's emits, written at one time, are unordered. -/
-theorem group_lines_unordered (a b : Nat) (la lb : Line) (w : EmittedBy) (ha : s.lines[a]? = some la)
-    (hb : s.lines[b]? = some lb) (hwa : la.emitted = some w) (hwb : lb.emitted = some w) (ht : la.time = lb.time) :
-    ordered s a b = false := by
+theorem group_lines_unordered (a b : Nat) (t : Time) (ia ib : LineId) (ea eb : Spec.Ref) (pa pb : Value)
+    (ra rb : Option LineId) (w : EmittedBy) (ha : s.lines[a]? = some ⟨t, .out, ia, .event ea pa ra, w, (), ()⟩)
+    (hb : s.lines[b]? = some ⟨t, .out, ib, .event eb pb rb, w, (), ()⟩) : ordered s a b = false := by
   unfold ordered
-  simp [ha, hb, hwa, hwb, ht]
+  simp [ha, hb]
 
 /--
 Two event lines at one time whose steps differ and that no cause chain links are unordered, even on one channel:
 independent senders impose no order.
 -/
-theorem independent_unordered (a b : Nat) (la lb : Line) (wa wb : EmittedBy) (ha : s.lines[a]? = some la)
-    (hb : s.lines[b]? = some lb) (hwa : la.emitted = some wa) (hwb : lb.emitted = some wb) (ht : la.time = lb.time)
-    (hstep : wa.step ≠ wb.step) (hcause : causedBy s wa.step wb.step = false) : ordered s a b = false := by
+theorem independent_unordered (a b : Nat) (t : Time) (ia ib : LineId) (ea eb : Spec.Ref) (pa pb : Value)
+    (ra rb : Option LineId) (wa wb : EmittedBy) (ha : s.lines[a]? = some ⟨t, .out, ia, .event ea pa ra, wa, (), ()⟩)
+    (hb : s.lines[b]? = some ⟨t, .out, ib, .event eb pb rb, wb, (), ()⟩) (hstep : wa.step ≠ wb.step)
+    (hcause : causedBy s wa.step wb.step = false) : ordered s a b = false := by
   unfold ordered
-  simp [ha, hb, hwa, hwb, ht, hstep, hcause]
+  simp [ha, hb, hstep, hcause]
 
 end Tazuna.Thm.Sim.Order

@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { tolerant } from "../data/canonical.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
-import type { TraceLine } from "../data/trace.generated.ts";
+import { tolerant } from "../data/schemaNode.ts";
+import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { type FileLine, subjectOf, untilMalformed } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import { objectOf } from "../data/values.ts";
@@ -24,14 +24,16 @@ import { byLine, type Found, lineSchema } from "./lines.ts";
 
 type LineOf<T extends TraceLine["type"]> = Extract<TraceLine, { readonly type: T }>;
 
-/** Lean's Request: a request of the trace, whether no answer rejected it, and the events naming it as resultOf. */
+/** Lean's Request: a request of the trace, its first answer, if any, and the events naming it as resultOf. */
 interface Request {
   readonly definition: AnyCommand | AnyQuery;
   readonly line: LineOf<"command" | "query">;
-  accepted: boolean;
-  answered: boolean;
+  answer: Answer | undefined;
   readonly results: { readonly at: number; readonly event: AnyEvent }[];
 }
+
+/** Lean's Request.accepted: whether no answer rejected the request. */
+const accepted = (r: Request): boolean => r.answer === undefined || r.answer.result === "accepted";
 
 /** Returns the first requires of the target that fails on the input alone. */
 const assumedRequires = (target: AnyCommand | AnyQuery, input: unknown): string | undefined =>
@@ -57,10 +59,7 @@ function checkLine(
 ): Found | Resolved | undefined {
   if (l.dir === "in" && (l.type === "command" || l.type === "query")) {
     const definition = definitionOfTraceName(spec, service, l.name, l.type);
-    requests.set(
-      l.id,
-      definition === undefined ? undefined : { definition, line: l, accepted: true, answered: false, results: [] },
-    );
+    requests.set(l.id, definition === undefined ? undefined : { definition, line: l, answer: undefined, results: [] });
     return definition === undefined
       ? ({
           kind: "Uncomparable.unknownRequest",
@@ -81,15 +80,14 @@ function checkLine(
     const request = requests.get(l.to);
     if (request === undefined) return undefined;
     const target = refOfDefinition(spec, request.definition);
-    if (request.answered)
+    if (request.answer !== undefined)
       return {
         kind: "Mismatch.repeatedAnswer",
         definition: null,
         line: at,
         data: { requestId: l.to, target },
       } satisfies Mismatch;
-    request.answered = true;
-    request.accepted &&= l.answer.result === "accepted";
+    request.answer = l.answer;
     if (l.answer.result === "rejected")
       return rejectionKinds(spec.structure, service, target).includes(l.answer.rejection.kind)
         ? { at, line: l, request }
@@ -150,7 +148,7 @@ function checkResults(spec: Spec, requests: ReadonlyMap<string, Request | undefi
       ? []
       : request.results.flatMap(({ at, event }): Found[] => {
           const target = refOfDefinition(spec, request.definition);
-          const mismatch = resultOfMismatch(spec.structure, target, request.accepted, refOfDefinition(spec, event));
+          const mismatch = resultOfMismatch(spec.structure, target, accepted(request), refOfDefinition(spec, event));
           return mismatch === undefined
             ? []
             : [

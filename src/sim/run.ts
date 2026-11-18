@@ -35,6 +35,7 @@ import {
 import { receivedId } from "./receive.ts";
 import {
   answersOf,
+  comparedOr,
   fill,
   json,
   markCreated,
@@ -48,12 +49,6 @@ import {
 } from "./resolve.ts";
 
 type RequestType = Extract<Line, { readonly type: "request" }>["kind"];
-
-/** Lean's comparedOr. */
-function comparedOr(r: Processing, schema: Schema, v: unknown): unknown {
-  const c = r.functions.unordered(schema, v);
-  return c instanceof Failed ? v : c;
-}
 
 const inputSchema = (definition: DefinitionRef): Schema => ({ kind: "input", definition });
 const payloadSchema = (event: DefinitionRef): Schema => ({ kind: "payload", event });

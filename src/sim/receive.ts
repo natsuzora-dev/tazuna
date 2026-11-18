@@ -107,7 +107,7 @@ export function arriveAll(r: Processing, arrivals: readonly Arrival[]): void {
       s.stepOrder = rest;
     }
     remaining.splice(remaining.indexOf(chosen), 1);
-    const step = newStep(s, undefined, { tie: { kind: "arrivals", first }, message: s.messageCount + 1 });
+    const step = newStep(s, { kind: "arrival", tie: { kind: "arrivals", first } }, { message: s.messageCount + 1 });
     r.note.arrivalBegins(step, arrivalName(r.st.service, chosen));
     arriveFrom(r, chosen.sender, chosen.id, chosen.body);
     r.note.arrivalEnds();

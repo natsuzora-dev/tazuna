@@ -101,7 +101,7 @@ where
       | .error e => return s.report (.invalidInput e)
       | .ok (i, stepOrder) =>
         let a := remaining[i]
-        let (s, step) := { s with stepOrder }.newStep none (tie := some (.arrivals first))
+        let (s, step) := { s with stepOrder }.newStep (.arrival (.arrivals first))
           (message := some (s.messageCount + 1))
         MonadNote.note (.arrivalBegins step (a.name st.service))
         let t ← arriveFrom st fs s a.sender a.id a.body

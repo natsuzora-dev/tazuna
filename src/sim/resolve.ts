@@ -4,6 +4,7 @@ import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generate
 import type { Answer } from "../data/trace.generated.ts";
 import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
 import type { Schema } from "../service/basic.ts";
+import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { chartOf } from "../service/instance.ts";
 import { type Line, type LineBody, sameLineId } from "../service/message.ts";
@@ -71,18 +72,19 @@ function setValueAt(v: unknown, x: unknown, path: readonly string[]): unknown {
   return { [k]: setValueAt({}, x, rest) };
 }
 
-/** Lean's comparedOr. */
-function comparedOr(w: World, service: string, schema: Schema, v: unknown): unknown {
-  const r = w.services.get(service)?.processing;
-  if (r === undefined) return v;
-  const c = r.functions.unordered(schema, v);
-  return c instanceof Failed ? v : c;
+/** Lean's comparedOr; `v` as it is for a service that is not in the world. */
+export function comparedOr(r: Processing | undefined, schema: Schema, v: unknown): unknown {
+  const c = r?.functions.unordered(schema, v);
+  return c === undefined || c instanceof Failed ? v : c;
 }
+
+const processingOf = (w: World, service: string): Processing | undefined => w.services.get(service)?.processing;
 
 /** Lean's picks. */
 const picks = (w: World, service: string, schema: Schema, pick: unknown, v: unknown): boolean =>
   pick === undefined ||
-  canonicalJson(comparedOr(w, service, schema, overlay(v, pick))) === canonicalJson(comparedOr(w, service, schema, v));
+  canonicalJson(comparedOr(processingOf(w, service), schema, overlay(v, pick))) ===
+    canonicalJson(comparedOr(processingOf(w, service), schema, v));
 
 /** Lean's World.schemaOf?. */
 function schemaOf(w: World, m: Message): readonly [string, Schema] | undefined {
@@ -154,7 +156,7 @@ function comparedContent(w: World, k: number): string | undefined {
   const v = valueOfLine(m.body);
   if (v === undefined) return undefined;
   const schema = schemaOf(w, m);
-  return canonicalJson(schema === undefined ? v : comparedOr(w, schema[0], schema[1], v));
+  return canonicalJson(schema === undefined ? v : comparedOr(processingOf(w, schema[0]), schema[1], v));
 }
 
 /** Lean's World.alikeMessages: equal messages, of those on one channel the oldest in flight or else the first. */
@@ -312,7 +314,7 @@ function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
   const missing = (): never =>
     reported({ kind: "InvalidScenario.missingOutput", definition: null, data: { scenarioLine: i, fact: json(fact) } });
   const compared = (side: string, schema: Schema | undefined, v: unknown) =>
-    schema === undefined ? v : comparedOr(w, side, schema, v);
+    schema === undefined ? v : comparedOr(processingOf(w, side), schema, v);
   const viaMessages = () => {
     const ks = messagesOf(w, i, fact);
     const values = ks.flatMap((k) => {

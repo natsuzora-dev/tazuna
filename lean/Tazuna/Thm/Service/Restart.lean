@@ -8,8 +8,8 @@ open Tazuna.Thm.Service.Records Tazuna.Thm.Service.Input
 
 variable {st : Service} {fs : Functions Id} {s t : State}
 
-theorem stop_write (givenId : Option LineId) (body : LineBody) (q : SenderOf .in body) (r : RequestOf .in body) :
-    (s.write .in givenId body none q r).1.stop = (s.stop.write .in givenId body none q r).1 := rfl
+theorem stop_write (givenId : Option LineId) (body : LineBody) (w : EmittedOf .in body) (q : SenderOf .in body) (r : RequestOf .in body) :
+    (s.write .in givenId body w q r).1.stop = (s.stop.write .in givenId body w q r).1 := rfl
 
 /-- The service begins again from the part of the state that it persists, with none of the part in its memory left. -/
 theorem restart_keeps : ∃ t, restart st fs s = begin st fs t ∧ t.toDurable = s.toDurable ∧ t.toProcess = {} :=

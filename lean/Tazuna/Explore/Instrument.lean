@@ -464,9 +464,9 @@ def leadsTo (s : State) (earlier later : Nat) : Bool :=
     (earlier < later && (s.steps[earlier]?.any (·.barrier)) &&
       (s.steps[earlier]?.map (·.message)) == (s.steps[later]?.map (·.message))) ||
     match s.steps[later]? with
-    | some { cause, message, barrier, .. } =>
-      (barrier && earlier < later && (s.steps[earlier]?.map (·.message)) == some message) ||
-        match cause with
+    | some i =>
+      (i.barrier && earlier < later && (s.steps[earlier]?.map (·.message)) == some i.message) ||
+        match i.origin.cause with
         | some cause => if cause < later then leadsTo s earlier cause else false
         | none => false
     | none => false
@@ -474,13 +474,13 @@ termination_by later
 
 /-- Whether steps `i` and `j` are of one tie: deadlines due at one time, or messages that one line delivered. -/
 def tied (s : State) (i j : Nat) : Bool :=
-  match s.steps[i]?.bind (·.tie), s.steps[j]?.bind (·.tie) with
+  match s.steps[i]?.bind (·.origin.tie), s.steps[j]?.bind (·.origin.tie) with
   | some a, some b => a == b
   | _, _ => false
 
 /-- Whether steps `i` and `j` are steps of one message that no tie chose. -/
 def sameMessage (s : State) (i j : Nat) : Bool :=
-  (s.steps[i]?.bind (·.tie)).isNone && (s.steps[j]?.bind (·.tie)).isNone &&
+  (s.steps[i]?.bind (·.origin.tie)).isNone && (s.steps[j]?.bind (·.origin.tie)).isNone &&
     (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message))
 
 /--
@@ -493,7 +493,7 @@ outcomes up to a renaming of created keys.
 -/
 def involved (s : State) (c : Collect) (n : Nat) (a : StepAccess) : Footprint :=
   let message := s.steps[n]?.map (·.message)
-  let (steps, after) := if (s.steps[n]?.bind (·.tie)).isSome then
+  let (steps, after) := if (s.steps[n]?.bind (·.origin.tie)).isSome then
       (c.steps.toList.filter fun (k, _) => s.steps[k]?.map (·.message) == message,
         (message.bind (c.afters.lookup ·)).getD {})
     else ([(n, a)], {})

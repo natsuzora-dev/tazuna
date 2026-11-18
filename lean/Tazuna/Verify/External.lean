@@ -10,12 +10,14 @@ namespace Tazuna.Verify
 open Tazuna.Data
 open Tazuna.Spec
 
-/-- A request of the trace: whether no answer rejected it, and the lines of the events naming it as their resultOf. -/
+/-- A request of the trace: its first answer, if any, and the lines of the events naming it as their resultOf. -/
 structure Request where
   definition : Definition
-  accepted : Bool
-  answered : Bool
+  answer : Option Answer := none
   results : List (Nat × Ref) := []
+
+/-- Whether no answer rejected the request. -/
+def Request.accepted (r : Request) : Bool := r.answer.all (· matches .accepted _)
 
 def resultOfFinding (line : Nat) (event : Ref) (requestId : String) (target : Ref) : ResultOfMismatch → Finding
   | .resultOfNonCommand => .uncomparable (.resultOfNonCommand line event requestId target)
@@ -28,15 +30,14 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
   | .command .in id name _ | .query .in id name _ =>
     let definition := s.named service (some name) [l.body.type]
     (if definition.isSome then none else some (.uncomparable (.unknownRequest line (Subject.of l))),
-      setAt requests id (definition.map fun definition => { definition, accepted := true, answered := false }))
+      setAt requests id (definition.map fun definition => { definition }))
   | .answer .out _ to answer =>
     match requests.lookup to, answer with
     | none, _ => (some (.uncomparable (.unknownAnswer line (Subject.of l))), requests)
     | some none, _ => (none, requests)
     | some (some r), _ =>
-      if r.answered then (some (.mismatch (.repeatedAnswer line to r.definition.ref)), requests) else
-      let answered := setAt requests to
-        (some { r with accepted := r.accepted && answer matches .accepted _, answered := true })
+      if r.answer.isSome then (some (.mismatch (.repeatedAnswer line to r.definition.ref)), requests) else
+      let answered := setAt requests to (some { r with answer })
       match answer, r.definition.kind with
       | .rejected rejection, _ =>
         (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none

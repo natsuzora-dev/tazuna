@@ -20,7 +20,7 @@ def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (k
     let id := .copy o.id map encodedKey
     let copy : Instance := { chart := o.chart, id, context, input := o.input, itemKey := some key }
     let started : State := { r.state with copies := r.state.copies.filter (·.id != id) ++ [copy] }
-    let (s, copyStep) := started.newStep (some step) (nested := true)
+    let (s, copyStep) := started.newStep (.caused step)
     MonadNote.note (.stepBegins copyStep (.start id) (some id))
     let r ← match (o.chart.state? map).bind (·.initial) with
       | some initial => enter fs st copyStep id [initial] ⟨s, r.queue⟩

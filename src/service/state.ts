@@ -24,16 +24,7 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import {
-  type EmittedBy,
-  type Halting,
-  halts,
-  idKey,
-  type Line,
-  type LineBody,
-  type LineKind,
-  type RequestBody,
-} from "./message.ts";
+import { type Halting, halts, idKey, type Line, type LineBody, type LineKind, type RequestBody } from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";
 
@@ -206,22 +197,41 @@ export const sameTie = (a: Tie, b: Tie): boolean =>
     : b.kind === "arrivals" && a.first === b.first;
 
 /**
- * A step of a message. `cause` is the step that caused this one, undefined for input and deadline steps. `armedBy` is,
- * for a deadline step, the step that armed the deadline, and `timedIn` the message whose end last changed its time.
- * `message` is the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
- * marks a step that comes after every earlier step of the same message and before every later one. `nested` marks a
- * step that began while its cause was running (a copy start), so it ends before its cause does. `tie` is, for a
- * deadline step or the step in which a message of a tie arrives, its tie.
+ * Lean's StepOrigin: what began a step. A root step has no cause: an input's first step, or a screen's settling. A
+ * caused step continues the message of its cause. A deadline step names the step that armed the deadline, the message
+ * whose end last changed its time by reading what steps write, and its tie, if any. An arrival step names the tie of
+ * its message.
+ */
+export type StepOrigin =
+  | { readonly kind: "root" }
+  | { readonly kind: "caused"; readonly cause: number }
+  | {
+      readonly kind: "deadline";
+      readonly armedBy: number;
+      readonly timedIn: number | undefined;
+      readonly tie: Tie | undefined;
+    }
+  | { readonly kind: "arrival"; readonly tie: Tie };
+
+/** Lean's StepOrigin.cause. */
+export const causeOf = (o: StepOrigin): number | undefined => (o.kind === "caused" ? o.cause : undefined);
+
+/** Lean's StepOrigin.tie, of the origin of `step`. */
+export function tieOf(step: StepInfo | undefined): Tie | undefined {
+  const o = step?.origin;
+  return o?.kind === "deadline" || o?.kind === "arrival" ? o.tie : undefined;
+}
+
+/**
+ * A step of a message. `message` is the message number, inherited from the cause. `command` marks a step that processes
+ * an own-service command. `barrier` marks a step that comes after every earlier step of the same message and before
+ * every later one.
  */
 export interface StepInfo {
-  readonly cause: number | undefined;
-  readonly armedBy: number | undefined;
-  readonly timedIn: number | undefined;
+  readonly origin: StepOrigin;
   readonly message: number;
   readonly command: boolean;
   readonly barrier: boolean;
-  readonly nested: boolean;
-  readonly tie: Tie | undefined;
 }
 
 /** The part of the state that the service persists; a restart keeps it, as in the Raft TLA+ spec's Restart. */
@@ -313,10 +323,7 @@ export function newState(st: Service): State {
 }
 
 /** A line before `write` adds the time and, unless the line gives one, the id. */
-type UnwrittenLine = LineKind & {
-  readonly id?: LineId;
-  readonly emitted?: EmittedBy;
-};
+type UnwrittenLine = LineKind & { readonly id?: LineId };
 
 /** Lean's LineBody.idName: the name that line ids count, as the trace of `service` writes it. */
 function idName(service: string, body: LineBody): string {
@@ -385,24 +392,12 @@ export function newMessage(s: State): void {
 
 export function newStep(
   s: State,
-  cause: number | undefined,
-  {
-    barrier = false,
-    nested = false,
-    tie,
-    armedBy,
-    timedIn,
-    message = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount,
-  }: {
-    barrier?: boolean;
-    nested?: boolean;
-    tie?: Tie | undefined;
-    armedBy?: number;
-    timedIn?: number | undefined;
-    message?: number;
-  } = {},
+  origin: StepOrigin,
+  { barrier = false, message }: { barrier?: boolean; message?: number } = {},
 ): number {
-  s.steps.push({ cause, armedBy, timedIn, message, command: false, barrier, nested, tie });
+  const cause = causeOf(origin);
+  const inherited = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount;
+  s.steps.push({ origin, message: message ?? inherited, command: false, barrier });
   return s.steps.length - 1;
 }
 
@@ -410,8 +405,8 @@ export function newStep(
 function commandDepth(s: State, step: number): number {
   const info = s.steps[step];
   if (info === undefined) return 0;
-  const { cause, command } = info;
-  return (command ? 1 : 0) + (cause !== undefined && cause < step ? commandDepth(s, cause) : 0);
+  const cause = causeOf(info.origin);
+  return (info.command ? 1 : 0) + (cause !== undefined && cause < step ? commandDepth(s, cause) : 0);
 }
 
 /**
@@ -423,7 +418,7 @@ export function newCommandStep(
   cause: number,
   sender: DefinitionRef,
 ): { readonly step: number; readonly exceeded: Fault | undefined } {
-  const step = newStep(s, cause);
+  const step = newStep(s, { kind: "caused", cause });
   const info = s.steps[step] as StepInfo;
   s.steps[step] = { ...info, command: true };
   const depth = commandDepth(s, step);

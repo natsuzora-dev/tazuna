@@ -634,13 +634,12 @@ function compareGroups(
 }
 
 /**
- * The violations of a comparison, the bindings that agree with every compared line (Lean's Compared.bindings) as `set`
- * and as pairs of strings, and the pairs of the first, by which the harness gives its next `in` line.
+ * The violations of a comparison, the bindings that agree with every compared line (Lean's Compared.bindings) as `set`,
+ * and the pairs of the first as strings, by which the harness gives its next `in` line.
  */
 export interface Compared {
   readonly found: Found[];
   readonly set: readonly Binding[];
-  readonly bindings: readonly Bindings[];
   readonly first: Bindings;
 }
 
@@ -695,14 +694,14 @@ function comparedLines(trace: readonly FileLine[]): {
 /**
  * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
  * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Outcome.renaming, or
- * `verifying` for verify. `relation` compares the lines' `after` too, as test does for two runs of the simulation.
+ * the identity for verify. `relation` compares the lines' `after` too, as test does for two runs of the simulation.
  */
 export function verifyLines(
   spec: Spec,
   service: string,
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly FileLine[],
-  renamed: (v: Values) => Values,
+  renamed: (v: Values) => Values = (v) => v,
   relation = false,
 ): Compared {
   const { lines, cut } = comparedLines(trace);
@@ -710,12 +709,13 @@ export function verifyLines(
   const expected = snapshot.map((l) => l && read(l));
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
   const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed, relation);
-  const bindings = set.map((b) => new Map(stringPairs(b)));
-  return { found: [...found, ...(cut === undefined ? [] : [cut])], set, bindings, first: bindings[0] ?? new Map() };
+  const [first] = set;
+  return {
+    found: [...found, ...(cut === undefined ? [] : [cut])],
+    set,
+    first: first === undefined ? new Map() : new Map(stringPairs(first)),
+  };
 }
-
-/** What verify knows of the values: valueDomains, and a fresh value may stand for any string. */
-export const verifying = (v: Values): Values => v;
 
 /** Compares the trace with the snapshot's lines. A trace line's violation has its 1-based line number in `line`. */
 export function compareTrace(
@@ -723,7 +723,7 @@ export function compareTrace(
   service: string,
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly unknown[],
-  renamed: (v: Values) => Values,
+  renamed: (v: Values) => Values = (v) => v,
 ): Compared {
   const compared = verifyLines(spec, service, snapshot, parseFileLines(trace), renamed);
   return { ...compared, found: compared.found.sort(byLine) };

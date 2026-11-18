@@ -57,7 +57,7 @@ export function send(r: Processing, target: DefinitionRef, input: unknown, given
   const request: Request = { name, input };
   const id = write(s, { dir: "in", type: "command", ...given, target, input });
   newMessage(s);
-  const step = newStep(s, undefined);
+  const step = newStep(s, { kind: "root" });
   const known = s.commandAnswers.get(idKey(id));
   if (known === undefined) {
     const { answer, groups } = processCommand(r, name, input, id, step);
@@ -140,7 +140,7 @@ export function receive(r: Processing, event: DefinitionRef, payload: unknown, i
   s.deliveries.add(idKey(id));
   const e: Emitted = { event, payload: parsed.value, encoded: parsed.encoded as Json };
   newMessage(s);
-  const step = newStep(s, undefined);
+  const step = newStep(s, { kind: "root" });
   r.queue.tasks.push(...reactions(r.st, s, [[e]], false, step));
   message(r);
 }
@@ -213,7 +213,7 @@ function answerRequest(r: Processing, givenId: LineId, p: Pending, answer: Answe
   }
   write(s, { dir: "in", type: "answer", id: givenId, to: p.id, answer });
   newMessage(s);
-  const step = newStep(s, undefined);
+  const step = newStep(s, { kind: "root" });
   settled(r, machineOf(p.requester), step, () => deliverAnswer(r, step, p, checked.decoded));
   message(r);
 }
@@ -414,7 +414,7 @@ export function operate(r: Processing, resource: InstanceId, key: string, payloa
           : report(r.state, { kind: "InvalidInput.unopenedScreen", definition: null, data });
   const s = r.state;
   newMessage(s);
-  const step = newStep(s, undefined);
+  const step = newStep(s, { kind: "root" });
   settled(r, top.id, step, () => dispatch(r, top.id, key, decoded, step));
   message(r);
 }

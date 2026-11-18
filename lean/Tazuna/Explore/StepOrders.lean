@@ -29,7 +29,7 @@ deadlines take no order.
 def Execution.taken (w : Execution) (span : Sim.Span) : List (Nat × StepName) :=
   let s := w.world.state span.service
   (w.collect span.service).steps.toList.filterMap fun (n, a) =>
-    let fixed := (a.name.isDeadline && (s.steps[n]?.bind (·.tie)).isNone) || s.steps[n]?.any (·.barrier)
+    let fixed := (a.name.isDeadline && (s.steps[n]?.bind (·.origin.tie)).isNone) || s.steps[n]?.any (·.barrier)
     if span.stepsFrom ≤ n && n < span.stepsTo && !fixed then some (n, a.name) else none
 
 /--
@@ -98,7 +98,8 @@ def Line.swapIds (x y : LineId) (l : Line) : Line :=
   match l with
   | ⟨time, .out, id, .answer to a, emitted, _, request⟩ => ⟨time, .out, swap id, .answer (swap to) a, emitted, (), request⟩
   | ⟨time, .in, id, .answer to a, emitted, _, _⟩ => ⟨time, .in, swap id, .answer (swap to) a, emitted, (), ()⟩
-  | ⟨time, dir, id, .event e p r, emitted, _, _⟩ => ⟨time, dir, swap id, .event e p (r.map swap), emitted, (), ()⟩
+  | ⟨time, .out, id, .event e p r, emitted, _, _⟩ => ⟨time, .out, swap id, .event e p (r.map swap), emitted, (), ()⟩
+  | ⟨time, .in, id, .event e p r, _, _, _⟩ => ⟨time, .in, swap id, .event e p (r.map swap), (), (), ()⟩
   | ⟨time, .out, id, .unsubscribe to, emitted, _, request⟩ =>
     ⟨time, .out, swap id, .unsubscribe (swap to), emitted, (), request⟩
   | ⟨time, .in, id, .unsubscribe to, emitted, _, _⟩ => ⟨time, .in, swap id, .unsubscribe (swap to), emitted, (), ()⟩
@@ -108,7 +109,7 @@ def Line.swapIds (x y : LineId) (l : Line) : Line :=
 def Execution.arrivals (w : Execution) (span : Sim.Span) : List (StepName × LineId) :=
   let s := w.world.state span.service
   let steps := (w.collect span.service).steps.toList.filter fun (n, _) =>
-    span.stepsFrom ≤ n && n < span.stepsTo && match s.steps[n]?.bind (·.tie) with
+    span.stepsFrom ≤ n && n < span.stepsTo && match s.steps[n]?.bind (·.origin.tie) with
       | some (.arrivals _) => true
       | _ => false
   (steps.map (·.2.name)).zip (inIds s span)

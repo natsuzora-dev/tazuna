@@ -22,17 +22,17 @@ structure Fixed where
 def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
   ⟨s.commandAnswers, s.records, s.now, s.started⟩
 
-@[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy)
+@[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b)
     (q : SenderOf d b) (r : RequestOf d b) : (s.write d g b w q r).1.fixed = s.fixed := rfl
 
 @[simp] theorem await_fixed (b : LineBody) (q : Requester) (a : Activity) (i : Value) :
     (s.await b q a i).fixed = s.fixed := by
   simp [State.await, State.fixed, State.write]
 
-@[simp] theorem write_commandAnswers (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) (q : SenderOf d b) (r : RequestOf d b) :
+@[simp] theorem write_commandAnswers (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b) (q : SenderOf d b) (r : RequestOf d b) :
     (s.write d g b w q r).1.commandAnswers = s.commandAnswers := rfl
 
-@[simp] theorem newStep_commandAnswers (c : Option Nat) : (s.newStep c).1.commandAnswers = s.commandAnswers := rfl
+@[simp] theorem newStep_commandAnswers (o : StepOrigin) : (s.newStep o).1.commandAnswers = s.commandAnswers := rfl
 
 @[simp] theorem newMessage_commandAnswers :
     s.newMessage.commandAnswers = s.commandAnswers := rfl
@@ -151,7 +151,7 @@ theorem documentOrder_owner (i : Instance) :
 theorem emitAll_fixed (r : Option LineId) (es : List (Emit × EmittedBy)) : (s.emitAll r es).fixed = s.fixed := by
   induction es generalizing s with
   | nil => rfl
-  | cons e es ih => exact ih (s := (s.write .out none (.event e.1.event e.1.payload r) (some e.2)).1)
+  | cons e es ih => exact ih (s := (s.write .out none (.event e.1.event e.1.payload r) e.2).1)
 
 theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).fixed = t.fixed) (xs : List α)
     (t : State) : (xs.foldl f t).fixed = t.fixed := by
@@ -204,7 +204,7 @@ theorem Grows.trans {a b c : State} (h₁ : Grows a b) (hn : b.now = a.now) (h�
 theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now) : Grows a c :=
   (Grows.of_lines hl).trans hn h
 
-theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy := none)
+theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b := by exact ())
     (q : SenderOf d b) (r : RequestOf d b) : Grows s (s.write d g b w q r).1 :=
   ⟨#[_], Array.push_eq_append, by simp⟩
 
@@ -248,36 +248,36 @@ theorem holdsFold_lines (i : Instance) (es : List (String × Time)) :
 theorem answer_records (t : State) (to : Option LineId) (d : Spec.Ref) (a : Answer) : (t.answer to d a).records = t.records := by
   cases to <;> rfl
 
-@[simp] theorem write_records (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) (q : SenderOf d b) (r : RequestOf d b) :
+@[simp] theorem write_records (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b) (q : SenderOf d b) (r : RequestOf d b) :
     (s.write d g b w q r).1.records = s.records := rfl
 
-@[simp] theorem write_deliveries (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) (q : SenderOf d b) (r : RequestOf d b) :
+@[simp] theorem write_deliveries (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b) (q : SenderOf d b) (r : RequestOf d b) :
     (s.write d g b w q r).1.deliveries = s.deliveries := rfl
 
-@[simp] theorem write_halted (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) (q : SenderOf d b) (r : RequestOf d b) :
+@[simp] theorem write_halted (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b) (q : SenderOf d b) (r : RequestOf d b) :
     (s.write d g b w q r).1.halted = s.halted := rfl
 
-@[simp] theorem write_id (d : Dir) (id : LineId) (b : LineBody) (w : Option EmittedBy) (q : SenderOf d b) (r : RequestOf d b) :
+@[simp] theorem write_id (d : Dir) (id : LineId) (b : LineBody) (w : EmittedOf d b) (q : SenderOf d b) (r : RequestOf d b) :
     (s.write d (some id) b w q r).2 = id := rfl
 
-@[simp] theorem write_now (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) (q : SenderOf d b) (r : RequestOf d b) :
+@[simp] theorem write_now (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b) (q : SenderOf d b) (r : RequestOf d b) :
     (s.write d g b w q r).1.now = s.now := rfl
 
-@[simp] theorem newStep_now (c : Option Nat) : (s.newStep c).1.now = s.now := rfl
+@[simp] theorem newStep_now (o : StepOrigin) : (s.newStep o).1.now = s.now := rfl
 
 @[simp] theorem newMessage_now : s.newMessage.now = s.now := rfl
 
 @[simp] theorem answer_now (to : Option LineId) (d : Spec.Ref) (a : Answer) : (s.answer to d a).now = s.now := by
   cases to <;> rfl
 
-@[simp] theorem newStep_records (c : Option Nat) : (s.newStep c).1.records = s.records := rfl
+@[simp] theorem newStep_records (o : StepOrigin) : (s.newStep o).1.records = s.records := rfl
 
 @[simp] theorem newMessage_records : s.newMessage.records = s.records := rfl
 
-@[simp] theorem newStep_deliveries (c : Option Nat) :
-    (s.newStep c).1.deliveries = s.deliveries := rfl
+@[simp] theorem newStep_deliveries (o : StepOrigin) :
+    (s.newStep o).1.deliveries = s.deliveries := rfl
 
-@[simp] theorem newStep_halted (c : Option Nat) : (s.newStep c).1.halted = s.halted := rfl
+@[simp] theorem newStep_halted (o : StepOrigin) : (s.newStep o).1.halted = s.halted := rfl
 
 @[simp] theorem newMessage_halted : s.newMessage.halted = s.halted := rfl
 
@@ -286,7 +286,7 @@ theorem answer_records (t : State) (to : Option LineId) (d : Spec.Ref) (a : Answ
 
 /-- The state and the step after `send` writes the input line and begins the message and its step. -/
 def sent (s : State) (name : Spec.Ref) (id : LineId) (input : Value) : State × Nat :=
-  (s.write .in (some id) (.command name input)).1.newMessage.newStep none
+  (s.write .in (some id) (.command name input)).1.newMessage.newStep .root
 
 /-- The state after `receive` writes the input line. -/
 def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l

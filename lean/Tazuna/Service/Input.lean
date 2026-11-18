@@ -13,7 +13,7 @@ def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
     (givenId : Option LineId) (raw : Value) : m State := do
   if target.service = st.service ∧ target.name ∈ st.commands then
     let (s, id) := s.write .in givenId (.command target raw)
-    let (s, step) := s.newMessage.newStep none
+    let (s, step) := s.newMessage.newStep .root
     let request : Request := { name := target.name, input := raw }
     match s.commandAnswers.find? id with
     | some known => message st fs (s.answer (some id) target (answerAgain known request)) {}
@@ -56,7 +56,7 @@ def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     (id : LineId) (raw payload : Value) (resultOf : Option LineId) : m State := do
   let (s, _) := s.write .in (some id) (.event event raw resultOf)
   let s := { s with deliveries := s.deliveries ++ [id] }
-  let (s, step) := s.newMessage.newStep none
+  let (s, step) := s.newMessage.newStep .root
   message st fs s { tasks := reactions st s [[{ event, payload }]] false step }
 
 /--
@@ -140,7 +140,7 @@ def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
     pure (s.report (.fault (issueViolation p.activity.ref e)))
   | .ok (.error f) => pure (s.report f)
   | .ok (.ok decoded) =>
-    let started := (s.write .in givenId (.answer p.id answer)).1.newMessage.newStep none
+    let started := (s.write .in givenId (.answer p.id answer)).1.newMessage.newStep .root
     let r ← settled fs st started.2 p.requester.machine? (deliverAnswer fs st started.2 p decoded) ⟨started.1, {}⟩
     message st fs r.state r.queue
 
@@ -320,7 +320,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
       match ← acceptsOperation fs st s resource control decoded with
       | .error fault => pure (s.report (.fault fault))
       | .ok (.ok i) =>
-        let (s, step) := s.newMessage.newStep none
+        let (s, step) := s.newMessage.newStep .root
         let r ← settled fs st step (some i.id) (dispatch fs st step i.id control decoded) ⟨s, {}⟩
         message st fs r.state r.queue
       | .ok (.error r) => pure (s.report (r.finding st screen control decoded))
