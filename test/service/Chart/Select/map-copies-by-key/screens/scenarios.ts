@@ -51,8 +51,8 @@ export const withoutKeyFields = scenario(
     given,
     when: (w) => {
       const all = w.user.operate(deliveredList(w, "task-1", "task-2"), "completeAll");
-      const first = all.request(todo.completeTask, { input: { taskId: "task-1" } });
-      const second = all.request(todo.completeTask, { input: { taskId: "task-2" } });
+      const first = all.request(todo.completeTask, { taskId: "task-1" });
+      const second = all.request(todo.completeTask, { taskId: "task-2" });
       w.net.deliver(first);
       w.peer.todo.leaveUnanswered(first);
       w.net.deliver(second);

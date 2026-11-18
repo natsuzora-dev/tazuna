@@ -174,57 +174,33 @@ export interface ScreenRef<Sc = AnyScreen> {
   readonly screen: Sc;
 }
 
-/** The number of handles of `requests` that a scenario names one by one at most. */
-export const handleLimit = 64;
-
-type Tuple<H, N extends number, A extends readonly H[] = []> = A["length"] extends N
-  ? A
-  : Tuple<H, N, readonly [...A, H]>;
-
-/**
- * The handles of `requests`, named one by one: their number exists only when the scenario runs, so a spread or a loop
- * over them is misusedObserved, and a handle beyond handleLimit a type error.
- */
-export type Handles<H> = Tuple<H, typeof handleLimit>;
-
 /** Nothing that `D` lacks, unless a service of `S` owns the definition `D`. */
 type OwnedBy<D, S extends string> = OwnerOf<D> extends S ? unknown : never;
 
 /**
- * What a line's processing, or the startup, caused, named by content; none or several matches are reported. A message
- * travels between services of `S`: the own service and the peers that Given lists as running or external.
+ * What a line's processing, or the startup, caused, named by content: a handle names every message whose content has
+ * the fields of `pick`. None matching is reported, and so are matches that differ. A line that names a handle acts on
+ * each of its messages in sending order, and test runs every other order and reports ChoiceDependent when one changes
+ * the result. A message travels between services of `S`: the own service and the peers that Given lists as running or
+ * external.
  */
 export interface Caused<S extends string = string> {
-  request<T extends Request>(
-    target: T & OwnedBy<T, S>,
-    pick?: { readonly input?: SomeFields<InputOf<T>> },
-  ): OutRequest<T>;
+  request<T extends Request>(target: T & OwnedBy<T, S>, pick?: SomeFields<InputOf<T>>): OutRequest<T>;
+  subscription<Q extends AnyQuery>(query: Q & OwnedBy<Q, S>, pick?: SomeFields<InputOf<Q>>): OutSubscription<Q>;
   /**
-   * The handles of the requests that `request` with these arguments names, which must be equal: named one by one, as in
-   * `const [first, second] = line.requests(target)`. Which request each handle names is no line's, so test runs every
-   * assignment and reports ChoiceDependent when one changes the result; a handle beyond their number names nothing.
-   */
-  requests<T extends Request>(
-    target: T & OwnedBy<T, S>,
-    pick?: { readonly input?: SomeFields<InputOf<T>> },
-  ): Handles<OutRequest<T>>;
-  subscription<Q extends AnyQuery>(
-    query: Q & OwnedBy<Q, S>,
-    pick?: { readonly input?: SomeFields<InputOf<Q>> },
-  ): OutSubscription<Q>;
-  /**
-   * The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. Equal events
-   * on one channel are one handle, and a line that names it acts on the oldest in flight.
+   * The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. Of equal events
+   * on one channel, a line acts on the oldest in flight.
    */
   event<Ev extends AnyEvent>(
     event: Ev & OwnedBy<Ev, S>,
-    pick?: { readonly payload?: SomeFields<EncodedPayload<Ev>>; readonly to?: Contract<unknown, unknown, "spec", S> },
+    pick?: SomeFields<EncodedPayload<Ev>>,
+    route?: { readonly to: Contract<unknown, unknown, "spec", S> },
   ): EventMessage<Ev>;
   screen<Sc extends AnyScreen>(screen: Sc): ScreenRef<Sc>;
   /**
-   * The one answer to the request of `request` that its receiver gave while this line or the startup was processed: the
+   * The answer to each request of `request` that its receiver gave while this line or the startup was processed: the
    * own service's answer to a peer's request, or one answer of a subscription, named by the line that caused it.
-   * `request` is the line that sent the request or delivered it.
+   * `request` is the line that sent the requests or delivered them.
    */
   answer<T>(request: RequestLine<T> | DeliveredRequest<T>): AnswerRef<T>;
   /** The end of the subscription `subscription` that its sender sent while this line or the startup was processed. */

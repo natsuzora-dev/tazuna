@@ -1,4 +1,4 @@
-import Tazuna.Explore.Assignments
+import Tazuna.Explore.DeliveryOrders
 import Tazuna.Explore.Enabled
 import Tazuna.Explore.Instrument
 import Tazuna.Scenario.Given
@@ -26,9 +26,10 @@ structure PairedService where
 
 derive_wire PairedService
 
-/-- The step order that a simulation takes for the processing of `origin` in `service`. -/
+/-- The step order that a simulation takes for the processing of `service` in delivery `delivery` of `origin`. -/
 structure StepOrder where
   origin : Scenario.Origin
+  delivery : Nat
   service : String
   order : List StepName
 
@@ -50,7 +51,7 @@ inductive Request where
   | simulate («structure» : Spec.Structure) (scenario : Scenario) (execute : Option Bool)
       (stepOrders : Option (List StepOrder))
   | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
-  | assignmentChanges («structure» : Spec.Structure) (scenario : Scenario)
+  | deliveryOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -198,9 +199,10 @@ structure TriedOrder where
 
 derive_wire TriedOrder serialize_only skip_serializing_none
 
-/-- What the search of the processing `origin` of `service` ran and found. -/
+/-- What the search of the processing of `service` in delivery `delivery` of `origin` ran and found. -/
 structure SearchedProcessing where
   origin : Scenario.Origin
+  delivery : Nat
   service : String
   tried : List TriedOrder
   found : List Explore.ChoiceDependent
@@ -222,7 +224,7 @@ inductive Response where
   | simulated (services : List SimulatedService) (violations : List Sim.InvalidScenario)
       (halted : Option Sim.InvalidScenario)
   | stepOrderChanges (searched : List SearchedProcessing)
-  | assignmentChanges (tried : List Explore.AssignmentTried) (found : List Explore.ChoiceDependent)
+  | deliveryOrderChanges (tried : List Explore.DeliveryOrderTried) (found : List Explore.ChoiceDependent)
   | error (message : String)
 
 derive_wire Response tag "type" serialize_only

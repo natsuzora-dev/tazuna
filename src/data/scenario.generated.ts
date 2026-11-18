@@ -23,8 +23,9 @@ export type Origin = z.infer<typeof origin>;
 
 const fact = z.discriminatedUnion("type", [
   /**
-   * The request of kind `kind` to `target` that a running service sent while `origin` was processed, whose input has each
-   * field of `input`, when given, equal as the target's input schema compares it.
+   * The requests of kind `kind` to `target` that running services sent while `origin` was processed, whose input has each
+   * field of `input`, when given, equal as the sender's input schema compares it. They must be equal, and a line that
+   * names them acts on each.
    */
   z.object({
     type: z.literal("request"),
@@ -36,23 +37,9 @@ const fact = z.discriminatedUnion("type", [
     },
   }),
   /**
-   * The handle `handle`, from 0, of the requests that `request` with the same fields names, which are equal as the
-   * target's input schema compares them and so interchangeable: which of them each handle names is a choice that test
-   * searches (World.assignments), and handles beyond their number name nothing.
-   */
-  z.object({
-    type: z.literal("requests"),
-    origin: origin,
-    kind: z.enum(["command", "query", "subscribe"]),
-    target: ref,
-    get input() {
-      return template.exactOptional();
-    },
-    handle: z.int().nonnegative(),
-  }),
-  /**
-   * The event `event` that a running service emitted while `origin` was processed, with each field of `payload` equal when
-   * given, as it travels to `receiver` when given, or to its only receiver.
+   * The events `event` that running services emitted while `origin` was processed, with each field of `payload` equal when
+   * given, as they travel to `receiver` when given, or to their only receiver. They must be equal; of those on one channel,
+   * a line acts on the oldest in flight.
    */
   z.object({
     type: z.literal("event"),
@@ -63,7 +50,10 @@ const fact = z.discriminatedUnion("type", [
     },
     receiver: z.string().exactOptional(),
   }),
-  /** The answer to the request that line `to` sent or delivered, which its receiver gave while `origin` was processed. */
+  /**
+   * The answers to the requests that line `to` sent or delivered, which their receivers gave while `origin` was processed,
+   * one per request.
+   */
   z.object({
     type: z.literal("answer"),
     origin: origin,
@@ -81,7 +71,7 @@ const fact = z.discriminatedUnion("type", [
     },
   }),
   /**
-   * The message that line `index` itself carried: a request it sent, a message that a peer line stated, or one that it
+   * The messages that line `index` itself carried: a request it sent, messages that a peer line stated, or those that it
    * delivered.
    */
   z.object({

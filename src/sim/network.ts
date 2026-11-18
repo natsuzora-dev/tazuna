@@ -1,7 +1,7 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
-import type { Fact, Origin } from "../data/scenario.generated.ts";
+import type { Origin } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
@@ -50,8 +50,15 @@ export const sameChannel = (m: Message, n: Message): boolean =>
 export const sameOrigin = (a: Origin, b: Origin): boolean =>
   a.type === b.type && (a.type === "startup" || (b.type === "line" && a.index === b.index));
 
-export interface Span {
+/** Lean's Turn: one processing, by its origin and which delivery of the line it is. */
+export interface Turn {
   readonly origin: Origin;
+  readonly delivery: number;
+}
+
+export const sameTurn = (a: Turn, b: Turn): boolean => sameOrigin(a.origin, b.origin) && a.delivery === b.delivery;
+
+export interface Span extends Turn {
   readonly service: string;
   readonly from: number;
   readonly to: number;
@@ -60,14 +67,10 @@ export interface Span {
 }
 
 /** Lean's World.stepOrders entry. */
-export interface StepOrder {
-  readonly origin: Origin;
+export interface StepOrder extends Turn {
   readonly service: string;
   readonly order: readonly StepName[];
 }
-
-/** Lean's World.assignments entry: a group of handles of `requests`, and the place of the message of each handle. */
-export type Assignment = readonly [Fact, readonly number[]];
 
 export interface Opened {
   readonly origin: Origin;
@@ -105,8 +108,8 @@ export interface World {
   halted: InvalidScenario | undefined;
   /** Lean's World.stepOrders. */
   stepOrders: readonly StepOrder[];
-  /** Lean's World.assignments. */
-  assignments: readonly Assignment[];
+  /** Lean's World.deliveryOrders: by line, the places of its messages in the order it acts on them. */
+  deliveryOrders: ReadonlyMap<number, readonly number[]>;
 }
 
 export const stateOf = (w: World, service: string): State | undefined => w.services.get(service)?.processing.state;
@@ -250,7 +253,7 @@ function checkComputed(w: World, service: string, sent: readonly Line[], records
 }
 
 /** Lean's World.act. */
-export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
+export function act(w: World, turn: Turn, service: string, f: (r: Processing) => void, reopen = false): void {
   const p = w.services.get(service);
   if (p === undefined) return;
   const r = p.processing;
@@ -258,7 +261,8 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
   const before = s.lines.length;
   const stepsFrom = s.steps.length;
   const screens = screensOf(s);
-  const entry = w.stepOrders.find((e) => sameOrigin(e.origin, o) && e.service === service);
+  const o = turn.origin;
+  const entry = w.stepOrders.find((e) => sameTurn(e, turn) && e.service === service);
   s.stepOrder = entry?.order ?? [];
   if (entry !== undefined) w.stepOrders = w.stepOrders.filter((e) => e !== entry);
   try {
@@ -274,16 +278,16 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
   }
   for (const id of screensOf(s).filter((k) => reopen || !screens.includes(k)))
     w.opened.push({ origin: o, service, id });
-  w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
+  w.spans.push({ ...turn, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
   const sent = s.lines.slice(before);
   route(w, o, service, sent);
   checkComputed(w, service, sent, s.records);
 }
 
 /** Lean's World.deliver. */
-export function deliver(w: World, o: Origin, k: number): void {
+export function deliver(w: World, turn: Turn, k: number): void {
   const m = w.messages[k];
   if (m === undefined) return;
   m.status = "delivered";
-  act(w, o, m.receiver, (r) => arriveFrom(r, m.sender, m.id, m.body));
+  act(w, turn, m.receiver, (r) => arriveFrom(r, m.sender, m.id, m.body));
 }

@@ -7,11 +7,13 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "command",
-          "id": "addTask#1",
-          "name": "addTask",
+          "id": "addTasks#1",
+          "name": "addTasks",
           "input": {
-            "taskId": "task-1",
-            "title": "Buy milk"
+            "taskIds": [
+              "task-1",
+              "task-2"
+            ]
           }
         },
         {
@@ -19,7 +21,7 @@
           "dir": "out",
           "type": "answer",
           "id": "answer#1",
-          "to": "addTask#1",
+          "to": "addTasks#1",
           "answer": {
             "result": "accepted"
           }
@@ -32,10 +34,10 @@
           "name": "taskAddedRecorded",
           "payload": {
             "id": "task-1",
-            "title": "Buy milk",
+            "title": "task-1",
             "seen": false
           },
-          "resultOf": "addTask#1"
+          "resultOf": "addTasks#1"
         },
         {
           "time": "2026-10-25T01:00:00Z",
@@ -46,7 +48,31 @@
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1"
+          "resultOf": "addTasks#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "taskAddedRecorded#2",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-2",
+            "title": "task-2",
+            "seen": false
+          },
+          "resultOf": "addTasks#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "taskAdded#2",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-2"
+          },
+          "resultOf": "addTasks#1"
         },
         {
           "time": "2026-10-25T01:00:00Z",
@@ -59,25 +85,20 @@
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
+          "type": "event",
+          "id": "noted#2",
+          "name": "noted",
+          "payload": {}
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
           "type": "command",
           "id": "calendar.book#1",
           "name": "calendar.book",
           "input": {
             "bookingId": "todo/Booking-1",
             "taskId": "task-1"
-          }
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "answer",
-          "id": "calendar/answer#1",
-          "to": "calendar.book#1",
-          "answer": {
-            "result": "accepted",
-            "output": {
-              "slot": "10:00"
-            }
           }
         }
       ],
@@ -102,28 +123,35 @@
     "kind": "InvalidScenario.ambiguousReference",
     "definition": null,
     "data": {
-      "scenarioLine": 5,
+      "scenarioLine": 1,
       "fact": {
-        "type": "line",
-        "index": 4
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "event": {
+          "service": "todo",
+          "name": "taskAdded"
+        }
       },
       "candidates": [
         {
-          "sender": "calendar",
-          "receiver": "todo",
-          "id": "bookingConfirmed#1",
+          "sender": "todo",
+          "receiver": "notifier",
+          "id": "taskAdded#1",
           "origin": {
             "type": "line",
-            "index": 4
+            "index": 0
           }
         },
         {
-          "sender": "calendar",
-          "receiver": "audit",
-          "id": "bookingConfirmed#1",
+          "sender": "todo",
+          "receiver": "notifier",
+          "id": "taskAdded#2",
           "origin": {
             "type": "line",
-            "index": 4
+            "index": 0
           }
         }
       ]

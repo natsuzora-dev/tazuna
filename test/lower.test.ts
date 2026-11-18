@@ -79,9 +79,9 @@ test("A handle's observed value in a written value becomes a hole that reads the
 
 test("A pick that holds an observed value becomes a template, and a subscription handle names a subscribe request", () => {
   const { lines } = lowered((w) => {
-    const watching = w.startup.subscription(todo.tasks, { input: { filter: "open" } });
+    const watching = w.startup.subscription(todo.tasks, { filter: "open" });
     const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
-    w.net.deliver(adding.request(todo.completeTask, { input: { taskId: watching.input.filter } }));
+    w.net.deliver(adding.request(todo.completeTask, { taskId: watching.input.filter }));
   });
   assert.deepEqual(lines[1], {
     type: "deliver",
@@ -213,30 +213,34 @@ for (const [use, misuse] of [
     assert.equal(violations[0]?.kind === "misusedObserved" ? violations[0].use : undefined, use);
   });
 
-test("The handles of requests name the same requests by their place, and a spread of them is a violation", () => {
-  const named = lowered((w) => {
+test("A pick is the content itself, and an event's route comes after it", () => {
+  const { lines } = lowered((w) => {
     const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
-    const [, second] = adding.requests(calendar.nextBusinessDay);
-    w.net.deliver(second);
+    w.net.deliver(adding.request(calendar.nextBusinessDay, { from: "2026-10-25T00:00:00Z" }));
+    w.net.deliver(adding.event(todo.taskAdded, { taskId: "task-1" }, { to: todo }));
   });
-  assert.deepEqual(named.lines[1], {
-    type: "deliver",
-    message: {
-      type: "requests",
-      origin: { type: "line", index: 0 },
-      kind: "query",
-      target: { service: "calendar", name: "nextBusinessDay" },
-      handle: 1,
+  assert.deepEqual(lines.slice(1), [
+    {
+      type: "deliver",
+      message: {
+        type: "request",
+        origin: line(0),
+        kind: "query",
+        target: { service: "calendar", name: "nextBusinessDay" },
+        input: { value: { from: "2026-10-25T00:00:00Z" }, holes: [] },
+      },
     },
-  });
-  const spread = lowered((w) => {
-    const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
-    for (const request of [...adding.requests(calendar.nextBusinessDay)]) w.net.deliver(request);
-  });
-  assert.deepEqual(
-    spread.violations.map((p) => (p.kind === "misusedObserved" ? [p.use, p.path] : p.kind)),
-    [["spread", []]],
-  );
+    {
+      type: "deliver",
+      message: {
+        type: "event",
+        origin: line(0),
+        event: { service: "todo", name: "taskAdded" },
+        payload: { value: { taskId: "task-1" }, holes: [] },
+        receiver: "todo",
+      },
+    },
+  ]);
 });
 
 test("A position read in a bag of an observed value is a violation, and one in a sequence is a hole", () => {

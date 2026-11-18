@@ -8,7 +8,7 @@ import type { Processing } from "../../service/chart/queue.ts";
 import { created } from "../../service/state.ts";
 import type { Structure } from "../../spec/structure.generated.ts";
 import { encodedGivenRecords, start } from "../given.ts";
-import type { Assignment, StepOrder, World } from "../network.ts";
+import type { StepOrder, World } from "../network.ts";
 import { execute, simulate } from "../run.ts";
 import { snapshotLines, traceLineOf } from "../trace.ts";
 import { instrumented, Listener } from "./listener.ts";
@@ -36,7 +36,7 @@ function made(
   sc: Scenario,
   run: (structure: Structure, w: World, sc: Scenario) => World,
   stepOrders: readonly StepOrder[],
-  assignments: readonly Assignment[] = [],
+  deliveryOrders: ReadonlyMap<number, readonly number[]> = new Map(),
 ): Made {
   const listeners = new Map<string, Listener>();
   const w = start(sc, (service) => {
@@ -45,7 +45,7 @@ function made(
     return processingFor(spec, service, listener);
   });
   w.stepOrders = stepOrders;
-  w.assignments = assignments;
+  w.deliveryOrders = deliveryOrders;
   return { world: run(spec.structure, w, sc), listeners };
 }
 
@@ -53,13 +53,13 @@ function made(
 export const simulateSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
   made(spec, sc, simulate, stepOrders);
 
-/** Runs the lines of the scenario on the spec's services as explore does (execute), with the handles of `assignments`. */
+/** Runs the lines of the scenario on the spec's services as explore does (execute), with `deliveryOrders`. */
 export const executeSpec = (
   spec: Spec,
   sc: Scenario,
   stepOrders: readonly StepOrder[] = [],
-  assignments: readonly Assignment[] = [],
-): Made => made(spec, sc, execute, stepOrders, assignments);
+  deliveryOrders: ReadonlyMap<number, readonly number[]> = new Map(),
+): Made => made(spec, sc, execute, stepOrders, deliveryOrders);
 
 /** Each running service's trace as its snapshot holds it. */
 export const snapshotsOf = ({ world }: Made): ReadonlyMap<string, readonly TraceLine[]> =>

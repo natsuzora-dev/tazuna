@@ -59,10 +59,4 @@ def Expectation.picks (e : Expectation) : List Template :=
     | .requested _ _ ends => ends.flatMap Fact.picks
     | _ => []) ++ e.written.flatMap Template.picks
 
-/-- The handles that the expectation names, with those that they and its written values read, at any depth. -/
-def Expectation.named (e : Expectation) : List Fact :=
-  (match e with
-    | .requested _ _ ends => ends.flatMap Fact.named
-    | _ => []) ++ e.written.flatMap Template.named
-
 end Tazuna.Scenario

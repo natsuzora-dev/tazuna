@@ -26,19 +26,8 @@ deriving Repr, Inhabited
 derive_wire Difference tag "aspect"
 
 /--
-The handles of one group of `requests` to `target`: handle `j` names the group's message at place `handles[j]`, counted
-in sending order.
--/
-structure Assigned where
-  target : Spec.Ref
-  handles : List Nat
-deriving Repr, Inhabited
-
-derive_wire Assigned
-
-/--
-A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, or
-of two deadlines of one service due at one time, or which of equal requests each handle of `requests` names. Every other
+A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, of two
+deadlines of one service due at one time, or of the processings of equal messages that one line delivers. Every other
 order of a simulation is a written line. stepOrder writes the pair in canonical order.
 -/
 inductive ChoiceDependent where
@@ -53,19 +42,20 @@ inductive ChoiceDependent where
   /--
   The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
   a result that only those change is not reported. `definition` is the definition of the first step of the first pair
-  that the search swapped. The search of the assignments of one scenario stops alike at assignmentLimit, with the
-  target of the first group as `definition`.
+  that the search swapped. The search of the delivery orders of one line stops alike at deliveryOrderLimit, with the
+  definition of its messages as `definition`.
   -/
   | searchLimit (definition : Spec.Ref) (limit : Nat)
   /--
-  The execution in which each handle of `requests` names the message at its own place and the execution with the handles of each
-  group as `assigned` lists them differ by `difference` in the outcome of the running service `service`. The requests
-  are equal, so nothing outside tells which answer belongs to which. `definition` is the target of the first group that
-  `assigned` changes.
+  The execution in which scenario line `scenarioLine` delivers the equal messages that it names in sending order and the
+  execution in which it delivers them in `order`, their places counted in sending order, differ by `difference` in the
+  outcome of the running service `service`. The messages are equal, so nothing outside tells which arrives first.
+  `definition` is the request or event that the messages carry.
   -/
-  | assignment (definition : Spec.Ref) (service : String) (assigned : List Assigned) (difference : Difference)
+  | deliveryOrder (definition : Spec.Ref) (scenarioLine : Nat) (order : List Nat) (service : String)
+      (difference : Difference)
   /--
-  Comparing the records of two executions that a stepOrder or assignment violation at `definition` would name held more
+  Comparing the records of two executions that a stepOrder or deliveryOrder violation at `definition` would name held more
   than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
   the choice changes the records is not known.
   -/
@@ -81,10 +71,10 @@ processing with many steps that touch the same values, whose count grows factori
 def stepOrderLimit : Nat := 64
 
 /--
-The number of assignments of handles of `requests` that the search of one scenario runs at most (assignmentSearch). It
-bounds the assignments of many equal requests, whose count grows factorially.
+The number of delivery orders that the search of one line runs at most (deliveryOrderSearch). It bounds the orders of
+many equal messages, whose count grows factorially.
 -/
-def assignmentLimit : Nat := 64
+def deliveryOrderLimit : Nat := 64
 
 /--
 The result of a run: the violation that halted it, the trace lines that verify reads, its records, and the keys that its
@@ -216,16 +206,16 @@ def stepOrder (compare : Compare m) (service : String) (a b : StepName) (aOrder 
     (.stepOrder (first.definition service) first second firstOrder secondOrder)
 
 /--
-The ChoiceDependent violation, if any, for the assignment `assigned` of handles of `requests`: the first difference,
-in the order of `outcomes`, between the outcome of a running service in the execution with each handle at its own place and
-in the execution with `assigned`. `definition` is the target of the first group that `assigned` changes.
+The ChoiceDependent violation, if any, for the delivery order `order` of line `line`: the first difference, in the order
+of `outcomes`, between the outcome of a running service in the execution that delivers in sending order and in the
+execution that delivers in `order`.
 -/
-def assignment (compareFor : String → Compare m) (definition : Spec.Ref) (assigned : List Assigned)
+def deliveryOrder (compareFor : String → Compare m) (definition : Spec.Ref) (line : Nat) (order : List Nat)
     (outcomes : List (String × Outcome × Outcome)) : m (Option ChoiceDependent) :=
   outcomes.foldlM (init := none) fun found (service, original, alternative) => do
     if found.isSome then return found
     return (← difference (compareFor service) original alternative).violation definition
-      (.assignment definition service assigned)
+      (.deliveryOrder definition line order service)
 
 end
 

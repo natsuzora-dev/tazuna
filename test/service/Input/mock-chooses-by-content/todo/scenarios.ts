@@ -11,7 +11,7 @@ export const chosenByContent = scenario(
     when: (w) => {
       const add = w.client.send(addTask, {});
       const deliverAndAnswer = (from: string) => {
-        const request = add.request(calendar.nextDay, { input: { from } });
+        const request = add.request(calendar.nextDay, { from });
         w.net.deliver(request);
         w.net.deliver(w.peer.calendar.answer(request, nextDay));
       };

@@ -8,7 +8,7 @@ import {
   type Values,
 } from "../data/binding.ts";
 import { Bag } from "../data/canonical.ts";
-import type { Assigned, ChoiceDependent, Difference } from "../data/choiceDependent.generated.ts";
+import type { ChoiceDependent, Difference } from "../data/choiceDependent.generated.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
@@ -162,20 +162,25 @@ export function stepOrder(
 }
 
 /**
- * Lean's assignment: the violation for the assignment `assigned` at the first running service, in the order of
- * `outcomes`, whose outcome differs between the execution with each handle at its own place and the execution with `assigned`.
+ * Lean's deliveryOrder: the violation for the delivery order `order` of line `line` at the first running service, in the
+ * order of `outcomes`, whose outcome differs between the execution in sending order and the execution in `order`.
  */
-export function assignment(
+export function deliveryOrder(
   compareFor: (service: string) => Compare,
-  definition: Of<"ChoiceDependent.assignment">["definition"],
-  assigned: readonly Assigned[],
+  definition: Of<"ChoiceDependent.deliveryOrder">["definition"],
+  line: number,
+  order: readonly number[],
   outcomes: readonly (readonly [string, Outcome, Outcome])[],
-): Of<"ChoiceDependent.assignment" | "ChoiceDependent.uncomparable"> | undefined {
+): Of<"ChoiceDependent.deliveryOrder" | "ChoiceDependent.uncomparable"> | undefined {
   for (const [service, original, alternative] of outcomes) {
     const found = difference(compareFor(service), original, alternative);
     if (found === "uncomparable") return uncomparable(definition);
     if (found !== undefined)
-      return { kind: "ChoiceDependent.assignment", definition, data: { service, assigned, difference: found } };
+      return {
+        kind: "ChoiceDependent.deliveryOrder",
+        definition,
+        data: { scenarioLine: line, order, service, difference: found },
+      };
   }
   return undefined;
 }

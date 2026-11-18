@@ -1,0 +1,6 @@
+{"time":"2026-10-25T10:00:00Z","dir":"in","type":"command","id":"todo/calendar.reserve#1","name":"reserve","input":{"day":"Mon"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"todo/calendar.reserve#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"event","id":"booked#1","name":"booked","payload":{"day":"Mon"},"resultOf":"todo/calendar.reserve#1"}
+{"time":"2026-10-25T10:00:00Z","dir":"in","type":"command","id":"todo/calendar.reserve#2","name":"reserve","input":{"day":"Tue"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"todo/calendar.reserve#2","answer":{"result":"accepted"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"event","id":"booked#2","name":"booked","payload":{"day":"Tue"},"resultOf":"todo/calendar.reserve#2"}

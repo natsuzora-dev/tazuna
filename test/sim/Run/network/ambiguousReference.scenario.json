@@ -33,12 +33,11 @@
       "kind": "command",
       "target": {
         "service": "todo",
-        "name": "addTask"
+        "name": "addTasks"
       },
       "input": {
         "value": {
-          "taskId": "task-1",
-          "title": "Buy milk"
+          "taskIds": ["task-1", "task-2"]
         },
         "holes": []
       }
@@ -46,81 +45,15 @@
     {
       "type": "deliver",
       "message": {
-        "type": "request",
+        "type": "event",
         "origin": {
           "type": "line",
           "index": 0
         },
-        "kind": "command",
-        "target": {
-          "service": "calendar",
-          "name": "book"
+        "event": {
+          "service": "todo",
+          "name": "taskAdded"
         }
-      }
-    },
-    {
-      "type": "answer",
-      "peer": "calendar",
-      "request": {
-        "type": "request",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "kind": "command",
-        "target": {
-          "service": "calendar",
-          "name": "book"
-        }
-      },
-      "answer": {
-        "value": {
-          "result": "accepted",
-          "output": {
-            "slot": "10:00"
-          }
-        },
-        "holes": []
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "line",
-        "index": 2
-      }
-    },
-    {
-      "type": "emit",
-      "peer": "calendar",
-      "event": {
-        "service": "calendar",
-        "name": "bookingConfirmed"
-      },
-      "payload": {
-        "value": {
-          "bookingId": "b"
-        },
-        "holes": []
-      },
-      "resultOf": {
-        "type": "request",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "kind": "command",
-        "target": {
-          "service": "calendar",
-          "name": "book"
-        }
-      }
-    },
-    {
-      "type": "deliver",
-      "message": {
-        "type": "line",
-        "index": 4
       }
     }
   ],

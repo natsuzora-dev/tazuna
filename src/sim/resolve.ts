@@ -117,7 +117,8 @@ export function targetOf(m: Message): DefinitionRef | undefined {
 
 const eventOf = (m: Message): DefinitionRef | undefined => (m.body.type === "event" ? m.body.event : undefined);
 
-export const sentBy = (w: World, line: number): Sent | undefined => w.sent.find((s) => s.line === line);
+/** Lean's World.sentBy: the requests that line `line` sent or delivered, in the order it did. */
+export const sentBy = (w: World, line: number): Sent[] => w.sent.filter((s) => s.line === line);
 
 const unresolved = (i: number, fact: Fact): never =>
   reported({
@@ -126,72 +127,53 @@ const unresolved = (i: number, fact: Fact): never =>
     data: { scenarioLine: i, fact: json(fact) },
   });
 
-/** Lean's World.only. */
-function only(w: World, i: number, fact: Fact, found: readonly number[]): number {
-  if (found.length === 1) return found[0] as number;
-  if (found.length === 0) return unresolved(i, fact);
-  return reported({
+/** Lean's nonEmpty. */
+function nonEmpty<T>(i: number, fact: Fact, found: readonly T[]): readonly T[] {
+  return found.length === 0 ? unresolved(i, fact) : found;
+}
+
+/** Lean's World.ambiguous. */
+const ambiguous = (w: World, i: number, fact: Fact, ks: readonly number[]): never =>
+  reported({
     kind: "InvalidScenario.ambiguousReference",
     definition: null,
     data: {
       scenarioLine: i,
       fact: json(fact),
-      candidates: found.flatMap((k) => {
+      candidates: ks.flatMap((k) => {
         const m = w.messages[k];
         return m === undefined ? [] : [describe(m)];
       }),
     },
   });
+
+/** Lean's World.comparedContent?. */
+function comparedContent(w: World, k: number): string | undefined {
+  const m = w.messages[k];
+  if (m === undefined) return undefined;
+  const v = valueOfLine(m.body);
+  if (v === undefined) return undefined;
+  const schema = schemaOf(w, m);
+  return canonicalJson(schema === undefined ? v : comparedOr(w, schema[0], schema[1], v));
 }
 
-/** Lean's World.oneOfEqual: `found` with equal messages on one channel as one, the oldest in flight or the first. */
-function oneOfEqual(w: World, found: readonly number[]): readonly number[] {
-  const first = found[0] === undefined ? undefined : w.messages[found[0]];
-  if (first === undefined) return found;
-  const keys = found.flatMap((k) => {
-    const m = w.messages[k];
-    if (m === undefined || !sameChannel(m, first)) return [];
-    const schema = schemaOf(w, m);
-    const v = valueOfLine(m.body);
-    return schema === undefined || v === undefined ? [] : [canonicalJson(comparedOr(w, schema[0], schema[1], v))];
+/** Lean's World.alikeMessages: equal messages, of those on one channel the oldest in flight or else the first. */
+function alikeMessages(w: World, i: number, fact: Fact, found: readonly number[]): number[] {
+  const ks = nonEmpty(i, fact, found);
+  const keys = ks.map((k) => comparedContent(w, k));
+  if (!keys.every((k) => k === keys[0])) ambiguous(w, i, fact, ks);
+  const together = (k: number, j: number) => {
+    const [a, b] = [w.messages[k], w.messages[j]];
+    return a !== undefined && b !== undefined && sameChannel(a, b);
+  };
+  return ks.filter((k) => {
+    const peers = ks.filter((j) => together(k, j));
+    return k === (peers.find((j) => w.messages[j]?.status === "inFlight") ?? peers[0] ?? k);
   });
-  if (keys.length !== found.length || !keys.every((k) => k === keys[0])) return found;
-  return [found.find((k) => w.messages[k]?.status === "inFlight") ?? (found[0] as number)];
 }
 
-/** Lean's Fact.group?. */
-export const groupOf = (fact: Extract<Fact, { type: "requests" }>): Fact => ({ ...fact, handle: 0 });
-
-/** Lean's World.requestsOf. */
-export function requestsOf(w: World, i: number, fact: Fact): number[] {
-  if (fact.type !== "requests") return unresolved(i, fact);
-  const pick = fact.input === undefined ? undefined : fill(w, i, fact.input);
-  const found = w.messages.flatMap((m, k) => {
-    if (!(sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m) ?? null, fact.target)))
-      return [];
-    const schema = schemaOf(w, m);
-    const v = valueOfLine(m.body);
-    if (schema === undefined || v === undefined || !picks(w, schema[0], schema[1], pick, v)) return [];
-    return [[k, canonicalJson(comparedOr(w, schema[0], schema[1], v))] as const];
-  });
-  if (!found.every(([, c]) => c === found[0]?.[1]))
-    return reported({
-      kind: "InvalidScenario.ambiguousReference",
-      definition: null,
-      data: {
-        scenarioLine: i,
-        fact: json(fact),
-        candidates: found.flatMap(([k]) => {
-          const m = w.messages[k];
-          return m === undefined ? [] : [describe(m)];
-        }),
-      },
-    });
-  return found.map(([k]) => k);
-}
-
-/** Lean's World.messageOf. */
-export function messageOf(w: World, i: number, fact: Fact): number {
+/** Lean's World.messagesOf. */
+export function messagesOf(w: World, i: number, fact: Fact): number[] {
   const matching = (p: (m: Message) => boolean) => w.messages.flatMap((m, k) => (p(m) ? [k] : []));
   const picked = (p: (m: Message) => boolean, pick: Template | undefined) => {
     const filled = pick === undefined ? undefined : fill(w, i, pick);
@@ -202,9 +184,13 @@ export function messageOf(w: World, i: number, fact: Fact): number {
       return schema !== undefined && v !== undefined && picks(w, schema[0], schema[1], filled, v);
     });
   };
+  const oneEach = (each: readonly number[][]): number[] => {
+    if (each.some((ks) => ks.length > 1)) ambiguous(w, i, fact, each.flat());
+    return [...nonEmpty(i, fact, each.flat())];
+  };
   switch (fact.type) {
     case "request":
-      return only(
+      return alikeMessages(
         w,
         i,
         fact,
@@ -214,69 +200,57 @@ export function messageOf(w: World, i: number, fact: Fact): number {
           fact.input,
         ),
       );
-    case "requests": {
-      const found = requestsOf(w, i, fact);
-      const key = canonicalJson(groupOf(fact) as Json);
-      const place = w.assignments.find(([g]) => canonicalJson(g as Json) === key)?.[1][fact.handle] ?? fact.handle;
-      const k = found[place];
-      return k === undefined ? unresolved(i, fact) : k;
-    }
     case "event":
-      return only(
+      return alikeMessages(
         w,
         i,
         fact,
-        oneOfEqual(
-          w,
-          picked(
+        picked(
+          (m) =>
+            sameOrigin(m.origin, fact.origin) &&
+            sameRef(eventOf(m) ?? null, fact.event) &&
+            (fact.receiver === undefined || fact.receiver === m.receiver),
+          fact.payload,
+        ),
+      );
+    case "answer":
+      return oneEach(
+        sentBy(w, fact.to).map((s) =>
+          matching(
             (m) =>
               sameOrigin(m.origin, fact.origin) &&
-              sameRef(eventOf(m) ?? null, fact.event) &&
-              (fact.receiver === undefined || fact.receiver === m.receiver),
-            fact.payload,
+              m.sender === s.receiver &&
+              m.body.type === "answer" &&
+              sameLineId(m.body.to, s.id),
           ),
         ),
       );
-    case "answer": {
-      const s = sentBy(w, fact.to);
-      if (s === undefined) return unresolved(i, fact);
-      return only(
-        w,
-        i,
-        fact,
-        matching(
-          (m) =>
-            sameOrigin(m.origin, fact.origin) &&
-            m.sender === s.receiver &&
-            m.body.type === "answer" &&
-            sameLineId(m.body.to, s.id),
-        ),
-      );
-    }
     case "end": {
-      const sub = w.messages[messageOf(w, i, fact.subscription)];
-      if (sub === undefined) return unresolved(i, fact);
-      return only(
-        w,
-        i,
-        fact,
-        matching(
-          (m) =>
-            sameOrigin(m.origin, fact.origin) &&
-            m.sender === sub.sender &&
-            m.receiver === sub.receiver &&
-            m.body.type === "unsubscribe" &&
-            sameLineId(m.body.to, sub.id),
+      const subs = messagesOf(w, i, fact.subscription).flatMap((k) => {
+        const m = w.messages[k];
+        return m === undefined ? [] : [m];
+      });
+      return oneEach(
+        subs.map((sub) =>
+          matching(
+            (m) =>
+              sameOrigin(m.origin, fact.origin) &&
+              m.sender === sub.sender &&
+              m.receiver === sub.receiver &&
+              m.body.type === "unsubscribe" &&
+              sameLineId(m.body.to, sub.id),
+          ),
         ),
       );
     }
     case "line":
-      return only(
-        w,
-        i,
-        fact,
-        w.carried.flatMap(([l, k]) => (l === fact.index ? [k] : [])),
-      );
+      return [
+        ...nonEmpty(
+          i,
+          fact,
+          w.carried.flatMap(([l, k]) => (l === fact.index ? [k] : [])),
+        ),
+      ];
     case "screen":
       return unresolved(i, fact);
   }
@@ -320,45 +294,99 @@ export function answersOf(w: World, s: Sent): Answer[] {
 const outputOf = (a: Answer | undefined): unknown =>
   a === undefined || a.result === "rejected" ? undefined : a.output;
 
+/** Lean's alike: the first raw value, when every compared value is equal. */
+function alike(i: number, fact: Fact, missing: () => never, values: readonly (readonly [unknown, unknown])[]): unknown {
+  const [first, ...rest] = values;
+  if (first === undefined) return missing();
+  const key = canonicalJson(first[1]);
+  if (rest.every(([, c]) => canonicalJson(c) === key)) return first[0];
+  return reported({
+    kind: "InvalidScenario.ambiguousReference",
+    definition: null,
+    data: { scenarioLine: i, fact: json(fact), candidates: values.map(([v]) => json(v)) },
+  });
+}
+
 /** Lean's World.partOf. */
 function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
   const missing = (): never =>
     reported({ kind: "InvalidScenario.missingOutput", definition: null, data: { scenarioLine: i, fact: json(fact) } });
-  const present = (v: unknown) => (v === undefined ? missing() : v);
-  const viaMessage = () => {
-    const m = w.messages[messageOf(w, i, fact)];
-    if (m === undefined) return missing();
-    if (m.body.type === "answer" && part === "output") return present(outputOf(m.body.answer));
-    if (part === "input") return present(valueOfLine(m.body));
-    const received = (stateOf(w, m.sender)?.lines ?? []).find(
-      (l) => l.dir === "in" && l.type === "answer" && sameLineId(l.to, m.id),
-    );
-    return present(received?.type === "answer" ? outputOf(received.answer) : undefined);
+  const compared = (side: string, schema: Schema | undefined, v: unknown) =>
+    schema === undefined ? v : comparedOr(w, side, schema, v);
+  const viaMessages = () => {
+    const ks = messagesOf(w, i, fact);
+    const values = ks.flatMap((k) => {
+      const m = w.messages[k];
+      if (m === undefined) return [];
+      const schema = schemaOf(w, m);
+      const side = schema?.[0] ?? m.sender;
+      let v: unknown;
+      if (m.body.type === "answer" && part === "output") v = outputOf(m.body.answer);
+      else if (part === "input") v = valueOfLine(m.body);
+      else {
+        const received = (stateOf(w, m.sender)?.lines ?? []).find(
+          (l) => l.dir === "in" && l.type === "answer" && sameLineId(l.to, m.id),
+        );
+        v = received?.type === "answer" ? outputOf(received.answer) : undefined;
+      }
+      const target = targetOf(m);
+      const valueSchema: Schema | undefined =
+        part === "input" ? schema?.[1] : target === undefined ? undefined : { kind: "output", definition: target };
+      return v === undefined ? [] : [[v, compared(side, valueSchema, v)] as const];
+    });
+    if (values.length !== ks.length) return missing();
+    return alike(i, fact, missing, values);
   };
   if (fact.type === "line") {
-    const s = sentBy(w, fact.index);
-    if (s === undefined) return viaMessage();
-    if (part === "input") {
-      const l = stateOf(w, s.receiver)?.lines[s.position];
-      return present(l === undefined ? undefined : valueOfLine(l));
-    }
-    return present(outputOf(answersOf(w, s)[0]));
+    const sents = sentBy(w, fact.index);
+    if (sents.length === 0) return viaMessages();
+    const values = sents.flatMap((s) => {
+      const request = stateOf(w, s.receiver)?.lines[s.position];
+      const v =
+        part === "input" ? (request === undefined ? undefined : valueOfLine(request)) : outputOf(answersOf(w, s)[0]);
+      const target =
+        request?.type === "command" || request?.type === "query" || request?.type === "subscribe"
+          ? request.target
+          : undefined;
+      const schema: Schema | undefined =
+        target === undefined
+          ? undefined
+          : part === "input"
+            ? { kind: "input", definition: target }
+            : { kind: "output", definition: target };
+      return v === undefined ? [] : [[v, compared(s.receiver, schema, v)] as const];
+    });
+    if (values.length !== sents.length) return missing();
+    return alike(i, fact, missing, values);
   }
   if (fact.type === "answer" && part === "output") {
-    const s = sentBy(w, fact.to);
-    if (s === undefined) return unresolved(i, fact);
-    const given = spanLines(w, fact.origin, s.receiver).flatMap((l) =>
-      l.dir === "out" && l.type === "answer" && sameLineId(l.to, s.id) ? [l.answer] : [],
+    const sents = sentBy(w, fact.to);
+    if (sents.length === 0) return unresolved(i, fact);
+    const each = sents.map((s) =>
+      spanLines(w, fact.origin, s.receiver).flatMap((l) =>
+        l.dir === "out" && l.type === "answer" && sameLineId(l.to, s.id) ? [l.answer] : [],
+      ),
     );
-    if (given.length === 1) return present(outputOf(given[0]));
-    if (given.length === 0) return unresolved(i, fact);
-    return reported({
-      kind: "InvalidScenario.ambiguousReference",
-      definition: null,
-      data: { scenarioLine: i, fact: json(fact), candidates: given.map(json) },
+    if (each.some((given) => given.length === 0)) return unresolved(i, fact);
+    if (each.some((given) => given.length > 1))
+      return reported({
+        kind: "InvalidScenario.ambiguousReference",
+        definition: null,
+        data: { scenarioLine: i, fact: json(fact), candidates: each.flat().map(json) },
+      });
+    const outputs = each.flat().flatMap((a) => {
+      const o = outputOf(a);
+      return o === undefined ? [] : [o];
     });
+    if (outputs.length !== sents.length) return missing();
+    return alike(
+      i,
+      fact,
+      missing,
+      outputs.map((o) => [o, o] as const),
+    );
   }
-  return viaMessage();
+  return viaMessages();
 }
 
 /** Lean's World.observed. */

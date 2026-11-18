@@ -43,9 +43,8 @@ inductive InvalidScenario where
   /-- No fact matches the handle `fact` that the line names. -/
   | unresolvedReference (scenarioLine : Nat) (fact : Value)
   /--
-  Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. For a
-  handle of `requests`, the candidates differ in content, so a pick tells them apart. Equal events on one channel are
-  not several: a line that names them acts on the oldest in flight.
+  The facts `candidates` that match the handle `fact` differ, so the line cannot act on each alike; the handle must name
+  content that tells them apart. Equal messages are not ambiguous: a line acts on each of them.
   -/
   | ambiguousReference (scenarioLine : Nat) (fact : Value) (candidates : List Value)
   /-- The line reads the output of the answer to `fact`, which has no answer with an output by then. -/

@@ -27,10 +27,10 @@ export const limits = {
 export const stepOrderLimit = 64;
 
 /**
- * The number of assignments of handles of `requests` that the search of one scenario runs at most (assignmentSearch). It
- * bounds the assignments of many equal requests, whose count grows factorially.
+ * The number of delivery orders that the search of one line runs at most (deliveryOrderSearch). It bounds the orders of
+ * many equal messages, whose count grows factorially.
  */
-export const assignmentLimit = 64;
+export const deliveryOrderLimit = 64;
 
 /** The most bindings, or states of a group, that one step of a comparison holds. */
 export const bindingLimit = 256;

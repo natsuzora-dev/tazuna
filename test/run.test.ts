@@ -65,10 +65,10 @@ const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string
     kinds: ["Fault.outputSchema"],
     because: "the fault halts the scenario at its last line, and the stepOrder of its first line is still reported",
   },
-  "choiceDependent/Explore/ChoiceDependent/identical-requests": {
-    kinds: ["InvalidScenario.leftInFlight", "InvalidScenario.unresolvedReference"],
+  "choiceDependent/Explore/ChoiceDependent/equal-requests": {
+    kinds: ["Uncomparable.ambiguous"],
     because:
-      "each handle of requests needs a line of its own, and a handle beyond the requests sent names nothing, beside the assignments that the example searches",
+      "test runs verify's ambiguity check on the snapshot it writes, and the snapshot answers the equal requests differently, beside the delivery order that the example searches",
   },
 };
 

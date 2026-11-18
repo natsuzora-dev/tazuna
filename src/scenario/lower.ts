@@ -24,8 +24,6 @@ import {
   type EventMessage,
   type Expectation,
   factOf,
-  type Handles,
-  handleLimit,
   type Line,
   type Look,
   lineIndex,
@@ -42,7 +40,7 @@ import {
 
 /** How a scenario reads an observed value that exists only when the scenario runs. */
 export type ObservedUse =
-  /** It lists its fields, or the handles of `requests`: a spread, `Object.keys`, or a loop over it. */
+  /** It lists its fields: a spread, `Object.keys`, or a loop over it. */
   | "spread"
   /** It asks whether a field is present (`in`). */
   | "presence"
@@ -228,40 +226,28 @@ export function lower(
   });
 
   const caused = (origin: Origin): Caused => {
-    const request = (subscribe: boolean) => (target: unknown, pick?: { readonly input?: unknown }) => {
+    const request = (subscribe: boolean) => (target: unknown, pick?: unknown) => {
       const fact: Fact = {
         type: "request",
         origin,
         kind: subscribe ? "subscribe" : (target as RequestShapes).kind,
         target: named(target, at()),
-        ...(pick?.input === undefined ? {} : { input: template(pick.input) }),
+        ...(pick === undefined ? {} : { input: template(pick) }),
       };
       return requestMessage(fact, target);
     };
-    const requests = (target: unknown, pick?: { readonly input?: unknown }) => {
-      const group = request(false)(target, pick)[factOf] as Extract<Fact, { type: "request" }>;
-      return {
-        *[Symbol.iterator]() {
-          for (let handle = 0; handle < handleLimit; handle++)
-            yield requestMessage({ ...group, type: "requests", handle }, target);
-          throw new Misused("spread", []);
-        },
-      };
-    };
     return {
-      request: <T extends AnyCommand | AnyQuery>(target: T, pick?: { readonly input?: unknown }) =>
+      request: <T extends AnyCommand | AnyQuery>(target: T, pick?: unknown) =>
         handle<OutRequest<T>>(request(false)(target, pick)),
-      requests: <T extends AnyCommand | AnyQuery>(target: T, pick?: { readonly input?: unknown }) =>
-        handle<Handles<OutRequest<T>>>(requests(target, pick)),
-      subscription: <Q extends AnyQuery>(query: Q, pick?: { readonly input?: unknown }) =>
+      subscription: <Q extends AnyQuery>(query: Q, pick?: unknown) =>
         handle<OutSubscription<Q>>(request(true)(query, pick)),
-      event: <Ev extends AnyEvent>(event: Ev, pick?: { readonly payload?: unknown; readonly to?: unknown }) => {
+      event: <Ev extends AnyEvent>(event: Ev, pick?: unknown, route?: { readonly to: unknown }) => {
         const fact: Fact = {
           type: "event",
           origin,
           event: named(event, at()),
-          ...(pick?.payload === undefined ? {} : { payload: template(pick.payload) }),
-          ...(pick?.to === undefined ? {} : { receiver: serviceNamed(pick.to, [...at(), "to"]) }),
+          ...(pick === undefined ? {} : { payload: template(pick) }),
+          ...(route === undefined ? {} : { receiver: serviceNamed(route.to, [...at(), "to"]) }),
         };
         const shape = (event as { readonly payload: Shape }).payload;
         return handle<EventMessage<Ev>>({

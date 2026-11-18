@@ -67,7 +67,7 @@ def modules : List (String × List Name) :=
    ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),
    ("src/data/bagOrderDependent.generated.ts", [``Tazuna.Explore.BagOrderDependent]),
    ("src/data/choiceDependent.generated.ts",
-    [``Tazuna.Explore.Difference, ``Tazuna.Explore.Assigned, ``Tazuna.Explore.ChoiceDependent]),
+    [``Tazuna.Explore.Difference, ``Tazuna.Explore.ChoiceDependent]),
    ("src/data/transitionRef.generated.ts",
     [``Tazuna.Spec.CallOutcome, ``Tazuna.Spec.SendOutcome, ``Tazuna.Spec.Trigger, ``Tazuna.Spec.TransitionRef]),
    ("src/data/step.generated.ts",
@@ -87,7 +87,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
      ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys, ``Tazuna.Explore.Holder, ``Tazuna.Explore.Access,
      ``Tazuna.Verify.Part, ``Tazuna.Service.Operation, ``Tazuna.Explore.Awaiting, ``Tazuna.Explore.Enabled,
-     ``Tazuna.Explore.AssignmentTried, ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder,
+     ``Tazuna.Explore.DeliveryOrderTried, ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder,
      ``Tazuna.DiffTest.Request, ``Tazuna.DiffTest.Question, ``Tazuna.DiffTest.Asked, ``Tazuna.DiffTest.ItemKey,
      ``Tazuna.DiffTest.Deadline, ``Tazuna.DiffTest.Reply, ``Tazuna.DiffTest.Replied, ``Tazuna.DiffTest.Unpaired,
      ``Tazuna.DiffTest.SimulatedService, ``Tazuna.DiffTest.TriedOrder, ``Tazuna.DiffTest.SearchedProcessing,
@@ -443,7 +443,7 @@ def limitsFile : String :=
     String.join (((samples% Tazuna.Service.Limit).zip (constructorDocs% Tazuna.Service.Limit)).map fun (l, doc) =>
       jsdoc "  " doc ++ s!"  {l.name}: {l.max},\n") ++ "} as const;\n" ++
     constant "stepOrderLimit" (doc% Tazuna.Explore.stepOrderLimit) Tazuna.Explore.stepOrderLimit ++
-    constant "assignmentLimit" (doc% Tazuna.Explore.assignmentLimit) Tazuna.Explore.assignmentLimit ++
+    constant "deliveryOrderLimit" (doc% Tazuna.Explore.deliveryOrderLimit) Tazuna.Explore.deliveryOrderLimit ++
     constant "bindingLimit" (doc% Tazuna.Data.bindingLimit) Tazuna.Data.bindingLimit
 
 /-- The TS constant `byCallerKinds`: the rejection kinds, in declaration order, that blame the request. -/

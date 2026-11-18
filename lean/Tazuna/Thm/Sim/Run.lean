@@ -135,45 +135,84 @@ theorem lines_after_stop_ignored (sc : Scenario) (pre post : List (Scenario.Line
   rw [List.foldlM_append, id_bind, foldlM_step_stopped sc post _ h]
 
 /--
+The world after `f` takes each of `xs` keeps what every take keeps: a line that names several messages acts on each.
+-/
+theorem forEach_keeps {α : Type} (P : World → Prop) {w : World} {xs : List α} {f : World → α → Nat → Id World}
+    (hw : P w) (hf : ∀ v x n, x ∈ xs → P v → P (f v x n)) : P (w.forEach xs f) := by
+  unfold World.forEach
+  rw [foldlM_id]
+  suffices ∀ (ys : List (α × Nat)) (v : World), (∀ y ∈ ys, y.1 ∈ xs) → P v →
+      P (ys.foldl (fun v (x, n) => if v.stopped || v.violations.length != w.violations.length then v else f v x n) v) by
+    exact this _ _ (fun y hy => List.fst_mem_of_mem_zipIdx hy) hw
+  intro ys
+  induction ys with
+  | nil => intro v _ hv; exact hv
+  | cons y ys ih =>
+    intro v hys hv
+    refine ih _ (fun z hz => hys z (List.mem_cons_of_mem _ hz)) ?_
+    dsimp only
+    split
+    · exact hv
+    · exact hf _ _ _ (hys y List.mem_cons_self) hv
+
+theorem mem_inOrder {w : World} {i k : Nat} {ks : List Nat} (h : k ∈ w.inOrder i ks) : k ∈ ks := by
+  unfold World.inOrder at h
+  split at h
+  · split at h
+    · obtain ⟨j, -, hj⟩ := List.mem_filterMap.mp h
+      exact List.mem_of_getElem? hj
+    · exact h
+  · exact h
+
+/--
 Every message in flight in `w`, except those at the places that `except` names, is in flight at the same place of `w'`
-with the same content.
+with the same content, and `w'` has every place of `w`.
 -/
 def KeepsInFlight (except : Nat → Prop) (w w' : World) : Prop :=
-  ∀ k msg, ¬except k → w.messages[k]? = some msg → msg.status = .inFlight → w'.messages[k]? = some msg
+  w.messages.size ≤ w'.messages.size ∧
+    ∀ k msg, ¬except k → w.messages[k]? = some msg → msg.status = .inFlight → w'.messages[k]? = some msg
 
 variable {e : Nat → Prop}
 
-theorem keeps_refl (w : World) : KeepsInFlight e w w := fun _ _ _ h _ => h
+theorem keeps_refl (w : World) : KeepsInFlight e w w := ⟨Nat.le_refl _, fun _ _ _ h _ => h⟩
 
 theorem keeps_messages {w w' w'' : World} (h : KeepsInFlight e w w') (hm : w''.messages = w'.messages) :
-    KeepsInFlight e w w'' := fun k msg hk hw hs => by rw [hm]; exact h k msg hk hw hs
+    KeepsInFlight e w w'' := ⟨hm ▸ h.1, fun k msg hk hw hs => by rw [hm]; exact h.2 k msg hk hw hs⟩
 
 theorem keeps_report {w w' : World} (h : KeepsInFlight e w w') (r : InvalidScenario) : KeepsInFlight e w (w'.report r) :=
   keeps_messages h (by unfold World.report; split <;> rfl)
 
 theorem keeps_push {w w' : World} (h : KeepsInFlight e w w') (msg : Message) :
-    KeepsInFlight e w { w' with messages := w'.messages.push msg } := fun k m hk hw hs => by
-  have := h k m hk hw hs
-  simp only [Array.getElem?_push]
-  split
-  · rename_i hk'
-    subst hk'
-    simp at this
-  · exact this
+    KeepsInFlight e w { w' with messages := w'.messages.push msg } := ⟨by have := h.1; simp only [Array.size_push]; omega,
+  fun k m hk hw hs => by
+    have := h.2 k m hk hw hs
+    simp only [Array.getElem?_push]
+    split
+    · rename_i hk'
+      subst hk'
+      simp at this
+    · exact this⟩
+
+/-- The message `k` is one that `w` lacks, or one that `w'` holds out of flight. -/
+def Unkept (w w' : World) (k : Nat) : Prop :=
+  w.messages.size ≤ k ∨ ∀ msg, w'.messages[k]? = some msg → msg.status ≠ .inFlight
 
 theorem keeps_setStatus {w w' : World} (h : KeepsInFlight e w w') (k : Nat) (status : Status)
-    (hk : e k ∨ ∀ msg, w'.messages[k]? = some msg → msg.status ≠ .inFlight) :
-    KeepsInFlight e w (w'.setStatus k status) := fun j m hj hw hs => by
-  have hj' := h j m hj hw hs
-  unfold World.setStatus
-  simp only [Array.getElem?_modify]
-  split
-  · rename_i hjk
-    subst hjk
-    rcases hk with hk | hk
-    · exact absurd hk hj
-    · exact absurd hs (hk m hj')
-  · exact hj'
+    (hk : e k ∨ Unkept w w' k) :
+    KeepsInFlight e w (w'.setStatus k status) := ⟨by simp only [World.setStatus, Array.size_modify]; exact h.1,
+  fun j m hj hw hs => by
+    have hj' := h.2 j m hj hw hs
+    unfold World.setStatus
+    simp only [Array.getElem?_modify]
+    split
+    · rename_i hjk
+      subst hjk
+      rcases hk with hk | hk | hk
+      · exact absurd hk hj
+      · rw [Array.getElem?_eq_none hk] at hw
+        cases hw
+      · exact absurd hs (hk m hj')
+    · exact hj'⟩
 
 theorem keeps_post {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
     (channel : Option LineId) : KeepsInFlight e w (w'.post o sender receiver l channel) := by
@@ -200,7 +239,7 @@ theorem keeps_checkComputed {w w' : World} (h : KeepsInFlight e w w') (service :
   repeat' split
   all_goals exact keeps_messages h rfl
 
-theorem keeps_act {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (service : String)
+theorem keeps_act {w w' : World} (h : KeepsInFlight e w w') (o : Turn) (service : String)
     (f : Service → Functions Id → State → Id State) (reopen : Bool) :
     KeepsInFlight e w (w'.act fsOf o service f reopen) := by
   unfold World.act
@@ -210,8 +249,8 @@ theorem keeps_act {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin
     apply keeps_route
     exact keeps_messages h rfl
 
-theorem keeps_deliver {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (k : Nat)
-    (hk : e k ∨ ∀ msg, w'.messages[k]? = some msg → msg.status ≠ .inFlight) :
+theorem keeps_deliver {w w' : World} (h : KeepsInFlight e w w') (o : Turn) (k : Nat)
+    (hk : e k ∨ Unkept w w' k) :
     KeepsInFlight e w (w'.deliver fsOf o k) := by
   unfold World.deliver
   split
@@ -223,7 +262,7 @@ theorem keeps_carry {w w' : World} (h : KeepsInFlight e w w') (i k : Nat) : Keep
 
 theorem keeps_recordSent {w w' : World} (h : KeepsInFlight e w w') (i : Nat) (service : String) (before : Nat) :
     KeepsInFlight e w (w'.recordSent i service before) :=
-  keeps_messages h (by unfold World.recordSent; split <;> rfl)
+  keeps_messages h (by unfold World.recordSent; (repeat' split) <;> rfl)
 
 theorem keeps_stated {w w' : World} (h : KeepsInFlight e w w') (i : Nat) (msg : Message) :
     KeepsInFlight e w (w'.stated i msg) := by
@@ -273,12 +312,13 @@ macro "keeps_tac" : tactic => `(tactic| repeat' (first
   | with_reducible refine keeps_resolving ?_ _ _ fun _ => ?_
   | with_reducible refine keeps_attempt ?_ _ _ fun _ => ?_
   | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
+  | with_reducible refine forEach_keeps _ ?_ fun _ _ _ _ _ => ?_
   | dsimp only
   | split))
 
-theorem keeps_deliverCarried {w w' : World} (h : KeepsInFlight e w w') (i k : Nat)
-    (hk : e k ∨ ∀ msg, w'.messages[k]? = some msg → msg.status ≠ .inFlight) :
-    KeepsInFlight e w (w'.deliverCarried fsOf i k) := by
+theorem keeps_deliverCarried {w w' : World} (h : KeepsInFlight e w w') (i n k : Nat)
+    (hk : e k ∨ Unkept w w' k) :
+    KeepsInFlight e w (w'.deliverCarried fsOf i n k) := by
   unfold World.deliverCarried
   simp only [bind, pure]
   keeps_tac
@@ -312,12 +352,10 @@ theorem take_keeps (w : World) (own : String) (lines : List Scenario.Line) (i : 
   all_goals keeps_tac
   all_goals first
     | exact keeps_clientRequest (keeps_refl _) _ _ _ _ _
-    | (apply keeps_setStatus (keeps_refl _); right; apply status_ne (s := .delivered) <;> first | assumption | decide)
-    | (apply keeps_deliverCarried (keeps_refl _); right; apply status_ne (s := .delivered) <;> first | assumption | decide)
-
-theorem keeps_absent {w w' : World} {n : Nat} (h : KeepsInFlight (fun j => e j ∨ j = n) w w')
-    (hn : w.messages[n]? = none) : KeepsInFlight e w w' := fun k msg hk hm hs =>
-  h k msg (fun hk' => hk'.elim hk fun hkn => by rw [hkn, hn] at hm; cases hm) hm hs
+    | (apply keeps_setStatus ‹KeepsInFlight _ _ _›; right; right
+       apply status_ne (s := .delivered) <;> first | assumption | decide)
+    | (apply keeps_deliverCarried ‹KeepsInFlight _ _ _›; right; right
+       apply status_ne (s := .delivered) <;> first | assumption | decide)
 
 theorem checkWritten_halts {w : World} {i : Nat} {written picks : List Scenario.Template} {allowed : Bool}
     {r : InvalidScenario} (h : w.checkWritten i written picks allowed = some r) : r.halts = true := by
@@ -347,73 +385,92 @@ theorem line_keeps_leftInFlight (w : World) (own : String) (lines : List Scenari
   · exact keeps_report (keeps_refl w) r
 
 /--
-A deliver, lose, or refuse line leaves every message in flight as it is, except the one its handle names.
+A deliver, lose, or refuse line leaves every message in flight as it is, except those its handle names.
 -/
 theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenario.Line)
-    (i : Nat) (l : Scenario.Line) (f : Scenario.Fact) (hl : moved l = some f) (k : Nat)
-    (hk : (w.messageOf fsOf i f).run = .ok k) :
-    KeepsInFlight (· = k) w (w.line fsOf own lines i l) := by
+    (i : Nat) (l : Scenario.Line) (f : Scenario.Fact) (hl : moved l = some f) (ks : List Nat)
+    (hk : (w.messagesOf fsOf i f).run = .ok ks) :
+    KeepsInFlight (· ∈ ks) w (w.line fsOf own lines i l) := by
   rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
   · cases l <;> simp only [moved, reduceCtorEq, Option.some.injEq] at hl <;> subst hl <;>
       simp only [World.take, World.resolving, bind, pure, hk]
+    all_goals refine forEach_keeps _ (keeps_refl w) fun v k n hm hv => ?_
+    all_goals replace hm := mem_inOrder hm
     all_goals try (unfold World.deliverInOrder; simp only [pure])
     all_goals (repeat' split) <;> first
-      | with_reducible exact keeps_refl w
-      | with_reducible exact keeps_report (keeps_refl w) _
-      | with_reducible exact keeps_deliverCarried (keeps_refl w) _ _ (Or.inl rfl)
-      | with_reducible exact keeps_setStatus (keeps_refl w) _ _ (Or.inl rfl)
-      | (refine keeps_absent (n := w.messages.size) ?_ (by simp)
-         refine keeps_deliverCarried (e := fun j => j = k ∨ j = w.messages.size) (keeps_push (keeps_setStatus (keeps_refl w) _ _ (Or.inl (Or.inl rfl))) _)
-           _ _ (Or.inl (Or.inr ?_))
-         simp [World.setStatus])
+      | with_reducible exact hv
+      | with_reducible exact keeps_report hv _
+      | with_reducible exact keeps_deliverCarried hv _ _ _ (Or.inl hm)
+      | with_reducible exact keeps_setStatus hv _ _ (Or.inl hm)
+      | (refine keeps_deliverCarried (keeps_push (keeps_setStatus hv _ _ (Or.inl hm)) _) _ _ _ (Or.inr (Or.inl ?_))
+         simp only [World.setStatus, Array.size_push, Array.size_modify, Nat.pred_succ]
+         exact hv.1)
   · exact keeps_report (keeps_refl w) r
 
+theorem forEach_stopped {α : Type} {w v : World} {xs : List (α × Nat)} {f : World → α → Nat → Id World}
+    (h : v.stopped = true) :
+    xs.foldl (fun v (x, n) => if v.stopped || v.violations.length != w.violations.length then v else f v x n) v = v := by
+  induction xs with
+  | nil => rfl
+  | cons y ys ih =>
+    simp only [List.foldl_cons, h, Bool.true_or, ite_true]
+    exact ih
+
+/-- The world after `f` takes the first of `x :: xs` in a world that has not stopped, when that take stops it. -/
+theorem forEach_first_stops {α : Type} {w : World} {x : α} {xs : List α} {f : World → α → Nat → Id World}
+    (hw : w.stopped = false) (hf : (f w x 0).stopped = true) : w.forEach (x :: xs) f = f w x 0 := by
+  unfold World.forEach
+  rw [foldlM_id]
+  simp only [List.zipIdx_cons, List.foldl_cons, hw, bne_self_eq_false, Bool.or_false, Bool.false_eq_true, ite_false]
+  exact forEach_stopped hf
+
 /--
-A deliver line whose message has an earlier message in flight that must arrive first (World.precedes) delivers
+A deliver line whose first message has an earlier message in flight that must arrive first (World.precedes) delivers
 nothing and stops the simulation with a violation: ordered messages on one channel reach their receiver in sending
 order.
 -/
 theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
-    (i : Nat) (f : Scenario.Fact) (k : Nat) (msg : Message)
-    (hk : (w.messageOf fsOf i f).run = .ok k) (hm : w.messages[k]? = some msg) (j : Nat) (n : Message) (hj : j < k)
-    (hn : w.messages[j]? = some n) (hs : n.status = .inFlight) (hc : w.precedes n msg = true) :
+    (i : Nat) (f : Scenario.Fact) (ks rest : List Nat) (k : Nat) (msg : Message) (hw : w.stopped = false)
+    (hk : (w.messagesOf fsOf i f).run = .ok ks) (ho : w.inOrder i ks = k :: rest) (hm : w.messages[k]? = some msg)
+    (j : Nat) (n : Message) (hj : j < k) (hn : w.messages[j]? = some n) (hs : n.status = .inFlight)
+    (hc : w.precedes n msg = true) :
     ∃ r, r.halts = true ∧ w.line fsOf own lines i (.deliver f) = w.report r := by
   rcases line_eq w own lines i (.deliver f) with h | h
   · rw [h]
-    simp only [World.take, World.resolving, bind, pure, hk, hm]
-    split
-    · exact ⟨_, rfl, rfl⟩
-    · unfold World.deliverInOrder
-      simp only [hm]
-      have hmem : n ∈ w.messages.toList.take k := by
-        apply List.mem_of_getElem? (i := j)
-        simp [hj, hn]
-      have hfind : ((w.messages.toList.take k).find? fun x => x.status == .inFlight && w.precedes x msg).isSome :=
-        List.find?_isSome.mpr ⟨n, hmem, by simp [hs, hc]⟩
-      obtain ⟨earlier, he⟩ := Option.isSome_iff_exists.mp hfind
-      rw [he]
-      exact ⟨_, rfl, rfl⟩
+    simp only [World.take, World.resolving, bind, pure, hk, ho]
+    have hmem : n ∈ w.messages.toList.take k := by
+      apply List.mem_of_getElem? (i := j)
+      simp [hj, hn]
+    have hfind : ((w.messages.toList.take k).find? fun x => x.status == .inFlight && w.precedes x msg).isSome :=
+      List.find?_isSome.mpr ⟨n, hmem, by simp [hs, hc]⟩
+    obtain ⟨earlier, he⟩ := Option.isSome_iff_exists.mp hfind
+    rw [forEach_first_stops hw] <;> simp only [hm] <;> split <;>
+      first
+      | exact ⟨_, rfl, rfl⟩
+      | rfl
+      | (unfold World.deliverInOrder; simp only [hm, he]; first | exact ⟨_, rfl, rfl⟩ | rfl)
   · exact h
 
 /--
-An external peer's answer line names a request that reached that peer: otherwise it sends nothing and stops the
-simulation with a report.
+An external peer's answer line names requests that reached that peer: when the first it takes did not, it sends
+nothing and stops the simulation with a report.
 -/
 theorem external_answer_needs_delivery (w : World) (own : String) (lines : List Scenario.Line)
-    (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (k : Nat)
-    (msg : Message) (hr : w.role peer = some .external) (hk : (w.messageOf fsOf i f).run = .ok k)
+    (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (ks rest : List Nat) (k : Nat)
+    (msg : Message) (hw : w.stopped = false) (hr : w.role peer = some .external)
+    (hk : (w.messagesOf fsOf i f).run = .ok ks) (ho : w.inOrder i ks = k :: rest)
     (hm : w.messages[k]? = some msg) (hd : ¬(msg.receiver = peer ∧ msg.status = .delivered)) :
     ∃ r, r.halts = true ∧ w.line fsOf own lines i (.answer peer f a) = w.report r := by
   rcases line_eq w own lines i (.answer peer f a) with h | h
   · rw [h]
-    simp only [World.take, World.resolving, bind, pure, hk, hm, hr]
-    split
-    · exact ⟨_, rfl, rfl⟩
-    · split
-      · exact ⟨_, rfl, rfl⟩
-      · rename_i hne hst
-        simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hne hst
-        exact absurd ⟨hne, hst⟩ hd
+    simp only [World.take, World.resolving, bind, pure, hk, ho]
+    rw [forEach_first_stops hw] <;> simp only [hm, hr] <;> split <;> (try split) <;>
+      first
+      | exact ⟨_, rfl, rfl⟩
+      | rfl
+      | (rename_i hne hst
+         simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hne hst
+         exact absurd ⟨hne, hst⟩ hd)
   · exact h
 
 /-- `w'` holds every running service's state as `w` holds it. -/
@@ -465,6 +522,7 @@ macro "same_tac" : tactic => `(tactic| repeat' (first
   | with_reducible refine same_resolving ?_ _ _ fun _ => ?_
   | with_reducible refine same_attempt ?_ _ _ fun _ => ?_
   | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
+  | with_reducible refine forEach_keeps _ ?_ fun _ _ _ _ _ => ?_
   | dsimp only
   | split))
 

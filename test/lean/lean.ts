@@ -38,7 +38,7 @@ const responses = {
   decodeLines: "decodedLines",
   simulate: "simulated",
   stepOrderChanges: "stepOrderChanges",
-  assignmentChanges: "assignmentChanges",
+  deliveryOrderChanges: "deliveryOrderChanges",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
@@ -179,9 +179,9 @@ export class Lean {
     return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
   }
 
-  /** Lean's assignmentSearch of the scenario's handle groups: each assignment it ran, and what it found. */
-  assignmentChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"assignmentChanges"> {
-    return this.exchange({ type: "assignmentChanges", structure: spec.structure, scenario }, functions);
+  /** Lean's deliveryOrderSearch of the scenario: each delivery order it ran, and what it found. */
+  deliveryOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"deliveryOrderChanges"> {
+    return this.exchange({ type: "deliveryOrderChanges", structure: spec.structure, scenario }, functions);
   }
 
   /** Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables. */

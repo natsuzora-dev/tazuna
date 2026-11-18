@@ -55,7 +55,7 @@ test("Lean and TS refuse a step order that names a step no processing takes, as 
       for (const [index, line] of sc.lines.entries()) {
         const event = { service: sc.service, name: "noSuchAutomation" };
         const order = [{ kind: "reaction", automation: event.name, event, payload: {}, delivered: [] } as const];
-        const stepOrders = [{ origin: { type: "line", index } as const, service: sc.service, order }];
+        const stepOrders = [{ origin: { type: "line", index } as const, delivery: 0, service: sc.service, order }];
         const ts = outcomeOf(simulateSpec(spec, sc, stepOrders));
         const fromLean = lean.simulate(spec, sc, new SimFunctions(spec, (part) => lean.read(part)), false, stepOrders);
         assert.equal(canonicalJson(fromLean as Json), canonicalJson(ts as unknown as Json), `${root} line ${index}`);

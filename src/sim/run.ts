@@ -39,7 +39,7 @@ import {
   json,
   markCreated,
   maskCreated,
-  messageOf,
+  messagesOf,
   Reported,
   screenOf,
   sentBy,
@@ -86,7 +86,6 @@ const hasCreated = (t: Template): boolean => t.holes.some((h) => h.fill.type ===
 function factPicks(f: Fact): Template[] {
   switch (f.type) {
     case "request":
-    case "requests":
       return f.input === undefined ? [] : [f.input, ...templatePicks(f.input)];
     case "event":
       return f.payload === undefined ? [] : [f.payload, ...templatePicks(f.payload)];
@@ -146,7 +145,7 @@ const linePicks = (l: Line): Template[] => [
 ];
 
 /** Lean's Expectation.line. */
-export const expectationLine = (e: Expectation): number => (e.type === "offered" ? e.look : e.line);
+const expectationLine = (e: Expectation): number => (e.type === "offered" ? e.look : e.line);
 
 /** Lean's Expectation.written. */
 function expectationWritten(e: Expectation): Template[] {
@@ -166,37 +165,6 @@ function expectationWritten(e: Expectation): Template[] {
 const expectationPicks = (e: Expectation): Template[] => [
   ...(e.type === "requested" ? e.ends.flatMap(factPicks) : []),
   ...expectationWritten(e).flatMap(templatePicks),
-];
-
-/** Lean's Fact.named. */
-function factNamed(f: Fact): Fact[] {
-  switch (f.type) {
-    case "request":
-    case "requests":
-      return [f, ...(f.input === undefined ? [] : templateNamed(f.input))];
-    case "event":
-      return [f, ...(f.payload === undefined ? [] : templateNamed(f.payload))];
-    case "end":
-      return [f, ...factNamed(f.subscription)];
-    default:
-      return [f];
-  }
-}
-
-/** Lean's Template.named. */
-const templateNamed = (t: Template): Fact[] =>
-  t.holes.flatMap((h) => (h.fill.type === "ref" ? factNamed(h.fill.value.fact) : []));
-
-/** Lean's Line.named. */
-export const lineNamed = (l: Line): Fact[] => [
-  ...lineFacts(l).flatMap(factNamed),
-  ...lineWritten(l).flatMap(templateNamed),
-];
-
-/** Lean's Expectation.named. */
-export const expectationNamed = (e: Expectation): Fact[] => [
-  ...(e.type === "requested" ? e.ends.flatMap(factNamed) : []),
-  ...expectationWritten(e).flatMap(templateNamed),
 ];
 
 /** Lean's World.checkWritten. */
@@ -226,7 +194,27 @@ function recordSent(w: World, i: number, service: string, before: number): void 
   const lines = stateOf(w, service)?.lines ?? [];
   const position = lines.findIndex((line, n) => n >= before && line.dir === "in");
   const l = lines[position];
-  if (l !== undefined) w.sent.push({ line: i, receiver: service, id: l.id, position });
+  if (l === undefined || w.sent.some((s) => s.line === i && s.receiver === service && sameLineId(s.id, l.id))) return;
+  w.sent.push({ line: i, receiver: service, id: l.id, position });
+}
+
+/** Lean's World.inOrder. */
+function inOrder(w: World, i: number, ks: readonly number[]): readonly number[] {
+  const order = w.deliveryOrders.get(i);
+  if (order === undefined || order.length !== ks.length) return ks;
+  return order.flatMap((p) => {
+    const k = ks[p];
+    return k === undefined ? [] : [k];
+  });
+}
+
+/** Lean's World.forEach: `f` takes each of `xs` with its place until the world stops or a report is added. */
+function forEach<T>(w: World, xs: readonly T[], f: (x: T, n: number) => void): void {
+  const before = w.violations.length;
+  for (const [n, x] of xs.entries()) {
+    if (stopped(w) || w.violations.length !== before) return;
+    f(x, n);
+  }
 }
 
 /** Lean's requestOf. */
@@ -259,7 +247,7 @@ function clientRequest(
   const v = fill(w, i, input);
   let id: LineId | undefined;
   if (sameIdAs !== undefined) {
-    const s = sentBy(w, sameIdAs);
+    const [s] = sentBy(w, sameIdAs);
     if (s === undefined)
       reportedHere({
         kind: "InvalidScenario.unresolvedReference",
@@ -269,7 +257,7 @@ function clientRequest(
     id = s.id;
   }
   const before = p.state.lines.length;
-  act(w, { type: "line", index: i }, receiver, requestOf(type, target, id, v));
+  act(w, { origin: { type: "line", index: i }, delivery: 0 }, receiver, requestOf(type, target, id, v));
   recordSent(w, i, receiver, before);
 }
 
@@ -333,7 +321,7 @@ function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => bo
 const isRequest = (l: LineBody): boolean => l.type === "command" || l.type === "query" || l.type === "subscribe";
 
 /** Lean's World.deliverCarried. */
-function deliverCarried(w: World, i: number, k: number): void {
+function deliverCarried(w: World, i: number, n: number, k: number): void {
   carry(w, i, k);
   const m = w.messages[k];
   if (m === undefined) return;
@@ -342,13 +330,13 @@ function deliverCarried(w: World, i: number, k: number): void {
     return;
   }
   const before = stateOf(w, m.receiver)?.lines.length ?? 0;
-  deliver(w, { type: "line", index: i }, k);
+  deliver(w, { origin: { type: "line", index: i }, delivery: n }, k);
   if (!isRequest(m.body)) return;
-  for (const [l, j] of [...w.carried]) if (j === k && sentBy(w, l) === undefined) recordSent(w, l, m.receiver, before);
+  for (const [l, j] of [...w.carried]) if (j === k) recordSent(w, l, m.receiver, before);
 }
 
 /** Lean's World.deliverInOrder. */
-function deliverInOrder(w: World, i: number, k: number): void {
+function deliverInOrder(w: World, i: number, n: number, k: number): void {
   const m = w.messages[k];
   if (m === undefined) return;
   const earlier = w.messages.slice(0, k).find((n) => n.status === "inFlight" && precedes(w, n, m));
@@ -358,11 +346,11 @@ function deliverInOrder(w: World, i: number, k: number): void {
       definition: null,
       data: { scenarioLine: i, message: describe(m), earlier: describe(earlier) },
     });
-  deliverCarried(w, i, k);
+  deliverCarried(w, i, n, k);
 }
 
-/** Lean's World.requestId. */
-function requestId(w: World, i: number, peer: string, fact: Fact): LineId {
+/** Lean's World.requestIds. */
+function requestIds(w: World, i: number, peer: string, fact: Fact): LineId[] {
   const unreceived = (): never =>
     reportedHere({
       kind: "InvalidScenario.unreceivedRequest",
@@ -370,18 +358,20 @@ function requestId(w: World, i: number, peer: string, fact: Fact): LineId {
       data: { scenarioLine: i, peer, fact: json(fact) },
     });
   if (fact.type === "line") {
-    const s = sentBy(w, fact.index);
-    if (s === undefined)
+    const sents = sentBy(w, fact.index);
+    if (sents.length === 0)
       return reportedHere({
         kind: "InvalidScenario.unresolvedReference",
         definition: null,
         data: { scenarioLine: i, fact: json(fact) },
       });
-    return s.receiver === peer ? s.id : unreceived();
+    return sents.every((s) => s.receiver === peer) ? sents.map((s) => s.id) : unreceived();
   }
-  const m = w.messages[messageOf(w, i, fact)] as Message;
-  if (m.receiver !== peer || (m.status !== "delivered" && m.status !== "unanswered")) return unreceived();
-  return receivedId(m.sender, m.id);
+  return messagesOf(w, i, fact).map((k) => {
+    const m = w.messages[k] as Message;
+    if (m.receiver !== peer || (m.status !== "delivered" && m.status !== "unanswered")) return unreceived();
+    return receivedId(m.sender, m.id);
+  });
 }
 
 /** Lean's offeredAt. */
@@ -435,6 +425,7 @@ const answered = (w: World, sender: string, to: LineId): boolean =>
 /** Lean's World.take. */
 function take(w: World, own: string, lines: readonly Line[], i: number, l: Line) {
   const origin = { type: "line", index: i } as const;
+  const turn = { origin, delivery: 0 };
   switch (l.type) {
     case "request": {
       if (l.peer === undefined) return clientRequest(w, i, l.kind, l.target, l.input, l.sameIdAs);
@@ -465,38 +456,40 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
     }
     case "unsubscribe": {
       if (l.peer === undefined) {
-        const s = sentBy(w, l.subscription);
+        const [s] = sentBy(w, l.subscription);
         if (s === undefined)
           return reportedHere({
             kind: "InvalidScenario.unresolvedReference",
             definition: null,
             data: { scenarioLine: i, fact: { type: "line", index: l.subscription } },
           });
-        return act(w, origin, s.receiver, (r) => endSubscription(r, s.id));
+        return act(w, turn, s.receiver, (r) => endSubscription(r, s.id));
       }
       const peer = l.peer;
-      const sub = w.messages[messageOf(w, i, { type: "line", index: l.subscription })] as Message;
-      const role = w.roles.get(peer);
-      if (role === "external") {
-        const id = nextId(w, peer, "unsubscribe");
-        return stated(w, i, {
-          sender: peer,
-          receiver: sub.receiver,
-          id,
-          body: { type: "unsubscribe", to: sub.id },
-          origin,
-          channel: receivedId(peer, sub.id),
-          status: "inFlight",
-        });
-      }
-      if (role !== "run") return wrongRole(i, peer);
-      const k = peerMessage(
-        w,
-        i,
-        peer,
-        (m) => m.receiver === sub.receiver && m.body.type === "unsubscribe" && sameLineId(m.body.to, sub.id),
-      );
-      return carry(w, i, k);
+      return forEach(w, inOrder(w, i, messagesOf(w, i, { type: "line", index: l.subscription })), (j) => {
+        const sub = w.messages[j] as Message;
+        const role = w.roles.get(peer);
+        if (role === "external") {
+          const id = nextId(w, peer, "unsubscribe");
+          return stated(w, i, {
+            sender: peer,
+            receiver: sub.receiver,
+            id,
+            body: { type: "unsubscribe", to: sub.id },
+            origin,
+            channel: receivedId(peer, sub.id),
+            status: "inFlight",
+          });
+        }
+        if (role !== "run") return wrongRole(i, peer);
+        const k = peerMessage(
+          w,
+          i,
+          peer,
+          (m) => m.receiver === sub.receiver && m.body.type === "unsubscribe" && sameLineId(m.body.to, sub.id),
+        );
+        return carry(w, i, k);
+      });
     }
     case "resend": {
       const original = lines[l.line];
@@ -512,7 +505,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const o = screenOf(w, i, l.screen);
       if (w.roles.get(o.service) !== "own") return wrongRole(i, o.service);
       const v = fill(w, i, l.payload);
-      return act(w, origin, o.service, (r) => operate(r, o.id, l.control, v));
+      return act(w, turn, o.service, (r) => operate(r, o.id, l.control, v));
     }
     case "look": {
       const o = screenOf(w, i, l.screen);
@@ -520,185 +513,196 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       return;
     }
     case "answer": {
-      const k = messageOf(w, i, l.request);
-      const m = w.messages[k] as Message;
-      if (m.receiver !== l.peer)
-        return reportedHere({
-          kind: "InvalidScenario.unresolvedReference",
-          definition: null,
-          data: { scenarioLine: i, fact: json(l.request) },
-        });
-      const to = receivedId(m.sender, m.id);
-      const role = w.roles.get(l.peer);
-      if (role === "external") {
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.request)), (k) => {
+        const m = w.messages[k] as Message;
+        if (m.receiver !== l.peer)
+          return reportedHere({
+            kind: "InvalidScenario.unresolvedReference",
+            definition: null,
+            data: { scenarioLine: i, fact: json(l.request) },
+          });
+        const to = receivedId(m.sender, m.id);
+        const role = w.roles.get(l.peer);
+        if (role === "external") {
+          if (m.status !== "delivered") return notDelivered(i, m);
+          if (answered(w, l.peer, to) && m.body.type !== "subscribe")
+            return reportedHere({
+              kind: "InvalidScenario.repeatedAnswer",
+              definition: null,
+              data: { scenarioLine: i, message: describe(m) },
+            });
+          const v = fill(w, i, l.answer);
+          const a = answerOfValue(v);
+          if (a === undefined)
+            return reportedHere({
+              kind: "InvalidScenario.malformedValue",
+              definition: null,
+              data: { scenarioLine: i, value: json(v) },
+            });
+          const id = nextId(w, l.peer, "answer");
+          return stated(w, i, {
+            sender: l.peer,
+            receiver: m.sender,
+            id,
+            body: { type: "answer", to, answer: a },
+            origin,
+            channel: to,
+            status: "inFlight",
+          });
+        }
+        if (role === "run") {
+          const j = w.messages.findIndex(
+            (n, k) =>
+              n.status === "inFlight" &&
+              n.sender === l.peer &&
+              n.receiver === m.sender &&
+              !isCarried(w, k) &&
+              n.body.type === "answer" &&
+              sameLineId(n.body.to, to),
+          );
+          if (j < 0)
+            return reportedHere({
+              kind: "InvalidScenario.unpairedPeerLine",
+              definition: null,
+              data: { scenarioLine: i, peer: l.peer },
+            });
+          const v = fill(w, i, l.answer);
+          const reply = w.messages[j] as Message;
+          const actual: Answer = reply.body.type === "answer" ? reply.body.answer : { result: "accepted" };
+          const r = processingOf(w, l.peer) as Processing;
+          const target = targetOf(m);
+          const shown = comparedAnswerValue(r, target, maskCreated(w, l.peer, l.answer, v, actual));
+          const expected = comparedAnswerValue(r, target, markCreated(l.answer, v));
+          if (canonicalJson(expected) !== canonicalJson(shown))
+            reportTo(w, {
+              kind: "InvalidScenario.differentPeerAnswer",
+              definition: null,
+              data: { scenarioLine: i, expected: json(expected), actual: json(shown) },
+            });
+          return carry(w, i, j);
+        }
+        return wrongRole(i, l.peer);
+      });
+    }
+    case "emit": {
+      const resultIds = l.resultOf === undefined ? [undefined] : requestIds(w, i, l.peer, l.resultOf);
+      const v = fill(w, i, l.payload);
+      return forEach(w, resultIds, (resultId) => {
+        const role = w.roles.get(l.peer);
+        if (role === "external") {
+          const id = nextId(w, l.peer, l.event.name);
+          const body: LineBody = {
+            type: "event",
+            event: l.event,
+            payload: v,
+            ...(resultId === undefined ? {} : { resultOf: resultId }),
+          };
+          const receivers = [...w.services].filter(([, p]) =>
+            p.processing.st.receives.some((e) => sameRef(e, l.event)),
+          );
+          if (receivers.length === 0)
+            return reportedHere({
+              kind: "InvalidScenario.unreceivedEvent",
+              definition: null,
+              data: { scenarioLine: i, event: l.event },
+            });
+          for (const [r] of receivers)
+            stated(w, i, { sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
+          return;
+        }
+        if (role === "run") {
+          const peer = l.peer;
+          const r = processingOf(w, peer) as Processing;
+          const k = peerMessage(w, i, peer, (m) => {
+            const b = m.body;
+            if (b.type !== "event") return false;
+            return (
+              m.receiver === own &&
+              sameRef(b.event, l.event) &&
+              sameLineId(b.resultOf, resultId) &&
+              sameValue(w, r, payloadSchema(b.event), peer, l.payload, v, b.payload)
+            );
+          });
+          return carry(w, i, k);
+        }
+        return wrongRole(i, l.peer);
+      });
+    }
+    case "leaveUnanswered": {
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.request)), (k) => {
+        const m = w.messages[k] as Message;
+        if (w.roles.get(l.peer) !== "external" || m.receiver !== l.peer) return wrongRole(i, l.peer);
         if (m.status !== "delivered") return notDelivered(i, m);
-        if (answered(w, l.peer, to) && m.body.type !== "subscribe")
+        if (answered(w, l.peer, receivedId(m.sender, m.id)) && m.body.type !== "subscribe")
           return reportedHere({
             kind: "InvalidScenario.repeatedAnswer",
             definition: null,
             data: { scenarioLine: i, message: describe(m) },
           });
-        const v = fill(w, i, l.answer);
-        const a = answerOfValue(v);
-        if (a === undefined)
+        m.status = "unanswered";
+        return;
+      });
+    }
+    case "deliver": {
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k, n) => {
+        const m = w.messages[k] as Message;
+        if (m.status !== "inFlight") return notInFlight(i, m);
+        return deliverInOrder(w, i, n, k);
+      });
+    }
+    case "redeliver": {
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k, n) => {
+        const m = w.messages[k] as Message;
+        if (m.status !== "delivered") return notDelivered(i, m);
+        if (!running(w.roles.get(m.receiver))) return wrongRole(i, m.receiver);
+        return deliverCarried(w, i, n, k);
+      });
+    }
+    case "lose": {
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k) => {
+        const m = w.messages[k] as Message;
+        if (m.status !== "inFlight") return notInFlight(i, m);
+        m.status = "lost";
+        return;
+      });
+    }
+    case "refuse": {
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k, n) => {
+        const m = w.messages[k] as Message;
+        if (m.status !== "inFlight") return notInFlight(i, m);
+        if (!isRequest(m.body))
           return reportedHere({
-            kind: "InvalidScenario.malformedValue",
+            kind: "InvalidScenario.unrefusable",
             definition: null,
-            data: { scenarioLine: i, value: json(v) },
+            data: { scenarioLine: i, message: describe(m) },
           });
-        const id = nextId(w, l.peer, "answer");
-        return stated(w, i, {
-          sender: l.peer,
+        m.status = "lost";
+        const to = receivedId(m.sender, m.id);
+        const id: LineId = { kind: "own", id: `answer:${lineIdText(m.id)}` };
+        const unavailable: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
+        w.messages.push({
+          sender: m.receiver,
           receiver: m.sender,
           id,
-          body: { type: "answer", to, answer: a },
+          body: { type: "answer", to, answer: unavailable },
           origin,
           channel: to,
           status: "inFlight",
         });
-      }
-      if (role === "run") {
-        const j = w.messages.findIndex(
-          (n, k) =>
-            n.status === "inFlight" &&
-            n.sender === l.peer &&
-            n.receiver === m.sender &&
-            !isCarried(w, k) &&
-            n.body.type === "answer" &&
-            sameLineId(n.body.to, to),
-        );
-        if (j < 0)
-          return reportedHere({
-            kind: "InvalidScenario.unpairedPeerLine",
-            definition: null,
-            data: { scenarioLine: i, peer: l.peer },
-          });
-        const v = fill(w, i, l.answer);
-        const reply = w.messages[j] as Message;
-        const actual: Answer = reply.body.type === "answer" ? reply.body.answer : { result: "accepted" };
-        const r = processingOf(w, l.peer) as Processing;
-        const target = targetOf(m);
-        const shown = comparedAnswerValue(r, target, maskCreated(w, l.peer, l.answer, v, actual));
-        const expected = comparedAnswerValue(r, target, markCreated(l.answer, v));
-        if (canonicalJson(expected) !== canonicalJson(shown))
-          reportTo(w, {
-            kind: "InvalidScenario.differentPeerAnswer",
-            definition: null,
-            data: { scenarioLine: i, expected: json(expected), actual: json(shown) },
-          });
-        return carry(w, i, j);
-      }
-      return wrongRole(i, l.peer);
-    }
-    case "emit": {
-      const resultId = l.resultOf === undefined ? undefined : requestId(w, i, l.peer, l.resultOf);
-      const v = fill(w, i, l.payload);
-      const role = w.roles.get(l.peer);
-      if (role === "external") {
-        const id = nextId(w, l.peer, l.event.name);
-        const body: LineBody = {
-          type: "event",
-          event: l.event,
-          payload: v,
-          ...(resultId === undefined ? {} : { resultOf: resultId }),
-        };
-        const receivers = [...w.services].filter(([, p]) => p.processing.st.receives.some((e) => sameRef(e, l.event)));
-        if (receivers.length === 0)
-          return reportedHere({
-            kind: "InvalidScenario.unreceivedEvent",
-            definition: null,
-            data: { scenarioLine: i, event: l.event },
-          });
-        for (const [r] of receivers)
-          stated(w, i, { sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
-        return;
-      }
-      if (role === "run") {
-        const peer = l.peer;
-        const r = processingOf(w, peer) as Processing;
-        const k = peerMessage(w, i, peer, (m) => {
-          const b = m.body;
-          if (b.type !== "event") return false;
-          return (
-            m.receiver === own &&
-            sameRef(b.event, l.event) &&
-            sameLineId(b.resultOf, resultId) &&
-            sameValue(w, r, payloadSchema(b.event), peer, l.payload, v, b.payload)
-          );
-        });
-        return carry(w, i, k);
-      }
-      return wrongRole(i, l.peer);
-    }
-    case "leaveUnanswered": {
-      const k = messageOf(w, i, l.request);
-      const m = w.messages[k] as Message;
-      if (w.roles.get(l.peer) !== "external" || m.receiver !== l.peer) return wrongRole(i, l.peer);
-      if (m.status !== "delivered") return notDelivered(i, m);
-      if (answered(w, l.peer, receivedId(m.sender, m.id)) && m.body.type !== "subscribe")
-        return reportedHere({
-          kind: "InvalidScenario.repeatedAnswer",
-          definition: null,
-          data: { scenarioLine: i, message: describe(m) },
-        });
-      m.status = "unanswered";
-      return;
-    }
-    case "deliver": {
-      const k = messageOf(w, i, l.message);
-      const m = w.messages[k] as Message;
-      if (m.status !== "inFlight") return notInFlight(i, m);
-      return deliverInOrder(w, i, k);
-    }
-    case "redeliver": {
-      const k = messageOf(w, i, l.message);
-      const m = w.messages[k] as Message;
-      if (m.status !== "delivered") return notDelivered(i, m);
-      if (!running(w.roles.get(m.receiver))) return wrongRole(i, m.receiver);
-      return deliverCarried(w, i, k);
-    }
-    case "lose": {
-      const k = messageOf(w, i, l.message);
-      const m = w.messages[k] as Message;
-      if (m.status !== "inFlight") return notInFlight(i, m);
-      m.status = "lost";
-      return;
-    }
-    case "refuse": {
-      const k = messageOf(w, i, l.message);
-      const m = w.messages[k] as Message;
-      if (m.status !== "inFlight") return notInFlight(i, m);
-      if (!isRequest(m.body))
-        return reportedHere({
-          kind: "InvalidScenario.unrefusable",
-          definition: null,
-          data: { scenarioLine: i, message: describe(m) },
-        });
-      m.status = "lost";
-      const to = receivedId(m.sender, m.id);
-      const id: LineId = { kind: "own", id: `answer:${lineIdText(m.id)}` };
-      const unavailable: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
-      w.messages.push({
-        sender: m.receiver,
-        receiver: m.sender,
-        id,
-        body: { type: "answer", to, answer: unavailable },
-        origin,
-        channel: to,
-        status: "inFlight",
+        return deliverCarried(w, i, n, w.messages.length - 1);
       });
-      return deliverCarried(w, i, w.messages.length - 1);
     }
     case "leaveInFlight": {
-      const k = messageOf(w, i, l.message);
-      if (w.leftInFlight.some(([, j]) => j === k))
-        return reportedHere({
-          kind: "InvalidScenario.repeatedInFlight",
-          definition: null,
-          data: { scenarioLine: i, message: describe(w.messages[k] as Message) },
-        });
-      w.leftInFlight.push([i, k]);
-      return;
+      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k) => {
+        if (w.leftInFlight.some(([, j]) => j === k))
+          return reportedHere({
+            kind: "InvalidScenario.repeatedInFlight",
+            definition: null,
+            data: { scenarioLine: i, message: describe(w.messages[k] as Message) },
+          });
+        w.leftInFlight.push([i, k]);
+        return;
+      });
     }
     case "at": {
       const time = Temporal.Instant.from(l.time);
@@ -710,13 +714,13 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         });
       for (const service of w.services.keys()) {
         if (stopped(w)) break;
-        act(w, origin, service, fireTo(time));
+        act(w, turn, service, fireTo(time));
       }
       w.now = time;
       return;
     }
     case "restart":
-      return act(w, origin, own, restart, true);
+      return act(w, turn, own, restart, true);
   }
 }
 
@@ -819,7 +823,7 @@ function compared(
   const st = r.st;
   switch (e.type) {
     case "answered": {
-      const s = sentBy(w, e.line);
+      const [s] = sentBy(w, e.line);
       if (s === undefined)
         return reportedHere({
           kind: "InvalidScenario.unresolvedReference",
@@ -858,10 +862,12 @@ function compared(
           : [],
       );
       const filled = e.requests.map((q) => [q, fill(w, e.line, q.input)] as const);
-      const expectedEnds = e.ends.map((f) => {
-        const m = w.messages[messageOf(w, e.line, f)];
-        return m === undefined ? "" : lineIdText(m.id);
-      });
+      const expectedEnds = e.ends.flatMap((f) =>
+        messagesOf(w, e.line, f).map((k) => {
+          const m = w.messages[k];
+          return m === undefined ? "" : lineIdText(m.id);
+        }),
+      );
       const expected = filled.map(([q, v]) => ({
         kind: q.kind,
         target: q.target,
@@ -920,7 +926,8 @@ function expect(
 
 /** Lean's World.execute, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
 function executeLines(w: World, sc: Scenario, looked?: Found[]): void {
-  for (const service of w.services.keys()) if (!stopped(w)) act(w, { type: "startup" }, service, begin);
+  for (const service of w.services.keys())
+    if (!stopped(w)) act(w, { origin: { type: "startup" }, delivery: 0 }, service, begin);
   sc.lines.forEach((l, i) => {
     if (stopped(w)) return;
     looked?.push(...found(w, sc.expectations, i, l));

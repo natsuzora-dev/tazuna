@@ -8,7 +8,7 @@ import type { Uncovered } from "../data/uncovered.ts";
 import { canonicalJson } from "../data/values.ts";
 import { type ReportedViolation, toReported } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
-import { assignmentChanges } from "../explore/assignments.ts";
+import { deliveryOrderChanges } from "../explore/deliveryOrders.ts";
 import { exploreLines, seenLines, valuesPerPayload } from "../explore/paths.ts";
 import { stepOrderChanges } from "../explore/stepOrders.ts";
 import * as automations from "../explore/uncovered/automations.ts";
@@ -20,7 +20,7 @@ import type { LoadedScenario } from "../load/scenarios.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { serviceViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
 import { snapshotPairingViolation } from "../verify/pairing.ts";
-import { pairSnapshots, snapshotFolders, snapshotViolations } from "../verify/snapshot.ts";
+import { pairSnapshots, snapshotAmbiguities, snapshotFolders, snapshotViolations } from "../verify/snapshot.ts";
 
 const uncoveredChecks: readonly {
   readonly check: (spec: Spec, reached: Coverage) => readonly Found<Uncovered>[];
@@ -48,7 +48,8 @@ interface Snapshotted {
 
 /**
  * Compares each run that did not halt with its snapshot, or, with `update`, writes that snapshot and removes the
- * snapshots without a run. Also reports the other violations in the snapshot folders.
+ * snapshots without a run. Either way, runs verify's ambiguity check on the lines that each snapshot holds. Also reports
+ * the other violations in the snapshot folders.
  */
 function testSnapshots(
   spec: Spec,
@@ -63,11 +64,14 @@ function testSnapshots(
     snapshotted.map((s) => ({ run: s.run, compared: s.lines !== undefined })),
     folders,
   );
-  const violations = update
-    ? []
-    : ended
-        .filter((s) => pairing.compare.some((r) => sameRun(r, s.run)))
-        .flatMap((s) => snapshotViolations(spec, s.run, s.lines));
+  const violations = [
+    ...ended.flatMap((s) => snapshotAmbiguities(spec, s.run, s.lines)),
+    ...(update
+      ? []
+      : ended
+          .filter((s) => pairing.compare.some((r) => sameRun(r, s.run)))
+          .flatMap((s) => snapshotViolations(spec, s.run, s.lines))),
+  ];
   const removed: string[] = [];
   for (const p of pairing.violations)
     if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && p.at.kind === "snapshotEntry") {
@@ -116,8 +120,8 @@ export function testSpec(spec: CheckedSpec, options: { readonly update: boolean;
 
 /**
  * Simulates each scenario and returns the violations that it reports, each at the line it names, with the step orders
- * that change the result of one of its processings and the assignment of its handles of `requests` that changes the
- * result of a running service, and the trace of each
+ * that change the result of one of its processings and the delivery orders of equal messages that change the result of
+ * a running service, and the trace of each
  * running service when the simulation did not halt: the own service's, and each running peer's that has lines.
  */
 function simulateScenarios(spec: Spec): {
@@ -139,7 +143,10 @@ function simulateScenarios(spec: Spec): {
       violations.push(toReported(violation, at(line) ?? named.place, { scenario: ref }));
     }
     const halted = world.halted !== undefined || [...world.services.values()].some((p) => p.halted !== undefined);
-    for (const v of [...stepOrderChanges(spec, scenario, simulated, 0), ...assignmentChanges(spec, scenario)])
+    for (const v of [
+      ...stepOrderChanges(spec, scenario, simulated, 0),
+      ...deliveryOrderChanges(spec, scenario, simulated),
+    ])
       violations.push(toReported(v, v.location ?? named.place, { scenario: ref }));
     for (const service of world.services.keys()) {
       for (const v of serviceViolations(simulated, service))

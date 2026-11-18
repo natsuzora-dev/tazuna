@@ -1,4 +1,5 @@
 import Tazuna.Sim.Run
+import Tazuna.Thm.Sim.Run
 import Tazuna.Thm.Service.Keys
 import Tazuna.Thm.Service.KeyGrowth
 
@@ -144,7 +145,7 @@ theorem keepsWorld_checkComputed {w w' : World} (h : KeepsWorld w w') (service :
         · exact .refl _
     · exact h
 
-theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
+theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Turn) (service : String)
     (f : Service → Functions Id → State → Id State) (hf : ∀ st s, KeepsKeys s (f st (fsOf service) s))
     (reopen : Bool) : KeepsWorld w (w'.act fsOf o service f reopen) := by
   unfold World.act
@@ -223,7 +224,7 @@ theorem keepsWorld_carry {w w' : World} (h : KeepsWorld w w') (i k : Nat) : Keep
 
 theorem keepsWorld_recordSent {w w' : World} (h : KeepsWorld w w') (i : Nat) (service : String) (before : Nat) :
     KeepsWorld w (w'.recordSent i service before) :=
-  keepsWorld_states h (by unfold World.recordSent; split <;> rfl)
+  keepsWorld_states h (by unfold World.recordSent; (repeat' split) <;> rfl)
 
 theorem keepsWorld_stated {w w' : World} (h : KeepsWorld w w') (i : Nat) (msg : Message) :
     KeepsWorld w (w'.stated i msg) := by
@@ -246,14 +247,14 @@ theorem keepsWorld_attempt {α : Type} {w w' : World} (h : KeepsWorld w w') (r :
   · exact keepsWorld_report h _
   · exact hk _
 
-theorem keepsWorld_deliver {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (k : Nat) :
+theorem keepsWorld_deliver {w w' : World} (h : KeepsWorld w w') (o : Turn) (k : Nat) :
     KeepsWorld w (w'.deliver fsOf o k) := by
   unfold World.deliver; split
   · exact h
   · exact keepsWorld_act (keepsWorld_setStatus h _ _) _ _ _ (fun st s => keeps_arriveFrom _ _ _ _ _ _) _
 
-theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i k : Nat) :
-    KeepsWorld w (w'.deliverCarried fsOf i k) := by
+theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i n k : Nat) :
+    KeepsWorld w (w'.deliverCarried fsOf i n k) := by
   unfold World.deliverCarried
   simp only [bind, pure]
   repeat' split
@@ -262,9 +263,7 @@ theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i k : Na
     | exact keepsWorld_setStatus (keepsWorld_carry h _ _) _ _
     | exact keepsWorld_deliver (keepsWorld_carry h _ _) _ _
     | (refine foldl_keeps (KeepsWorld w) _ (fun v l hv => ?_) _ _ (keepsWorld_deliver (keepsWorld_carry h _ _) _ _)
-       split
-       · exact hv
-       · exact keepsWorld_recordSent hv _ _ _)
+       exact keepsWorld_recordSent hv _ _ _)
 
 theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) (type : Scenario.RequestType)
     (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
@@ -287,13 +286,13 @@ theorem keepsWorld_inFlight_iff {w w' : World} (leftInFlight : List (Nat × Nat)
 theorem keepsWorld_messages_iff {w w' : World} (messages : Array Message) :
     KeepsWorld w { w' with messages } ↔ KeepsWorld w w' := Iff.rfl
 
-theorem keepsWorld_deliverInOrder {w w' : World} (h : KeepsWorld w w') (i k : Nat) :
-    KeepsWorld w (w'.deliverInOrder fsOf i k) := by
+theorem keepsWorld_deliverInOrder {w w' : World} (h : KeepsWorld w w') (i n k : Nat) :
+    KeepsWorld w (w'.deliverInOrder fsOf i n k) := by
   unfold World.deliverInOrder; simp only [pure]
   repeat' split
   · exact h
   · exact keepsWorld_report h _
-  · exact keepsWorld_deliverCarried h _ _
+  · exact keepsWorld_deliverCarried h _ _ _
 
 /-- Closes `KeepsWorld w x` where `x` is built from `w` by steps that keep every running service's createKey values. -/
 macro "kw_tac" : tactic => `(tactic| repeat' (first
@@ -314,6 +313,7 @@ macro "kw_tac" : tactic => `(tactic| repeat' (first
   | with_reducible refine keepsWorld_resolving ?_ _ _ fun _ => ?_
   | with_reducible refine keepsWorld_attempt ?_ _ _ fun _ => ?_
   | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
+  | with_reducible refine Tazuna.Thm.Sim.Run.forEach_keeps _ ?_ fun _ _ _ _ _ => ?_
   | with_reducible exact keeps_endSubscription _ _
   | with_reducible exact keeps_operate _ _ _ _
   | with_reducible exact keeps_restart _

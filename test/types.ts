@@ -1383,11 +1383,9 @@ scenarioOfScreens("types", {
     const look = w.user.look(list);
     const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     const asking = adding.request(calendarPeer.nextBusinessDay);
-    const [first, second] = adding.requests(calendarPeer.nextBusinessDay, { input: { from: "2026-10-25" } });
-    w.net.deliver(first);
-    w.net.lose(second);
-    // @ts-expect-error the handles of requests are named one by one, up to handleLimit
-    void adding.requests(calendarPeer.nextBusinessDay)[64];
+    w.net.deliver(adding.request(calendarPeer.nextBusinessDay, { from: "2026-10-25" }));
+    // @ts-expect-error a pick has fields of the input only
+    void adding.request(calendarPeer.nextBusinessDay, { input: { from: "2026-10-25" } });
     // @ts-expect-error the client reaches running services only, not an external peer
     w.client.call(calendarPeer.nextBusinessDay, { from: "2026-10-25" });
     // @ts-expect-error a client line reaches its receiver directly; no message is delivered

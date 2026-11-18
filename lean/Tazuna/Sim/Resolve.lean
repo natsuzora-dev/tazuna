@@ -1,6 +1,9 @@
 import Tazuna.Sim.Network
 
-/-! A line's handles name facts by content; each resolves to exactly one fact of the world, or is reported. -/
+/-!
+A line's handles name facts by content; each resolves to the messages of the world that it names, all equal, or is
+reported.
+-/
 
 namespace Tazuna.Sim
 
@@ -51,6 +54,10 @@ def _root_.Tazuna.Service.LineBody.value? : LineBody → Option Value
   | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => some v
   | _ => none
 
+def _root_.Tazuna.Service.LineBody.target? : LineBody → Option Spec.Ref
+  | .command r _ | .query r _ | .subscribe r _ => some r
+  | _ => none
+
 def _root_.Tazuna.Service.LineBody.requestType? : LineBody → Option Scenario.RequestType
   | .command .. => some .command
   | .query .. => some .query
@@ -78,32 +85,45 @@ def World.schemaOf? (w : World) (msg : Message) : Option (String × Schema) :=
   | .event r _ _ => some (side, .payload r)
   | _ => none
 
-def World.sentBy (w : World) (line : Nat) : Option Sent := w.sent.find? (·.line == line)
-
-/-- The only one of `found`, or the report of none or several for the handle `fact` of line `i`. -/
-def World.only (w : World) (i : Nat) (fact : Fact) : List Nat → Except InvalidScenario Nat
-  | [k] => .ok k
-  | [] => .error (.unresolvedReference i (ToValue.toValue fact))
-  | ks => .error (.ambiguousReference i (ToValue.toValue fact) (ks.filterMap (w.messages[·]?) |>.map (·.describe)))
-
-/--
-`found` with equal messages on one channel taken as one: the oldest still in flight, or else the first. A line cannot
-tell them apart, and FIFO delivers them in sending order, so a line that names them acts on each in turn.
--/
-def World.oneOfEqual (w : World) (fsOf : String → Functions m) (found : List Nat) : m (List Nat) := do
-  let some first := found.head?.bind (w.messages[·]?) | return found
-  let keys ← found.filterMapM fun k => do
-    let some msg := w.messages[k]? | return none
-    if !msg.sameChannel first then return none
-    match w.schemaOf? msg, msg.body.value? with
-    | some (side, schema), some v => return some (← (comparedOr (fsOf side) schema v : m Value)).canonical
-    | _, _ => return none
-  if keys.length != found.length || !keys.all (some · == keys.head?) then return found
-  return [(found.find? fun k => (w.messages[k]?).any (·.status == .inFlight)).getD (found.headD 0)]
+/-- The requests that the client or a peer line `line` sent, or that the line delivered, in the order it did. -/
+def World.sentBy (w : World) (line : Nat) : List Sent := w.sent.filter (·.line == line)
 
 def ofExcept {α : Type} : Except InvalidScenario α → ExceptT InvalidScenario m α
   | .ok a => pure a
   | .error e => throw e
+
+/-- `found`, or the report of none for the handle `fact` of line `i`. -/
+def nonEmpty {α : Type} (i : Nat) (fact : Fact) : List α → Except InvalidScenario (List α)
+  | [] => .error (.unresolvedReference i (ToValue.toValue fact))
+  | ks => .ok ks
+
+/-- The report that the messages `ks` that the handle `fact` of line `i` names differ. -/
+def World.ambiguous (w : World) (i : Nat) (fact : Fact) (ks : List Nat) : InvalidScenario :=
+  .ambiguousReference i (ToValue.toValue fact) (ks.filterMap (w.messages[·]?) |>.map (·.describe))
+
+/-- The content of message `k` as the schema of its running end compares it, if it carries a value. -/
+def World.comparedContent? (w : World) (fsOf : String → Functions m) (k : Nat) : m (Option String) := do
+  let some msg := w.messages[k]? | return none
+  match w.schemaOf? msg, msg.body.value? with
+  | some (side, schema), some v => return some (← (comparedOr (fsOf side) schema v : m Value)).canonical
+  | _, _ => return none
+
+/--
+The messages `found` that the handle `fact` of line `i` names, which must be equal: a line cannot tell them apart. Of
+those on one channel, it takes the oldest still in flight, or else the first, as FIFO delivers them in sending order.
+-/
+def World.alikeMessages (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) (found : List Nat) :
+    ExceptT InvalidScenario m (List Nat) := do
+  let found ← ofExcept (nonEmpty i fact found)
+  let keys ← found.mapM fun k => (w.comparedContent? fsOf k : m (Option String))
+  if !keys.all (· == keys.head?.join) then throw (w.ambiguous i fact found)
+  let inFlight (k : Nat) := (w.messages[k]?).any (·.status == .inFlight)
+  let sameChannel (k j : Nat) := match w.messages[k]?, w.messages[j]? with
+    | some a, some b => a.sameChannel b
+    | _, _ => false
+  pure (found.filter fun k =>
+    let peers := found.filter (sameChannel k)
+    k == ((peers.find? inFlight).getD (peers.headD k)))
 
 /-- The screen instance that the handle `fact` of line `i` names. -/
 def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except InvalidScenario Opened :=
@@ -120,7 +140,7 @@ def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except InvalidScenario 
 /-- The lines that `service` wrote while `origin` was processed. -/
 def World.spanLines (w : World) (o : Origin) (service : String) : List Service.Line :=
   let lines := (w.state service).lines
-  w.spans.flatMap fun sp => if sp.origin == o && sp.service == service then (lines.extract sp.from sp.to).toList else []
+  w.spans.flatMap fun sp => if sp.turn.origin == o && sp.service == service then (lines.extract sp.from sp.to).toList else []
 
 /--
 The answers that the receiver of the request `s` gave to it, from its `in` line up to the receiver's next `in` line with
@@ -134,14 +154,24 @@ def World.answersOf (w : World) (s : Sent) : List Answer :=
     | .answer t a => if l.dir == .out && t == s.id && next.all (n < ·) then some a else none
     | _ => none
 
+/--
+The first of `values`, the raw and compared values that the handle `fact` of line `i` reads, when the compared values are
+all equal, or the report of none or of a difference.
+-/
+def alike (i : Nat) (fact : Fact) (missing : InvalidScenario) : List (Value × Value) → Except InvalidScenario Value
+  | [] => .error missing
+  | (v, c) :: rest =>
+    if rest.all (·.2.canonical == c.canonical) then .ok v
+    else .error (.ambiguousReference i (ToValue.toValue fact) (v :: rest.map (·.1)))
+
 mutual
 /--
-The message that the handle `fact` of line `i` names. A pick's value is filled as the line fills its values, and
-compared with the message's as the schema of its sender compares them. The handles of `requests` name only requests
-equal as that schema compares them: the scenario cannot tell them apart, so which handle names which is no line's.
+The messages, in sending order, that the handle `fact` of line `i` names. A pick's value is filled as the line fills its
+values, and compared with the message's as the schema of its sender compares them. The requests and events that one
+handle names must be equal as that schema compares them; a line acts on each.
 -/
-partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
-    ExceptT InvalidScenario m Nat := do
+partial def World.messagesOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
+    ExceptT InvalidScenario m (List Nat) := do
   let indexed := w.messages.toList.zipIdx
   let matching (p : Message → Bool) := indexed.filterMap fun (msg, k) => if p msg then some k else none
   let picked (p : Message → Bool) (pick : Option Template) : ExceptT InvalidScenario m (List Nat) := do
@@ -154,96 +184,97 @@ partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat
     pure (found.map (·.2))
   match fact with
   | .request o kind target input =>
-    ofExcept (w.only i fact (← picked (fun msg => msg.origin == o && msg.body.requestType? == some kind &&
-      msg.target? == some target) input))
-  | .requests _ _ _ _ h =>
-    let found ← w.requestsOf fsOf i fact
-    let place := ((w.assignments.lookup (fact.group?.getD fact)).bind (·[h]?)).getD h
-    match found[place]? with
-    | some k => pure k
-    | none => throw (.unresolvedReference i (ToValue.toValue fact))
+    w.alikeMessages fsOf i fact (← picked (fun msg => msg.origin == o && msg.body.requestType? == some kind &&
+      msg.target? == some target) input)
   | .event o event payload receiver =>
-    let found ← picked (fun msg => msg.origin == o && msg.event? == some event && receiver.all (· == msg.receiver))
-      payload
-    ofExcept (w.only i fact (← (w.oneOfEqual fsOf found : m (List Nat))))
+    w.alikeMessages fsOf i fact (← picked (fun msg => msg.origin == o && msg.event? == some event &&
+      receiver.all (· == msg.receiver)) payload)
   | .answer o to =>
-    match w.sentBy to with
-    | none => throw (.unresolvedReference i (ToValue.toValue fact))
-    | some s =>
-      ofExcept (w.only i fact (matching fun msg => msg.origin == o && msg.sender == s.receiver && match msg.body with
-        | .answer t _ => t == s.id
-        | _ => false))
+    let sents := w.sentBy to
+    let each := sents.map fun s => matching fun msg => msg.origin == o && msg.sender == s.receiver &&
+      match msg.body with
+      | .answer t _ => t == s.id
+      | _ => false
+    if each.any (·.length > 1) then throw (w.ambiguous i fact each.flatten)
+    ofExcept (nonEmpty i fact each.flatten)
   | .«end» o subscription =>
-    let k ← w.messageOf fsOf i subscription
-    let some sub := w.messages[k]? | throw (.unresolvedReference i (ToValue.toValue fact))
-    ofExcept (w.only i fact (matching fun msg => msg.origin == o && msg.sender == sub.sender &&
-      msg.receiver == sub.receiver && match msg.body with
+    let subs ← w.messagesOf fsOf i subscription
+    let each := subs.filterMap (w.messages[·]?) |>.map fun sub =>
+      matching fun msg => msg.origin == o && msg.sender == sub.sender && msg.receiver == sub.receiver &&
+        match msg.body with
         | .unsubscribe to => to == sub.id
-        | _ => false))
-  | .line j => ofExcept (w.only i fact (w.carried.filterMap fun (l, k) => if l == j then some k else none))
+        | _ => false
+    if each.any (·.length > 1) then throw (w.ambiguous i fact each.flatten)
+    ofExcept (nonEmpty i fact each.flatten)
+  | .line j => ofExcept (nonEmpty i fact (w.carried.filterMap fun (l, k) => if l == j then some k else none))
   | .screen .. => throw (.unresolvedReference i (ToValue.toValue fact))
 
 /--
-The messages, in sending order, of the group of the handle `fact` of `requests` of line `i`: the requests that `request`
-with the same fields names, which must be equal as the schema of their sender compares them.
--/
-partial def World.requestsOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
-    ExceptT InvalidScenario m (List Nat) := do
-  let .requests o kind target input _ := fact | throw (.unresolvedReference i (ToValue.toValue fact))
-  let pick ← input.mapM (w.fill fsOf i)
-  let found ← w.messages.toList.zipIdx.filterMapM fun (msg, k) => do
-    if !(msg.origin == o && msg.body.requestType? == some kind && msg.target? == some target) then return none
-    match w.schemaOf? msg, msg.body.value? with
-    | some (side, schema), some v =>
-      if ← (picks (fsOf side) schema pick v : m Bool) then
-        return some (k, (← (comparedOr (fsOf side) schema v : m Value)).canonical)
-      else return none
-    | _, _ => return none
-  if !found.all (·.2 == (found.head?.map (·.2)).getD "") then
-    throw (.ambiguousReference i (ToValue.toValue fact) (found.filterMap (w.messages[·.1]?) |>.map (·.describe)))
-  pure (found.map (·.1))
-
-/--
-The value of the part `part` of the request that the handle `fact` of line `i` names: of a line's request or of a
-request that a running service sent, its input and the output of the first answer to it; of an answer, the output of the
-one answer that the receiver of the line's request gave to it while the answer's origin was processed, which names
-each answer of a subscription by the line that caused it; of an answer that a line states, its output.
+The value of the part `part` of the requests that the handle `fact` of line `i` names, which must be equal: of a line's
+requests or of requests that a running service sent, their input and the output of the first answer to each; of
+answers, the output of the one answer that the receiver of each of the line's requests gave to it while the answers'
+origin was processed, which names each answer of a subscription by the line that caused it; of answers that a line
+states, their output.
 -/
 partial def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) (part : Part) :
     ExceptT InvalidScenario m Value := do
-  let missing : ExceptT InvalidScenario m Value := throw (.missingOutput i (ToValue.toValue fact))
-  let present : Option Value → ExceptT InvalidScenario m Value
-    | some v => pure v
-    | none => missing
-  let viaMessage : ExceptT InvalidScenario m Value := do
-    let k ← w.messageOf fsOf i fact
-    let some msg := w.messages[k]? | missing
-    match msg.body, part with
-    | .answer _ a, .output => present a.output?
-    | _, .input => present msg.body.value?
-    | _, .output => present (((w.state msg.sender).lines.toList.findSome? fun l =>
-        match l.dir, l.body with
-        | .in, .answer t a => if t == msg.id then some a else none
-        | _, _ => none).bind (·.output?))
+  let missing : InvalidScenario := .missingOutput i (ToValue.toValue fact)
+  let compared (side : String) (schema : Option Schema) (v : Value) : m Value :=
+    match schema with
+    | some s => comparedOr (fsOf side) s v
+    | none => pure v
+  let viaMessages : ExceptT InvalidScenario m Value := do
+    let ks ← w.messagesOf fsOf i fact
+    let values ← ks.filterMapM fun k => do
+      let some msg := w.messages[k]? | return none
+      let side := ((w.schemaOf? msg).map (·.1)).getD msg.sender
+      let v? := match msg.body, part with
+        | .answer _ a, .output => a.output?
+        | _, .input => msg.body.value?
+        | _, .output => ((w.state msg.sender).lines.toList.findSome? fun l =>
+            match l.dir, l.body with
+            | .in, .answer t a => if t == msg.id then some a else none
+            | _, _ => none).bind (·.output?)
+      let schema := match part with
+        | .input => (w.schemaOf? msg).map (·.2)
+        | .output => msg.target?.map Schema.output
+      match v? with
+      | some v => return some (v, ← compared side schema v)
+      | none => return none
+    if values.length != ks.length then throw missing
+    ofExcept (alike i fact missing values)
   match fact, part with
   | .line j, _ =>
     match w.sentBy j with
-    | some s =>
-      match part with
-      | .input => present (((w.state s.receiver).lines[s.position]?).bind (·.body.value?))
-      | .output => present ((w.answersOf s).head?.bind (·.output?))
-    | none => viaMessage
+    | [] => viaMessages
+    | sents =>
+      let values ← sents.filterMapM fun s => do
+        let request := (w.state s.receiver).lines[s.position]?
+        let v? := match part with
+          | .input => request.bind (·.body.value?)
+          | .output => (w.answersOf s).head?.bind (·.output?)
+        let schema := request.bind (·.body.target?) |>.map fun r => match part with
+          | .input => Schema.input r
+          | .output => Schema.output r
+        match v? with
+        | some v => return some (v, ← compared s.receiver schema v)
+        | none => return none
+      if values.length != sents.length then throw missing
+      ofExcept (alike i fact missing values)
   | .answer o to, .output =>
     match w.sentBy to with
-    | none => throw (.unresolvedReference i (ToValue.toValue fact))
-    | some s =>
-      match (w.spanLines o s.receiver).filterMap fun l => match l.dir, l.body with
-          | .out, .answer t a => if t == s.id then some a else none
-          | _, _ => none with
-      | [a] => present a.output?
-      | [] => throw (.unresolvedReference i (ToValue.toValue fact))
-      | several => throw (.ambiguousReference i (ToValue.toValue fact) (several.map ToValue.toValue))
-  | _, _ => viaMessage
+    | [] => throw (.unresolvedReference i (ToValue.toValue fact))
+    | sents =>
+      let each := sents.map fun s => (w.spanLines o s.receiver).filterMap fun l => match l.dir, l.body with
+        | .out, .answer t a => if t == s.id then some a else none
+        | _, _ => none
+      if each.any (·.isEmpty) then throw (.unresolvedReference i (ToValue.toValue fact))
+      if each.any (·.length > 1) then
+        throw (.ambiguousReference i (ToValue.toValue fact) (each.flatten.map ToValue.toValue))
+      let outputs := each.flatten.filterMap (·.output?)
+      if outputs.length != sents.length then throw missing
+      ofExcept (alike i fact missing (outputs.map fun v => (v, v)))
+  | _, _ => viaMessages
 
 partial def World.observed (w : World) (fsOf : String → Functions m) (i : Nat) (r : ValueRef) :
     ExceptT InvalidScenario m Value := do

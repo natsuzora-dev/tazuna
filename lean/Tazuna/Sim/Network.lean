@@ -60,11 +60,20 @@ def Message.sameChannel (m n : Message) : Bool :=
   m.sender == n.sender && m.receiver == n.receiver && m.channel == n.channel
 
 /--
-The lines `from` to `to` (exclusive) that `service` wrote while `origin` was processed, and the steps `stepsFrom` to
-`stepsTo` (exclusive) that it took.
+One processing of a running service: what caused it, and which delivery of the line it is, from 0, when the line
+delivers several messages, each its own processing. A service acts at most once per turn.
+-/
+structure Turn where
+  origin : Origin
+  delivery : Nat := 0
+deriving DecidableEq, Repr, Inhabited
+
+/--
+The lines `from` to `to` (exclusive) that `service` wrote in `turn`, and the steps `stepsFrom` to `stepsTo` (exclusive)
+that it took.
 -/
 structure Span where
-  origin : Origin
+  turn : Turn
   service : String
   «from» : Nat
   to : Nat
@@ -109,16 +118,15 @@ structure World where
   violations : List InvalidScenario := []
   halted : Option InvalidScenario := none
   /--
-  The steps that the internal queue of `service` takes first while `origin` is processed, as State.stepOrder: the
-  order of steps that test's search runs, which no line writes.
+  The steps that the internal queue of `service` takes first in a turn, as State.stepOrder: the order of steps that
+  test's search runs, which no line writes.
   -/
-  stepOrders : List (Origin × String × List StepName) := []
+  stepOrders : List (Turn × String × List StepName) := []
   /--
-  The message that each handle of a group of `requests` names, by group (Fact.group?): handle `j` names the group's
-  message at place `j` of the list, counted in sending order. A group without an entry has each handle name the message
-  at its own place. The assignment that test's search runs, which no line writes.
+  The order in which a line acts on the messages that it names, by line: the places of the messages, counted in sending
+  order. A line without an entry acts in sending order. The order that test's search runs, which no line writes.
   -/
-  assignments : List (Scenario.Fact × List Nat) := []
+  deliveryOrders : List (Nat × List Nat) := []
 deriving Inhabited
 
 def World.state (w : World) (service : String) : State := (w.states.lookup service).getD { service }
@@ -243,11 +251,11 @@ def World.checkComputed (w : World) (service : String) (sent : List Line) (recor
   | none => w
 
 /--
-The world after `service` processes what `f` gives it while `origin` is processed, taking first the steps of its entry
-of `stepOrders`, which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages it sent.
-Under `reopen`, as after a restart, every screen open after it opened anew.
+The world after `service` processes what `f` gives it in `turn`, taking first the steps of its entry of `stepOrders`,
+which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages
+it sent. Under `reopen`, as after a restart, every screen open after it opened anew.
 -/
-def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : String → Functions m) (o : Origin)
+def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : String → Functions m) (turn : Turn)
     (service : String) (f : Service → Functions m → State → m State) (reopen : Bool := false) : m World := do
   match w.services.lookup service with
   | none => pure w
@@ -256,24 +264,25 @@ def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : 
     let before := s.lines.size
     let stepsFrom := s.steps.size
     let screens := screensOf s
-    let order := (w.stepOrders.find? fun (o', q, _) => o' == o && q == service).map (·.2.2)
+    let o := turn.origin
+    let order := (w.stepOrders.find? fun (t, q, _) => t == turn && q == service).map (·.2.2)
     let t ← MonadActing.acting service (f st (fsOf service) { s with stepOrder := order.getD [] })
     let t := if order.isSome then checkStepOrder t else t
     let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun id =>
       { origin := o, service, id : Opened }
-    let span : Span := { origin := o, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
+    let span : Span := { turn, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
                       spans := w.spans ++ [span], opened := w.opened ++ opened,
-                      stepOrders := w.stepOrders.filter fun (o', q, _) => !(o' == o && q == service) }
+                      stepOrders := w.stepOrders.filter fun (t, q, _) => !(t == turn && q == service) }
     let sent := (t.lines.extract before t.lines.size).toList
     pure ((w.route o service sent).checkComputed service sent t.records)
 
-/-- The world after the message `k` arrives at its running receiver while `origin` is processed. -/
+/-- The world after the message `k` arrives at its running receiver in `turn`. -/
 def World.deliver {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (w : World) (fsOf : String → Functions m)
-    (o : Origin) (k : Nat) : m World :=
+    (turn : Turn) (k : Nat) : m World :=
   match w.messages[k]? with
   | none => pure w
   | some msg =>
-    (w.setStatus k .delivered).act fsOf o msg.receiver fun st fs s => arriveFrom st fs s msg.sender msg.id msg.body
+    (w.setStatus k .delivered).act fsOf turn msg.receiver fun st fs s => arriveFrom st fs s msg.sender msg.id msg.body
 
 end Tazuna.Sim

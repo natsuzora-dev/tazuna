@@ -58,12 +58,13 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
   A machine receives each event of one group that `decide` returns in a step of its own, so the order of a group is one of these orders.
   Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
   A tied deadline fires as a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
-- Which of the equal requests of one processing each handle of `requests` names.
-  `test` runs every assignment.
+- The order in which a line delivers the equal messages that its handle names.
+  Each delivery is a processing of its own, and `test` runs every order of them.
 
-When an order or an assignment changes the outcome, `test` reports `ChoiceDependent`.
+When an order changes the outcome, `test` reports `ChoiceDependent`.
 Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
 The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike wherever the key appears.
+For another delivery order, the lines of each delivery compare at the place of the message that the delivery took, so equal messages compare by which message each processing took and not by when it ran.
 
 ### When a trace matches a snapshot
 
@@ -88,6 +89,7 @@ An implementation that uses a string of its input, such as an idempotency key, a
 The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`.
 Keys that only a later line tells apart wait for that line.
 When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind, and its doc comment states the case.
+`test` runs the check for `Uncomparable.ambiguous` on each snapshot that it writes, so a spec that answers equal requests differently is reported before any implementation runs.
 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
@@ -128,7 +130,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
-| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`. The order of two ready steps with equal step names, which the search takes as one step: such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
+| `ChoiceDependent` | Orders beyond `ChoiceDependent.searchLimit`. The order of two ready steps with equal step names, which the search takes as one step: such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 
@@ -193,10 +195,10 @@ A map state has one *copy* of its child states for each key of its items.
 ### Simulation
 
 - Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone (`then_only_reports`). The checks at the end of a run also only add violations (`simulate_reported`).
-- A line changes no message in flight except the one that its handle names, and only a deliver, lose, or refuse line removes one (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
+- A line changes no message in flight except those that its handle names, and only a deliver, lose, or refuse line removes one (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
 - Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line (`line_keeps_states`).
-- A deliver line whose message has an earlier message in flight that must arrive first, on its channel and not an event of a step that no cause chain links to its own, delivers nothing and stops the simulation (`overtaking_delivery_halts`).
-- An external peer's answer to a request that has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
+- A deliver line whose first message has an earlier message in flight that must arrive first, on its channel and not an event of a step that no cause chain links to its own, delivers nothing and stops the simulation (`overtaking_delivery_halts`).
+- An external peer's answer whose first request has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A halting `InvalidScenario` violation stops the simulation, and once the simulation stops, the steps of the later lines take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
 - No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity, provided the service's state names the service as the owner of its keys, which `World.start` sets but no theorem proves (`unwritten_not_created`, `execute_unwritten_not_created`).
 - The order in which Given writes the records does not matter: a scenario that writes the same records, no two with one key, in another order simulates alike (`simulate_records_perm`).

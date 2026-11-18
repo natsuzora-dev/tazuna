@@ -27,17 +27,8 @@ export type Difference =
     };
 
 /**
- * The handles of one group of `requests` to `target`: handle `j` names the group's message at place `handles[j]`, counted
- * in sending order.
- */
-export type Assigned = {
-  readonly target: DefinitionRef;
-  readonly handles: readonly number[];
-};
-
-/**
- * A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, or
- * of two deadlines of one service due at one time, or which of equal requests each handle of `requests` names. Every other
+ * A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, of two
+ * deadlines of one service due at one time, or of the processings of equal messages that one line delivers. Every other
  * order of a simulation is a written line. stepOrder writes the pair in canonical order.
  */
 export type ChoiceDependent =
@@ -61,8 +52,8 @@ export type ChoiceDependent =
   /**
    * The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
    * a result that only those change is not reported. `definition` is the definition of the first step of the first pair
-   * that the search swapped. The search of the assignments of one scenario stops alike at assignmentLimit, with the
-   * target of the first group as `definition`.
+   * that the search swapped. The search of the delivery orders of one line stops alike at deliveryOrderLimit, with the
+   * definition of its messages as `definition`.
    */
   | {
       readonly kind: "ChoiceDependent.searchLimit";
@@ -72,22 +63,23 @@ export type ChoiceDependent =
       };
     }
   /**
-   * The execution in which each handle of `requests` names the message at its own place and the execution with the handles of each
-   * group as `assigned` lists them differ by `difference` in the outcome of the running service `service`. The requests
-   * are equal, so nothing outside tells which answer belongs to which. `definition` is the target of the first group that
-   * `assigned` changes.
+   * The execution in which scenario line `scenarioLine` delivers the equal messages that it names in sending order and the
+   * execution in which it delivers them in `order`, their places counted in sending order, differ by `difference` in the
+   * outcome of the running service `service`. The messages are equal, so nothing outside tells which arrives first.
+   * `definition` is the request or event that the messages carry.
    */
   | {
-      readonly kind: "ChoiceDependent.assignment";
+      readonly kind: "ChoiceDependent.deliveryOrder";
       readonly definition: DefinitionRef;
       readonly data: {
+        readonly scenarioLine: number;
+        readonly order: readonly number[];
         readonly service: string;
-        readonly assigned: readonly Assigned[];
         readonly difference: Difference;
       };
     }
   /**
-   * Comparing the records of two executions that a stepOrder or assignment violation at `definition` would name held more
+   * Comparing the records of two executions that a stepOrder or deliveryOrder violation at `definition` would name held more
    * than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
    * the choice changes the records is not known.
    */
@@ -102,6 +94,6 @@ export type ChoiceDependent =
 export const choiceDependentKinds = [
   "ChoiceDependent.stepOrder",
   "ChoiceDependent.searchLimit",
-  "ChoiceDependent.assignment",
+  "ChoiceDependent.deliveryOrder",
   "ChoiceDependent.uncomparable",
 ] as const;

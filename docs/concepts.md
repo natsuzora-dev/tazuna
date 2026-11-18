@@ -34,8 +34,9 @@ A rule that held only for the own service would let a peer's message arrive with
 ## A line refers to earlier lines through handles
 
 Each line returns a *handle*, and a later line refers to what an earlier line caused only through that handle.
-A handle names a message by its definition and, when needed, by its content.
-When a handle matches no message or more than one, tazuna reports it instead of picking one.
+A handle names messages by their definition and, when needed, by their content, as a Playwright filter does: `add.request(calendar.reserve, { day: "Mon" })`.
+It names every message that matches, and a line that uses it acts on each in sending order.
+When no message matches, or the matches differ, tazuna reports it instead of picking one.
 
 A scenario never refers to a message by its position or by a count, such as "the second request that this command sent".
 A position breaks silently when the spec changes: a command that sends one more request shifts every later position, and the scenario then names a different message without any error.
@@ -89,9 +90,10 @@ Whether two orders give the same outcome depends on what each step changes:
 - Two tied deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
 - Two tied deadlines whose events a machine reacts to only the first time do not, because the reaction's event follows whichever event came first.
 
-The same rule covers equal requests that one processing sends.
-When a scenario names them one by one with `requests`, nothing decides which handle names which request, so `test` runs every assignment.
-If an assignment changes the outcome, the requests need content that tells them apart, such as an id in the input.
+The same rule covers equal messages that one line delivers.
+Nothing outside tells which of them arrives first, so `test` runs every order and reports `ChoiceDependent.deliveryOrder` when one changes the outcome.
+For example, two copies that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
+The requests then need content that tells them apart, such as the task's id in the input.
 
 ## Each meaning has one form
 
