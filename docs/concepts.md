@@ -26,7 +26,6 @@ Every other service that the own service exchanges messages with is a peer, whic
 
 Apart from what the role decides, the own service and the peers follow one set of rules.
 A message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario.
-A key that any running service creates is never written in the scenario.
 A running peer's lines state the messages that its run sent, and its trace is a snapshot of its own, which `verify` compares with the peer's implementation in the same way as the own service's.
 
 The symmetry is what lets one scenario check both sides of an exchange.
@@ -41,6 +40,7 @@ When a handle matches no message or more than one, tazuna reports it instead of 
 A scenario never refers to a message by its position or by a count, such as "the second request that this command sent".
 A position breaks silently when the spec changes: a command that sends one more request shifts every later position, and the scenario then names a different message without any error.
 A handle that names content fails loudly instead.
+For the same reason, an operation names its screen instance by the handle of the line that opened it, so several open instances of one screen need no position.
 
 A scenario also never writes a key that a running service creates, such as `todo/Task-1`.
 The value of a created key is the run's decision, and the implementation makes it differently.
@@ -53,10 +53,15 @@ A message stays *in flight* from the moment its sender sends it until a line of 
 While a message is in flight, other lines can run, which is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
 
 Messages on one channel keep their order, and messages on different channels keep none.
-[Terms](guarantees.md#terms) defines which messages share a channel.
-This model follows what a real transport promises.
-One connection or one queue keeps its order, and nothing orders two connections.
+[Terms](guarantees.md#terms) defines the channels.
+This model follows what a real transport promises: one connection or one queue keeps its order, and nothing orders two connections.
 A spec that relies on an order across channels relies on an order that a deployed system does not keep, so neither the snapshot nor `verify` records one.
+
+A message carries its value as the sender wrote it, and only the receiver parses it, as in a web API.
+A sender that checked or normalized the value first would make the simulation accept a message that the deployed receiver rejects.
+
+A subscription lives as long as the process that serves it, as a WebSocket does.
+A restart ends every subscription, and a subscription with the same id after the restart is a new one that gets its first answer again.
 
 ## No result depends on an uncontrolled order
 
@@ -69,8 +74,8 @@ Spec functions receive the records of an entity as a `Bag`, which has no index a
 To order records, the spec sorts them by a key with `sortedBy`, and records with equal keys stay one group without order.
 A function can still depend on the order through a variable outside its callbacks, which `test` detects only partly as `BagOrderDependent`.
 
-Some steps have no cause that orders them: deadlines of one service due at the same time, and the steps of one processing that read and write the same data.
-`test` runs their orders and reports `ChoiceDependent.stepOrder` when two orders give different outcomes.
+Some steps have no cause that orders them: deadlines of one service due at the same time, the steps of one processing that read and write the same data, and the events of one group that `decide` returns.
+One search runs all of these orders, and `test` reports `ChoiceDependent.stepOrder` when two orders give different outcomes.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
 Whether two orders give the same outcome depends on what each step changes, including the messages on each channel:
@@ -106,13 +111,5 @@ The snapshot is the full record, which `test` and `verify` compare.
 ## Some violations are fixed in the spec or the scenario
 
 Some violations point at the spec or the scenario even when nothing in them is wrong as written, because the run that they describe leaves a choice open that a comparison cannot settle.
-
-`Uncomparable.ambiguous` is one.
-`verify` binds each value that the snapshot creates, such as a request id, to the implementation's value.
-When one processing sends equal requests that get different answers, the bindings can map an answer to either request, and the choice decides what the implementation receives next.
-`verify` cannot tell which binding is right, so it reports the line.
-To fix it, make the equal requests differ in content, or give them equal answers.
-
-`ChoiceDependent` works the same way in `test`.
-The spec is consistent, but its outcome depends on a choice that neither the scenario nor the spec makes.
-The fix states that choice in the spec, so that the simulation and the implementation make it alike.
+`ChoiceDependent` in `test` and `Uncomparable.ambiguous` in `verify` are such violations.
+The fix states the choice in the spec or the scenario, so that the simulation and the implementation make it alike.

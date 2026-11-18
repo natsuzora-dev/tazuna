@@ -70,12 +70,10 @@ The implementation creates its keys and request ids in its own way.
 A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 
 - Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
-- The `out` lines after each `in` line pair one to one with the snapshot's, comparing equal under the binding.
-  The pairing that `verify` reports by has equal times and keeps the order that each snapshot line's `after` names.
-  The theorem proves the equal comparison and the times and order for pairings that may differ.
-  The simulation orders only lines on one channel (`ordered_same_channel`), so the order kept is per channel.
+- The `out` lines after each `in` line pair one to one with the snapshot's, each pair equal under the binding.
+  A one-to-one pairing, which can be another one, pairs them at equal times and keeps the order that each snapshot line's `after` names.
+  `after` names only lines on one channel, and never two events of one group that `decide` returns (`ordered_same_channel`, `group_lines_unordered`).
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
-  The events of one group that `decide` returns have no order, even on one channel.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
   The binding is one to one within each domain: the request ids, and the keys of each entity.
   Paired lines have the same type, direction, and name, and their contents, and the ids of `in` lines and outgoing requests, are equal up to the binding (`contentMatch_renamed`).
@@ -126,7 +124,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
-| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`, the order of two ready steps with equal step names, which the search takes as one step (a name holds what the step runs and the groups that its event came in, so the two differ only in the step that caused them and, for answers, in which of two equal requests each answers), and a difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
+| `ChoiceDependent` | Orders and assignments beyond `ChoiceDependent.searchLimit`. The order of two ready steps with equal step names, which the search takes as one step: such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 
@@ -154,12 +152,14 @@ tazuna detects a break of each assumption only partly or not at all.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
   An external command's `ensures` is checked once, at the end of the scenario or trace, with all its result events.
+  An external query's `ensures` is checked when its answer arrives.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
   Replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
   A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so `verify` assumes that the implementation behaves the same with either set of values.
 - **Reproducible implementations.** Given the same world, an implementation sends the messages of its recorded trace.
   `verify` compares each implementation's trace with its own snapshot, so the claim that several implementations together produce the simulated run rests on this assumption and the previous one.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
+  The Lean build fails on `sorry` and on any axiom other than `propext`, `Classical.choice`, and `Quot.sound`, so no theorem rests on an unproven step.
 
 ## Properties without a theorem
 
@@ -174,7 +174,7 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 - Only a clock line moves the current time (`fireTo` in `lean/Tazuna/Sim/Run.lean`).
 - A command is processed as one message (`send` in `lean/Tazuna/Service/Input.lean`).
 - Several open instances of one screen are each operable: an operation names its instance by the line that opened it (`operate` in `lean/Tazuna/Service/Input.lean`).
-- Only the receiver of a message parses its value, and a spec service's `invalid-input` answer to another spec service is the sender's `Fault` (`checkAnswer` in `lean/Tazuna/Service/Input.lean`).
+- A message carries its value as the sender wrote it, only the receiver parses it, and a spec service's `invalid-input` answer to another spec service is the sender's `Fault` (`checkAnswer` in `lean/Tazuna/Service/Input.lean`).
 - A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it (`withoutRepeatedAnswers` in `lean/Tazuna/Verify/Compare.lean`).
 - Spec functions read the keys of an entity in one order, whatever order the records were written in.
   Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
