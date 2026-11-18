@@ -3,6 +3,7 @@ import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
 import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
 import { bag, bagged, defaultRow, sorted, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
+import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
 import {
@@ -35,7 +36,6 @@ import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../../
 import type { Spec } from "../../load/load.ts";
 import { traceName } from "../../load/traceName.ts";
 import { type Schema, type Service, serviceOf } from "../../service/basic.ts";
-import type { Activity } from "../../service/chart/basic.ts";
 import {
   type Access,
   type Assignment,

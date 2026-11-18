@@ -1,5 +1,5 @@
 import { limits } from "../../data/limits.generated.ts";
-import type { Requester, StepName } from "../../data/step.generated.ts";
+import type { Activity, Received, Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
@@ -29,7 +29,7 @@ import {
   takeQueued,
 } from "../state.ts";
 import { settle, settled } from "./always.ts";
-import { type Activity, answerTrigger, isOwn, type Transition, transitionsAt } from "./basic.ts";
+import { answerTrigger, isOwn, type Transition, transitionsAt } from "./basic.ts";
 import { enter, microstep } from "./microstep.ts";
 import { commandWork, type Processing, type Ready, type ReceivedEvent, take, type Work, workLeft } from "./queue.ts";
 import { sendEntered } from "./request.ts";
@@ -44,29 +44,31 @@ function firstEvent(work: Extract<Work, { readonly kind: "reaction" }>): Emitted
 
 function workName(r: Processing, work: Work): StepName {
   switch (work.kind) {
-    case "reaction": {
-      const e = firstEvent(work);
+    case "reaction":
       return {
         kind: "reaction",
         automation: work.automation.name,
         event: refOf(r.st, work.automation.receives),
-        payload: e.encoded,
+        payload: work.groups[0]?.[0]?.encoded ?? null,
+        delivered: work.delivered.map((g) => g.map((e) => e.encoded)),
       };
+    case "answered": {
+      const { activity, requester, input } = work.sent;
+      return { kind: "answer", activity, sender: requester, input: input as Json, answer: work.answer as Json };
     }
-    case "answered":
-      return {
-        kind: "answer",
-        command: work.sent.activity.target,
-        sender: work.sent.requester,
-        input: work.sent.input as Json,
-      };
     case "start":
       return { kind: "start", id: work.machine };
     case "receive": {
       const e = work.groups[0]?.[0];
+      const received = ({ key, payload }: ReceivedEvent): Received => ({ key, payload });
       return e === undefined
         ? { kind: "always", id: work.machine }
-        : { kind: "receive", id: work.machine, received: { key: e.key, payload: e.payload } };
+        : {
+            kind: "receive",
+            id: work.machine,
+            received: received(e),
+            delivered: work.delivered.map((g) => g.map(received)),
+          };
     }
     case "onDone":
       return { kind: "onDone", id: work.machine };
@@ -78,13 +80,8 @@ function workName(r: Processing, work: Work): StepName {
 /** Lean's Ready.name. */
 function readyName(r: Processing, ready: Ready): StepName {
   if (ready.kind === "work") return workName(r, ready.work);
-  const { activity, requester } = ready.sent;
-  return {
-    kind: "command",
-    command: activity.target,
-    sender: requester,
-    input: ready.sent.input as Json,
-  };
+  const { activity, requester, input } = ready.sent;
+  return { kind: "command", activity, sender: requester, input: input as Json };
 }
 
 function started(work: Work): InstanceId | undefined {
@@ -104,18 +101,21 @@ export function applyCompletion(
 }
 
 /** Handles an answer with the transitions of the state's activity that sent the request. */
+/** Lean's Instance.answerTransitions: the transitions of `instance` at `state` that take `answer` to activity `a`. */
+function answerTransitions(instance: Instance, state: string, a: Activity, answer: Answer): readonly Transition[] {
+  const trigger = answerTrigger(a, answer.result === "rejected");
+  return trigger === undefined ? [] : transitionsAt(instance.chart, state, trigger);
+}
+
 function handle(r: Processing, name: InstanceId, state: string, a: Activity, answer: Answer, step: number): void {
   const instance = machine(r.state, name);
   if (instance === undefined) return;
   r.note.readStates([[name, state]]);
   if (instance.closed || !instance.entered.has(state)) return;
-  const on = (rejected: boolean) => {
-    const trigger = answerTrigger(a, rejected);
-    return trigger === undefined ? [] : transitionsAt(instance.chart, state, trigger);
-  };
+  const ts = answerTransitions(instance, state, a, answer);
   if (answer.result === "rejected")
-    applyCompletion(r, instance, on(true), { rejection: { kind: answer.rejection.kind } }, step);
-  else applyCompletion(r, instance, on(false), answer.output === undefined ? {} : { output: answer.output }, step);
+    applyCompletion(r, instance, ts, { rejection: { kind: answer.rejection.kind } }, step);
+  else applyCompletion(r, instance, ts, answer.output === undefined ? {} : { output: answer.output }, step);
 }
 
 export function dispatch(r: Processing, name: InstanceId, key: string, payload: unknown, step: number): void {
@@ -256,6 +256,14 @@ function workBody(r: Processing, work: Work, step: number): void {
     }
     case "answered": {
       const { sent, answer } = work;
+      // Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
+      // answer has a transition to take.
+      if (sent.requester.kind === "state") {
+        const { machine: name, state } = sent.requester;
+        const instance = machine(r.state, name);
+        if (instance !== undefined && answerTransitions(instance, state, sent.activity, answer).length > 0)
+          r.note.readStates([[name, state]]);
+      }
       const live = sent.serial === undefined || takeQueued(r.state, sent.serial);
       const fault = rejectedInput(r, sent.activity.target, sent.requester, sent.input, answer);
       if (fault !== undefined) {

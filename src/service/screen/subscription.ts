@@ -1,7 +1,7 @@
+import type { Activity } from "../../data/step.generated.ts";
 import type { Json } from "../../data/values.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref, traceNameOf } from "../basic.ts";
-import type { Activity } from "../chart/basic.ts";
 import { openShows, stateEndSubscription } from "../chart/exit.ts";
 import type { Processing } from "../chart/queue.ts";
 import { Failed, issueViolation } from "../functions.ts";

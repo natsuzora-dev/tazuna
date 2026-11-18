@@ -475,7 +475,7 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
   intro r
   obtain ⟨s, q⟩ := r
   cases w with
-  | reaction a gs c =>
+  | reaction a gs d c =>
     rcases gs with _ | ⟨_ | ⟨e, g⟩, gs⟩
     · exact ⟨rfl, List.prefix_refl _⟩
     · exact ⟨rfl, List.prefix_refl _⟩
@@ -489,7 +489,7 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
       | (refine KeepsKeys.trans ?_ (keysBy_answerTo _ _ _ _ _); keys_leaf)
       | keys_leaf
   | start name c => exact keysBy_startWork _ _ _
-  | receive name received c => exact keysBy_receiveWork _ _ _ _
+  | receive name received d c => exact keysBy_receiveWork _ _ _ _
   | onDone name c => exact keysBy_doneWork _ _ _ _
   | opensDone name state key output serial c =>
     simp only [workBody, id_bind, note_id]

@@ -1,4 +1,4 @@
-import type { Requester } from "../../data/step.generated.ts";
+import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { ref, requirementsOf, traceNameOf } from "../basic.ts";
@@ -21,7 +21,7 @@ import {
   scopeOf,
   startQueued,
 } from "../state.ts";
-import { type Activity, type Chart, isOwn } from "./basic.ts";
+import { type Chart, isOwn } from "./basic.ts";
 import { slots } from "./config.ts";
 import type { Processing } from "./queue.ts";
 

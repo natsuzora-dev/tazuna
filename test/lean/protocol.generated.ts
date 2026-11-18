@@ -2,10 +2,9 @@
 import { z } from "zod";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
-import type { InstanceId, StepName } from "../../src/data/step.generated.ts";
+import type { Activity, InstanceId, StepName } from "../../src/data/step.generated.ts";
 import type { Answer, Rejection, TraceLine } from "../../src/data/trace.generated.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
-import type { Activity } from "../../src/service/chart/basic.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Folder, PairingScenario } from "../../src/verify/pairing.ts";
 

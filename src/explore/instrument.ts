@@ -4,13 +4,12 @@ import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } fr
 import { Bag } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
-import type { StepName } from "../data/step.generated.ts";
+import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
-import type { Activity } from "../service/chart/basic.ts";
 import {
   type Access,
   type Assignment,

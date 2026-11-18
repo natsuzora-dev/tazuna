@@ -1,4 +1,4 @@
-import type { DefinitionRef } from "../../data/definitionRef.ts";
+import type { Activity } from "../../data/step.generated.ts";
 import type { Trigger } from "../../data/transitionRef.generated.ts";
 import {
   type ActivityStructure,
@@ -21,15 +21,6 @@ export interface Transition {
   readonly guarded: boolean;
   readonly reenter: boolean;
 }
-
-/**
- * An activity of a state and the definition that it names. calls and sends send a request on each entry, opens opens a
- * child screen, and shows is a query subscribed while the screen is open. `modal` marks an opened screen that blocks
- * operations on other screens while it is open.
- */
-export type Activity =
-  | { readonly keyword: "calls" | "sends" | "shows"; readonly key: string; readonly target: DefinitionRef }
-  | { readonly keyword: "opens"; readonly key: string; readonly target: DefinitionRef; readonly modal: boolean };
 
 /** Whether `a` is an own-service command of `service`, which the internal queue processes without trace lines. */
 export const isOwn = (a: Activity, service: string): boolean => a.keyword === "sends" && a.target.service === service;

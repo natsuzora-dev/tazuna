@@ -30,27 +30,31 @@ def mapStateReads (i : Instance) : List (InstanceId × String) :=
   (i.active.filter (tree.kindOf · == some .map)).map (i.id, ·)
 
 def Work.name (st : Service) : Work → StepName
-  | .reaction a ((e :: _) :: _) _ => .reaction a.name (st.refOf a.receives) e.payload
-  | .reaction a _ _ => .reaction a.name (st.refOf a.receives) .null
-  | .answered c _ _ => .answer c.activity.ref c.requester c.input
+  | .reaction a ((e :: _) :: _) d _ => .reaction a.name (st.refOf a.receives) e.payload (d.map (·.map (·.payload)))
+  | .reaction a _ d _ => .reaction a.name (st.refOf a.receives) .null (d.map (·.map (·.payload)))
+  | .answered c answer _ => .answer c.activity c.requester c.input (ToValue.toValue answer)
   | .start name _ => .start name
-  | .receive name ((e :: _) :: _) _ => .receive name e
-  | .receive name _ _ => .always name
+  | .receive name ((e :: _) :: _) d _ => .receive name e d
+  | .receive name _ _ _ => .always name
   | .onDone name _ => .onDone name
   | .opensDone name state key _ _ _ => .opensDone name state key
 
 def Ready.name (st : Service) : Ready → StepName
   | .work w => w.name st
-  | .command c => .command c.activity.ref c.requester c.input
+  | .command c => .command c.activity c.requester c.input
 
 def Work.cause : Work → Option Nat
-  | .reaction _ _ cause | .answered _ _ cause | .receive _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
+  | .reaction _ _ _ cause | .answered _ _ cause | .receive _ _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
     some cause
   | .start _ cause => cause
 
 def Work.started : Work → Option InstanceId
   | .start name _ => some name
   | _ => none
+
+/-- The transitions of `i` at `state` that take `answer` to activity `a`. -/
+def Instance.answerTransitions (i : Instance) (state : String) (a : Activity) (answer : Answer) : List Transition :=
+  ((a.answerTrigger? (answer matches .rejected _)).map (i.chart.transitionsAt (some state))).getD []
 
 section
 
@@ -68,12 +72,12 @@ def handle (st : Service) (step : Nat) (name : InstanceId) (state : String) (a :
   withMachine name fun i r => do
     MonadNote.note (.readStates [(name, state)])
     if i.closed || !i.isIn state then pure r else
-    let on (rejected : Bool) := ((a.answerTrigger? rejected).map (i.chart.transitionsAt (some state))).getD []
+    let ts := i.answerTransitions state a answer
     match answer with
-    | .rejected rejection => applyCompletion fs st step name (on true) (.rejection rejection) r
+    | .rejected rejection => applyCompletion fs st step name ts (.rejection rejection) r
     | .accepted output =>
-      applyCompletion fs st step name (on false) (match output with | some o => .output o | none => .none) r
-    | .fulfilled output => applyCompletion fs st step name (on false) (.output output) r
+      applyCompletion fs st step name ts (match output with | some o => .output o | none => .none) r
+    | .fulfilled output => applyCompletion fs st step name ts (.output output) r
 
 def dispatch (st : Service) (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) : m Processing :=
   match r.state.machine? name with
@@ -168,13 +172,13 @@ def deliverAnswer (st : Service) (step : Nat) (p : Pending) (answer : Answer) (r
 end
 
 def Work.settledMachine? : Work → Option InstanceId
-  | .receive name _ _ | .onDone name _ | .opensDone name _ _ _ _ _ => some name
+  | .receive name _ _ _ | .onDone name _ | .opensDone name _ _ _ _ _ => some name
   | .answered c _ _ => c.requester.machine?
-  | .start _ _ | .reaction _ _ _ => none
+  | .start _ _ | .reaction .. => none
 
 def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : Nat) : Work → Processing → m Processing
-  | .reaction _ [] _, r | .reaction _ ([] :: _) _, r => pure r
-  | .reaction a ((e :: _) :: _) _, ⟨s, q⟩ => do
+  | .reaction _ [] _ _, r | .reaction _ ([] :: _) _ _, r => pure r
+  | .reaction a ((e :: _) :: _) _ _, ⟨s, q⟩ => do
     let definition := st.ref a.name
     match ← fs.react a.name e.payload s.records s.now s.nextKeys with
     | .error issue =>
@@ -188,7 +192,12 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
           pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
                                                     serial := none, input, cause := step }] }⟩
         else pure ⟨s.await (.command (st.traceNameOf a.sends.ref) input) (.automation a.name) a.sends input, q⟩
-  | .answered c answer _, ⟨s, q⟩ =>
+  | .answered c answer _, ⟨s, q⟩ => do
+    -- Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
+    -- answer has a transition to take.
+    if let .state name state := c.requester then
+      if (s.machine? name).any fun i => !(i.answerTransitions state c.activity answer).isEmpty then
+        MonadNote.note (.readStates [(name, state)])
     let (s, live) := match c.serial with
       | some serial => s.takeQueued serial
       | none => (s, true)
@@ -196,7 +205,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     | some fault => pure ⟨s.report (.fault fault), q⟩
     | none => if live then answerTo fs st step c.activity answer c.requester ⟨s, q⟩ else pure ⟨s, q⟩
   | .start name _, r => startWork fs st step name r
-  | .receive name received _, r => receiveWork fs st step name received r
+  | .receive name received _ _, r => receiveWork fs st step name received r
   | .onDone name _, r => doneWork fs st step name Limit.onDoneSelections.max r
   | .opensDone name state key output serial _, ⟨s, q⟩ => do
     let (s, live) := s.takeQueued serial

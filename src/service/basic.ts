@@ -1,7 +1,8 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import type { Activity } from "../data/step.generated.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import { isOpenedByScreen, refOfTraceName, schemaProperties, traceNameOfRef } from "../spec/structure.ts";
-import { type Activity, type Chart, executableChart } from "./chart/basic.ts";
+import { type Chart, executableChart } from "./chart/basic.ts";
 
 type Change =
   | { readonly kind: "none" }

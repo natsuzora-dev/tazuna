@@ -41,7 +41,7 @@ def constArray (name : String) (values : List String) : String :=
   else s!"export const {name} = [\n" ++ String.join (quoted.map fun q => s!"  {q},\n") ++ "] as const;\n"
 
 def tsTypes : List TsType :=
-  [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
+  [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Bool, "boolean", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
    ⟨``Tazuna.Spec.Ref, "DefinitionRef", some "./definitionRef.ts"⟩,
    ⟨``Tazuna.Verify.Subject, "Subject", some "./mismatch.generated.ts"⟩,
    ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
@@ -62,14 +62,16 @@ def tsTypes : List TsType :=
    ⟨``Tazuna.Scenario, "Scenario", some "./scenario.generated.ts"⟩,
    ⟨``Tazuna.Scenario.Origin, "Origin", some "./scenario.generated.ts"⟩,
    ⟨``Tazuna.Spec.Structure, "Structure", some "../spec/structure.generated.ts"⟩,
-   ⟨``Tazuna.Service.Activity, "Activity", some "../service/chart/basic.ts"⟩,
+   ⟨``Tazuna.Service.Activity, "Activity", some "./step.generated.ts"⟩,
    ⟨``Tazuna.Verify.Scenario, "PairingScenario", some "../verify/pairing.ts"⟩,
    ⟨``Tazuna.Verify.Folder, "Folder", some "../verify/pairing.ts"⟩]
 
 /-- The TS type of a Lean type. The state collects the imports that the TS type needs. -/
 partial def tsType : Expr → StateT (List (String × String)) MetaM String
   | .app (.const ``Option _) a => return s!"{← tsType a} | null"
-  | .app (.const ``List _) a => return s!"readonly {← tsType a}[]"
+  | .app (.const ``List _) a => do
+    let t ← tsType a
+    return if t.startsWith "readonly " || (t.splitOn " | ").length > 1 then s!"readonly ({t})[]" else s!"readonly {t}[]"
   | .const name _ => do
     let some t := tsTypes.find? (·.lean == name) | throwError "tsTypes has no TS type for {name}"
     if let some path := t.module then
@@ -459,7 +461,8 @@ def files : List (String × String) :=
    ("src/data/transitionRef.generated.ts",
     types% Tazuna.Spec.CallOutcome Tazuna.Spec.SendOutcome Tazuna.Spec.Trigger Tazuna.Spec.TransitionRef),
    ("src/data/step.generated.ts",
-    types% Tazuna.Service.InstanceId Tazuna.Service.Requester Tazuna.Service.Received Tazuna.Service.StepName),
+    types% Tazuna.Service.InstanceId Tazuna.Service.Requester Tazuna.Service.Received Tazuna.Service.Activity
+      Tazuna.Service.StepName),
    ("src/data/trace.generated.ts",
     zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer ++ byCallerKinds),
    ("src/data/limits.generated.ts", limitsFile),

@@ -24,7 +24,7 @@ deriving Repr, Inhabited
 /-- Work that the step `cause` caused. -/
 inductive Work where
   /-- A run of an automation. `groups` holds the events that it receives, in their groups, as for `receive`. -/
-  | reaction (automation : Automation) (groups : List (List Emit)) (cause : Nat)
+  | reaction (automation : Automation) (groups delivered : List (List Emit)) (cause : Nat)
   | answered (sent : Sent) (answer : Answer) (cause : Nat)
   /--
   The start of a machine or screen in its initial state. A screen that `opens` opened has the opening step as `cause`.
@@ -33,8 +33,9 @@ inductive Work where
   /--
   An evaluation of a machine. `groups` holds the key and payload of each matching `receives`, in the groups of the
   events, and is empty when only records changed. One step takes one event; the next group waits for the current one.
+  `delivered` holds the groups as the work received them.
   -/
-  | receive (machine : InstanceId) (groups : List (List Received)) (cause : Nat)
+  | receive (machine : InstanceId) (groups delivered : List (List Received)) (cause : Nat)
   | onDone (machine : InstanceId) (cause : Nat)
   /-- The close in a final state of a screen that `opens` opened; the opener takes the `onDone` of its `opens`. -/
   | opensDone (machine : InstanceId) (state key : String) (output : Value) (serial : Nat) (cause : Nat)
@@ -92,14 +93,14 @@ def Groups.rest {α : Type} (cause step : Nat) : List (List α) → Option (List
 
 /-- The ways to take work `w`: a receive or reaction work takes any event of its first group first. -/
 def Work.choices : Work → List Work
-  | .receive machine gs cause => (Groups.choices gs).map (.receive machine · cause)
-  | .reaction a gs cause => (Groups.choices gs).map (.reaction a · cause)
+  | .receive machine gs d cause => (Groups.choices gs).map (.receive machine · d cause)
+  | .reaction a gs d cause => (Groups.choices gs).map (.reaction a · d cause)
   | w => [w]
 
 /-- The work left after the step `step` took the first event of `w`. None for work other than receive and reaction. -/
 def Work.rest (step : Nat) : Work → Option Work
-  | .receive machine gs cause => (Groups.rest cause step gs).map fun (gs, c) => .receive machine gs c
-  | .reaction a gs cause => (Groups.rest cause step gs).map fun (gs, c) => .reaction a gs c
+  | .receive machine gs d cause => (Groups.rest cause step gs).map fun (gs, c) => .receive machine gs d c
+  | .reaction a gs d cause => (Groups.rest cause step gs).map fun (gs, c) => .reaction a gs d c
   | _ => none
 
 /--
@@ -165,12 +166,12 @@ def withMachine [Monad m] (name : InstanceId) (f : Instance → Processing → m
 def machineWork (groups : List (List Emit)) (recordsChanged : Bool) (cause : Nat) (i : Instance) : Option Work :=
   let received := (groups.map fun g => g.flatMap fun e =>
     (i.chart.receives.filter (·.2 == e.event)).map fun r => { key := r.1, payload := e.payload : Received }).filter (!·.isEmpty)
-  if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.id received cause)
+  if i.closed || (received.isEmpty && !recordsChanged) then none else some (.receive i.id received received cause)
 
 /-- The reaction work of automation `a`. -/
 def automationWork (groups : List (List Emit)) (cause : Nat) (a : Automation) : Option Work :=
   let received := (groups.map (·.filter (a.receives == ·.event))).filter (!·.isEmpty)
-  if received.isEmpty then none else some (.reaction a received cause)
+  if received.isEmpty then none else some (.reaction a received received cause)
 
 /--
 The work that the groups of events `groups` cause: one receive work per machine and one reaction work per automation.

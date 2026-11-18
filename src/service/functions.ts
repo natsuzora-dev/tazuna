@@ -1,11 +1,11 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
+import type { Activity } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { type Schema, schemaOwner } from "./basic.ts";
-import type { Activity } from "./chart/basic.ts";
 import { type InstanceId, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource, Row } from "./records.ts";

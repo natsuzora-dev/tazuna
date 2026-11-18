@@ -261,7 +261,7 @@ theorem keeps_workBody (step : Nat) (w : Work) : Keeps (workBody st fs step w) :
   intro r
   obtain ⟨s, q⟩ := r
   cases w with
-  | reaction a gs c =>
+  | reaction a gs d c =>
     rcases gs with _ | ⟨_ | ⟨e, g⟩, gs⟩
     · rfl
     · rfl
@@ -273,7 +273,7 @@ theorem keeps_workBody (step : Nat) (w : Work) : Keeps (workBody st fs step w) :
     repeat' split
     all_goals first | exact keeps_answerTo _ _ _ _ _ | rfl | simp [State.fixed, State.takeQueued, report_eq]
   | start name c => exact keeps_startWork _ _ _
-  | receive name received c => exact keeps_receiveWork _ _ _ _
+  | receive name received d c => exact keeps_receiveWork _ _ _ _
   | onDone name c => exact keeps_doneWork _ _ _ _
   | opensDone name state key output serial c =>
     simp only [workBody]
@@ -285,7 +285,7 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
   intro r
   obtain ⟨s, q⟩ := r
   cases w with
-  | reaction a gs c =>
+  | reaction a gs d c =>
     rcases gs with _ | ⟨_ | ⟨e, g⟩, gs⟩
     · exact Grows.of_lines rfl
     · exact Grows.of_lines rfl
@@ -300,7 +300,7 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
     repeat' split
     all_goals first | exact growsBy_answerTo _ _ _ _ _ | exact Grows.of_lines rfl | exact Grows.of_lines (report_lines ..)
   | start name c => exact growsBy_startWork _ _ _
-  | receive name received c => exact growsBy_receiveWork _ _ _ _
+  | receive name received d c => exact growsBy_receiveWork _ _ _ _
   | onDone name c => exact growsBy_doneWork _ _ _ _
   | opensDone name state key output serial c =>
     simp only [workBody]
@@ -416,11 +416,11 @@ theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : S
     (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
   rcases answer with _ | _ | ⟨kind, reason⟩
-  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
-  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
+  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]; split <;> rfl
+  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]; split <;> rfl
   · cases kind
     · exact absurd rfl (ha reason)
-    all_goals simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]
+    all_goals simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]; split <;> rfl
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 

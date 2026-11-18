@@ -1,4 +1,4 @@
-import type { Received, Requester, StepName } from "../../data/step.generated.ts";
+import type { Activity, Received, Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import type { Automation, Service } from "../basic.ts";
@@ -6,7 +6,6 @@ import type { InstanceId } from "../instance.ts";
 import type { Emitted } from "../message.ts";
 import { sameStep } from "../note.ts";
 import { type Instance, type Run, report, type State } from "../state.ts";
-import type { Activity } from "./basic.ts";
 
 /**
  * A command sent to its own service. `order` is the sender definition's rank, `cause` is the sending step, `serial` is
@@ -31,6 +30,7 @@ export type Work =
       readonly kind: "reaction";
       readonly automation: Automation;
       readonly groups: readonly (readonly Emitted[])[];
+      readonly delivered: readonly (readonly Emitted[])[];
       readonly cause: number;
     }
   | { readonly kind: "answered"; readonly sent: Sent; readonly answer: Answer; readonly cause: number }
@@ -38,12 +38,14 @@ export type Work =
   | { readonly kind: "start"; readonly machine: InstanceId; readonly cause: number | undefined }
   /**
    * `groups` holds each receives key and payload in the groups of the events, and is empty when only records changed.
-   * One step takes one event; the next group waits for the current one.
+   * One step takes one event; the next group waits for the current one. `delivered` holds the groups as the work
+   * received them.
    */
   | {
       readonly kind: "receive";
       readonly machine: InstanceId;
       readonly groups: readonly (readonly ReceivedEvent[])[];
+      readonly delivered: readonly (readonly ReceivedEvent[])[];
       readonly cause: number;
     }
   | { readonly kind: "onDone"; readonly machine: InstanceId; readonly cause: number }
@@ -213,7 +215,7 @@ function machineWork(
     )
     .filter((g) => g.length > 0);
   if (instance.closed || (received.length === 0 && !recordsChanged)) return undefined;
-  return { kind: "receive", machine: instance.id, groups: received, cause };
+  return { kind: "receive", machine: instance.id, groups: received, delivered: received, cause };
 }
 
 /**
@@ -231,7 +233,9 @@ export function reactions(
     ...[...s.machines.values()].flatMap((i) => machineWork(groups, recordsChanged, cause, i) ?? []),
     ...st.automations.flatMap((automation): Work[] => {
       const received = groups.map((g) => g.filter((e) => e.event === automation.receives)).filter((g) => g.length > 0);
-      return received.length === 0 ? [] : [{ kind: "reaction", automation, groups: received, cause }];
+      return received.length === 0
+        ? []
+        : [{ kind: "reaction", automation, groups: received, delivered: received, cause }];
     }),
   ];
 }

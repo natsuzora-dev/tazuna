@@ -1,4 +1,4 @@
-import Tazuna.Spec.Structure
+import Tazuna.Service.Chart.Basic
 import Tazuna.Service.Instance
 
 /-! This module defines how the internal queue and the search name a step. -/
@@ -41,21 +41,22 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Received
 
 /--
-A step as the internal queue and the search name it: by its definition and what tells it apart from another step of
-that definition. The search treats two steps with equal names as one, so equal names must run equal work. `input` of a
-command or answer is the request's input. A receive step takes one event.
+A step as the internal queue and the search name it. The search treats two steps with equal names as one, so a name
+holds what the step runs and what its work came with, but not the step that caused it or the Queued it answers. A
+receive or reaction step takes one event, of the groups `delivered` that its work received; a name must not depend on
+which events of those groups other steps took, since the search reorders them. `answer` is the answer as written.
 -/
 inductive StepName where
   | start (id : InstanceId)
-  | receive (id : InstanceId) (received : Received)
+  | receive (id : InstanceId) (received : Received) (delivered : List (List Received))
   | always (id : InstanceId)
   | onDone (id : InstanceId)
   | opensDone (id : InstanceId) (state key : String)
   | activities (id : InstanceId) (state : String)
   | deadline (id : InstanceId) (state name : String)
-  | reaction (automation : String) (event : Spec.Ref) (payload : Value)
-  | command (command : Spec.Ref) (sender : Requester) (input : Value)
-  | answer (command : Spec.Ref) (sender : Requester) (input : Value)
+  | reaction (automation : String) (event : Spec.Ref) (payload : Value) (delivered : List (List Value))
+  | command (activity : Activity) (sender : Requester) (input : Value)
+  | answer (activity : Activity) (sender : Requester) (input : Value) (answer : Value)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
@@ -66,9 +67,9 @@ def StepName.isDeadline : StepName → Bool
 
 /-- The definition of the step, in service `service`. -/
 def StepName.definition (service : String) : StepName → Spec.Ref
-  | .start i | .receive i _ | .always i | .onDone i | .opensDone i _ _ | .activities i _ | .deadline i _ _ =>
+  | .start i | .receive i .. | .always i | .onDone i | .opensDone i _ _ | .activities i _ | .deadline i _ _ =>
     { service, name := i.chart }
-  | .reaction a _ _ => { service, name := a }
-  | .command _ sender _ | .answer _ sender _ => { service, name := sender.sender }
+  | .reaction a .. => { service, name := a }
+  | .command _ sender _ | .answer _ sender _ _ => { service, name := sender.sender }
 
 end Tazuna.Service

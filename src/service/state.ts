@@ -2,7 +2,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import { limits } from "../data/limits.generated.ts";
-import type { Requester, StepName } from "../data/step.generated.ts";
+import type { Activity, Requester, StepName } from "../data/step.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { UntimedTraceLine } from "../data/trace.ts";
@@ -10,7 +10,7 @@ import type { Fields, Json } from "../data/values.ts";
 import { type Located, type Location, type Violation, type ViolationError, withExtra } from "../data/violation.ts";
 import { descendants, pathOf } from "../spec/tree.ts";
 import { ref, type Service } from "./basic.ts";
-import type { Activity, Chart, Transition } from "./chart/basic.ts";
+import type { Chart, Transition } from "./chart/basic.ts";
 import {
   type Access,
   Failed,
