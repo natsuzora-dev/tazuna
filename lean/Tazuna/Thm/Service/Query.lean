@@ -119,13 +119,4 @@ theorem resolve_output_sorted_before_normalize (name : String) (raw input output
     ∃ vs, resolveChecked st fs s name raw = .answered (.fulfilled normalized) vs := by
   cases failed <;> simp [resolveChecked, normalizeOutput, hp, hr, hv, hn, he] <;> exact ⟨_, rfl⟩
 
-theorem query_ensures_reported (name : String) (raw input output normalized : Value) (failed : Option String)
-    (hp : fs.parse (.input name) raw = .ok (some input))
-    (hr : firstFalse (fs.inputRequirement name · input) (st.requirementsOf name).requires = .ok none)
-    (hv : fs.resolve name input s.records s.now = .ok output)
-    (hn : fs.normalize (.output name) (st.sorted (.output name) output) = .ok (some normalized))
-    (he : fs.queryEnsures name input normalized s.records = .ok failed) :
-    resolveChecked st fs s name raw = .answered (.fulfilled normalized) (failed.toList.map (st.failedEnsures name)) := by
-  cases failed <;> simp [resolveChecked, normalizeOutput, hp, hr, hv, hn, he]
-
 end Tazuna.Thm.Service.Query

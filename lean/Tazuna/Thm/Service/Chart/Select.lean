@@ -26,48 +26,6 @@ theorem descendant_replaces_ancestor (s : State) (c : Chart) (a d : InstanceId �
       Decidable.not_not, forall_eq, true_and]
   exact ⟨x.1, x.2, hxa, hxd⟩
 
-theorem ancestor_after_descendant_dropped (s : State) (c : Chart) (a d : InstanceId × Transition) (x : InstanceId × String)
-    (hxa : x ∈ s.exitKeys a) (hxd : x ∈ s.exitKeys d) (hout : c.tree.isInside a.2.source d.2.source = false) :
-    s.removeConflicts c [d, a] = [d] := by
-  simp only [State.removeConflicts, List.any_filter, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq, Prod.exists,
-      Bool.not_eq_eq_eq_not, Bool.not_true, List.mem_filter, not_and, not_exists, decide_not, List.foldl_cons,
-      List.filter_nil, List.any_nil, Bool.false_eq_true, ↓reduceIte, List.not_mem_nil, decide_false, Bool.not_false,
-      List.nil_append, List.any_cons, hout, Bool.and_true, Bool.or_false, List.mem_cons, or_false, List.foldl_nil,
-      ite_eq_left_iff]
-  intro h
-  exact absurd hxa (h x.1 x.2 hxd)
-
-theorem ancestor_only_without_descendant (s : State) (extra : Extra) (levels : List (Instance × List Transition))
-    (h' : InstanceId) (t : Transition) (h : firstLevel fs st s extra levels = .ok (some (h', t))) :
-    ∃ k : Nat, (∃ i ts, levels[k]? = some (i, ts) ∧ i.id = h' ∧ choose fs st s i extra ts = .ok (some t)) ∧
-      ∀ j < k, ∀ i ts, levels[j]? = some (i, ts) → choose fs st s i extra ts = .ok none := by
-  induction levels with
-  | nil =>
-    simp only [firstLevel, id_pure] at h
-    injection h with h
-    cases h
-  | cons l rest ih =>
-    obtain ⟨i, ts⟩ := l
-    simp only [firstLevel, id_bind] at h
-    split at h
-    · cases h
-    · rename_i t' ht'
-      injection h with h
-      injection h with h
-      injection h with h₁ h₂
-      subst h₂
-      exact ⟨0, ⟨i, ts, rfl, h₁, ht'⟩, fun j hj => absurd hj (Nat.not_lt_zero j)⟩
-    · rename_i hn
-      obtain ⟨k, ⟨i', ts', hk, hr, hc⟩, hb⟩ := ih h
-      refine ⟨k + 1, ⟨i', ts', by simpa using hk, hr, hc⟩, fun j hj i'' ts'' hj' => ?_⟩
-      cases j with
-      | zero =>
-        simp only [List.length_cons, Nat.zero_lt_succ, getElem?_pos, List.getElem_cons_zero, Option.some.injEq,
-            Prod.mk.injEq] at hj'
-        obtain ⟨rfl, rfl⟩ := hj'
-        exact hn
-      | succ j => exact hb j (by omega) i'' ts'' (by simpa using hj')
-
 theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k : String)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) =

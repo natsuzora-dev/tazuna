@@ -56,8 +56,4 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
   refine ⟨r, ho, hsv, ?_⟩
   rw [hev, ← beq_iff_eq.mp hname, Ref.traceName, ite_eq_left (by simp [hsv])]
 
-theorem no_index_reasons (s : Structure) :
-    Commands.indexReasons s = [] ↔ ∀ d ∈ s.definitions, ∀ r ∈ s.rejectionReasons d.ref, Commands.isArrayIndex r = false := by
-  simp [Commands.indexReasons, List.flatMap_eq_nil_iff, List.filter_eq_nil_iff]
-
 end Tazuna.Thm.Validation.Commands

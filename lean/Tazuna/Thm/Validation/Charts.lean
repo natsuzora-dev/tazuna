@@ -1,81 +1,11 @@
 import Tazuna.Validation.Charts
 import Tazuna.Service.Input
-import Tazuna.Thm.Service.Basic
+import Tazuna.Thm.Service.Chart.Basic
 
 namespace Tazuna.Thm.Validation.Charts
 
 open Tazuna.Data Tazuna.Validation Tazuna.Validation.Charts
 open Tazuna.Spec
-open Tazuna.Thm.Service.Basic
-
-theorem parentKeys_eq_nil (c : Chart) :
-    parentKeys c = [] ↔ c.input = [] ∧ c.requires = [] ∧ c.output = [] ∧ c.ensures = [] := by
-  unfold parentKeys
-  cases c.input <;> cases c.requires <;> cases c.output <;> cases c.ensures <;> simp
-
-theorem starting_screen_has_no_parent_keys (j : Structure) (service : String) (st : Tazuna.Service)
-    (hs : Tazuna.Service.ofStructure j service = .ok st) (h : missingParents j = []) (c : Tazuna.Service.Chart)
-    (hc : c ∈ st.starting) (hscr : c.screen = true) :
-    ∃ d ∈ j.definitions, ∃ sc, d.body = .screen sc ∧ d.service = service ∧ d.name = c.name ∧
-      sc.input = [] ∧ sc.requires = [] ∧ sc.output = [] ∧ sc.ensures = [] := by
-  obtain ⟨hm, ho⟩ := List.mem_filter.mp hc
-  obtain ⟨d, hd, sc, hcs, hsv, hn, hscs, hop⟩ := chart_of_definition j service st hs c hm
-  have hscreen : d.isScreen = true := hscs ▸ hscr
-  have hb : d.body = .screen sc := by
-    simp only [Definition.chart?, Definition.isScreen] at hcs hscreen
-    split at hcs <;> simp_all
-  refine ⟨d, hd, sc, hb, hsv, hn.symm, (parentKeys_eq_nil sc).mp ?_⟩
-  have hopens : j.isOpenedByScreen d.ref = false := by simpa [hop, hscreen] using ho
-  have := List.filterMap_eq_nil_iff.mp h d hd
-  simp only [hb, hopens, Bool.not_false, Bool.and_true] at this
-  split at this
-  · exact absurd this (by simp)
-  · rename_i hif
-    simpa using hif
-
-theorem opened_by_screen_iff (s : Structure) (r : Ref) :
-    s.isOpenedByScreen r = true ↔
-      ∃ o ∈ s.definitions, ∃ oc, o.body = .screen oc ∧ ∃ key, (key, some r) ∈ oc.screens := by
-  unfold Structure.isOpenedByScreen
-  rw [List.any_eq_true]
-  constructor
-  · rintro ⟨o, ho, h⟩
-    cases hb : o.body with
-    | screen oc =>
-      rw [hb] at h
-      obtain ⟨⟨key, target⟩, hk, hr⟩ := List.any_eq_true.mp h
-      cases target with
-      | none => simp [sameRef] at hr
-      | some t =>
-        simp only [sameRef, beq_iff_eq] at hr
-        exact ⟨o, ho, oc, hb, key, hr ▸ hk⟩
-    | _ => rw [hb] at h; simp at h
-  · rintro ⟨o, ho, oc, hb, key, hk⟩
-    refine ⟨o, ho, ?_⟩
-    rw [hb]
-    exact List.any_eq_true.mpr ⟨(key, some r), hk, by simp [sameRef]⟩
-
-theorem screens_with_parent_keys_are_opened (s : Structure) :
-    missingParents s = [] ↔
-      ∀ d ∈ s.definitions, ∀ c, d.body = .screen c → ¬(c.input = [] ∧ c.requires = [] ∧ c.output = [] ∧ c.ensures = []) →
-        ∃ o ∈ s.definitions, ∃ oc, o.body = .screen oc ∧ ∃ key, (key, some d.ref) ∈ oc.screens := by
-  simp only [missingParents, List.filterMap_eq_nil_iff]
-  constructor
-  · intro h d hd c hb hin
-    have := h d hd
-    rw [hb] at this
-    refine (opened_by_screen_iff s d.ref).mp ?_
-    cases ho : s.isOpenedByScreen d.ref
-    · have hne : parentKeys c ≠ [] := fun he => hin ((parentKeys_eq_nil c).mp he)
-      simp [ho, hne] at this
-    · rfl
-  · intro h d hd
-    cases hb : d.body with
-    | screen c =>
-      by_cases hin : parentKeys c = []
-      · simp [hin]
-      · simp [(opened_by_screen_iff s d.ref).mpr (h d hd c hb fun he => hin ((parentKeys_eq_nil c).mpr he))]
-    | _ => rfl
 
 theorem queries_of_other_services (s : Structure) :
     ownQueries s = [] ↔

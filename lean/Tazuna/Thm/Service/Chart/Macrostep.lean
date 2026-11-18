@@ -14,14 +14,6 @@ variable {st : Service} {fs : Functions Id} {s : State}
 theorem settled_some (step : Nat) (name : InstanceId) (f : Processing → Id Processing) (r : Processing) :
     settled fs st step (some name) f r = settleAround fs st step (name.owner) f r := rfl
 
-theorem records_change_settles (s : State) (groups : List (List Emit)) (cause : Nat) (i : Instance)
-    (hm : i ∈ s.machines) (hc : i.closed = false) :
-    ∃ received, Work.receive i.id received cause ∈ reactions st s groups true cause := by
-  refine ⟨(groups.map fun g => g.flatMap fun e =>
-      (i.chart.receives.filter (·.2 == e.event)).map fun r => { key := r.1, payload := e.payload : Received }).filter (!·.isEmpty),
-    List.mem_append_left _ (List.mem_filterMap.mpr ⟨i, hm, ?_⟩)⟩
-  simp [machineWork, hc]
-
 theorem keeps_settle (step : Nat) (name : InstanceId) : Keeps (settle fs st step name) :=
   fun r => settleFrom_fixed step _ _ r
 
@@ -130,17 +122,6 @@ theorem keeps_answerTo (step : Nat) (a : Activity) (answer : Answer) (requester 
     repeat' split
     all_goals exact showAnswer_fixed _ _ _ _
   | automation n => exact automationAnswer_fixed _ _ _
-
-theorem keeps_deliverAnswer (step : Nat) (p : Pending) (answer : Answer) :
-    Keeps (deliverAnswer fs st step p answer) := by
-  intro r
-  have ha := answered_fixed (s := r.state) p
-  unfold deliverAnswer
-  rcases h : r.state.answered p with ⟨s', live⟩
-  rw [h] at ha
-  cases live
-  · exact ha
-  · exact (keeps_answerTo _ _ _ _ _).trans ha
 
 theorem growsBy_settle (step : Nat) (name : InstanceId) : GrowsBy (settle fs st step name) :=
   fun r => settleFrom_grows step _ _ r
@@ -260,28 +241,6 @@ theorem stopped_machine_takes_no_event (step : Nat) (name : InstanceId) (key : S
     dispatch fs st step name key payload r = r := by
   simp [dispatch, hi, hc]
 
-theorem dispatch_takes_one_microstep (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
-    (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition)) (hh : r.state.halted = none)
-    (hi : r.state.machine? name = some i) (hc : i.closed = false) (hl : eventLeaves fs st r.state i payload = .ok leaves)
-    (hs : select fs st r.state i (.on key) (.payload payload) leaves = .ok chosen) (hn : chosen ≠ []) :
-    dispatch fs st step name key payload r = microstep fs st step name chosen (.payload payload) r := by
-  unfold dispatch
-  cases chosen with
-  | nil => exact absurd rfl hn
-  | cons t ts =>
-    simp only [hi, Processing.halted, hh, hc, Option.isSome_none, Bool.or_false, Bool.false_eq_true, ↓reduceIte, id_bind]
-    rw [hl]
-    simp only
-    rw [hs]
-
-theorem answer_after_exit_ignored (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) (r : Processing)
-    (i : Instance) (hi : r.state.machine? name = some i) (hn : i.isIn state = false) :
-    handle fs st step name state a answer r = r := by
-  unfold handle withMachine
-  split
-  · rfl
-  · simp [hi, hn]
-
 theorem untaken_operation_changes_nothing (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
     (leaves : List (InstanceId × Option String)) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
     (hl : eventLeaves fs st r.state i payload = .ok leaves)
@@ -397,9 +356,6 @@ theorem drain_clock (n : Nat) (q : Queue) : (drain st fs n s q).clock = s.clock 
           | exact hc (settleScreens_fixed _ _)
           | (rw [processCommand_clock]; rfl))
 
-theorem drain_commandAnswers (n : Nat) (q : Queue) : (drain st fs n s q).commandAnswers = s.commandAnswers :=
-  congrArg Prod.fst (drain_clock n q)
-
 theorem runWork_grows (q : Queue) (step : Nat) (w : Work) : Grows s (runWork st fs s q step w).1 :=
   growsBy_settled step _ (growsBy_workBody step w) (keeps_workBody step w) ⟨s, q⟩
 
@@ -475,151 +431,6 @@ theorem invalid_input_command_answer_faults_sender (s : State) (q : Queue) (step
         | none => s
       ⟨t.report (.fault (c.requester.inputFault st c.activity.ref)), q⟩ := by
   cases h : c.serial <;> simp [workBody, Requester.rejectedInput?, h]
-
-theorem groups_choices_cons {α : Type} (gs : List (List α)) : ∃ cs, Groups.choices gs = gs :: cs := by
-  unfold Groups.choices
-  split <;> exact ⟨_, rfl⟩
-
-theorem choices_cons (w : Work) : ∃ cs, w.choices = w :: cs := by
-  cases w with
-  | receive machine gs cause =>
-    obtain ⟨cs, h⟩ := groups_choices_cons gs
-    exact ⟨cs.map (.receive machine · cause), by simp [Work.choices, h]⟩
-  | reaction a gs cause =>
-    obtain ⟨cs, h⟩ := groups_choices_cons gs
-    exact ⟨cs.map (.reaction a · cause), by simp [Work.choices, h]⟩
-  | _ => exact ⟨_, rfl⟩
-
-/-- Without `stepOrder` entries, the queue takes its first task and puts back what the step leaves of it. -/
-theorem drain_runs_task_first (fuel : Nat) (q : Queue) (w : Work) (ws : List Work) (hh : s.halted = none)
-    (ho : s.stepOrder = []) (hq : q.tasks = w :: ws) :
-    drain st fs (fuel + 1) s q =
-      let (s₁, step) := s.newStep w.cause
-      let r := runWork st fs s₁ ({ q with tasks := ws }.putBack 0 (w.rest step)) step w
-      drain st fs fuel r.state r.queue := by
-  obtain ⟨cs, hc⟩ := choices_cons w
-  cases s; subst ho
-  simp_all [drain, Queue.take, Queue.entries, Queue.without]
-
-/-- Without `stepOrder` entries or tasks, the queue takes the first command, with the round joined. -/
-theorem drain_processes_command_with_current_records (fuel : Nat) (q : Queue) (c : Sent) (cs : List Sent)
-    (hh : s.halted = none) (ho : s.stepOrder = []) (ht : q.tasks = []) (hc : q.commands ++ sortSent q.round = c :: cs)
-    (hr : (s.newCommandStep c.cause (st.ref c.requester.sender)).2 = none) :
-    drain st fs (fuel + 1) s q =
-      let (s₁, step) := (s.newCommandStep c.cause (st.ref c.requester.sender)).1
-      let r := processCommand st fs s₁ (st.traceNameOf c.activity.ref) c.input none step
-      drain st fs fuel r.1
-        { tasks := commandWork st r.1 r.2.2 step ++ [.answered c r.2.1 step], round := [], commands := cs,
-          entered := q.entered } := by
-  cases s; subst ho
-  simp_all [drain, Queue.take, Queue.entries, Queue.without, Ready.name]
-
-/-- A ready work or command that the next `stepOrder` entry names runs before the others, whatever their order. -/
-theorem take_named (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready) (i : Nat)
-    (h : q.entries.find? (name ·.1 == named) = some (r, i)) :
-    q.take name (named :: rest) = .ok (some (r, i, q.without i, rest)) := by
-  simp only [Queue.take]
-  generalize q.entries = entries at h ⊢
-  cases entries with
-  | nil => simp at h
-  | cons x xs => dsimp only; rw [h]
-
-theorem take_unnamed (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (e : Ready × Nat)
-    (es : List (Ready × Nat)) (hr : q.entries = e :: es) (h : q.entries.find? (name ·.1 == named) = none)
-    (hd : named.isDeadline = false) :
-    q.take name (named :: rest) = .error (.unreadyStep named (q.entries.map (name ·.1))) := by
-  simp only [Queue.take]
-  rw [hr] at h ⊢
-  dsimp only
-  rw [h]
-  simp [hd]
-
-/-- An entry that names a deadline waits for its tie: the queue takes its first ready entry and keeps the entry. -/
-theorem take_deadline (q : Queue) (name : Ready → StepName) (named : StepName) (rest : List StepName) (r : Ready)
-    (i : Nat) (es : List (Ready × Nat)) (hr : q.entries = (r, i) :: es) (h : q.entries.find? (name ·.1 == named) = none)
-    (hd : named.isDeadline = true) :
-    q.take name (named :: rest) = .ok (some (r, i, q.without i, named :: rest)) := by
-  simp only [Queue.take]
-  rw [hr] at h ⊢
-  dsimp only
-  rw [h]
-  simp [hd]
-
-theorem find_distinct_name {α : Type} (key : α → StepName) :
-    ∀ (l : List α) (x : α), l.Pairwise (key · ≠ key ·) → x ∈ l → l.find? (key · == key x) = some x
-  | [], _, _, hx => by simp at hx
-  | y :: ys, x, hp, hx => by
-    rw [List.pairwise_cons] at hp
-    rcases List.mem_cons.mp hx with rfl | hx
-    · simp
-    · have hne : key y ≠ key x := hp.1 x hx
-      simp [hne, find_distinct_name key ys x hp.2 hx]
-
-/-- When the ready entries have distinct names, naming an entry takes exactly that entry. -/
-theorem take_reaches (q : Queue) (name : Ready → StepName) (rest : List StepName) (r : Ready) (i : Nat)
-    (hd : q.entries.Pairwise (name ·.1 ≠ name ·.1)) (hx : (r, i) ∈ q.entries) :
-    q.take name (name r :: rest) = .ok (some (r, i, q.without i, rest)) :=
-  take_named q name _ rest r i (find_distinct_name (name ·.1) q.entries (r, i) hd hx)
-
-theorem newCommandStep_exceeded_halts (cause : Nat) (sender : Spec.Ref) (exceeded : Fault)
-    (h : (s.newCommandStep cause sender).2 = some exceeded) : exceeded.halts = true := by
-  unfold State.newCommandStep at h
-  dsimp only at h
-  split at h
-  · cases h; rfl
-  · split at h
-    · cases h; rfl
-    · cases h
-
-theorem drain_halts_on_command_runaway (fuel : Nat) (q : Queue) (c : Sent) (cs : List Sent) (exceeded : Fault)
-    (hh : s.halted = none) (ho : s.stepOrder = []) (ht : q.tasks = []) (hc : q.commands ++ sortSent q.round = c :: cs)
-    (hr : (s.newCommandStep c.cause (st.ref c.requester.sender)).2 = some exceeded) :
-    drain st fs (fuel + 1) s q =
-      (s.newCommandStep c.cause (st.ref c.requester.sender)).1.1.halt (Finding.fault exceeded) := by
-  have hx := newCommandStep_exceeded_halts _ _ _ hr
-  cases s; subst ho
-  simp_all [drain, Queue.take, Queue.entries, Queue.without, State.report]
-
-theorem drain_at_work_limit (q : Queue) (hh : s.halted = none) :
-    drain st fs 0 s q =
-      if !q.isEmpty then s.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)) else
-      let s₁ := refreshScreens st fs s
-      if s₁.halted.isNone && !(shownChanged s s₁).isEmpty then s₁.halt (Finding.fault (.exceededMessageWork Limit.messageWork.max)) else s₁ := by
-  simp only [drain, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind, State.report]
-  rfl
-
-theorem doneWork_at_selection_limit (step : Nat) (name : InstanceId) (r : Processing) (i : Instance)
-    (hi : r.state.machine? name = some i) :
-    doneWork fs st step name 0 r =
-      match i.awaitingOnDone with
-      | some (_ :: _) => ⟨r.state.halt (Finding.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)), r.queue⟩
-      | _ => ⟨r.state.setMachine name fun i => { i with awaitingOnDone := none }, r.queue⟩ := by
-  simp only [doneWork, hi]
-  rcases h : i.awaitingOnDone with _ | _ | ⟨_, _⟩ <;> simp [Processing.report, State.report, Fault.halts]
-
-theorem shows_rejection_reported (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
-    (showAnswer st name slot answer r).state.violations = r.state.violations ++
-      (match answer with
-       | .rejected rj =>
-         if RejectionKind.byCaller rj.kind then [(Finding.fault (.rejectedShows (st.ref name.chart) slot rj))]
-         else []
-       | _ => []) ∧
-      (showAnswer st name slot answer r).state.halted = r.state.halted := by
-  cases answer with
-  | rejected rj => cases h : RejectionKind.byCaller rj.kind <;> simp [showAnswer, h, State.report, State.violate, Fault.halts]
-  | _ => simp [showAnswer, State.setShown, State.setMachine]
-
-theorem queued_work_keeps_records (q : Queue) (step : Nat) (w : Work) :
-    (runWork st fs s q step w).state.records = s.records :=
-  congrArg Fixed.records (runWork_fixed q step w)
-
-theorem reaction_reads_current_records (q : Queue) (step : Nat) (a : Automation) (e : Emit) (g : List Emit)
-    (gs : List (List Emit)) (cause : Nat) :
-    ∃ k : Except Issue (Option Value × List String) → Processing,
-      runWork st fs s q step (.reaction a ((e :: g) :: gs) cause) =
-        k (fs.react a.name e.payload s.records s.now s.nextKeys) :=
-  ⟨fun x => runWork st { fs with react := fun _ _ _ _ _ => x } s q step (.reaction a ((e :: g) :: gs) cause), by
-    simp only [runWork, Work.settledMachine?, settled, workBody, id_bind]⟩
 
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)

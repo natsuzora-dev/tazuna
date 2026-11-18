@@ -364,10 +364,6 @@ theorem keeps_lookup_map (l : List (String × State)) (g : String × State → S
     · exact h₂
     · exact ih
 
-theorem keeps_ite_records (c : Bool) (x : State) (rows : Records) :
-    KeepsKeys x (if c = true then { x with records := rows } else x) := by
-  cases c <;> exact .refl _
-
 theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : KeepsWorld w (w.given j fsOf sc) := by
   unfold World.given
   simp only [bind, pure]

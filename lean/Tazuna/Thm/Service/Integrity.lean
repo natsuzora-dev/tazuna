@@ -180,28 +180,6 @@ theorem entity_invariant_reported_iff (records : Records) (name : String) (defin
   · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
 
-theorem single_invariant_reported_iff (records : Records) (name : String) (definition : Spec.Ref) (c : String)
-    (command : Spec.Ref) :
-    .failedSingleInvariant definition c command ∈ (integrityViolations st fs records name).run ↔
-      command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
-        row.key = none ∧ fs.invariant row.entity row.value = .ok (some c) := by
-  rw [mem_integrityViolations]
-  simp only [mem_rowViolations, mem_danglingRefs, Row.failedInvariant]
-  constructor
-  · rintro (⟨row, hr, he, (⟨_, _, hi⟩ | ⟨c', hi, hk⟩ | ⟨_, _, _, _, _, _, _, _, hk⟩)⟩ | ⟨_, _, h⟩ | ⟨_, _, h⟩)
-    · exact (not_issue_of_not_halts (fun _ => rfl) rfl hi).elim
-    · split at hk
-      · cases hk
-      · rename_i hkey
-        simp only [Fault.failedSingleInvariant.injEq] at hk
-        obtain ⟨rfl, rfl, rfl⟩ := hk
-        exact ⟨rfl, row, hr, rfl, he, hkey, hi⟩
-    · split at hk <;> cases hk
-    · cases h
-    · cases h
-  · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
-    exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
-
 theorem service_invariant_reported_iff (records : Records) (name : String) (c : String) (command : Spec.Ref) :
     .failedServiceInvariant c command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ fs.serviceInvariant records = .ok (some c) := by
@@ -238,30 +216,6 @@ theorem dangling_ref_reported_iff (records : Records) (name : String) (definitio
         obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := hk
         exact ⟨rfl, row, hr, rfl, he, hkey, t, hm, ht, v, hv, hn, rfl, hx⟩
       · cases hk
-    · cases h
-    · cases h
-  · rintro ⟨rfl, row, hr, rfl, he, hk, targetEntity, hm, ht, v, hv, hn, rfl, hx⟩
-    exact Or.inl ⟨row, hr, he, Or.inr (Or.inr ⟨field, targetEntity, v, hm, hv, hn, ht, hx, by rw [hk]⟩)⟩
-
-theorem dangling_single_ref_reported_iff (records : Records) (name : String) (definition : Spec.Ref)
-    (field targetKey : String) (command : Spec.Ref) :
-    .danglingSingleRef definition field targetKey command ∈ (integrityViolations st fs records name).run ↔
-      command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
-        row.key = none ∧ ∃ targetEntity, (row.entity, field, targetEntity) ∈ st.references ∧
-        targetEntity ∈ st.entities ∧ ∃ v, row.value.field? field = some v ∧ v ≠ .null ∧ v.keyString = targetKey ∧
-          ¬ ∃ x ∈ records, x.entity = targetEntity ∧ x.key = some targetKey := by
-  rw [mem_integrityViolations]
-  simp only [mem_rowViolations, mem_danglingRefs, Row.failedInvariant]
-  constructor
-  · rintro (⟨row, hr, he, (⟨_, _, hi⟩ | ⟨_, _, hk⟩ | ⟨f, t, v, hm, hv, hn, ht, hx, hk⟩)⟩ | ⟨_, _, h⟩ | ⟨_, _, h⟩)
-    · exact (not_issue_of_not_halts (fun _ => rfl) rfl hi).elim
-    · split at hk <;> cases hk
-    · split at hk
-      · cases hk
-      · rename_i hkey
-        simp only [Fault.danglingSingleRef.injEq] at hk
-        obtain ⟨rfl, rfl, rfl, rfl⟩ := hk
-        exact ⟨rfl, row, hr, rfl, he, hkey, t, hm, ht, v, hv, hn, rfl, hx⟩
     · cases h
     · cases h
   · rintro ⟨rfl, row, hr, rfl, he, hk, targetEntity, hm, ht, v, hv, hn, rfl, hx⟩

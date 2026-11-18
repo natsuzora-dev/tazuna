@@ -40,30 +40,6 @@ theorem foldl_keeps {α β : Type} (P : β → Prop) (f : β → α → β) (h :
   | nil => intro b hb; exact hb
   | cons x xs ih => intro b hb; exact ih _ (h b x hb)
 
-theorem mem_zipIdx_of_mem {α : Type} {x : α} {l : List α} (h : x ∈ l) : ∃ i, (x, i) ∈ l.zipIdx := by
-  obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp h
-  exact ⟨i, List.mem_zipIdx_iff_getElem?.mpr hi⟩
-
-theorem except_bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {b : β} (h : x >>= f = .ok b) :
-    ∃ a, x = .ok a ∧ f a = .ok b := by
-  cases x with
-  | error e => cases h
-  | ok a => exact ⟨a, rfl, h⟩
-
-theorem mem_mapM_ok {ε α β : Type} {f : α → Except ε β} {l : List α} {out : List β} (h : l.mapM f = .ok out)
-    {x : β} (hx : x ∈ out) : ∃ a ∈ l, f a = .ok x := by
-  induction l generalizing out with
-  | nil => cases h; cases hx
-  | cons a l ih =>
-    rw [List.mapM_cons] at h
-    obtain ⟨b, hb, h⟩ := except_bind_ok h
-    obtain ⟨bs, hbs, h⟩ := except_bind_ok h
-    cases h
-    rcases List.mem_cons.mp hx with rfl | hx
-    · exact ⟨a, List.mem_cons_self, hb⟩
-    · obtain ⟨a', ha', hf⟩ := ih hbs hx
-      exact ⟨a', List.mem_cons_of_mem _ ha', hf⟩
-
 theorem exists_zip_of_mem_right {α β : Type} {l₁ : List α} {l₂ : List β} (hl : l₂.length = l₁.length) {y : β}
     (hy : y ∈ l₂) : ∃ x, (x, y) ∈ l₁.zip l₂ := by
   induction l₁ generalizing l₂ with

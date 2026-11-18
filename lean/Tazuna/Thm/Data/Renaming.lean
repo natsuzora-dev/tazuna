@@ -312,14 +312,6 @@ theorem renames_compose {b c : List (Bound × Bound)} (hc : (c.map Prod.fst).Nod
 
 /-! ## One to one -/
 
-theorem inverse_fst_nodup {b : List (Bound × Bound)} (h : (b.map Prod.snd).Nodup) :
-    ((inverse b).map Prod.fst).Nodup := by
-  rw [inverse_map_fst]; exact h
-
-theorem inverse_snd_nodup {b : List (Bound × Bound)} (h : (b.map Prod.fst).Nodup) :
-    ((inverse b).map Prod.snd).Nodup := by
-  rw [inverse_map_snd]; exact h
-
 /-- The first part of compose, from the pairs of `b`. -/
 def composeLeft (b c : List (Bound × Bound)) : List (Bound × Bound) :=
   b.filterMap fun p => match c.lookup p.2 with
@@ -435,20 +427,6 @@ theorem strRenames_compose {dom : String → String} {b c : List (Bound × Bound
   unfold StrRenames at h₂
   rw [domain_of_renames hb h₁] at h₂
   exact renames_compose hc h₁ h₂
-
-theorem consistent_inverse {dom : String → String} {b : List (Bound × Bound)} (hb : Consistent dom b) :
-    Consistent dom (inverse b) := by
-  intro p hp
-  obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
-  exact ⟨(hb q hq).2, (hb q hq).1⟩
-
-theorem consistent_compose {dom : String → String} {b c : List (Bound × Bound)} (hb : Consistent dom b)
-    (hc : Consistent dom c) : Consistent dom (compose b c) := by
-  intro ⟨s, u⟩ hp
-  rcases mem_compose_left.mp hp with ⟨m, ha, hu⟩ | ⟨ha, _⟩ | ⟨ha, _⟩
-  · exact ⟨(hb _ ha).1, (hc _ (mem_of_lookup hu)).2⟩
-  · exact hb _ ha
-  · exact hc _ ha
 
 /-! ## The equivalence -/
 

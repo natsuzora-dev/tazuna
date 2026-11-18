@@ -19,10 +19,6 @@ theorem processCommand_clock (name : String) (raw : Value) (id : Option String) 
   · exact (emitAll_clock _ _ _).trans (by simp [State.clock])
   · simp [State.clock]
 
-theorem processCommand_commandAnswers (name : String) (raw : Value) (id : Option String) (n : Nat) :
-    (processCommand st fs s name raw id n).1.commandAnswers = s.commandAnswers :=
-  congrArg Prod.fst (processCommand_clock name raw id n)
-
 theorem processCommand_grows (name : String) (raw : Value) (id : Option String) (n : Nat) :
     Grows s (processCommand st fs s name raw id n).1 := by
   simp only [processCommand, id_bind]
@@ -81,11 +77,6 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option S
     rw [reportAll_records]
     exact h
 
-theorem processCommand_answer (name : String) (raw : Value) (id : Option String) (n : Nat) :
-    (processCommand st fs s name raw id n).2.1 = (evaluate st fs s.records s.now name raw).answer := by
-  simp only [processCommand, id_bind]
-  split <;> simp_all [Outcome.answer]
-
 /-- A rejected command writes no record and emits no event: the state only gains the answer line. -/
 theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option String) (n : Nat) (r : Rejection)
     (h : evaluate st fs s.records s.now name raw = .rejected r) :
@@ -108,31 +99,10 @@ theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Val
       (by show (State.answer _ id _).records = _; rw [answer_records, reportAll_records])
   · simp [processCommand, h]
 
-theorem own_command_answer_has_no_output (name : String) (raw : Value) (id : Option String) (n : Nat) (o : Value) :
-    (processCommand st fs s name raw id n).2.1 ≠ .accepted (some o) := by
-  rw [processCommand_answer]
-  cases evaluate st fs s.records s.now name raw <;> simp [Outcome.answer]
-
 theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value)
     (hp : fs.parse (.input name) raw = .ok none) :
     evaluate st fs records now name raw = .rejected { kind := .invalidInput } := by
   simp [evaluate, hp]
-
-theorem already_exists_iff_duplicated (records : Records) (now : Time) (name : String) (raw input : Value)
-    (decided : List (List Emit)) (normalized : List Emit) (hp : fs.parse (.input name) raw = .ok (some input))
-    (hr : requirementsRejection st fs records now name input = .ok none)
-    (hd : fs.decide name input records now = .ok decided) (hl : ∀ e ∈ decided.flatten, st.lists name e = true)
-    (hn : normalizeEmits st fs name decided.flatten = .ok normalized)
-    (ht : twiceWritten st records (orderedGroups decided normalized) = none) :
-    evaluate st fs records now name raw = .rejected { kind := .alreadyExists } ↔
-      duplicated st (applyAll st records (orderedGroups decided normalized).flatten) = true := by
-  have hf : decided.flatten.find? (!st.lists name ·) = none := List.find?_eq_none.mpr fun e he => by simp [hl e he]
-  simp only [evaluate, id_bind, hp, hr, hd, hf, hn, ht]
-  split
-  · simp_all
-  · simp only [Bool.not_eq_true] at *
-    simp_all only [Bool.false_eq_true, iff_false]
-    split <;> simp
 
 theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value)
     (decided : List (List Emit)) (hp : fs.parse (.input name) raw = .ok (some input))
@@ -214,33 +184,5 @@ theorem processCommand_answers (name : String) (raw : Value) (id : Option String
   · cases id <;> rfl
   · exact (congrArg Fixed.answers (emitAll_fixed _ _)).trans (by cases id <;> exact congrArg Fixed.answers (reportAll_fixed _))
   · exact congrArg Fixed.answers (reportAll_fixed ..)
-
-theorem emitAll_violations (t : State) (r : Option String) (emits : List Emit) :
-    (t.emitAll r emits).violations = t.violations := by
-  unfold State.emitAll
-  induction emits generalizing t with
-  | nil => rfl
-  | cons e es ih => simp only [List.foldl_cons]; exact ih _
-
-theorem emitAll_halted (t : State) (r : Option String) (emits : List Emit) : (t.emitAll r emits).halted = t.halted := by
-  unfold State.emitAll
-  induction emits generalizing t with
-  | nil => rfl
-  | cons e es ih => simp only [List.foldl_cons]; exact ih _
-
-theorem accepted_command_reports_violations (name : String) (raw : Value) (id : Option String) (n : Nat)
-    (written : Records) (groups : List (List Emit)) (vs : List Fault)
-    (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
-    (processCommand st fs s name raw id n).1.violations = ({ s with records := written }.reportAll vs).violations ∧
-      (processCommand st fs s name raw id n).1.halted = ({ s with records := written }.reportAll vs).halted ∧
-      (processCommand st fs s name raw id n).2.1 = .accepted none := by
-  simp only [processCommand, id_bind, h]
-  refine ⟨?_, ?_, rfl⟩
-  · show (State.emitAll _ id groups.flatten).violations = _
-    rw [emitAll_violations]
-    cases id <;> rfl
-  · show (State.emitAll _ id groups.flatten).halted = _
-    rw [emitAll_halted]
-    cases id <;> rfl
 
 end Tazuna.Thm.Service.Command

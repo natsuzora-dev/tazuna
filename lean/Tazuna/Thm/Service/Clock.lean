@@ -19,17 +19,6 @@ theorem keeps_fire (step : Nat) (t : Deadline) : Keeps (fire fs st step t) := by
     · rfl
     · exact keeps_applyCompletion _ _ _ _ r
 
-theorem growsBy_fire (step : Nat) (t : Deadline) : GrowsBy (fire fs st step t) := by
-  intro r
-  unfold fire
-  simp only [Tazuna.Thm.Service.Note.note_id, id_bind]
-  split
-  · exact Grows.of_lines (takeDeadline_lines t)
-  · refine (Grows.of_lines (takeDeadline_lines t)).trans rfl (growsBy_withMachine (fun i r => ?_) _)
-    split
-    · exact Grows.refl _
-    · exact growsBy_applyCompletion _ _ _ _ r
-
 theorem fires_only_in_active_state (step : Nat) (t : Deadline) (r : Processing) (i : Instance)
     (hi : r.state.machine? t.machine = some i)
     (hn : (r.state.takeDeadline t).2 = false ∨ i.closed = true ∨ i.isIn t.state = false) :
@@ -45,10 +34,6 @@ theorem fires_only_in_active_state (step : Nat) (t : Deadline) (r : Processing) 
       · simp_all
       · simp [hm, hn]
       · simp [hm, hn]
-
-/-- Without a tie, the earliest deadline in entry order fires. -/
-theorem chooseDeadline_untied (s : State) (first : Deadline) (due : List Deadline) :
-    chooseDeadline s first due false = .ok (first, s) := rfl
 
 /--
 In a tie, whichever line advanced the time, the next entry of the input's `stepOrder` chooses which of the tied

@@ -78,26 +78,6 @@ theorem settleFrom_grows (step : Nat) (owner : InstanceId) (roundsLeft : Nat) (r
     · exact ih _
     · exact (growsBy_microstep step _ _ _ r).trans ((keeps_microstep step _ _ _).now r) (ih _)
 
-theorem settle_halts_at_round_limit (step : Nat) (owner : InstanceId) (r : Processing) (i o : Instance)
-    (chosen : List (InstanceId × Transition)) (hh : r.state.halted = none) (hi : r.state.machine? owner = some i)
-    (hc : i.closed = false) (hs : (syncCopies fs st step owner r).1.state.halted = none)
-    (ho : (syncCopies fs st step owner r).1.state.machine? owner = some o)
-    (ht : select fs st (syncCopies fs st step owner r).1.state o .always .none
-      (leavesOf (syncCopies fs st step owner r).1.state o o.copyIds) = .ok chosen)
-    (hn : chosen ≠ [] ∨ (syncCopies fs st step owner r).2 = true) :
-    settleFrom fs st step owner 0 r =
-      ⟨(syncCopies fs st step owner r).1.state.halt (Finding.fault (.exceededAlwaysRounds (st.ref o.chart.name) Limit.alwaysRounds.max)),
-        (syncCopies fs st step owner r).1.queue⟩ := by
-  have hm : (chosen.isEmpty && !(syncCopies fs st step owner r).2) = false := by
-    rcases hn with hn | hn
-    · cases chosen with
-      | nil => exact absurd rfl hn
-      | cons => rfl
-    · simp [hn]
-  simp only [settleFrom, alwaysRound, Processing.halted, hh, hi, hc, hs, ho, ht, hm, Option.isSome_none, Bool.false_eq_true,
-    ↓reduceIte, id_bind]
-  simp [Processing.report, State.report, Fault.halts]
-
 def StableIfOpen (fs : Functions Id) (st : Service) (step : Nat) (owner : InstanceId) (R : Processing) (o : Instance) : Prop :=
   R.state.halted = none → R.state.machine? owner = some o → o.closed = false →
     syncCopies fs st step owner R = (R, false) ∧

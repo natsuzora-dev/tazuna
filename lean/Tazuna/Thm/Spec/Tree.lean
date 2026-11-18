@@ -57,47 +57,6 @@ theorem commonPrefix_append (l a b : List String) : commonPrefix (l ++ a) (l ++ 
   | nil => simp
   | cons x l ih => simp only [List.cons_append, commonPrefix, ↓reduceIte, ih, List.length_cons]; omega
 
-theorem commonPrefix_le : ∀ (xs ys : List String), commonPrefix xs ys ≤ xs.length ∧ commonPrefix xs ys ≤ ys.length
-  | [], _ => by simp [commonPrefix]
-  | _ :: _, [] => by simp [commonPrefix]
-  | x :: xs, y :: ys => by
-    by_cases he : x = y
-    · subst he
-      have := commonPrefix_le xs ys
-      simp only [commonPrefix, ↓reduceIte, List.length_cons]
-      omega
-    · simp [commonPrefix, he]
-
-theorem commonPrefix_eq : ∀ (xs ys : List String) (i : Nat), i < commonPrefix xs ys → xs[i]? = ys[i]?
-  | [], _, _, h => by simp [commonPrefix] at h
-  | _ :: _, [], _, h => by simp [commonPrefix] at h
-  | x :: xs, y :: ys, i, h => by
-    by_cases he : x = y
-    · subst he
-      have hc : commonPrefix (x :: xs) (x :: ys) = commonPrefix xs ys + 1 := by simp [commonPrefix]
-      rw [hc] at h
-      cases i with
-      | zero => rfl
-      | succ i =>
-        simp only [List.getElem?_cons_succ]
-        exact commonPrefix_eq xs ys i (by omega)
-    · simp [commonPrefix, he] at h
-
-theorem commonPrefix_differs : ∀ (xs ys : List String), commonPrefix xs ys < xs.length → commonPrefix xs ys < ys.length →
-    xs[commonPrefix xs ys]? ≠ ys[commonPrefix xs ys]?
-  | [], _, h1, _ => by simp at h1
-  | _ :: _, [], _, h2 => by simp at h2
-  | x :: xs, y :: ys, h1, h2 => by
-    by_cases he : x = y
-    · subst he
-      have hc : commonPrefix (x :: xs) (x :: ys) = commonPrefix xs ys + 1 := by simp [commonPrefix]
-      rw [hc] at h1 h2 ⊢
-      simp only [List.getElem?_cons_succ, List.length_cons] at h1 h2 ⊢
-      exact commonPrefix_differs xs ys (by omega) (by omega)
-    · have hc : commonPrefix (x :: xs) (y :: ys) = 0 := by simp [commonPrefix, he]
-      rw [hc]
-      simp [he]
-
 theorem pathOf_parent_eq (t : Tree) {n p : String} {st : Shape} (h : t.state? n = some st) (hp : st.parent = some p) :
     t.pathOf p = st.path.dropLast := by
   have ht := t.shape_tree (t.state?_mem h)
@@ -150,22 +109,6 @@ theorem pathOf_getElem? (t : Tree) : ∀ (len : Nat) (n : String), (t.pathOf n).
         subst hq
         rw [List.take_of_length_le (by simp), ← hlast, ← hpn, hname]
 
-theorem commonPrefix_of_take : ∀ (n : Nat) (xs ys : List String), xs.take n = ys.take n → n ≤ xs.length →
-    n ≤ ys.length → xs[n]? ≠ ys[n]? → commonPrefix xs ys = n
-  | 0, [], _, _, _, _, hne => by simp [commonPrefix]
-  | 0, _ :: _, [], _, _, _, hne => by simp [commonPrefix]
-  | 0, x :: xs, y :: ys, _, _, _, hne => by
-    have : x ≠ y := by simpa using hne
-    simp [commonPrefix, this]
-  | n + 1, [], _, _, h1, _, _ => by simp at h1
-  | n + 1, _ :: _, [], _, _, h2, _ => by simp at h2
-  | n + 1, x :: xs, y :: ys, ht, h1, h2, hne => by
-    simp only [List.take_succ_cons, List.cons.injEq] at ht
-    obtain ⟨rfl, ht⟩ := ht
-    simp only [List.length_cons] at h1 h2
-    simp only [List.getElem?_cons_succ] at hne
-    simp [commonPrefix, commonPrefix_of_take n xs ys ht (by omega) (by omega) hne]
-
 theorem pathOf_of_mem_path (t : Tree) (x n : String) (ps rs : List String) (h : t.pathOf x = ps ++ n :: rs) :
     t.pathOf n = ps ++ [n] := by
   have hk : (t.pathOf x)[ps.length]? = some n := by simp [h]
@@ -186,114 +129,6 @@ theorem not_mem_path_init (t : Tree) (n : String) (ps : List String) (h : t.path
 theorem commonPrefix_within (ps rt : List String) (n : String) :
     commonPrefix (ps ++ n :: rt) (ps ++ [n]) = ps.length + 1 := by
   rw [commonPrefix_append]; cases rt <;> simp [commonPrefix]
-
-theorem prefix_of_commonPrefix : ∀ (xs ys : List String), commonPrefix xs ys = xs.length → xs <+: ys
-  | [], _, _ => List.nil_prefix
-  | _ :: _, [], h => by simp [commonPrefix] at h
-  | x :: xs, y :: ys, h => by
-    by_cases he : x = y
-    · subst he
-      simp only [commonPrefix, ↓reduceIte, List.length_cons, Nat.add_right_cancel_iff] at h
-      exact (List.prefix_cons_inj x).mpr (prefix_of_commonPrefix xs ys h)
-    · simp [commonPrefix, he] at h
-
-theorem commonPrefix_comm : ∀ (xs ys : List String), commonPrefix xs ys = commonPrefix ys xs
-  | [], [] | [], _ :: _ | _ :: _, [] => rfl
-  | x :: xs, y :: ys => by
-    by_cases he : x = y
-    · subst he; simp [commonPrefix, commonPrefix_comm xs ys]
-    · simp [commonPrefix, he, Ne.symm he]
-
-theorem mem_pathOf_self (t : Tree) (x : String) : x ∈ t.pathOf x ∨ t.pathOf x = [] := by
-  cases hs : t.state? x with
-  | none => simp [Tree.pathOf, hs]
-  | some st =>
-    have hname : st.name = x := by simpa using List.find?_some hs
-    have hlast := t.path_last (t.state?_mem hs)
-    left
-    rw [Tree.pathOf_of_state? _ hs, hlast, hname]
-    simp
-
-theorem commonPrefix_nil (l : List String) : commonPrefix l [] = 0 := by
-  cases l <;> rfl
-
-theorem domainDepth_outside_source (t : Tree) (source : Option String) (target : String)
-    (hs : ∀ n, source = some n → n ∉ t.pathOf target) :
-    t.domainDepth source target true = t.domainDepth source target false := by
-  cases hsrc : source with
-  | none => simp [Tree.domainDepth, commonPrefix_nil, Tree.withoutParallel]
-  | some n =>
-    have hb' := hs n hsrc
-    by_cases hc : commonPrefix (t.pathOf target) (t.pathOf n) = (t.pathOf n).length
-    · rcases mem_pathOf_self t n with hm | hm
-      · rw [commonPrefix_comm] at hc
-        exact absurd ((prefix_of_commonPrefix _ _ hc).subset hm) hb'
-      · simp [Tree.domainDepth, hm, commonPrefix_nil, Tree.withoutParallel]
-    · simp [Tree.domainDepth, hc]
-
-theorem addDefaults_descendants (t : Tree) (x : String) (acc : List String) (y : String) (hy : y ∈ t.addDefaults x acc) :
-    y ∈ acc ∨ (x ∈ t.pathOf y ∧ (t.pathOf x).length < (t.pathOf y).length) := by
-  suffices ∀ k x (acc : List String), t.maxDepth + 1 - (t.pathOf x).length = k → ∀ y, y ∈ t.addDefaults x acc →
-      y ∈ acc ∨ (x ∈ t.pathOf y ∧ (t.pathOf x).length < (t.pathOf y).length) from this _ x acc rfl y hy
-  intro k
-  induction k using Nat.strongRecOn with
-  | ind k ih =>
-    intro x acc hk y hy
-    rw [Tree.addDefaults.eq_def] at hy
-    split at hy
-    · exact .inl hy
-    · rename_i st h
-      split at hy
-      · exact .inl hy
-      · have hname : st.name = x := by simpa using List.find?_some h
-        have hx : x ∈ t.pathOf x := by
-          rw [t.pathOf_of_state? h, t.path_last (t.state?_mem h), hname]
-          simp
-        have key : ∀ (l : List {ch // ch ∈ t.defaultChildren x st}) (acc' : List String),
-            (∀ z ∈ acc', z ∈ acc ∨ (x ∈ t.pathOf z ∧ (t.pathOf x).length < (t.pathOf z).length)) →
-            ∀ z ∈ l.foldl (fun acc child => t.addDefaults child.1 (addName acc child.1)) acc',
-              z ∈ acc ∨ (x ∈ t.pathOf z ∧ (t.pathOf x).length < (t.pathOf z).length) := by
-          intro l
-          induction l with
-          | nil => intro acc' h z hz; exact h z hz
-          | cons ch l ihl =>
-            intro acc' ha
-            apply ihl
-            intro z hz
-            have hch := t.defaultChildren_mem h ch.2
-            have hpc : t.pathOf ch.1 = t.pathOf x ++ [ch.1] := by rw [t.pathOf_child h hch, t.pathOf_of_state? h]
-            rcases ih _ (hk ▸ t.child_deeper h hch) ch.1 _ rfl z hz with hz | ⟨hz1, hz2⟩
-            · rcases mem_addName hz with hz | rfl
-              · exact ha z hz
-              · right; rw [hpc]; simp [hx]
-            · right
-              obtain ⟨j, hj, hjz⟩ := List.getElem_of_mem hz1
-              have hq := pathOf_getElem? t _ z rfl j ch.1 (by rw [List.getElem?_eq_getElem hj, hjz])
-              rw [hpc] at hq hz2
-              simp only [List.length_append, List.length_singleton] at hz2
-              exact ⟨List.mem_of_mem_take (hq ▸ List.mem_append_left _ hx), by omega⟩
-        exact key _ acc (fun z hz => .inl hz) y hy
-
-theorem region_not_in_path (t : Tree) (name p region : String) (i : Nat) (hi : (t.pathOf name)[i]? = some p)
-    (hr : region ∈ t.enterable p) (hne : (t.pathOf name)[i + 1]? ≠ some region) : region ∉ t.pathOf name := by
-  intro hm
-  obtain ⟨l, hl, hlr⟩ := List.getElem_of_mem hm
-  have hpr := pathOf_getElem? t _ name rfl l region (by rw [List.getElem?_eq_getElem hl, hlr])
-  have hpp := pathOf_getElem? t _ name rfl i p hi
-  have hil : i < (t.pathOf name).length := (List.getElem?_eq_some_iff.mp hi).1
-  cases hs : t.state? p with
-  | none => simp [Tree.enterable, hs] at hr
-  | some ps =>
-    have hch : region ∈ ps.children := by
-      simp only [Tree.enterable, hs, Option.map_some, Option.getD_some, List.mem_filter] at hr
-      exact hr.1
-    have hc := t.pathOf_child hs hch
-    rw [← t.pathOf_of_state? hs, hpp, hpr] at hc
-    have hlen := congrArg List.length hc
-    simp only [List.length_take, List.length_append, List.length_singleton] at hlen
-    have hli : l = i + 1 := by omega
-    subst hli
-    exact hne (by rw [List.getElem?_eq_getElem hl, hlr])
 
 theorem mem_exitOrder (t : Tree) (names : List String) (n : String) (st : Shape) (hs : t.state? n = some st)
     (hn : n ∈ names) : n ∈ t.exitOrder names := by
@@ -341,40 +176,6 @@ theorem entryOrder_ancestors_first (t : Tree) (names : List String) (x y : Strin
     (List.singleton_sublist.mpr hyA).append (List.singleton_sublist.mpr (by simp))
   have hf := (show [y, x].Sublist (A ++ x :: B) by simpa using h).filter (· ∈ names)
   simpa [hx, hyn] using hf
-
-theorem mem_path_foldl (entered : List String) (n : String) (hn : n ∉ entered) (path : List String) (hp : n ∈ path)
-    (acc : List String) : n ∈ path.foldl (fun acc m => if m ∈ entered then acc else addName acc m) acc := by
-  induction path generalizing acc with
-  | nil => simp at hp
-  | cons m path ih =>
-    simp only [List.foldl_cons]
-    by_cases hm : n = m
-    · subst hm
-      refine mem_foldl_of_mem _ (fun acc m x hx => ?_) _ ?_
-      · split
-        · exact hx
-        · exact mem_addName_of_mem _ hx
-      · simp only [hn, ↓reduceIte]; exact mem_addName_self acc n
-    · exact ih (by simpa [hm] using hp) _
-
-theorem exited_ancestor_entered (t : Tree) (entered : List String) (depth : Nat) (name n : String) (stn : Shape)
-    (hs : t.state? n = some stn) (hn : n ∈ (t.pathOf name).drop depth) (he : n ∉ entered) :
-    n ∈ t.entrySet entered depth name := by
-  simp only [Tree.entrySet, Tree.entryOrder, List.mem_filter, decide_eq_true_eq, List.mem_map]
-  refine ⟨⟨stn, List.mem_of_find?_eq_some hs, by simpa using List.find?_some hs⟩, ?_⟩
-  cases hf : t.state? name with
-  | none => simp [Tree.pathOf, hf] at hn
-  | some found =>
-    simp only [Tree.pathOf, hf, Option.map_some, Option.getD_some] at hn
-    simp only [Tree.addEntrySet, hf]
-    refine mem_addDefaults_of_mem t name (mem_foldl_of_mem _ (fun acc p x hx => ?_) _
-      (mem_path_foldl entered n he _ hn []))
-    split
-    · exact mem_foldl_of_mem _ (fun acc r y hy => by
-        split
-        · exact mem_addDefaults_of_mem t _ (mem_addName_of_mem _ hy)
-        · exact hy) _ hx
-    · exact hx
 
 theorem exits_of_domainDepth_le (t : Tree) (entered : List String) (source : Option String) (target n : String)
     (reenter : Bool) (ps rt : List String) (hp : t.pathOf n = ps ++ [n]) (ht : t.pathOf target = ps ++ n :: rt)
@@ -424,74 +225,5 @@ theorem ancestor_target_exits (t : Tree) (entered : List String) (source target 
     | cons _ _ => simp
   have := withoutParallel_le t (ps ++ [target]) ps.length
   simpa [Tree.domainDepth, hs, ht, hc, hne, hr] using this
-
-theorem entered_not_entered_again (t : Tree) (entered : List String) (depth : Nat) (name n : String)
-    (hn : n ∈ entered) (hp : n ∈ t.pathOf name) : n ∉ t.entrySet entered depth name := by
-  simp only [Tree.entrySet, Tree.entryOrder, List.mem_filter, decide_eq_true_eq, not_and]
-  intro _
-  obtain ⟨j, hj, hjn⟩ := List.getElem_of_mem hp
-  have hpn := pathOf_getElem? t _ name rfl j n (by rw [List.getElem?_eq_getElem hj, hjn])
-  have hsub : ∀ x ∈ t.pathOf n, x ∈ t.pathOf name := fun x hx => List.mem_of_mem_take (hpn ▸ hx)
-  have hlen : (t.pathOf n).length ≤ (t.pathOf name).length := by rw [hpn, List.length_take]; omega
-  cases hf : t.state? name with
-  | none => simp [Tree.addEntrySet, hf]
-  | some found =>
-    have hpf : t.pathOf name = found.path := t.pathOf_of_state? hf
-    simp only [Tree.addEntrySet, hf]
-    intro hm
-    rcases addDefaults_descendants t name _ n hm with hm | ⟨_, hl⟩
-    · revert hm
-      have hregions : ∀ (p : String) (i : Nat) (rs : List String) (acc : List String),
-          found.path[i]? = some p → (∀ r ∈ rs, r ∈ t.enterable p) → n ∉ acc →
-          n ∉ rs.foldl (fun acc region =>
-            if some region != found.path[i + 1]? && region ∉ entered && region ∉ acc then
-              t.addDefaults region (addName acc region)
-            else acc) acc := by
-        intro p i rs
-        induction rs with
-        | nil => intro acc _ _ ha; exact ha
-        | cons r rs ih =>
-          intro acc hi hr ha
-          simp only [List.foldl_cons]
-          apply ih _ hi (fun r' h' => hr r' (List.mem_cons_of_mem _ h'))
-          split
-          · rename_i hcond
-            simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, decide_eq_true_eq] at hcond
-            obtain ⟨⟨hne, hre⟩, -⟩ := hcond
-            intro hm
-            rcases addDefaults_descendants t r _ n hm with hm | ⟨hrn, -⟩
-            · rcases mem_addName hm with hm | rfl
-              · exact ha hm
-              · exact hre hn
-            · exact region_not_in_path t name p r i (hpf ▸ hi) (hr r List.mem_cons_self)
-                (hpf ▸ fun h => hne h.symm) (hsub r hrn)
-          · exact ha
-      have hfold : ∀ (l : List (String × Nat)) (acc : List String), (∀ x ∈ l, found.path[x.2]? = some x.1) → n ∉ acc →
-          n ∉ l.foldl (fun acc (x : String × Nat) =>
-            if depth ≤ x.2 && t.kindOf x.1 == some .parallel then
-              (t.enterable x.1).foldl (fun acc region =>
-                if some region != found.path[x.2 + 1]? && region ∉ entered && region ∉ acc then
-                  t.addDefaults region (addName acc region)
-                else acc) acc
-            else acc) acc := by
-        intro l
-        induction l with
-        | nil => intro acc _ ha; exact ha
-        | cons x l ih =>
-          intro acc hl ha
-          simp only [List.foldl_cons]
-          apply ih _ (fun y hy => hl y (List.mem_cons_of_mem _ hy))
-          split
-          · exact hregions x.1 x.2 _ acc (hl x List.mem_cons_self) (fun _ h => h) ha
-          · exact ha
-      exact hfold _ _ (fun x hx => List.mem_zipIdx_iff_getElem?.mp hx)
-        (not_mem_path_foldl entered n hn _ [] (by simp))
-    · omega
-
-theorem restores_last_children (t : Tree) (initial : String) (lastChildren : List (String × List String))
-    (target parent : String) (st : Shape) (x : String) (xs : List String) (hs : t.state? target = some st) (hk : st.kind = .history)
-    (hp : st.parent = some parent) (hl : lastChildren.lookup parent = some (x :: xs)) :
-    t.historyTargets initial lastChildren target = x :: xs := by
-  simp [Tree.historyTargets, hs, hk, hp, hl]
 
 end Tazuna.Thm.Spec.Tree

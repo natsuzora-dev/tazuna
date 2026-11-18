@@ -156,6 +156,16 @@ tazuna detects a break of each assumption only partly or not at all.
   `verify` compares each implementation's trace with its own snapshot, so the claim that several implementations together produce the simulated run rests on this assumption and the previous one.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
 
+## Properties without a theorem
+
+No theorem proves the following items yet.
+Each holds by the Lean definition that it names, or only in the TypeScript runtime.
+
+- Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit (`drain` in `lean/Tazuna/Service/Chart/Macrostep.lean`, `settle` in `lean/Tazuna/Service/Chart/Always.lean`, `exitOne` in `lean/Tazuna/Service/Chart/Exit.lean`, `fireDue` in `lean/Tazuna/Service/Queue.lean`).
+- The service answers a repeated query again, because a query has no identity (`call` in `lean/Tazuna/Service/Input.lean`).
+- Spec functions read the keys of an entity in one order, whatever order the records were written in.
+  Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
+
 ## Proven properties
 
 Each item holds for every spec, and the theorems in `lean/Tazuna/Thm` that prove it follow in parentheses.
@@ -173,6 +183,7 @@ A map state has one *copy* of its child states for each key of its items.
 - A halting violation stops the simulation, and the lines after it take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
 - No two createKey calls of the running services return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<service>/<Entity>-<n>` (`created_distinct`), and no key that the scenario may write, such as a Given key, is ever created (`unwritten_not_created`, `execute_unwritten_not_created`).
 - The order in which Given writes the records does not matter: a scenario that writes the same records in another order simulates alike (`simulate_records_perm`).
+- The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no run: a service whose spec functions are audited starts, processes each input, and checks the end of a run as it does without the audit (`instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkResults_agrees`).
 
 ### Data validity
 
@@ -183,7 +194,7 @@ A map state has one *copy* of its child states for each key of its items.
 
 ### Statecharts
 
-Charts follow the SCXML (W3C) algorithm (`enters_initial`, `microstep_exits_in_exit_order`, `microstep_enters_in_entry_order`, `select_one_per_leaf`, `always_one_per_atomic`, `descendant_replaces_ancestor`, `leaf_selects_innermost`, `ancestor_target_exits`, `untaken_operation_changes_nothing`).
+Charts follow the SCXML (W3C) algorithm (`enters_initial`, `microstep_exits_in_exit_order`, `exitOrder_descendants_first`, `microstep_enters_in_entry_order`, `entryOrder_ancestors_first`, `select_one_per_leaf`, `always_one_per_atomic`, `descendant_replaces_ancestor`, `leaf_selects_innermost`, `ancestor_target_exits`, `untaken_operation_changes_nothing`).
 The following items are tazuna's own:
 
 - A transition to a descendant of its source exits the source when it reenters, and keeps it otherwise (`reenter_true_exits`, `reenter_false_not_exited`).
@@ -211,7 +222,7 @@ The following items are tazuna's own:
 
 - Processing a message never changes the current time. Only a clock line moves it (`drain_keeps_now`).
 - Every line that processing a message writes carries the current time (`message_outputs_at_its_time`).
-- A deadline due by the time that the clock moves to fires as a message of its own, at its time (`deadline_is_own_message`, `deadline_message_at_its_time`).
+- A deadline due by the time that the clock moves to fires as a message of its own, at its time (`deadline_message_at_its_time`).
 - Deadlines of one service due at the same time fire in the step order that `test` searches, whichever line moved the time (`chooseDeadline_stepOrder`).
 
 ### Processing and completion
@@ -219,12 +230,10 @@ The following items are tazuna's own:
 - A command takes exactly one message to completion (`send_is_one_message`).
 - A failed postcondition or invariant is a `Fault` of the command after which it fails (`failed_ensures_blames_command`, `entity_invariant_reported_iff`, `service_invariant_reported_iff`).
 - A rejected command writes no record and emits no event (`rejected_command_changes_nothing`).
-- An accepted command writes its records before any reaction to its events runs (`accepted_command_writes_then_queues_reactions`, `reaction_reads_current_records`).
-- Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit (`drain_at_work_limit`, `settle_halts_at_round_limit`, `exitOne_at_depth_limit`, `fireDue_at_deadline_limit`).
+- An accepted command writes its records before any reaction to its events runs (`accepted_command_writes_then_queues_reactions`).
 
 ### Ordering
 
-- Spec functions read the keys of an entity in one order, whatever order the records were written in (`keys_perm`).
 - The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON (`bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order`).
 - A snapshot orders two `out` lines after one `in` line only when they travel on one channel (`ordered_same_channel`), and never two lines of one group of events that `decide` returns (`group_lines_unordered`).
 
@@ -234,10 +243,9 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 
 - Each input keeps the keys of a keyed entity distinct (`send_keysDistinct`, `message_keysDistinct`).
 - A reference that does not resolve is a `Fault` (`dangling_ref_reported_iff`).
-- When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`, `resent_command_ignores_decide`).
+- When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
 - The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
 - When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
-- The service answers a repeated query again, because a query has no identity (`query_processed_again`).
 - Equality up to a renaming of created keys, by which `test` compares two runs, is an equivalence. Every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain, as `test`'s bindings do.
 
 ### Restart
@@ -251,3 +259,4 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 
 - A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
 - Every binding that a trace comparison ends with is one to one within each domain, and keeps every pair that an earlier step bound (`compare_oneToOne`, `compareGroups_extends`).
+- `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace (`no_violation_iff`).

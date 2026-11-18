@@ -40,29 +40,4 @@ theorem compareSnapshot_reordered (snapshot : List (Option Value)) (run : List V
   rw [compareSnapshot_eq_none_iff, ← canonicalList_eq, ← canonicalList_eq]
   exact h.canonical_eq
 
-theorem pairSnapshots_nil_iff (services : List String) (scenarios : List Scenario) (folders : List Folder) :
-    (pairSnapshots services scenarios folders).violations = [] ↔
-      ∀ s ∈ services,
-        (∀ e ∈ entriesIn folders s, ∃ sc ∈ scenarios, sc.service = s ∧ fileName e = some sc.name) ∧
-          ∀ sc ∈ scenarios, sc.service = s → sc.compared = true →
-            ∃ e ∈ entriesIn folders s, fileName e = some sc.name := by
-  simp only [pairSnapshots, List.flatMap_eq_nil_iff, List.forall_mem_map]
-  refine forall_congr' fun s => imp_congr_right fun _ => ?_
-  simp only [snapshotPairing, List.append_eq_nil_iff, List.map_eq_nil_iff, missing_nil, unknown_nil, extra_nil,
-    mem_comparedNames, mem_scenarioNames]
-  constructor
-  · rintro ⟨⟨hm, hu⟩, hx⟩
-    refine ⟨fun e he => ?_, fun sc hs h1 h2 => hm sc.name ⟨sc, hs, h1, rfl, h2⟩⟩
-    obtain ⟨n, hn⟩ := Option.isSome_iff_exists.mp (hu e he)
-    obtain ⟨sc, hs, h1, h2⟩ := hx e he n hn
-    exact ⟨sc, hs, h1, h2 ▸ hn⟩
-  · rintro ⟨he, hm⟩
-    refine ⟨⟨fun n ⟨sc, hs, h1, h2, h3⟩ => h2 ▸ hm sc hs h1 h3, fun e h => ?_⟩, fun e h n hn => ?_⟩
-    · obtain ⟨sc, _, _, hn⟩ := he e h
-      simp [hn]
-    · obtain ⟨sc, hs, h1, h2⟩ := he e h
-      rw [hn] at h2
-      cases h2
-      exact ⟨sc, hs, h1, rfl⟩
-
 end Tazuna.Thm.Verify.Snapshot

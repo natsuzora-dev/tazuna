@@ -39,55 +39,6 @@ theorem keeps_enter (step : Nat) (name : InstanceId) (targets : List String) : K
   intro i r
   exact foldlM_keeps (fun n => keeps_unlessHalted (keeps_enterOne step name n)) _ r
 
-theorem lookup_isSome_iff {β : Type} (e : InstanceId × String) :
-    ∀ (l : List ((InstanceId × String) × β)), (l.lookup e).isSome = true ↔ e ∈ l.map (·.1)
-  | [] => by simp
-  | (a, b) :: l => by
-    by_cases h : e = a
-    · subst h; simp
-    · have hb : (e == a) = false := by simpa using h
-      simp only [List.lookup_cons, hb, List.map_cons, List.mem_cons, h, false_or]
-      exact lookup_isSome_iff e l
-
-theorem transitionIndexOf_keys (sets : List (List (InstanceId × String))) :
-    (transitionIndexOf sets).map (·.1) = sets.flatten := by
-  unfold transitionIndexOf
-  rw [List.map_flatMap]
-  have : ∀ (p : List (InstanceId × String) × Nat), (p.1.map (·, p.2)).map (·.1) = p.1 := by
-    intro p; simp [List.map_map, Function.comp_def]
-  simp only [this]
-  rw [List.flatMap_def]
-  exact congrArg List.flatten (List.zipIdx_map_fst 0 sets)
-
-theorem indexedInOrder_keys (order : List (InstanceId × String)) (sets : List (List (InstanceId × String))) :
-    (indexedInOrder order (transitionIndexOf sets)).map (·.1) = order.filter (· ∈ sets.flatten) := by
-  unfold indexedInOrder
-  induction order with
-  | nil => rfl
-  | cons e rest ih =>
-    rw [List.filterMap_cons, List.filter_cons]
-    have hk := lookup_isSome_iff e (transitionIndexOf sets)
-    rw [transitionIndexOf_keys] at hk
-    cases hl : (transitionIndexOf sets).lookup e with
-    | none =>
-      have : e ∉ sets.flatten := fun h => by have := hk.mpr h; simp [hl] at this
-      simp [this, ih]
-    | some k =>
-      have : e ∈ sets.flatten := hk.mp (by simp [hl])
-      simp [this, ih]
-
-theorem exiting_keys (s : State) (order : List (InstanceId × String)) (chosen : List (InstanceId × Transition)) :
-    (indexedInOrder order (transitionIndexOf (chosen.map s.exitPairsOf))).map (·.1) =
-      order.filter (· ∈ s.exitPairs chosen) := by
-  rw [indexedInOrder_keys, ← List.flatMap_def]
-  rfl
-
-theorem entering_keys (s : State) (order : List (InstanceId × String)) (chosen : List (InstanceId × Transition)) :
-    (indexedInOrder order (transitionIndexOf (chosen.map s.entryPairsOf))).map (·.1) =
-      order.filter (· ∈ s.entryPairs chosen) := by
-  rw [indexedInOrder_keys, ← List.flatMap_def]
-  rfl
-
 theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     Keeps (microstep fs st step name chosen extra) := by
   unfold microstep
@@ -173,26 +124,6 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
     obtain ⟨l0, n0⟩ := h0 (holdersOf chosen) _ r.state
     exact (Grows.of_lines l0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
       ((hA _ _).trans (congrArg Fixed.now (kA _ _)) (hN _ _)))
-
-theorem microstep_order (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) (r : Processing)
-    (i : Instance) (hh : r.state.halted = none) (hi : r.state.machine? name = some i) (hc : i.closed = false) :
-    microstep fs st step name chosen extra r =
-      let holders := holdersOf chosen
-      let exiting := (i.documentOrder.filter (· ∈ r.state.exitPairs chosen)).reverse
-      let exited := exiting.foldlM (m := Id) (fun r e => unlessHalted (exitOne fs st Limit.exitDepth.max e.1 e.2) r)
-        ⟨holders.foldl (fun s h => s.setMachine h (recordHistory ((exiting.filter (·.1 == h)).map (·.2)))) r.state, r.queue⟩
-      let assigned := chosen.foldlM (m := Id)
-        (fun r c => unlessHalted (runAssign fs st c.1 (.transition c.2) c.2.source extra) r) exited
-      (i.documentOrder.filter (· ∈ assigned.state.entryPairs chosen)).foldlM (m := Id)
-        (fun r e => unlessHalted (enterOne fs st step e.1 e.2) r) assigned := by
-  have hz : ∀ (g : Processing → InstanceId × Transition → Id Processing) (init : Processing),
-      chosen.foldlM g init = chosen.zipIdx.foldlM (fun r x => g r x.1) init := by
-    intro g init
-    rw [← List.zipIdx_map_fst 0 chosen, List.foldlM_map, List.zipIdx_map_fst]
-  simp only [microstep, withMachine, Processing.halted, hh, hi, hc, Option.isSome_none, Bool.false_eq_true, ↓reduceIte,
-    id_bind, note_id, id_pure]
-  rw [← exiting_keys, ← entering_keys, hz]
-  simp only [← List.map_reverse, List.foldlM_map, List.filter_map, List.map_map, Function.comp_def]
 
 theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × String)) :
     (((i.documentOrder.filter (· ∈ pairs)).filter (·.1 == i.id)).map (·.2)) =

@@ -656,12 +656,6 @@ theorem keeps_endSubscription (id : String) (s : State) : KeepsKeys s (endSubscr
   refine KeepsKeys.trans ?_ (keeps_message _ _)
   keys_leaf
 
-theorem keeps_deliver (name : String) (id : Option String) (raw payload : Value) (request : Option String)
-    (s : State) : KeepsKeys s (deliver st fs s name id raw payload request) := by
-  simp only [deliver]
-  refine KeepsKeys.trans ?_ (keeps_message _ _)
-  cases request <;> keys_leaf
-
 theorem keeps_receive (name : String) (id : Option String) (raw : Value) (resultOf : Option String) (s : State) :
     KeepsKeys s (receive st fs s name id raw resultOf) := by
   simp only [receive, redeliver, id_bind]

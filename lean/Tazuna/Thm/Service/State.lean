@@ -125,49 +125,12 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 @[simp] theorem reportAll_answers (fs : List Fault) : (s.reportAll fs).answers = s.answers :=
   reportAll_preserves State.answers (fun _ _ => report_answers ..) fs s
 
-theorem reportAll_not_halts (fs : List Fault) (h : ∀ f ∈ fs, f.halts = false) (t : State) :
-    (t.reportAll fs).halted = t.halted ∧
-      (t.halted = none → (t.reportAll fs).violations = t.violations ++ fs.map fun f => (Finding.fault f)) := by
-  induction fs generalizing t with
-  | nil => simp [State.reportAll]
-  | cons f fs ih =>
-    have hr : f.halts = false := h _ (List.mem_cons_self ..)
-    rw [reportAll_cons]
-    cases hh : t.halted with
-    | some v =>
-      simp only [Option.isSome_some, ↓reduceIte, reduceCtorEq, false_implies, and_true]
-      exact (ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) t).1.trans hh
-    | none =>
-      have hrep : t.report (.fault f) = t.violate (Finding.fault f) := by
-        simp [State.report, hr]
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, hrep, forall_const]
-      have := ih (fun f hf => h f (List.mem_cons_of_mem _ hf)) (t.violate (Finding.fault f))
-      refine ⟨this.1.trans hh, ?_⟩
-      rw [this.2 hh]
-      simp [State.violate]
-
 @[simp] theorem setMachine_commandAnswers (name : InstanceId) (f : Instance → Instance) :
     (s.setMachine name f).commandAnswers = s.commandAnswers := rfl
 
 @[simp] theorem answer_commandAnswers (to : Option String) (a : Answer) :
     (s.answer to a).commandAnswers = s.commandAnswers := by
   cases to <;> rfl
-
-theorem find_setMachine (l : List Instance) (c : InstanceId) (f : Instance → Instance) (hf : ∀ i, (f i).id = i.id) :
-    (l.map fun i => if i.id == c then f i else i).find? (·.id == c) = (l.find? (·.id == c)).map f := by
-  induction l with
-  | nil => rfl
-  | cons x xs ih =>
-    rw [List.map_cons, List.find?_cons, List.find?_cons]
-    by_cases hx : x.id = c
-    · simp [hx, hf]
-    · have hb : (x.id == c) = false := by simp [hx]
-      simp only [hb, Bool.false_eq_true, ↓reduceIte, ih]
-
-theorem machine?_setMachine (c : InstanceId) (f : Instance → Instance) (hf : ∀ i, (f i).id = i.id) :
-    (s.setMachine c f).machine? c = (s.machine? c).map f := by
-  simp only [State.machine?, State.setMachine, ← List.map_append]
-  exact find_setMachine _ c f hf
 
 theorem copy_ne (i : InstanceId) (map key : String) : InstanceId.copy i map key ≠ i := by
   intro h
@@ -191,18 +154,6 @@ theorem documentOrder_owner (i : Instance) :
       obtain ⟨d, -, rfl⟩ := List.mem_map.mp ha
       simpa using copy_ne i.id cs.name k
     simp [hb]
-
-theorem documentOrder_at_map (i : Instance) (cs : ChartState) (hcs : cs ∈ i.chart.states) :
-    ∃ pre post, i.documentOrder =
-      pre ++ (i.id, cs.name) ::
-        ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (InstanceId.copy i.id cs.name k, ·)) ++ post := by
-  obtain ⟨A, B, hAB⟩ := List.append_of_mem hcs
-  let f := fun cs : ChartState =>
-    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (InstanceId.copy i.id cs.name k, ·)
-  refine ⟨A.flatMap f, B.flatMap f, ?_⟩
-  unfold Instance.documentOrder
-  rw [hAB, List.flatMap_append, List.flatMap_cons]
-  simp [f]
 
 theorem emitAll_fixed (r : Option String) (es : List Emit) : (s.emitAll r es).fixed = s.fixed := by
   induction es generalizing s with
@@ -242,22 +193,7 @@ theorem holdsFold_fixed (i : Instance) (es : List (String × Time)) :
       · exact report_fixed ..
       · rfl
 
-def Extends (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new
-
 def Grows (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now
-
-theorem Extends.refl (s : State) : Extends s s := ⟨#[], by simp⟩
-
-theorem Extends.trans {a b c : State} (h₁ : Extends a b) (h₂ : Extends b c) : Extends a c := by
-  obtain ⟨n₁, e₁⟩ := h₁
-  obtain ⟨n₂, e₂⟩ := h₂
-  exact ⟨n₁ ++ n₂, by rw [e₂, e₁, Array.append_assoc]⟩
-
-theorem Extends.getElem? {a b : State} (h : Extends a b) {k : Nat} {l : Line} (hk : a.lines[k]? = some l) :
-    b.lines[k]? = some l := by
-  obtain ⟨new, e⟩ := h
-  rw [e, Array.getElem?_append_left (Array.getElem?_eq_some_iff.mp hk).1]
-  exact hk
 
 theorem Grows.refl (s : State) : Grows s s := ⟨#[], by simp, by simp⟩
 
@@ -274,10 +210,6 @@ theorem Grows.trans {a b c : State} (h₁ : Grows a b) (hn : b.now = a.now) (h�
 
 theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now) : Grows a c :=
   (Grows.of_lines hl).trans hn h
-
-theorem Grows.toExtends {a b : State} (h : Grows a b) : Extends a b := by
-  obtain ⟨n, e, _⟩ := h
-  exact ⟨n, e⟩
 
 theorem grows_write (d : Dir) (g : Option String) (b : LineBody) : Grows s (s.write d g b).1 :=
   ⟨#[_], Array.push_eq_append, by simp⟩
@@ -318,12 +250,6 @@ theorem holdsFold_lines (i : Instance) (es : List (String × Time)) :
       split
       · exact report_lines ..
       · rfl
-
-theorem foldl_records {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).records = t.records) (xs : List α)
-    (t : State) : (xs.foldl f t).records = t.records := by
-  induction xs generalizing t with
-  | nil => rfl
-  | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h]
 
 theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer to a).records = t.records := by
   cases to <;> rfl
@@ -383,96 +309,7 @@ theorem AddsOnly.trans {P : Line → Prop} {a b c : State} (h₁ : AddsOnly P a 
   · exact p₁ l h
   · exact p₂ l h
 
-def isOpenShow (owner : InstanceId) (p : Pending) : Bool := p.requester.machine? == some owner && p.requester.slot?.isSome && !p.stale
-
-theorem nodup_map_inj (l : List Pending) (h : (l.map (·.id)).Nodup) {p q : Pending} (hp : p ∈ l) (hq : q ∈ l)
-    (he : p.id = q.id) : p = q := by
-  induction l with
-  | nil => cases hp
-  | cons x xs ih =>
-    simp only [List.map_cons, List.nodup_cons] at h
-    rcases List.mem_cons.mp hp with h1 | h1 <;> rcases List.mem_cons.mp hq with h2 | h2
-    · rw [h1, h2]
-    · subst h1; exact absurd (he ▸ List.mem_map_of_mem (f := (·.id)) h2) h.1
-    · subst h2; exact absurd (he.symm ▸ List.mem_map_of_mem (f := (·.id)) h1) h.1
-    · exact ih h.2 h1 h2
-
 def CopiesOf (chart map : String) (cs : List Instance) : Prop :=
   ∀ c ∈ cs, c.chart.name = chart ∧ c.id.map? = some map
-
-theorem foldl_earliest (xs : List Pending) : ∀ (best : Option Pending) (p : Pending),
-    xs.foldl (fun best p => match best with
-      | some b => if p.turn < b.turn then some p else some b
-      | none => some p) best = some p →
-    (best = some p ∨ p ∈ xs) ∧ (∀ b, best = some b → p.turn ≤ b.turn) ∧ ∀ q ∈ xs, p.turn ≤ q.turn := by
-  induction xs with
-  | nil =>
-    intro best p h
-    simp only [List.foldl_nil] at h
-    subst h
-    exact ⟨Or.inl rfl, fun b hb => by cases hb; exact Nat.le_refl _, fun q hq => absurd hq List.not_mem_nil⟩
-  | cons x xs ih =>
-    intro best p h
-    simp only [List.foldl_cons] at h
-    obtain ⟨hm, hb, hq⟩ := ih _ p h
-    cases best with
-    | none =>
-      simp only at hm hb
-      refine ⟨?_, (fun b hb' => nomatch hb'), ?_⟩
-      · rcases hm with hm | hm
-        · injection hm with hm
-          subst hm
-          exact Or.inr List.mem_cons_self
-        · exact Or.inr (List.mem_cons_of_mem _ hm)
-      · intro q hq'
-        rcases List.mem_cons.mp hq' with rfl | hq'
-        · exact hb _ rfl
-        · exact hq q hq'
-    | some b =>
-      simp only at hm hb
-      by_cases hlt : x.turn < b.turn
-      · simp only [hlt, ↓reduceIte] at hm hb
-        refine ⟨?_, fun b' hb' => ?_, ?_⟩
-        · rcases hm with hm | hm
-          · injection hm with hm
-            subst hm
-            exact Or.inr List.mem_cons_self
-          · exact Or.inr (List.mem_cons_of_mem _ hm)
-        · injection hb' with hb'
-          subst hb'
-          exact Nat.le_trans (hb _ rfl) (Nat.le_of_lt hlt)
-        · intro q hq'
-          rcases List.mem_cons.mp hq' with rfl | hq'
-          · exact hb _ rfl
-          · exact hq q hq'
-      · simp only [hlt, ↓reduceIte] at hm hb
-        refine ⟨?_, fun b' hb' => ?_, ?_⟩
-        · rcases hm with hm | hm
-          · exact Or.inl hm
-          · exact Or.inr (List.mem_cons_of_mem _ hm)
-        · injection hb' with hb'
-          subst hb'
-          exact hb _ rfl
-        · intro q hq'
-          rcases List.mem_cons.mp hq' with rfl | hq'
-          · exact Nat.le_trans (hb _ rfl) (Nat.le_of_not_lt hlt)
-          · exact hq q hq'
-
-theorem answered_fixed (p : Pending) : (s.answered p).1.fixed = s.fixed := by
-  unfold State.answered; split <;> rfl
-
-theorem subscription_waits_again (p : Pending) (hp : p.requester.slot?.isSome = true) (hm : p ∈ s.pending) :
-    (∃ q ∈ (s.answered p).1.pending, q.id = p.id ∧ q.turn = s.turn) ∧ (s.answered p).1.turn = s.turn + 1 ∧
-      (s.answered p).1.pending.map (·.id) = s.pending.map (·.id) := by
-  have e : (s.answered p).1 = { s with
-      pending := s.pending.map (fun q => if q.id == p.id then { q with turn := s.turn } else q),
-      turn := s.turn + 1 } := by simp [State.answered, hp]
-  rw [e]
-  refine ⟨⟨{ p with turn := s.turn }, List.mem_map.mpr ⟨p, hm, by simp⟩, rfl, rfl⟩, rfl, ?_⟩
-  · simp only [List.map_map]
-    congr 1
-    funext q
-    simp only [Function.comp]
-    split <;> rfl
 
 end Tazuna.Thm.Service.State

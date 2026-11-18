@@ -94,7 +94,7 @@ def Transition.guarded (t : Transition) : Bool := !t.guards.isEmpty
 
 /--
 Whether the transition has `reenter: true`. A missing `reenter` is false. For a target that is neither the source
-nor its descendant, the value does not change the domain (domainDepth_outside_source).
+nor its descendant, the value does not change the domain.
 -/
 def Transition.reenters (t : Transition) : Bool := t.reenter == some true
 

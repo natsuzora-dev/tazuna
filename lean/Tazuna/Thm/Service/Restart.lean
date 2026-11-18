@@ -19,7 +19,4 @@ theorem restart_keeps : ∃ t, restart st fs s = begin st fs t ∧ t.toDurable =
 theorem restart_forgets (h : s.stop = t.stop) : restart st fs s = restart st fs t := by
   simp only [restart, stop_write, h]
 
-theorem restart_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (restart st fs s).records :=
-  begin_keysDistinct h
-
 end Tazuna.Thm.Service.Restart

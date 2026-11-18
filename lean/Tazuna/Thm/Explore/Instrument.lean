@@ -66,12 +66,6 @@ theorem Agrees.mapM {α β : Type} {f : α → StateT C Id β} {g : α → Id β
     simp only [List.mapM_cons]
     exact Agrees.bind (hf x) fun b => Agrees.bind ih fun bs => Agrees.pure _
 
-theorem Agrees.modifyThen {α : Type} {g : C → C} {x : StateT C Id α} {a : α} (hx : Agrees x a) :
-    Agrees (modify g *> x) a := by
-  unfold Agrees at *
-  intro c
-  exact hx _
-
 structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : Prop where
   parse : ∀ a b, Agrees (fsI.parse a b) (fs.parse a b)
   unordered : ∀ a b, Agrees (fsI.unordered a b) (fs.unordered a b)
@@ -542,6 +536,10 @@ theorem answerRequest_agrees (s : State) (id : Option String) (p : Pending) (ans
   unfold answerRequest
   agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
+theorem answerIn_agrees (s : State) (id to : String) (answer : Answer) :
+    Agrees (answerIn st fsI s id to answer) (answerIn st fs s id to answer) := by
+  unfold answerIn; agree [message_agrees h, answerRequest_agrees h]
+
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.singleRecord]
@@ -588,141 +586,5 @@ theorem observe_agrees {α : Type} (x : Id α) (f : α → StateT Collect Id Uni
 
 theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) fs := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
-
-theorem reversed_result_reported {ε α : Type} (definition : Spec.Ref) (function : String) (original answer : α)
-    (again : Id (Except ε α)) (same : α → α → Sameness) (c : Collect) (ha : again = .ok answer) :
-    ((orderAudit definition function original again same).run c).2 =
-      if definition ∈ c.reportedOrder ∨ same original answer = .same then c
-      else if same original answer = .uncomparable then
-        c.reportOrder definition (BagOrderDependent.uncomparable definition function bindingLimit).toViolation
-      else c.reportOrder definition (BagOrderDependent.reversedResult definition function).toViolation := by
-  by_cases hm : definition ∈ c.reportedOrder
-  · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
-  · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
-      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, ha, reportOrder, modify, modifyGet,
-      MonadStateOf.modifyGet, false_or]
-    cases same original answer <;> rfl
-
-theorem reversed_exception_reported {ε α : Type} (definition : Spec.Ref) (function : String) (original : α)
-    (again : Id (Except ε α)) (same : α → α → Sameness) (e : ε) (c : Collect) (ha : again = .error e) :
-    ((orderAudit definition function original again same).run c).2 =
-      if definition ∈ c.reportedOrder then c
-      else c.reportOrder definition (BagOrderDependent.reversedException definition function).toViolation := by
-  by_cases hm : definition ∈ c.reportedOrder
-  · simp [orderAudit, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, StateT.pure, hm]
-  · simp only [StateT.run, orderAudit, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, pure, hm,
-      ↓reduceIte, liftM, monadLift, MonadLift.monadLift, StateT.lift, ha, reportOrder, modify, modifyGet,
-      MonadStateOf.modifyGet]
-    rfl
-
-theorem report_keeps (c : Collect) (v w : Violation) (h : v ∈ c.violations) : v ∈ (c.report w).violations := by
-  unfold Collect.report
-  split
-  · exact h
-  · exact List.mem_append_left _ h
-
-theorem report_adds (c : Collect) (w : Violation) : w ∈ (c.report w).violations := by
-  unfold Collect.report
-  split
-  · assumption
-  · exact List.mem_append_right _ (List.mem_singleton_self _)
-
-theorem foldl_report (f : BagOrderDependent → Violation) :
-    ∀ (rs : List BagOrderDependent) (c : Collect), (∀ v ∈ c.violations, v ∈ (rs.foldl (fun c r => c.report (f r)) c).violations) ∧
-      ∀ r ∈ rs, f r ∈ (rs.foldl (fun c r => c.report (f r)) c).violations
-  | [], _ => ⟨fun _ h => h, fun _ h => absurd h List.not_mem_nil⟩
-  | r :: rs, c => by
-    obtain ⟨hk, ha⟩ := foldl_report f rs (c.report (f r))
-    refine ⟨fun v hv => hk v (report_keeps c v _ hv), fun x hx => ?_⟩
-    rcases List.mem_cons.mp hx with rfl | hx
-    · exact hk _ (report_adds c _)
-    · exact ha x hx
-
-theorem finding_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (r : BagOrderDependent)
-    (hc : check.halted = false) (hp : p ∈ check.pairs) (hr : r ∈ regionFindings check.chart c.accessOf p) :
-    r.toViolation ∈ (c.checkRegions check).violations := by
-  simp only [Collect.checkRegions, hc]
-  exact (foldl_report _ _ c).2 r (List.mem_flatMap.mpr ⟨p, hp, hr⟩)
-
-theorem both_writes_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : InstanceId × String)
-    (hc : check.halted = false) (hp : p ∈ check.pairs) (ha : v ∈ (c.accessOf p.first).writes)
-    (hb : v ∈ (c.accessOf p.second).writes) :
-    (BagOrderDependent.bothAssign check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
-      (c.checkRegions check).violations := by
-  refine finding_reported c check p _ hc hp ?_
-  unfold regionFindings
-  exact List.mem_append_left _ (List.mem_filterMap.mpr ⟨v, hb, by simp [ha]⟩)
-
-theorem second_writes_first_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : InstanceId × String)
-    (hc : check.halted = false) (hp : p ∈ check.pairs) (hb : v ∈ (c.accessOf p.second).writes)
-    (ha : v ∉ (c.accessOf p.first).writes) (hr : v ∈ (c.accessOf p.first).reads) :
-    (BagOrderDependent.assignRead check.chart p.state p.secondRef p.firstRef v.2).toViolation ∈
-      (c.checkRegions check).violations := by
-  refine finding_reported c check p _ hc hp ?_
-  unfold regionFindings
-  exact List.mem_append_left _ (List.mem_filterMap.mpr ⟨v, hb, by simp [ha, hr]⟩)
-
-theorem first_writes_second_reads_reported (c : Collect) (check : RegionCheck) (p : RegionPair) (v : InstanceId × String)
-    (hc : check.halted = false) (hp : p ∈ check.pairs) (ha : v ∈ (c.accessOf p.first).writes)
-    (hb : v ∉ (c.accessOf p.second).writes) (hr : v ∈ (c.accessOf p.second).reads) :
-    (BagOrderDependent.assignRead check.chart p.state p.firstRef p.secondRef v.2).toViolation ∈
-      (c.checkRegions check).violations := by
-  refine finding_reported c check p _ hc hp ?_
-  unfold regionFindings
-  exact List.mem_append_right _ (List.mem_filterMap.mpr ⟨v, List.mem_filter.mpr ⟨ha, by simp [hb]⟩, by simp [hr]⟩)
-
-theorem separate_values_report_nothing (c : Collect) (check : RegionCheck)
-    (hw : ∀ p ∈ check.pairs, ∀ v ∈ (c.accessOf p.second).writes, v ∉ (c.accessOf p.first).writes ∧ v ∉ (c.accessOf p.first).reads)
-    (hr : ∀ p ∈ check.pairs, ∀ v ∈ (c.accessOf p.first).writes, v ∉ (c.accessOf p.second).reads) :
-    (c.checkRegions check).violations = c.violations := by
-  have hn : ∀ p ∈ check.pairs, regionFindings check.chart c.accessOf p = [] := by
-    intro p hp
-    unfold regionFindings
-    rw [List.append_eq_nil_iff, List.filterMap_eq_nil_iff, List.filterMap_eq_nil_iff]
-    refine ⟨fun v hv => ?_, fun v hv => ?_⟩
-    · obtain ⟨h1, h2⟩ := hw p hp v hv
-      simp [h1, h2]
-    · simp [hr p hp v (List.mem_filter.mp hv).1]
-  have he : check.pairs.flatMap (regionFindings check.chart c.accessOf) = [] :=
-    List.flatMap_eq_nil_iff.mpr hn
-  unfold Collect.checkRegions
-  split
-  · rfl
-  · rw [he]; rfl
-
-theorem dependent_candidate (st : Service) (s : State) (c : Collect) (stopped : Option Finding) (i j n k : Nat)
-    (a b : StepAccess) (hs : (s.halted <|> stopped) = none) (ha : c.steps[n]? = some (i, a))
-    (hb : ((j, b), k) ∈ c.steps.toList.zipIdx.drop (n + 1))
-    (hm : tiedDeadlines s i j = true ∨ (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message)))
-    (hl : leadsTo s i j = false) (hc : a.commutes b = false) (hn : a.name ≠ b.name)
-    (ho : overlaps ((footprints st s c)[n]?.getD {}) ((footprints st s c)[k]?.getD {}) = true) :
-    (i, j) ∈ candidates st s c stopped := by
-  unfold candidates
-  rw [hs]
-  refine List.mem_flatMap.mpr ⟨((i, a), n), List.mem_zipIdx_iff_getElem?.mpr ?_,
-    List.mem_filterMap.mpr ⟨((j, b), k), hb, ?_⟩⟩
-  · simpa using ha
-  · rcases hm with hm | hm <;> simp [hm, hl, hc, hn, ho]
-
-theorem candidate_unordered (st : Service) (s : State) (c : Collect) (stopped : Option Finding) (i j : Nat)
-    (h : (i, j) ∈ candidates st s c stopped) :
-    (s.halted <|> stopped) = none ∧ ∃ a b, (i, a) ∈ c.steps ∧ (j, b) ∈ c.steps ∧
-      leadsTo s i j = false ∧ a.name ≠ b.name ∧ a.commutes b = false ∧
-      (tiedDeadlines s i j = true ∨ (s.steps[i]?.map (·.message)) = (s.steps[j]?.map (·.message))) := by
-  unfold candidates at h
-  cases hs : (s.halted <|> stopped) with
-  | some _ => simp [hs] at h
-  | none =>
-  refine ⟨rfl, ?_⟩
-  simp only [hs, Option.isSome_none, Bool.false_eq_true, ↓reduceIte] at h
-  obtain ⟨⟨⟨i', a⟩, n⟩, hz, hf⟩ := List.mem_flatMap.mp h
-  obtain ⟨⟨⟨j', b⟩, k⟩, hd, he⟩ := List.mem_filterMap.mp hf
-  have hia : (i', a) ∈ c.steps := Array.mem_toList_iff.mp (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp hz))
-  have hjb : (j', b) ∈ c.steps :=
-    Array.mem_toList_iff.mp (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp (List.mem_of_mem_drop hd)))
-  simp only [Option.ite_none_right_eq_some, Option.some.injEq, Bool.and_eq_true, Bool.or_eq_true, beq_iff_eq,
-    Bool.not_eq_true', bne_iff_ne, ne_eq, Prod.mk.injEq] at he
-  obtain ⟨⟨⟨⟨⟨hk, _⟩, hc⟩, hn⟩, hl⟩, rfl, rfl⟩ := he
-  exact ⟨a, b, hia, hjb, hl, hn, hc, hk⟩
 
 end Tazuna.Thm.Explore.Instrument

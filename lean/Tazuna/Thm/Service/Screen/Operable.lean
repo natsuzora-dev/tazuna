@@ -47,44 +47,4 @@ theorem nonmodal_child_lets_parent (resource : InstanceId) (pre rest : List Inst
   rw [accepting_skips resource pre (resource :: rest) hp, State.accepting.go]
   simp [hpi]
 
-theorem accepts_iff (resource : InstanceId) (control : String) (payload : Value) (top : Instance) :
-    acceptsOperation fs st s resource control payload = .ok (.ok top) ↔
-      s.accepting resource = .ok top ∧ ∃ applied, offered fs st s top control payload = .ok applied ∧
-        applied.any (·.2.admits payload) = true := by
-  unfold acceptsOperation
-  constructor
-  · intro h
-    split at h
-    · cases h
-    · rename_i top' ha
-      simp only [id_bind] at h
-      split at h
-      · cases h
-      · rename_i applied ho
-        split at h
-        · rename_i hl
-          cases h
-          exact ⟨ha, applied, ho, hl⟩
-        · cases h
-  · rintro ⟨ha, applied, ho, hl⟩
-    simp only [ha, id_bind, ho, hl, ↓reduceIte, id_pure]
-
-theorem foldlM_zip {α β ε : Type} (f : Except ε (List β) → α → Id (Except ε (List β))) (R : β → α → Prop)
-    (herr : ∀ v x, f (.error v) x = .error v) (hok : ∀ done x r, f (.ok done) x = .ok r → ∃ p, r = done ++ [p] ∧ R p x) :
-    ∀ (l : List α) (acc : Except ε (List β)) (r : List β), l.foldlM f acc = .ok r →
-      ∃ done rest, acc = .ok done ∧ r = done ++ rest ∧ rest.length = l.length ∧ ∀ p ∈ rest.zip l, R p.1 p.2
-  | [], acc, r, h => ⟨r, [], by simpa using h, by simp, rfl, by simp⟩
-  | x :: l, acc, r, h => by
-    rw [List.foldlM_cons] at h
-    obtain ⟨done', rest, hacc', rfl, hl, hf⟩ := foldlM_zip f R herr hok l _ r h
-    cases acc with
-    | error v => simp [herr] at hacc'
-    | ok done =>
-      obtain ⟨p, rfl, hp⟩ := hok done x done' hacc'
-      refine ⟨done, p :: rest, rfl, by simp, by simp [hl], ?_⟩
-      intro q hq
-      rcases List.mem_cons.mp hq with rfl | hq
-      · exact hp
-      · exact hf q hq
-
 end Tazuna.Thm.Service.Screen.Operable

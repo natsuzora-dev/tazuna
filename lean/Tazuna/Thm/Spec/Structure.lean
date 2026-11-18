@@ -39,23 +39,4 @@ theorem emitsOf_mem (s : Structure) (command : Option Ref) (r : Ref) (h : some r
       exact ⟨by assumption, h⟩
     · contradiction
 
-/-- A request to the own service is rejected with no kind but those its definition allows or declares. -/
-theorem rejectionKinds_own (s : Structure) (r : Ref) (k : RejectionKind) (hk : k ∈ s.rejectionKinds r.service r) :
-    k = .notFound ∨ k = .requires ∨ k = .alreadyExists ∨
-      ∃ d ∈ s.definitions.find? (·.ref == r), match d.body with
-        | .command (some kinds) .. | .query (some kinds) .. => k ∈ kinds
-        | _ => False := by
-  unfold Structure.rejectionKinds at hk
-  cases h : s.definitions.find? (·.ref == r) with
-  | none => simp [h] at hk
-  | some d =>
-    simp only [h, Option.map_some] at hk
-    cases hb : d.body <;> simp only [hb, List.not_mem_nil] at hk
-    case command rejects _ _ _ _ _ _ =>
-      cases rejects
-      · simp_all; grind
-      · simp_all
-    case query rejects _ _ _ =>
-      cases rejects <;> simp_all
-
 end Tazuna.Thm.Spec.Structure
