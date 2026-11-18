@@ -237,20 +237,13 @@ theorem keeps_route {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Orig
     | (refine foldl_keeps (KeepsInFlight e w) _ (fun u x hu => ?_) _ _ hv
        split <;> first | exact hu | exact keeps_post hu _ _ _ _ _)
 
-theorem keeps_checkComputed {w w' : World} (h : KeepsInFlight e w w') (service : String) (sent : List Line)
-    (records : Records) : KeepsInFlight e w (w'.checkComputed service sent records) := by
-  unfold World.checkComputed
-  repeat' split
-  all_goals exact keeps_messages h rfl
-
 theorem keeps_act {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (service : String)
     (f : Service → Functions Id → State → Id State) (reopen : Bool) :
     KeepsInFlight e w (w'.act fsOf o service f reopen) := by
   unfold World.act
   split
   · exact h
-  · apply keeps_checkComputed
-    apply keeps_route
+  · apply keeps_route
     exact keeps_messages h rfl
 
 theorem keeps_setStatuses {w w' : World} (h : KeepsInFlight e w w') (ks : List Nat) (status : Status)

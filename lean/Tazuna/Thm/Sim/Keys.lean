@@ -106,45 +106,6 @@ theorem keeps_stepOrder (x : State) (o : List StepName) : KeepsKeys x { x with s
 theorem keeps_checkStepOrder (x : State) : KeepsKeys x (checkStepOrder x) := by
   unfold checkStepOrder; split <;> keys_leaf
 
-theorem lookup_map_report (l : List (String × State)) (k p : String) (f : Finding) :
-    (l.map fun (q, x) => if q == k then (q, x.report f) else (q, x)).lookup p =
-      (l.lookup p).map fun x => if p == k then x.report f else x := by
-  induction l with
-  | nil => rfl
-  | cons a l ih =>
-    obtain ⟨q, x⟩ := a
-    show List.lookup p ((if q == k then (q, x.report f) else (q, x)) :: _) = (List.lookup p ((q, x) :: l)).map _
-    by_cases hpq : (p == q) = true
-    · have := beq_iff_eq.mp hpq; subst this
-      by_cases hk : (p == k) = true
-      · simp only [hk, ↓reduceIte]; rw [List.lookup_cons, List.lookup_cons]; simp
-      · simp only [Bool.not_eq_true] at hk; simp only [hk, Bool.false_eq_true, ↓reduceIte]
-        rw [List.lookup_cons, List.lookup_cons]; simp
-    · simp only [Bool.not_eq_true] at hpq
-      have hc : List.lookup p ((q, x) :: l) = List.lookup p l := by rw [List.lookup_cons]; simp [hpq]
-      rw [hc, ← ih]
-      split <;> (rw [List.lookup_cons]; simp [hpq])
-
-theorem keepsWorld_checkComputed {w w' : World} (h : KeepsWorld w w') (service : String) (sent : List Line)
-    (records : Records) : KeepsWorld w (w'.checkComputed service sent records) := by
-  unfold World.checkComputed
-  split
-  · exact h
-  · split
-    · intro p
-      refine (h p).trans ?_
-      unfold World.state
-      dsimp only
-      rw [lookup_map_report]
-      cases w'.states.lookup p with
-      | none => exact .refl _
-      | some x =>
-        simp only [Option.map_some, Option.getD_some]
-        split
-        · exact ⟨report_service _ _, by rw [report_createdEntities]; exact List.prefix_refl _⟩
-        · exact .refl _
-    · exact h
-
 theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
     (f : Service → Functions Id → State → Id State) (hf : ∀ st s, KeepsKeys s (f st (fsOf service) s))
     (reopen : Bool) : KeepsWorld w (w'.act fsOf o service f reopen) := by
@@ -152,7 +113,6 @@ theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin
   split
   · exact h
   · rename_i st _
-    apply keepsWorld_checkComputed
     refine keepsWorld_route ?_ _ _ _
     intro p
     refine (h p).trans ?_

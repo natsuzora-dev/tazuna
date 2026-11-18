@@ -49,14 +49,13 @@ def Consistent (dom : String → String) (b : List (Bound × Bound)) : Prop :=
 mutual
 
 /--
-`s` renames to `t` under the string relation `R`: strings and key references as `R` relates them, other leaves equal,
+`s` renames to `t` under the string relation `R`: key references as `R` relates them, leaves (strings too) equal,
 arrays and runs element by element, and bags and objects after reordering the elements or fields of `t`. For objects
 with distinct keys, as verify reads them, reordering the fields is what sameKeys and lookup compare.
 -/
 inductive Renamed (R : String → String → Prop) : CValue → CValue → Prop
-  | str {s t : String} : R s t → Renamed R (.leaf (.str s)) (.leaf (.str t))
   | ref {e e' s t : String} : R s t → Renamed R (.ref e s) (.ref e' t)
-  | leaf {x : Value} : (∀ s, x ≠ .str s) → Renamed R (.leaf x) (.leaf x)
+  | leaf {x : Value} : Renamed R (.leaf x) (.leaf x)
   | arr {xs ys : List CValue} : RenamedList R xs ys → Renamed R (.arr xs) (.arr ys)
   | runs {xs ys : List CValue} : RenamedList R xs ys → Renamed R (.runs xs) (.runs ys)
   | obj {fs gs gs' : List (String × CValue)} : RenamedFields R fs gs' → gs'.Perm gs → Renamed R (.obj fs) (.obj gs)
@@ -120,9 +119,8 @@ mutual
 
 theorem Renamed.mono {R S : String → String → Prop} (hRS : ∀ s t, R s t → S s t) :
     {s t : CValue} → Renamed R s t → Renamed S s t
-  | _, _, .str h => .str (hRS _ _ h)
   | _, _, .ref h => .ref (hRS _ _ h)
-  | _, _, .leaf h => .leaf h
+  | _, _, .leaf => .leaf
   | _, _, .arr h => .arr (RenamedList.mono hRS h)
   | _, _, .runs h => .runs (RenamedList.mono hRS h)
   | _, _, .obj h hp => .obj (RenamedFields.mono hRS h) hp
@@ -143,10 +141,7 @@ end
 mutual
 
 theorem Renamed.refl {R : String → String → Prop} (hR : ∀ s, R s s) : (s : CValue) → Renamed R s s
-  | .leaf x => by
-    by_cases hx : ∃ s, x = .str s
-    · obtain ⟨s, rfl⟩ := hx; exact .str (hR s)
-    · exact .leaf fun s h => hx ⟨s, h⟩
+  | .leaf _ => .leaf
   | .ref _ s => .ref (hR s)
   | .arr xs => .arr (RenamedList.refl hR xs)
   | .runs xs => .runs (RenamedList.refl hR xs)
@@ -167,9 +162,8 @@ end
 mutual
 
 theorem Renamed.symm {R : String → String → Prop} : {s t : CValue} → Renamed R s t → Renamed (flip R) t s
-  | _, _, .str h => .str h
   | _, _, .ref h => .ref h
-  | _, _, .leaf h => .leaf h
+  | _, _, .leaf => .leaf
   | _, _, .arr h => .arr (RenamedList.symm h)
   | _, _, .runs h => .runs (RenamedList.symm h)
   | _, _, .obj h hp =>
@@ -198,11 +192,8 @@ mutual
 
 theorem Renamed.trans {R S : String → String → Prop} :
     {s t u : CValue} → Renamed R s t → Renamed S t u → Renamed (Comp R S) s u
-  | _, _, _, .str h, .str h' => .str ⟨_, h, h'⟩
-  | _, _, _, .str _, .leaf h' => absurd rfl (h' _)
   | _, _, _, .ref h, .ref h' => .ref ⟨_, h, h'⟩
-  | _, _, _, .leaf h, .str _ => absurd rfl (h _)
-  | _, _, _, .leaf h, .leaf _ => .leaf h
+  | _, _, _, .leaf, .leaf => .leaf
   | _, _, _, .arr h, .arr h' => .arr (RenamedList.trans h h')
   | _, _, _, .runs h, .runs h' => .runs (RenamedList.trans h h')
   | _, _, _, .obj h hp, .obj h' hp' =>

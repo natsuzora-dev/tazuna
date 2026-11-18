@@ -259,20 +259,6 @@ export type Fault =
         readonly slot: string;
         readonly rejection: Rejection;
       };
-    }
-  /**
-   * The service sent `key` or holds it in a record, of the form of a key of `entity` that a running service creates, and
-   * no running service created it: a spec computed it. Only createKey makes a created key, so test could not tell it from
-   * one when it compares runs up to a renaming of created keys. The check follows the whole processing, whose definitions
-   * any may have computed it, so the fault names no definition.
-   */
-  | {
-      readonly kind: "Fault.computedKey";
-      readonly definition: null;
-      readonly data: {
-        readonly key: string;
-        readonly entity: DefinitionRef;
-      };
     };
 
 export const faultKinds = [
@@ -309,7 +295,6 @@ export const faultKinds = [
   "Fault.exceededExitDepth",
   "Fault.rejectedAutomationCommand",
   "Fault.rejectedShows",
-  "Fault.computedKey",
 ] as const;
 
 /** The kinds whose violations halt the run. */
@@ -338,5 +323,4 @@ export const haltingFaultKinds = [
   "Fault.exceededMessageWork",
   "Fault.exceededDueDeadlines",
   "Fault.exceededExitDepth",
-  "Fault.computedKey",
 ] as const;

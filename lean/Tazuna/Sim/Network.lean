@@ -202,29 +202,6 @@ def World.keyEntity? (w : World) (x : String) : Option Spec.Ref :=
     (st.entities.find? fun e => !st.singles.contains e && Spec.isKeyOf s!"{owner}/{e}" x).map st.ref
 
 /--
-The least string, in code-point order, of the `out` lines `sent` and the records `records` that has a running
-running service's key form (keyEntity?) and that no running service created, with the entity: a spec computed it.
--/
-def World.computedKey? (w : World) (sent : List Line) (records : Records) : Option (String × Spec.Ref) :=
-  let strings := (sent.filter (·.dir == .out)).flatMap (·.body.content.strings) ++
-    records.flatMap fun r => r.key.toList ++ r.value.strings
-  let made := w.states.flatMap fun (_, s) => s.created.map (·.2)
-  let computed := strings.filter fun x => !made.contains x && (w.keyEntity? x).isSome
-  ((computed.mergeSort fun a b => decide (a ≤ b)).head?).bind fun x => (w.keyEntity? x).map (x, ·)
-
-/--
-The world with the computed key (computedKey?) that `service` sent in `sent` or holds in `records` reported as its
-fault, unless the simulation stopped already: one cause, one report.
--/
-def World.checkComputed (w : World) (service : String) (sent : List Line) (records : Records) : World :=
-  if w.stopped then w else
-  match w.computedKey? sent records with
-  | some (key, entity) =>
-    { w with states := w.states.map fun (q, x) =>
-        if q == service then (q, x.report (.fault (.computedKey key entity))) else (q, x) }
-  | none => w
-
-/--
 The world after `service` processes what `f` gives it while `o` is processed, taking first the steps of its entry of `stepOrders`,
 which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages
 it sent. Under `reopen`, as after a restart, every screen open after it opened anew.
@@ -248,7 +225,7 @@ def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : 
                       spans := w.spans ++ [span], opened := w.opened ++ opened,
                       stepOrders := w.stepOrders.filter fun (t, q, _) => !(t == o && q == service) }
     let sent := (t.lines.extract before t.lines.size).toList
-    pure ((w.route o service sent).checkComputed service sent t.records)
+    pure (w.route o service sent)
 
 /--
 The world after the messages `ks`, all to the running service `receiver`, arrive in one processing while `o` is

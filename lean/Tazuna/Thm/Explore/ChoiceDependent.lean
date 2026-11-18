@@ -12,11 +12,11 @@ Records that sameRecords finds the same are renamed into each other under a bind
 bindings: each created key of `original` stands for one created key of `alternative`, one to one.
 -/
 theorem sameRecords_renamed {set : List Binding} {original alternative : Outcome}
-    (hx : Distinct (recordsCValue original.records)) (hy : Distinct (recordsCValue alternative.records))
+    (hx : Distinct original.records) (hy : Distinct alternative.records)
     (h : sameRecords set original alternative = .same) :
     ∃ b ∈ set, ∃ c : Binding, b.Extends c ∧ OneToOne c.pairs ∧
       Renamed (BoundBy (fun s => (original.created.lookup s).getD "") c)
-        (recordsCValue original.records) (recordsCValue alternative.records) := by
+        original.records alternative.records := by
   unfold sameRecords Sameness.any at h
   dsimp only at h
   split at h

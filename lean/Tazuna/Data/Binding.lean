@@ -145,9 +145,12 @@ def Values.bind (v : Values) (b : Binding) (s t : String) : Matches b :=
 
 mutual
 
-/-- The bindings under which snapshot value `s` compares equal with implementation value `t`, extending `b`. -/
+/--
+The bindings under which snapshot value `s` compares equal with implementation value `t`, extending `b`. A key
+reference binds; any other string compares literally, whatever its form.
+-/
 def matchValue (v : Values) (b : Binding) : CValue → CValue → Matches b
-  | .leaf (.str s), .leaf (.str t) | .ref _ s, .ref _ t => v.bind b s t
+  | .ref _ s, .ref _ t => v.bind b s t
   | .leaf x, .leaf y => some (if x == y then [⟨b, .refl b⟩] else [])
   | .arr xs, .arr ys | .runs xs, .runs ys => matchList v b xs ys
   | .obj fs, .obj gs => if sameKeys fs gs then matchFields v b fs gs else some []

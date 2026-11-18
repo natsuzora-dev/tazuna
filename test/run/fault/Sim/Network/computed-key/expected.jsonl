@@ -1,1 +1,0 @@
-{"kind":"Fault.computedKey","definition":null,"data":{"key":"notes/Note-9","entity":{"service":"notes","name":"Note"}},"location":{"file":"notes/scenarios.ts","line":3},"scenario":{"service":"notes","name":"askGuess"}}

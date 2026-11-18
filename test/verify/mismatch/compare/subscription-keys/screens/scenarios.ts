@@ -1,6 +1,7 @@
 import { skip } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
-import { noteScreen, scenario } from "./screens.ts";
+import { scenario } from "./data.ts";
+import { noteScreen } from "./screens.ts";
 
 const given = {
   start: "2026-10-25T00:00:00Z",

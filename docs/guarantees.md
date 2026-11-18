@@ -67,7 +67,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
 Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
-The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike wherever the key appears.
+The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position.
 Lines that a service wrote for messages that one line delivered compare by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
 
 ### When a trace matches a snapshot
@@ -96,7 +96,8 @@ When the bindings cannot decide what the implementation gets, or a trace cannot 
 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
-Because created keys compare only up to renaming, a string that a spec computes in the form of a created key is `Fault.computedKey`.
+A key position is a value whose schema is `ref(E)` or `E`'s key field, such as `Task.fields.id`, and in records the key field and the `ref()` fields.
+Both commands rename a string only at a key position; any other string, such as a key held in a plain `z.string()`, compares as text.
 
 ## Who fixes a violation
 
@@ -267,7 +268,7 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
 - The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
 - When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
-- Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each string or key as the binding pairs it, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this is a renaming in the sense of the theorems that follow (`matchValue_strRenamed`). The renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain. No theorem shows that the bindings that `test` and `verify` end with pair no value of domain "" or keep keys in their domains.
+- Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this is a renaming in the sense of the theorems that follow (`matchValue_strRenamed`). The renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain. No theorem shows that the bindings that `test` and `verify` end with pair no value of domain "" or keep keys in their domains.
 
 ### Restart
 

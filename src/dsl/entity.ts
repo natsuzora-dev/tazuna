@@ -51,6 +51,9 @@ export type KeyValue<E extends AnyKeyedEntity> =
 export type RowOf<E extends AnyEntity> =
   E extends KeyedEntity<infer S> ? Row<S> : E extends SingleEntity<infer S> ? Row<S> : never;
 
+const refTargets = new WeakMap<z.ZodType, AnyKeyedEntity>();
+const keyFieldOwners = new WeakMap<z.ZodType, AnyKeyedEntity>();
+
 /**
  * Defines the shape of records identified by `key`. Other definitions reuse a field's schema as `Task.fields.title`.
  */
@@ -69,15 +72,22 @@ export function entity<
   /** The conditions that every record meets (Fault.failedEntityInvariant). */
   invariants?: Named<Iv, { record: Row<S> }>;
 }): KeyedEntity<S, K> {
-  return {
+  // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
+  const shared = definition.fields[definition.key] as z.ZodType;
+  const key = shared.clone();
+  const target = refTargets.get(shared);
+  if (target !== undefined) refTargets.set(key, target);
+  const keyed: KeyedEntity<S, K> = {
     kind: "entity",
     single: false,
     description: definition.description,
-    fields: definition.fields,
+    fields: { ...definition.fields, [definition.key]: key },
     key: definition.key,
     unique: definition.unique ?? [],
     invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> }>,
   };
+  keyFieldOwners.set(key, keyed);
+  return keyed;
 }
 
 /** Defines an entity with exactly one record; `records.Settings` is that record. */
@@ -96,12 +106,15 @@ export function singleEntity<const S extends DefaultedShape, const Iv extends st
   };
 }
 
-const refTargets = new WeakMap<z.ZodType, AnyKeyedEntity>();
 declare const refEntity: unique symbol;
 
 export type Ref<E extends AnyKeyedEntity> = z.ZodType<KeyValue<E>, KeyValue<E>> & { readonly [refEntity]: E };
 
-/** Returns the schema of a field whose value is the key of a `target` record. */
+/**
+ * Returns the schema of a field whose value is the key of a `target` record. `test` and `verify` compare a created key
+ * up to renaming only where its schema is `ref(target)` or `target`'s key field; anywhere else, such as in a plain
+ * `z.string()`, they compare it as text.
+ */
 export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
   const schema = (target.fields[target.key] as z.ZodType).clone();
   refTargets.set(schema, target);
@@ -112,6 +125,14 @@ export function refTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
   const direct = refTargets.get(schema);
   if (direct !== undefined) return direct;
   if (schema instanceof z.ZodNullable || schema instanceof z.ZodDefault) return refTarget(schema.unwrap() as z.ZodType);
+  return undefined;
+}
+
+/** Returns the entity whose key a value of `schema` is, as `ref(entity)` or as the entity's key field. */
+export function keyTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
+  const direct = refTargets.get(schema) ?? keyFieldOwners.get(schema);
+  if (direct !== undefined) return direct;
+  if (schema instanceof z.ZodNullable || schema instanceof z.ZodDefault) return keyTarget(schema.unwrap() as z.ZodType);
   return undefined;
 }
 

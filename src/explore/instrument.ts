@@ -1,7 +1,7 @@
 import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
-import { Bag } from "../data/canonical.ts";
+import { Bag, Ref } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
@@ -381,11 +381,13 @@ function unbagged(value: unknown): unknown {
 /** Lean's canonical: the canonical JSON of a value whose Bags are arrays. */
 const text = (value: unknown): string => canonicalJson(unbagged(value));
 
-/** Lean's madeValue: a value with each array as a Bag. */
-function madeValue(value: unknown): unknown {
-  if (Array.isArray(value)) return new Bag(value.map(madeValue));
+/** Lean's madeValue: a value with each array as a Bag and each key that the call created (`keys`) as a Ref. */
+function madeValue(keys: ReadonlyMap<string, string>, value: unknown): unknown {
+  if (Array.isArray(value)) return new Bag(value.map((v) => madeValue(keys, v)));
+  const entity = typeof value === "string" ? keys.get(value) : undefined;
+  if (entity !== undefined) return new Ref(entity, value as string);
   if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, madeValue(v)]));
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, madeValue(keys, v)]));
 }
 
 /** What an audit compares of two answers: the texts that a function gives them, or a relation (Lean's `same`). */
@@ -408,7 +410,12 @@ function sameMade(
     image: (s: string, t: string) => others.get(t) === domains.get(s),
   };
   return matchesSameness(
-    matchValue(values, emptyBinding, madeValue(plain(unbagged(a[0]))), madeValue(plain(unbagged(b[0])))),
+    matchValue(
+      values,
+      emptyBinding,
+      madeValue(domains, plain(unbagged(a[0]))),
+      madeValue(others, plain(unbagged(b[0]))),
+    ),
   );
 }
 

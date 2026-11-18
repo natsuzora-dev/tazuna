@@ -1,7 +1,7 @@
 import { arm, scenario } from "./tokens.ts";
 
 export const tied = scenario(
-  "Arm at 11:00; the deadlines of first and second tie. first clears Last.id and second sets it to a created key, so the order that runs second last leaves the created key and the other leaves the empty string. A created key stands only for a key that the other order created, never for the empty string, so test reports stepOrder",
+  "Arm at 11:00; the deadlines of first and second tie. first clears Last.id and second sets it to a created key, so the order that runs second last leaves the created key and the other leaves the empty string. Last.id is a plain z.string(), so the two compare as text and test reports stepOrder",
   {
     given: { start: "2026-10-25T11:00:00+09:00", records: { Note: [], Last: { id: "" } }, peers: {} },
     when: (w) => {

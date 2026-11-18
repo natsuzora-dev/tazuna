@@ -243,31 +243,25 @@ theorem bagPaired_step {dom : String → String} {ys pre : List CValue} {b c : B
 mutual
 
 /--
-Every binding under which matchValue compares two values equal relates them by `Renamed`: strings and keys as the
-binding pairs them, bags and objects after reordering.
+Every binding under which matchValue compares two values equal relates them by `Renamed`: keys as the binding pairs
+them, bags and objects after reordering.
 -/
 theorem matchValue_renamed (v : Values) (b : Binding) (x y : CValue) (hx : Distinct x) (hy : Distinct y)
     {out : List (From b)} (h : matchValue v b x y = some out) : ∀ c ∈ out, Renamed (BoundBy v.domain c.val) x y := by
   intro c hc
   match x, y, hx, hy with
-  | .leaf (.str s), .leaf (.str t), _, _ =>
-    rw [matchValue] at h
-    exact .str (bind_bound h c hc)
   | .ref _ s, .ref _ t, _, _ =>
     rw [matchValue] at h
     exact .ref (bind_bound h c hc)
   | .leaf a, .leaf a', _, _ =>
-    by_cases hst : ∃ s t, a = .str s ∧ a' = .str t
-    · obtain ⟨s, t, rfl, rfl⟩ := hst
-      rw [matchValue] at h
-      exact .str (bind_bound h c hc)
-    · rw [matchValue] at h
-      all_goals try (intros; simp_all; done)
-      split at h
-      · rename_i he
-        cases beq_iff_eq.mp he
-        exact .leaf fun s e => hst ⟨s, s, e, e⟩
-      · cases h; cases hc
+    rw [matchValue] at h
+    split at h
+    · rename_i he
+      cases beq_iff_eq.mp he
+      cases h
+      simp only [List.mem_singleton] at hc
+      exact .leaf
+    · cases h; cases hc
   | .arr xs, .arr ys, .arr hx, .arr hy =>
     rw [matchValue] at h
     exact .arr (matchList_renamed v b xs ys hx hy h c hc)

@@ -1,18 +1,16 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Origin } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
-import { byCodePoint, sameJson, stringsOf } from "../data/values.ts";
+import { sameJson } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import type { InstanceId } from "../service/instance.ts";
-import { bodyContent, type Line, type LineBody, sameLineId } from "../service/message.ts";
-import type { Records } from "../service/records.ts";
-import { created, Halt, report, type State } from "../service/state.ts";
+import { type Line, type LineBody, sameLineId } from "../service/message.ts";
+import { Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import { channelOf, sentBefore } from "./order.ts";
 import { arriveAll, arriveFrom } from "./receive.ts";
@@ -203,34 +201,6 @@ export function keyEntity(w: World, x: string): DefinitionRef | undefined {
   return undefined;
 }
 
-/** Lean's World.computedKey?. */
-function computedKey(w: World, sent: readonly Line[], records: Records): readonly [string, DefinitionRef] | undefined {
-  const strings = [
-    ...sent.filter((l) => l.dir === "out").flatMap((l) => stringsOf(bodyContent(l))),
-    ...[...records.keyed.values()].flatMap((rows) =>
-      [...rows].flatMap(([key, row]) => [key, ...stringsOf(row.encoded)]),
-    ),
-    ...[...records.singles.values()].flatMap((row) => stringsOf(row.encoded)),
-  ];
-  const made = new Set([...w.services.values()].flatMap((p) => created(p.processing.state).map(([, key]) => key)));
-  const [least] = strings.filter((x) => !made.has(x) && keyEntity(w, x) !== undefined).toSorted(byCodePoint);
-  const entity = least === undefined ? undefined : keyEntity(w, least);
-  return least === undefined || entity === undefined ? undefined : [least, entity];
-}
-
-/** Lean's World.checkComputed: the fault halts the service. */
-function checkComputed(w: World, service: string, sent: readonly Line[], records: Records): void {
-  const p = w.services.get(service);
-  if (p === undefined || stopped(w)) return;
-  const found = computedKey(w, sent, records);
-  if (found !== undefined)
-    p.halted = {
-      kind: "Fault.computedKey",
-      definition: null,
-      data: { key: found[0], entity: found[1] },
-    } satisfies Fault;
-}
-
 /** Lean's World.act. */
 export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
   const p = w.services.get(service);
@@ -259,7 +229,6 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
   w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
   const sent = s.lines.slice(before);
   route(w, o, service, sent);
-  checkComputed(w, service, sent, s.records);
 }
 
 /** Lean's World.deliver: the messages `ks` to `receiver` arrive in one processing, several as a tie. */

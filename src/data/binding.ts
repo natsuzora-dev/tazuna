@@ -125,9 +125,8 @@ export const bind = (v: Values, b: Binding, s: string, t: string): Matches => {
   return c === undefined ? [] : [c];
 };
 
-/** Lean's matchValue. */
+/** Lean's matchValue: a key reference binds; any other string compares literally. */
 export function matchValue(v: Values, b: Binding, s: unknown, t: unknown): Matches {
-  if (typeof s === "string" && typeof t === "string") return bind(v, b, s, t);
   if (s instanceof Ref && t instanceof Ref) return bind(v, b, s.value, t.value);
   if (s instanceof Bag && t instanceof Bag)
     return s.items.length === t.items.length ? matchBag(v, b, s.items, t.items) : [];
@@ -144,7 +143,7 @@ export function matchValue(v: Values, b: Binding, s: unknown, t: unknown): Match
     return fields(b, 0);
   }
   const leaf = (x: unknown) => x === null || typeof x !== "object";
-  return leaf(s) && leaf(t) && typeof s !== "string" && typeof t !== "string" && s === t ? [b] : [];
+  return leaf(s) && leaf(t) && s === t ? [b] : [];
 }
 
 /** Lean's matchList. */

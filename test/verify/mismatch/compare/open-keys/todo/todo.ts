@@ -1,15 +1,16 @@
 import { bag, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
+import { screens } from "../screens/contract.ts";
 
 export const { query, contract } = service({ name: "todo", description: "Answer questions about notes" });
 
 export const notesIn = query({
-  input: { ids: bag(z.string()) },
+  input: { ids: bag(screens.DraftId) },
   output: { count: z.number() },
 }).resolve(({ input }) => ({ count: input.ids.size }));
 
 export const note = query({
-  input: { id: z.string() },
+  input: { id: screens.DraftId },
   output: { found: z.boolean() },
 }).resolve(() => ({ found: false }));
 

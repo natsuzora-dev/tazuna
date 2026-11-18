@@ -359,10 +359,16 @@ def decideCollect (name : String) (records : Records) (decided : Except Issue (L
 /-- The texts in code-point order, which compare two lists as multisets. -/
 def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
 
-/-- A value that one call made, with each array as a bag, since the call may build an array in the order of its keys. -/
-def madeValue : Value → CValue
-  | .arr vs => .bag (vs.map madeValue)
-  | .obj fs => .obj (fs.map fun p => (p.1, madeValue p.2))
+/--
+A value that one call made, with each array as a bag, since the call may build an array in the order of its keys, and
+each key that the call created (`keys`, entity then key) as a key reference.
+-/
+def madeValue (keys : List (String × String)) : Value → CValue
+  | .arr vs => .bag (vs.map (madeValue keys))
+  | .obj fs => .obj (fs.map fun p => (p.1, madeValue keys p.2))
+  | .str s => match keys.find? (·.2 == s) with
+    | some (e, _) => .ref e s
+    | none => .leaf (.str s)
   | v => .leaf v
 decreasing_by all_goals nested_decreasing
 
@@ -379,7 +385,7 @@ def sameMade (keys : Keys) (a b : Value × List String) : Sameness :=
     let other := givenKeys keys b.2
     let v : Values := { domain := fun s => (entityOf given s).getD "", fresh := given.map (·.2),
                         image := fun s t => entityOf other t == entityOf given s }
-    (matchValue v .empty (madeValue a.1) (madeValue b.1)).sameness
+    (matchValue v .empty (madeValue given a.1) (madeValue other b.1)).sameness
 
 /-- The texts without order or repetition, which compare two lists as sets. -/
 def textSet (texts : List String) : List String := (sortedTexts texts).eraseDups

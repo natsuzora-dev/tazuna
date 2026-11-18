@@ -60,6 +60,7 @@ function outcomeFor(m: Made, service: string, lines?: readonly Line[]): Outcome 
     created(r.processing.state).map(([entity, key]) => [key, `${q}/${entity}`] as const),
   );
   return outcomeOf(
+    p.processing.st,
     p.halted === undefined ? null : violationValue(p.halted),
     traceLines,
     p.processing.state.records,

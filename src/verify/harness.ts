@@ -1,12 +1,13 @@
 import type { CheckedSpec } from "../check/spec.ts";
+import { Bag, Ref, Runs } from "../data/canonical.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
-import { type Bindings, substituted, type UntimedTraceLine } from "../data/trace.ts";
+import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
 import type { Run } from "../data/traceFile.ts";
 import { plain } from "../data/values.ts";
 import { traceName } from "../load/traceName.ts";
 import { givenRecordsOf } from "../sim/spec/simulate.ts";
 import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
-import { compareTrace } from "./compare.ts";
+import { compareTrace, readLine } from "./compare.ts";
 import { readSnapshot } from "./snapshot.ts";
 
 interface Waiting extends ForeignRequest {
@@ -29,20 +30,31 @@ function required<F>(receive: F | undefined, type: string): F {
   return receive;
 }
 
+/** Returns `value` with each key reference that `bindings` binds replaced by its bound value, as plain JSON. */
+function substitutedRefs(bindings: Bindings, value: unknown): unknown {
+  if (value instanceof Ref) return bindings.get(value.value) ?? value.value;
+  if (value instanceof Bag) return value.items.map((v) => substitutedRefs(bindings, v));
+  if (value instanceof Runs) return value.runs.flatMap((r) => r.items.map((v) => substitutedRefs(bindings, v)));
+  if (Array.isArray(value)) return value.map((v) => substitutedRefs(bindings, v));
+  if (value !== null && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substitutedRefs(bindings, v)]));
+  return value;
+}
+
 /**
- * The `in` line with the snapshot values that the bindings bind replaced in its value positions (the answered request,
- * resultOf and the content), read by the trace line schema.
+ * The `in` line, as readLine reads it, with the snapshot values that the bindings bind replaced in its key positions:
+ * the answered request, resultOf and the key references of the content. Any other string stays as the snapshot has it.
  */
 function substitutedLine(bindings: Bindings, line: TraceLine): TraceLine {
-  const value = (v: unknown) => substituted(bindings, plain(v));
+  const value = (v: unknown) => plain(substitutedRefs(bindings, v));
   const id = (s: string | undefined) => (s === undefined ? undefined : (bindings.get(s) ?? s));
   return traceLine.parse({
     ...line,
     ...("to" in line ? { to: id(line.to) } : {}),
     ...("resultOf" in line && line.resultOf !== undefined ? { resultOf: id(line.resultOf) } : {}),
-    ...("input" in line ? { input: value(line.input) } : {}),
-    ...("payload" in line ? { payload: value(line.payload) } : {}),
-    ...("answer" in line ? { answer: value(line.answer) } : {}),
+    ...("input" in line && line.input !== undefined ? { input: value(line.input) } : {}),
+    ...("payload" in line && line.payload !== undefined ? { payload: value(line.payload) } : {}),
+    ...("answer" in line && line.answer !== undefined ? { answer: value(line.answer) } : {}),
   });
 }
 
@@ -64,6 +76,8 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     .scenario;
   if (scenario === undefined) throw new Error(`no scenario ${run.service}.${run.scenario}`);
   const snapshot = readSnapshot(spec, run);
+  const read = readLine(spec, runner);
+  const readSnapshotLines = snapshot.map((l) => read(l));
   const lines: (TraceLine | undefined)[] = [];
   // Keyed by who gave the id, the implementation or the harness, so that neither id hides the other.
   const waiting = new Map<string, Waiting>();
@@ -205,7 +219,7 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     const compared = comparedBefore(k);
     // The comparison compares nothing after an Uncomparable finding, so the later lines would go by no binding.
     if (compared.found.some(({ kind }) => kind.startsWith("Uncomparable."))) break;
-    await give(substitutedLine(compared.first, line));
+    await give(substitutedLine(compared.first, readSnapshotLines[k] ?? line));
   }
   await adapter.settled();
   for (const controller of subscriptions.values()) controller.abort();

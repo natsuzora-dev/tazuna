@@ -39,16 +39,16 @@ import {
 } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import { canonicalJson, type Json, mapStrings, plain, type Shape, stringsOf } from "../data/values.ts";
-import { refTarget } from "../dsl/entity.ts";
+import { keyTarget } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
 import { contractsListing } from "../spec/structure.ts";
 import { byLine, type Found, lineSchema } from "./lines.ts";
 
-/** Names the entity of a key reference as `<service>/<name>`, the domain of its values. */
+/** Names the entity of a key position (keyTarget) as `<service>/<name>`, the domain of its values. */
 export function refEntityOf(spec: Spec): RefEntity {
   return (schema) => {
-    const target = refTarget(schema);
+    const target = keyTarget(schema);
     if (target === undefined) return undefined;
     const ref = refOfDefinition(spec, target);
     return `${ref.service}/${ref.name}`;
@@ -56,7 +56,7 @@ export function refEntityOf(spec: Spec): RefEntity {
 }
 
 /** Lean's readLine: the line with its input, payload or answer output read by its definition's schema. */
-function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
+export function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
   const outputByRequestId = new Map<string, Shape>();
   const refEntity = refEntityOf(spec);
   return (l) => {

@@ -1,10 +1,7 @@
-import { any, entity, ref, service } from "@natsuzora-dev/tazuna";
+import { any, ref } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
-
-export const Draft = entity({ description: "A draft note", fields: { id: z.string() }, key: "id" });
-
-export const { screen, scenario } = service({ name: "screens", description: "Show the notes", entities: { Draft } });
+import { Draft, screen } from "./data.ts";
 
 export const noteScreen = screen({
   description: "Two new drafts, all of them, and then the first one",
