@@ -289,6 +289,63 @@ function sameAfter(
 
 type Finding = Mismatch | Uncomparable;
 
+/** Lean's pairChecks: the time, order, and (when `relation`) `after` findings of the way with pairs `pairNumbers`. */
+function pairChecks(
+  relation: boolean,
+  snapshot: readonly Numbered[],
+  trace: readonly Numbered[],
+  pairNumbers: readonly (readonly [number, number])[],
+): Finding[] {
+  const at = (xs: readonly Numbered[], i: number) => xs.find((x) => x.index === i);
+  const pairs = pairNumbers.flatMap(([i, j]) => {
+    const [s, t] = [at(snapshot, i), at(trace, j)];
+    return s === undefined || t === undefined ? [] : [[s, t] as const];
+  });
+  const times = pairs.flatMap(([s, t]): Finding[] =>
+    sameTime(s.line, t.line)
+      ? []
+      : [
+          {
+            kind: "Mismatch.time",
+            definition: null,
+            line: t.index,
+            data: { subject: subjectOf(t.line), snapshot: s.line.time, trace: t.line.time },
+          },
+        ],
+  );
+  const orders = snapshot.flatMap((s, k): Finding[] => {
+    const t = pairs.find(([x]) => x.index === s.index)?.[1];
+    if (t === undefined) return [];
+    return mustFollow(snapshot, s, k).flatMap((n): Finding[] => {
+      const before = pairs.find(([x]) => x.index === n)?.[1];
+      if (before === undefined || before.index < t.index) return [];
+      return [
+        {
+          kind: "Mismatch.lineOrder",
+          definition: null,
+          line: t.index,
+          data: { subject: subjectOf(t.line), before: subjectOf(before.line) },
+        },
+      ];
+    });
+  });
+  const afters = relation
+    ? pairs.flatMap(([s, t]): Finding[] =>
+        sameAfter(snapshot, trace, pairNumbers, s, t)
+          ? []
+          : [
+              {
+                kind: "Mismatch.after",
+                definition: null,
+                line: t.index,
+                data: { subject: subjectOf(t.line), snapshot: s.line.after ?? [], trace: t.line.after ?? [] },
+              },
+            ],
+      )
+    : [];
+  return [...times, ...orders, ...afters];
+}
+
 /** Lean's State: one way of pairing a group's lines so far. */
 interface State {
   readonly binding: Binding;
@@ -384,60 +441,17 @@ function compareGroup(
   }
   const [first] = states;
   const used = first === undefined ? [] : usedOf(first);
-  const at = (xs: readonly Numbered[], i: number) => xs.find((x) => x.index === i);
   const differences = placed.flatMap(([s, t, equal]) =>
     t === undefined ? [missing(s, place)] : equal ? [] : [difference(s.line, t)],
   );
   const unexpectedLines = trace.filter((t) => !used.includes(t.index)).map(unexpected);
-  const pairs = (first?.pairs ?? []).flatMap(([i, j]) => {
-    const [s, t] = [at(snapshot, i), at(trace, j)];
-    return s === undefined || t === undefined ? [] : [[s, t] as const];
-  });
-  const times = pairs.flatMap(([s, t]): Finding[] =>
-    sameTime(s.line, t.line)
-      ? []
-      : [
-          {
-            kind: "Mismatch.time",
-            definition: null,
-            line: t.index,
-            data: { subject: subjectOf(t.line), snapshot: s.line.time, trace: t.line.time },
-          },
-        ],
+  const checks = pairChecks(relation, snapshot, trace, first?.pairs ?? []);
+  const kept = states.filter(
+    (st) =>
+      sameSet(usedOf(st), used) && (checks.length > 0 || pairChecks(relation, snapshot, trace, st.pairs).length === 0),
   );
-  const orders = snapshot.flatMap((s, k): Finding[] => {
-    const t = pairs.find(([x]) => x.index === s.index)?.[1];
-    if (t === undefined) return [];
-    return mustFollow(snapshot, s, k).flatMap((n): Finding[] => {
-      const before = pairs.find(([x]) => x.index === n)?.[1];
-      if (before === undefined || before.index < t.index) return [];
-      return [
-        {
-          kind: "Mismatch.lineOrder",
-          definition: null,
-          line: t.index,
-          data: { subject: subjectOf(t.line), before: subjectOf(before.line) },
-        },
-      ];
-    });
-  });
-  const afters = relation
-    ? pairs.flatMap(([s, t]): Finding[] =>
-        sameAfter(snapshot, trace, first?.pairs ?? [], s, t)
-          ? []
-          : [
-              {
-                kind: "Mismatch.after",
-                definition: null,
-                line: t.index,
-                data: { subject: subjectOf(t.line), snapshot: s.line.after ?? [], trace: t.line.after ?? [] },
-              },
-            ],
-      )
-    : [];
-  const kept = states.filter((st) => sameSet(usedOf(st), used));
   return [
-    [...differences, ...unexpectedLines, ...times, ...orders, ...afters],
+    [...differences, ...unexpectedLines, ...checks],
     distinctBy(
       sameBinding,
       kept.map((st) => st.binding),

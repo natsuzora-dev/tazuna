@@ -36,8 +36,8 @@ values that the implementation chose in its own way are open.
   orders of a processing alike (ChoiceDependent), so a spec without that report fixes each channel's order.
 - A snapshot line that pairs in no way pairs by place (type and name, or the answered request under the first way) to
   report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
-  unexpected. The set keeps the ways that leave the same trace lines unpaired. Paired lines compare their time and the
-  snapshot's `after` order.
+  unexpected. Paired lines compare their time and the snapshot's `after` order. The set keeps the ways that leave the
+  same trace lines unpaired and, when the first way compares, that compare too.
 - Verify reports the trace's first malformed line, and the first `out` request line with the id of an earlier one
   (duplicateId), and compares neither the group of the first of them nor anything later. Other lines' ids name no
   line, so the ids that the harness gives the lines that the implementation gives no id never meet them.
@@ -437,10 +437,38 @@ def namedLines (snapshot : List Numbered) : List Nat :=
   snapshot.zipIdx.flatMap fun (s, k) => mustFollow snapshot s k
 
 /--
+The findings of the way that pairs the snapshot and trace lines `pairNumbers`: paired lines at different times, a line
+paired before a line that it must follow, and, when `relation`, a trace line whose `after` differs from the snapshot's
+through the pairing (sameAfter).
+-/
+def pairChecks (relation : Bool) (snapshot trace : List Numbered) (pairNumbers : List (Nat × Nat)) : List Finding :=
+  let pairs := pairNumbers.filterMap fun (i, j) => do
+    pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))
+  let times := pairs.filterMap fun (s, t) =>
+    if s.line.time.time == t.line.time.time then none
+    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text))
+  let orders := snapshot.zipIdx.flatMap fun (s, k) =>
+    match pairs.find? (·.1.index == s.index) with
+    | none => []
+    | some (_, t) =>
+      (mustFollow snapshot s k).filterMap fun n => do
+        let (_, before) ← pairs.find? (·.1.index == n)
+        if before.index < t.index then none
+        else some (Finding.mismatch
+          (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
+  let afters := if !relation then [] else pairs.filterMap fun (s, t) =>
+    if sameAfter snapshot trace pairNumbers s t then none
+    else some (Finding.mismatch
+      (.after t.index (Subject.of t.line.toTraceLine) (s.line.after.getD []) (t.line.after.getD [])))
+  times ++ orders ++ afters
+
+/--
 Pairs the `out` lines of one group under the set of bindings and reports their differences. `v.fresh` holds the values
 that this and earlier groups introduced, also on lines that are not compared; one that is not bound yet binds where a
 compared line first holds it. `place` is the trace line of the group's input. When `relation`, the trace's `after`
-must equal the snapshot's (sameAfter). The last component tells that nothing later is compared.
+must equal the snapshot's (sameAfter). The first way reports by (pairChecks); when it has nothing to report, only the ways
+that have nothing either carry on, so that each binding carried on pairs the group through one pairing. The last
+component tells that nothing later is compared.
 -/
 def compareGroup {root : Binding} (set : List (From root)) (v : Values) (relation : Bool) (snapshot trace : List Numbered)
     (place : Nat) : List Finding × List (From root) × Bool :=
@@ -460,27 +488,10 @@ def compareGroup {root : Binding} (set : List (From root)) (v : Values) (relatio
     | (_, some (_, true)) => none
     | (s, none) => some (.mismatch (missing s place))
   let unexpectedLines := (trace.filter fun t => !used.contains t.index).map (.mismatch ∘ unexpected)
-  let pairs := ((first.map (·.pairs)).getD []).filterMap fun (i, j) => do
-    pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))
-  let times := pairs.filterMap fun (s, t) =>
-    if s.line.time.time == t.line.time.time then none
-    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text))
-  let orders := snapshot.zipIdx.flatMap fun (s, k) =>
-    match pairs.find? (·.1.index == s.index) with
-    | none => []
-    | some (_, t) =>
-      (mustFollow snapshot s k).filterMap fun n => do
-        let (_, before) ← pairs.find? (·.1.index == n)
-        if before.index < t.index then none
-        else some (Finding.mismatch
-          (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
-  let pairNumbers := (first.map (·.pairs)).getD []
-  let afters := if !relation then [] else pairs.filterMap fun (s, t) =>
-    if sameAfter snapshot trace pairNumbers s t then none
-    else some (Finding.mismatch
-      (.after t.index (Subject.of t.line.toTraceLine) (s.line.after.getD []) (t.line.after.getD [])))
-  let kept := states.filter fun st => sameSet st.used used
-  (differences ++ unexpectedLines ++ times ++ orders ++ afters, distinctBy From.same (kept.map (·.binding)), false)
+  let checks := pairChecks relation snapshot trace ((first.map (·.pairs)).getD [])
+  let kept := states.filter fun st =>
+    sameSet st.used used && (!checks.isEmpty || (pairChecks relation snapshot trace st.pairs).isEmpty)
+  (differences ++ unexpectedLines ++ checks, distinctBy From.same (kept.map (·.binding)), false)
 
 /-- The line without its own id, which names the line rather than what it gives. -/
 def useValue (l : Line) : Value :=
