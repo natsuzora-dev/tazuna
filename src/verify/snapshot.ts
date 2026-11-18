@@ -1,21 +1,23 @@
 import { relative } from "node:path";
-import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import { entriesOf, pair } from "../data/pairing.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { jsonLine } from "../data/trace.ts";
-import { parseSnapshotFile, peerSnapshotName, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
+import { parseSnapshotFile, type Run, runStem, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
 import { readSnapshotViolations, violationsAt } from "./lines.ts";
 import {
-  comparedNames,
+  type At,
+  comparedRuns,
+  type Expected,
   entriesIn,
   type Folder,
-  type PairingScenario,
   type PairingViolation,
-  scenarioNames,
+  runsOf,
+  scenarioOf,
+  snapshotEntry,
   unpaired,
 } from "./pairing.ts";
 
@@ -52,38 +54,41 @@ export function compareSnapshot(
 }
 
 interface SnapshotPairing {
-  /** The compared scenarios that have a snapshot. */
-  readonly compare: readonly DefinitionRef[];
-  readonly violations: readonly PairingViolation[];
+  /** The compared runs that have a snapshot. */
+  readonly compare: readonly Run[];
+  readonly violations: readonly PairingViolation<Exclude<At, { readonly kind: "traceEntry" }>>[];
 }
 
-function snapshotPairing(
-  scenarios: readonly PairingScenario[],
-  folders: readonly Folder[],
-  service: string,
-): SnapshotPairing {
+function snapshotPairing(expected: readonly Expected[], folders: readonly Folder[], service: string): SnapshotPairing {
   const entries = entriesIn(folders, service);
-  const { paired, missing, unknown } = pair(comparedNames(scenarios, service), entries);
+  const { paired, missing, unknown } = pair(runStem, comparedRuns(expected, service), entries);
   return {
-    compare: paired.map((name) => ({ service, name })),
+    compare: paired,
     violations: [
-      ...missing.map((name) =>
+      ...missing.map((run) =>
         unpaired(
-          { scenario: { service, name } },
-          { kind: "Uncomparable.missingSnapshot", definition: null, scenario: { service, name }, data: {} },
+          { kind: "scenario", scenario: scenarioOf(run) },
+          {
+            kind: "Uncomparable.missingSnapshot",
+            definition: null,
+            scenario: scenarioOf(run),
+            data: { runner: run.runner },
+          },
         ),
       ),
       ...unknown.map((entry) =>
-        unpaired(
-          { service, snapshotEntry: entry },
-          { kind: "Uncomparable.unknownSnapshotEntry", definition: null, data: {} },
-        ),
+        unpaired(snapshotEntry(service, entry), {
+          kind: "Uncomparable.unknownSnapshotEntry",
+          definition: null,
+          data: {},
+        }),
       ),
-      ...pair(scenarioNames(scenarios, service), entries).extra.map((name) =>
-        unpaired(
-          { service, snapshotEntry: `${name}.jsonl` },
-          { kind: "Uncomparable.obsoleteSnapshot", definition: null, data: {} },
-        ),
+      ...pair(runStem, runsOf(expected, service), entries).extra.map((name) =>
+        unpaired(snapshotEntry(service, `${name}.jsonl`), {
+          kind: "Uncomparable.obsoleteSnapshot",
+          definition: null,
+          data: {},
+        }),
       ),
     ],
   };
@@ -95,10 +100,10 @@ function snapshotPairing(
  */
 export function pairSnapshots(
   services: readonly string[],
-  scenarios: readonly PairingScenario[],
+  expected: readonly Expected[],
   folders: readonly Folder[],
 ): SnapshotPairing {
-  const pairings = services.map((service) => snapshotPairing(scenarios, folders, service));
+  const pairings = services.map((service) => snapshotPairing(expected, folders, service));
   return { compare: pairings.flatMap((p) => p.compare), violations: pairings.flatMap((p) => p.violations) };
 }
 
@@ -114,52 +119,39 @@ export function snapshotFolders(spec: Spec): {
   };
 }
 
-/**
- * A run that can have a snapshot in the snapshot folder of `service`: a scenario's run, or, named by peerSnapshotName,
- * the run of a running peer in a scenario. `runner` is the service that
- * makes the run, whose implementation records its trace.
- */
-export type SnapshotRun = DefinitionRef & { readonly runner: string };
-
-export function snapshotRuns(spec: Spec): SnapshotRun[] {
-  const peers = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
+/** Returns every run that can have a snapshot: each scenario's own run, and the run of each other spec service in it. */
+export function snapshotRuns(spec: Spec): Run[] {
+  const runners = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
   return spec.scenarios.flatMap(({ service, name }) => [
-    { service, name, runner: service },
-    ...peers
-      .filter((peer) => peer !== service)
-      .map((peer) => ({ service, name: peerSnapshotName(name, peer), runner: peer })),
+    { service, scenario: name, runner: service },
+    ...runners.filter((r) => r !== service).map((runner) => ({ service, scenario: name, runner })),
   ]);
 }
 
-export function hasSnapshot(spec: Spec, runs: readonly DefinitionRef[]): (run: DefinitionRef) => boolean {
+/** Returns the runs among `runs` that have a snapshot. */
+export function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
   const { services, folders } = snapshotFolders(spec);
-  const { compare } = pairSnapshots(
-    services,
-    runs.map(({ service, name }) => ({ service, name, compared: true })),
-    folders,
-  );
-  return (run) => compare.some((s) => sameRef(s, run));
+  return [
+    ...pairSnapshots(
+      services,
+      runs.map((r) => ({ ...r, compared: true })),
+      folders,
+    ).compare,
+  ];
 }
 
-export function snapshotViolations(
-  spec: Spec,
-  scenario: DefinitionRef,
-  lines: readonly TraceLine[],
-): ReportedViolation[] {
-  const path = snapshotPath(spec, scenario);
+export function snapshotViolations(spec: Spec, run: Run, lines: readonly TraceLine[]): ReportedViolation[] {
+  const path = snapshotPath(spec, run);
   const file = relative(spec.root, path);
   const snapshot = readSnapshotViolations(path);
-  if (snapshot.violations.length > 0) return violationsAt(file, snapshot.violations, scenario);
+  if (snapshot.violations.length > 0) return violationsAt(file, snapshot.violations, scenarioOf(run));
   const mismatch = compareSnapshot(snapshot.values, lines.map(jsonLine));
-  return mismatch === undefined ? [] : violationsAt(file, [mismatch], scenario);
+  return mismatch === undefined ? [] : violationsAt(file, [mismatch], scenarioOf(run));
 }
 
-/**
- * Reads the lines of a scenario's snapshot, or of a snapshot that peerSnapshots returns. Throws when the snapshot is
- * missing or has a line that is not a trace line.
- */
-export function readSnapshot(spec: Spec, snapshot: DefinitionRef): TraceLine[] {
-  const path = snapshotPath(spec, snapshot);
+/** Reads the lines of a run's snapshot. Throws when the snapshot is missing or has a line that is not a trace line. */
+export function readSnapshot(spec: Spec, run: Run): TraceLine[] {
+  const path = snapshotPath(spec, run);
   const { lines, malformed } = parseSnapshotFile(path);
   if (malformed.length > 0)
     throw new Error(

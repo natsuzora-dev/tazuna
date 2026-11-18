@@ -255,11 +255,11 @@ theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (ext
     Agrees (select fsI st s top trigger extra leaves) (select fs st s top trigger extra leaves) := by
   unfold select; agree [pick_agrees h]
 
-theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key : Value) (encodedKey : String) (r : Processing) :
+theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) (r : Processing) :
     Agrees (startCopy fsI st step owner map key encodedKey r) (startCopy fs st step owner map key encodedKey r) := by
   unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.copyContext, enter_agrees h]
 
-theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
+theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     Agrees (exitLeftCopy fsI st owner map itemKeys r k) (exitLeftCopy fs st owner map itemKeys r k) := by
   unfold exitLeftCopy; agree [unlessHalted_agrees, endWith_agrees (exitOne_agrees h _)]
 

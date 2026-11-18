@@ -4,7 +4,7 @@ import type { CheckedSpec } from "../check/spec.ts";
 import { type JsonSchema, jsonSchema } from "../data/jsonSchema.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { type MalformedLine, senderOf } from "../data/trace.ts";
-import { parseSnapshotFile, snapshotPath } from "../data/traceFile.ts";
+import { ownRun, parseSnapshotFile, snapshotPath } from "../data/traceFile.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Json, Shape } from "../data/values.ts";
 import { pathOfTrigger } from "../dsl/chart.ts";
@@ -172,7 +172,7 @@ function snapshot(path: string): { readonly trace: TraceLine[] | null; readonly 
 }
 
 function scenarioView(spec: Spec, scenario: Named<{ readonly description: string }>): ScenarioView {
-  const shot = snapshot(snapshotPath(spec, scenario));
+  const shot = snapshot(snapshotPath(spec, ownRun(scenario)));
   return {
     service: scenario.service,
     name: scenario.name,

@@ -38,7 +38,7 @@ structure Instance where
   opener : Option Opener := none
   /-- The decoded item key of a copy; the map state and the canonical key are in `id`. -/
   itemKey : Option Value := none
-  copyKeys : List (String × List String) := []
+  copyKeys : List (String × List Value) := []
 deriving Repr, Inhabited
 
 /--
@@ -297,7 +297,7 @@ def Instance.depth (i : Instance) : Nat :=
   | some m => (i.chart.tree.pathOf m).length
   | none => 0
 
-def Instance.copyKeysOf (i : Instance) (map : String) : List String := (i.copyKeys.lookup map).getD []
+def Instance.copyKeysOf (i : Instance) (map : String) : List Value := (i.copyKeys.lookup map).getD []
 
 def Instance.copyIds (i : Instance) : List InstanceId := i.copyKeys.flatMap fun c => c.2.map (.copy i.id c.1)
 

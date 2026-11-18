@@ -22,25 +22,25 @@ def compareSnapshot (snapshot : List (Option Value)) (run : List Value) : Option
 
 structure SnapshotPairing where
   /-- The compared scenarios that have a snapshot. -/
-  compare : List (String × String)
+  compare : List Run
   violations : List (At × Uncomparable)
 
-def snapshotPairing (scenarios : List Scenario) (folders : List Folder) (service : String) : SnapshotPairing :=
+def snapshotPairing (expected : List Expected) (folders : List Folder) (service : String) : SnapshotPairing :=
   let entries := entriesIn folders service
-  let p := pair (comparedNames scenarios service) entries
-  { compare := p.paired.map ((service, ·))
+  let p := pair Run.stem (comparedRuns expected service) entries
+  { compare := p.paired
     violations :=
-      p.missing.map (fun n => (.scenario { service, name := n }, .missingSnapshot { service, name := n })) ++
+      p.missing.map (fun r => (.scenario r.ref, .missingSnapshot r.ref r.runner)) ++
         p.unknown.map (fun e => (.snapshotEntry service e, .unknownSnapshotEntry)) ++
-        (pair (scenarioNames scenarios service) entries).extra.map fun n =>
+        (pair Run.stem (runsOf expected service) entries).extra.map fun n =>
           (.snapshotEntry service (n ++ ".jsonl"), .obsoleteSnapshot) }
 
 /--
 The pairing of the compared scenarios with their snapshots. A snapshot of a scenario that is not compared is neither
 compared nor reported.
 -/
-def pairSnapshots (services : List String) (scenarios : List Scenario) (folders : List Folder) : SnapshotPairing :=
-  let pairings := services.map (snapshotPairing scenarios folders)
+def pairSnapshots (services : List String) (expected : List Expected) (folders : List Folder) : SnapshotPairing :=
+  let pairings := services.map (snapshotPairing expected folders)
   { compare := pairings.flatMap (·.compare), violations := pairings.flatMap (·.violations) }
 
 end Tazuna.Verify

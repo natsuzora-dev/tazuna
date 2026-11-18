@@ -46,9 +46,11 @@ inductive Uncomparable where
   | unknownService (service : String)
   /-- A trace is named for no scenario of the service. -/
   | unknownScenario (scenario : Spec.Ref)
-  | missingTrace (scenario : Spec.Ref)
+  /-- A snapshot of the run of `scenario` by `runner` has no trace. -/
+  | missingTrace (scenario : Spec.Ref) (runner : String)
   | unknownTraceEntry
-  | missingSnapshot (scenario : Spec.Ref)
+  /-- The run of `scenario` by `runner` did not halt and has no snapshot. -/
+  | missingSnapshot (scenario : Spec.Ref) (runner : String)
   /-- A snapshot is named for no scenario of the service. -/
   | obsoleteSnapshot
   | unknownSnapshotEntry

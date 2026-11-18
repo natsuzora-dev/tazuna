@@ -170,10 +170,10 @@ at load) always answer.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
 - showInput: the query input of a shows slot, as the sender writes it (only its codecs run, encoding).
-- items: the keys that a map state's items return, encoded and as canonicalJson. The map state takes them as a set.
+- items: the keys that a map state's items return, encoded and as canonical values. The map state takes them as a set.
 - copyContext: a copy's initial context (defaults, checked at load).
 - singleRecord: the initial record of a single entity (defaults, checked at load).
-- copyKey: the canonicalJson of the payload's key fields if the payload has all of them (none if they fail the schema),
+- copyKey: the canonical value of the payload's key fields if the payload has all of them (none if they fail the schema),
   or none without them, in which case the payload reaches every copy.
 - close: the output of a screen that closes in a final state (the resolve value, schema-checked and encoded) and the
   first failing ensures.
@@ -212,10 +212,10 @@ structure Functions (m : Type → Type) where
   deadlineAt : Scope → Records → String → m (Except Issue Time)
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
-  items : Scope → Records → m (Except Issue (List (Value × String)))
+  items : Scope → Records → m (Except Issue (List (Value × Value)))
   copyContext : String → String → m Value
   singleRecord : String → m Value
-  copyKey : String → String → Value → m (Except Issue (Option (Option String)))
+  copyKey : String → String → Value → m (Except Issue (Option (Option Value)))
   close : Scope → Records → m (Except Issue (Value × Option String))
 
 end Tazuna.Service

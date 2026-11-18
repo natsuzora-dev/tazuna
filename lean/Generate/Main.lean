@@ -43,7 +43,8 @@ def handTypes : List (Name × String × Option String) :=
    (``Tazuna.Spec.Ref, "DefinitionRef", some "src/data/definitionRef.ts"),
    (``Tazuna.Data.Violation, "ViolationValue", some "src/data/violation.ts"),
    (``Tazuna.Verify.At, "At", some "src/verify/pairing.ts"),
-   (``Tazuna.Verify.Scenario, "PairingScenario", some "src/verify/pairing.ts"),
+   (``Tazuna.Verify.Run, "Run", some "src/data/traceFile.ts"),
+   (``Tazuna.Verify.Expected, "Expected", some "src/verify/pairing.ts"),
    (``Tazuna.Verify.Folder, "Folder", some "src/verify/pairing.ts")]
 
 /-- The Lean sums whose constructors each wrap one value and write it as it is, with the types that they wrap. -/

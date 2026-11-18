@@ -7,11 +7,12 @@ open Tazuna.Data
 /--
 An instance of a machine or screen, or a copy of a map state. `serial` numbers the instances of `chart` in creation
 order from 0: a machine, or a screen that no other screen opens, has only serial 0. A copy is the copy of `owner`'s map
-state `map` for the item whose key has the canonical JSON `key`.
+state `map` for the item whose key is `key`, a canonical value (its fields in canonical order), so equal keys are
+equal values.
 -/
 inductive InstanceId where
   | top (chart : String) (serial : Nat)
-  | copy (owner : InstanceId) (map key : String)
+  | copy (owner : InstanceId) (map : String) (key : Value)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire_mutual (InstanceId tag "kind")
@@ -31,7 +32,7 @@ def InstanceId.map? : InstanceId → Option String
   | .top .. => none
 
 /-- The canonical item key of a copy. -/
-def InstanceId.key? : InstanceId → Option String
+def InstanceId.key? : InstanceId → Option Value
   | .copy _ _ k => some k
   | .top .. => none
 

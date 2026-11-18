@@ -1,4 +1,5 @@
 import type { InstanceId } from "../data/step.generated.ts";
+import type { Json } from "../data/values.ts";
 
 export type { InstanceId };
 
@@ -27,8 +28,9 @@ export const instanceName = (id: InstanceId): string => names.get(id) as string;
 
 export const topId = (chart: string, serial = 0): InstanceId => intern({ kind: "top", chart, serial });
 
-export const copyId = (owner: InstanceId, map: string, key: string): InstanceId =>
-  intern({ kind: "copy", owner, map, key });
+/** The copy of `owner`'s map state `map` for the item key whose canonical JSON is `canonicalKey`. */
+export const copyId = (owner: InstanceId, map: string, canonicalKey: string): InstanceId =>
+  intern({ kind: "copy", owner, map, key: JSON.parse(canonicalKey) as Json });
 
 export const chartOf = (id: InstanceId): string => (id.kind === "top" ? id.chart : chartOf(id.owner));
 

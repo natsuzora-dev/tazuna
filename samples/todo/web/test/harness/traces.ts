@@ -1,12 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { TraceLine } from "@natsuzora-dev/tazuna";
 
 /** The folder that the check script verifies with `tazuna verify`. */
 const traceFolder = join(import.meta.dirname, "../../.traces");
 
-/** Writes the trace as <service>/<name>.jsonl in the trace folder. */
-export function writeTrace(service: string, name: string, trace: readonly TraceLine[]): void {
-  mkdirSync(join(traceFolder, service), { recursive: true });
-  writeFileSync(join(traceFolder, service, `${name}.jsonl`), trace.map((l) => `${JSON.stringify(l)}\n`).join(""));
+/** Writes the trace at `file` in the trace folder: a run's runFile, or <service>/<name>.jsonl of an external service. */
+export function writeTrace(file: string, trace: readonly TraceLine[]): void {
+  const path = join(traceFolder, file);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, trace.map((l) => `${JSON.stringify(l)}\n`).join(""));
 }

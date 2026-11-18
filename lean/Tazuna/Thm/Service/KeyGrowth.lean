@@ -250,7 +250,7 @@ theorem keysBy_sendEntered : KeysBy (sendEntered fs st) := by
   refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_activateEntered e) _ _)
   exact .refl _
 
-theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (encodedKey : String) :
+theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) :
     KeysBy (startCopy fs st step owner map key encodedKey) := by
   apply keysBy_withMachine
   intro o r
@@ -260,7 +260,7 @@ theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key :
     keys_leaf
   · keys_leaf
 
-theorem keysBy_exitLeftCopy (owner : InstanceId) (map : String) (itemKeys : List String) (k : String) :
+theorem keysBy_exitLeftCopy (owner : InstanceId) (map : String) (itemKeys : List Value) (k : Value) :
     KeysBy (fun r => exitLeftCopy fs st owner map itemKeys r k) := by
   intro r
   unfold exitLeftCopy
@@ -271,15 +271,15 @@ theorem keysBy_exitLeftCopy (owner : InstanceId) (map : String) (itemKeys : List
 theorem keeps_setMachine (s : State) (name : InstanceId) (f : Instance → Instance) : KeepsKeys s (s.setMachine name f) := by
   keys_leaf
 
-theorem keys_exitLeftCopies (owner : InstanceId) (map : String) (itemKeys xs : List String) (r : Processing) :
+theorem keys_exitLeftCopies (owner : InstanceId) (map : String) (itemKeys xs : List Value) (r : Processing) :
     KeepsKeys r.state (xs.foldlM (fun r k => exitLeftCopy fs st owner map itemKeys r k) r).state :=
   keysBy_foldlM (g := fun k r => exitLeftCopy fs st owner map itemKeys r k)
     (fun k => keysBy_exitLeftCopy owner map itemKeys k) xs r
 
-theorem keys_startCopies (step : Nat) (owner : InstanceId) (map : String) (xs : List (Value × String)) (r : Processing) :
-    KeepsKeys r.state (xs.foldlM (fun (r : Processing) (k : Value × String) =>
+theorem keys_startCopies (step : Nat) (owner : InstanceId) (map : String) (xs : List (Value × Value)) (r : Processing) :
+    KeepsKeys r.state (xs.foldlM (fun (r : Processing) (k : Value × Value) =>
       unlessHalted (startCopy fs st step owner map k.1 k.2) r) r).state :=
-  keysBy_foldlM (g := fun (k : Value × String) => unlessHalted (startCopy fs st step owner map k.1 k.2))
+  keysBy_foldlM (g := fun (k : Value × Value) => unlessHalted (startCopy fs st step owner map k.1 k.2))
     (fun k => keysBy_unlessHalted (keysBy_startCopy step owner map k.1 k.2)) xs r
 
 theorem keys_syncMap (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :

@@ -40,9 +40,9 @@ inductive Request where
   | verify («structure» : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
       (trace : List (FileLine TraceLine))
   | checkExternal («structure» : Spec.Structure) (service : String) (trace : List (FileLine TraceLine))
-  | pair (services : List PairedService) (scenarios : List Verify.Scenario) (others : List String)
+  | pair (services : List PairedService) (expected : List Verify.Expected) (others : List String)
       (folders : List Verify.Folder)
-  | pairSnapshots (services : List String) (scenarios : List Verify.Scenario) (folders : List Verify.Folder)
+  | pairSnapshots (services : List String) (expected : List Verify.Expected) (folders : List Verify.Folder)
   | compareSnapshot (snapshot : List (Option Value)) (run : List Value)
   | afters (snapshot : List (Option TraceLine))
   | decodeLines (values : List Value)
@@ -102,10 +102,10 @@ structure Asked where
 derive_wire Question tag "type" skip_serializing_none
 derive_wire Asked flatten question skip_serializing_none
 
-/-- A key of a map state's items, encoded and as canonicalJson. -/
+/-- A key of a map state's items, encoded and as a canonical value. -/
 structure ItemKey where
   key : Value
-  encodedKey : String
+  canonical : Value
 
 derive_wire ItemKey
 
@@ -152,7 +152,7 @@ inductive Reply where
   | copyContext (context : Value)
   | singleRecord (record : Value)
   /-- The key, null when the payload's key fields fail the schema, or none without them. -/
-  | copyKey (key : Option (Option String))
+  | copyKey (key : Option (Option Value))
   | close (output : Value) (failed : Option String)
   | comparableValue (value : Value)
 
@@ -213,8 +213,8 @@ inductive Response where
   /-- The pairs of each binding that the comparison ends with. -/
   | verified (findings : List Verify.Finding) (bindings : List (List (String × String)))
   | checkedExternal (findings : List Verify.Finding)
-  | paired (compare contract : List Spec.Ref) (findings : List Unpaired)
-  | pairedSnapshots (compare : List Spec.Ref) (findings : List Unpaired)
+  | paired (compare : List Verify.Run) (contract : List Spec.Ref) (findings : List Unpaired)
+  | pairedSnapshots (compare : List Verify.Run) (findings : List Unpaired)
   | comparedSnapshot (mismatch : Option Verify.Mismatch)
   | afters (findings : List Verify.Uncomparable)
   /-- Each value as a trace line, or null when it is none. -/

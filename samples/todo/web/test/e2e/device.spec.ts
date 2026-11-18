@@ -72,7 +72,7 @@ test("A browser without notification permission sends notificationPermissionDeni
       answer: { result: "rejected", rejection: { kind: "unavailable" } },
     }),
   );
-  writeTrace("device", "permissionNotGranted", trace);
+  writeTrace("device/permissionNotGranted.jsonl", trace);
 });
 
 interface PermissionSettings {
@@ -103,7 +103,7 @@ test("The page sends notificationPermissionDenied when the user revokes permissi
   await page.waitForFunction(() => (Reflect.get(window, "permissionSettings") as PermissionSettings).isWatched());
   await page.evaluate(() => (Reflect.get(window, "permissionSettings") as PermissionSettings).change("denied"));
   await expect.poll(() => trace).toContainEqual(expect.objectContaining({ name: "notificationPermissionDenied" }));
-  writeTrace("device", "permissionRevoked", trace);
+  writeTrace("device/permissionRevoked.jsonl", trace);
 });
 
 test("Closing the browser's permission prompt reports no result and shows the allow button again", async ({

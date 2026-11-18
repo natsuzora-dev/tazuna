@@ -58,7 +58,7 @@ const keysOf = ({ owner, next }: LeanKeys): Keys => ({
 
 /** The interned id of an id that Lean sent. */
 const idOf = (id: InstanceId): InstanceId =>
-  id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, id.key);
+  id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, canonicalJson(id.key));
 
 const json = (value: unknown): Json | undefined =>
   value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as Json);
@@ -573,7 +573,7 @@ export class RunFunctions implements Answering {
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.items(scope, this.records, access), (keys) => ({
             type: "items",
-            keys: keys.map((k) => ({ key: k.encoded as Json, encodedKey: k.encodedKey })),
+            keys: keys.map((k) => ({ key: k.encoded as Json, canonical: JSON.parse(k.encodedKey) as Json })),
           })),
         );
       case "copyContext": {
@@ -594,7 +594,9 @@ export class RunFunctions implements Answering {
           decoded === undefined
             ? { type: "copyKey", key: null }
             : this.replied(this.functions.copyKey(q.machine, q.map, decoded), (key) =>
-                key === undefined ? { type: "copyKey" } : { type: "copyKey", key },
+                key === undefined
+                  ? { type: "copyKey" }
+                  : { type: "copyKey", key: key === null ? null : (JSON.parse(key) as Json) },
               ),
         );
       }

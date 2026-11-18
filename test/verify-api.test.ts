@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { type Adapter, commandRequest, decodeAnswer, drive, peerSnapshots, verifyTraces } from "../src/verify/index.ts";
+import { type Adapter, commandRequest, decodeAnswer, drive, snapshotRuns, verifyTraces } from "../src/verify/index.ts";
 import { checkedRoot, serviceRoot } from "./examples.ts";
 import { payments } from "./service/Command/command-output/payments/contract.ts";
 import { createCharge } from "./service/Command/command-output/payments/payments.ts";
@@ -10,7 +10,7 @@ import { calendar } from "./verify/mismatch/external/assumptions/calendar/contra
 
 const commandOutput = join(serviceRoot, "Command/command-output");
 const shop = await checkedRoot(commandOutput);
-const refund = { service: "shop", name: "refundCreatedCharge" };
+const refund = { service: "shop", scenario: "refundCreatedCharge", runner: "shop" };
 
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copies = mkdtempSync(join(import.meta.dirname, ".fixtures", "verify-api-"));
@@ -21,10 +21,12 @@ const copyOfCommandOutput = (name: string) => {
   return copy;
 };
 
-test("peerSnapshots returns the peer runs that have a snapshot", async () => {
+test("snapshotRuns returns the own and peer runs that have a snapshot", async () => {
   const spec = await checkedRoot(join(import.meta.dirname, "verify/uncomparable/pairing/peer-runs"));
-  const snapshots = peerSnapshots(spec);
-  assert.deepEqual(snapshots, [{ service: "notifier", name: "announcesAdded.todo", runner: "todo" }]);
+  assert.deepEqual(
+    snapshotRuns(spec).filter((r) => r.runner !== r.service),
+    [{ service: "notifier", scenario: "announcesAdded", runner: "todo" }],
+  );
 });
 
 test("verifyTraces reports snapshot lines that do not fit the schema as violations without throwing", async () => {
@@ -226,7 +228,7 @@ test("drive ends the subscriptions of the old process at a restart, so an iterab
   const spec = await checkedRoot(subscriptionAnswers);
   const traces = join(copies, "resubscribed");
   mkdirSync(join(traces, "todo"), { recursive: true });
-  const run = { service: "todo", name: "resubscribeAfterRestart" };
+  const run = { service: "todo", scenario: "resubscribeAfterRestart", runner: "todo" };
   const trace = await drive(spec, run, droppingTodoAdapter());
   writeFileSync(
     join(traces, "todo/resubscribeAfterRestart.jsonl"),

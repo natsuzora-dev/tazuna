@@ -2,4 +2,4 @@
 {"kind":"Uncomparable.unknownTraceEntry","definition":null,"data":{},"location":{"file":"traces/todo/addOne"}}
 {"kind":"Uncomparable.unknownTraceEntry","definition":null,"data":{},"location":{"file":"traces/todo/addOne.txt"}}
 {"kind":"Uncomparable.unknownScenario","definition":null,"data":{},"location":{"file":"traces/todo/removed.jsonl"},"scenario":{"service":"todo","name":"removed"}}
-{"kind":"Uncomparable.missingTrace","definition":null,"data":{},"location":{"file":"todo/__snapshots__/addTwo.jsonl"},"scenario":{"service":"todo","name":"addTwo"}}
+{"kind":"Uncomparable.missingTrace","definition":null,"data":{"runner":"todo"},"location":{"file":"todo/__snapshots__/addTwo.jsonl"},"scenario":{"service":"todo","name":"addTwo"}}

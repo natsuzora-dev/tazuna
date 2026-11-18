@@ -132,7 +132,7 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
     (s.answer to a).commandAnswers = s.commandAnswers := by
   cases to <;> rfl
 
-theorem copy_ne (i : InstanceId) (map key : String) : InstanceId.copy i map key ≠ i := by
+theorem copy_ne (i : InstanceId) (map : String) (key : Value) : InstanceId.copy i map key ≠ i := by
   intro h
   have := congrArg sizeOf h
   simp only [InstanceId.copy.sizeOf_spec] at this

@@ -3,11 +3,10 @@ import { readdirSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { after, describe, test } from "node:test";
 import fc from "fast-check";
-import type { DefinitionRef } from "../src/data/definitionRef.ts";
 import type { Entry } from "../src/data/pairing.ts";
 import type { TraceLine } from "../src/data/trace.generated.ts";
 import { isMalformed, parseFileLines } from "../src/data/trace.ts";
-import { readTrace, snapshotPath } from "../src/data/traceFile.ts";
+import { type Run, readTrace, runStem, sameRun, snapshotPath } from "../src/data/traceFile.ts";
 import type { Json } from "../src/data/values.ts";
 import type { Placed, ViolationValue } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
@@ -15,14 +14,8 @@ import { simulateSpec, snapshotsOf } from "../src/sim/spec/simulate.ts";
 import { verifying, verifyLines } from "../src/verify/compare.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
 import { readSnapshotViolations, unknownAfters } from "../src/verify/lines.ts";
-import {
-  type Folder,
-  type PairingScenario,
-  pairTraces,
-  type TraceFolder,
-  traceFolderOf,
-} from "../src/verify/pairing.ts";
-import { compareSnapshot, hasSnapshot, pairSnapshots, snapshotFolders, snapshotRuns } from "../src/verify/snapshot.ts";
+import { type Expected, type Folder, pairTraces, type TraceFolder, traceFolderOf } from "../src/verify/pairing.ts";
+import { compareSnapshot, pairSnapshots, snapshotFolders, snapshotRuns, withSnapshot } from "../src/verify/snapshot.ts";
 import { folders, groupExamples, runExamples } from "./examples.ts";
 import { VerifyFunctions } from "./lean/functions.ts";
 import { Lean, type VerifyViolation } from "./lean/lean.ts";
@@ -69,19 +62,19 @@ function violationCountOfBoth({ spec, service, snapshot }: Case, trace: readonly
 const snapshotRunsOf = new Map([...specs.values()].map((spec) => [spec, snapshotRuns(spec)]));
 
 const snapshotted = new Map(
-  [...specs.values()].map((spec) => [spec, hasSnapshot(spec, snapshotRunsOf.get(spec) ?? [])]),
+  [...specs.values()].map((spec) => [spec, withSnapshot(spec, snapshotRunsOf.get(spec) ?? [])]),
 );
 
-const snapshotOf = (spec: Spec, ref: DefinitionRef) => snapshotted.get(spec)?.(ref) === true;
+const snapshotOf = (spec: Spec, run: Run) => snapshotted.get(spec)?.some((s) => sameRun(s, run)) === true;
 
 const snapshots = [...specs].flatMap(([root, spec]) =>
-  (snapshotRunsOf.get(spec) ?? [])
-    .filter((s) => spec.services.get(s.service)?.definition.external !== true && snapshotOf(spec, s))
+  (snapshotted.get(spec) ?? [])
+    .filter((s) => spec.services.get(s.service)?.definition.external !== true)
     .map((s) => ({
       spec,
       service: s.runner,
-      name: s.name,
-      label: `${relative(import.meta.dirname, root)}/${s.service}/${s.name}`,
+      name: runStem(s),
+      label: `${relative(import.meta.dirname, root)}/${s.service}/${runStem(s)}`,
       read: readSnapshotViolations(snapshotPath(spec, s)),
     })),
 );
@@ -289,11 +282,12 @@ describe("Content comparison", () => {
       const service = basename(dirname(file));
       const name = basename(file, ".jsonl");
       if (!spec.services.has(service) || spec.services.get(service)?.definition.external === true) continue;
-      if (!snapshotOf(spec, { service, name })) continue;
-      const snapshot = readSnapshotViolations(snapshotPath(spec, { service, name }));
+      const run = snapshotted.get(spec)?.find((r) => r.service === service && runStem(r) === name);
+      if (run === undefined) continue;
+      const snapshot = readSnapshotViolations(snapshotPath(spec, run));
       if (snapshot.violations.length > 0) continue;
       test(`${relative(verifyRoot, file)}: TS and Lean find the same comparison violations`, () => {
-        violationCountOfBoth({ spec, service, snapshot: snapshot.lines }, readTrace(file), file);
+        violationCountOfBoth({ spec, service: run.runner, snapshot: snapshot.lines }, readTrace(file), file);
       });
     }
   }
@@ -781,20 +775,16 @@ describe("External service trace check", () => {
   });
 });
 
-function pairBoth(spec: Spec, scenarios: readonly PairingScenario[], folder: TraceFolder, at: string): number {
+function pairBoth(spec: Spec, expected: readonly Expected[], folder: TraceFolder, at: string): number {
   const services = spec.structure.services.map(({ name, external }) => ({ name, external }));
-  const { compare, contract, violations } = pairTraces(services, scenarios, folder);
-  const fromLean = lean.pair({ services, scenarios, others: folder.others, folders: folder.folders });
+  const { compare, contract, violations } = pairTraces(services, expected, folder);
+  const fromLean = lean.pair({ services, expected, others: folder.others, folders: folder.folders });
   assert.deepEqual(fromLean, JSON.parse(JSON.stringify({ compare, contract, findings: violations })), at);
   return violations.length;
 }
 
-const withSnapshots = (spec: Spec): PairingScenario[] =>
-  (snapshotRunsOf.get(spec) ?? []).map(({ service, name }) => ({
-    service,
-    name,
-    compared: snapshotOf(spec, { service, name }),
-  }));
+const withSnapshots = (spec: Spec): Expected[] =>
+  (snapshotRunsOf.get(spec) ?? []).map((run) => ({ ...run, compared: snapshotOf(spec, run) }));
 
 const entryKinds = ["file", "folder", "other"] as const;
 
@@ -812,10 +802,10 @@ function entriesOf(names: readonly string[], entries: readonly (readonly [number
   ];
 }
 
-const randomScenarios = (spec: Spec, compared: readonly boolean[]): PairingScenario[] =>
-  spec.scenarios.map((s, i) => ({ service: s.service, name: s.name, compared: compared[i] ?? true }));
+const randomScenarios = (spec: Spec, compared: readonly boolean[]): Expected[] =>
+  (snapshotRunsOf.get(spec) ?? []).map((run, i) => ({ ...run, compared: compared[i] ?? true }));
 
-const namesOf = (spec: Spec) => [...spec.scenarios.map((s) => s.name), "removed"];
+const namesOf = (spec: Spec) => [...(snapshotRunsOf.get(spec) ?? []).map(runStem), "removed"];
 
 describe("Pairing traces with snapshots", () => {
   for (const root of examples)
@@ -856,13 +846,13 @@ describe("Pairing traces with snapshots", () => {
 
 function pairSnapshotsBoth(
   services: readonly string[],
-  scenarios: readonly PairingScenario[],
+  expected: readonly Expected[],
   folders: readonly Folder[],
   at: string,
 ): number {
-  const { compare, violations } = pairSnapshots(services, scenarios, folders);
+  const { compare, violations } = pairSnapshots(services, expected, folders);
   assert.deepEqual(
-    lean.pairSnapshots({ services, scenarios, folders }),
+    lean.pairSnapshots({ services, expected, folders }),
     JSON.parse(JSON.stringify({ compare, findings: violations })),
     at,
   );
@@ -874,8 +864,12 @@ describe("Pairing scenarios with snapshot files", () => {
     let found = 0;
     for (const [root, spec] of specs) {
       const { services, folders } = snapshotFolders(spec);
-      const scenarios = spec.scenarios.map(({ service, name }) => ({ service, name, compared: true }));
-      found += pairSnapshotsBoth(services, scenarios, folders, root);
+      found += pairSnapshotsBoth(
+        services,
+        withSnapshots(spec).map((r) => ({ ...r, compared: true })),
+        folders,
+        root,
+      );
     }
     assert.ok(found > 0);
   });

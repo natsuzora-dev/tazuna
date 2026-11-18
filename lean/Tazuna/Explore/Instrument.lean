@@ -438,7 +438,7 @@ def instrument : Functions (StateT Collect m) :=
       audit (collect (some scope)) (st.ref scope.machine) "holds" (·.holds scope records) fun _ _ => true
     items := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
-        fun a b => textSet (a.map (·.2)) == textSet (b.map (·.2))
+        fun a b => textSet (a.map (·.2.canonical)) == textSet (b.map (·.2.canonical))
     offers := fun scope records control =>
       audit (collect (some scope)) (st.ref scope.machine) "offers" (·.offers scope records control)
         fun a b => textSet (a.map (·.canonical)) == textSet (b.map (·.canonical))

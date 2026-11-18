@@ -9,7 +9,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Service.Functions Taz
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem keeps_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (k : String) :
+theorem keeps_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (k : Value) :
     Keeps (startCopy fs st step owner map key k) := by
   unfold startCopy
   apply keeps_withMachine
@@ -19,7 +19,7 @@ theorem keeps_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : 
   · exact keeps_enter _ _ _ _
   · rfl
 
-theorem exitLeftCopy_fixed (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
+theorem exitLeftCopy_fixed (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     (exitLeftCopy fs st owner map itemKeys r k).1.fixed = r.state.fixed := by
   unfold exitLeftCopy
   split
@@ -41,7 +41,7 @@ theorem syncMap_fixed (step : Nat) (owner : InstanceId) (r : Processing) (map : 
         · split
           · rfl
           · rw [foldlM_id, foldlM_id]
-            exact (foldl_fixed' _ (fun (r : Processing) (k : Value × String) =>
+            exact (foldl_fixed' _ (fun (r : Processing) (k : Value × Value) =>
               keeps_unlessHalted (keeps_startCopy (fs := fs) (st := st) step owner map k.1 k.2) r) _ _).trans
               (foldl_fixed' _ (exitLeftCopy_fixed _ _ _) _ _)
 
@@ -93,7 +93,7 @@ theorem syncCopies_unchanged (step : Nat) (owner : InstanceId) (r : Processing)
     exact (foldl_unchanged (fun r map => syncMap fs st step owner r map) (fun r map => syncMap_unchanged step owner r map)
       _ (r, false) h).2
 
-theorem growsBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (k : String) :
+theorem growsBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) (k : Value) :
     GrowsBy (startCopy fs st step owner map key k) := by
   unfold startCopy
   apply growsBy_withMachine
@@ -103,7 +103,7 @@ theorem growsBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key 
   · exact (growsBy_enter _ _ _ _).bridge (by rfl) (by rfl)
   · exact Grows.of_lines rfl
 
-theorem exitLeftCopy_grows (owner : InstanceId) (map : String) (itemKeys : List String) (r : Processing) (k : String) :
+theorem exitLeftCopy_grows (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     Grows r.state (exitLeftCopy fs st owner map itemKeys r k).1 := by
   unfold exitLeftCopy
   split
@@ -127,9 +127,9 @@ theorem syncMap_grows (step : Nat) (owner : InstanceId) (r : Processing) (map : 
           · exact Grows.refl _
           · rw [foldlM_id, foldlM_id]
             refine (foldl_run_grows _ (exitLeftCopy_grows _ _ _) (fun r c => congrArg Fixed.now (exitLeftCopy_fixed _ _ _ r c))
-              _ _).trans ?_ ((foldl_run_grows _ (fun (r : Processing) (k : Value × String) =>
+              _ _).trans ?_ ((foldl_run_grows _ (fun (r : Processing) (k : Value × Value) =>
                 growsBy_unlessHalted (growsBy_startCopy (fs := fs) (st := st) step owner map k.1 k.2) r)
-                (fun (r : Processing) (k : Value × String) => congrArg Fixed.now
+                (fun (r : Processing) (k : Value × Value) => congrArg Fixed.now
                   (keeps_unlessHalted (keeps_startCopy (fs := fs) (st := st) step owner map k.1 k.2) r)) _ _).bridge
                   (by rfl) (by rfl))
             exact congrArg Fixed.now (foldl_fixed' _ (exitLeftCopy_fixed _ _ _) _ _)

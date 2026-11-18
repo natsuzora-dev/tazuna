@@ -154,22 +154,28 @@ export type Uncomparable =
       readonly scenario: DefinitionRef;
       readonly data: Readonly<Record<string, never>>;
     }
+  /** A snapshot of the run of `scenario` by `runner` has no trace. */
   | {
       readonly kind: "Uncomparable.missingTrace";
       readonly definition: null;
       readonly scenario: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly runner: string;
+      };
     }
   | {
       readonly kind: "Uncomparable.unknownTraceEntry";
       readonly definition: null;
       readonly data: Readonly<Record<string, never>>;
     }
+  /** The run of `scenario` by `runner` did not halt and has no snapshot. */
   | {
       readonly kind: "Uncomparable.missingSnapshot";
       readonly definition: null;
       readonly scenario: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
+      readonly data: {
+        readonly runner: string;
+      };
     }
   /** A snapshot is named for no scenario of the service. */
   | {

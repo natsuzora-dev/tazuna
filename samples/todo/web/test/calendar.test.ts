@@ -17,5 +17,5 @@ test("nextBusinessDay writes the trace of the calendar double's answers", async 
     trace.push({ time, dir: "in", type: "query", id, name: "nextBusinessDay", input: { from } });
     trace.push({ time, dir: "out", type: "answer", id: lineId("answer"), to: id, answer: toSpec.calendar(result) });
   }
-  writeTrace("calendar", "nextBusinessDay", trace);
+  writeTrace("calendar/nextBusinessDay.jsonl", trace);
 });

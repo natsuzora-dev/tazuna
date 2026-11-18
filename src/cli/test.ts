@@ -1,10 +1,9 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { CheckedSpec } from "../check/spec.ts";
-import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { toJsonl } from "../data/trace.ts";
-import { peerSnapshotName, snapshotEntryPath, snapshotPath } from "../data/traceFile.ts";
+import { type Run, sameRun, snapshotEntryPath, snapshotPath } from "../data/traceFile.ts";
 import type { Uncovered } from "../data/uncovered.ts";
 import { canonicalJson } from "../data/values.ts";
 import { type ReportedViolation, toReported } from "../data/violation.ts";
@@ -20,7 +19,7 @@ import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { serviceViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
-import { pairingViolation } from "../verify/pairing.ts";
+import { snapshotPairingViolation } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotViolations } from "../verify/snapshot.ts";
 
 const uncoveredChecks: readonly {
@@ -34,20 +33,16 @@ export interface TestResult {
   readonly reached: Coverage;
 }
 
-function writeSnapshot(spec: Spec, scenario: DefinitionRef, lines: readonly TraceLine[]): string {
-  const path = snapshotPath(spec, scenario);
+function writeSnapshot(spec: Spec, run: Run, lines: readonly TraceLine[]): string {
+  const path = snapshotPath(spec, run);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, toJsonl(lines));
   return path;
 }
 
-/**
- * A snapshot that test writes: a scenario's run, or a peer's run of the inputs derived from it (peerSnapshotName).
- * `lines` is undefined for a run that halted.
- */
+/** A run that test snapshots. `lines` is undefined for a run that halted. */
 interface Snapshotted {
-  readonly scenario: Pick<Named<unknown>, "service" | "place">;
-  readonly name: string;
+  readonly run: Run;
   readonly lines: readonly TraceLine[] | undefined;
 }
 
@@ -60,30 +55,26 @@ function testSnapshots(
   snapshotted: readonly Snapshotted[],
   update: boolean,
 ): Pick<TestResult, "violations" | "written" | "removed"> {
-  const refOf = (s: Snapshotted) => ({ service: s.scenario.service, name: s.name });
-  const ended = snapshotted.filter((s) => s.lines !== undefined);
-  const linesOf = (s: Snapshotted) => s.lines as readonly TraceLine[];
-  const written = update ? ended.map((s) => writeSnapshot(spec, refOf(s), linesOf(s))) : [];
+  const ended = snapshotted.flatMap(({ run, lines }) => (lines === undefined ? [] : [{ run, lines }]));
+  const written = update ? ended.map((s) => writeSnapshot(spec, s.run, s.lines)) : [];
   const { services, folders } = snapshotFolders(spec);
-  const scenarios = snapshotted.map((s) => ({ ...refOf(s), compared: s.lines !== undefined }));
-  const pairing = pairSnapshots(services, scenarios, folders);
+  const pairing = pairSnapshots(
+    services,
+    snapshotted.map((s) => ({ ...s.run, compared: s.lines !== undefined })),
+    folders,
+  );
   const violations = update
     ? []
     : ended
-        .filter((s) => pairing.compare.some((r) => sameRef(r, refOf(s))))
-        .flatMap((s) => snapshotViolations(spec, refOf(s), linesOf(s)));
+        .filter((s) => pairing.compare.some((r) => sameRun(r, s.run)))
+        .flatMap((s) => snapshotViolations(spec, s.run, s.lines));
   const removed: string[] = [];
   for (const p of pairing.violations)
-    if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && "snapshotEntry" in p.at) {
-      const path = snapshotEntryPath(spec, p.at);
+    if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && p.at.kind === "snapshotEntry") {
+      const path = snapshotEntryPath(spec, p.at.service, p.at.entry);
       rmSync(path);
       removed.push(path);
-    } else if ("scenario" in p.at) {
-      const { scenario } = snapshotted.find((s) =>
-        sameRef(refOf(s), (p.at as { scenario: DefinitionRef }).scenario),
-      ) as Snapshotted;
-      violations.push(toReported(p.violation, scenario.place));
-    } else violations.push(pairingViolation(spec, p));
+    } else violations.push(snapshotPairingViolation(spec, p));
   return { violations, written, removed };
 }
 
@@ -127,8 +118,7 @@ export function testSpec(spec: CheckedSpec, options: { readonly update: boolean;
  * Simulates each scenario and returns the violations that it reports, each at the line it names, with the step orders
  * that change the result of one of its processings and the assignment of its handles of `requests` that changes the
  * result of a running service, and the trace of each
- * running service when the simulation did not halt: the own service's under the scenario's name, and each running
- * peer's that has lines under peerSnapshotName.
+ * running service when the simulation did not halt: the own service's, and each running peer's that has lines.
  */
 function simulateScenarios(spec: Spec): {
   readonly violations: ReportedViolation[];
@@ -159,14 +149,8 @@ function simulateScenarios(spec: Spec): {
           }),
         );
       const lines = snapshots.get(service) ?? [];
-      if (service === named.service)
-        snapshotted.push({ scenario: named, name: named.name, lines: halted ? undefined : lines });
-      else if (lines.length > 0)
-        snapshotted.push({
-          scenario: named,
-          name: peerSnapshotName(named.name, service),
-          lines: halted ? undefined : lines,
-        });
+      const run = { service: named.service, scenario: named.name, runner: service };
+      if (service === named.service || lines.length > 0) snapshotted.push({ run, lines: halted ? undefined : lines });
     }
   }
   return { violations, snapshotted };

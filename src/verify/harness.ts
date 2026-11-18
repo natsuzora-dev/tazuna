@@ -1,19 +1,13 @@
 import type { CheckedSpec } from "../check/spec.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import { type Bindings, substituted, type UntimedTraceLine } from "../data/trace.ts";
+import type { Run } from "../data/traceFile.ts";
 import { plain } from "../data/values.ts";
 import { traceName } from "../load/traceName.ts";
 import { givenRecordsOf } from "../sim/spec/simulate.ts";
 import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
 import { compareTrace, verifying } from "./compare.ts";
 import { readSnapshot } from "./snapshot.ts";
-
-/** A run that a snapshot records: a scenario of `service`, or the run of its running peer `runner`. */
-export interface Run {
-  readonly service: string;
-  readonly name: string;
-  readonly runner?: string;
-}
 
 interface Waiting extends ForeignRequest {
   readonly id: string;
@@ -65,11 +59,10 @@ function substitutedLine(bindings: Bindings, line: TraceLine): TraceLine {
  * finds the trace uncomparable, the harness gives no more lines.
  */
 export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
-  const runner = run.runner ?? run.service;
-  const scenarioName = runner === run.service ? run.name : run.name.slice(0, -`.${runner}`.length);
-  const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === scenarioName)?.definition
+  const { runner } = run;
+  const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition
     .scenario;
-  if (scenario === undefined) throw new Error(`no scenario ${run.service}.${scenarioName}`);
+  if (scenario === undefined) throw new Error(`no scenario ${run.service}.${run.scenario}`);
   const snapshot = readSnapshot(spec, run);
   const lines: (TraceLine | undefined)[] = [];
   // Keyed by who gave the id, the implementation or the harness, so that neither id hides the other.

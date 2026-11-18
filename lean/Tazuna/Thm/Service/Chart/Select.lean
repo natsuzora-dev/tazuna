@@ -15,7 +15,7 @@ theorem leaf_selects_innermost (s : State) (extra : Extra) (i : Instance) (ts : 
     firstLevel fs st s extra ((i, ts) :: rest) = .ok (some (i.id, t)) := by
   simp [firstLevel, h]
 
-theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k : String)
+theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k : Value)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) =
       cs.filter (fun c => c.id.key? == some k) := by
@@ -31,7 +31,7 @@ theorem keyless_payload_reaches_all (chart map : String) (payload : Value)
   obtain ⟨hn, hm⟩ := hcs c hc
   simp [reaches, hn, hm, hk]
 
-theorem keyed_payload_reaches_at_most_one (chart map : String) (payload : Value) (k : String)
+theorem keyed_payload_reaches_at_most_one (chart map : String) (payload : Value) (k : Value)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs)
     (hd : (cs.map (·.id.key?)).Nodup) :
     (cs.filter fun c => reaches fs st c payload matches .ok true).length ≤ 1 := by

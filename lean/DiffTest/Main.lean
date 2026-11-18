@@ -173,7 +173,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       answered (.showInput scope a) (records := records) fun | .showInput input => some input | _ => none
     items := fun scope records =>
       answered (.items scope) (records := records) fun
-        | .items keys => some (keys.map fun k => (k.key, k.encodedKey)) | _ => none
+        | .items keys => some (keys.map fun k => (k.key, k.canonical)) | _ => none
     copyContext := fun chart map =>
       always (.copyContext chart map) fun | .copyContext context => some context | _ => none
     singleRecord := fun entity => always (.singleRecord entity) fun | .singleRecord record => some record | _ => none
@@ -336,12 +336,12 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .check s => pure (.checked (Validation.check s))
   | .verify s service snapshot trace => verify stdin stdout s service snapshot trace
   | .checkExternal s service trace => pure (.checkedExternal (Verify.checkExternal s service trace))
-  | .pair services scenarios others folders =>
-    let found := Verify.pairTraces (services.map fun s => (s.name, s.external)) scenarios others folders
-    pure (.paired (refs found.compare) (refs found.contract) (unpaired found.violations))
-  | .pairSnapshots services scenarios folders =>
-    let found := Verify.pairSnapshots services scenarios folders
-    pure (.pairedSnapshots (refs found.compare) (unpaired found.violations))
+  | .pair services expected others folders =>
+    let found := Verify.pairTraces (services.map fun s => (s.name, s.external)) expected others folders
+    pure (.paired found.compare found.contract (unpaired found.violations))
+  | .pairSnapshots services expected folders =>
+    let found := Verify.pairSnapshots services expected folders
+    pure (.pairedSnapshots found.compare (unpaired found.violations))
   | .compareSnapshot snapshot run => pure (.comparedSnapshot (Verify.compareSnapshot snapshot run))
   | .afters snapshot =>
     let lines := snapshot.map (·.map fun l : TraceLine => ({ l with value := none } : Verify.Line))
@@ -353,7 +353,6 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
   | .assignmentChanges s sc => assignmentChangesRequest stdin stdout s sc
 where
-  refs (l : List (String × String)) : List Spec.Ref := l.map fun (service, name) => { service, name }
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 
 partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do

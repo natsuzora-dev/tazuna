@@ -1,5 +1,5 @@
 import type { Trigger } from "../../data/transitionRef.generated.ts";
-import type { Fields } from "../../data/values.ts";
+import { canonicalJson, type Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
@@ -51,7 +51,7 @@ export function reaches(r: Run, copy: Instance, payload: unknown): boolean {
   const map = mapOf(copy.id) as string;
   const key = r.functions.copyKey(copy.chart.name, map, payload);
   if (key instanceof Failed) return halt(issueViolation(ref(r.st, copy.chart.name), key));
-  return key === undefined || (copy.id.kind === "copy" && key === copy.id.key);
+  return key === undefined || (copy.id.kind === "copy" && key === canonicalJson(copy.id.key));
 }
 
 function exitKeys(s: State, c: Chosen): Set<string> {

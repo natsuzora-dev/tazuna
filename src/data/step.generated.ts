@@ -5,7 +5,8 @@ import type { Json } from "./values.ts";
 /**
  * An instance of a machine or screen, or a copy of a map state. `serial` numbers the instances of `chart` in creation
  * order from 0: a machine, or a screen that no other screen opens, has only serial 0. A copy is the copy of `owner`'s map
- * state `map` for the item whose key has the canonical JSON `key`.
+ * state `map` for the item whose key is `key`, a canonical value (its fields in canonical order), so equal keys are
+ * equal values.
  */
 export type InstanceId =
   | {
@@ -17,7 +18,7 @@ export type InstanceId =
       readonly kind: "copy";
       readonly owner: InstanceId;
       readonly map: string;
-      readonly key: string;
+      readonly key: Json;
     };
 
 /** The sender of a request. */

@@ -7,12 +7,13 @@ import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
 import type { Activity, InstanceId, StepName } from "../../src/data/step.generated.ts";
 import type { Answer, Rejection, TraceLine } from "../../src/data/trace.generated.ts";
+import type { Run } from "../../src/data/traceFile.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
 import type { Json } from "../../src/data/values.ts";
 import type { ViolationValue } from "../../src/data/violation.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
-import type { At, Folder, PairingScenario } from "../../src/verify/pairing.ts";
+import type { At, Expected, Folder } from "../../src/verify/pairing.ts";
 
 /**
  * A schema that a definition declares. `mapContext` is the copy context of the map state `map`, and `record` the fields
@@ -270,14 +271,14 @@ export type Request =
   | {
       readonly type: "pair";
       readonly services: readonly PairedService[];
-      readonly scenarios: readonly PairingScenario[];
+      readonly expected: readonly Expected[];
       readonly others: readonly string[];
       readonly folders: readonly Folder[];
     }
   | {
       readonly type: "pairSnapshots";
       readonly services: readonly string[];
-      readonly scenarios: readonly PairingScenario[];
+      readonly expected: readonly Expected[];
       readonly folders: readonly Folder[];
     }
   | {
@@ -497,10 +498,10 @@ export type Asked = {
   readonly reversed?: boolean;
 } & Question;
 
-/** A key of a map state's items, encoded and as canonicalJson. */
+/** A key of a map state's items, encoded and as a canonical value. */
 export type ItemKey = {
   readonly key: Json;
-  readonly encodedKey: string;
+  readonly canonical: Json;
 };
 
 /** An `after` deadline of a state: its delay in milliseconds, or none when an expression sets its time. */
@@ -643,7 +644,7 @@ export type Reply =
   /** The key, null when the payload's key fields fail the schema, or none without them. */
   | {
       readonly type: "copyKey";
-      readonly key?: string | null;
+      readonly key?: Json | null;
     }
   | {
       readonly type: "close";
@@ -713,13 +714,13 @@ export type Response =
     }
   | {
       readonly type: "paired";
-      readonly compare: readonly DefinitionRef[];
+      readonly compare: readonly Run[];
       readonly contract: readonly DefinitionRef[];
       readonly findings: readonly Unpaired[];
     }
   | {
       readonly type: "pairedSnapshots";
-      readonly compare: readonly DefinitionRef[];
+      readonly compare: readonly Run[];
       readonly findings: readonly Unpaired[];
     }
   | {
