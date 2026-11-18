@@ -36,8 +36,6 @@ def setValueAt (v x : Value) : List String → Value
 
 variable {m : Type → Type} [Monad m]
 
-local instance {α : Type} : Inhabited (ExceptT InvalidScenario m α) := ⟨throw default⟩
-
 /-- `v` as the simulation compares it for `schema` (Functions.unordered), or as it is when it does not match it. -/
 def comparedOr (fs : Functions m) (schema : Schema) (v : Value) : m Value := do
   match ← fs.unordered schema v with
@@ -170,12 +168,11 @@ The messages, in sending order, that the handle `fact` of line `i` names. A pick
 values, and compared with the message's as the schema of its sender compares them. The requests and events that one
 handle names must be equal as that schema compares them; a line acts on each.
 -/
-partial def World.messagesOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
+def World.messagesOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) :
     ExceptT InvalidScenario m (List Nat) := do
   let indexed := w.messages.toList.zipIdx
   let matching (p : Message → Bool) := indexed.filterMap fun (msg, k) => if p msg then some k else none
-  let picked (p : Message → Bool) (pick : Option Template) : ExceptT InvalidScenario m (List Nat) := do
-    let pick ← pick.mapM (w.fill fsOf i)
+  let picked (p : Message → Bool) (pick : Option Value) : ExceptT InvalidScenario m (List Nat) := do
     let found ← indexed.filterM fun (msg, _) => do
       if !p msg then return false
       match w.schemaOf? msg, msg.body.value? with
@@ -184,11 +181,17 @@ partial def World.messagesOf (w : World) (fsOf : String → Functions m) (i : Na
     pure (found.map (·.2))
   match fact with
   | .request o kind target input =>
+    let pick ← match input with
+      | some t => some <$> w.fill fsOf i t
+      | none => pure none
     w.alikeMessages fsOf i fact (← picked (fun msg => msg.origin == o && msg.body.requestType? == some kind &&
-      msg.target? == some target) input)
+      msg.target? == some target) pick)
   | .event o event payload receiver =>
+    let pick ← match payload with
+      | some t => some <$> w.fill fsOf i t
+      | none => pure none
     w.alikeMessages fsOf i fact (← picked (fun msg => msg.origin == o && msg.event? == some event &&
-      receiver.all (· == msg.receiver)) payload)
+      receiver.all (· == msg.receiver)) pick)
   | .answer o to =>
     let sents := w.sentBy to
     let each := sents.map fun s => matching fun msg => msg.origin == o && msg.sender == s.receiver &&
@@ -208,6 +211,8 @@ partial def World.messagesOf (w : World) (fsOf : String → Functions m) (i : Na
     ofExcept (nonEmpty i fact each.flatten)
   | .line j => ofExcept (nonEmpty i fact (w.carried.filterMap fun (l, k) => if l == j then some k else none))
   | .screen .. => throw (.unresolvedReference i (ToValue.toValue fact))
+termination_by 2 * sizeOf fact
+decreasing_by all_goals (simp_wf; omega)
 
 /--
 The value of the part `part` of the requests that the handle `fact` of line `i` names, which must be equal: of a line's
@@ -216,7 +221,7 @@ answers, the output of the one answer that the receiver of each of the line's re
 origin was processed, which names each answer of a subscription by the line that caused it; of answers that a line
 states, their output.
 -/
-partial def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) (part : Part) :
+def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (fact : Fact) (part : Part) :
     ExceptT InvalidScenario m Value := do
   let missing : InvalidScenario := .missingOutput i (ToValue.toValue fact)
   let compared (side : String) (schema : Option Schema) (v : Value) : m Value :=
@@ -275,21 +280,27 @@ partial def World.partOf (w : World) (fsOf : String → Functions m) (i : Nat) (
       if outputs.length != sents.length then throw missing
       ofExcept (alike i fact missing (outputs.map fun v => (v, v)))
   | _, _ => viaMessages
+termination_by 2 * sizeOf fact + 1
 
-partial def World.observed (w : World) (fsOf : String → Functions m) (i : Nat) (r : ValueRef) :
-    ExceptT InvalidScenario m Value := do
-  let v ← w.partOf fsOf i r.fact r.part
-  match valueAt? v r.path with
-  | some x => pure x
-  | none => throw (.missingField i r.path v)
+def World.observed (w : World) (fsOf : String → Functions m) (i : Nat) : ValueRef →
+    ExceptT InvalidScenario m Value
+  | { fact, part, path } => do
+    let v ← w.partOf fsOf i fact part
+    match valueAt? v path with
+    | some x => pure x
+    | none => throw (.missingField i path v)
+termination_by r => 2 * sizeOf r
+decreasing_by simp_wf; omega
 
 /-- The template's value with each referenced hole filled; a created hole keeps the written value. -/
-partial def World.fill (w : World) (fsOf : String → Functions m) (i : Nat) (t : Template) :
-    ExceptT InvalidScenario m Value :=
-  t.holes.foldlM (init := t.value) fun v h =>
-    match h.fill with
-    | .ref r => do pure (setValueAt v (← w.observed fsOf i r) h.path)
-    | .created => pure v
+def World.fill (w : World) (fsOf : String → Functions m) (i : Nat) : Template → ExceptT InvalidScenario m Value
+  | { value, holes } =>
+    holes.attach.foldlM (init := value) fun v ⟨h, _mem⟩ =>
+      match h with
+      | { path, fill := .ref r } => do pure (setValueAt v (← w.observed fsOf i r) path)
+      | { fill := .created, .. } => pure v
+termination_by t => 2 * sizeOf t
+decreasing_by have := List.sizeOf_lt_of_mem _mem; simp only [Scenario.Hole.mk.sizeOf_spec, Scenario.Fill.ref.sizeOf_spec] at this; simp_wf; omega
 end
 
 /-- What a created hole holds when the simulation compares: a key that the peer created and that no handle names. -/
