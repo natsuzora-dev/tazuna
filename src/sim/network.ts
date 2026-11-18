@@ -142,14 +142,6 @@ export function noteTo(w: World, r: InvalidScenario): void {
 /** Lean's screensOf. */
 const screensOf = (s: State): InstanceId[] => [...s.machines.values()].filter((i) => i.chart.screen).map((i) => i.id);
 
-/** Lean's requestDefinition?: the definition of the request line `id` in the direction `dir` of the lines `lines`. */
-function requestDefinition(lines: readonly Line[], dir: Line["dir"], id: LineId): DefinitionRef | undefined {
-  for (const l of lines)
-    if (l.dir === dir && (l.type === "command" || l.type === "query" || l.type === "subscribe") && sameLineId(l.id, id))
-      return l.target;
-  return undefined;
-}
-
 /** Lean's World.post. */
 function post(w: World, o: Origin, sender: string, receiver: string, l: Line, definition: DefinitionRef): void {
   const role = w.roles.get(receiver);
@@ -184,11 +176,9 @@ function route(w: World, o: Origin, service: string, lines: readonly Line[]): vo
         if (target !== service) post(w, o, service, target, l, l.target);
         break;
       }
-      case "unsubscribe": {
-        const request = requestDefinition(stateOf(w, service)?.lines ?? [], "out", l.to);
-        if (request !== undefined) post(w, o, service, request.service, l, request);
+      case "unsubscribe":
+        post(w, o, service, l.request.service, l, l.request);
         break;
-      }
       case "answer":
         if (l.to.kind === "received") post(w, o, service, l.to.sender, l, l.request);
         break;

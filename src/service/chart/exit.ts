@@ -26,7 +26,7 @@ import type { Processing } from "./queue.ts";
 /** Lean's State.endSubscription. */
 export function stateEndSubscription(r: Processing, p: Pending): void {
   p.stale = true;
-  write(r.state, { dir: "out", type: "unsubscribe", to: p.id });
+  write(r.state, { dir: "out", type: "unsubscribe", to: p.id, request: p.activity.target });
 }
 
 type ShowsRequest = Pending & { readonly requester: Extract<Requester, { readonly kind: "slot" }> };

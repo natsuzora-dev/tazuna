@@ -67,20 +67,20 @@ export interface EmittedBy {
 
 export type RequestBody = Extract<LineBody, { readonly type: "command" | "query" | "subscribe" }>;
 
-type AnswerBody = Extract<LineBody, { readonly type: "answer" }>;
+type ReplyBody = Extract<LineBody, { readonly type: "answer" | "unsubscribe" }>;
 
 /**
  * A line's direction and body, with Lean's SenderOf and RequestOf: an `out` request line names `sender`, the definition
  * of the service that sent the request, which a check of the request at the end of the run blames after a restart forgot
- * who waits for it, and an `out` answer line names `request`, the definition of the request that it answers, which the
- * answer travels as. No other line names either.
+ * who waits for it, and an `out` answer or unsubscribe line names `request`, the definition of the request that it
+ * answers or ends, which the line travels as. No other line names either.
  */
 export type LineKind =
   | (RequestBody & { readonly dir: "out"; readonly sender: string; readonly request?: never })
   | (RequestBody & { readonly dir: "in"; readonly sender?: never; readonly request?: never })
-  | (AnswerBody & { readonly dir: "out"; readonly sender?: never; readonly request: DefinitionRef })
-  | (AnswerBody & { readonly dir: "in"; readonly sender?: never; readonly request?: never })
-  | (Exclude<LineBody, RequestBody | AnswerBody> & {
+  | (ReplyBody & { readonly dir: "out"; readonly sender?: never; readonly request: DefinitionRef })
+  | (ReplyBody & { readonly dir: "in"; readonly sender?: never; readonly request?: never })
+  | (Exclude<LineBody, RequestBody | ReplyBody> & {
       readonly dir: "in" | "out";
       readonly sender?: never;
       readonly request?: never;

@@ -150,13 +150,6 @@ def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
 
 def screensOf (s : State) : List InstanceId := (s.machines.filter (·.chart.screen)).map (·.id)
 
-/-- The definition of the request line `id` in the direction `dir` of the lines `lines`. -/
-def requestDefinition? (lines : Array Line) (dir : Dir) (id : LineId) : Option Spec.Ref :=
-  lines.toList.findSome? fun l =>
-    match l.body with
-    | .command r _ | .query r _ | .subscribe r _ => if l.dir == dir && l.id == id then some r else none
-    | _ => none
-
 /--
 The world with a message from `sender` to `receiver` that carries `definition`, kept in flight, discarded, or reported
 as unlisted.
@@ -182,10 +175,7 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
     match l with
     | ⟨_, .out, _, .command r _, _, _, _⟩ | ⟨_, .out, _, .query r _, _, _, _⟩ | ⟨_, .out, _, .subscribe r _, _, _, _⟩ =>
       if r.service == service then w else w.post o service r.service l r
-    | ⟨_, .out, _, .unsubscribe to, _, _, _⟩ =>
-      match requestDefinition? (w.state service).lines .out to with
-      | some r => w.post o service r.service l r
-      | none => w
+    | ⟨_, .out, _, .unsubscribe _, _, _, r⟩ => w.post o service r.service l r
     | ⟨_, .out, _, .answer (.received requester _) _, _, _, r⟩ => w.post o service requester l r
     | ⟨_, .out, _, .event event _ _, _, _, _⟩ =>
       w.services.foldl (init := w) fun w (r, st) =>

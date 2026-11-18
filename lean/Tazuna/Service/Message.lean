@@ -73,20 +73,20 @@ instance (dir : Dir) (body : LineBody) : Repr (SenderOf dir body) := by
   unfold SenderOf; split <;> infer_instance
 
 /--
-What a line with direction `dir` and body `body` names besides its sender: an `out` answer line names the definition of
-the request that it answers, which the answer travels as. No other line names one.
+What a line with direction `dir` and body `body` names besides its sender: an `out` answer or unsubscribe line names the
+definition of the request that it answers or ends, which the line travels as. No other line names one.
 -/
 abbrev RequestOf (dir : Dir) (body : LineBody) : Type :=
   match body, dir with
-  | .answer .., .out => Spec.Ref
+  | .answer .., .out | .unsubscribe .., .out => Spec.Ref
   | _, _ => Unit
 
 /-- `request` on the line with direction `dir` and body `body` if it names one (RequestOf). -/
 def RequestOf.given (request : Spec.Ref) (dir : Dir) : (body : LineBody) → RequestOf dir body
-  | .answer .. => match dir with
+  | .answer .. | .unsubscribe .. => match dir with
     | .out => request
     | .in => ()
-  | .command .. | .query .. | .subscribe .. | .event .. | .unsubscribe .. | .time | .restart | .operation .. => ()
+  | .command .. | .query .. | .subscribe .. | .event .. | .time | .restart | .operation .. => ()
 
 instance (dir : Dir) (body : LineBody) : DecidableEq (RequestOf dir body) := by
   unfold RequestOf; split <;> infer_instance

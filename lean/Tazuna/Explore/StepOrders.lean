@@ -99,7 +99,9 @@ def Line.swapIds (x y : LineId) (l : Line) : Line :=
   | ⟨time, .out, id, .answer to a, emitted, _, request⟩ => ⟨time, .out, swap id, .answer (swap to) a, emitted, (), request⟩
   | ⟨time, .in, id, .answer to a, emitted, _, _⟩ => ⟨time, .in, swap id, .answer (swap to) a, emitted, (), ()⟩
   | ⟨time, dir, id, .event e p r, emitted, _, _⟩ => ⟨time, dir, swap id, .event e p (r.map swap), emitted, (), ()⟩
-  | ⟨time, dir, id, .unsubscribe to, emitted, _, _⟩ => ⟨time, dir, swap id, .unsubscribe (swap to), emitted, (), ()⟩
+  | ⟨time, .out, id, .unsubscribe to, emitted, _, request⟩ =>
+    ⟨time, .out, swap id, .unsubscribe (swap to), emitted, (), request⟩
+  | ⟨time, .in, id, .unsubscribe to, emitted, _, _⟩ => ⟨time, .in, swap id, .unsubscribe (swap to), emitted, (), ()⟩
   | ⟨time, dir, id, body, emitted, sender, request⟩ => ⟨time, dir, swap id, body, emitted, sender, request⟩
 
 /-- The arrival steps of the processing of `span` (Tie.arrivals), by name, each with its message's id, in arrival order. -/
