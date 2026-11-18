@@ -1,6 +1,7 @@
 import { ref } from "../basic.ts";
 import { type DeadlineTime, Failed, issueViolation } from "../functions.ts";
 import type { InstanceId } from "../instance.ts";
+import { nowName } from "../note.ts";
 import { LazyRecordSource } from "../records.ts";
 import { type Deadline, halt, machine, NoteAccess, type Run, type State, scopeOf } from "../state.ts";
 
@@ -29,11 +30,17 @@ export function rearm(r: Run): void {
     if (!deadline.fromAt || instance === undefined) continue;
     const scope = scopeOf(r.state, instance, deadline.state);
     const records = new LazyRecordSource(r.state.records, r.note);
-    const time = r.functions.deadlineAt(scope, records, deadline.name, new NoteAccess(r, scope));
+    let time!: Temporal.Instant | Failed;
+    // Lean's deadlineAt also answers whether it read what steps write.
+    const read = r.evaluations
+      .track(() => {
+        time = r.functions.deadlineAt(scope, records, deadline.name, new NoteAccess(r, scope));
+      })
+      .some((name) => name !== nowName);
     if (time instanceof Failed) halt(issueViolation(ref(r.st, instance.chart.name), time));
     if (deadline.time === undefined || !deadline.time.equals(time)) {
       deadline.time = time;
-      deadline.timedIn = r.state.messageCount;
+      deadline.timedIn = read ? r.state.messageCount : undefined;
     }
   }
 }

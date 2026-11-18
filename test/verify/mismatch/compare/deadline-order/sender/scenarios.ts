@@ -13,11 +13,16 @@ export const armAndWait = scenario(
 );
 
 export const overduePongFirst = scenario(
-  "Arm and move the clock past 10:00; the implementation trace sends overdue's pong before both pings: the deadline follows every step of the message at whose end its time was set, both pings included, so verify reports lineOrder twice",
+  "Arm and move the clock past 10:00; the implementation trace sends overdue's pong before both pings: the deadline follows the step that armed it, which follows overdue's ping, so verify reports lineOrder",
   { given, when, then: () => [] },
 );
 
 export const latePongFirst = scenario(
   "Arm and move the clock past 10:00; the implementation trace sends late's 10:00 pong before the 09:00 pings, which the clock line follows, so verify reports lineOrder",
+  { given, when, then: () => [] },
+);
+
+export const overdueBeforeLate = scenario(
+  "Arm and move the clock past 10:00; the implementation trace sends overdue's ping and pong before late's ping: overdue's constant `at` reads nothing that a step writes, so its pong follows only its own ping; no violation",
   { given, when, then: () => [] },
 );

@@ -53,7 +53,7 @@ structure Deadline where
   name : String
   /-- The step that entered `state`, which armed the deadline. -/
   armedBy : Nat
-  /-- The last message after which rearm changed `time`: it read the records that the whole message wrote. -/
+  /-- The last message after which rearm changed `time` by reading what steps write, or none when it read nothing. -/
   timedIn : Option Nat := none
 deriving DecidableEq, Repr, Inhabited
 
@@ -96,7 +96,7 @@ deriving DecidableEq, Repr, Inhabited
 /--
 A step of a run. `cause` is the step that caused this one, or none for input and deadline steps. `armedBy` is, for a
 deadline step, the step that armed the deadline, which caused it as `cause` does but in an earlier message, and
-`timedIn` the message whose end last changed the deadline's time, every step of which caused it too. `message`
+`timedIn` the message whose end last changed the deadline's time by reading what steps write (see `Sim.causes`). `message`
 is the message number, inherited from the cause. `command` is whether the step processes an own-service command. `barrier` is
 whether the step comes after every earlier step of the same message and before every later one. `nested` is whether
 the step began while its cause was running (a copy start), so that it ends before its cause does. `tie` is, for a

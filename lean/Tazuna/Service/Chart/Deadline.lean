@@ -24,9 +24,10 @@ def rearm [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
       match ← fs.deadlineAt (s.scopeOf i (some t.state)) s.records t.name with
       | .error e =>
         pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
-      | .ok time =>
+      | .ok (time, read) =>
         pure { s with deadlines := s.deadlines.map fun u =>
-          if u.order == t.order && u.time != some time then { u with time := some time, timedIn := some s.messageCount }
+          if u.order == t.order && u.time != some time then
+            { u with time := some time, timedIn := if read then some s.messageCount else none }
           else u })
     s
 

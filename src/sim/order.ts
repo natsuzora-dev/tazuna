@@ -9,16 +9,21 @@ type Channel =
   | { readonly kind: "answers"; readonly request: LineId }
   | { readonly kind: "events"; readonly resultOf: LineId | null };
 
-/**
- * Lean's causedBy: whether step `later` is step `earlier` or one that it caused, a deadline step by its arming step and
- * by every step of the message whose end set its time.
- */
+/** Lean's causes. */
+function causes(steps: readonly StepInfo[], later: number): number[] {
+  const step = steps[later];
+  if (step === undefined) return [];
+  const direct = step.cause ?? step.armedBy;
+  const { timedIn } = step;
+  const timed = timedIn === undefined ? [] : steps.flatMap((s, i) => (i < later && s.message === timedIn ? [i] : []));
+  return [...(direct === undefined ? [] : [direct]), ...timed];
+}
+
+/** Lean's causedBy. */
 function causedBy(steps: readonly StepInfo[], earlier: number, later: number): boolean {
-  if (later === earlier) return true;
-  const timedIn = steps[later]?.timedIn;
-  if (timedIn !== undefined && earlier < later && steps[earlier]?.message === timedIn) return true;
-  const cause = steps[later]?.cause ?? steps[later]?.armedBy;
-  return cause !== undefined && cause < later && causedBy(steps, earlier, cause);
+  return (
+    later === earlier || causes(steps, later).some((c) => c < later && earlier <= c && causedBy(steps, earlier, c))
+  );
 }
 
 /** Lean's LineBody.channel: the channel of the line with id `id` and body `l`, seen from its sender. */

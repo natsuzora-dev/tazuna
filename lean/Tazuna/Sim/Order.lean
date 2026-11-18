@@ -22,16 +22,22 @@ inductive Channel where
 deriving DecidableEq, Repr
 
 /--
-Whether step `later` is step `earlier` or one that it caused, following the cause chain, in which a deadline step's
-cause is the step that armed it, and every step of the message whose end set its time.
+The steps that caused step `later` directly: its cause, or for a deadline step the step that armed it and every earlier
+step of the message whose end set its time by reading what steps write.
 -/
+def causes (s : State) (later : Nat) : List Nat :=
+  match s.steps[later]? with
+  | none => []
+  | some i =>
+    (i.cause <|> i.armedBy).toList ++
+      match i.timedIn with
+      | some m => (List.range later).filter fun c => s.steps[c]?.map (·.message) == some m
+      | none => []
+
+/-- Whether step `later` is step `earlier` or one that it caused, following `causes`. -/
 def causedBy (s : State) (earlier later : Nat) : Bool :=
   later == earlier ||
-    (earlier < later && (s.steps[later]?.bind (·.timedIn)).isSome &&
-      s.steps[later]?.bind (·.timedIn) == s.steps[earlier]?.map (·.message)) ||
-    match s.steps[later]?.bind fun i => i.cause <|> i.armedBy with
-    | some cause => if cause < later then causedBy s earlier cause else false
-    | none => false
+    (causes s later).any fun c => if c < later then earlier ≤ c && causedBy s earlier c else false
 termination_by later
 
 /-- The channel of the line with id `id` and body `body`. -/

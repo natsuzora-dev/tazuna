@@ -162,7 +162,7 @@ export interface Deadline {
   readonly name: string;
   /** The step that entered `state`, which armed the deadline. */
   readonly armedBy: number;
-  /** The last message after which rearm changed `time`: it read the records that the whole message wrote. */
+  /** The last message after which rearm changed `time` by reading what steps write, or undefined when it read nothing. */
   timedIn: number | undefined;
 }
 

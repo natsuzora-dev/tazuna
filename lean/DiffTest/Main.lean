@@ -165,8 +165,12 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     deadlines := fun machine state => do
       let deadlines ← always (.deadlines machine state) fun | .deadlines ds => some ds | _ => none
       pure (deadlines.map fun d => (d.name, (d.delay.map fun ms => DeadlineTime.delay ms).getD .atExpression))
-    deadlineAt := fun scope records name =>
-      answered (.deadlineAt scope name) (records := records) fun | .deadlineAt time => some time | _ => none
+    deadlineAt := fun scope records name => do
+      let reply ← asking records (.deadlineAt scope name)
+      let log ← reads.get
+      let read := !log.parts.isEmpty ||
+        log.replied.any (·.access.any fun a => !(a.context.isEmpty && a.active.isEmpty && a.shown.isEmpty))
+      answer (.deadlineAt scope name) reply fun | .deadlineAt time => some (time, read) | _ => none
     offers := fun scope records control =>
       answered (.offers scope control) (records := records) fun | .offers payloads => some payloads | _ => none
     showInput := fun scope records a =>

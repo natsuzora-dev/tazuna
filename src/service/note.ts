@@ -36,6 +36,9 @@ export function valueName(k: ValueKey): string {
   }
 }
 
+/** The name under which the evaluation cache hears reads and writes of the time. */
+export const nowName = "@now";
+
 /** The key of a step name. The search takes steps with equal names as one, so equal names must run equal work. */
 const stepKey = (name: StepName): string => canonicalJson(name);
 

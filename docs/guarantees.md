@@ -22,7 +22,7 @@ The events that name one request as their `resultOf` travel on a channel of thei
 An event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
 Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused, or when a clock line sent it after the earlier.
-A deadline counts as caused by the step that entered its state, and, when the end of a message changed its time, by every step of that message, since the time reads the records that the whole message wrote.
+A deadline counts as caused by the step that entered its state, and, when the end of a message changed its time by reading records, context, states, or shown values, by every step of that message and what caused them. An `at` that reads none of these, like a `delay`, follows only the step that entered its state.
 Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
 
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
