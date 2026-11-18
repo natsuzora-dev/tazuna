@@ -45,7 +45,7 @@ theorem objectText_perm {xs ys : List (String × String)} (hn : (xs.map (·.1)).
     ((List.mergeSort_perm _ _).trans (hp.trans (List.mergeSort_perm _ _).symm))]
   intro a b ha hb hab hba
   simp only [decide_eq_true_eq] at hab hba
-  exact eq_of_map_nodup (·.1) hn ((List.mergeSort_perm _ _).mem_iff.mp ha)
+  exact eq_of_map_nodup (f := (·.1)) hn ((List.mergeSort_perm _ _).mem_iff.mp ha)
     (hp.mem_iff.mpr ((List.mergeSort_perm _ _).mem_iff.mp hb)) (String.le_antisymm hab hba)
 
 mutual

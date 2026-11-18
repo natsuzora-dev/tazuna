@@ -5,7 +5,6 @@ namespace Tazuna.Thm.Sim.Given
 
 open Tazuna.Data Tazuna.Service Tazuna.Sim
 open Tazuna.Scenario (GivenRecord PeerEntry)
-open Tazuna.Thm.Verify.Pairing (eq_of_map_nodup)
 
 variable {fsOf : String → Functions Id}
 
@@ -61,7 +60,7 @@ theorem sorted_perm {rs rs' : List GivenRecord} (hp : rs.Perm rs') (hn : Records
     (List.pairwise_mergeSort before_trans before_total _)
     ((List.mergeSort_perm _ _).trans (hp.trans (List.mergeSort_perm _ _).symm))
   intro a b ha hb hab hba
-  exact eq_of_map_nodup (fun g : GivenRecord => (g.entity, g.key)) hn ((List.mergeSort_perm _ _).mem_iff.mp ha)
+  exact eq_of_map_nodup (f := fun g : GivenRecord => (g.entity, g.key)) hn ((List.mergeSort_perm _ _).mem_iff.mp ha)
     (hp.mem_iff.mpr ((List.mergeSort_perm _ _).mem_iff.mp hb)) (before_antisymm hab hba)
 
 /--

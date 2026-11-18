@@ -6,6 +6,31 @@ namespace Tazuna.Thm.Service.Chart.Queue
 open Tazuna.Data Tazuna.Service
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna.Thm.Service.Chart.Basic
 
+/-- Processing `f` relates the state before it to the state after it by `R`. Each tower below is one `R`. -/
+def By (R : State → State → Prop) (f : Processing → Id Processing) : Prop := ∀ r, R r.state (f r).1
+
+theorem By.unlessHalted {R : State → State → Prop} (refl : ∀ s, R s s) {f : Processing → Id Processing} (h : By R f) :
+    By R (unlessHalted f) := by
+  intro r; unfold Service.unlessHalted; split
+  · exact refl _
+  · exact h r
+
+theorem By.withMachine {R : State → State → Prop} (refl : ∀ s, R s s) {name : InstanceId}
+    {f : Instance → Processing → Id Processing} (h : ∀ i, By R (f i)) : By R (withMachine name f) := by
+  intro r; unfold Service.withMachine; split
+  · exact refl _
+  · split
+    · exact h _ r
+    · exact refl _
+
+theorem By.foldlM {R : State → State → Prop} (refl : ∀ s, R s s) (trans : ∀ a b c, R a b → R b c → R a c) {α : Type}
+    {g : α → Processing → Id Processing} (h : ∀ x, By R (g x)) (xs : List α) (r : Processing) :
+    R r.state (xs.foldlM (fun r x => g x r) r).1 := by
+  rw [foldlM_id]
+  induction xs generalizing r with
+  | nil => exact refl _
+  | cons x xs ih => exact trans _ _ _ (h x r) (ih _)
+
 def Keeps (f : Processing → Id Processing) : Prop := ∀ r, (f r).1.fixed = r.state.fixed
 
 theorem Keeps.commandAnswers {f : Processing → Id Processing} (h : Keeps f) (r : Processing) :
@@ -23,29 +48,16 @@ theorem Keeps.started {f : Processing → Id Processing} (h : Keeps f) (r : Proc
 theorem Keeps.answers {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.answers = r.state.answers :=
   congrArg Fixed.answers (h r)
 
-theorem keeps_unlessHalted {f : Processing → Id Processing} (h : Keeps f) : Keeps (unlessHalted f) := by
-  intro r
-  unfold unlessHalted
-  split
-  · rfl
-  · exact h r
+theorem keeps_unlessHalted {f : Processing → Id Processing} (h : Keeps f) : Keeps (unlessHalted f) :=
+  By.unlessHalted (R := fun s t => t.fixed = s.fixed) (fun _ => rfl) h
 
 theorem keeps_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, Keeps (f i)) :
-    Keeps (withMachine name f) := by
-  intro r
-  unfold withMachine
-  split
-  · rfl
-  · split
-    · exact h _ r
-    · rfl
+    Keeps (withMachine name f) :=
+  By.withMachine (R := fun s t => t.fixed = s.fixed) (fun _ => rfl) h
 
 theorem foldlM_keeps {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, Keeps (g x)) (xs : List α) (r : Processing) :
-    (xs.foldlM (fun r x => g x r) r).1.fixed = r.state.fixed := by
-  rw [foldlM_id]
-  induction xs generalizing r with
-  | nil => rfl
-  | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h x r]
+    (xs.foldlM (fun r x => g x r) r).1.fixed = r.state.fixed :=
+  By.foldlM (R := fun s t => t.fixed = s.fixed) (fun _ => rfl) (fun _ _ _ h₁ h₂ => h₂.trans h₁) h xs r
 
 theorem foldl_fixed' {α : Type} (f : Processing → α → Processing) (h : ∀ r x, (f r x).1.fixed = r.state.fixed) (xs : List α)
     (r : Processing) : (xs.foldl f r).1.fixed = r.state.fixed := by
@@ -74,42 +86,22 @@ theorem Grows.after {f : Processing → Id Processing} (hf : GrowsBy f) {r r' : 
     (hn : r'.state.now = r.state.now) : Grows r.state (f r').1 :=
   (Grows.of_lines hl).trans hn (hf r')
 
-theorem sameLines_unlessHalted {f : Processing → Id Processing} (h : SameLines f) : SameLines (unlessHalted f) := by
-  intro r
-  unfold unlessHalted
-  split
-  · rfl
-  · exact h r
+theorem sameLines_unlessHalted {f : Processing → Id Processing} (h : SameLines f) : SameLines (unlessHalted f) :=
+  By.unlessHalted (R := fun s t => t.lines = s.lines) (fun _ => rfl) h
 
 theorem foldlM_now {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, Keeps (g x)) (xs : List α) (r : Processing) :
     (xs.foldlM (fun r x => g x r) r).1.now = r.state.now := congrArg Fixed.now (foldlM_keeps h xs r)
 
-theorem growsBy_unlessHalted {f : Processing → Id Processing} (h : GrowsBy f) : GrowsBy (unlessHalted f) := by
-  intro r
-  unfold unlessHalted
-  split
-  · exact Grows.refl _
-  · exact h r
+theorem growsBy_unlessHalted {f : Processing → Id Processing} (h : GrowsBy f) : GrowsBy (unlessHalted f) :=
+  By.unlessHalted (R := Grows) Grows.refl h
 
 theorem growsBy_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, GrowsBy (f i)) :
-    GrowsBy (withMachine name f) := by
-  intro r
-  unfold withMachine
-  split
-  · exact Grows.refl _
-  · split
-    · exact h _ r
-    · exact Grows.refl _
+    GrowsBy (withMachine name f) :=
+  By.withMachine (R := Grows) Grows.refl h
 
 theorem sameLines_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, SameLines (f i)) :
-    SameLines (withMachine name f) := by
-  intro r
-  unfold withMachine
-  split
-  · rfl
-  · split
-    · exact h _ r
-    · rfl
+    SameLines (withMachine name f) :=
+  By.withMachine (R := fun s t => t.lines = s.lines) (fun _ => rfl) h
 
 theorem foldlM_grows {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, GrowsBy (g x)) (hk : ∀ x, Keeps (g x))
     (xs : List α) (r : Processing) : Grows r.state (xs.foldlM (fun r x => g x r) r).1 := by
@@ -121,11 +113,8 @@ theorem foldlM_grows {α : Type} {g : α → Processing → Id Processing} (h : 
     exact (h x r).trans ((hk x).now r) (ih _)
 
 theorem foldlM_sameLines {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, SameLines (g x)) (xs : List α) (r : Processing) :
-    (xs.foldlM (fun r x => g x r) r).1.lines = r.state.lines := by
-  rw [foldlM_id]
-  induction xs generalizing r with
-  | nil => rfl
-  | cons x xs ih => simp only [List.foldl_cons]; rw [ih, h x r]
+    (xs.foldlM (fun r x => g x r) r).1.lines = r.state.lines :=
+  By.foldlM (R := fun s t => t.lines = s.lines) (fun _ => rfl) (fun _ _ _ h₁ h₂ => h₂.trans h₁) h xs r
 
 theorem foldl_run_grows {α : Type} (f : Processing → α → Processing) (h : ∀ r x, Grows r.state (f r x).1)
     (hn : ∀ r x, (f r x).1.now = r.state.now) (xs : List α) (r : Processing) : Grows r.state (xs.foldl f r).1 := by
@@ -135,32 +124,16 @@ theorem foldl_run_grows {α : Type} (f : Processing → α → Processing) (h : 
 
 def DeadlinesShrink (f : Processing → Id Processing) : Prop := ∀ r, ∀ t ∈ (f r).1.deadlines, t ∈ r.state.deadlines
 
-theorem deadlinesShrink_unlessHalted {f : Processing → Id Processing} (h : DeadlinesShrink f) : DeadlinesShrink (unlessHalted f) := by
-  intro r t ht
-  unfold unlessHalted at ht
-  split at ht
-  · exact ht
-  · exact h r t ht
+theorem deadlinesShrink_unlessHalted {f : Processing → Id Processing} (h : DeadlinesShrink f) : DeadlinesShrink (unlessHalted f) :=
+  By.unlessHalted (R := fun s t => ∀ x ∈ t.deadlines, x ∈ s.deadlines) (fun _ _ h => h) h
 
 theorem deadlinesShrink_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, DeadlinesShrink (f i)) :
-    DeadlinesShrink (withMachine name f) := by
-  intro r t ht
-  unfold withMachine at ht
-  split at ht
-  · exact ht
-  · split at ht
-    · exact h _ r t ht
-    · exact ht
+    DeadlinesShrink (withMachine name f) :=
+  By.withMachine (R := fun s t => ∀ x ∈ t.deadlines, x ∈ s.deadlines) (fun _ _ h => h) h
 
 theorem foldlM_deadlinesShrink {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, DeadlinesShrink (g x))
-    (xs : List α) (r : Processing) : ∀ t ∈ (xs.foldlM (fun r x => g x r) r).1.deadlines, t ∈ r.state.deadlines := by
-  rw [foldlM_id]
-  induction xs generalizing r with
-  | nil => intro t ht; exact ht
-  | cons x xs ih =>
-    intro t ht
-    simp only [List.foldl_cons] at ht
-    exact h x r t (ih _ t ht)
+    (xs : List α) (r : Processing) : ∀ t ∈ (xs.foldlM (fun r x => g x r) r).1.deadlines, t ∈ r.state.deadlines :=
+  By.foldlM (R := fun s t => ∀ x ∈ t.deadlines, x ∈ s.deadlines) (fun _ _ h => h) (fun _ _ _ h₁ h₂ x hx => h₁ x (h₂ x hx)) h xs r
 
 def Marked (p p' : Pending) : Prop :=
   p'.id = p.id ∧ p'.requester = p.requester ∧ (p.stale = true → p'.stale = true)
@@ -197,22 +170,14 @@ theorem PendingMapped.comp {f g : Processing → Id Processing} (hf : PendingMap
   exact ⟨b ∘ a, fun p => (ha p).trans (hb (a p)), by simp only [eb, ea, List.map_map]⟩
 
 theorem pendingMapped_unlessHalted {f : Processing → Id Processing} (h : PendingMapped f) :
-    PendingMapped (unlessHalted f) := by
-  intro r
-  unfold unlessHalted
-  split
-  · exact PendingMapped.of_eq (fun _ => rfl) r
-  · exact h r
+    PendingMapped (unlessHalted f) :=
+  By.unlessHalted (R := fun s t => ∃ g : Pending → Pending, (∀ p, Marked p (g p)) ∧ t.pending = s.pending.map g)
+    (fun _ => ⟨id, Marked.refl, by rw [List.map_id]⟩) h
 
 theorem pendingMapped_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing}
-    (h : ∀ i, PendingMapped (f i)) : PendingMapped (withMachine name f) := by
-  intro r
-  unfold withMachine
-  split
-  · exact PendingMapped.of_eq (fun _ => rfl) r
-  · split
-    · exact h _ r
-    · exact PendingMapped.of_eq (fun _ => rfl) r
+    (h : ∀ i, PendingMapped (f i)) : PendingMapped (withMachine name f) :=
+  By.withMachine (R := fun s t => ∃ g : Pending → Pending, (∀ p, Marked p (g p)) ∧ t.pending = s.pending.map g)
+    (fun _ => ⟨id, Marked.refl, by rw [List.map_id]⟩) h
 
 theorem foldlM_pendingMapped {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, PendingMapped (g x))
     (xs : List α) : PendingMapped (fun r => xs.foldlM (fun r x => g x r) r) := by
@@ -227,31 +192,16 @@ def MachinesKept (f : Processing → Id Processing) : Prop :=
   ∀ r, (f r).1.machines.map (·.id) = r.state.machines.map (·.id)
 
 theorem machinesKept_unlessHalted {f : Processing → Id Processing} (h : MachinesKept f) :
-    MachinesKept (unlessHalted f) := by
-  intro r
-  unfold unlessHalted
-  split
-  · rfl
-  · exact h r
+    MachinesKept (unlessHalted f) :=
+  By.unlessHalted (R := fun s t => t.machines.map (·.id) = s.machines.map (·.id)) (fun _ => rfl) h
 
 theorem machinesKept_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing}
-    (h : ∀ i, MachinesKept (f i)) : MachinesKept (withMachine name f) := by
-  intro r
-  unfold withMachine
-  split
-  · rfl
-  · split
-    · exact h _ r
-    · rfl
+    (h : ∀ i, MachinesKept (f i)) : MachinesKept (withMachine name f) :=
+  By.withMachine (R := fun s t => t.machines.map (·.id) = s.machines.map (·.id)) (fun _ => rfl) h
 
 theorem foldlM_machinesKept {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, MachinesKept (g x)) (xs : List α)
-    (r : Processing) : (xs.foldlM (fun r x => g x r) r).1.machines.map (·.id) = r.state.machines.map (·.id) := by
-  rw [foldlM_id]
-  induction xs generalizing r with
-  | nil => rfl
-  | cons x xs ih =>
-    simp only [List.foldl_cons]
-    exact (ih _).trans (h x r)
+    (r : Processing) : (xs.foldlM (fun r x => g x r) r).1.machines.map (·.id) = r.state.machines.map (·.id) :=
+  By.foldlM (R := fun s t => t.machines.map (·.id) = s.machines.map (·.id)) (fun _ => rfl) (fun _ _ _ h₁ h₂ => h₂.trans h₁) h xs r
 
 theorem setMachine_resources (s : State) (name : InstanceId) (f : Instance → Instance) (hf : ∀ i, (f i).id = i.id) :
     (s.setMachine name f).machines.map (·.id) = s.machines.map (·.id) := by

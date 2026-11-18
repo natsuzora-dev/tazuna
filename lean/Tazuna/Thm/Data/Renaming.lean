@@ -1,4 +1,5 @@
 import Tazuna.Data.Binding
+import Tazuna.Thm.Data.List
 
 /-!
 Explore compares two runs up to a renaming of their created keys (Data/Binding): a created key of one run may stand for
@@ -18,6 +19,7 @@ domain that `dom` gives their strings, as Explore's bindings do, since a created
 namespace Tazuna.Thm.Data.Renaming
 
 open Tazuna.Data
+open Tazuna.Thm.Data.List (lookup_of_mem mem_of_lookup)
 
 /-- `b` renames `s` to `t`: they are a pair of `b`, or `s` is `t` and `b` binds it to nothing and nothing to it. -/
 def Renames (b : List (Bound × Bound)) (s t : Bound) : Prop :=
@@ -239,30 +241,6 @@ theorem renames_inverse {b : List (Bound × Bound)} {s t : Bound} : Renames b s 
   rcases h with h | ⟨rfl, h₁, h₂⟩
   · exact .inl (List.mem_map.mpr ⟨(s, t), h, rfl⟩)
   · exact .inr ⟨rfl, by rw [inverse_map_fst]; exact h₂, by rw [inverse_map_snd]; exact h₁⟩
-
-theorem lookup_of_mem {c : List (Bound × Bound)} (hc : (c.map Prod.fst).Nodup) {t u : Bound} (h : (t, u) ∈ c) :
-    c.lookup t = some u := by
-  induction c with
-  | nil => cases h
-  | cons p c ih =>
-    obtain ⟨a, b⟩ := p
-    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hc
-    rcases List.mem_cons.mp h with he | hm
-    · cases he; simp
-    · have hne : (t == a) = false := by
-        simp only [beq_eq_false_iff_ne]
-        intro e; subst e; exact hc.1 ⟨(t, u), hm, rfl⟩
-      rw [List.lookup_cons, hne]; exact ih hc.2 hm
-
-theorem mem_of_lookup {c : List (Bound × Bound)} {t u : Bound} (h : c.lookup t = some u) : (t, u) ∈ c := by
-  induction c with
-  | nil => simp at h
-  | cons p c ih =>
-    obtain ⟨a, b⟩ := p
-    rw [List.lookup_cons] at h
-    split at h
-    · rename_i he; cases h; have := beq_iff_eq.mp he; subst this; exact List.mem_cons_self
-    · exact List.mem_cons_of_mem _ (ih h)
 
 theorem lookup_none {c : List (Bound × Bound)} {t : Bound} (h : t ∉ c.map Prod.fst) : c.lookup t = none := by
   cases hl : c.lookup t with

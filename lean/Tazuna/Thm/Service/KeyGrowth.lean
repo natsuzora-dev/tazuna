@@ -88,24 +88,15 @@ theorem keeps_addDeadlines (name : InstanceId) (n : String) (ds : List (String �
 def KeysBy (f : Processing → Id Processing) : Prop := ∀ r, KeepsKeys r.state (f r).1
 
 theorem keysBy_foldlM {α : Type} {g : α → Processing → Id Processing} (h : ∀ x, KeysBy (g x)) (xs : List α)
-    (r : Processing) : KeepsKeys r.state (xs.foldlM (fun r x => g x r) r).1 := by
-  rw [foldlM_id]
-  induction xs generalizing r with
-  | nil => exact .refl _
-  | cons x xs ih => exact (h x r).trans (ih _)
+    (r : Processing) : KeepsKeys r.state (xs.foldlM (fun r x => g x r) r).1 :=
+  Tazuna.Thm.Service.Chart.Queue.By.foldlM (R := KeepsKeys) KeepsKeys.refl (fun _ _ _ h₁ h₂ => h₁.trans h₂) h xs r
 
-theorem keysBy_unlessHalted {f : Processing → Id Processing} (h : KeysBy f) : KeysBy (unlessHalted f) := by
-  intro r; unfold unlessHalted; split
-  · exact .refl _
-  · exact h r
+theorem keysBy_unlessHalted {f : Processing → Id Processing} (h : KeysBy f) : KeysBy (unlessHalted f) :=
+  Tazuna.Thm.Service.Chart.Queue.By.unlessHalted (R := KeepsKeys) KeepsKeys.refl h
 
 theorem keysBy_withMachine {name : InstanceId} {f : Instance → Processing → Id Processing} (h : ∀ i, KeysBy (f i)) :
-    KeysBy (withMachine name f) := by
-  intro r; unfold withMachine; split
-  · exact .refl _
-  · split
-    · exact h _ r
-    · exact .refl _
+    KeysBy (withMachine name f) :=
+  Tazuna.Thm.Service.Chart.Queue.By.withMachine (R := KeepsKeys) KeepsKeys.refl h
 
 theorem keysBy_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
     KeysBy (runAssign fs st name a scope extra) := by

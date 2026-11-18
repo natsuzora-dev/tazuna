@@ -1,9 +1,12 @@
 import Tazuna.Thm.Data.Pairing
 import Tazuna.Verify.Pairing
+import Tazuna.Thm.Data.List
+import Tazuna.Data.Binding
 
 namespace Tazuna.Thm.Verify.Pairing
 
 open Tazuna.Data Tazuna.Thm.Data.Pairing Tazuna.Verify
+open Tazuna.Thm.Data.List (lookup_of_mem mem_of_lookup)
 
 /-- Whether entry `e` of the subfolder `service` is a trace of an external service, or a trace of a scenario of a
 service that is not external. -/
@@ -11,40 +14,6 @@ def Paired (services : List (String × Bool)) (scenarios : List Scenario) (servi
   ∃ n, fileName e = some n ∧
     (services.lookup service = some true ∨
       services.lookup service = some false ∧ ∃ s ∈ scenarios, s.service = service ∧ s.name = n)
-
-theorem lookup_of_mem :
-    ∀ {services : List (String × Bool)} {s : String} {b : Bool},
-      (services.map (·.1)).Nodup → (s, b) ∈ services → services.lookup s = some b
-  | [], _, _, _, h => absurd h List.not_mem_nil
-  | (s', b') :: rest, s, b, hn, h => by
-    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
-    rcases List.mem_cons.mp h with h | h
-    · cases h; simp
-    · have hne : s ≠ s' := fun e => hn.1 ⟨(s, b), h, e⟩
-      have : (s == s') = false := by simpa using hne
-      simp only [List.lookup_cons, this]
-      exact lookup_of_mem hn.2 h
-
-theorem mem_of_lookup :
-    ∀ {services : List (String × Bool)} {s : String} {b : Bool}, services.lookup s = some b → (s, b) ∈ services
-  | [], _, _, h => by simp at h
-  | (s', b') :: rest, s, b, h => by
-    by_cases e : s = s'
-    · subst e; simp only [List.lookup_cons, beq_self_eq_true] at h; cases h; simp
-    · have : (s == s') = false := by simpa using e
-      simp only [List.lookup_cons, this] at h
-      exact List.mem_cons_of_mem _ (mem_of_lookup h)
-
-theorem eq_of_map_nodup {α β : Type} (f : α → β) :
-    ∀ {l : List α} {a b : α}, (l.map f).Nodup → a ∈ l → b ∈ l → f a = f b → a = b
-  | [], _, _, _, ha, _, _ => absurd ha List.not_mem_nil
-  | x :: xs, a, b, hn, ha, hb, he => by
-    simp only [List.map_cons, List.nodup_cons, List.mem_map, not_exists, not_and] at hn
-    rcases List.mem_cons.mp ha with ha | ha <;> rcases List.mem_cons.mp hb with hb | hb
-    · rw [ha, hb]
-    · rw [ha] at he; exact absurd he.symm (hn.1 b hb)
-    · rw [hb] at he; exact absurd he (hn.1 a ha)
-    · exact eq_of_map_nodup f hn.2 ha hb he
 
 theorem entriesIn_of_mem (folders : List Folder) (unique : (folders.map (·.service)).Nodup) (f : Folder)
     (hf : f ∈ folders) : entriesIn folders f.service = f.entries := by
@@ -54,7 +23,7 @@ theorem entriesIn_of_mem (folders : List Folder) (unique : (folders.map (·.serv
   | some g =>
     have hg := List.mem_of_find?_eq_some h
     have hs : g.service = f.service := by simpa using List.find?_some h
-    have : g = f := eq_of_map_nodup (·.service) unique hg hf hs
+    have : g = f := eq_of_map_nodup (f := (·.service)) unique hg hf hs
     simp [this]
 
 theorem entriesIn_cases (folders : List Folder) (s : String) :
