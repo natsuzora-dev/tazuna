@@ -46,6 +46,9 @@ tazuna aims to report each mistake with the earliest tool that can find it, in t
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
   This holds for the own service and for each running peer that has an implementation.
 
+One theorem states each verdict: `check_eq_nil_iff` for the `Illegal` rules of `check`, `stepOrderSearch_same` for the orders that `test` searches, and `compare_matches` for `verify`.
+[Properties without a theorem](#properties-without-a-theorem) lists what they leave out.
+
 When the assumptions also hold, the implementation sends the messages that the spec defines for the lines of each scenario.
 tazuna guarantees nothing about lines that no scenario contains.
 
@@ -77,8 +80,8 @@ The implementation creates its keys and request ids in its own way.
 A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 
 - Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
-- The `out` lines after each `in` line pair one to one with the snapshot's, each pair equal under the binding.
-  A one-to-one pairing, which can be another one, pairs them at equal times and keeps the order that each snapshot line's `after` names.
+- The `out` lines after each `in` line pair one to one with the snapshot's.
+  One pairing holds all of the following: each pair is equal under the binding and at an equal time, and the pairing keeps the order that each snapshot line's `after` names.
   `after` names only lines on one channel, and never two events at one time of one group that `decide` returns or of steps that no cause chain links (`ordered_same_channel`, `group_lines_unordered`, `independent_unordered`).
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
@@ -177,7 +180,7 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 - Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit (`drain` in `lean/Tazuna/Service/Chart/Macrostep.lean`, `settle` in `lean/Tazuna/Service/Chart/Always.lean`, `exitOne` in `lean/Tazuna/Service/Chart/Exit.lean`, `fireDue` in `lean/Tazuna/Service/Queue.lean`).
 - The service answers a repeated query again, because a query has no identity (`call` in `lean/Tazuna/Service/Input.lean`).
 - A refuse line gives the sender the `unavailable` answer (`take` in `lean/Tazuna/Sim/Run.lean`).
-- A halting `Fault` or `InvalidInput` stops the simulation (`stopped` in `lean/Tazuna/Sim/Network.lean`).
+- A halting `Fault` or `InvalidInput` stops the simulation (`stopped` in `lean/Tazuna/Sim/Network.lean`), and a run that stops gets no checks of the exchanges with external services (`World.ended` in `lean/Tazuna/Sim/Run.lean`).
 - A clock line publishes the subscription answers that the new time changes (`fireTo` in `lean/Tazuna/Sim/Run.lean`).
 - Only a clock line moves the current time (`fireTo` in `lean/Tazuna/Sim/Run.lean`).
 - A command is processed as one message (`send` in `lean/Tazuna/Service/Input.lean`).

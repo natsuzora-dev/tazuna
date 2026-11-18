@@ -93,7 +93,7 @@ Whether two orders give the same outcome depends on what each step changes:
 
 The same rule covers the messages that one line delivers to one service, since nothing outside tells which of them arrives first.
 The same search runs their orders and reports `ChoiceDependent.stepOrder`.
-Equal messages need no search: a service reads a received id only to route a message, so their other order is the same run with their ids swapped, and `test` reports `ChoiceDependent.equalMessages` when the service processes them differently.
+Equal messages need no search: a service reads a received id only to route, answer, and deduplicate a message, so their other order is the same run with their ids swapped, and `test` reports `ChoiceDependent.equalMessages` when the service processes them differently.
 For example, two copies that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
 The requests then need content that tells them apart, such as the task's id in the input.
 
