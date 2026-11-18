@@ -6,13 +6,14 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def addDeadlines (name : InstanceId) (n : String) (deadlines : List (String × DeadlineTime)) (s : State) : State :=
+def addDeadlines (step : Nat) (name : InstanceId) (n : String) (deadlines : List (String × DeadlineTime)) (s : State) :
+    State :=
   deadlines.foldl (fun s (deadline, d) =>
     { s with deadlineCount := s.deadlineCount + 1,
              deadlines := s.deadlines ++
                [{ time := (match d with | .delay delay => some (s.now + delay) | .atExpression => none),
                   fromAt := d == .atExpression, order := s.deadlineCount + 1, machine := name, state := n,
-                  name := deadline }] }) s
+                  name := deadline, armedBy := step }] }) s
 
 def rearm [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.deadlines.foldlM (fun s t =>

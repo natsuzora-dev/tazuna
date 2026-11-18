@@ -1,5 +1,6 @@
 import Tazuna.Explore.ChoiceDependent
 import Tazuna.Sim.Run
+import Tazuna.Sim.Trace
 
 /-!
 The step-order search: it executes a scenario's simulation again with other orders of the steps that no cause orders, and
@@ -96,7 +97,7 @@ The order that runs the pair `(i, j)` of an execution's candidates the other way
 then the steps between that lead to `j`, then `b` (step `j`) and `a` (step `i`).
 -/
 def pairOrder (s : State) (taken : List (Nat × StepName)) (i j : Nat) (a b : StepName) : List StepName :=
-  (taken.filter (·.1 < i)).map (·.2) ++ (taken.filter fun (n, _) => i < n && n < j && Sim.leadsTo s n j).map (·.2) ++ [b, a]
+  (taken.filter (·.1 < i)).map (·.2) ++ (taken.filter fun (n, _) => i < n && n < j && leadsTo s n j).map (·.2) ++ [b, a]
 
 /-- The state of a search: what it did, the taken-step sequences it reached, the first step it swapped, and its queue. -/
 structure Searching where

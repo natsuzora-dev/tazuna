@@ -1,78 +1,10 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Channel } from "../data/note.generated.ts";
 import type { LineId, TraceLine } from "../data/trace.generated.ts";
 import { lineIdText, operationName } from "../data/trace.ts";
-import { sameJson } from "../data/values.ts";
 import { bodyContent, type Line } from "../service/message.ts";
 import type { StepInfo } from "../service/state.ts";
 import { traceNameOfRef } from "../spec/structure.ts";
-
-/**
- * Returns whether step `earlier` comes before step `later` through the cause chain or through a barrier of the same
- * message.
- */
-export function leadsTo(steps: readonly StepInfo[], earlier: number, later: number): boolean {
-  if (later === earlier) return true;
-  const first = steps[earlier];
-  const last = steps[later];
-  if (earlier < later && first?.barrier === true && first.message === last?.message) return true;
-  if (last === undefined) return false;
-  if (last.barrier && earlier < later && first?.message === last.message) return true;
-  return last.cause !== undefined && last.cause < later && leadsTo(steps, earlier, last.cause);
-}
-
-/** Lean's causedBy: whether step `later` is step `earlier` or one that it caused, following the cause chain only. */
-function causedBy(steps: readonly StepInfo[], earlier: number, later: number): boolean {
-  if (later === earlier) return true;
-  const cause = steps[later]?.cause;
-  return cause !== undefined && cause < later && causedBy(steps, earlier, cause);
-}
-
-/** Lean's channelOf: the channel that an `out` line travels on, seen from its sender. */
-function channelOf(l: Line): Channel | undefined {
-  switch (l.type) {
-    case "command":
-    case "query":
-    case "subscribe":
-      return { kind: "request", id: l.id };
-    case "unsubscribe":
-      return { kind: "request", id: l.to };
-    case "answer":
-      return { kind: "answers", request: l.to };
-    case "event":
-      return { kind: "events", resultOf: l.resultOf ?? null };
-    default:
-      return undefined;
-  }
-}
-
-/**
- * Returns Lean's `ordered`: whether line `a` must precede line `b` among the lines of one window, because they travel
- * on one channel and `b` is caused by `a`.
- */
-function ordered(lines: readonly Line[], steps: readonly StepInfo[], a: number, b: number): boolean {
-  const [la, lb] = [lines[a] as Line, lines[b] as Line];
-  const [channel, other] = [channelOf(la), channelOf(lb)];
-  if (channel === undefined || other === undefined || !sameJson(channel, other)) return false;
-  const [ea, eb] = [la.emitted, lb.emitted];
-  if (ea === undefined || eb === undefined) return true;
-  return ea.step === eb.step ? ea.group !== eb.group : causedBy(steps, ea.step, eb.step);
-}
-
-/** Lean's sentBefore: whether line `a` reaches a receiver before line `b`. */
-export function sentBefore(lines: readonly Line[], steps: readonly StepInfo[], a: number, b: number): boolean {
-  return a < b && (lines.slice(a + 1, b).some((l) => l.dir === "in") || ordered(lines, steps, a, b));
-}
-
-/** Lean's window: the indexes of the `out` lines of each window, between two input lines. */
-function windows(lines: readonly Line[]): number[][] {
-  const result: number[][] = [[]];
-  lines.forEach((l, i) => {
-    if (l.dir === "out") result.at(-1)?.push(i);
-    else result.push([]);
-  });
-  return result;
-}
+import { ordered, windows } from "./order.ts";
 
 /**
  * Lean's traceLineOf: the trace line of `line` of the trace of `service`, with its `after` and `created`. This is where

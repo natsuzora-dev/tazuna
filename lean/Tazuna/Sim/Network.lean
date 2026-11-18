@@ -1,7 +1,7 @@
 import Tazuna.Scenario.Given
 import Tazuna.Sim.Receive
 import Tazuna.Sim.InvalidScenario
-import Tazuna.Sim.Trace
+import Tazuna.Sim.Order
 
 /-!
 The world of a simulation: the running services, each with its state, and the network, a list of messages that each

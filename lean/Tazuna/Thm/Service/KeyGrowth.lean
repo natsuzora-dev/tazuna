@@ -80,8 +80,8 @@ theorem keeps_emitAll (s : State) (r : Option LineId) (es : List (Emit × Emitte
 @[simp] theorem emitAll_service (s : State) (r : Option LineId) (es : List (Emit × EmittedBy)) :
     (s.emitAll r es).service = s.service := (keeps_emitAll s r es).1
 
-theorem keeps_addDeadlines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
-    KeepsKeys s (addDeadlines name n ds s) :=
+theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
+    KeepsKeys s (addDeadlines step name n ds s) :=
   keeps_foldl _ (fun t x => by keys_leaf) _ _
 
 /-- Processing `f` keeps the createKey values. -/
@@ -191,7 +191,7 @@ theorem keysBy_enterOne (step : Nat) (name : InstanceId) (n : String) : KeysBy (
     | exact h.trans (keysBy_closeFinal _ _ _)
     | exact h.trans (keysBy_endWith (fun c n => keysBy_exitOne _ c n) _ _)
     | exact h.trans (keysBy_enterFinal _ _ _ _)
-    | exact h.trans (keeps_addDeadlines _ _ _ _)
+    | exact h.trans (keeps_addDeadlines _ _ _ _ _)
 
 theorem keysBy_enter (step : Nat) (name : InstanceId) (targets : List String) : KeysBy (enter fs st step name targets) := by
   apply keysBy_withMachine

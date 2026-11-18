@@ -69,7 +69,7 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
       r.note.wroteNow();
     }
     newMessage(s);
-    const step = newStep(s, undefined, { tie });
+    const step = newStep(s, undefined, { tie, armedBy: deadline.armedBy });
     inStep(r, step, deadlineStep(deadline), undefined, () =>
       settled(r, deadline.machine, step, () => fire(r, deadline, step)),
     );

@@ -3,7 +3,7 @@ import { basename, join, relative } from "node:path";
 import { test } from "node:test";
 import { mismatchKinds } from "../src/data/mismatch.generated.ts";
 import { uncomparableKinds } from "../src/data/uncomparable.generated.ts";
-import { depth, folders, groupExamples } from "./examples.ts";
+import { depth, folders, groupExamples, runRoot } from "./examples.ts";
 import { kindOfLine, recordsOf, testEveryKind, testExamples } from "./expected.ts";
 
 const groups = { mismatch: "Mismatch", uncomparable: "Uncomparable" } as const;
@@ -30,10 +30,10 @@ for (const [folder, group] of Object.entries(groups))
   for (const [target, args] of Object.entries(commands))
     testExamples(folders(join(verifyRoot, folder, target)), group, args);
 
-testEveryKind(groupExamples("verify"), [...mismatchKinds, ...uncomparableKinds], {
-  "Mismatch.after":
-    "Only test compares `after`, between two runs of the simulation, and reports it inside ChoiceDependent; an example needs two step orders whose lines both relations allow in one line order, and test/run/choiceDependent/Explore/ChoiceDependent/same-channel/echoes differs in line order first",
-});
+testEveryKind(
+  [...groupExamples("verify"), ...folders(join(runRoot, "choiceDependent/Explore/ChoiceDependent"))],
+  [...mismatchKinds, ...uncomparableKinds],
+);
 
 const snapshotChecks = Object.values(groups).map((group) => `${group}.`);
 

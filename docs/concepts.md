@@ -83,6 +83,7 @@ To fix the violation, make the definition order the steps, for example by guardi
 
 Two outcomes are the same when their lines have the same contents and the same causal relation: which earlier lines each line must follow.
 A line must follow the message that caused it, the earlier lines of its request's channel, and the events on its channel that its own step's earlier groups or a step that caused it emitted, as happens-before orders messages.
+A deadline counts as caused by the step that entered its state, and what a clock line fires follows the lines before the clock line.
 Whether two orders give the same outcome depends on what each step changes:
 
 - Two tied deadlines that each send one request give the same outcome, because the requests keep no order between them.

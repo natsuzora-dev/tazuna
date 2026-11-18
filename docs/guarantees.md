@@ -20,7 +20,8 @@ Messages travel on *channels*.
 A request, its answers, its end, and the events that name it as their `resultOf` share the request's channel.
 An event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
-Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused.
+Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused, or when a clock line sent it after the earlier.
+A deadline counts as caused by the step that entered its state.
 Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
 A snapshot keeps no order between a request's answers and its result events, although the simulation delivers them on one channel.
 
@@ -76,7 +77,7 @@ A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 - Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
 - The `out` lines after each `in` line pair one to one with the snapshot's, each pair equal under the binding.
   A one-to-one pairing, which can be another one, pairs them at equal times and keeps the order that each snapshot line's `after` names.
-  `after` names only lines on one channel, never two events of one group that `decide` returns, and never two events of steps that no cause chain links (`ordered_same_channel`, `group_lines_unordered`, `independent_unordered`).
+  `after` names only lines on one channel, and never two events at one time of one group that `decide` returns or of steps that no cause chain links (`ordered_same_channel`, `group_lines_unordered`, `independent_unordered`).
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
   The binding is one to one within each domain: the request ids, and the keys of each entity.
@@ -250,7 +251,7 @@ The following items are tazuna's own:
 ### Ordering
 
 - The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON (`bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order`).
-- A snapshot orders two `out` lines after one `in` line only when they travel on one channel (`ordered_same_channel`), never two lines of one group of events that `decide` returns (`group_lines_unordered`), and never two events of steps that no cause chain links (`independent_unordered`).
+- A snapshot orders two `out` lines after one `in` line only when they travel on one channel (`ordered_same_channel`), and never two events at one time of one group that `decide` returns (`group_lines_unordered`) or of steps that no cause chain links (`independent_unordered`).
 
 ### Identity
 

@@ -151,6 +151,8 @@ export interface Deadline {
   readonly machine: InstanceId;
   readonly state: string;
   readonly name: string;
+  /** The step that entered `state`, which armed the deadline. */
+  readonly armedBy: number;
 }
 
 export const machineOf = (requester: Requester): InstanceId | undefined =>
@@ -183,14 +185,15 @@ interface Queued {
 }
 
 /**
- * A step of a message. `cause` is the step that caused this one, undefined for input and deadline steps. `message` is
- * the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
+ * A step of a message. `cause` is the step that caused this one, undefined for input and deadline steps. `armedBy` is,
+ * for a deadline step, the step that armed the deadline. `message` is the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
  * marks a step that comes after every earlier step of the same message and before every later one. `nested` marks a
  * step that began while its cause was running (a copy start), so it ends before its cause does. `tie` is, for a
  * deadline step, the time of the tie it fired in.
  */
 export interface StepInfo {
   readonly cause: number | undefined;
+  readonly armedBy: number | undefined;
   readonly message: number;
   readonly command: boolean;
   readonly barrier: boolean;
@@ -382,10 +385,11 @@ export function newStep(
     barrier = false,
     nested = false,
     tie,
-  }: { barrier?: boolean; nested?: boolean; tie?: Temporal.Instant | undefined } = {},
+    armedBy,
+  }: { barrier?: boolean; nested?: boolean; tie?: Temporal.Instant | undefined; armedBy?: number } = {},
 ): number {
   const message = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount;
-  s.steps.push({ cause, message, command: false, barrier, nested, tie });
+  s.steps.push({ cause, armedBy, message, command: false, barrier, nested, tie });
   return s.steps.length - 1;
 }
 

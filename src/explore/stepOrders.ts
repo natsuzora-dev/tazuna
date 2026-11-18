@@ -10,9 +10,9 @@ import { stepNameDefinition, stepsKey } from "../service/note.ts";
 import { created } from "../service/state.ts";
 import { type Span, type StepOrder, sameTurn, type Turn } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
-import { leadsTo } from "../sim/trace.ts";
 import { compareRuns } from "../verify/compare.ts";
 import { type Compare, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
+import { leadsTo } from "./instrument.ts";
 
 /** Lean's Tried: a step order that the search ran, refused (Execution.refused) or with the violation found, if any. */
 export type Tried =

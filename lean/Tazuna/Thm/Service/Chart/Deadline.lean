@@ -8,8 +8,8 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem addDeadlines_fixed (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
-    (addDeadlines name n ds s).fixed = s.fixed := by
+theorem addDeadlines_fixed (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
+    (addDeadlines step name n ds s).fixed = s.fixed := by
   unfold addDeadlines
   induction ds generalizing s with
   | nil => rfl
@@ -33,8 +33,8 @@ theorem rearm_fixed : (rearm st fs s).fixed = s.fixed := by
         · simp [report_eq, State.fixed]
         · rfl
 
-theorem addDeadlines_lines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
-    (addDeadlines name n ds s).lines = s.lines := by
+theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
+    (addDeadlines step name n ds s).lines = s.lines := by
   unfold addDeadlines
   induction ds generalizing s with
   | nil => rfl

@@ -142,7 +142,7 @@ theorem forEach_keeps {α : Type} (P : World → Prop) {w : World} {xs : List α
   unfold World.forEach
   rw [foldlM_id]
   suffices ∀ (ys : List (α × Nat)) (v : World), (∀ y ∈ ys, y.1 ∈ xs) → P v →
-      P (ys.foldl (fun v (x, n) => if v.stopped || v.violations.length != w.violations.length then v else f v x n) v) by
+      P (ys.foldl (fun v (x, n) => if v.stopped then v else f v x n) v) by
     exact this _ _ (fun y hy => List.fst_mem_of_mem_zipIdx hy) hw
   intro ys
   induction ys with
@@ -407,13 +407,12 @@ theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenar
          exact hv.1)
   · exact keeps_report (keeps_refl w) r
 
-theorem forEach_stopped {α : Type} {w v : World} {xs : List (α × Nat)} {f : World → α → Nat → Id World}
-    (h : v.stopped = true) :
-    xs.foldl (fun v (x, n) => if v.stopped || v.violations.length != w.violations.length then v else f v x n) v = v := by
+theorem forEach_stopped {α : Type} {v : World} {xs : List (α × Nat)} {f : World → α → Nat → Id World}
+    (h : v.stopped = true) : xs.foldl (fun v (x, n) => if v.stopped then v else f v x n) v = v := by
   induction xs with
   | nil => rfl
   | cons y ys ih =>
-    simp only [List.foldl_cons, h, Bool.true_or, ite_true]
+    simp only [List.foldl_cons, h, ite_true]
     exact ih
 
 /-- The world after `f` takes the first of `x :: xs` in a world that has not stopped, when that take stops it. -/
@@ -421,7 +420,7 @@ theorem forEach_first_stops {α : Type} {w : World} {x : α} {xs : List α} {f :
     (hw : w.stopped = false) (hf : (f w x 0).stopped = true) : w.forEach (x :: xs) f = f w x 0 := by
   unfold World.forEach
   rw [foldlM_id]
-  simp only [List.zipIdx_cons, List.foldl_cons, hw, bne_self_eq_false, Bool.or_false, Bool.false_eq_true, ite_false]
+  simp only [List.zipIdx_cons, List.foldl_cons, hw, Bool.false_eq_true, ite_false]
   exact forEach_stopped hf
 
 /--

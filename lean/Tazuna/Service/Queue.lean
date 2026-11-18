@@ -76,7 +76,7 @@ def fireDue [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (to : Time
       let time := t.time.getD s.now
       let s := { s with now := max s.now time }
       let s := s.newMessage
-      let (s, step) := s.newStep none (tie := if tied then e.time else none)
+      let (s, step) := s.newStep none (tie := if tied then e.time else none) (armedBy := some t.armedBy)
       MonadNote.note (.stepBegins step t.step none)
       let r ← settled fs st step (some t.machine) (fire fs st step t) ⟨s, {}⟩
       MonadNote.note .stepEnds

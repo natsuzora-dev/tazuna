@@ -1,6 +1,6 @@
 import Tazuna.Service.Restart
 import Tazuna.Explore.BagOrderDependent
-import Tazuna.Sim.Trace
+import Tazuna.Sim.Order
 import Tazuna.Data.Binding
 
 /-!
@@ -447,6 +447,24 @@ def instrument : Functions (StateT Collect m) :=
     close := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
         fun a b => sameValue a.1 b.1 && a.2 == b.2 }
+
+/--
+Whether step `earlier` leads to step `later`. Nested steps are spans of their outer step, so only steps that write
+event lines are compared. Reachability between them follows the cause chain and barriers, which the search of step
+orders keeps fixed.
+-/
+def leadsTo (s : State) (earlier later : Nat) : Bool :=
+  later == earlier ||
+    (earlier < later && (s.steps[earlier]?.any (·.barrier)) &&
+      (s.steps[earlier]?.map (·.message)) == (s.steps[later]?.map (·.message))) ||
+    match s.steps[later]? with
+    | some { cause, message, barrier, .. } =>
+      (barrier && earlier < later && (s.steps[earlier]?.map (·.message)) == some message) ||
+        match cause with
+        | some cause => if cause < later then leadsTo s earlier cause else false
+        | none => false
+    | none => false
+termination_by later
 
 /-- Whether steps `i` and `j` are deadlines of one tie. -/
 def tiedDeadlines (s : State) (i j : Nat) : Bool :=

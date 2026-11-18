@@ -6,6 +6,7 @@ import { type Deadline, halt, machine, NoteAccess, type Run, type State, scopeOf
 
 export function addDeadlines(
   s: State,
+  step: number,
   resource: InstanceId,
   state: string,
   deadlines: readonly (readonly [string, DeadlineTime])[],
@@ -17,6 +18,7 @@ export function addDeadlines(
       machine: resource,
       state,
       name,
+      armedBy: step,
     });
 }
 

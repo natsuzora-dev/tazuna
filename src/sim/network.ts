@@ -14,8 +14,8 @@ import { bodyContent, type Line, type LineBody, sameLineId } from "../service/me
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
+import { sentBefore } from "./order.ts";
 import { arriveFrom, receivedId } from "./receive.ts";
-import { sentBefore } from "./trace.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";

@@ -43,6 +43,16 @@ export const exampleTest = (t: TestContext, example: string): Promise<void> =>
 
 export const kindOfLine = (line: string) => (JSON.parse(line) as { readonly kind: string }).kind;
 
+/** The kind of a violation line, and the kind of the mismatch that a ChoiceDependent difference holds. */
+const kindsOfLine = (line: string): string[] => {
+  const v = JSON.parse(line) as {
+    readonly kind: string;
+    readonly data?: { readonly difference?: { readonly mismatch?: { readonly kind: string } } };
+  };
+  const nested = v.data?.difference?.mismatch?.kind;
+  return nested === undefined ? [v.kind] : [v.kind, nested];
+};
+
 /** Tests that the violations of each example equal its expected.jsonl and all have kinds of `group`. */
 export function testExamples(examples: readonly string[], group: Group, args: readonly string[]): void {
   for (const example of examples)
@@ -67,8 +77,8 @@ function commonFolder(examples: readonly string[]): string {
 }
 
 /**
- * Tests that each of `kinds` appears in the expected.jsonl of some example, except `unexemplified`: the kinds that no
- * example reports, each with the reason.
+ * Tests that each of `kinds` appears in the expected.jsonl of some example, as a violation or as the mismatch of a
+ * ChoiceDependent difference, except `unexemplified`: the kinds that no example reports, each with the reason.
  */
 export function testEveryKind(
   examples: readonly string[],
@@ -78,7 +88,7 @@ export function testEveryKind(
   const groups = [...new Set(kinds.map((kind) => kind.split(".")[0]))].join(" and ");
   const skipped = Object.keys(unexemplified);
   test(`Each kind of ${groups} except the unexemplified ones appears in the expected.jsonl of some example under test/${commonFolder(examples)}, and no unexemplified kind does`, () => {
-    const reported = new Set(examples.flatMap(expectedOf).map(kindOfLine));
+    const reported = new Set(examples.flatMap(expectedOf).flatMap(kindsOfLine));
     assert.deepEqual(
       kinds.filter((kind) => !(kind in unexemplified) && !reported.has(kind)),
       [],

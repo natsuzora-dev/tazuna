@@ -1,88 +1,10 @@
-import Tazuna.Service.Note
-import Tazuna.Service.State
-import Tazuna.Data.Trace
+import Tazuna.Sim.Order
 
-/-!
-This module computes a snapshot line's `after`: every order that must hold among the lines of one window (between two
-input lines).
--/
+/-! This module builds the lines of a snapshot from a running service's trace. -/
 
 namespace Tazuna.Sim
 
 open Tazuna.Data Tazuna.Service
-
-/--
-Whether step `earlier` leads to step `later`. Nested steps are spans of their outer step, so only steps that write
-event lines are compared. Reachability between them follows the cause chain and barriers, which the search of step
-orders keeps fixed.
--/
-def leadsTo (s : State) (earlier later : Nat) : Bool :=
-  later == earlier ||
-    (earlier < later && (s.steps[earlier]?.any (·.barrier)) &&
-      (s.steps[earlier]?.map (·.message)) == (s.steps[later]?.map (·.message))) ||
-    match s.steps[later]? with
-    | some { cause, message, barrier, .. } =>
-      (barrier && earlier < later && (s.steps[earlier]?.map (·.message)) == some message) ||
-        match cause with
-        | some cause => if cause < later then leadsTo s earlier cause else false
-        | none => false
-    | none => false
-termination_by later
-
-/-- Whether step `later` is step `earlier` or one that it caused, following the cause chain only. -/
-def causedBy (s : State) (earlier later : Nat) : Bool :=
-  later == earlier ||
-    match s.steps[later]?.bind (·.cause) with
-    | some cause => if cause < later then causedBy s earlier cause else false
-    | none => false
-termination_by later
-
-def channelOf (l : Line) : Option Channel :=
-  match l.body with
-  | .command .. | .query .. | .subscribe .. => some (.request l.id)
-  | .unsubscribe to => some (.request to)
-  | .answer to _ => some (.answers to)
-  | .event _ _ resultOf => some (.events resultOf)
-  | .time | .restart | .operation .. => none
-
-/--
-Whether line `a` must precede line `b` among the lines of one window: they travel on one channel, and `b` is caused by
-`a`. The lines of one request's channel all are. Of two event lines, `b` is when its step is `a`'s and its group a
-different one, since decide orders its groups and not the events of one group, or when its step is one that `a`'s step
-caused. Events of steps that no cause chain links keep no order, even on one channel, as two senders' messages do not;
-lines on different channels keep none either. Precedents: Lamport's happens-before, Kafka (order within a partition),
-HTTP/2 (independent streams), and Mazurkiewicz traces (independent actions commute).
--/
-def ordered (s : State) (a b : Nat) : Bool :=
-  match s.lines[a]?, s.lines[b]? with
-  | some la, some lb =>
-    (channelOf la).isSome && channelOf la == channelOf lb &&
-      match la.emitted, lb.emitted with
-      | some ea, some eb => if ea.step == eb.step then ea.group != eb.group else causedBy s ea.step eb.step
-      | _, _ => true
-  | _, _ => false
-
-/--
-Whether line `a` reaches a receiver before line `b` (`a < b`): an `in` line lies between them, since every line caused
-by an input comes before the next input, or they are ordered.
--/
-def sentBefore (s : State) (a b : Nat) : Bool :=
-  a < b && ((s.lines.extract (a + 1) b).any (·.dir == .in) || ordered s a b)
-
-/-- The `out` lines of the window that contains line `i`. -/
-def window (s : State) (i : Nat) : List Nat :=
-  let indexed := s.lines.toList.zipIdx
-  let before := (indexed.take i).reverse.takeWhile (·.1.dir == .out)
-  let after := (indexed.drop i).takeWhile (·.1.dir == .out)
-  (before.reverse ++ after).map (·.2)
-
-/-- The ids of the earlier lines in the same window that must precede line `i` (ordered). -/
-def after (s : State) (i : Nat) : List LineId :=
-  match s.lines[i]? with
-  | none => []
-  | some line =>
-    if line.dir == .in then [] else
-    ((window s i).filter fun a => a < i && ordered s a i).filterMap fun a => s.lines[a]?.map (·.id)
 
 /--
 The strings of a line body in which createKey values are searched. Rejection kinds are excluded, since they can never

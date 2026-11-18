@@ -31,7 +31,7 @@ theorem keeps_enterOne (step : Nat) (name : InstanceId) (n : String) : Keeps (en
           · exact (keeps_closeFinal st step name _).trans ha
           · exact (keeps_endWith (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _).trans ha
         · simp only [id_pure, enterFinal_fixed]; exact ha
-      · exact (addDeadlines_fixed _ _ _).trans ha
+      · exact (addDeadlines_fixed _ _ _ _).trans ha
 
 theorem keeps_enter (step : Nat) (name : InstanceId) (targets : List String) : Keeps (enter fs st step name targets) := by
   unfold enter
@@ -79,7 +79,7 @@ theorem growsBy_enterOne (step : Nat) (name : InstanceId) (n : String) : GrowsBy
           · exact (Grows.of_lines ha).trans hn (growsBy_endWith (fun c n => growsBy_exitOne Limit.exitDepth.max c n)
               (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _)
         · simp only [id_pure]; exact Grows.of_lines ((enterFinal_lines _ _ _ _).trans ha)
-      · exact Grows.of_lines ((addDeadlines_lines _ _ _).trans ha)
+      · exact Grows.of_lines ((addDeadlines_lines _ _ _ _).trans ha)
 
 theorem growsBy_enter (step : Nat) (name : InstanceId) (targets : List String) : GrowsBy (enter fs st step name targets) := by
   unfold enter

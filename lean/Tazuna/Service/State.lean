@@ -51,8 +51,9 @@ structure Deadline where
   machine : InstanceId
   state : String
   name : String
+  /-- The step that entered `state`, which armed the deadline. -/
+  armedBy : Nat
 deriving DecidableEq, Repr, Inhabited
-
 
 /--
 A request with a request line, awaiting an answer. `stale` is whether the sending state was exited or the
@@ -82,14 +83,16 @@ structure Queued where
 deriving DecidableEq, Repr, Inhabited
 
 /--
-A step of a run. `cause` is the step that caused this one, or none for input and deadline steps. `message` is the
-message number, inherited from the cause. `command` is whether the step processes an own-service command. `barrier` is
+A step of a run. `cause` is the step that caused this one, or none for input and deadline steps. `armedBy` is, for a
+deadline step, the step that armed the deadline, which caused it as `cause` does but in an earlier message. `message`
+is the message number, inherited from the cause. `command` is whether the step processes an own-service command. `barrier` is
 whether the step comes after every earlier step of the same message and before every later one. `nested` is whether
 the step began while its cause was running (a copy start), so that it ends before its cause does. `tie` is, for a
 deadline step, the time of the tie it fired in, so that test's search takes the tie's deadlines in every order.
 -/
 structure StepInfo where
   cause : Option Nat
+  armedBy : Option Nat := none
   message : Nat
   command : Bool := false
   barrier : Bool := false
@@ -212,13 +215,13 @@ def State.createKeys (s : State) (entities : List String) : State :=
 
 def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
 
-def State.newStep (s : State) (cause : Option Nat) (barrier := false) (nested := false) (tie : Option Time := none) :
-    State × Nat :=
+def State.newStep (s : State) (cause : Option Nat) (barrier := false) (nested := false) (tie : Option Time := none)
+    (armedBy : Option Nat := none) : State × Nat :=
   let message := match cause.bind (s.steps[·]?) with
     | some c => c.message
     | none => s.messageCount
   let step := s.steps.size
-  ({ s with steps := s.steps.push { cause, message, barrier, nested, tie } }, step)
+  ({ s with steps := s.steps.push { cause, armedBy, message, barrier, nested, tie } }, step)
 
 /-- The number of command steps in the cause chain of `step`, including `step`. -/
 def State.commandDepth (s : State) (step : Nat) : Nat :=

@@ -14,20 +14,6 @@ inductive RecordPart where
   | field (entity : String) (key : Option String) (name : String)
 deriving DecidableEq, Repr, Inhabited
 
-/--
-The channel that an `out` line travels on, seen from its sender (Sim's Message.sameChannel, whose receiver a trace line
-does not name): a request and its end travel to the request's receiver on the request's own channel, the answers to a
-received request travel back to its sender, and events travel to their receivers on the channel of their `resultOf`,
-or on the sender's channel when they name none. A line that no sender writes `out` travels on none.
--/
-inductive Channel where
-  | request (id : LineId)
-  | answers (request : LineId)
-  | events (resultOf : Option LineId)
-deriving DecidableEq, Repr
-
-derive_wire Channel tag "kind"
-
 /-- A value that steps read and write. Being in a state also stands for the copy set of a map state. -/
 inductive ValueKey where
   | record (part : RecordPart)

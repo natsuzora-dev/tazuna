@@ -27,7 +27,6 @@ import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, 
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
-import { leadsTo } from "../sim/trace.ts";
 
 /**
  * The values that a step reads and writes, each by its valueName. `keyWrites` holds the key sets of entities that a
@@ -115,6 +114,20 @@ function commutes(a: StepAccess, b: StepAccess): boolean {
     a.settledOwner === b.settledOwner &&
     (a.name.kind === "always" || b.name.kind === "always")
   );
+}
+
+/**
+ * Returns whether step `earlier` comes before step `later` through the cause chain or through a barrier of the same
+ * message.
+ */
+export function leadsTo(steps: readonly StepInfo[], earlier: number, later: number): boolean {
+  if (later === earlier) return true;
+  const first = steps[earlier];
+  const last = steps[later];
+  if (earlier < later && first?.barrier === true && first.message === last?.message) return true;
+  if (last === undefined) return false;
+  if (last.barrier && earlier < later && first?.message === last.message) return true;
+  return last.cause !== undefined && last.cause < later && leadsTo(steps, earlier, last.cause);
 }
 
 /** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie. */

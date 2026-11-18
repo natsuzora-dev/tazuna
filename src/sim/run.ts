@@ -208,11 +208,10 @@ function inOrder(w: World, i: number, ks: readonly number[]): readonly number[] 
   });
 }
 
-/** Lean's World.forEach: `f` takes each of `xs` with its place until the world stops or a report is added. */
+/** Lean's World.forEach: `f` takes each of `xs` with its place until the world stops. */
 function forEach<T>(w: World, xs: readonly T[], f: (x: T, n: number) => void): void {
-  const before = w.violations.length;
   for (const [n, x] of xs.entries()) {
-    if (stopped(w) || w.violations.length !== before) return;
+    if (stopped(w)) return;
     f(x, n);
   }
 }
@@ -823,22 +822,25 @@ function compared(
   const st = r.st;
   switch (e.type) {
     case "answered": {
-      const [s] = sentBy(w, e.line);
-      if (s === undefined)
+      const pairs = sentBy(w, e.line).map((s): readonly [unknown, unknown] => {
+        const request = stateOf(w, s.receiver)?.lines[s.position];
+        const target =
+          request?.type === "command" || request?.type === "query" || request?.type === "subscribe"
+            ? request.target
+            : undefined;
+        const rr = processingOf(w, s.receiver) as Processing;
+        const actual = answersOf(w, s).map((a) => comparedAnswer(rr, target, a));
+        const expected = e.answers.map((t) => comparedAnswerValue(rr, target, fill(w, e.line, t)));
+        return [expected, actual];
+      });
+      const pair = pairs.find(([expected, actual]) => canonicalJson(expected) !== canonicalJson(actual)) ?? pairs[0];
+      if (pair === undefined)
         return reportedHere({
           kind: "InvalidScenario.unresolvedReference",
           definition: null,
           data: { scenarioLine: e.line, fact: { type: "line", index: e.line } },
         });
-      const request = stateOf(w, s.receiver)?.lines[s.position];
-      const target =
-        request?.type === "command" || request?.type === "query" || request?.type === "subscribe"
-          ? request.target
-          : undefined;
-      const rr = processingOf(w, s.receiver) as Processing;
-      const actual = answersOf(w, s).map((a) => comparedAnswer(rr, target, a));
-      const expected = e.answers.map((t) => comparedAnswerValue(rr, target, fill(w, e.line, t)));
-      return [expected, actual];
+      return pair;
     }
     case "emitted": {
       const actual = spanLines(w, { type: "line", index: e.line }, own).flatMap((l) =>

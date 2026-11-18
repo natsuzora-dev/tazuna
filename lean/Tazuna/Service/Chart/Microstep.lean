@@ -86,7 +86,7 @@ def enterOne (st : Service) (step : Nat) (name : InstanceId) (n : String) : Proc
         | some parent => pure (enterFinal step name parent r)
       else do
       let deadlines ← fs.deadlines i.chart.name n
-      pure ⟨addDeadlines name n deadlines r.state, if cs.activities.isEmpty then r.queue else r.queue.enter name n step⟩
+      pure ⟨addDeadlines step name n deadlines r.state, if cs.activities.isEmpty then r.queue else r.queue.enter name n step⟩
 
 /-- The processing after instance `name` enters `targets` (SCXML enterStates). -/
 def enter (st : Service) (step : Nat) (name : InstanceId) (targets : List String) : Processing → m Processing :=

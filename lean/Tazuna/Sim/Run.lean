@@ -70,12 +70,11 @@ def World.inOrder (w : World) (i : Nat) (ks : List Nat) : List Nat :=
   | none => ks
 
 /--
-The world after `f` takes each of `xs` in turn with its place, from 0, until the world stops or a report is added: a
-line that names several messages acts on each, and stops at the first report as a line with one does.
+The world after `f` takes each of `xs` in turn with its place, from 0, until the world stops: a line that names several
+messages acts on each.
 -/
 def World.forEach {α : Type} (w : World) (xs : List α) (f : World → α → Nat → m World) : m World :=
-  xs.zipIdx.foldlM (init := w) fun v (x, n) =>
-    if v.stopped || v.violations.length != w.violations.length then pure v else f v x n
+  xs.zipIdx.foldlM (init := w) fun v (x, n) => if v.stopped then pure v else f v x n
 
 def requestOf (type : RequestType) (target : Spec.Ref) (id : Option LineId) (v : Value) :
     Service → Functions m → State → m State :=
@@ -449,13 +448,16 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
     ExceptT.lift (comparedAnswerValue fs target v)
   match e with
   | .answered line answers =>
-    let some s := (w.sentBy line).head? | throw (.unresolvedReference line (ToValue.toValue (Fact.line line)))
-    let lines := (w.state s.receiver).lines
-    let target := (lines[s.position]?).bind (requestTarget? ·.body)
-    let rfs := fsOf s.receiver
-    let actual ← (w.answersOf s).mapM (comparedAnswer rfs target)
-    let expected ← (← answers.mapM (w.fill fsOf line)).mapM (comparedAnswerValue rfs target)
-    pure (some (.arr expected, .arr actual))
+    let pairs ← (w.sentBy line).mapM fun s => do
+      let lines := (w.state s.receiver).lines
+      let target := (lines[s.position]?).bind (requestTarget? ·.body)
+      let rfs := fsOf s.receiver
+      let actual ← (w.answersOf s).mapM (comparedAnswer rfs target)
+      let expected ← (← answers.mapM (w.fill fsOf line)).mapM (comparedAnswerValue rfs target)
+      pure (Value.arr expected, Value.arr actual)
+    match pairs.find? (fun (e, a) => e.canonical != a.canonical) <|> pairs.head? with
+    | some pair => pure (some pair)
+    | none => throw (.unresolvedReference line (ToValue.toValue (Fact.line line)))
   | .emitted line events =>
     let actual ← ((w.spanLines (.line line) own).filterMap fun l => match l.dir, l.body with
       | .out, .event event payload _ =>
