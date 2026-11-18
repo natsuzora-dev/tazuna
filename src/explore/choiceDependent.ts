@@ -161,26 +161,18 @@ export function stepOrder(
       };
 }
 
-/**
- * Lean's deliveryOrder: the violation for the delivery order `order` of line `line` at the first running service, in the
- * order of `outcomes`, whose outcome differs between the execution in sending order and the execution in `order`.
- */
-export function deliveryOrder(
-  compareFor: (service: string) => Compare,
-  definition: Of<"ChoiceDependent.deliveryOrder">["definition"],
-  line: number,
-  order: readonly number[],
-  outcomes: readonly (readonly [string, Outcome, Outcome])[],
-): Of<"ChoiceDependent.deliveryOrder" | "ChoiceDependent.uncomparable"> | undefined {
-  for (const [service, original, alternative] of outcomes) {
-    const found = difference(compareFor(service), original, alternative);
-    if (found === "uncomparable") return uncomparable(definition);
-    if (found !== undefined)
-      return {
-        kind: "ChoiceDependent.deliveryOrder",
-        definition,
-        data: { scenarioLine: line, order, service, difference: found },
-      };
-  }
-  return undefined;
+/** The equalMessages violation, if any, for two equal messages of a tie that `service` processed alike or not. */
+export function equalMessages(
+  compare: Compare,
+  service: string,
+  arrival: StepName,
+  original: Outcome,
+  swapped: Outcome,
+): Of<"ChoiceDependent.equalMessages" | "ChoiceDependent.uncomparable"> | undefined {
+  const definition = stepNameDefinition(service, arrival);
+  const found = difference(compare, original, swapped);
+  if (found === "uncomparable") return uncomparable(definition);
+  return found === undefined
+    ? undefined
+    : { kind: "ChoiceDependent.equalMessages", definition, data: { service, arrival, difference: found } };
 }

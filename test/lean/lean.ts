@@ -38,7 +38,6 @@ const responses = {
   decodeLines: "decodedLines",
   simulate: "simulated",
   stepOrderChanges: "stepOrderChanges",
-  deliveryOrderChanges: "deliveryOrderChanges",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
@@ -177,11 +176,6 @@ export class Lean {
   /** Lean's stepOrderChanges of the scenario executed from its startup: each search, what it ran, and what it found. */
   stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"stepOrderChanges">["searched"] {
     return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
-  }
-
-  /** Lean's deliveryOrderSearch of the scenario: each delivery order it ran, and what it found. */
-  deliveryOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"deliveryOrderChanges"> {
-    return this.exchange({ type: "deliveryOrderChanges", structure: spec.structure, scenario }, functions);
   }
 
   /** Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables. */

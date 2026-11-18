@@ -165,8 +165,9 @@ function without(queue: Queue, at: number): void {
  * Lean's Queue.take: removes the entry that the queue takes next and returns it, or undefined when nothing is ready.
  * While the state has `stepOrder` entries, the taken entry is the first ready one that the next entry names (`name`
  * names each). Otherwise, it is the first in queue order: the tasks in arrival order, then the commands, with the round
- * joined to them in sender-definition order. An entry that names a deadline waits for its tie (chooseDeadline), so the
- * queue takes the first in queue order and keeps the entry.
+ * joined to them in sender-definition order. An entry that names a deadline waits for its tie (chooseDeadline), and one
+ * that names an arrival for the next message of a tie (arriveAll), so the queue takes the first in queue order and keeps
+ * the entry.
  */
 export function take(r: Processing, name: (ready: Ready) => StepName): Entry | undefined {
   const { state: s, queue } = r;
@@ -179,7 +180,7 @@ export function take(r: Processing, name: (ready: Ready) => StepName): Entry | u
     return first;
   }
   const found = ready.find((e) => sameStep(name(e.ready), named));
-  if (found === undefined && named.kind !== "deadline")
+  if (found === undefined && named.kind !== "deadline" && named.kind !== "arrival")
     return report(s, {
       kind: "InvalidInput.unreadyStep",
       definition: null,

@@ -27,8 +27,8 @@ derive_wire Difference tag "aspect"
 
 /--
 A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, of two
-deadlines of one service due at one time, or of the processings of equal messages that one line delivers. Every other
-order of a simulation is a written line. stepOrder writes the pair in canonical order.
+deadlines of one service due at one time, or of two messages that one line delivers to one service. Every other order of
+a simulation is a written line. stepOrder writes the pair in canonical order.
 -/
 inductive ChoiceDependent where
   /--
@@ -42,20 +42,19 @@ inductive ChoiceDependent where
   /--
   The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
   a result that only those change is not reported. `definition` is the definition of the first step of the first pair
-  that the search swapped. The search of the delivery orders of one line stops alike at deliveryOrderLimit, with the
-  definition of its messages as `definition`.
+  that the search swapped.
   -/
   | searchLimit (definition : Spec.Ref) (limit : Nat)
   /--
-  The execution in which scenario line `scenarioLine` delivers the equal messages that it names in sending order and the
-  execution in which it delivers them in `order`, their places counted in sending order, differ by `difference` in the
-  outcome of the running service `service`. The messages are equal, so nothing outside tells which arrives first.
-  `definition` is the request or event that the messages carry.
+  Two equal messages that one line delivers to the running service `service`, which arrive in steps of the name
+  `arrival`, are processed differently, so which of them gets which processing depends on which arrives first, which
+  nothing outside tells: the outcome with the two swapped differs by `difference`. That outcome is the same run with the
+  two ids swapped, since the service reads a received id only to name the message, so no search executes it.
+  `definition` is the request or event that the messages carry, or answer or end.
   -/
-  | deliveryOrder (definition : Spec.Ref) (scenarioLine : Nat) (order : List Nat) (service : String)
-      (difference : Difference)
+  | equalMessages (definition : Spec.Ref) (service : String) (arrival : StepName) (difference : Difference)
   /--
-  Comparing the records of two executions that a stepOrder or deliveryOrder violation at `definition` would name held more
+  Comparing the records of two executions that a stepOrder or equalMessages violation at `definition` would name held more
   than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
   the choice changes the records is not known.
   -/
@@ -69,12 +68,6 @@ The number of step orders that the search of one processing runs at most (stepOr
 processing with many steps that touch the same values, whose count grows factorially.
 -/
 def stepOrderLimit : Nat := 64
-
-/--
-The number of delivery orders that the search of one line runs at most (deliveryOrderSearch). It bounds the orders of
-many equal messages, whose count grows factorially.
--/
-def deliveryOrderLimit : Nat := 64
 
 /--
 The result of a run: the violation that halted it, the trace lines that verify reads, its records, and the keys that its
@@ -204,18 +197,6 @@ def stepOrder (compare : Compare m) (service : String) (a b : StepName) (aOrder 
     else (b, a, bOrder, aOrder, bFirst, aFirst)
   return (← difference compare original alternative).violation (first.definition service)
     (.stepOrder (first.definition service) first second firstOrder secondOrder)
-
-/--
-The ChoiceDependent violation, if any, for the delivery order `order` of line `line`: the first difference, in the order
-of `outcomes`, between the outcome of a running service in the execution that delivers in sending order and in the
-execution that delivers in `order`.
--/
-def deliveryOrder (compareFor : String → Compare m) (definition : Spec.Ref) (line : Nat) (order : List Nat)
-    (outcomes : List (String × Outcome × Outcome)) : m (Option ChoiceDependent) :=
-  outcomes.foldlM (init := none) fun found (service, original, alternative) => do
-    if found.isSome then return found
-    return (← difference (compareFor service) original alternative).violation definition
-      (.deliveryOrder definition line order service)
 
 end
 

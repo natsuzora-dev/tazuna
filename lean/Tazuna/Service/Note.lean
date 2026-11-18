@@ -41,6 +41,12 @@ inductive Note where
   | read (definition : Spec.Ref) (parts : List RecordPart)
   | stepBegins (step : Nat) (name : StepName) (started : Option InstanceId)
   | stepEnds
+  /--
+  The arrival of a message of a tie in step `step`, whose processing outside any step (such as its decide) belongs to
+  that step, until arrivalEnds.
+  -/
+  | arrivalBegins (step : Nat) (name : StepName)
+  | arrivalEnds
   /-- The evaluation of the always transitions of `owner` and its copies before and after the work of the open step. -/
   | settlesAround (owner : InstanceId)
   /-- A read by the open step of whether instances or copies are in the given states. -/

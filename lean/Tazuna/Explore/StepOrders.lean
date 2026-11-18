@@ -10,15 +10,16 @@ compares each execution's outcome by ChoiceDependent.stepOrder.
 namespace Tazuna.Explore
 
 open Tazuna.Data Tazuna.Service
+open Tazuna.Scenario (Origin)
 
 /-- An execution of a scenario, with what each running service's instrumented functions collected. -/
 structure Execution where
   world : Sim.World
   collect : String → Collect
 
-/-- The span of the execution's processing of `service` in `turn`. -/
-def Execution.span? (w : Execution) (turn : Sim.Turn) (service : String) : Option Sim.Span :=
-  w.world.spans.find? fun s => s.service == service && s.turn == turn
+/-- The span of the execution's processing of `service` while `o` was processed. -/
+def Execution.span? (w : Execution) (o : Origin) (service : String) : Option Sim.Span :=
+  w.world.spans.find? fun s => s.service == service && s.origin == o
 
 /--
 The steps of the processing of `span` that an order takes, by step number and name, in the order they began: those
@@ -33,11 +34,11 @@ def Execution.taken (w : Execution) (span : Sim.Span) : List (Nat × StepName) :
 
 /--
 Whether the service of `span` halted while the processing of `span` ran: it halted, and the processing is its last.
-A service acts once per turn, and a halted service acts no more.
+A service acts once per origin, and a halted service acts no more.
 -/
 def Execution.haltedIn (w : Execution) (span : Sim.Span) : Bool :=
   (w.world.state span.service).halted.isSome &&
-    ((w.world.spans.filter (·.service == span.service)).getLast?.map (·.turn)) == some span.turn
+    ((w.world.spans.filter (·.service == span.service)).getLast?.map (·.origin)) == some span.origin
 
 /--
 The candidates of the processing of `span`: none when its service halted in it, which skips the steps after the halt,
@@ -58,12 +59,82 @@ def Execution.refused (w : Execution) (service : String) : Bool :=
   | some (.invalidInput (.unreadyStep ..)) | some (.invalidInput (.unusedStepOrder _)) => true
   | _ => false
 
-/-- What the relation compares of the execution for the running service `st`. -/
-def Execution.outcome (w : Execution) (st : Service) : Explore.Outcome :=
-  let s := w.world.state st.service
+/-- What the relation compares of the execution for the running service `st`, whose state is `s`. -/
+def Execution.outcomeWith (w : Execution) (st : Service) (s : State) : Explore.Outcome :=
   let lines := (Sim.trace s).map fun (line, after, created) => Sim.traceLineOf st.service line after created
   Outcome.of st (s.halted.map (·.toViolation)) lines s.records (w.world.states.flatMap fun (q, x) =>
     x.created.map fun (entity, key) => (key, s!"{q}/{entity}"))
+
+/-- What the relation compares of the execution for the running service `st`. -/
+def Execution.outcome (w : Execution) (st : Service) : Explore.Outcome :=
+  w.outcomeWith st (w.world.state st.service)
+
+/-- The ids of the `in` lines of `span` in `s`: the messages that the processing took, in the order it took them. -/
+def inIds (s : State) (span : Sim.Span) : List LineId :=
+  ((s.lines.extract span.from span.to).toList.filter (·.dir == .in)).map (·.id)
+
+/--
+`s` with the lines of `span` in the order of the messages `ids`: each `in` line moves with the `out` lines after it, so
+two runs that took the messages of a tie in other orders compare by message, as verify pairs a trace's `in` lines with
+the snapshot's.
+-/
+def alignTo (ids : List LineId) (span : Sim.Span) (s : State) : State :=
+  let lines := (s.lines.extract span.from span.to).toList
+  let pre := lines.takeWhile (·.dir != .in)
+  let windows := ((lines.drop pre.length).foldl (fun (ws : List (List Line)) l =>
+    if l.dir == .in then [l] :: ws else match ws with
+      | w :: more => (l :: w) :: more
+      | [] => [[l]]) []).reverse.map List.reverse
+  let key (window : List Line) := (window.head?.bind fun l => ids.idxOf? l.id).getD ids.length
+  let sorted := windows.mergeSort fun a b => decide (key a ≤ key b)
+  { s with lines := s.lines.extract 0 span.from ++ (pre ++ sorted.flatten).toArray ++ s.lines.extract span.to s.lines.size }
+
+/-- The id `i`, with `x` and `y` swapped. -/
+def swapId (x y i : LineId) : LineId := if i == x then y else if i == y then x else i
+
+/-- The line `l` with the ids `x` and `y` swapped wherever it names a message. -/
+def Line.swapIds (x y : LineId) (l : Line) : Line :=
+  { l with id := swapId x y l.id, body := match l.body with
+    | .answer to a => .answer (swapId x y to) a
+    | .event e p r => .event e p (r.map (swapId x y))
+    | .unsubscribe to => .unsubscribe (swapId x y to)
+    | b => b }
+
+/-- The arrival steps of the processing of `span` (Tie.arrivals), by name, each with its message's id, in arrival order. -/
+def Execution.arrivals (w : Execution) (span : Sim.Span) : List (StepName × LineId) :=
+  let s := w.world.state span.service
+  let steps := (w.collect span.service).steps.toList.filter fun (n, _) =>
+    span.stepsFrom ≤ n && n < span.stepsTo && match s.steps[n]?.bind (·.tie) with
+      | some (.arrivals _) => true
+      | _ => false
+  (steps.map (·.2.name)).zip (inIds s span)
+
+section
+
+variable {m : Type → Type} [Monad m]
+
+/--
+The equalMessages violation, if any, of the processing of `span` of the running service `st` in `base`: for each arrival
+whose name an earlier arrival has, the outcome with the two messages swapped. A service reads a received id only to
+name the message (arrivalContent), so that outcome is the run with their ids swapped (symmetry, as TLA+ symmetry sets
+reduce states), which no execution needs.
+-/
+def equalArrivals (compare : Compare m) (st : Service) (base : Execution) (span : Sim.Span) :
+    m (Option ChoiceDependent) := do
+  if base.haltedIn span then return none
+  let s := base.world.state st.service
+  let arrivals := base.arrivals span
+  let original := base.outcome st
+  arrivals.foldlM (init := none) fun found (name, x) => do
+    if found.isSome then return found
+    let some (_, first) := arrivals.find? (·.1 == name) | return none
+    if first == x then return none
+    let swapped := alignTo (inIds s span) span { s with lines := s.lines.map (Line.swapIds first x) }
+    let definition := name.definition st.service
+    return (← difference compare original (base.outcomeWith st swapped)).violation definition
+      (.equalMessages definition st.service name)
+
+end
 
 /-- The verdict of the search on one step order: refused (Execution.refused), or the violation found, if any. -/
 inductive Verdict where
@@ -90,7 +161,7 @@ deriving Repr, Inhabited
 def findingKey : ChoiceDependent → String
   | .stepOrder _ first second _ _ difference =>
     (Value.arr [ToValue.toValue first, ToValue.toValue second, ToValue.toValue difference]).canonical
-  | .searchLimit .. | .deliveryOrder .. | .uncomparable .. => ""
+  | .searchLimit .. | .equalMessages .. | .uncomparable .. => ""
 
 /--
 The order that runs the pair `(i, j)` of an execution's candidates the other way: the steps before `i` as the execution took them,
@@ -117,7 +188,7 @@ The search after the pair `(i, j)` of the execution `parent`, whose step order i
 (pairOrder) is run unless it ran before, compared with `parent` unless refused, and queued when it reaches a new
 sequence of taken steps. At stepOrderLimit orders the search stops with searchLimit at the first step it swapped.
 -/
-def searchPair (compare : Compare m) (executeWith : List StepName → m Execution) (turn : Sim.Turn) (st : Service)
+def searchPair (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin) (st : Service)
     (parent : Execution) (parentOrder : List StepName) (parentOutcome : Explore.Outcome) (taken : List (Nat × StepName))
     (r : Searching) (pair : Nat × Nat) : m Searching := do
   let (i, j) := pair
@@ -133,17 +204,22 @@ def searchPair (compare : Compare m) (executeWith : List StepName → m Executio
   let alternative ← executeWith order
   if alternative.refused st.service then
     return { r with search := { r.search with tried := r.search.tried ++ [{ order, verdict := .refused }] } }
-  let found ← stepOrder compare st.service a b parentOrder order parentOutcome (alternative.outcome st)
+  let aligned := match parent.span? o st.service, alternative.span? o st.service with
+    | some ps, some alt =>
+      alternative.outcomeWith st (alignTo (inIds (parent.world.state st.service) ps) alt
+        (alternative.world.state st.service))
+    | _, _ => alternative.outcome st
+  let found ← stepOrder compare st.service a b parentOrder order parentOutcome aligned
   let fresh := found.filter fun v => !r.search.found.any (findingKey · == findingKey v)
   let r := { r with search := { tried := r.search.tried ++ [{ order, verdict := .decided found }],
                                 found := r.search.found ++ fresh.toList } }
-  let some altSpan := alternative.span? turn st.service | return r
+  let some altSpan := alternative.span? o st.service | return r
   let sequence := (alternative.taken altSpan).map (·.2)
   if r.reached.contains sequence then return r
   return { r with reached := r.reached ++ [sequence], queue := r.queue ++ [(alternative, order)] }
 
 /-- The search after the executions of its queue, at most `fuel` of them. -/
-def searchQueue (compare : Compare m) (executeWith : List StepName → m Execution) (turn : Sim.Turn) (st : Service) :
+def searchQueue (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin) (st : Service) :
     Nat → Searching → m Searching
   | 0, r => pure r
   | fuel + 1, r =>
@@ -152,64 +228,66 @@ def searchQueue (compare : Compare m) (executeWith : List StepName → m Executi
     | (executed, order) :: rest => do
       if r.stopped then return r
       let r := { r with queue := rest }
-      let some span := executed.span? turn st.service | searchQueue compare executeWith turn st fuel r
+      let some span := executed.span? o st.service | searchQueue compare executeWith o st fuel r
       let taken := executed.taken span
       let r ← (executed.candidatesOf span).foldlM
-        (searchPair compare executeWith turn st executed order (executed.outcome st) taken) r
-      searchQueue compare executeWith turn st fuel r
+        (searchPair compare executeWith o st executed order (executed.outcome st) taken) r
+      searchQueue compare executeWith o st fuel r
 
 /--
-The search of the step orders of the processing in `turn` of the running service `st` that change its result, from
-`base`, the scenario executed up to that processing without an order; `executeWith` executes it with a step order of the
-processing. Each pair of an execution's candidates runs in the other order (pairOrder) and is compared with that execution, and
-each execution that reaches a new sequence of taken steps is searched in turn, so the search reaches every order of
-dependent steps (dynamic partial-order reduction, Flanagan and Godefroid, POPL 2005), up to stepOrderLimit orders.
-Each queued execution follows a new order, so stepOrderLimit + 1 executions bound the queue.
+The search of the step orders of the processing while `o` is processed of the running service `st` that change its
+result, from `base`, the scenario executed up to that processing without an order; `executeWith` executes it with a step
+order of the processing. Equal messages of a tie are checked on `base` alone (equalArrivals). Each pair of an
+execution's candidates runs in the other order (pairOrder) and is compared with that execution, and each execution that
+reaches a new sequence of taken steps is searched in turn, so the search reaches every order of dependent steps (dynamic
+partial-order reduction, Flanagan and Godefroid, POPL 2005), up to stepOrderLimit orders. Each queued execution follows
+a new order, so stepOrderLimit + 1 executions bound the queue.
 -/
-def stepOrderSearch (compare : Compare m) (executeWith : List StepName → m Execution) (turn : Sim.Turn)
+def stepOrderSearch (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin)
     (st : Service) (base : Execution) : m Search := do
-  let some span := base.span? turn st.service | return {}
-  if (base.candidatesOf span).isEmpty then return {}
-  let r ← searchQueue compare executeWith turn st (stepOrderLimit + 1)
+  let some span := base.span? o st.service | return {}
+  let equal := (← equalArrivals compare st base span).toList
+  if (base.candidatesOf span).isEmpty then return { found := equal }
+  let r ← searchQueue compare executeWith o st (stepOrderLimit + 1)
     { reached := [(base.taken span).map (·.2)], queue := [(base, [])] }
-  return r.search
+  return { r.search with found := equal ++ r.search.found }
 
-/-- The search of the processing of `service` in `turn`. -/
+/-- The search of the processing of `service` while `origin` was processed. -/
 structure Searched where
-  turn : Sim.Turn
+  origin : Origin
   service : String
   search : Search
 
 /--
-The searches of the processings of the execution `executed` of the scenario `sc` whose origin is the startup (when `from` is 0)
-or a line from `from` on, each processing once, that have candidates: each on the scenario executed up to its line
-(`executeWith` executes a scenario with step orders), so a later halt hides none. `compareFor` compares the trace
-lines of a service.
+The searches of the processings of the execution `executed` of the scenario `sc` whose origin is the startup (when `from`
+is 0) or a line from `from` on, each processing once, that have candidates or take messages of a tie: each on the
+scenario executed up to its line (`executeWith` executes a scenario with step orders), so a later halt hides none.
+`compareFor` compares the trace lines of a service.
 -/
 def stepOrderChanges (compareFor : String → Compare m)
-    (executeWith : Scenario → List (Sim.Turn × String × List StepName) → m Execution) (sc : Scenario) (executed : Execution)
+    (executeWith : Scenario → List (Origin × String × List StepName) → m Execution) (sc : Scenario) (executed : Execution)
     («from» : Nat) : m (List Searched) := do
   let spans := executed.world.spans.foldl (fun (seen : List Sim.Span) span =>
-    let index := match span.turn.origin with
+    let index := match span.origin with
       | .startup => none
       | .line i => some i
     let inRange := match index with
       | none => «from» == 0
       | some i => «from» ≤ i
-    if !inRange || seen.any (fun s => s.turn == span.turn && s.service == span.service) then seen
+    if !inRange || seen.any (fun s => s.origin == span.origin && s.service == span.service) then seen
     else seen ++ [span]) []
   spans.filterMapM fun span => do
-    if (executed.candidatesOf span).isEmpty then return none
+    if (executed.candidatesOf span).isEmpty && (executed.arrivals span).isEmpty then return none
     let some st := executed.world.services.lookup span.service | return none
-    let count := match span.turn.origin with
+    let count := match span.origin with
       | .startup => 0
       | .line i => i + 1
     let pre := { sc with lines := sc.lines.take count, expectations := [] }
     let base ← executeWith pre []
     let search ← stepOrderSearch (compareFor span.service)
-      (fun order => executeWith pre [(span.turn, span.service, order)]) span.turn st base
+      (fun order => executeWith pre [(span.origin, span.service, order)]) span.origin st base
     if search.tried.isEmpty && search.found.isEmpty then return none
-    return some { turn := span.turn, service := span.service, search }
+    return some { origin := span.origin, service := span.service, search }
 
 end
 

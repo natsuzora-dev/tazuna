@@ -189,30 +189,22 @@ function checkWritten(
   return undefined;
 }
 
-/** Lean's World.recordSent. */
-function recordSent(w: World, i: number, service: string, before: number): void {
+/** Lean's World.recordSent: the first `in` line from `before` on, or the one with id `id`. */
+function recordSent(w: World, i: number, service: string, before: number, id?: LineId): void {
   const lines = stateOf(w, service)?.lines ?? [];
-  const position = lines.findIndex((line, n) => n >= before && line.dir === "in");
+  const position = lines.findIndex(
+    (line, n) => n >= before && line.dir === "in" && (id === undefined || sameLineId(line.id, id)),
+  );
   const l = lines[position];
   if (l === undefined || w.sent.some((s) => s.line === i && s.receiver === service && sameLineId(s.id, l.id))) return;
   w.sent.push({ line: i, receiver: service, id: l.id, position });
 }
 
-/** Lean's World.inOrder. */
-function inOrder(w: World, i: number, ks: readonly number[]): readonly number[] {
-  const order = w.deliveryOrders.get(i);
-  if (order === undefined || order.length !== ks.length) return ks;
-  return order.flatMap((p) => {
-    const k = ks[p];
-    return k === undefined ? [] : [k];
-  });
-}
-
-/** Lean's World.forEach: `f` takes each of `xs` with its place until the world stops. */
-function forEach<T>(w: World, xs: readonly T[], f: (x: T, n: number) => void): void {
-  for (const [n, x] of xs.entries()) {
+/** Lean's World.forEach: `f` takes each of `xs` until the world stops. */
+function forEach<T>(w: World, xs: readonly T[], f: (x: T) => void): void {
+  for (const x of xs) {
     if (stopped(w)) return;
-    f(x, n);
+    f(x);
   }
 }
 
@@ -256,7 +248,7 @@ function clientRequest(
     id = s.id;
   }
   const before = p.state.lines.length;
-  act(w, { origin: { type: "line", index: i }, delivery: 0 }, receiver, requestOf(type, target, id, v));
+  act(w, { type: "line", index: i }, receiver, requestOf(type, target, id, v));
   recordSent(w, i, receiver, before);
 }
 
@@ -319,33 +311,40 @@ function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => bo
 
 const isRequest = (l: LineBody): boolean => l.type === "command" || l.type === "query" || l.type === "subscribe";
 
-/** Lean's World.deliverCarried. */
-function deliverCarried(w: World, i: number, n: number, k: number): void {
-  carry(w, i, k);
-  const m = w.messages[k];
-  if (m === undefined) return;
-  if (!running(w.roles.get(m.receiver))) {
-    m.status = "delivered";
-    return;
+/** Lean's World.deliverCarried: each running receiver processes the messages `ks` to it in one processing. */
+function deliverCarried(w: World, i: number, ks: readonly number[]): void {
+  for (const k of ks) carry(w, i, k);
+  const receivers = [...new Set(ks.flatMap((k) => w.messages[k]?.receiver ?? []))];
+  for (const receiver of receivers) {
+    if (stopped(w)) return;
+    const mine = ks.filter((k) => w.messages[k]?.receiver === receiver);
+    if (!running(w.roles.get(receiver))) {
+      for (const k of mine) (w.messages[k] as Message).status = "delivered";
+      continue;
+    }
+    const before = stateOf(w, receiver)?.lines.length ?? 0;
+    deliver(w, { type: "line", index: i }, receiver, mine);
+    for (const k of mine) {
+      const m = w.messages[k] as Message;
+      if (!isRequest(m.body)) continue;
+      for (const [l, j] of [...w.carried]) if (j === k) recordSent(w, l, receiver, before, receivedId(m.sender, m.id));
+    }
   }
-  const before = stateOf(w, m.receiver)?.lines.length ?? 0;
-  deliver(w, { origin: { type: "line", index: i }, delivery: n }, k);
-  if (!isRequest(m.body)) return;
-  for (const [l, j] of [...w.carried]) if (j === k) recordSent(w, l, m.receiver, before);
 }
 
-/** Lean's World.deliverInOrder. */
-function deliverInOrder(w: World, i: number, n: number, k: number): void {
+/** Lean's World.overtaken: reports that line `i`, which delivers `ks`, delivers `k` before an earlier message. */
+function checkOvertaken(w: World, i: number, ks: readonly number[], k: number): void {
   const m = w.messages[k];
   if (m === undefined) return;
-  const earlier = w.messages.slice(0, k).find((n) => n.status === "inFlight" && precedes(w, n, m));
+  const earlier = w.messages
+    .slice(0, k)
+    .find((n, j) => !ks.includes(j) && n.status === "inFlight" && precedes(w, n, m));
   if (earlier !== undefined)
     reportedHere({
       kind: "InvalidScenario.overtaking",
       definition: null,
       data: { scenarioLine: i, message: describe(m), earlier: describe(earlier) },
     });
-  deliverCarried(w, i, n, k);
 }
 
 /** Lean's World.requestIds. */
@@ -424,7 +423,6 @@ const answered = (w: World, sender: string, to: LineId): boolean =>
 /** Lean's World.take. */
 function take(w: World, own: string, lines: readonly Line[], i: number, l: Line) {
   const origin = { type: "line", index: i } as const;
-  const turn = { origin, delivery: 0 };
   switch (l.type) {
     case "request": {
       if (l.peer === undefined) return clientRequest(w, i, l.kind, l.target, l.input, l.sameIdAs);
@@ -462,10 +460,10 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
             definition: null,
             data: { scenarioLine: i, fact: { type: "line", index: l.subscription } },
           });
-        return act(w, turn, s.receiver, (r) => endSubscription(r, s.id));
+        return act(w, origin, s.receiver, (r) => endSubscription(r, s.id));
       }
       const peer = l.peer;
-      return forEach(w, inOrder(w, i, messagesOf(w, i, { type: "line", index: l.subscription })), (j) => {
+      return forEach(w, messagesOf(w, i, { type: "line", index: l.subscription }), (j) => {
         const sub = w.messages[j] as Message;
         const role = w.roles.get(peer);
         if (role === "external") {
@@ -504,7 +502,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const o = screenOf(w, i, l.screen);
       if (w.roles.get(o.service) !== "own") return wrongRole(i, o.service);
       const v = fill(w, i, l.payload);
-      return act(w, turn, o.service, (r) => operate(r, o.id, l.control, v));
+      return act(w, origin, o.service, (r) => operate(r, o.id, l.control, v));
     }
     case "look": {
       const o = screenOf(w, i, l.screen);
@@ -512,7 +510,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       return;
     }
     case "answer": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.request)), (k) => {
+      return forEach(w, messagesOf(w, i, l.request), (k) => {
         const m = w.messages[k] as Message;
         if (m.receiver !== l.peer)
           return reportedHere({
@@ -628,7 +626,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       });
     }
     case "leaveUnanswered": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.request)), (k) => {
+      return forEach(w, messagesOf(w, i, l.request), (k) => {
         const m = w.messages[k] as Message;
         if (w.roles.get(l.peer) !== "external" || m.receiver !== l.peer) return wrongRole(i, l.peer);
         if (m.status !== "delivered") return notDelivered(i, m);
@@ -643,22 +641,25 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       });
     }
     case "deliver": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k, n) => {
+      const ks = messagesOf(w, i, l.message);
+      for (const k of ks) {
         const m = w.messages[k] as Message;
-        if (m.status !== "inFlight") return notInFlight(i, m);
-        return deliverInOrder(w, i, n, k);
-      });
+        if (m.status !== "inFlight") notInFlight(i, m);
+        checkOvertaken(w, i, ks, k);
+      }
+      return deliverCarried(w, i, ks);
     }
     case "redeliver": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k, n) => {
+      const ks = messagesOf(w, i, l.message);
+      for (const k of ks) {
         const m = w.messages[k] as Message;
-        if (m.status !== "delivered") return notDelivered(i, m);
-        if (!running(w.roles.get(m.receiver))) return wrongRole(i, m.receiver);
-        return deliverCarried(w, i, n, k);
-      });
+        if (m.status !== "delivered") notDelivered(i, m);
+        if (!running(w.roles.get(m.receiver))) wrongRole(i, m.receiver);
+      }
+      return deliverCarried(w, i, ks);
     }
     case "lose": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k) => {
+      return forEach(w, messagesOf(w, i, l.message), (k) => {
         const m = w.messages[k] as Message;
         if (m.status !== "inFlight") return notInFlight(i, m);
         m.status = "lost";
@@ -666,7 +667,8 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       });
     }
     case "refuse": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k, n) => {
+      const start = w.messages.length;
+      forEach(w, messagesOf(w, i, l.message), (k) => {
         const m = w.messages[k] as Message;
         if (m.status !== "inFlight") return notInFlight(i, m);
         if (!isRequest(m.body))
@@ -688,11 +690,15 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           channel: to,
           status: "inFlight",
         });
-        return deliverCarried(w, i, n, w.messages.length - 1);
       });
+      return deliverCarried(
+        w,
+        i,
+        w.messages.slice(start).map((_, j) => start + j),
+      );
     }
     case "leaveInFlight": {
-      return forEach(w, inOrder(w, i, messagesOf(w, i, l.message)), (k) => {
+      return forEach(w, messagesOf(w, i, l.message), (k) => {
         if (w.leftInFlight.some(([, j]) => j === k))
           return reportedHere({
             kind: "InvalidScenario.repeatedInFlight",
@@ -713,13 +719,13 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         });
       for (const service of w.services.keys()) {
         if (stopped(w)) break;
-        act(w, turn, service, fireTo(time));
+        act(w, origin, service, fireTo(time));
       }
       w.now = time;
       return;
     }
     case "restart":
-      return act(w, turn, own, restart, true);
+      return act(w, origin, own, restart, true);
   }
 }
 
@@ -928,8 +934,7 @@ function expect(
 
 /** Lean's World.execute, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
 function executeLines(w: World, sc: Scenario, looked?: Found[]): void {
-  for (const service of w.services.keys())
-    if (!stopped(w)) act(w, { origin: { type: "startup" }, delivery: 0 }, service, begin);
+  for (const service of w.services.keys()) if (!stopped(w)) act(w, { type: "startup" }, service, begin);
   sc.lines.forEach((l, i) => {
     if (stopped(w)) return;
     looked?.push(...found(w, sc.expectations, i, l));

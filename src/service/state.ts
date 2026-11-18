@@ -184,12 +184,22 @@ interface Queued {
   stale: boolean;
 }
 
+/** Lean's Tie: the deadlines due at one time, or the messages that one line delivers, the first in step `first`. */
+export type Tie =
+  | { readonly kind: "deadlines"; readonly time: Temporal.Instant }
+  | { readonly kind: "arrivals"; readonly first: number };
+
+export const sameTie = (a: Tie, b: Tie): boolean =>
+  a.kind === "deadlines"
+    ? b.kind === "deadlines" && a.time.equals(b.time)
+    : b.kind === "arrivals" && a.first === b.first;
+
 /**
  * A step of a message. `cause` is the step that caused this one, undefined for input and deadline steps. `armedBy` is,
  * for a deadline step, the step that armed the deadline. `message` is the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
  * marks a step that comes after every earlier step of the same message and before every later one. `nested` marks a
  * step that began while its cause was running (a copy start), so it ends before its cause does. `tie` is, for a
- * deadline step, the time of the tie it fired in.
+ * deadline step or the step in which a message of a tie arrives, its tie.
  */
 export interface StepInfo {
   readonly cause: number | undefined;
@@ -198,7 +208,7 @@ export interface StepInfo {
   readonly command: boolean;
   readonly barrier: boolean;
   readonly nested: boolean;
-  readonly tie: Temporal.Instant | undefined;
+  readonly tie: Tie | undefined;
 }
 
 /**
@@ -386,7 +396,7 @@ export function newStep(
     nested = false,
     tie,
     armedBy,
-  }: { barrier?: boolean; nested?: boolean; tie?: Temporal.Instant | undefined; armedBy?: number } = {},
+  }: { barrier?: boolean; nested?: boolean; tie?: Tie | undefined; armedBy?: number } = {},
 ): number {
   const message = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount;
   s.steps.push({ cause, armedBy, message, command: false, barrier, nested, tie });

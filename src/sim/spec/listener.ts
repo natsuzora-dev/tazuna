@@ -47,6 +47,12 @@ export class Listener implements Note, Evaluations {
   stepBegins(step: number, name: StepName, started: InstanceId | undefined): void {
     this.collected.stepBegins(step, name, started);
   }
+  arrivalBegins(step: number, name: StepName): void {
+    this.collected.arrivalBegins(step, name);
+  }
+  arrivalEnds(): void {
+    this.collected.arrivalEnds();
+  }
   stepEnds(): void {
     this.collected.stepEnds();
   }

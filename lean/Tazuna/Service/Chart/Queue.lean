@@ -125,7 +125,8 @@ def Queue.putBack (q : Queue) (i : Nat) : Option Work → Queue
 The entry that the queue takes next, its position, the queue without it, and the entries of `stepOrder` left; none when
 nothing is ready. While entries remain, it is the first ready one that the next entry names (`name` names each);
 otherwise it is the first in queue order. An entry that names a deadline is for a tie of deadlines after the message
-(chooseDeadline), so until then the queue takes the first in queue order and keeps the entry.
+(chooseDeadline), and one that names an arrival is for the next message of a tie (arriveAll), so until then the queue
+takes the first in queue order and keeps the entry.
 -/
 def Queue.take (q : Queue) (name : Ready → StepName) : List StepName →
     Except InvalidInput (Option (Ready × Nat × Queue × List StepName))
@@ -140,7 +141,7 @@ def Queue.take (q : Queue) (name : Ready → StepName) : List StepName →
       match ((first, p) :: others).find? (name ·.1 == named) with
       | some (r, i) => .ok (some (r, i, q.without i, rest))
       | none =>
-        if named.isDeadline then .ok (some (first, p, q.without p, named :: rest))
+        if named.isDeadline || named.isArrival then .ok (some (first, p, q.without p, named :: rest))
         else .error (.unreadyStep named (((first, p) :: others).map (name ·.1)))
 
 structure Processing where

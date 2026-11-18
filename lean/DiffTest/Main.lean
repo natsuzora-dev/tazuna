@@ -1,7 +1,7 @@
 import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Protocol
-import Tazuna.Explore.DeliveryOrders
+import Tazuna.Explore.StepOrders
 import Tazuna.Sim.Run
 
 /-!
@@ -259,7 +259,7 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (Strin
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do
   let start ← IO.ofExcept (Sim.World.start spec sc)
-  pure { start with stepOrders := stepOrders.map fun o => ({ origin := o.origin, delivery := o.delivery }, o.service, o.order) }
+  pure { start with stepOrders := stepOrders.map fun o => (o.origin, o.service, o.order) }
 
 /--
 The reply to request `simulate`, which takes a structure, a scenario, and step orders, and returns each running
@@ -291,7 +291,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
 
 /-- A search, as TS writes it. -/
 def searchedOf (r : Searched) : SearchedProcessing :=
-  { origin := r.turn.origin, delivery := r.turn.delivery, service := r.service, found := r.search.found
+  { origin := r.origin, service := r.service, found := r.search.found
     tried := r.search.tried.map fun t => match t.verdict with
       | .refused => { order := t.order, refused := some true, found := none }
       | .decided found => { order := t.order, refused := none, found := some found } }
@@ -301,7 +301,7 @@ The reply to request `stepOrderChanges`, which takes a structure and a scenario 
 scenario executed, from its startup: every search, with each step order it ran and its verdict, and what it found.
 -/
 def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Response := do
-  let executeWith (sc : Scenario) (stepOrders : List (Sim.Turn × String × List StepName)) : IO Execution := do
+  let executeWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Execution := do
     let start ← IO.ofExcept (Sim.World.start spec sc)
     let start := { start with stepOrders }
     let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
@@ -311,22 +311,6 @@ def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure
   let searched ← stepOrderChanges (fun service => compareOf spec service (askComparable stdin stdout reads))
     executeWith sc (← executeWith sc []) 0
   pure (.stepOrderChanges (searched.map searchedOf))
-
-/--
-The reply to request `deliveryOrderChanges`, which takes a structure and a scenario and returns deliveryOrderSearch of the
-scenario executed: each delivery order it ran, with the violation it found, and what it reports.
--/
-def deliveryOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Response := do
-  let start ← worldOf spec sc []
-  let executeWith (deliveryOrders : List (Nat × List Nat)) : IO Execution := do
-    let start := { start with deliveryOrders }
-    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
-    let (w, acting) ← ran.run {}
-    pure { world := w, collect := acting.collect }
-  let reads ← IO.mkRef {}
-  let search ← deliveryOrderSearch (fun service => compareOf spec service (askComparable stdin stdout reads))
-    executeWith (← executeWith [])
-  pure (.deliveryOrderChanges search.tried search.found)
 
 /-- The response to `request`. A snapshot line is none for a blank line. -/
 def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
@@ -348,7 +332,6 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .simulate s sc execute stepOrders =>
     simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD [])
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
-  | .deliveryOrderChanges s sc => deliveryOrderChangesRequest stdin stdout s sc
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

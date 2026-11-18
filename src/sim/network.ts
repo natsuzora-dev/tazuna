@@ -15,7 +15,7 @@ import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import { sentBefore } from "./order.ts";
-import { arriveFrom, receivedId } from "./receive.ts";
+import { type Arrival, arriveAll, arriveFrom, receivedId } from "./receive.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -50,15 +50,8 @@ export const sameChannel = (m: Message, n: Message): boolean =>
 export const sameOrigin = (a: Origin, b: Origin): boolean =>
   a.type === b.type && (a.type === "startup" || (b.type === "line" && a.index === b.index));
 
-/** Lean's Turn: one processing, by its origin and which delivery of the line it is. */
-export interface Turn {
+export interface Span {
   readonly origin: Origin;
-  readonly delivery: number;
-}
-
-export const sameTurn = (a: Turn, b: Turn): boolean => sameOrigin(a.origin, b.origin) && a.delivery === b.delivery;
-
-export interface Span extends Turn {
   readonly service: string;
   readonly from: number;
   readonly to: number;
@@ -67,7 +60,8 @@ export interface Span extends Turn {
 }
 
 /** Lean's World.stepOrders entry. */
-export interface StepOrder extends Turn {
+export interface StepOrder {
+  readonly origin: Origin;
   readonly service: string;
   readonly order: readonly StepName[];
 }
@@ -108,8 +102,6 @@ export interface World {
   halted: InvalidScenario | undefined;
   /** Lean's World.stepOrders. */
   stepOrders: readonly StepOrder[];
-  /** Lean's World.deliveryOrders: by line, the places of its messages in the order it acts on them. */
-  deliveryOrders: ReadonlyMap<number, readonly number[]>;
 }
 
 export const stateOf = (w: World, service: string): State | undefined => w.services.get(service)?.processing.state;
@@ -253,7 +245,7 @@ function checkComputed(w: World, service: string, sent: readonly Line[], records
 }
 
 /** Lean's World.act. */
-export function act(w: World, turn: Turn, service: string, f: (r: Processing) => void, reopen = false): void {
+export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
   const p = w.services.get(service);
   if (p === undefined) return;
   const r = p.processing;
@@ -261,8 +253,7 @@ export function act(w: World, turn: Turn, service: string, f: (r: Processing) =>
   const before = s.lines.length;
   const stepsFrom = s.steps.length;
   const screens = screensOf(s);
-  const o = turn.origin;
-  const entry = w.stepOrders.find((e) => sameTurn(e, turn) && e.service === service);
+  const entry = w.stepOrders.find((e) => sameOrigin(e.origin, o) && e.service === service);
   s.stepOrder = entry?.order ?? [];
   if (entry !== undefined) w.stepOrders = w.stepOrders.filter((e) => e !== entry);
   try {
@@ -278,16 +269,53 @@ export function act(w: World, turn: Turn, service: string, f: (r: Processing) =>
   }
   for (const id of screensOf(s).filter((k) => reopen || !screens.includes(k)))
     w.opened.push({ origin: o, service, id });
-  w.spans.push({ ...turn, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
+  w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
   const sent = s.lines.slice(before);
   route(w, o, service, sent);
   checkComputed(w, service, sent, s.records);
 }
 
-/** Lean's World.deliver. */
-export function deliver(w: World, turn: Turn, k: number): void {
-  const m = w.messages[k];
-  if (m === undefined) return;
-  m.status = "delivered";
-  act(w, turn, m.receiver, (r) => arriveFrom(r, m.sender, m.id, m.body));
+/** Lean's World.definitionOf?. */
+function definitionOf(w: World, msg: Message): DefinitionRef | undefined {
+  const requested = (to: LineId) => {
+    for (const r of w.messages)
+      if (sameLineId(receivedId(r.sender, r.id), to))
+        return r.body.type === "command" || r.body.type === "query" || r.body.type === "subscribe"
+          ? r.body.target
+          : undefined;
+    return undefined;
+  };
+  switch (msg.body.type) {
+    case "command":
+    case "query":
+    case "subscribe":
+      return msg.body.target;
+    case "event":
+      return msg.body.event;
+    case "answer":
+      return requested(msg.body.to);
+    case "unsubscribe":
+      return requested(receivedId(msg.sender, msg.body.to));
+    default:
+      return undefined;
+  }
+}
+
+/** Lean's World.deliver: the messages `ks` to `receiver` arrive in one processing, several as a tie. */
+export function deliver(w: World, o: Origin, receiver: string, ks: readonly number[]): void {
+  const msgs = ks.flatMap((k) => w.messages[k] ?? []);
+  const arrivals = msgs.map(
+    (msg, n): Arrival => ({
+      sender: msg.sender,
+      id: msg.id,
+      body: msg.body,
+      definition: definitionOf(w, msg) ?? { service: "", name: "" },
+      waitsFor: msgs.slice(0, n).flatMap((e, j) => (precedes(w, e, msg) ? [j] : [])),
+    }),
+  );
+  for (const msg of msgs) msg.status = "delivered";
+  const [only] = msgs;
+  if (msgs.length === 1 && only !== undefined)
+    act(w, o, receiver, (r) => arriveFrom(r, only.sender, only.id, only.body));
+  else act(w, o, receiver, (r) => arriveAll(r, arrivals));
 }

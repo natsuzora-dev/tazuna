@@ -26,11 +26,5 @@ export const limits = {
  */
 export const stepOrderLimit = 64;
 
-/**
- * The number of delivery orders that the search of one line runs at most (deliveryOrderSearch). It bounds the orders of
- * many equal messages, whose count grows factorially.
- */
-export const deliveryOrderLimit = 64;
-
 /** The most bindings, or states of a group, that one step of a comparison holds. */
 export const bindingLimit = 256;

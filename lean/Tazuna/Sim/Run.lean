@@ -53,28 +53,20 @@ def requestTarget? : LineBody → Option Spec.Ref
   | _ => none
 
 /--
-The world with what the line `i` processed by `service` wrote first as an `in` line recorded as its request, unless the
-line has that request already.
+The world with the `in` line that `service` wrote from position `before` on, the first or the one with id `id`, recorded
+as a request of line `i`, unless the line has that request already.
 -/
-def World.recordSent (w : World) (i : Nat) (service : String) (before : Nat) : World :=
-  match ((w.state service).lines.toList.zipIdx.drop before).find? (·.1.dir == .in) with
+def World.recordSent (w : World) (i : Nat) (service : String) (before : Nat) (id : Option LineId := none) : World :=
+  match ((w.state service).lines.toList.zipIdx.drop before).find?
+      (fun (l, _) => l.dir == .in && id.all (· == l.id)) with
   | some (l, position) =>
     if w.sent.any fun s => s.line == i && s.receiver == service && s.id == l.id then w
     else { w with sent := w.sent ++ [{ line := i, receiver := service, id := l.id, position }] }
   | none => w
 
-/-- The places `ks`, in sending order, in the order that line `i` acts on them (World.deliveryOrders). -/
-def World.inOrder (w : World) (i : Nat) (ks : List Nat) : List Nat :=
-  match w.deliveryOrders.lookup i with
-  | some order => if order.length == ks.length then order.filterMap (ks[·]?) else ks
-  | none => ks
-
-/--
-The world after `f` takes each of `xs` in turn with its place, from 0, until the world stops: a line that names several
-messages acts on each.
--/
-def World.forEach {α : Type} (w : World) (xs : List α) (f : World → α → Nat → m World) : m World :=
-  xs.zipIdx.foldlM (init := w) fun v (x, n) => if v.stopped then pure v else f v x n
+/-- The world after `f` takes each of `xs` in turn until the world stops: a line that names several messages acts on each. -/
+def World.forEach {α : Type} (w : World) (xs : List α) (f : World → α → m World) : m World :=
+  xs.foldlM (init := w) fun v x => if v.stopped then pure v else f v x
 
 def requestOf (type : RequestType) (target : Spec.Ref) (id : Option LineId) (v : Value) :
     Service → Functions m → State → m State :=
@@ -100,7 +92,7 @@ def World.clientRequest (w : World) (fsOf : String → Functions m) (i : Nat) (t
       | some j => pure ((w.sentBy j).head?.map (some ·.id))
     let some id := given | return w.report (.unresolvedReference i (ToValue.toValue (Fact.line (sameIdAs.getD 0))))
     let before := (w.state receiver).lines.size
-    let w ← w.act fsOf { origin := .line i } receiver (requestOf type target id v)
+    let w ← w.act fsOf (.line i) receiver (requestOf type target id v)
     pure (w.recordSent i receiver before)
 
 /-- The world with the message `k` carried by line `i`. -/
@@ -140,30 +132,35 @@ def World.peerMessage (w : World) (i : Nat) (peer : String) (fits : Message → 
     | [] => .error (.unpairedPeerLine i peer))
 
 /--
-The world after the message `k` reaches its receiver by line `i`, as the line's delivery `n`: a running receiver
-processes it, and a request that it processes is recorded as a request of each line that carried it.
+The world after the messages `ks` reach their receivers by line `i`: each running receiver processes those to it in one
+processing (World.deliver), and a request that it processes is recorded as a request of each line that carried it.
 -/
-def World.deliverCarried (w : World) (fsOf : String → Functions m) (i n k : Nat) : m World := do
-  let w := w.carry i k
-  let some msg := w.messages[k]? | return w
-  if !((w.role msg.receiver).any (·.running)) then return w.setStatus k .delivered
-  let before := (w.state msg.receiver).lines.size
-  let w ← w.deliver fsOf { origin := .line i, delivery := n } k
-  if (requestTarget? msg.body).isNone then return w
-  let carriers := (w.carried.filter (·.2 == k)).map (·.1)
-  pure (carriers.foldl (init := w) fun w l => w.recordSent l msg.receiver before)
+def World.deliverCarried (w : World) (fsOf : String → Functions m) (i : Nat) (ks : List Nat) : m World := do
+  let w := ks.foldl (fun w k => w.carry i k) w
+  let receivers := (ks.filterMap fun k => (w.messages[k]?).map (·.receiver)).eraseDups
+  receivers.foldlM (init := w) fun w receiver => do
+    if w.stopped then return w
+    let mine := ks.filter fun k => (w.messages[k]?).any (·.receiver == receiver)
+    if !((w.role receiver).any (·.running)) then return mine.foldl (fun w k => w.setStatus k .delivered) w
+    let before := (w.state receiver).lines.size
+    let w ← w.deliver fsOf (.line i) receiver mine
+    pure (mine.foldl (init := w) fun w k =>
+      match w.messages[k]? with
+      | some msg =>
+        if (requestTarget? msg.body).isNone then w else
+        let carriers := (w.carried.filter (·.2 == k)).map (·.1)
+        carriers.foldl (init := w) fun w l => w.recordSent l receiver before (some (receivedId msg.sender msg.id))
+      | none => w)
 
 /--
-The world after line `i` delivers the in-flight message `k` as its delivery `n`, unless an earlier message in flight must
-arrive before it (World.precedes), which FIFO delivers first.
+The report, if any, that line `i`, which delivers the in-flight messages `ks`, delivers message `k` before an earlier
+message in flight that must arrive before it (World.precedes), which FIFO delivers first.
 -/
-def World.deliverInOrder (w : World) (fsOf : String → Functions m) (i n k : Nat) : m World :=
-  match w.messages[k]? with
-  | none => pure w
-  | some msg =>
-    match (w.messages.toList.take k).find? fun n => n.status == .inFlight && w.precedes n msg with
-    | some earlier => pure (w.report (.overtaking i msg.describe earlier.describe))
-    | none => w.deliverCarried fsOf i n k
+def World.overtaken (w : World) (i : Nat) (ks : List Nat) (k : Nat) : Option InvalidScenario := do
+  let msg ← w.messages[k]?
+  let (earlier, _) ← (w.messages.toList.zipIdx.take k).find? fun (n, j) =>
+    !ks.contains j && n.status == .inFlight && w.precedes n msg
+  pure (.overtaking i msg.describe earlier.describe)
 
 /--
 The ids by which `peer` names the requests that the handle `fact` of line `i` names, which a line delivered to `peer`.
@@ -237,9 +234,9 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
   | .unsubscribe none subscription => do
     let some s := (w.sentBy subscription).head?
       | return w.report (.unresolvedReference i (ToValue.toValue (Fact.line subscription)))
-    w.act fsOf { origin := .line i } s.receiver fun st fs t => endSubscription st fs t s.id
+    w.act fsOf (.line i) s.receiver fun st fs t => endSubscription st fs t s.id
   | .unsubscribe (some p) subscription =>
-    w.resolving (w.messagesOf fsOf i (.line subscription)) fun ks => w.forEach (w.inOrder i ks) fun w k _ => do
+    w.resolving (w.messagesOf fsOf i (.line subscription)) fun ks => w.forEach ks fun w k => do
       let some sub := w.messages[k]? | return w
       match w.role p with
       | some .external =>
@@ -262,12 +259,12 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
     w.attempt (w.screenOf i screen) fun o => do
       if w.role o.service != some .own then return w.report (.wrongRole i o.service)
       w.resolving (w.fill fsOf i payload) fun v =>
-        w.act fsOf { origin := .line i } o.service fun st fs s => operate st fs s o.id control v
+        w.act fsOf (.line i) o.service fun st fs s => operate st fs s o.id control v
   | .look screen =>
     w.attempt (w.screenOf i screen) fun o =>
       pure (if (w.services.lookup o.service).isNone then w.report (.wrongRole i o.service) else w)
   | .answer peer request answer =>
-    w.resolving (w.messagesOf fsOf i request) fun ks => w.forEach (w.inOrder i ks) fun w k _ => do
+    w.resolving (w.messagesOf fsOf i request) fun ks => w.forEach ks fun w k => do
       let some msg := w.messages[k]? | return w
       if msg.receiver != peer then return w.report (.unresolvedReference i (ToValue.toValue request))
       let to := receivedId msg.sender msg.id
@@ -306,7 +303,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       | none => pure [none]
       | some f => (·.map some) <$> w.requestIds fsOf i peer f
     w.resolving resultIds fun resultIds =>
-    w.resolving (w.fill fsOf i payload) fun v => w.forEach resultIds fun w resultId _ => do
+    w.resolving (w.fill fsOf i payload) fun v => w.forEach resultIds fun w resultId => do
       match w.role peer with
       | some .external =>
         let (w, id) := w.nextId peer event.name
@@ -329,7 +326,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         | .ok k => pure (w.carry i k)
       | _ => pure (w.report (.wrongRole i peer))
   | .leaveUnanswered peer request =>
-    w.resolving (w.messagesOf fsOf i request) fun ks => w.forEach (w.inOrder i ks) fun w k _ => do
+    w.resolving (w.messagesOf fsOf i request) fun ks => w.forEach ks fun w k => do
       let some msg := w.messages[k]? | return w
       if w.role peer != some .external || msg.receiver != peer then return w.report (.wrongRole i peer)
       if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
@@ -337,35 +334,42 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         return w.report (.repeatedAnswer i msg.describe)
       pure (w.setStatus k .unanswered)
   | .deliver message =>
-    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach (w.inOrder i ks) fun w k n => do
-      let some msg := w.messages[k]? | return w
-      if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
-      w.deliverInOrder fsOf i n k
+    w.resolving (w.messagesOf fsOf i message) fun ks =>
+      let unready (k : Nat) := (w.messages[k]?).bind fun msg =>
+        if msg.status != .inFlight then some (.notInFlight i msg.describe) else w.overtaken i ks k
+      match ks.findSome? unready with
+      | some r => pure (w.report r)
+      | none => w.deliverCarried fsOf i ks
   | .redeliver message =>
-    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach (w.inOrder i ks) fun w k n => do
-      let some msg := w.messages[k]? | return w
-      if msg.status != .delivered then return w.report (.notDelivered i msg.describe)
-      if !((w.role msg.receiver).any (·.running)) then return w.report (.wrongRole i msg.receiver)
-      w.deliverCarried fsOf i n k
+    w.resolving (w.messagesOf fsOf i message) fun ks =>
+      let unready (k : Nat) := (w.messages[k]?).bind fun msg =>
+        if msg.status != .delivered then some (.notDelivered i msg.describe)
+        else if !((w.role msg.receiver).any (·.running)) then some (.wrongRole i msg.receiver) else none
+      match ks.findSome? unready with
+      | some r => pure (w.report r)
+      | none => w.deliverCarried fsOf i ks
   | .lose message =>
-    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach (w.inOrder i ks) fun w k _ => do
+    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach ks fun w k => do
       let some msg := w.messages[k]? | return w
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
       pure (w.setStatus k .lost)
   | .refuse message =>
-    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach (w.inOrder i ks) fun w k n => do
-      let some msg := w.messages[k]? | return w
-      if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
-      if requestTarget? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
-      let to := receivedId msg.sender msg.id
-      let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
-                               body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
-                               channel := some to, status := .inFlight }
-      let w := w.setStatus k .lost
-      let w := { w with messages := w.messages.push reply }
-      w.deliverCarried fsOf i n w.messages.size.pred
+    w.resolving (w.messagesOf fsOf i message) fun ks => do
+      let start := w.messages.size
+      let w ← w.forEach ks fun w k => do
+        let some msg := w.messages[k]? | return w
+        if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
+        if requestTarget? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
+        let to := receivedId msg.sender msg.id
+        let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
+                                 body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
+                                 channel := some to, status := .inFlight }
+        let w := w.setStatus k .lost
+        pure { w with messages := w.messages.push reply }
+      if w.stopped then return w
+      w.deliverCarried fsOf i ((List.range (w.messages.size - start)).map (start + ·))
   | .leaveInFlight message =>
-    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach (w.inOrder i ks) fun w k _ => do
+    w.resolving (w.messagesOf fsOf i message) fun ks => w.forEach ks fun w k => do
       let some msg := w.messages[k]? | return w
       if w.leftInFlight.any (·.2 == k) then return w.report (.repeatedInFlight i msg.describe)
       pure { w with leftInFlight := w.leftInFlight ++ [(i, k)] }
@@ -373,9 +377,9 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
     if time.time ≤ w.now then return w.report (.notLater i time.time w.now)
     let w ← w.services.foldlM (init := w) fun w (service, _) =>
       if w.stopped then pure w else
-      w.act fsOf { origin := .line i } service (fireTo time.time)
+      w.act fsOf (.line i) service (fireTo time.time)
     pure { w with now := time.time }
-  | .restart => w.act fsOf { origin := .line i } own restart (reopen := true)
+  | .restart => w.act fsOf (.line i) own restart (reopen := true)
 
 /--
 The world after line `i`, unless the values it writes report: a running peer's request, answer and event may write
@@ -531,7 +535,7 @@ def World.stepFinding (fsOf : String → Functions m) (sc : Scenario) (wf : Worl
 
 /-- The world after every running service begins, until one stops it. -/
 def World.beginAll (w : World) (fsOf : String → Functions m) : m World :=
-  w.services.foldlM (init := w) fun w (s, _) => if w.stopped then pure w else w.act fsOf { origin := .startup } s begin
+  w.services.foldlM (init := w) fun w (s, _) => if w.stopped then pure w else w.act fsOf .startup s begin
 
 /-- The world after every running service begins and the lines take place, until one stops it. -/
 def World.execute (w : World) (fsOf : String → Functions m) (sc : Scenario) : m World := do

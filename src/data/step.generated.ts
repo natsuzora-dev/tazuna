@@ -135,4 +135,13 @@ export type StepName =
       readonly sender: Requester;
       readonly input: Json;
       readonly answer: Json;
+    }
+  /**
+   * The arrival of a message of a tie (Tie.arrivals) that carries `definition`'s request or event, or answers or ends one:
+   * `content` is the message as the receiver reads it, without the id that only names it, so equal messages have one name.
+   */
+  | {
+      readonly kind: "arrival";
+      readonly definition: DefinitionRef;
+      readonly content: Json;
     };

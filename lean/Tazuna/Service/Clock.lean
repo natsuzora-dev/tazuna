@@ -38,13 +38,15 @@ def Deadline.step (t : Deadline) : StepName := .deadline t.machine t.state t.nam
 The deadline that fires among `due`, the deadlines due at the earliest time in entry order, whose first is `first`, and
 the state with the order entry that chose it used. Without a tie it is `first`. A tie is internal to the service, as the
 order of its steps is, whichever line advanced the time: the next entry of the input's `stepOrder`, which test's search
-writes, chooses it, and without entries it is `first`, one of the orders that the search compares.
+writes, chooses it, and without entries it is `first`, one of the orders that the search compares. An entry that names
+an arrival is for the next message of a tie of arrivals, so the tie takes `first` and keeps it.
 -/
 def chooseDeadline (s : State) (first : Deadline) (due : List Deadline) (tied : Bool) :
     Except InvalidInput (Deadline × State) :=
   if !tied then .ok (first, s) else
   match s.stepOrder with
   | named :: rest =>
+    if named.isArrival then .ok (first, s) else
     match due.find? (·.step == named) with
     | some t => .ok (t, { s with stepOrder := rest })
     | none => .error (.unreadyStep named (due.map (·.step)))

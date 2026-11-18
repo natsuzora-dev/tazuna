@@ -145,7 +145,7 @@ theorem keepsWorld_checkComputed {w w' : World} (h : KeepsWorld w w') (service :
         · exact .refl _
     · exact h
 
-theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Turn) (service : String)
+theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
     (f : Service → Functions Id → State → Id State) (hf : ∀ st s, KeepsKeys s (f st (fsOf service) s))
     (reopen : Bool) : KeepsWorld w (w'.act fsOf o service f reopen) := by
   unfold World.act
@@ -200,6 +200,24 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender 
   · exact keeps_receive _ _ _ _ _
   · exact .refl _
 
+theorem keeps_arriveAll (st : Service) (fs : Functions Id) (arrivals : List Arrival) (s : State) :
+    KeepsKeys s (arriveAll st fs arrivals s) := by
+  unfold arriveAll
+  suffices ∀ first fuel done s, KeepsKeys s (arriveAll.go st fs arrivals first fuel done s) from this _ _ _ s
+  intro first fuel
+  induction fuel with
+  | zero => intro _ s; exact .refl _
+  | succ n ih =>
+    intro done s
+    simp only [arriveAll.go, bind, pure]
+    repeat' split
+    all_goals first
+      | exact .refl _
+      | keys_leaf
+      | (refine KeepsKeys.trans ?_ (ih _ _)
+         refine KeepsKeys.trans (KeepsKeys.trans ?_ (keeps_arriveFrom st fs _ _ _ _)) ⟨rfl, List.prefix_refl _⟩
+         keys_leaf)
+
 theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State) :
     KeepsKeys s (fireTo time st fs s) := by
   simp only [fireTo, id_bind]
@@ -222,8 +240,8 @@ theorem keepsWorld_setStatus {w w' : World} (h : KeepsWorld w w') (k : Nat) (sta
 theorem keepsWorld_carry {w w' : World} (h : KeepsWorld w w') (i k : Nat) : KeepsWorld w (w'.carry i k) :=
   keepsWorld_states h rfl
 
-theorem keepsWorld_recordSent {w w' : World} (h : KeepsWorld w w') (i : Nat) (service : String) (before : Nat) :
-    KeepsWorld w (w'.recordSent i service before) :=
+theorem keepsWorld_recordSent {w w' : World} (h : KeepsWorld w w') (i : Nat) (service : String) (before : Nat)
+    (id : Option LineId) : KeepsWorld w (w'.recordSent i service before id) :=
   keepsWorld_states h (by unfold World.recordSent; (repeat' split) <;> rfl)
 
 theorem keepsWorld_stated {w w' : World} (h : KeepsWorld w w') (i : Nat) (msg : Message) :
@@ -247,23 +265,34 @@ theorem keepsWorld_attempt {α : Type} {w w' : World} (h : KeepsWorld w w') (r :
   · exact keepsWorld_report h _
   · exact hk _
 
-theorem keepsWorld_deliver {w w' : World} (h : KeepsWorld w w') (o : Turn) (k : Nat) :
-    KeepsWorld w (w'.deliver fsOf o k) := by
-  unfold World.deliver; split
-  · exact h
-  · exact keepsWorld_act (keepsWorld_setStatus h _ _) _ _ _ (fun st s => keeps_arriveFrom _ _ _ _ _ _) _
+theorem keepsWorld_setStatuses {w w' : World} (h : KeepsWorld w w') (ks : List Nat) (status : Status) :
+    KeepsWorld w (ks.foldl (fun w k => w.setStatus k status) w') :=
+  foldl_keeps (KeepsWorld w) _ (fun _ k hv => keepsWorld_setStatus hv k status) _ _ h
 
-theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i n k : Nat) :
-    KeepsWorld w (w'.deliverCarried fsOf i n k) := by
+theorem keepsWorld_deliver {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (receiver : String)
+    (ks : List Nat) : KeepsWorld w (w'.deliver fsOf o receiver ks) := by
+  unfold World.deliver
+  dsimp only
+  split
+  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveFrom _ _ _ _ _ _) _
+  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveAll _ _ _ _) _
+
+theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i : Nat) (ks : List Nat) :
+    KeepsWorld w (w'.deliverCarried fsOf i ks) := by
   unfold World.deliverCarried
-  simp only [bind, pure]
-  repeat' split
-  all_goals first
-    | exact keepsWorld_carry h _ _
-    | exact keepsWorld_setStatus (keepsWorld_carry h _ _) _ _
-    | exact keepsWorld_deliver (keepsWorld_carry h _ _) _ _
-    | (refine foldl_keeps (KeepsWorld w) _ (fun v l hv => ?_) _ _ (keepsWorld_deliver (keepsWorld_carry h _ _) _ _)
-       exact keepsWorld_recordSent hv _ _ _)
+  simp only [bind, pure, foldlM_id]
+  have hc : KeepsWorld w (ks.foldl (fun w k => w.carry i k) w') :=
+    foldl_keeps (KeepsWorld w) _ (fun v k hv => keepsWorld_carry hv _ _) _ _ h
+  refine foldl_keeps (KeepsWorld w) _ (fun v r hv => ?_) _ _ hc
+  split
+  · exact hv
+  · split
+    · exact keepsWorld_setStatuses hv _ _
+    · refine foldl_keeps (KeepsWorld w) _ (fun u k hu => ?_) _ _ (keepsWorld_deliver hv _ _ _)
+      repeat' split
+      all_goals first
+        | exact hu
+        | exact foldl_keeps (KeepsWorld w) _ (fun x l hx => keepsWorld_recordSent hx _ _ _ _) _ _ hu
 
 theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) (type : Scenario.RequestType)
     (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
@@ -276,7 +305,7 @@ theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) 
     repeat' split
     all_goals first
       | exact keepsWorld_report h _
-      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => keeps_requestOf _ _ _ _ _ _ _) _) _ _ _
+      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => keeps_requestOf _ _ _ _ _ _ _) _) _ _ _ _
 
 theorem keepsWorld_now_iff {w w' : World} (now : Time) : KeepsWorld w { w' with now } ↔ KeepsWorld w w' := Iff.rfl
 
@@ -285,14 +314,6 @@ theorem keepsWorld_inFlight_iff {w w' : World} (leftInFlight : List (Nat × Nat)
 
 theorem keepsWorld_messages_iff {w w' : World} (messages : Array Message) :
     KeepsWorld w { w' with messages } ↔ KeepsWorld w w' := Iff.rfl
-
-theorem keepsWorld_deliverInOrder {w w' : World} (h : KeepsWorld w w') (i n k : Nat) :
-    KeepsWorld w (w'.deliverInOrder fsOf i n k) := by
-  unfold World.deliverInOrder; simp only [pure]
-  repeat' split
-  · exact h
-  · exact keepsWorld_report h _
-  · exact keepsWorld_deliverCarried h _ _ _
 
 /-- Closes `KeepsWorld w x` where `x` is built from `w` by steps that keep every running service's createKey values. -/
 macro "kw_tac" : tactic => `(tactic| repeat' (first
@@ -307,13 +328,12 @@ macro "kw_tac" : tactic => `(tactic| repeat' (first
   | with_reducible apply keepsWorld_setStatus
   | with_reducible apply keepsWorld_deliverCarried
   | with_reducible apply keepsWorld_clientRequest
-  | with_reducible apply keepsWorld_deliverInOrder
   | (with_reducible refine keepsWorld_act ?_ _ _ _ (fun st s => ?_) _)
   | simp only [keepsWorld_now_iff, keepsWorld_inFlight_iff, keepsWorld_messages_iff]
   | with_reducible refine keepsWorld_resolving ?_ _ _ fun _ => ?_
   | with_reducible refine keepsWorld_attempt ?_ _ _ fun _ => ?_
   | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
-  | with_reducible refine Tazuna.Thm.Sim.Run.forEach_keeps _ ?_ fun _ _ _ _ _ => ?_
+  | with_reducible refine Tazuna.Thm.Sim.Run.forEach_keeps _ ?_ fun _ _ _ _ => ?_
   | with_reducible exact keeps_endSubscription _ _
   | with_reducible exact keeps_operate _ _ _ _
   | with_reducible exact keeps_restart _

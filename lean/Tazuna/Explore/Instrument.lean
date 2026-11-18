@@ -146,6 +146,8 @@ structure Collect where
   steps : Array (Nat × StepAccess) := #[]
   /-- The message whose afterMessage runs, while it runs. -/
   afterMessage : Option Nat := none
+  /-- The place in `steps` of the step in which a message of a tie arrives, while it is processed (arrivalBegins). -/
+  arrival : Option Nat := none
   /-- For each message, the values that its afterMessage read: subscription answers, holds, invariants, and rearm. -/
   afters : List (Nat × Footprint) := []
   violations : List Violation := []
@@ -189,14 +191,16 @@ def startedValue (openSteps : List (Option InstanceId)) : ValueKey → Bool
   | _ => false
 
 /--
-`c` with `f` added to the outermost open step, or, while no step is open, to the afterMessage that runs. Other accesses
-outside any step, such as answering a query input, change nothing that a later message observes.
+`c` with `f` added to the outermost open step, or, while no step is open, to the afterMessage that runs, or else to the
+step in which the message of a tie arrived. Other accesses outside any step, such as answering a query input, change
+nothing that a later message observes.
 -/
 def Collect.stepAccess (c : Collect) (f : Footprint) : Collect :=
   if c.openSteps.isEmpty then
-    match c.afterMessage with
-    | some m => { c with afters := (m, ((c.afters.lookup m).getD {}).union f) :: c.afters.filter (·.1 != m) }
-    | none => c
+    match c.afterMessage, c.arrival with
+    | some m, _ => { c with afters := (m, ((c.afters.lookup m).getD {}).union f) :: c.afters.filter (·.1 != m) }
+    | none, some k => { c with steps := c.steps.modify k fun (n, a) => (n, { a with access := a.access.union f }) }
+    | none, none => c
   else
   let opened := c.openSteps
   c.modifyOutermost fun a =>
@@ -232,6 +236,8 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
       { c with openSteps := started :: c.openSteps,
                steps := if c.openSteps.isEmpty then c.steps.push (step, { name }) else c.steps }
     | .stepEnds => { c with openSteps := c.openSteps.tail }
+    | .arrivalBegins step name => { c with steps := c.steps.push (step, { name }), arrival := some c.steps.size }
+    | .arrivalEnds => { c with arrival := none }
     | .settlesAround owner => c.modifyOutermost ({ · with settledOwner := some owner })
     | .readStates states => c.stepAccess { reads := states.map fun (r, n) => .state r n }
     | .wroteState r n | .wroteCopies r n => c.stepAccess { writes := [.state r n] }
@@ -466,15 +472,20 @@ def leadsTo (s : State) (earlier later : Nat) : Bool :=
     | none => false
 termination_by later
 
-/-- Whether steps `i` and `j` are deadlines of one tie. -/
-def tiedDeadlines (s : State) (i j : Nat) : Bool :=
+/-- Whether steps `i` and `j` are of one tie: deadlines due at one time, or messages that one line delivered. -/
+def tied (s : State) (i j : Nat) : Bool :=
   match s.steps[i]?.bind (·.tie), s.steps[j]?.bind (·.tie) with
   | some a, some b => a == b
   | _, _ => false
 
+/-- Whether steps `i` and `j` are steps of one message that no tie chose. -/
+def sameMessage (s : State) (i j : Nat) : Bool :=
+  (s.steps[i]?.bind (·.tie)).isNone && (s.steps[j]?.bind (·.tie)).isNone &&
+    (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message))
+
 /--
 The footprint of what step `n` stands for when the search swaps its order (one independence relation for every choice
-of order): a deadline of a tie stands for its whole message, since its effects run in the later steps of that message
+of order): a step of a tie stands for its whole message, since its effects run in the later steps of that message
 and the state at the end of the message is observed before the next deadline fires, so the reads of its afterMessage
 count too; any other step stands for itself. The lines that the steps write are not in it: swapping steps that no cause
 chain links changes no order of a snapshot (Sim.ordered). Keys that the steps create are not in it, since test compares
@@ -494,8 +505,9 @@ def footprints (s : State) (c : Collect) : Array Footprint :=
 
 /--
 The pairs of steps whose other order test runs, by step number in the order they began, whose names differ so that a
-`stepOrder` names each, that no cause orders, and whose order is a choice: the deadlines of one tie, or the steps of one
-message. Of those, only the pairs whose footprints overlap and that do not commute run, the one independence relation of
+`stepOrder` names each, that no cause orders, and whose order is a choice: the steps of one tie, or the steps of one
+message that no tie chose. Equal messages of one tie arrive in steps of one name, so no pair of them runs: their other
+order is the same run with their ids swapped (equalArrivals). Of those, only the pairs whose footprints overlap and that do not commute run, the one independence relation of
 the search. A run that halted (in the semantic run, or `stopped` from enabled) skips the steps after the halt, so it has
 none. Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
 orders to run.
@@ -505,7 +517,7 @@ def candidates (s : State) (c : Collect) (stopped : Option Finding) : List (Nat 
   let fps := footprints s c
   c.steps.toList.zipIdx.flatMap fun ((i, a), n) =>
     (c.steps.toList.zipIdx.drop (n + 1)).filterMap fun ((j, b), k) =>
-      if (tiedDeadlines s i j || (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message))) &&
+      if (tied s i j || sameMessage s i j) &&
           overlaps (fps[n]?.getD {}) (fps[k]?.getD {}) && !a.commutes b && a.name != b.name && !leadsTo s i j then
         some (i, j)
       else none

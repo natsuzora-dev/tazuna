@@ -65,11 +65,6 @@ const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string
     kinds: ["Fault.outputSchema"],
     because: "the fault halts the scenario at its last line, and the stepOrder of its first line is still reported",
   },
-  "choiceDependent/Explore/ChoiceDependent/equal-requests": {
-    kinds: ["Uncomparable.ambiguous"],
-    because:
-      "test runs verify's ambiguity check on the snapshot it writes, and the snapshot answers the equal requests differently, beside the delivery order that the example searches",
-  },
 };
 
 const folderOf = (group: string) => group.charAt(0).toLowerCase() + group.slice(1);

@@ -42,7 +42,12 @@ deadlines fires, as it chooses the internal queue's next step.
 theorem chooseDeadline_stepOrder (s : State) (first t : Deadline) (due : List Deadline) (named : StepName)
     (rest : List StepName) (ho : s.stepOrder = named :: rest) (h : due.find? (·.step == named) = some t) :
     chooseDeadline s first due true = .ok (t, { s with stepOrder := rest }) := by
-  simp [chooseDeadline, ho, h]
+  have hn : named.isArrival = false := by
+    have := List.find?_some h
+    simp only [beq_iff_eq] at this
+    rw [← this]
+    rfl
+  simp [chooseDeadline, ho, h, hn]
 
 /-- Choosing a deadline changes only the step order entries left. -/
 theorem chooseDeadline_orders {s s' : State} {tied : Bool} {first t : Deadline} {due : List Deadline}

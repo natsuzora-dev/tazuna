@@ -55,17 +55,17 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
 
 `test` searches the orders that no line writes:
 
-- Deadlines of one service due at the same time, and the steps of one processing that no cause orders.
+- Deadlines of one service due at the same time, the messages that one line delivers to one service, and the steps of one processing that no cause orders.
   A machine receives each event of one group that `decide` returns in a step of its own, so the order of a group is one of these orders.
   Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
-  A tied deadline fires as a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
-- The order in which a line delivers the equal messages that its handle names.
-  Each delivery is a processing of its own, and `test` runs every order of them.
+  A tied deadline, and a message that a line delivers with others, is a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
+- Equal messages that one line delivers to one service are not searched.
+  A service reads a received id only to route a message, to answer it, and to tell one it processed before, so their other order is the same run with their ids swapped, and `test` compares that run without executing it (`ChoiceDependent.equalMessages`).
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
 Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
 The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike wherever the key appears.
-For another delivery order, the lines of each delivery compare at the place of the message that the delivery took, so equal messages compare by which message each processing took and not by when it ran.
+Lines that a service wrote for messages that one line delivered compare by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
 
 ### When a trace matches a snapshot
 
@@ -90,7 +90,6 @@ An implementation that uses a string of its input, such as an idempotency key, a
 The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`.
 Keys that only a later line tells apart wait for that line.
 When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind, and its doc comment states the case.
-`test` runs the check for `Uncomparable.ambiguous` on each snapshot that it writes, so a spec that answers equal requests differently is reported before any implementation runs.
 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
@@ -198,7 +197,7 @@ A map state has one *copy* of its child states for each key of its items.
 - Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone (`then_only_reports`). The checks at the end of a run also only add violations (`simulate_reported`).
 - A line changes no message in flight except those that its handle names, and only a deliver, lose, or refuse line removes one (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
 - Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line (`line_keeps_states`).
-- A deliver line whose first message has an earlier message in flight that must arrive first, on its channel and not an event of a step that no cause chain links to its own, delivers nothing and stops the simulation (`overtaking_delivery_halts`).
+- A deliver line whose first message has an earlier message in flight that the line does not name and that must arrive first, on its channel and not an event of a step that no cause chain links to its own, delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer whose first request has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A halting `InvalidScenario` violation stops the simulation, and once the simulation stops, the steps of the later lines take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
 - No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity, provided the service's state names the service as the owner of its keys, which `World.start` sets but no theorem proves (`unwritten_not_created`, `execute_unwritten_not_created`).

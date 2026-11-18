@@ -28,8 +28,8 @@ export type Difference =
 
 /**
  * A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, of two
- * deadlines of one service due at one time, or of the processings of equal messages that one line delivers. Every other
- * order of a simulation is a written line. stepOrder writes the pair in canonical order.
+ * deadlines of one service due at one time, or of two messages that one line delivers to one service. Every other order of
+ * a simulation is a written line. stepOrder writes the pair in canonical order.
  */
 export type ChoiceDependent =
   /**
@@ -52,8 +52,7 @@ export type ChoiceDependent =
   /**
    * The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
    * a result that only those change is not reported. `definition` is the definition of the first step of the first pair
-   * that the search swapped. The search of the delivery orders of one line stops alike at deliveryOrderLimit, with the
-   * definition of its messages as `definition`.
+   * that the search swapped.
    */
   | {
       readonly kind: "ChoiceDependent.searchLimit";
@@ -63,23 +62,23 @@ export type ChoiceDependent =
       };
     }
   /**
-   * The execution in which scenario line `scenarioLine` delivers the equal messages that it names in sending order and the
-   * execution in which it delivers them in `order`, their places counted in sending order, differ by `difference` in the
-   * outcome of the running service `service`. The messages are equal, so nothing outside tells which arrives first.
-   * `definition` is the request or event that the messages carry.
+   * Two equal messages that one line delivers to the running service `service`, which arrive in steps of the name
+   * `arrival`, are processed differently, so which of them gets which processing depends on which arrives first, which
+   * nothing outside tells: the outcome with the two swapped differs by `difference`. That outcome is the same run with the
+   * two ids swapped, since the service reads a received id only to name the message, so no search executes it.
+   * `definition` is the request or event that the messages carry, or answer or end.
    */
   | {
-      readonly kind: "ChoiceDependent.deliveryOrder";
+      readonly kind: "ChoiceDependent.equalMessages";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly scenarioLine: number;
-        readonly order: readonly number[];
         readonly service: string;
+        readonly arrival: StepName;
         readonly difference: Difference;
       };
     }
   /**
-   * Comparing the records of two executions that a stepOrder or deliveryOrder violation at `definition` would name held more
+   * Comparing the records of two executions that a stepOrder or equalMessages violation at `definition` would name held more
    * than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
    * the choice changes the records is not known.
    */
@@ -94,6 +93,6 @@ export type ChoiceDependent =
 export const choiceDependentKinds = [
   "ChoiceDependent.stepOrder",
   "ChoiceDependent.searchLimit",
-  "ChoiceDependent.deliveryOrder",
+  "ChoiceDependent.equalMessages",
   "ChoiceDependent.uncomparable",
 ] as const;

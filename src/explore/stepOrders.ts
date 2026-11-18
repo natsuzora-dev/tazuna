@@ -1,17 +1,20 @@
 import type { ChoiceDependent } from "../data/choiceDependent.generated.ts";
 import { stepOrderLimit } from "../data/limits.generated.ts";
-import type { Scenario } from "../data/scenario.generated.ts";
+import type { Origin, Scenario } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
+import type { LineId } from "../data/trace.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
-import { stepNameDefinition, stepsKey } from "../service/note.ts";
+import { type Line, sameLineId } from "../service/message.ts";
+import { sameStep, stepNameDefinition, stepsKey } from "../service/note.ts";
 import { created } from "../service/state.ts";
-import { type Span, type StepOrder, sameTurn, type Turn } from "../sim/network.ts";
+import { type Span, type StepOrder, sameOrigin } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
+import { snapshotLines } from "../sim/trace.ts";
 import { compareRuns } from "../verify/compare.ts";
-import { type Compare, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
+import { type Compare, equalMessages, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
 import { leadsTo } from "./instrument.ts";
 
 /** Lean's Tried: a step order that the search ran, refused (Execution.refused) or with the violation found, if any. */
@@ -19,8 +22,9 @@ export type Tried =
   | { readonly order: readonly StepName[]; readonly refused: true }
   | { readonly order: readonly StepName[]; readonly found: ChoiceDependent | null };
 
-/** Lean's Searched: what the search of the processing of `service` in a turn ran and found. The diff test asks Lean. */
-export interface Searched extends Turn {
+/** Lean's Searched: what the search of the processing of `service` ran and found. The diff test asks Lean. */
+export interface Searched {
+  readonly origin: Origin;
   readonly service: string;
   readonly tried: readonly Tried[];
   readonly found: readonly ChoiceDependent[];
@@ -30,7 +34,7 @@ export type OnSearched = ((searched: Searched) => void) | undefined;
 
 const violationValue = ({ kind, definition, data }: ViolationValue): ViolationValue => ({ kind, definition, data });
 
-export const compareOf =
+const compareOf =
   (spec: Spec, service: string): Compare =>
   (renamed, expected, actual) => {
     const { found, set } = compareRuns(spec, service, expected, actual, renamed);
@@ -38,17 +42,26 @@ export const compareOf =
     return mismatch === undefined ? { set } : { mismatch: violationValue(mismatch) };
   };
 
-/** Lean's Execution.outcome. */
-export function outcomeFor(m: Made, service: string): Outcome {
+/** Lean's Execution.outcomeWith: the outcome of `service` in `m`, with its lines `lines` when given. */
+function outcomeFor(m: Made, service: string, lines?: readonly Line[]): Outcome {
   const p = m.world.services.get(service);
   if (p === undefined) throw new Error(`${service} does not run`);
-  const lines = snapshotsOf(m).get(service) ?? [];
+  const s = p.processing.state;
+  const traceLines =
+    lines === undefined
+      ? (snapshotsOf(m).get(service) ?? [])
+      : snapshotLines(
+          service,
+          lines,
+          s.steps,
+          created(s).map(([, key]) => key),
+        );
   const keys = [...m.world.services].flatMap(([q, r]) =>
     created(r.processing.state).map(([entity, key]) => [key, `${q}/${entity}`] as const),
   );
   return outcomeOf(
     p.halted === undefined ? null : violationValue(p.halted),
-    lines,
+    traceLines,
     p.processing.state.records,
     new Map(keys),
   );
@@ -61,8 +74,86 @@ function refused(m: Made, service: string): boolean {
 }
 
 /** Lean's Execution.span?. */
-const spanOf = (m: Made, turn: Turn, service: string): Span | undefined =>
-  m.world.spans.find((s) => s.service === service && sameTurn(s, turn));
+const spanOf = (m: Made, origin: Origin, service: string): Span | undefined =>
+  m.world.spans.find((s) => s.service === service && sameOrigin(s.origin, origin));
+
+const linesOf = (m: Made, service: string): readonly Line[] =>
+  m.world.services.get(service)?.processing.state.lines ?? [];
+
+/** Lean's inIds: the ids of the `in` lines of `span`. */
+const inIds = (lines: readonly Line[], span: Span): LineId[] =>
+  lines.slice(span.from, span.to).flatMap((l) => (l.dir === "in" ? [l.id] : []));
+
+/** Lean's alignTo: the lines with those of `span` in the order of the messages `ids`, each window as one. */
+function alignTo(ids: readonly LineId[], span: Span, lines: readonly Line[]): Line[] {
+  const within = lines.slice(span.from, span.to);
+  const firstIn = within.findIndex((l) => l.dir === "in");
+  const pre = firstIn < 0 ? within : within.slice(0, firstIn);
+  const windows: Line[][] = [];
+  for (const l of within.slice(pre.length)) {
+    if (l.dir === "in" || windows.length === 0) windows.push([l]);
+    else windows.at(-1)?.push(l);
+  }
+  const key = (window: readonly Line[]) => {
+    const head = window[0];
+    const n = head === undefined ? -1 : ids.findIndex((id) => sameLineId(id, head.id));
+    return n < 0 ? ids.length : n;
+  };
+  const sorted = windows.map((w, n) => [w, key(w), n] as const).toSorted((a, b) => a[1] - b[1] || a[2] - b[2]);
+  return [...lines.slice(0, span.from), ...pre, ...sorted.flatMap(([w]) => w), ...lines.slice(span.to)];
+}
+
+/** Lean's swapId. */
+const swapId = (x: LineId, y: LineId, i: LineId): LineId => (sameLineId(i, x) ? y : sameLineId(i, y) ? x : i);
+
+/** Lean's Line.swapIds. */
+function swapIds(x: LineId, y: LineId, l: Line): Line {
+  const id = swapId(x, y, l.id);
+  switch (l.type) {
+    case "answer":
+      return { ...l, id, to: swapId(x, y, l.to) };
+    case "event":
+      return l.resultOf === undefined ? { ...l, id } : { ...l, id, resultOf: swapId(x, y, l.resultOf) };
+    case "unsubscribe":
+      return { ...l, id, to: swapId(x, y, l.to) };
+    default:
+      return { ...l, id };
+  }
+}
+
+/** Lean's Execution.arrivals: the arrival steps of `span`, by name, each with its message's id. */
+function arrivals(m: Made, span: Span): (readonly [StepName, LineId])[] {
+  const steps = m.world.services.get(span.service)?.processing.state.steps ?? [];
+  const names = (m.listeners.get(span.service)?.collected.names(span.stepsFrom) ?? []).filter(
+    ([n]) => n < span.stepsTo && steps[n]?.tie?.kind === "arrivals",
+  );
+  const ids = inIds(linesOf(m, span.service), span);
+  return names.flatMap(([, name], n) => {
+    const id = ids[n];
+    return id === undefined ? [] : [[name, id] as const];
+  });
+}
+
+/** Lean's equalArrivals: the outcome with two equal messages of a tie swapped, which is the run with their ids swapped. */
+function equalArrivals(spec: Spec, base: Made, span: Span): ChoiceDependent | undefined {
+  if (haltedIn(base, span)) return undefined;
+  const service = span.service;
+  const lines = linesOf(base, service);
+  const found = arrivals(base, span);
+  const original = outcomeFor(base, service);
+  for (const [name, x] of found) {
+    const first = found.find(([other]) => sameStep(other, name));
+    if (first === undefined || sameLineId(first[1], x)) continue;
+    const swapped = alignTo(
+      inIds(lines, span),
+      span,
+      lines.map((l) => swapIds(first[1], x, l)),
+    );
+    const result = equalMessages(compareOf(spec, service), service, name, original, outcomeFor(base, service, swapped));
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
 
 /** Lean's Execution.taken. */
 function taken(m: Made, span: Span): (readonly [number, StepName])[] {
@@ -78,7 +169,7 @@ function taken(m: Made, span: Span): (readonly [number, StepName])[] {
 function haltedIn(m: Made, span: Span): boolean {
   if (m.world.services.get(span.service)?.halted === undefined) return false;
   const last = m.world.spans.findLast((s) => s.service === span.service);
-  return last !== undefined && sameTurn(last, span);
+  return last !== undefined && sameOrigin(last.origin, span.origin);
 }
 
 /** Lean's Execution.candidatesOf. */
@@ -95,20 +186,27 @@ const findingKey = (v: ChoiceDependent): string =>
     ? canonicalJson([v.data.firstStep, v.data.secondStep, v.data.difference] as unknown as Json)
     : "";
 
-/** Lean's stepOrderSearch of the processing of `service` in `turn` of the scenario `prefix`, which ends with it. */
-function stepOrderSearch(spec: Spec, prefix: Scenario, turn: Turn, service: string): Pick<Searched, "tried" | "found"> {
+/** Lean's stepOrderSearch of the processing of `service` while `origin` is processed, of `prefix`, which ends with it. */
+function stepOrderSearch(
+  spec: Spec,
+  prefix: Scenario,
+  origin: Origin,
+  service: string,
+): Pick<Searched, "tried" | "found"> {
   const base = executeSpec(spec, prefix);
-  const baseSpan = spanOf(base, turn, service);
-  if (baseSpan === undefined || candidatesOf(base, baseSpan).length === 0) return { tried: [], found: [] };
+  const baseSpan = spanOf(base, origin, service);
+  if (baseSpan === undefined) return { tried: [], found: [] };
+  const equal = equalArrivals(spec, base, baseSpan);
+  const found: ChoiceDependent[] = equal === undefined ? [] : [equal];
+  if (candidatesOf(base, baseSpan).length === 0) return { tried: [], found };
   const compare = compareOf(spec, service);
   const tried: Tried[] = [];
-  const found: ChoiceDependent[] = [];
   const reached = new Set([stepsKey(taken(base, baseSpan).map(([, name]) => name))]);
   const queue: { readonly executed: Made; readonly order: readonly StepName[] }[] = [{ executed: base, order: [] }];
   let first: StepName | undefined;
   for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
     const { executed, order: parentOrder } = next;
-    const span = spanOf(executed, turn, service);
+    const span = spanOf(executed, origin, service);
     if (span === undefined) continue;
     const names = taken(executed, span);
     const nameOf = new Map(names);
@@ -134,25 +232,24 @@ function stepOrderSearch(spec: Spec, prefix: Scenario, turn: Turn, service: stri
         };
         return { tried, found: [...found, limit] };
       }
-      const stepOrders: StepOrder[] = [{ origin: turn.origin, delivery: turn.delivery, service, order }];
+      const stepOrders: StepOrder[] = [{ origin, service, order }];
       const alternative = executeSpec(spec, prefix, stepOrders);
       if (refused(alternative, service)) {
         tried.push({ order, refused: true });
         continue;
       }
-      const result = stepOrder(
-        compare,
-        service,
-        a,
-        b,
-        parentOrder,
-        order,
-        parentOutcome,
-        outcomeFor(alternative, service),
-      );
+      const altSpan = spanOf(alternative, origin, service);
+      const aligned =
+        altSpan === undefined
+          ? outcomeFor(alternative, service)
+          : outcomeFor(
+              alternative,
+              service,
+              alignTo(inIds(linesOf(executed, service), span), altSpan, linesOf(alternative, service)),
+            );
+      const result = stepOrder(compare, service, a, b, parentOrder, order, parentOutcome, aligned);
       tried.push({ order, found: result ?? null });
       if (result !== undefined && !found.some((v) => findingKey(v) === findingKey(result))) found.push(result);
-      const altSpan = spanOf(alternative, turn, service);
       if (altSpan === undefined) continue;
       const sequence = stepsKey(taken(alternative, altSpan).map(([, name]) => name));
       if (reached.has(sequence)) continue;
@@ -178,14 +275,14 @@ export function stepOrderChanges(
   const searched = new Set<string>();
   return executed.world.spans.flatMap((span) => {
     const index = span.origin.type === "startup" ? -1 : span.origin.index;
-    const key = canonicalJson([span.origin, span.delivery, span.service] as Json);
+    const key = canonicalJson([span.origin, span.service] as Json);
     if ((span.origin.type === "startup" ? from > 0 : index < from) || searched.has(key)) return [];
     searched.add(key);
-    if (candidatesOf(executed, span).length === 0) return [];
+    if (candidatesOf(executed, span).length === 0 && arrivals(executed, span).length === 0) return [];
     const prefix: Scenario = { ...sc, lines: sc.lines.slice(0, index + 1), expectations: [] };
-    const search = stepOrderSearch(spec, prefix, span, span.service);
+    const search = stepOrderSearch(spec, prefix, span.origin, span.service);
     if (search.tried.length === 0 && search.found.length === 0) return [];
-    onSearched?.({ origin: span.origin, delivery: span.delivery, service: span.service, ...search });
+    onSearched?.({ origin: span.origin, service: span.service, ...search });
     return search.found.map((v) => withExtra(v, { location: placeOf(spec, v.definition) }));
   });
 }

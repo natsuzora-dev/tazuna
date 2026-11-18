@@ -73,7 +73,6 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     violations: [],
     halted: undefined,
     stepOrders: [],
-    deliveryOrders: new Map(),
   };
 }
 

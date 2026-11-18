@@ -60,20 +60,11 @@ def Message.sameChannel (m n : Message) : Bool :=
   m.sender == n.sender && m.receiver == n.receiver && m.channel == n.channel
 
 /--
-One processing of a running service: what caused it, and which delivery of the line it is, from 0, when the line
-delivers several messages, each its own processing. A service acts at most once per turn.
--/
-structure Turn where
-  origin : Origin
-  delivery : Nat := 0
-deriving DecidableEq, Repr, Inhabited
-
-/--
-The lines `from` to `to` (exclusive) that `service` wrote in `turn`, and the steps `stepsFrom` to `stepsTo` (exclusive)
-that it took.
+The lines `from` to `to` (exclusive) that `service` wrote while `origin` was processed, and the steps `stepsFrom` to
+`stepsTo` (exclusive) that it took. A service acts at most once per origin.
 -/
 structure Span where
-  turn : Turn
+  origin : Origin
   service : String
   «from» : Nat
   to : Nat
@@ -121,12 +112,7 @@ structure World where
   The steps that the internal queue of `service` takes first in a turn, as State.stepOrder: the order of steps that
   test's search runs, which no line writes.
   -/
-  stepOrders : List (Turn × String × List StepName) := []
-  /--
-  The order in which a line acts on the messages that it names, by line: the places of the messages, counted in sending
-  order. A line without an entry acts in sending order. The order that test's search runs, which no line writes.
-  -/
-  deliveryOrders : List (Nat × List Nat) := []
+  stepOrders : List (Origin × String × List StepName) := []
 deriving Inhabited
 
 def World.state (w : World) (service : String) : State := (w.states.lookup service).getD { service }
@@ -251,11 +237,11 @@ def World.checkComputed (w : World) (service : String) (sent : List Line) (recor
   | none => w
 
 /--
-The world after `service` processes what `f` gives it in `turn`, taking first the steps of its entry of `stepOrders`,
+The world after `service` processes what `f` gives it while `o` is processed, taking first the steps of its entry of `stepOrders`,
 which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages
 it sent. Under `reopen`, as after a restart, every screen open after it opened anew.
 -/
-def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : String → Functions m) (turn : Turn)
+def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : String → Functions m) (o : Origin)
     (service : String) (f : Service → Functions m → State → m State) (reopen : Bool := false) : m World := do
   match w.services.lookup service with
   | none => pure w
@@ -264,25 +250,46 @@ def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : 
     let before := s.lines.size
     let stepsFrom := s.steps.size
     let screens := screensOf s
-    let o := turn.origin
-    let order := (w.stepOrders.find? fun (t, q, _) => t == turn && q == service).map (·.2.2)
+    let order := (w.stepOrders.find? fun (t, q, _) => t == o && q == service).map (·.2.2)
     let t ← MonadActing.acting service (f st (fsOf service) { s with stepOrder := order.getD [] })
     let t := if order.isSome then checkStepOrder t else t
     let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun id =>
       { origin := o, service, id : Opened }
-    let span : Span := { turn, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
+    let span : Span := { origin := o, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
                       spans := w.spans ++ [span], opened := w.opened ++ opened,
-                      stepOrders := w.stepOrders.filter fun (t, q, _) => !(t == turn && q == service) }
+                      stepOrders := w.stepOrders.filter fun (t, q, _) => !(t == o && q == service) }
     let sent := (t.lines.extract before t.lines.size).toList
     pure ((w.route o service sent).checkComputed service sent t.records)
 
-/-- The world after the message `k` arrives at its running receiver in `turn`. -/
+/-- The definition that the message carries: its request's or event's, or that of the request that it answers or ends. -/
+def World.definitionOf? (w : World) (msg : Message) : Option Spec.Ref :=
+  let requested (to : LineId) := w.messages.toList.findSome? fun r =>
+    if receivedId r.sender r.id != to then none else
+    match r.body with
+    | .command t _ | .query t _ | .subscribe t _ => some t
+    | _ => none
+  match msg.body with
+  | .command r _ | .query r _ | .subscribe r _ | .event r _ _ => some r
+  | .answer to _ => requested to
+  | .unsubscribe to => requested (receivedId msg.sender to)
+  | _ => none
+
+/--
+The world after the messages `ks`, all to the running service `receiver`, arrive in one processing while `o` is
+processed: one message as it is, and several as a tie (arriveAll), each waiting for those that must arrive before it
+(World.precedes).
+-/
 def World.deliver {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (w : World) (fsOf : String → Functions m)
-    (turn : Turn) (k : Nat) : m World :=
-  match w.messages[k]? with
-  | none => pure w
-  | some msg =>
-    (w.setStatus k .delivered).act fsOf turn msg.receiver fun st fs s => arriveFrom st fs s msg.sender msg.id msg.body
+    (o : Origin) (receiver : String) (ks : List Nat) : m World :=
+  let msgs := ks.filterMap (w.messages[·]?)
+  let w' := ks.foldl (fun w k => w.setStatus k .delivered) w
+  match msgs with
+  | [msg] => w'.act fsOf o receiver fun st fs s => arriveFrom st fs s msg.sender msg.id msg.body
+  | _ =>
+    let arrivals := msgs.zipIdx.map fun (msg, n) =>
+      { sender := msg.sender, id := msg.id, body := msg.body, definition := (w.definitionOf? msg).getD default
+        waitsFor := (msgs.take n).zipIdx.filterMap fun (e, j) => if w.precedes e msg then some j else none : Arrival }
+    w'.act fsOf o receiver (arriveAll · · arrivals)
 
 end Tazuna.Sim

@@ -36,7 +36,6 @@ function made(
   sc: Scenario,
   run: (structure: Structure, w: World, sc: Scenario) => World,
   stepOrders: readonly StepOrder[],
-  deliveryOrders: ReadonlyMap<number, readonly number[]> = new Map(),
 ): Made {
   const listeners = new Map<string, Listener>();
   const w = start(sc, (service) => {
@@ -45,7 +44,6 @@ function made(
     return processingFor(spec, service, listener);
   });
   w.stepOrders = stepOrders;
-  w.deliveryOrders = deliveryOrders;
   return { world: run(spec.structure, w, sc), listeners };
 }
 
@@ -53,13 +51,9 @@ function made(
 export const simulateSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
   made(spec, sc, simulate, stepOrders);
 
-/** Runs the lines of the scenario on the spec's services as explore does (execute), with `deliveryOrders`. */
-export const executeSpec = (
-  spec: Spec,
-  sc: Scenario,
-  stepOrders: readonly StepOrder[] = [],
-  deliveryOrders: ReadonlyMap<number, readonly number[]> = new Map(),
-): Made => made(spec, sc, execute, stepOrders, deliveryOrders);
+/** Runs the lines of the scenario on the spec's services as explore does (execute). */
+export const executeSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
+  made(spec, sc, execute, stepOrders);
 
 /** Each running service's trace as its snapshot holds it. */
 export const snapshotsOf = ({ world }: Made): ReadonlyMap<string, readonly TraceLine[]> =>

@@ -140,7 +140,7 @@ def World.screenOf (w : World) (i : Nat) (fact : Fact) : Except InvalidScenario 
 /-- The lines that `service` wrote while `origin` was processed. -/
 def World.spanLines (w : World) (o : Origin) (service : String) : List Service.Line :=
   let lines := (w.state service).lines
-  w.spans.flatMap fun sp => if sp.turn.origin == o && sp.service == service then (lines.extract sp.from sp.to).toList else []
+  w.spans.flatMap fun sp => if sp.origin == o && sp.service == service then (lines.extract sp.from sp.to).toList else []
 
 /--
 The answers that the receiver of the request `s` gave to it, from its `in` line up to the receiver's next `in` line with

@@ -7,7 +7,6 @@ import { parseSnapshotFile, type Run, runStem, snapshotFolder, snapshotPath } fr
 import { canonicalJson, type Json } from "../data/values.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
-import { verifying, verifyLines } from "./compare.ts";
 import { readSnapshotViolations, violationsAt } from "./lines.ts";
 import {
   type At,
@@ -139,17 +138,6 @@ export function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
       folders,
     ).compare,
   ];
-}
-
-/**
- * Verify's ambiguity check (Uncomparable.ambiguous) on the lines that test writes as the run's snapshot, read as the
- * implementation's trace: whether verify could route each input that answers one of equal requests.
- */
-export function snapshotAmbiguities(spec: Spec, run: Run, lines: readonly TraceLine[]): ReportedViolation[] {
-  const found = verifyLines(spec, run.runner, lines, lines, verifying).found.filter(
-    (v) => v.kind === "Uncomparable.ambiguous",
-  );
-  return violationsAt(relative(spec.root, snapshotPath(spec, run)), found, scenarioOf(run));
 }
 
 export function snapshotViolations(spec: Spec, run: Run, lines: readonly TraceLine[]): ReportedViolation[] {

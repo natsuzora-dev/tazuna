@@ -55,6 +55,8 @@ export function stepNameDefinition(service: string, name: StepName): DefinitionR
         service,
         name: name.sender.kind === "automation" ? name.sender.automation : chartOf(name.sender.machine),
       };
+    case "arrival":
+      return name.definition;
     default:
       return { service, name: chartOf(name.id) };
   }
@@ -91,6 +93,9 @@ export interface RegionCheck {
 export interface Note {
   stepBegins(step: number, name: StepName, started: InstanceId | undefined): void;
   stepEnds(): void;
+  /** Reports that a message of a tie arrives in step `step`: what its processing does outside any step belongs to it. */
+  arrivalBegins(step: number, name: StepName): void;
+  arrivalEnds(): void;
   /**
    * Reports that the open step evaluates the always transitions of `owner` and its copies before and after its work.
    */

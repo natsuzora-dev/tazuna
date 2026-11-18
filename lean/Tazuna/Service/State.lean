@@ -83,12 +83,21 @@ structure Queued where
 deriving DecidableEq, Repr, Inhabited
 
 /--
+A tie of steps that no cause orders, which test's search takes in every order: the deadlines of a service due at one
+time, or the messages that one line delivers to the service, the first of which arrived in step `first`.
+-/
+inductive Tie where
+  | deadlines (time : Time)
+  | arrivals (first : Nat)
+deriving DecidableEq, Repr, Inhabited
+
+/--
 A step of a run. `cause` is the step that caused this one, or none for input and deadline steps. `armedBy` is, for a
 deadline step, the step that armed the deadline, which caused it as `cause` does but in an earlier message. `message`
 is the message number, inherited from the cause. `command` is whether the step processes an own-service command. `barrier` is
 whether the step comes after every earlier step of the same message and before every later one. `nested` is whether
 the step began while its cause was running (a copy start), so that it ends before its cause does. `tie` is, for a
-deadline step, the time of the tie it fired in, so that test's search takes the tie's deadlines in every order.
+deadline step or the step in which a message of a tie arrives, its tie.
 -/
 structure StepInfo where
   cause : Option Nat
@@ -97,7 +106,7 @@ structure StepInfo where
   command : Bool := false
   barrier : Bool := false
   nested : Bool := false
-  tie : Option Time := none
+  tie : Option Tie := none
 deriving DecidableEq, Repr, Inhabited
 
 /--
@@ -215,7 +224,7 @@ def State.createKeys (s : State) (entities : List String) : State :=
 
 def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
 
-def State.newStep (s : State) (cause : Option Nat) (barrier := false) (nested := false) (tie : Option Time := none)
+def State.newStep (s : State) (cause : Option Nat) (barrier := false) (nested := false) (tie : Option Tie := none)
     (armedBy : Option Nat := none) : State × Nat :=
   let message := match cause.bind (s.steps[·]?) with
     | some c => c.message

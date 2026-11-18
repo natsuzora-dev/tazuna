@@ -57,6 +57,11 @@ inductive StepName where
   | reaction (automation : String) (event : Spec.Ref) (payload : Value) (delivered : List (List Value))
   | command (activity : Activity) (sender : Requester) (input : Value)
   | answer (activity : Activity) (sender : Requester) (input : Value) (answer : Value)
+  /--
+  The arrival of a message of a tie (Tie.arrivals) that carries `definition`'s request or event, or answers or ends one:
+  `content` is the message as the receiver reads it, without the id that only names it, so equal messages have one name.
+  -/
+  | arrival (definition : Spec.Ref) (content : Value)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire StepName tag "kind"
@@ -65,11 +70,16 @@ def StepName.isDeadline : StepName → Bool
   | .deadline .. => true
   | _ => false
 
+def StepName.isArrival : StepName → Bool
+  | .arrival .. => true
+  | _ => false
+
 /-- The definition of the step, in service `service`. -/
 def StepName.definition (service : String) : StepName → Spec.Ref
   | .start i | .receive i .. | .always i | .onDone i | .opensDone i _ _ | .activities i _ | .deadline i _ _ =>
     { service, name := i.chart }
   | .reaction a .. => { service, name := a }
   | .command _ sender _ | .answer _ sender _ _ => { service, name := sender.sender }
+  | .arrival definition _ => definition
 
 end Tazuna.Service

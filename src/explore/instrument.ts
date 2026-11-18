@@ -26,7 +26,7 @@ import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
-import type { State, StepInfo } from "../service/state.ts";
+import { type State, type StepInfo, sameTie } from "../service/state.ts";
 
 /**
  * The values that a step reads and writes, each by its valueName. `keyWrites` holds the key sets of entities that a
@@ -130,11 +130,15 @@ export function leadsTo(steps: readonly StepInfo[], earlier: number, later: numb
   return last.cause !== undefined && last.cause < later && leadsTo(steps, earlier, last.cause);
 }
 
-/** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie. */
-function tiedDeadlines(steps: readonly StepInfo[], i: number, j: number): boolean {
+/** Lean's tied: whether steps `i` and `j` are of one tie. */
+function tied(steps: readonly StepInfo[], i: number, j: number): boolean {
   const [a, b] = [steps[i]?.tie, steps[j]?.tie];
-  return a !== undefined && b !== undefined && a.equals(b);
+  return a !== undefined && b !== undefined && sameTie(a, b);
 }
+
+/** Lean's sameMessage: whether steps `i` and `j` are steps of one message that no tie chose. */
+const sameMessage = (steps: readonly StepInfo[], i: number, j: number): boolean =>
+  steps[i]?.tie === undefined && steps[j]?.tie === undefined && steps[i]?.message === steps[j]?.message;
 
 const reportedKey = (v: BagOrderDependent): string => JSON.stringify([v.kind, v.definition, v.data]);
 
@@ -150,6 +154,8 @@ export class Collect
       Note,
       | "stepBegins"
       | "stepEnds"
+      | "arrivalBegins"
+      | "arrivalEnds"
       | "settlesAround"
       | "transitionPart"
       | "microstepEnds"
@@ -169,6 +175,8 @@ export class Collect
   private outermost: StepAccess | undefined;
   /** The message whose afterMessage runs, while it runs. */
   private afterMessage: number | undefined;
+  /** The access of the step in which a message of a tie arrives, while it is processed (arrivalBegins). */
+  private arrival: StepAccess | undefined;
   /** For each message, the values that its afterMessage read: subscription answers, holds, invariants, and rearm. */
   private readonly afters = new Map<number, Footprint>();
   readonly violations: (BagOrderDependent & Located)[] = [];
@@ -246,6 +254,15 @@ export class Collect
     if (this.openSteps.length === 0) this.outermost = undefined;
   }
 
+  arrivalBegins(step: number, name: StepName): void {
+    this.arrival = { name, settledOwner: undefined, reads: new Set(), writes: new Set(), keyWrites: new Set() };
+    this.steps.set(step, this.arrival);
+  }
+
+  arrivalEnds(): void {
+    this.arrival = undefined;
+  }
+
   settlesAround(owner: InstanceId): void {
     if (this.outermost !== undefined) this.outermost.settledOwner = owner;
   }
@@ -270,11 +287,14 @@ export class Collect
     this.afterMessage = undefined;
   }
 
-  /** Lean's stepAccess: the outermost open step, or, while no step is open, the afterMessage that runs. */
+  /**
+   * Lean's stepAccess: the outermost open step, or, while no step is open, the afterMessage that runs, or else the step
+   * in which the message of a tie arrived.
+   */
   private accessing(): Footprint | undefined {
     if (this.outermost !== undefined) return this.outermost;
     const message = this.afterMessage;
-    if (message === undefined) return undefined;
+    if (message === undefined) return this.arrival;
     const after = this.afters.get(message) ?? { reads: new Set(), writes: new Set(), keyWrites: new Set() };
     this.afters.set(message, after);
     return after;
@@ -325,7 +345,7 @@ export class Collect
         .slice(n + 1)
         .filter(
           ([j, b]) =>
-            (tiedDeadlines(s.steps, i, j) || s.steps[i]?.message === s.steps[j]?.message) &&
+            (tied(s.steps, i, j) || sameMessage(s.steps, i, j)) &&
             overlaps(footprints.get(i) as Footprint, footprints.get(j) as Footprint) &&
             !commutes(a, b) &&
             !sameStep(a.name, b.name) &&
