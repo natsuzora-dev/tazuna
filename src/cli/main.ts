@@ -39,6 +39,8 @@ interface Misuse {
 }
 
 interface Given {
+  readonly root: string;
+  /** The arguments after the spec root. */
   readonly positionals: readonly string[];
   /** The value of each given option, or "" for an option without a value. */
   readonly options: ReadonlyMap<string, string>;
@@ -62,7 +64,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
     positionals: ["spec"],
     description: "Check the spec's structure and source without running it.",
     options: {},
-    parse: ({ positionals: [root = ""] }) => ({ command: "check", root }),
+    parse: ({ root }) => ({ command: "check", root }),
   },
   test: {
     positionals: ["spec"],
@@ -84,7 +86,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
           "Also report the parts of commands, queries, automations, and charts that neither a scenario's run nor an explored path reaches (Uncovered).",
       },
     },
-    parse: ({ positionals: [root = ""], options }) => {
+    parse: ({ root, options }) => {
       const depth = options.get("--depth") ?? "";
       if (!/^\d+$/.test(depth)) return { misuse: `invalid depth ${depth} (expected a non-negative integer)` };
       const update = options.has("--update");
@@ -96,7 +98,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
     description:
       "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of another spec service <peer> that runs as a peer in the scenario, which verify compares with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace; any other entry of it is a violation. verify checks a trace of an external service against the service's contract once the trace ends, so a result event may come before or after its request's answer. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
     options: {},
-    parse: ({ positionals: [root = "", traces = ""] }, io) =>
+    parse: ({ root, positionals: [traces = ""] }, io) =>
       isFolder(resolve(io.cwd, traces))
         ? { command: "verify", root, traces: resolve(io.cwd, traces) }
         : { misuse: `no such folder ${traces}` },
@@ -106,7 +108,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
     description:
       "Serve the viewer of the spec's services, definitions, and scenario snapshots, and print its URL. The viewer reloads when a spec file or snapshot changes.",
     options: { "--port": { value: "n", description: "Serve on port n instead of a free port." } },
-    parse: ({ positionals: [root = ""], options }, io) => {
+    parse: ({ root, options }, io) => {
       const port = options.get("--port") ?? "0";
       if (!/^\d+$/.test(port) || Number(port) > 65535)
         return { misuse: `invalid port ${port} (expected an integer from 0 to 65535)` };
@@ -207,9 +209,9 @@ function parse(args: readonly string[], io: Io): Invocation | Misuse {
     return { misuse: `wrong number of arguments for ${command}`, help: true };
   const missing = Object.keys(known.options).find((o) => known.options[o]?.required === true && !options.has(o));
   if (missing !== undefined) return { misuse: `missing option ${missing} for ${command}`, help: true };
-  const [root = ""] = positionals;
+  const [root = "", ...after] = positionals;
   if (!isFolder(resolve(io.cwd, root))) return { misuse: `no such folder ${root}` };
-  return known.parse({ positionals, options }, io);
+  return known.parse({ root, positionals: after, options }, io);
 }
 
 export async function main(args: readonly string[], io: Io): Promise<number> {
