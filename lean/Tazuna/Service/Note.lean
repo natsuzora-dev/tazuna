@@ -25,6 +25,8 @@ inductive Channel where
   | events (resultOf : Option String)
 deriving DecidableEq, Repr
 
+derive_wire Channel tag "kind"
+
 /--
 A value that steps read and write. Being in a state also stands for the copy set of a map state, and a channel for the
 order of the lines on it.

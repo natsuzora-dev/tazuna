@@ -30,7 +30,7 @@ def snapshotPairing (scenarios : List Scenario) (folders : List Folder) (service
   let p := pair (comparedNames scenarios service) entries
   { compare := p.paired.map ((service, ·))
     violations :=
-      p.missing.map (fun n => (.scenario service n, .missingSnapshot { service, name := n })) ++
+      p.missing.map (fun n => (.scenario { service, name := n }, .missingSnapshot { service, name := n })) ++
         p.unknown.map (fun e => (.snapshotEntry service e, .unknownSnapshotEntry)) ++
         (pair (scenarioNames scenarios service) entries).extra.map fun n =>
           (.snapshotEntry service (n ++ ".jsonl"), .obsoleteSnapshot) }

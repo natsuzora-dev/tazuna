@@ -208,10 +208,9 @@ def compareOf (spec : Spec.Structure) (service : String)
 
 /-- The comparison violations of `trace` against `snapshot`, and the pairs of each binding that it ends with. -/
 def verify (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (service : String)
-    (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : IO Value := do
+    (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : IO Response := do
   let compared ← Verify.verifyLines spec service (askComparable stdin stdout (← IO.mkRef {})) snapshot trace id
-  pure (.obj [("type", .str "verified"), ("findings", .arr (compared.findings.map Verify.Finding.toValue)),
-    ("bindings", .arr (compared.bindings.map fun b => .arr (b.strings.map fun (s, t) => .arr [.str s, .str t])))])
+  pure (.verified compared.findings (compared.bindings.map (·.strings)))
 
 /-- What an instrumented simulation collects: one Collect per running service, and the service whose processing runs. -/
 structure Acting where
@@ -269,7 +268,7 @@ simulation's violations and halting violation. With `execute` true, the lines ta
 each running service that did not halt also returns what it enables next.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) (executing : Bool)
-    (stepOrders : List StepOrder) : IO Value := do
+    (stepOrders : List StepOrder) : IO Response := do
   let start ← worldOf spec sc stepOrders
   let fsOf ← instrumentedOf stdin stdout start
   let ran : ActingIO Sim.World :=
@@ -277,36 +276,31 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
   let (w, acting) ← ran.run {}
   let (services, _) ← (w.states.mapM fun ((service, s) : String × State) => do
     let c := acting.collect service
-    let enabled ← match executing, s.halted, w.services.lookup service with
-      | true, none, some st => do
-        match ← Explore.enabled st (fsOf service) s with
-        | .ok e => pure [("enabled", ToValue.toValue e)]
-        | .error f => pure [("enabled", .obj [("fault", ToValue.toValue (Finding.fault f).toViolation)])]
-      | _, _, _ => pure []
-    let fields : List (String × Value) := [("service", .str service),
-      ("lines", .arr (s.lines.toList.map fun l => lineValue l [] [])),
-      ("violations", .arr ((reportedViolations s c none).map ToValue.toValue)),
-      ("candidates", .arr (((w.services.lookup service).map fun st => candidates st s c none).getD [] |>.map
-        fun ((i, j) : Nat × Nat) => .arr [.num i, .num j]))]
-    pure (Value.obj (fields ++ enabled))).run acting
-  pure (.obj [("type", .str "simulated"),
-    ("services", .arr services),
-    ("violations", .arr (w.violations.map Sim.InvalidScenario.toValue)),
-    ("halted", (w.halted.map Sim.InvalidScenario.toValue).getD .null)])
+    let next ← match executing, s.halted, w.services.lookup service with
+      | true, none, some st => do pure (some (← Explore.enabled st (fsOf service) s))
+      | _, _, _ => pure none
+    pure ({ service
+            lines := s.lines.toList.map (Sim.traceLineOf · [] [])
+            violations := reportedViolations s c none
+            candidates := ((w.services.lookup service).map fun st => candidates st s c none).getD []
+            enabled := next.bind (·.toOption)
+            fault := next.bind fun
+              | .error f => some (Finding.fault f).toViolation
+              | .ok _ => none } : SimulatedService)).run acting
+  pure (.simulated services w.violations w.halted)
 
-/-- The JSON of a search, as TS writes it. -/
-def searchValue (r : Searched) : Value :=
-  .obj [("origin", ToValue.toValue r.origin), ("service", .str r.service),
-    ("tried", .arr (r.search.tried.map fun t => .obj (("order", ToValue.toValue t.order) :: match t.verdict with
-      | .refused => [("refused", .bool true)]
-      | .decided found => [("found", (found.map (·.toValue)).getD .null)]))),
-    ("found", .arr (r.search.found.map (·.toValue)))]
+/-- A search, as TS writes it. -/
+def searchedOf (r : Searched) : SearchedProcessing :=
+  { origin := r.origin, service := r.service, found := r.search.found
+    tried := r.search.tried.map fun t => match t.verdict with
+      | .refused => { order := t.order, refused := some true, found := none }
+      | .decided found => { order := t.order, refused := none, found := some found } }
 
 /--
 The reply to request `stepOrderChanges`, which takes a structure and a scenario and returns stepOrderChanges of the
 scenario executed, from its startup: every search, with each step order it ran and its verdict, and what it found.
 -/
-def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Value := do
+def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Response := do
   let executeWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Execution := do
     let start ← IO.ofExcept (Sim.World.start spec sc)
     let start := { start with stepOrders }
@@ -316,13 +310,13 @@ def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure
   let reads ← IO.mkRef {}
   let searched ← stepOrderChanges (fun service => compareOf spec service (askComparable stdin stdout reads))
     executeWith sc (← executeWith sc []) 0
-  pure (.obj [("type", .str "stepOrderChanges"), ("searched", .arr (searched.map searchValue))])
+  pure (.stepOrderChanges (searched.map searchedOf))
 
 /--
 The reply to request `assignmentChanges`, which takes a structure and a scenario and returns assignmentSearch of the
 scenario's handle groups: each assignment it ran, with the violation it found, and what it reports.
 -/
-def assignmentChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Value := do
+def assignmentChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Response := do
   let start ← worldOf spec sc []
   let executeWith (assignments : List (Scenario.Fact × List Nat)) : IO Execution := do
     let start := { start with assignments }
@@ -335,49 +329,39 @@ def assignmentChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structur
   let reads ← IO.mkRef {}
   let search ← assignmentSearch (fun service => compareOf spec service (askComparable stdin stdout reads)) sizeOf
     executeWith base (handleGroups sc)
-  pure (.obj [("type", .str "assignmentChanges"),
-    ("tried", .arr (search.tried.map fun t => .obj [("assigned", ToValue.toValue t.assigned),
-      ("found", (t.found.map (·.toValue)).getD .null)])),
-    ("found", .arr (search.found.map (·.toValue)))])
+  pure (.assignmentChanges search.tried search.found)
 
 /-- The response to `request`. A snapshot line is none for a blank line. -/
-def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Value
-  | .check s =>
-    pure (.obj [("type", .str "checked"), ("findings", .arr ((Validation.check s).map Validation.Illegal.toValue))])
+def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
+  | .check s => pure (.checked (Validation.check s))
   | .verify s service snapshot trace => verify stdin stdout s service snapshot trace
-  | .checkExternal s service trace =>
-    pure (.obj [("type", .str "checkedExternal"),
-      ("findings", .arr ((Verify.checkExternal s service trace).map Verify.Finding.toValue))])
+  | .checkExternal s service trace => pure (.checkedExternal (Verify.checkExternal s service trace))
   | .pair services scenarios others folders =>
     let found := Verify.pairTraces (services.map fun s => (s.name, s.external)) scenarios others folders
-    pure (.obj [("type", .str "paired"), ("compare", refValues found.compare),
-      ("contract", refValues found.contract), ("findings", pairingFindings found.violations)])
+    pure (.paired (refs found.compare) (refs found.contract) (unpaired found.violations))
   | .pairSnapshots services scenarios folders =>
     let found := Verify.pairSnapshots services scenarios folders
-    pure (.obj [("type", .str "pairedSnapshots"), ("compare", refValues found.compare),
-      ("findings", pairingFindings found.violations)])
-  | .compareSnapshot snapshot run =>
-    pure (.obj [("type", .str "comparedSnapshot"),
-      ("mismatch", ((Verify.compareSnapshot snapshot run).map Verify.Mismatch.toValue).getD .null)])
+    pure (.pairedSnapshots (refs found.compare) (unpaired found.violations))
+  | .compareSnapshot snapshot run => pure (.comparedSnapshot (Verify.compareSnapshot snapshot run))
   | .afters snapshot =>
     let lines := snapshot.map (·.map fun l : TraceLine => ({ l with value := none } : Verify.Line))
-    pure (.obj [("type", .str "afters"), ("findings", .arr ((Verify.unknownAfters lines).map (·.toValue)))])
+    pure (.afters (Verify.unknownAfters lines))
   | .decodeLines values =>
-    pure (.obj [("type", .str "decodedLines"), ("lines", .arr (values.map fun v =>
-      match (FromValue.fromValue v : Except String TraceLine) with
-      | .ok line => ToValue.toValue line
-      | .error _ => .null))])
+    pure (.decodedLines (values.map fun v => (FromValue.fromValue v : Except String TraceLine).toOption))
   | .simulate s sc execute stepOrders =>
     simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD [])
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
   | .assignmentChanges s sc => assignmentChangesRequest stdin stdout s sc
+where
+  refs (l : List (String × String)) : List Spec.Ref := l.map fun (service, name) => { service, name }
+  unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 
 partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
   let line ← stdin.getLine
   if line.isEmpty then return
   let reply ← try
       respond stdin stdout (← IO.ofExcept (parse line >>= FromValue.fromValue))
-    catch e => pure (.obj [("type", .str "error"), ("message", .str (toString e))])
+    catch e => pure (.error (toString e))
   sendLine stdout reply
   loop stdin stdout
 

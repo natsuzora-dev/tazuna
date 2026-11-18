@@ -29,6 +29,7 @@ export type Trigger =
       readonly key: string;
       readonly outcome: SendOutcome;
     }
+  /** The `onDone` of an `opens`, taken when the opened screen closes. */
   | {
       readonly type: "opens";
       readonly key: string;

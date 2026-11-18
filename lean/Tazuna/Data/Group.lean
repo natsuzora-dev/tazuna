@@ -92,9 +92,9 @@ syntax groupOption := &"flatten" ident
 `derive_group T (flatten f)?` defines `T.kind`, `"<last component of T>.<constructor>"`; `T.definition`, the
 constructor's argument `definition`, or null when it has none; `T.place`, its arguments named in `placeNames`, keyed by
 name; `T.data`, its other arguments keyed by name; `T.line?`, its argument `line`, if any; `T.toValue`,
-`{kind, definition, ...place, data}`; and `T.toViolation`. Under `flatten f`, as in serde, a constructor's argument `f`
-writes its own constructor in its place: the kind is named after that constructor, and its arguments follow the
-others in the data.
+`{kind, definition, ...place, data}`, which is also `ToValue T`; and `T.toViolation`. Under `flatten f`, as in serde, a
+constructor's argument `f` writes its own constructor in its place: the kind is named after that constructor, and its
+arguments follow the others in the data.
 -/
 elab "derive_group " t:ident option:(groupOption)? : command => do
   let group ← liftCoreM (realizeGlobalConstNoOverloadWithInfo t)
@@ -131,6 +131,7 @@ elab "derive_group " t:ident option:(groupOption)? : command => do
   elabCommand (← `(def $(mkIdent (root ++ `line?)) : $(mkIdent group) → Option Nat := fun $lineAlts:matchAlt*))
   elabCommand (← `(def $(mkIdent (root ++ `toValue)) (v : $(mkIdent group)) : Value :=
     .obj ([("kind", .str ($kind v)), ("definition", $definition v)] ++ $place v ++ [("data", $data v)])))
+  elabCommand (← `(instance : ToValue $(mkIdent group) := ⟨$(mkIdent (root ++ `toValue))⟩))
   elabCommand (← `(def $(mkIdent (root ++ `toViolation)) (v : $(mkIdent group)) : Violation :=
     { kind := $kind v, definition := $definition v, data := $data v }))
 

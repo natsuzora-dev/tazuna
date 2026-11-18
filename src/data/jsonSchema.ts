@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { collectionOf } from "./collections.ts";
 import { schemaNode } from "./schemaNode.ts";
-import type { Shape } from "./values.ts";
+import type { Json, Shape } from "./values.ts";
 
-export type JsonSchema = Readonly<Record<string, unknown>>;
+export type JsonSchema = { readonly [key: string]: Json };
 
 /** The Zod types whose values JSON cannot hold, after Zod's toJSONSchema; a `transform` has no way back to JSON. */
 export const unrepresentableTypes = [

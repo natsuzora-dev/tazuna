@@ -1,15 +1,27 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
-import type { Answer, Rejection, RejectionKind } from "../data/trace.generated.ts";
+import type { Answer, RejectionKind } from "../data/trace.generated.ts";
 import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
-import type { Structure } from "./structure.generated.ts";
+import type {
+  Activity as ActivityStructure,
+  AssumptionMismatch,
+  Definition as DefinitionStructure,
+  ResultOfMismatch,
+  State as StateStructure,
+  Structure,
+  Transition as TransitionStructure,
+} from "./structure.generated.ts";
 
-export type DefinitionStructure = Structure["definitions"][number];
+export type {
+  ActivityStructure,
+  AssumptionMismatch,
+  DefinitionStructure,
+  ResultOfMismatch,
+  StateStructure,
+  TransitionStructure,
+};
 export type ChartStructure = Extract<DefinitionStructure, { kind: "machine" | "screen" }>;
-export type StateStructure = ChartStructure["states"][number];
-export type TransitionStructure = StateStructure["transitions"][number];
-export type ActivityStructure = StateStructure["activities"][number];
 type CommandStructure = Extract<DefinitionStructure, { kind: "command" }>;
 
 const kinds: { readonly [K in DefinitionStructure["kind"]]: K } = {
@@ -96,7 +108,7 @@ export function contractsListing(structure: Structure, ref: DefinitionRef): stri
  * request to another service may also be rejected with `unavailable`, and a command to another service with
  * `reused-id`. An answer rejected with `invalid-input` is the sender's fault (inputFault), so it is not listed.
  */
-export function rejectionKinds(structure: Structure, service: string, target: DefinitionRef): RejectionKind[] {
+export function rejectionKinds(structure: Structure, service: string, target: DefinitionRef): readonly RejectionKind[] {
   const definition = structure.definitions.find((d) => sameRef(d, target));
   if (definition?.kind !== "command" && definition?.kind !== "query") return [];
   if (definition.rejects !== null) return definition.rejects;
@@ -161,9 +173,6 @@ export function isAssumed(structure: Structure, target: DefinitionRef): boolean 
   );
 }
 
-/** Why an event cannot be the result (resultOf) of a request. */
-export type ResultOfMismatch = "resultOfNonCommand" | "resultOfUnacceptedRequest" | "resultOfUnlistedEvent";
-
 /**
  * Returns why `event` cannot be the result of a request to `target`, or undefined when it can. `event` can be the
  * result only when `target` is a command that accepted the request and lists `event` in its emits.
@@ -179,14 +188,6 @@ export function resultOfMismatch(
   if (!accepted) return "resultOfUnacceptedRequest";
   return definition.emits.some((e) => sameRef(e, event)) ? undefined : "resultOfUnlistedEvent";
 }
-
-/** Lean's AssumptionMismatch: what an answer to a request, or its result events, break of the target's contract. */
-export type AssumptionMismatch =
-  | { readonly kind: "unlistedRejectionKind"; readonly rejection: Rejection }
-  | { readonly kind: "answerOutputSchema" }
-  | { readonly kind: "rejectedAssumedRequires" }
-  | { readonly kind: "failedAssumedRequires"; readonly condition: string }
-  | { readonly kind: "failedAssumedEnsures"; readonly condition: string };
 
 type Assumed<V extends { readonly kind: string }, G extends string> = Extract<
   V,

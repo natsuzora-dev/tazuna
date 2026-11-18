@@ -1,8 +1,9 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { Channel } from "../data/note.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Obligation } from "../data/uncovered.ts";
-import { canonicalJson, type Json } from "../data/values.ts";
+import { canonicalJson, sameJson } from "../data/values.ts";
 import { chartOf, type InstanceId, instanceName } from "./instance.ts";
 
 /**
@@ -13,23 +14,6 @@ export interface RecordPart {
   readonly entity: string;
   readonly key?: string;
   readonly field?: string;
-}
-
-/** Lean's Channel: the channel that an `out` line travels on, seen from its sender (channelOf). */
-export type Channel =
-  | { readonly kind: "request"; readonly id: string }
-  | { readonly kind: "answers"; readonly request: string }
-  | { readonly kind: "events"; readonly resultOf: string | null };
-
-export function sameChannel(a: Channel, b: Channel): boolean {
-  switch (a.kind) {
-    case "request":
-      return b.kind === "request" && b.id === a.id;
-    case "answers":
-      return b.kind === "answers" && b.request === a.request;
-    case "events":
-      return b.kind === "events" && b.resultOf === a.resultOf;
-  }
 }
 
 /**
@@ -60,9 +44,9 @@ export function valueName(k: ValueKey): string {
 }
 
 /** The key of a step name. The search takes steps with equal names as one, so equal names must run equal work. */
-const stepKey = (name: StepName): string => canonicalJson(name as Json);
+const stepKey = (name: StepName): string => canonicalJson(name);
 
-export const sameStep = (a: StepName, b: StepName): boolean => stepKey(a) === stepKey(b);
+export const sameStep = (a: StepName, b: StepName): boolean => sameJson(a, b);
 
 /** The key of a sequence of steps. */
 export const stepsKey = (names: readonly StepName[]): string => names.map(stepKey).join("\n");

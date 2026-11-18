@@ -46,7 +46,7 @@ function executedOutcome(executed: Executed) {
         return { ...p, enabled: enabled(processing) };
       } catch (error) {
         if (!(error instanceof Halt)) throw error;
-        return { ...p, enabled: { fault: violationValue(error.violation) } };
+        return { ...p, fault: violationValue(error.violation) };
       }
     }),
   };

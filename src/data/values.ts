@@ -52,6 +52,9 @@ export function canonicalJson(value: unknown): string {
     .join(",")}}`;
 }
 
+/** Whether two values are equal as JSON, objects compared without regard to key order. */
+export const sameJson = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
+
 export type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
 export const plain = (value: unknown): Json => JSON.parse(JSON.stringify(value) ?? "null") as Json;

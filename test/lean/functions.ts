@@ -6,6 +6,7 @@ import {
   canonicalJson,
   encode as encodeArrays,
   type Fields,
+  type Json,
   objectOf,
   type Shape,
   strictObjectOf,
@@ -35,6 +36,7 @@ import { refEntityOf } from "../../src/verify/compare.ts";
 import type {
   Asked,
   Extra,
+  Holder,
   Access as LeanAccess,
   Issue as LeanIssue,
   Keys as LeanKeys,
@@ -46,7 +48,7 @@ import type {
 } from "./protocol.generated.ts";
 
 /** Encodes a value as spec code receives it, whose bags, sets and sortedBy arrays are Bags and Runs. */
-const encode = (shape: Shape, value: unknown): unknown => encodeArrays(shape, sorted(objectOf(shape), value));
+const encode = (shape: Shape, value: unknown): Json => encodeArrays(shape, sorted(objectOf(shape), value)) as Json;
 
 /** The Keys of Lean's: the owner, if any, and what createKey returns next by entity. */
 const keysOf = ({ owner, next }: LeanKeys): Keys => ({
@@ -58,7 +60,8 @@ const keysOf = ({ owner, next }: LeanKeys): Keys => ({
 const idOf = (id: InstanceId): InstanceId =>
   id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, id.key);
 
-const json = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+const json = (value: unknown): Json | undefined =>
+  value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as Json);
 
 /**
  * Returns `f()`, which decodes a value of Lean's message, or, when it throws, a `thrown` failure of `schema`, as in
@@ -111,7 +114,7 @@ export interface Answering {
 }
 
 /** Tags each value with its shape for Lean. Objects become [name, value] pairs to keep their key order. */
-export function tagged(value: unknown): unknown {
+export function tagged(value: unknown): Json {
   if (value instanceof Ref) return { ref: [value.entity, value.value] };
   if (value instanceof Bag) return { bag: value.items.map(tagged) };
   if (value instanceof Runs) return { runs: value.runs.map(tagged) };
@@ -122,7 +125,7 @@ export function tagged(value: unknown): unknown {
         .filter(([, v]) => v !== undefined)
         .map(([k, v]) => [k, tagged(v)]),
     };
-  return { leaf: value };
+  return { leaf: value as Json };
 }
 
 export class VerifyFunctions implements Answering {
@@ -331,12 +334,16 @@ export class RunFunctions implements Answering {
 
   /** Returns the reply of a question about `scope`, with what its expressions read and assigned. */
   private scoped(lean: LeanScope, ask: (scope: Scope, access: Access) => Replied): Replied {
-    const access: LeanAccess = { context: [], active: [], assigned: [], shown: [] };
+    const context: [Holder, string][] = [];
+    const active: [Holder, string][] = [];
+    const assigned: [Holder, string][] = [];
+    const shown: string[] = [];
+    const access: LeanAccess = { context, active, assigned, shown };
     const told: Access = {
-      context: (holder, name) => access.context.push([holder, name]),
-      active: (holder, name) => access.active.push([holder, name]),
-      assigned: (holder, name) => access.assigned.push([holder, name]),
-      shown: (slot) => access.shown.push(slot),
+      context: (holder, name) => context.push([holder, name]),
+      active: (holder, name) => active.push([holder, name]),
+      assigned: (holder, name) => assigned.push([holder, name]),
+      shown: (slot) => shown.push(slot),
       now: () => {},
     };
     return { ...this.replied(this.scopeOf(lean), (scope) => ask(scope, told)), access };
@@ -362,12 +369,15 @@ export class RunFunctions implements Answering {
       case "parse": {
         const schema = this.schemaOf(q.schema);
         return this.replied(this.functions.parse(schema, q.value), (parsed) =>
-          "error" in parsed ? { type: "parse" } : { type: "parse", value: parsed.encoded },
+          "error" in parsed ? { type: "parse" } : { type: "parse", value: parsed.encoded as Json },
         );
       }
       case "unordered": {
         const schema = this.schemaOf(q.schema);
-        return this.replied(this.functions.unordered(schema, q.value), (value) => ({ type: "unordered", value }));
+        return this.replied(this.functions.unordered(schema, q.value), (value) => ({
+          type: "unordered",
+          value: value as Json,
+        }));
       }
       case "normalize": {
         const schema = this.schemaOf(q.schema);
@@ -376,7 +386,9 @@ export class RunFunctions implements Answering {
           decoded === undefined
             ? { type: "normalize" }
             : this.replied(this.functions.normalize(schema, decoded), (normalized) =>
-                "error" in normalized ? { type: "normalize" } : { type: "normalize", value: normalized.encoded },
+                "error" in normalized
+                  ? { type: "normalize" }
+                  : { type: "normalize", value: normalized.encoded as Json },
               ),
         );
       }
@@ -405,7 +417,7 @@ export class RunFunctions implements Answering {
         return this.replied(this.inputOf(q.command, q.input), (input) =>
           this.replied(this.functions.decide(q.command, input, this.records, now(q)), (decided) => ({
             type: "decide",
-            groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: json(e.payload) }))),
+            groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: json(e.payload) ?? null }))),
           })),
         );
       case "ensures":
@@ -547,7 +559,7 @@ export class RunFunctions implements Answering {
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.offers(scope, this.records, q.control, access), (payloads) => ({
             type: "offers",
-            payloads: payloads.map((p) => p.encoded),
+            payloads: payloads.map((p) => p.encoded as Json),
           })),
         );
       case "showInput":
@@ -561,7 +573,7 @@ export class RunFunctions implements Answering {
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.items(scope, this.records, access), (keys) => ({
             type: "items",
-            keys: keys.map((k) => ({ key: k.encoded, encodedKey: k.encodedKey })),
+            keys: keys.map((k) => ({ key: k.encoded as Json, encodedKey: k.encodedKey })),
           })),
         );
       case "copyContext": {
@@ -569,7 +581,7 @@ export class RunFunctions implements Answering {
         return { type: "copyContext", context: encode(shape, this.functions.copyContext(q.machine, q.map)) };
       }
       case "singleRecord":
-        return { type: "singleRecord", record: this.functions.singleRecord(q.entity).encoded };
+        return { type: "singleRecord", record: this.functions.singleRecord(q.entity).encoded as Json };
       case "copyKey": {
         const { ref } = this.functions.chartOf(q.machine);
         const row = q.payload as Fields;

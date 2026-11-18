@@ -1,11 +1,15 @@
+import Tazuna.Explore.Assignments
+import Tazuna.Explore.Enabled
 import Tazuna.Explore.Instrument
 import Tazuna.Scenario.Given
+import Tazuna.Sim.InvalidScenario
+import Tazuna.Validation.Illegal
 import Tazuna.Verify.Compare
 import Tazuna.Verify.Pairing
 
 /-!
 The messages that tazuna-lean exchanges with TS over stdio, one JSON value per line. TS sends a Request; while Lean
-answers it, Lean sends Questions about spec functions and TS sends Replies, until Lean sends the response.
+answers it, Lean sends Questions about spec functions and TS sends Replies, until Lean sends the Response.
 -/
 
 namespace Tazuna.DiffTest
@@ -160,5 +164,67 @@ structure Replied where
 
 derive_wire Reply tag "type" skip_serializing_none
 derive_wire Replied flatten reply skip_serializing_none
+
+instance : ToValue Verify.Finding := ⟨fun
+  | .mismatch m => ToValue.toValue m
+  | .uncomparable u => ToValue.toValue u⟩
+
+/-- A pairing violation and where it is. -/
+structure Unpaired where
+  «at» : Verify.At
+  violation : Verify.Uncomparable
+
+derive_wire Unpaired serialize_only
+
+/--
+What a simulation shows of one running service: its trace lines, its violations, and its candidates, and when it runs
+as explore does and did not halt, what it enables next or the fault that computing it raised.
+-/
+structure SimulatedService where
+  service : String
+  lines : List TraceLine
+  violations : List Violation
+  candidates : List (Nat × Nat)
+  enabled : Option Explore.Enabled
+  fault : Option Violation
+
+derive_wire SimulatedService serialize_only skip_serializing_none
+
+/-- A step order that a search ran, refused or with the violation found, if any. -/
+structure TriedOrder where
+  order : List StepName
+  refused : Option Bool
+  found : Option (Option Explore.ChoiceDependent)
+
+derive_wire TriedOrder serialize_only skip_serializing_none
+
+/-- What the search of the processing `origin` of `service` ran and found. -/
+structure SearchedProcessing where
+  origin : Scenario.Origin
+  service : String
+  tried : List TriedOrder
+  found : List Explore.ChoiceDependent
+
+derive_wire SearchedProcessing serialize_only
+
+/-- What Lean answers a Request with, the constructor named after the request's. -/
+inductive Response where
+  | checked (findings : List Validation.Illegal)
+  /-- The pairs of each binding that the comparison ends with. -/
+  | verified (findings : List Verify.Finding) (bindings : List (List (String × String)))
+  | checkedExternal (findings : List Verify.Finding)
+  | paired (compare contract : List Spec.Ref) (findings : List Unpaired)
+  | pairedSnapshots (compare : List Spec.Ref) (findings : List Unpaired)
+  | comparedSnapshot (mismatch : Option Verify.Mismatch)
+  | afters (findings : List Verify.Uncomparable)
+  /-- Each value as a trace line, or null when it is none. -/
+  | decodedLines (lines : List (Option TraceLine))
+  | simulated (services : List SimulatedService) (violations : List Sim.InvalidScenario)
+      (halted : Option Sim.InvalidScenario)
+  | stepOrderChanges (searched : List SearchedProcessing)
+  | assignmentChanges (tried : List Explore.AssignmentTried) (found : List Explore.ChoiceDependent)
+  | error (message : String)
+
+derive_wire Response tag "type" serialize_only
 
 end Tazuna.DiffTest

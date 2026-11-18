@@ -18,6 +18,7 @@ structure WireOptions where
   skipSerializingNone : Bool := false
   tryFrom : Option Name := none
   untagged : Bool := false
+  serializeOnly : Bool := false
 deriving Inhabited
 
 initialize wireOptions : MapDeclarationExtension WireOptions ← mkMapDeclarationExtension
@@ -178,6 +179,7 @@ syntax &"flatten" ident : wireOption
 syntax &"skip_serializing_none" : wireOption
 syntax &"try_from" ident : wireOption
 syntax &"untagged" : wireOption
+syntax &"serialize_only" : wireOption
 
 def wireOptionsOf (options : Array (TSyntax `wireOption)) : CommandElabM WireOptions :=
   options.foldlM (init := {}) fun o option => do
@@ -192,6 +194,7 @@ def wireOptionsOf (options : Array (TSyntax `wireOption)) : CommandElabM WireOpt
     | `(wireOption| try_from $t:ident) =>
       pure { o with tryFrom := some (← liftCoreM (realizeGlobalConstNoOverloadWithInfo t)) }
     | `(wireOption| untagged) => pure { o with untagged := true }
+    | `(wireOption| serialize_only) => pure { o with serializeOnly := true }
     | _ => throwErrorAt option "unknown option"
 
 def decodeField (v : Ident) : WireField → CommandElabM Term
@@ -267,7 +270,7 @@ def wireFunctions (type : Name) : CommandElabM (Term × Term) := do
 /--
 `derive_wire T options*` defines `FromValue T` and `ToValue T` in the shape that `wireShape` decides. Under try_from S,
 T is a structure that extends S with proofs: it is read as S and converted by `T.tryFrom : S → Except String T`, and
-written as its S.
+written as its S. Under serialize_only, as when deriving only serde's Serialize, it defines `ToValue T` alone.
 -/
 elab "derive_wire " t:ident options:wireOption* : command => do
   let type ← liftCoreM (realizeGlobalConstNoOverloadWithInfo t)
@@ -282,7 +285,7 @@ elab "derive_wire " t:ident options:wireOption* : command => do
     elabCommand (← `(instance : ToValue $self := ⟨fun x => ToValue.toValue ($toSource:ident x)⟩))
     return
   let (encode, decode) ← wireFunctions type
-  elabCommand (← `(instance : FromValue $self := ⟨$decode⟩))
+  unless wire.serializeOnly do elabCommand (← `(instance : FromValue $self := ⟨$decode⟩))
   elabCommand (← `(instance : ToValue $self := ⟨$encode⟩))
 
 syntax wireMember := "(" ident wireOption* ")"

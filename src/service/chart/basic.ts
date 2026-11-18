@@ -1,5 +1,6 @@
 import type { Activity } from "../../data/step.generated.ts";
 import type { Trigger } from "../../data/transitionRef.generated.ts";
+import { sameJson } from "../../data/values.ts";
 import {
   type ActivityStructure,
   type ChartStructure,
@@ -70,7 +71,7 @@ export interface Chart {
 
 export function transitionsAt(c: Chart, source: string | null, trigger: Trigger): readonly Transition[] {
   return (source === null ? c.on : (c.states.get(source)?.transitions ?? [])).filter((t) =>
-    sameTrigger(t.trigger, trigger),
+    sameJson(t.trigger, trigger),
   );
 }
 
@@ -129,20 +130,4 @@ export function executableChart(c: ChartStructure, service: string, order: numbe
       hasPayload: schemaProperties(payload).length > 0,
     })),
   };
-}
-
-function sameTrigger(a: Trigger, b: Trigger): boolean {
-  switch (a.type) {
-    case "always":
-    case "onDone":
-      return b.type === a.type;
-    case "after":
-      return b.type === "after" && b.deadline === a.deadline;
-    case "on":
-    case "opens":
-      return b.type === a.type && b.key === a.key;
-    case "calls":
-    case "sends":
-      return b.type === a.type && b.key === a.key && b.outcome === a.outcome;
-  }
 }

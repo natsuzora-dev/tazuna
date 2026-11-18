@@ -22,11 +22,13 @@ export type InstanceId =
 
 /** The sender of a request. */
 export type Requester =
+  /** The machine `machine`, which sent the request on entering `state`. */
   | {
       readonly kind: "state";
       readonly machine: InstanceId;
       readonly state: string;
     }
+  /** The screen `machine`, which subscribed the query of shows slot `slot`; answers keep coming until it ends. */
   | {
       readonly kind: "slot";
       readonly machine: InstanceId;
@@ -63,6 +65,7 @@ export type Activity =
       readonly key: string;
       readonly target: DefinitionRef;
     }
+  /** `modal` is whether the opened screen blocks operations on other screens while it is open. */
   | {
       readonly keyword: "opens";
       readonly key: string;

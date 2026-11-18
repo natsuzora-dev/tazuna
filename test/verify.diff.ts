@@ -59,7 +59,7 @@ function violationCountOfBoth({ spec, service, snapshot }: Case, trace: readonly
   const { found: ts, bindings } = verifyLines(spec, service, snapshot, lines, verifying);
   assert.deepEqual(
     lean.verify(spec, service, snapshot, lines, new VerifyFunctions(spec)),
-    { findings: ts.map(value), bindings: bindings.map((b) => [...b]) },
+    { findings: ts.map(value), bindings: bindings.map((b) => Object.fromEntries(b)) },
     at,
   );
   for (const { kind } of ts) findings.set(kind, (findings.get(kind) ?? 0) + 1);

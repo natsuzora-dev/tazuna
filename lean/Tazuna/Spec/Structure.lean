@@ -350,6 +350,8 @@ inductive ResultOfMismatch where
   | resultOfUnlistedEvent
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire ResultOfMismatch
+
 /--
 Why `event` cannot be the result of a request to `target`, or none when it can. `event` can be the result only when
 `target` is a command that accepted the request and lists `event` in its emits.
@@ -374,6 +376,8 @@ inductive AssumptionMismatch where
   /-- The answer, or the result events so far, fail the target's assumed ensures `condition`. -/
   | failedAssumedEnsures (condition : String)
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire AssumptionMismatch tag "kind"
 
 /--
 The assumption that an answer breaks, given the first assumed requires that fails and, when the requires hold and

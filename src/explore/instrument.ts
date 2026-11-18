@@ -4,6 +4,7 @@ import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } fr
 import { Bag } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
+import type { Channel } from "../data/note.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
@@ -23,15 +24,7 @@ import {
 } from "../service/functions.ts";
 import { chartOf, type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
-import {
-  type Channel,
-  type Note,
-  type RegionCheck,
-  type RegionPair,
-  sameStep,
-  type ValueKey,
-  valueName,
-} from "../service/note.ts";
+import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";

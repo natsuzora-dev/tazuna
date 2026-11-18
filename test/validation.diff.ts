@@ -78,7 +78,7 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
       charts(s).flatMap((c) => transitionsOf(c).flat()),
       a + b,
     );
-    if (t) (t as { guards: string[] }).guards = t.guards.length > 0 ? [] : ["g"];
+    if (t) (t as { guards: readonly string[] }).guards = t.guards.length > 0 ? [] : ["g"];
   },
   reenter(s, [a]) {
     const t = pick(
@@ -99,7 +99,7 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
       guards: c % 3 === 0 ? ["g"] : [],
       reenter: pick([null, false, true], c) ?? null,
     };
-    state.transitions.push(t);
+    (state.transitions as TransitionStructure[]).push(t);
   },
   kind(s, [a, b]) {
     const chart = pick(charts(s), a);
@@ -123,7 +123,7 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
   },
   input(s, [a]) {
     const chart = pick(charts(s), a);
-    if (chart) (chart as { input: string[] }).input = chart.input.length > 0 ? [] : ["x"];
+    if (chart) (chart as { input: readonly string[] }).input = chart.input.length > 0 ? [] : ["x"];
   },
   emits(s, [a, b, c]) {
     const command = pick(
@@ -132,7 +132,7 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     );
     if (command?.kind !== "command") return;
     const events = refsOf(s, ["event"]);
-    (command as { emits: unknown[] }).emits = [...command.emits.slice(0, b % 2), pick(events, c) ?? null];
+    (command as { emits: readonly unknown[] }).emits = [...command.emits.slice(0, b % 2), pick(events, c) ?? null];
   },
   automation(s, [a, b, c]) {
     const automation = pick(

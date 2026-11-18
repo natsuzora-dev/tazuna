@@ -60,6 +60,8 @@ structure AssignmentTried where
   found : Option ChoiceDependent
 deriving Repr, Inhabited
 
+derive_wire AssignmentTried serialize_only
+
 /-- What the search of a scenario's assignments did: each assignment it ran in turn, and what it reports. -/
 structure AssignmentSearch where
   tried : List AssignmentTried := []

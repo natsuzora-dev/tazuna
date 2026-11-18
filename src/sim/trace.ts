@@ -1,6 +1,7 @@
+import type { Channel } from "../data/note.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { contentOf, steps as windows } from "../data/trace.ts";
-import { type Channel, sameChannel } from "../service/note.ts";
+import { sameJson } from "../data/values.ts";
 import type { StepInfo } from "../service/state.ts";
 
 /**
@@ -60,7 +61,7 @@ function ordered(
   b: number,
 ): boolean {
   const [channel, other] = [channelOf(lines[a] as TraceLine), channelOf(lines[b] as TraceLine)];
-  if (channel === undefined || other === undefined || !sameChannel(channel, other)) return false;
+  if (channel === undefined || other === undefined || !sameJson(channel, other)) return false;
   const [writerA, writerB] = [lineSteps[a], lineSteps[b]];
   return writerA === undefined || writerB === undefined || writerA[1] !== writerB[1];
 }

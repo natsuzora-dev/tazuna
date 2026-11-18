@@ -6,6 +6,7 @@ import Tazuna.Explore.ChoiceDependent
 import Tazuna.Explore.BagOrderDependent
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
+import Tazuna.Service.Note
 import Tazuna.Spec.Structure
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
@@ -18,17 +19,12 @@ import DiffTest.Protocol
 The text is laid out as Biome formats it, since `npm run lint` checks it.
 
 A violation type and a wire type (Data/Wire.lean) differ in two ways. A violation's `Option` field is always `T | null`,
-and a wire type's is an optional property (`.exactOptional()`) under skip_serializing_none. A violation's constructor is
+and a wire type's is an optional property under skip_serializing_none. A violation's constructor is
 named by its `kind` (`"Group.constructor"`), and a wire type's constructor by its `tag` field, whose value is the
 constructor's name, kebab-case under rename_all.
 -/
 
 open Lean Elab Term Meta Tazuna.Data
-
-structure TsType where
-  lean : Name
-  ts : String
-  module : Option String
 
 /--
 The TS constant `name`: the strings `values` as a const array, on one line when it fits in 120 columns and one string
@@ -40,44 +36,111 @@ def constArray (name : String) (values : List String) : String :=
   if oneLine.length ≤ 120 then oneLine ++ "\n"
   else s!"export const {name} = [\n" ++ String.join (quoted.map fun q => s!"  {q},\n") ++ "] as const;\n"
 
-def tsTypes : List TsType :=
-  [⟨``String, "string", none⟩, ⟨``Nat, "number", none⟩, ⟨``Bool, "boolean", none⟩, ⟨``Tazuna.Data.Value, "Json", some "./values.ts"⟩,
-   ⟨``Tazuna.Spec.Ref, "DefinitionRef", some "./definitionRef.ts"⟩,
-   ⟨``Tazuna.Verify.Subject, "Subject", some "./mismatch.generated.ts"⟩,
-   ⟨``Tazuna.Data.RejectionKind, "RejectionKind", some "./trace.generated.ts"⟩,
-   ⟨``Tazuna.Data.Rejection, "Rejection", some "./trace.generated.ts"⟩,
-   ⟨``Tazuna.Data.Time, "string", none⟩,
-   ⟨``Tazuna.Spec.CallOutcome, "CallOutcome", some "../data/transitionRef.generated.ts"⟩,
-   ⟨``Tazuna.Spec.SendOutcome, "SendOutcome", some "../data/transitionRef.generated.ts"⟩,
-   ⟨``Tazuna.Spec.TransitionRef, "TransitionRef", some "../data/transitionRef.generated.ts"⟩,
-   ⟨``Tazuna.Spec.Trigger, "Trigger", some "../data/transitionRef.generated.ts"⟩,
-   ⟨``Tazuna.Service.InstanceId, "InstanceId", some "./step.generated.ts"⟩,
-   ⟨``Tazuna.Service.Requester, "Requester", some "./step.generated.ts"⟩,
-   ⟨``Tazuna.Service.Received, "Received", some "./step.generated.ts"⟩,
-   ⟨``Tazuna.Service.StepName, "StepName", some "./step.generated.ts"⟩,
-   ⟨``Tazuna.Data.Violation, "ViolationValue", some "./violation.ts"⟩,
-   ⟨``Tazuna.Explore.Difference, "Difference", none⟩, ⟨``Tazuna.Explore.Assigned, "Assigned", none⟩,
-   ⟨``Tazuna.Data.TraceLine, "TraceLine", some "./trace.generated.ts"⟩,
-   ⟨``Tazuna.Data.Answer, "Answer", some "./trace.generated.ts"⟩,
-   ⟨``Tazuna.Scenario, "Scenario", some "./scenario.generated.ts"⟩,
-   ⟨``Tazuna.Scenario.Origin, "Origin", some "./scenario.generated.ts"⟩,
-   ⟨``Tazuna.Spec.Structure, "Structure", some "../spec/structure.generated.ts"⟩,
-   ⟨``Tazuna.Service.Activity, "Activity", some "./step.generated.ts"⟩,
-   ⟨``Tazuna.Verify.Scenario, "PairingScenario", some "../verify/pairing.ts"⟩,
-   ⟨``Tazuna.Verify.Folder, "Folder", some "../verify/pairing.ts"⟩]
+/-- The TS type of each Lean type that no generated file declares: a TS built-in, or a type of a hand-written module. -/
+def handTypes : List (Name × String × Option String) :=
+  [(``String, "string", none), (``Nat, "number", none), (``Bool, "boolean", none), (``Tazuna.Data.Time, "string", none),
+   (``Tazuna.Data.DateTime, "string", none), (``Tazuna.Data.Value, "Json", some "src/data/values.ts"),
+   (``Tazuna.Spec.Ref, "DefinitionRef", some "src/data/definitionRef.ts"),
+   (``Tazuna.Data.Violation, "ViolationValue", some "src/data/violation.ts"),
+   (``Tazuna.Verify.At, "At", some "src/verify/pairing.ts"),
+   (``Tazuna.Verify.Scenario, "PairingScenario", some "src/verify/pairing.ts"),
+   (``Tazuna.Verify.Folder, "Folder", some "src/verify/pairing.ts")]
 
-/-- The TS type of a Lean type. The state collects the imports that the TS type needs. -/
-partial def tsType : Expr → StateT (List (String × String)) MetaM String
+/-- The Lean sums whose constructors each wrap one value and write it as it is, with the types that they wrap. -/
+def sums : List (Name × List Name) :=
+  [(``Tazuna.Verify.Finding, [``Tazuna.Verify.Mismatch, ``Tazuna.Verify.Uncomparable])]
+
+/-- Each generated module, by repository path, and the Lean types that it declares, the root last. -/
+def modules : List (String × List Name) :=
+  [("src/data/illegal.generated.ts", [``Tazuna.Validation.Illegal]),
+   ("src/data/mismatch.generated.ts", [``Tazuna.Verify.Subject, ``Tazuna.Verify.Mismatch]),
+   ("src/data/uncomparable.generated.ts", [``Tazuna.Verify.Uncomparable]),
+   ("src/data/invalidInput.generated.ts", [``Tazuna.Service.InvalidInput]),
+   ("src/data/invalidScenario.generated.ts", [``Tazuna.Sim.InvalidScenario]),
+   ("src/data/scenario.generated.ts",
+    [``Tazuna.Spec.Ref, ``Tazuna.Scenario.Origin, ``Tazuna.Scenario.Fact, ``Tazuna.Scenario.ValueRef,
+     ``Tazuna.Scenario.Fill, ``Tazuna.Scenario.Hole, ``Tazuna.Scenario.Template, ``Tazuna.Scenario.Line,
+     ``Tazuna.Scenario.SentRequest, ``Tazuna.Scenario.EmittedEvent, ``Tazuna.Scenario.Expectation,
+     ``Tazuna.Scenario.GivenRecord, ``Tazuna.Scenario.Peer, ``Tazuna.Scenario.PeerEntry, ``Tazuna.Scenario.Given,
+     ``Tazuna.Scenario]),
+   ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),
+   ("src/data/bagOrderDependent.generated.ts", [``Tazuna.Explore.BagOrderDependent]),
+   ("src/data/choiceDependent.generated.ts",
+    [``Tazuna.Explore.Difference, ``Tazuna.Explore.Assigned, ``Tazuna.Explore.ChoiceDependent]),
+   ("src/data/transitionRef.generated.ts",
+    [``Tazuna.Spec.CallOutcome, ``Tazuna.Spec.SendOutcome, ``Tazuna.Spec.Trigger, ``Tazuna.Spec.TransitionRef]),
+   ("src/data/step.generated.ts",
+    [``Tazuna.Service.InstanceId, ``Tazuna.Service.Requester, ``Tazuna.Service.Received, ``Tazuna.Service.Activity,
+     ``Tazuna.Service.StepName]),
+   ("src/data/note.generated.ts", [``Tazuna.Service.Channel]),
+   ("src/data/trace.generated.ts",
+    [``Tazuna.Data.RejectionKind, ``Tazuna.Data.Rejection, ``Tazuna.Data.Answer, ``Tazuna.Data.TraceLine]),
+   ("src/spec/structure.generated.ts",
+    [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.State, ``Tazuna.Spec.ChartFields,
+     ``Tazuna.Spec.Reference, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
+     ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
+     ``Tazuna.Spec.Structure]),
+   ("test/lean/protocol.generated.ts",
+    [``Tazuna.Service.Schema, ``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
+     ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
+     ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys, ``Tazuna.Explore.Holder, ``Tazuna.Explore.Access,
+     ``Tazuna.Verify.Part, ``Tazuna.Service.Operation, ``Tazuna.Explore.Awaiting, ``Tazuna.Explore.Enabled,
+     ``Tazuna.Explore.AssignmentTried, ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder,
+     ``Tazuna.DiffTest.Request, ``Tazuna.DiffTest.Question, ``Tazuna.DiffTest.Asked, ``Tazuna.DiffTest.ItemKey,
+     ``Tazuna.DiffTest.Deadline, ``Tazuna.DiffTest.Reply, ``Tazuna.DiffTest.Replied, ``Tazuna.DiffTest.Unpaired,
+     ``Tazuna.DiffTest.SimulatedService, ``Tazuna.DiffTest.TriedOrder, ``Tazuna.DiffTest.SearchedProcessing,
+     ``Tazuna.DiffTest.Response])]
+
+def declaredIn (path : String) : MetaM (List Name) := do
+  let some types := modules.lookup path | throwError "modules has no {path}"
+  pure types
+
+/-- The path of the file `target` as an import in the file `file`, both relative to the repository. -/
+def relativePath (file target : String) : String :=
+  let dir := (file.splitOn "/").dropLast
+  let parts := target.splitOn "/"
+  let common := ((dir.zip parts).takeWhile fun (a, b) => a == b).length
+  let rest := "/".intercalate (parts.drop common)
+  if dir.length == common then "./" ++ rest else String.join (List.replicate (dir.length - common) "../") ++ rest
+
+/-- The state of writing a generated module: its path, the types that it declares, and the types that it imports. -/
+structure Writing where
+  file : String
+  declared : List Name
+  imports : List (String × String) := []
+
+abbrev Write := StateT Writing MetaM
+
+/-- The TS name of the Lean type `name`, which the module imports unless it declares it. -/
+partial def named (name : Name) : Write String := do
+  let importing (ts path : String) : Write Unit :=
+    modify fun w => if (ts, path) ∈ w.imports then w else { w with imports := w.imports ++ [(ts, path)] }
+  if let some (_, ts, path) := handTypes.find? (·.1 == name) then
+    if let some path := path then importing ts path
+    return ts
+  if let some (_, members) := sums.find? (·.1 == name) then
+    return " | ".intercalate (← members.mapM named)
+  let ts := name.getString!
+  if (← get).declared.contains name then return ts
+  if let some (path, _) := modules.find? (·.2.contains name) then
+    importing ts path
+    return ts
+  if let .enum ctors ← wireShape name then
+    return " | ".intercalate (ctors.map fun c => s!"\"{c.name}\"")
+  throwError "no generated module declares {name}; add it to modules"
+
+/-- The TS type of a Lean type. -/
+partial def tsType : Expr → Write String
   | .app (.const ``Option _) a => return s!"{← tsType a} | null"
+  | .app (.const ``List _) (.app (.app (.const ``Prod _) (.const ``String _)) a) =>
+    return s!"Readonly<Record<string, {← tsType a}>>"
   | .app (.const ``List _) a => do
     let t ← tsType a
     return if t.startsWith "readonly " || (t.splitOn " | ").length > 1 then s!"readonly ({t})[]" else s!"readonly {t}[]"
-  | .const name _ => do
-    let some t := tsTypes.find? (·.lean == name) | throwError "tsTypes has no TS type for {name}"
-    if let some path := t.module then
-      modify fun imports => if (t.ts, path) ∈ imports then imports else imports ++ [(t.ts, path)]
-    return t.ts
-  | type => throwError "tsTypes has no TS type for {type}"
+  | .app (.app (.const ``Prod _) a) b => return s!"readonly [{← tsType a}, {← tsType b}]"
+  | .app (.const ``Tazuna.Data.FileLine _) a => return s!"null | \"malformed\" | {← tsType a}"
+  | .const name _ => named name
+  | type => throwError "no TS type for {type}"
 
 def jsdoc (indent doc : String) : String :=
   match (doc.trimAscii.toString.splitOn "\n").map (·.trimAsciiStart.toString) with
@@ -89,37 +152,65 @@ def jsdoc (indent doc : String) : String :=
 
 def lowerFirst (s : String) : String := (s.take 1).toString.toLower ++ (s.drop 1).toString
 
-/-- A TS object type. `literals` are the fields whose type is one string literal, and they come first. -/
-def object (fields : List (String × Expr)) (indent : String) (literals : List (String × String) := []) :
-    StateT (List (String × String)) MetaM String := do
-  let lines := literals.map (fun (n, v) => s!"{indent}readonly {n}: \"{v}\";\n") ++
-    (← fields.mapM fun (n, type) => do pure s!"{indent}readonly {n}: {← tsType type};\n")
-  if lines.isEmpty then return "Readonly<Record<string, never>>"
-  return "{\n" ++ String.join lines ++ (indent.drop 2).toString ++ "}"
+/-- A property of a TS object type: a field, or a field whose type is one string literal. -/
+inductive Property where
+  | field (field : WireField)
+  | literal (name value : String)
 
-def union (name : Name) (doc : String) (members : List String) : String :=
-  doc ++ s!"export type {name.getString!} =\n" ++ "\n".intercalate (members.map ("  | " ++ ·)) ++ ";\n"
+/-- A TS object type of `properties`, each after its docstring, intersected with the type of each flattened field. -/
+def object (indent : String) (properties : List (Option String × Property)) : Write String := do
+  let mut lines : List String := []
+  let mut flattened : List String := []
+  for (doc, p) in properties do
+    let doc := (doc.map (jsdoc indent)).getD ""
+    match p with
+    | .literal n v => lines := lines ++ [doc ++ s!"{indent}readonly {n}: \"{v}\";\n"]
+    | .field (.required n t) => lines := lines ++ [doc ++ s!"{indent}readonly {n}: {← tsType t};\n"]
+    | .field (.optional n t) => lines := lines ++ [doc ++ s!"{indent}readonly {n}?: {← tsType t};\n"]
+    | .field (.flattened _ written) => flattened := flattened ++ [← named written]
+  if lines.isEmpty && !flattened.isEmpty then return " & ".intercalate flattened
+  let body := if lines.isEmpty then "Readonly<Record<string, never>>"
+    else "{\n" ++ String.join lines ++ (indent.drop 2).toString ++ "}"
+  return " & ".intercalate (body :: flattened)
+
+def typeDoc (type : Name) : MetaM String := do
+  return ((← findDocString? (← getEnv) type).map (jsdoc "")).getD ""
+
+/-- A union of `members`, each after its docstring, an intersection in parentheses. -/
+def union (name : String) (doc : String) (members : List (Option String × String)) : String :=
+  let member (m : String) := if (m.splitOn "} & ").length > 1 then s!"({m})" else m
+  doc ++ s!"export type {name} =\n" ++
+    "\n".intercalate (members.map fun (d, m) => ((d.map (jsdoc "  ")).getD "") ++ "  | " ++ member m) ++ ";\n"
+
+/-- The TS declaration of a type with derive_wire, in the shape that `wireShape` decides. -/
+def declaration (type : Name) : Write String := do
+  let name := type.getString!
+  let doc ← typeDoc type
+  let fieldDocs (fields : List WireField) : Write (List (Option String × Property)) :=
+    fields.mapM fun f => do pure (← findDocString? (← getEnv) (type ++ .mkSimple f.name), .field f)
+  let variants (tag : Tag) (ctors : List WireConstructor) : Write (List (Option String × String)) :=
+    ctors.mapM fun c => do
+      let (before, after) := tag.split c.fields
+      let properties := (before.map fun f => (none, Property.field f)) ++ [(none, .literal tag.name c.name)] ++
+        after.map fun f => (none, .field f)
+      pure (← findDocString? (← getEnv) c.ctor, ← object "      " properties)
+  match ← wireShape type with
+  | .enum ctors => return doc ++ s!"export type {name} = {" | ".intercalate (ctors.map fun c => s!"\"{c.name}\"")};\n"
+  | .object _ fields => return doc ++ s!"export type {name} = {← object "  " (← fieldDocs fields)};\n"
+  | .tagged tag ctors => return union name doc (← variants tag ctors)
+  | .untagged ctors =>
+    return union name doc (← ctors.mapM fun c => do
+      pure (← findDocString? (← getEnv) c.ctor, ← object "      " (c.fields.map fun f => (none, .field f))))
+  | .flattened _ before body _ _ after =>
+    return doc ++ s!"export type {name} = {← object "  " (← fieldDocs (before ++ after ++ [body]))};\n"
 
 /-- The wire fields of constructor `ctor`, which a group's data writes always, as `T | null` for an `Option`. -/
-def dataFields (ctor : Name) (fields : List WireField) : MetaM (List (String × Expr)) :=
+def dataFields (ctor : Name) (fields : List WireField) : MetaM (List (Option String × Property)) :=
   fields.mapM fun
-    | .required name type => pure (name, type)
+    | field@(.required ..) => pure (none, .field field)
     | field => throwError "{ctor}.{field.name}: a group's data has no optional or flattened field"
 
-/-- The TS type of a type with derive_wire that a group's data uses, in the shape that `wireShape` decides. -/
-def value (type : Name) : StateT (List (String × String)) MetaM String := do
-  let doc := (← findDocString? (← getEnv) type).map (jsdoc "") |>.getD ""
-  match ← wireShape type with
-  | .untagged ctors => return union type doc (← ctors.mapM fun c => do object (← dataFields c.ctor c.fields) "      ")
-  | .tagged tag ctors =>
-    return union type doc
-      (← ctors.mapM fun c => do object (← dataFields c.ctor c.fields) "      " [(tag.name, c.name)])
-  | .object ctor fields =>
-    return doc ++ s!"export type {type.getString!} = {← object (← dataFields ctor fields) "  "};\n"
-  | .enum ctors => return doc ++ s!"export type {type.getString!} = {" | ".intercalate (ctors.map fun c => s!"\"{c.name}\"")};\n"
-  | _ => throwError "{type}: a group's data has only enum, untagged, tagged and object types"
-
-def group (type : Name) : StateT (List (String × String)) MetaM String := do
+def group (type : Name) : Write String := do
   let kinds ← Tazuna.Data.members type
   let members ← kinds.mapM fun member => do
     let fields ← groupFields member
@@ -133,65 +224,61 @@ def group (type : Name) : StateT (List (String × String)) MetaM String := do
         tsType type
       | none => pure "null"
     let place ← fields.place.mapM fun (n, type) => do pure s!"      readonly {n}: {← tsType type};\n"
-    let doc := ((← findDocString? (← getEnv) member.named).map (jsdoc "  ")).getD ""
-    pure (doc, "{\n" ++ s!"      readonly kind: \"{kindName type member}\";\n" ++
+    let data ← dataFields member.ctor (fields.data.map fun (n, t) => .required n t)
+    pure (← findDocString? (← getEnv) member.named, "{\n" ++ s!"      readonly kind: \"{kindName type member}\";\n" ++
       s!"      readonly definition: {definition};\n" ++ String.join place ++
-      s!"      readonly data: {← object fields.data "        "};\n" ++ "    }")
+      s!"      readonly data: {← object "        " data};\n" ++ "    }")
   let name := type.getString!
-  let typeDoc := (← findDocString? (← getEnv) type).map (jsdoc "") |>.getD ""
-  return typeDoc ++ s!"export type {name} =\n" ++
-    "\n".intercalate (members.map fun (doc, m) => doc ++ "  | " ++ m) ++ ";\n\n" ++
-    constArray s!"{lowerFirst name}Kinds" (kinds.map (kindName type ·))
+  return union name (← typeDoc type) members ++ "\n" ++ constArray s!"{lowerFirst name}Kinds" (kinds.map (kindName type ·))
 
-/-- The `import type` lines, one per module, for the TS types that `imports` names. -/
-def importLines (imports : List (String × String)) : List String :=
-  let sources := (imports.map (·.2)).eraseDups.mergeSort fun a b => decide (a ≤ b)
+def modulePaths (types : List Name) : MetaM String := do
+  let env ← getEnv
+  let modules ← types.mapM fun type => do
+    let some module := (env.getModuleIdxFor? type).bind (env.header.moduleNames[·]?)
+      | throwError "{type} is not in an imported module"
+    pure s!"lean/{"/".intercalate (module.components.map (·.toString))}.lean"
+  return ", ".intercalate modules.eraseDups
+
+/-- The `import type` lines of the module `file`, one per imported module, for the TS types that `imports` names. -/
+def importLines (file : String) (imports : List (String × String)) : List String :=
+  let sources := (imports.map (·.2)).eraseDups.mergeSort fun a b => decide (relativePath file a ≤ relativePath file b)
   sources.map fun source =>
     let types := ((imports.filter (·.2 == source)).map (·.1)).mergeSort fun a b => decide (a ≤ b)
-    s!"import type \{ {", ".intercalate types} } from \"{source}\";\n"
+    s!"import type \{ {", ".intercalate types} } from \"{relativePath file source}\";\n"
+
+def header (types : List Name) : MetaM String := do
+  return s!"// Generated by npm run lean:write (lean/Generate/Main.lean) from {← modulePaths types}. Do not edit.\n"
+
+/-- The module `path`, whose declarations `parts` writes, with its header and imports. -/
+def typesModule (path : String) (parts : Write (List String)) : MetaM (String × String) := do
+  let types ← declaredIn path
+  let (parts, w) ← parts.run { file := path, declared := types }
+  let imports := importLines path w.imports
+  return (path, (← header types) ++ String.join imports ++ (if imports.isEmpty then "" else "\n") ++
+    "\n".intercalate parts)
 
 /--
-`typescript% T values*` elaborates at build time to the TS source of group `T`, after the types `values` that its data
-uses, which the file declares instead of importing.
+`typescript% path` elaborates at build time to the module `path` and its TS source: the group that `modules` lists last
+for it, after the types that its data uses.
 -/
-elab "typescript% " t:ident values:ident* : term => do
-  let type ← realizeGlobalConstNoOverloadWithInfo t
-  let env ← getEnv
-  let some module := (env.getModuleIdxFor? type).bind (env.header.moduleNames[·]?)
-    | throwError "{type} is not in an imported module"
-  let values ← values.toList.mapM fun v => realizeGlobalConstNoOverloadWithInfo v.raw
-  let parts : StateT (List (String × String)) MetaM (List String) := do
-    pure ((← values.mapM value) ++ [← group type])
-  let (parts, imports) ← parts.run []
-  let imports := imports.filter fun (t, _) => !values.any (·.getString! == t)
-  let path := "/".intercalate (module.components.map (·.toString))
-  return toExpr (s!"// Generated by npm run lean:write (lean/Generate/Main.lean) from lean/{path}.lean. Do not edit.\n" ++
-    String.join (importLines imports) ++ "\n" ++ "\n".intercalate parts)
+elab "typescript% " p:str : term => do
+  let types ← declaredIn p.getString
+  return toExpr (← typesModule p.getString do
+    pure ((← types.dropLast.mapM declaration) ++ [← group types.getLast!]))
 
-/-- `types% T+` elaborates at build time to the TS types of the wire types `T`, which a group's data uses. -/
-elab "types% " ts:ident+ : term => do
-  let types ← ts.toList.mapM fun t => realizeGlobalConstNoOverloadWithInfo t.raw
-  let (parts, imports) ← (types.mapM value).run []
-  let imports := imports.filter fun (t, _) => !types.any (·.getString! == t)
-  let env ← getEnv
-  let modules := types.filterMap fun type => (env.getModuleIdxFor? type).bind (env.header.moduleNames[·]?)
-  let paths := modules.eraseDups.map fun m => s!"lean/{"/".intercalate (m.components.map (·.toString))}.lean"
-  return toExpr (s!"// Generated by npm run lean:write (lean/Generate/Main.lean) from {", ".intercalate paths}. Do not edit.\n" ++
-    String.join (importLines imports) ++ (if imports.isEmpty then "" else "\n") ++ "\n".intercalate parts)
+/-- `types% path` elaborates at build time to the module `path` and the TS types of the wire types it declares. -/
+elab "types% " p:str : term => do
+  let types ← declaredIn p.getString
+  return toExpr (← typesModule p.getString (types.mapM declaration))
 
 def schemaName (type : Name) : String := lowerFirst type.getString!
 
 def enumSchema (ctors : List WireConstructor) : String :=
   "z.enum([" ++ ", ".intercalate (ctors.map fun c => s!"\"{c.name}\"") ++ "])"
 
-/--
-The state of writing Zod schemas. `inlined` holds the enum types that the schemas write inline. `imports` holds the TS
-types, with their modules, that `z.custom` names; only a file that TS never parses (`custom`) writes `z.custom`.
--/
+/-- The state of writing Zod schemas. `inlined` holds the enum types that the schemas write inline. -/
 structure Emitted where
   inlined : List Name := []
-  imports : List (String × String) := []
-  custom : Bool
   /-- The types that the file declares, so that a schema may name one declared after it. -/
   declared : List Name := []
   /-- Whether the schema being written names a type declared after it, which a getter defers. -/
@@ -221,34 +308,30 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
     if let .enum ctors ← wireShape name then
       modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
       return enumSchema ctors
-    let some { ts, module := some path, .. } := tsTypes.find? (·.lean == name)
-      | throwError "list {name} before the wire types that use it"
-    unless (← get).custom do throwError "list {name} before the wire types that use it"
-    modify fun e => { e with imports := if (ts, path) ∈ e.imports then e.imports else e.imports ++ [(ts, path)] }
-    return s!"z.custom<{ts}>()"
+    throwError "list {name} before the wire types that use it"
   | type => throwError "no Zod schema for {type}"
 
 /-- A property of an object schema: `name: schema`, or a getter that returns the schema when it names a later type. -/
-structure Property where
+structure ZodProperty where
   text : String
   doc : Option String := none
   getter : Option (String × String) := none
 
 /-- The property `name` of schema `schema`, a getter when the schema names a type declared after it. -/
-def namedProperty (doc : Option String) (name : String) (schema : Emit String) : Emit Property := do
+def namedProperty (doc : Option String) (name : String) (schema : Emit String) : Emit ZodProperty := do
   modify fun e => { e with forward := false }
   let schema ← schema
   if (← get).forward then return { text := "", doc, getter := some (name, schema) }
   return { text := s!"{name}: {schema}", doc }
 
-def property (listed : List Name) (doc : Option String) : WireField → Emit Property
+def property (listed : List Name) (doc : Option String) : WireField → Emit ZodProperty
   | .required name type => namedProperty doc name (zodSchema listed type)
   | .optional name type => namedProperty doc name do pure s!"{← zodSchema listed type}.exactOptional()"
   | .flattened _ written => do
     unless listed.contains written do throwError "list {written} before the wire types that flatten it"
     pure { text := s!"...{schemaName written}.shape", doc }
 
-def objectSchema (indent : String) (properties : List Property) : String :=
+def objectSchema (indent : String) (properties : List ZodProperty) : String :=
   "z.object({\n" ++
     String.join (properties.map fun p =>
       ((p.doc.map (jsdoc s!"{indent}  ")).getD "") ++ match p.getter with
@@ -267,16 +350,16 @@ def unionSchema (members : List (Option String × String)) : String :=
   "z.union([\n" ++
     String.join (members.map fun (doc, m) => ((doc.map (jsdoc "  ")).getD "") ++ s!"  {m},\n") ++ "])"
 
-def variants (listed : List Name) (tag : Tag) (ctors : List WireConstructor) (before after : List Property) :
+def variants (listed : List Name) (tag : Tag) (ctors : List WireConstructor) (before after : List ZodProperty) :
     Emit (List (Option String × String)) :=
   ctors.mapM fun c => do
     let (beforeTag, afterTag) := tag.split c.fields
-    let tagProperty : Property := { text := s!"{tag.name}: z.literal(\"{c.name}\")" }
+    let tagProperty : ZodProperty := { text := s!"{tag.name}: z.literal(\"{c.name}\")" }
     let fields := (← beforeTag.mapM (property listed none)) ++ [tagProperty] ++ (← afterTag.mapM (property listed none))
     pure (← findDocString? (← getEnv) c.ctor, objectSchema "  " (before ++ fields ++ after))
 
 def schemaOf (listed : List Name) (type : Name) : Emit String := do
-  let fieldProperty (field : WireField) : Emit Property := do
+  let fieldProperty (field : WireField) : Emit ZodProperty := do
     property listed (← findDocString? (← getEnv) (type ++ .mkSimple field.name)) field
   match ← wireShape type with
   | .enum ctors => return enumSchema ctors
@@ -289,79 +372,24 @@ def schemaOf (listed : List Name) (type : Name) : Emit String := do
     let before ← before.mapM fieldProperty
     return discriminatedUnion tag.name (← variants listed tag ctors before (← after.mapM fieldProperty))
 
-def typeDoc (type : Name) : MetaM String := do
-  return ((← findDocString? (← getEnv) type).map (jsdoc "")).getD ""
-
-/-- A type that TS names: its schema, exported when TS parses it, and its type. -/
-def declaration (listed : List Name) (exported : Bool) (type : Name) : Emit String := do
+/-- A type that TS parses: its schema, exported for the root, and its type. -/
+def zodDeclaration (listed : List Name) (exported : Bool) (type : Name) : Emit String := do
   return s!"{if exported then "export " else ""}const {schemaName type} = {← schemaOf listed type};\n\n" ++
     (← typeDoc type) ++ s!"export type {type.getString!} = z.infer<typeof {schemaName type}>;\n"
 
-/-- A type that TS does not name: only its schema. -/
-def schemaDeclaration (listed : List Name) (type : Name) : Emit String := do
-  return (← typeDoc type) ++ s!"const {schemaName type} = {← schemaOf listed type};\n"
-
-def modulePaths (types : List Name) : MetaM String := do
-  let env ← getEnv
-  let modules ← types.mapM fun type => do
-    let some module := (env.getModuleIdxFor? type).bind (env.header.moduleNames[·]?)
-      | throwError "{type} is not in an imported module"
-    pure s!"lean/{"/".intercalate (module.components.map (·.toString))}.lean"
-  return ", ".intercalate modules.eraseDups
-
-/--
-The module `path`, which `tsTypes` names from a folder of src, as a file in another folder names it: `src` is that
-file's path to src.
--/
-def relocated (src : Option String) (path : String) : String :=
-  match src with
-  | none => path
-  | some src =>
-    if path.startsWith "./" then src ++ "data/" ++ (path.drop 2).toString
-    else if path.startsWith "../" then src ++ (path.drop 3).toString
-    else path
-
-def zodFile (declared : List Name) (custom : Bool) (declarations : Emit (List String)) (src : Option String := none) :
-    MetaM String := do
-  let (declarations, emitted) ← declarations.run { custom }
-  let header := s!"// Generated by npm run lean:write (lean/Generate/Main.lean) from {← modulePaths (declared ++ emitted.inlined)}."
-  let imports := emitted.imports.map fun (t, path) => (t, relocated src path)
-  return header ++ " Do not edit.\n" ++ "import { z } from \"zod\";\n" ++ String.join (importLines imports) ++
-    "\n" ++ "\n".intercalate declarations
-
-/--
-`zod% T parts*` elaborates to the Zod schemas of wire type `T`, which TS parses, after the wire types `parts` that it
-uses.
--/
-elab "zod% " t:ident parts:ident* : term => do
-  let root ← realizeGlobalConstNoOverloadWithInfo t
-  let parts ← parts.toList.mapM fun p => realizeGlobalConstNoOverloadWithInfo p.raw
-  let declarations : Emit (List String) := do
-    modify fun e => { e with declared := parts ++ [root] }
-    let mut listed : List Name := []
-    let mut declarations : List String := []
-    for type in parts do
-      declarations := declarations ++ [← declaration listed false type]
-      listed := listed ++ [type]
-    return declarations ++ [← declaration listed true root]
-  return toExpr (← zodFile (parts ++ [root]) false declarations)
-
-/--
-`zodType% T parts*` elaborates to the TS type of wire type `T`, which TS writes but never parses, taken with `z.infer`
-from schemas that are not exported, after the wire types `parts` that it uses. A type that another generated file
-declares in TS is written as `z.custom` of that TS type.
--/
-elab "zodType% " t:ident parts:ident* : term => do
-  let root ← realizeGlobalConstNoOverloadWithInfo t
-  let parts ← parts.toList.mapM fun p => realizeGlobalConstNoOverloadWithInfo p.raw
+/-- `zod% path` elaborates to the module `path` and the Zod schemas of the wire types that it declares, which TS parses. -/
+elab "zod% " p:str : term => do
+  let types ← declaredIn p.getString
   let declarations : Emit (List String) := do
     let mut listed : List Name := []
     let mut declarations : List String := []
-    for type in parts do
-      declarations := declarations ++ [← schemaDeclaration listed type]
+    for type in types do
+      declarations := declarations ++ [← zodDeclaration listed (type == types.getLast!) type]
       listed := listed ++ [type]
-    return declarations ++ [← declaration listed false root]
-  return toExpr (← zodFile (parts ++ [root]) true declarations)
+    return declarations
+  let (declarations, emitted) ← declarations.run { declared := types }
+  return toExpr (p.getString, (← header (types ++ emitted.inlined)) ++ "import { z } from \"zod\";\n\n" ++
+    "\n".intercalate declarations)
 
 /-- `groupSamples% T` elaborates to one value per kind of group `T`, with `default` arguments, in declaration order. -/
 elab "groupSamples% " t:ident : term => do
@@ -378,21 +406,6 @@ elab "groupSamples% " t:ident : term => do
     | none => sample m.ctor none
     | some (field, inner) => sample m.ctor (some (field, ← sample inner none))
   mkListLit (mkConst group) values
-
-/--
-`zodTypes% src T+` elaborates to the TS types of the wire types `T`, which TS writes but never parses, each taken with
-`z.infer` from a schema that is not exported, for a file outside src whose path to src is `src`.
--/
-elab "zodTypes% " src:str ts:ident+ : term => do
-  let types ← ts.toList.mapM fun t => realizeGlobalConstNoOverloadWithInfo t.raw
-  let declarations : Emit (List String) := do
-    let mut listed : List Name := []
-    let mut declarations : List String := []
-    for type in types do
-      declarations := declarations ++ [← declaration listed false type]
-      listed := listed ++ [type]
-    return declarations
-  return toExpr (← zodFile types true declarations (some src.getString))
 
 /--
 The TS constant `halting<type>Kinds`: the kinds, in declaration order, whose violations halt the run. `halts` depends
@@ -439,44 +452,29 @@ def byCallerKinds : String :=
       | .str s => if k.byCaller then some s else none
       | _ => none)
 
+/-- The module `file` with `extra` appended. -/
+def appended (file : String × String) (extra : String) : String × String := (file.1, file.2 ++ extra)
+
 def files : List (String × String) :=
-  [("src/data/illegal.generated.ts", typescript% Tazuna.Validation.Illegal),
-   ("src/data/mismatch.generated.ts", typescript% Tazuna.Verify.Mismatch Tazuna.Verify.Subject),
-   ("src/data/uncomparable.generated.ts", typescript% Tazuna.Verify.Uncomparable),
-   ("src/data/invalidInput.generated.ts", typescript% Tazuna.Service.InvalidInput ++
-      halting "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
-   ("src/data/invalidScenario.generated.ts", typescript% Tazuna.Sim.InvalidScenario ++
-      halting "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind))),
-   ("src/data/scenario.generated.ts",
-    zod% Tazuna.Scenario Tazuna.Spec.Ref Tazuna.Scenario.Origin
-      Tazuna.Scenario.Fact Tazuna.Scenario.ValueRef Tazuna.Scenario.Fill Tazuna.Scenario.Hole Tazuna.Scenario.Template
-      Tazuna.Scenario.Line Tazuna.Scenario.SentRequest Tazuna.Scenario.EmittedEvent
-      Tazuna.Scenario.Expectation Tazuna.Scenario.GivenRecord Tazuna.Scenario.Peer Tazuna.Scenario.PeerEntry
-      Tazuna.Scenario.Given),
-   ("src/data/fault.generated.ts", typescript% Tazuna.Service.Fault ++
-      halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
-   ("src/data/bagOrderDependent.generated.ts", typescript% Tazuna.Explore.BagOrderDependent),
-   ("src/data/choiceDependent.generated.ts",
-    typescript% Tazuna.Explore.ChoiceDependent Tazuna.Explore.Difference Tazuna.Explore.Assigned),
-   ("src/data/transitionRef.generated.ts",
-    types% Tazuna.Spec.CallOutcome Tazuna.Spec.SendOutcome Tazuna.Spec.Trigger Tazuna.Spec.TransitionRef),
-   ("src/data/step.generated.ts",
-    types% Tazuna.Service.InstanceId Tazuna.Service.Requester Tazuna.Service.Received Tazuna.Service.Activity
-      Tazuna.Service.StepName),
-   ("src/data/trace.generated.ts",
-    zod% Tazuna.Data.TraceLine Tazuna.Data.RejectionKind Tazuna.Data.Rejection Tazuna.Data.Answer ++ byCallerKinds),
+  [typescript% "src/data/illegal.generated.ts",
+   typescript% "src/data/mismatch.generated.ts",
+   typescript% "src/data/uncomparable.generated.ts",
+   appended (typescript% "src/data/invalidInput.generated.ts")
+     (halting "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
+   appended (typescript% "src/data/invalidScenario.generated.ts")
+     (halting "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind))),
+   zod% "src/data/scenario.generated.ts",
+   appended (typescript% "src/data/fault.generated.ts")
+     (halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
+   typescript% "src/data/bagOrderDependent.generated.ts",
+   typescript% "src/data/choiceDependent.generated.ts",
+   types% "src/data/transitionRef.generated.ts",
+   types% "src/data/step.generated.ts",
+   types% "src/data/note.generated.ts",
+   appended (zod% "src/data/trace.generated.ts") byCallerKinds,
    ("src/data/limits.generated.ts", limitsFile),
-   ("src/spec/structure.generated.ts",
-    zodType% Tazuna.Spec.Structure Tazuna.Data.RejectionKind Tazuna.Spec.Ref Tazuna.Spec.Activity
-      Tazuna.Spec.Transition Tazuna.Spec.State Tazuna.Spec.ChartFields Tazuna.Spec.Reference
-      Tazuna.Spec.Definition Tazuna.Spec.Contract Tazuna.Spec.ServiceInfo),
-   ("test/lean/protocol.generated.ts",
-    zodTypes% "../../src/" Tazuna.Service.Schema Tazuna.Service.Issue Tazuna.Service.CopyScope Tazuna.Service.Scope
-      Tazuna.Service.Transition Tazuna.Service.Assignment Tazuna.Service.Extra Tazuna.Service.Emit
-      Tazuna.Service.NextKeys Tazuna.Service.Keys Tazuna.Explore.Holder Tazuna.Explore.Access Tazuna.Verify.Part
-      Tazuna.DiffTest.PairedService Tazuna.DiffTest.StepOrder Tazuna.DiffTest.Request Tazuna.DiffTest.Question
-      Tazuna.DiffTest.Asked Tazuna.DiffTest.ItemKey Tazuna.DiffTest.Deadline Tazuna.DiffTest.Reply
-      Tazuna.DiffTest.Replied)]
+   types% "src/spec/structure.generated.ts",
+   types% "test/lean/protocol.generated.ts"]
 
 /--
 The entry point. Without `--write`, it exits 1 when a file differs from the Lean definitions or is missing, and writes

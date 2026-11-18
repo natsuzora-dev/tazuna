@@ -3,21 +3,17 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Scenario } from "../../src/data/scenario.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
 import { type FileLine, isMalformed } from "../../src/data/trace.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
 import type { Json } from "../../src/data/values.ts";
-import type { AssignmentSearch } from "../../src/explore/assignments.ts";
-import type { Searched } from "../../src/explore/stepOrders.ts";
 import type { Spec } from "../../src/load/load.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
-import type { Folder, PairingScenario } from "../../src/verify/pairing.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
-import type { Asked, Reply, Request } from "./protocol.generated.ts";
+import type { Asked, Reply, Request, Response } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -28,16 +24,24 @@ process.once("exit", () => {
   for (const child of running) child.kill();
 });
 
-export type Message = Readonly<Record<string, unknown>>;
-
-/** `T` with every array and object readonly, so that TS values pass where a generated message type is mutable. */
-type Immutable<T> = T extends readonly (infer U)[]
-  ? readonly Immutable<U>[]
-  : T extends object
-    ? { readonly [K in keyof T]: Immutable<T[K]> }
-    : T;
-
 export type VerifyViolation = Mismatch | Uncomparable;
+
+/** The response that each request gets. */
+const responses = {
+  check: "checked",
+  verify: "verified",
+  checkExternal: "checkedExternal",
+  pair: "paired",
+  pairSnapshots: "pairedSnapshots",
+  compareSnapshot: "comparedSnapshot",
+  afters: "afters",
+  decodeLines: "decodedLines",
+  simulate: "simulated",
+  stepOrderChanges: "stepOrderChanges",
+  assignmentChanges: "assignmentChanges",
+} as const satisfies Record<Request["type"], Response["type"]>;
+
+type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
 
 const fileLines = (lines: readonly FileLine[]) =>
   lines.map((l) => (l === undefined ? null : isMalformed(l) ? "malformed" : l));
@@ -86,18 +90,18 @@ export class Lean {
     rmSync(this.dir, { recursive: true, force: true });
   }
 
-  private send(message: Immutable<Request> | Reply): void {
+  private send(message: Request | Reply): void {
     writeSync(this.toLean, `${JSON.stringify(message)}\n`);
   }
 
-  private receive(): Message {
+  private receive(): Response | Asked {
     for (;;) {
       const end = this.buffered.indexOf("\n");
       if (end >= 0) {
         const line = this.parts.join("") + this.buffered.slice(0, end);
         this.parts = [];
         this.buffered = this.buffered.slice(end + 1);
-        return JSON.parse(line) as Message;
+        return JSON.parse(line) as Response | Asked;
       }
       this.parts.push(this.buffered);
       const n = readSync(this.fromLean, this.chunk);
@@ -106,12 +110,20 @@ export class Lean {
     }
   }
 
-  private exchange(request: Immutable<Request>, answer: string, functions: Answering): Message {
+  /** Sends `request` and returns Lean's response, answering each question with `functions` meanwhile. */
+  private exchange<T extends Request["type"]>(
+    request: Extract<Request, { type: T }>,
+    functions?: Answering,
+  ): Responded<T> {
     this.send(request);
     for (;;) {
       const message = this.receive();
-      if (message["type"] === answer) return message;
-      if (message["type"] === "error") throw new Error(`tazuna-lean: ${String(message["message"])}`);
+      if (message.type === "error") throw new Error(`tazuna-lean: ${message.message}`);
+      if (message.type === responses[request.type as T]) {
+        const { type: _, ...response } = message;
+        return response as unknown as Responded<T>;
+      }
+      if (functions === undefined) throw new Error(`tazuna-lean asked ${JSON.stringify(message)} for ${request.type}`);
       this.send(functions.answer(message as Asked));
     }
   }
@@ -119,8 +131,8 @@ export class Lean {
   read(part: Parameters<ReadRecord>[0]): unknown {
     this.send({ type: "read", ...part });
     const served = this.receive();
-    if (served["type"] !== "served") throw new Error(`tazuna-lean answered a read with ${JSON.stringify(served)}`);
-    return served["value"];
+    if (served.type !== "served") throw new Error(`tazuna-lean answered a read with ${JSON.stringify(served)}`);
+    return served.value;
   }
 
   verify(
@@ -129,100 +141,47 @@ export class Lean {
     snapshot: readonly (TraceLine | undefined)[],
     trace: readonly FileLine[],
     functions: Answering,
-  ): {
-    readonly findings: readonly VerifyViolation[];
-    readonly bindings: readonly (readonly (readonly [string, string])[])[];
-  } {
-    const result = this.exchange(
-      {
-        type: "verify",
-        structure: spec.structure,
-        service,
-        snapshot: snapshot.map((l) => l ?? null),
-        trace: fileLines(trace),
-      },
-      "verified",
-      functions,
-    );
-    return {
-      findings: result["findings"] as VerifyViolation[],
-      bindings: result["bindings"] as [string, string][][],
-    };
+  ): Responded<"verify"> {
+    const lines = { snapshot: snapshot.map((l) => l ?? null), trace: fileLines(trace) };
+    return this.exchange({ type: "verify", structure: spec.structure, service, ...lines }, functions);
   }
 
-  checkExternal(spec: Spec, service: string, trace: readonly FileLine[]): readonly VerifyViolation[] {
-    this.send({ type: "checkExternal", structure: spec.structure, service, trace: fileLines(trace) });
-    const message = this.receive();
-    if (message["type"] !== "checkedExternal")
-      throw new Error(`tazuna-lean answered checkExternal with ${JSON.stringify(message)}`);
-    return message["findings"] as VerifyViolation[];
+  checkExternal(spec: Spec, service: string, trace: readonly FileLine[]): Responded<"checkExternal">["findings"] {
+    return this.exchange({ type: "checkExternal", structure: spec.structure, service, trace: fileLines(trace) })
+      .findings;
   }
 
-  afters(snapshot: readonly (TraceLine | undefined)[]): readonly VerifyViolation[] {
-    this.send({ type: "afters", snapshot: snapshot.map((l) => l ?? null) });
-    const message = this.receive();
-    if (message["type"] !== "afters") throw new Error(`tazuna-lean answered afters with ${JSON.stringify(message)}`);
-    return message["findings"] as VerifyViolation[];
+  afters(snapshot: readonly (TraceLine | undefined)[]): Responded<"afters">["findings"] {
+    return this.exchange({ type: "afters", snapshot: snapshot.map((l) => l ?? null) }).findings;
   }
 
-  decodeLines(values: readonly Json[]): readonly (Json | null)[] {
-    this.send({ type: "decodeLines", values });
-    const message = this.receive();
-    if (message["type"] !== "decodedLines")
-      throw new Error(`tazuna-lean answered decodeLines with ${JSON.stringify(message)}`);
-    return message["lines"] as (Json | null)[];
+  decodeLines(values: readonly Json[]): Responded<"decodeLines">["lines"] {
+    return this.exchange({ type: "decodeLines", values }).lines;
   }
 
-  pair(request: {
-    readonly services: readonly { readonly name: string; readonly external: boolean }[];
-    readonly scenarios: readonly PairingScenario[];
-    readonly others: readonly string[];
-    readonly folders: readonly Folder[];
-  }): unknown {
-    this.send({ type: "pair", ...request });
-    const { type, ...paired } = this.receive();
-    if (type !== "paired") throw new Error(`tazuna-lean answered pair with ${JSON.stringify({ type, ...paired })}`);
-    return paired;
+  pair(request: Omit<Extract<Request, { type: "pair" }>, "type">): Responded<"pair"> {
+    return this.exchange({ type: "pair", ...request });
   }
 
-  pairSnapshots(request: {
-    readonly services: readonly string[];
-    readonly scenarios: readonly PairingScenario[];
-    readonly folders: readonly Folder[];
-  }): unknown {
-    this.send({ type: "pairSnapshots", ...request });
-    const { type, ...paired } = this.receive();
-    if (type !== "pairedSnapshots")
-      throw new Error(`tazuna-lean answered pairSnapshots with ${JSON.stringify({ type, ...paired })}`);
-    return paired;
+  pairSnapshots(request: Omit<Extract<Request, { type: "pairSnapshots" }>, "type">): Responded<"pairSnapshots"> {
+    return this.exchange({ type: "pairSnapshots", ...request });
   }
 
-  compareSnapshot(snapshot: readonly (Json | undefined)[], run: readonly Json[]): VerifyViolation | null {
-    this.send({ type: "compareSnapshot", snapshot: snapshot.map((l) => l ?? null), run });
-    const message = this.receive();
-    if (message["type"] !== "comparedSnapshot")
-      throw new Error(`tazuna-lean answered compareSnapshot with ${JSON.stringify(message)}`);
-    return message["mismatch"] as VerifyViolation | null;
+  compareSnapshot(
+    snapshot: readonly (Json | undefined)[],
+    run: readonly Json[],
+  ): Responded<"compareSnapshot">["mismatch"] {
+    return this.exchange({ type: "compareSnapshot", snapshot: snapshot.map((l) => l ?? null), run }).mismatch;
   }
 
   /** Lean's stepOrderChanges of the scenario executed from its startup: each search, what it ran, and what it found. */
-  stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): readonly Searched[] {
-    const result = this.exchange(
-      { type: "stepOrderChanges", structure: spec.structure, scenario },
-      "stepOrderChanges",
-      functions,
-    );
-    return result["searched"] as readonly Searched[];
+  stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"stepOrderChanges">["searched"] {
+    return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
   }
 
   /** Lean's assignmentSearch of the scenario's handle groups: each assignment it ran, and what it found. */
-  assignmentChanges(spec: Spec, scenario: Scenario, functions: Answering): AssignmentSearch {
-    const { tried, found } = this.exchange(
-      { type: "assignmentChanges", structure: spec.structure, scenario },
-      "assignmentChanges",
-      functions,
-    );
-    return { tried, found } as AssignmentSearch;
+  assignmentChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"assignmentChanges"> {
+    return this.exchange({ type: "assignmentChanges", structure: spec.structure, scenario }, functions);
   }
 
   /** Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables. */
@@ -232,8 +191,8 @@ export class Lean {
     functions: Answering,
     execute = false,
     stepOrders: readonly StepOrder[] = [],
-  ): Message {
-    const { type, ...result } = this.exchange(
+  ): Responded<"simulate"> {
+    return this.exchange(
       {
         type: "simulate",
         structure: spec.structure,
@@ -241,16 +200,11 @@ export class Lean {
         ...(execute ? { execute } : {}),
         ...(stepOrders.length > 0 ? { stepOrders } : {}),
       },
-      "simulated",
       functions,
     );
-    return result;
   }
 
-  check(structure: Structure): readonly Illegal[] {
-    this.send({ type: "check", structure });
-    const message = this.receive();
-    if (message["type"] !== "checked") throw new Error(`tazuna-lean answered check with ${JSON.stringify(message)}`);
-    return message["findings"] as Illegal[];
+  check(structure: Structure): Responded<"check">["findings"] {
+    return this.exchange({ type: "check", structure }).findings;
   }
 }

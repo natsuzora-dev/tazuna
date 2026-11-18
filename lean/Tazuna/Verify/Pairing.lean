@@ -26,10 +26,12 @@ derive_wire Folder
 /-- An entry of the trace folder or of its subfolder `service`, an entry of the snapshot folder of `service`, or a
 scenario. -/
 inductive At where
-  | entry (service : Option String) (name : String)
-  | snapshotEntry (service name : String)
-  | scenario (service name : String)
+  | entry (service : Option String) (entry : String)
+  | snapshotEntry (service snapshotEntry : String)
+  | scenario (scenario : Spec.Ref)
 deriving DecidableEq, Repr
+
+derive_wire At untagged skip_serializing_none
 
 def unknownTraceEntry (place : At) : At × Uncomparable := (place, .unknownTraceEntry)
 

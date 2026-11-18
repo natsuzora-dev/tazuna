@@ -75,8 +75,6 @@ def asList : Value → Except String (List Value)
   | .arr vs => pure vs
   | v => throw s!"expected an array, got {render v}"
 
-def lineValue (line : Line) (after created : List String) : Value := ToValue.toValue (Sim.traceLineOf line after created)
-
 /--
 The compared value that `v` encodes as an object with one field, whose name tells the variant (leaf, arr, obj, bag,
 runs). Its fields are pairs, since a JS object moves integer-like keys first.
@@ -93,22 +91,5 @@ partial def CValue.decode (v : Value) : Except String CValue := do
       | [k, x] => pure (← FromValue.fromValue k, ← CValue.decode x)
       | _ => throw s!"expected a field pair, got {render f}"))
   | other => throw s!"expected a compared value, got {render other}"
-
-def _root_.Tazuna.Verify.Finding.toValue : Verify.Finding → Value
-  | .mismatch m => m.toValue
-  | .uncomparable u => u.toValue
-
-/-- The place of a pairing violation, in the untagged shape that TS's pairing writes. -/
-def _root_.Tazuna.Verify.At.toValue : Verify.At → Value
-  | .entry service name =>
-    .obj ((service.map fun s => [("service", .str s)]).getD [] ++ [("entry", .str name)])
-  | .snapshotEntry service name => .obj [("service", .str service), ("snapshotEntry", .str name)]
-  | .scenario service name => .obj [("scenario", .obj [("service", .str service), ("name", .str name)])]
-
-def refValues (l : List (String × String)) : Value :=
-  .arr (l.map fun (service, name) => .obj [("service", .str service), ("name", .str name)])
-
-def pairingFindings (violations : List (Verify.At × Verify.Uncomparable)) : Value :=
-  .arr (violations.map fun (place, u) => .obj [("at", place.toValue), ("violation", u.toValue)])
 
 end Tazuna.Json
