@@ -192,12 +192,12 @@ def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Spec.Defini
   | reply => throw (IO.userError s!"TS answered comparableValue with {reply.type}")
 
 /--
-The first violation, by line, that verify finds in `actual` with `expected` as the snapshot, as TS `compareTrace`
-returns.
+The first violation, by line, that verify finds in `actual` with `expected` as the snapshot, comparing their `after`
+too, as TS `compareTrace` returns.
 -/
 def compareOf (spec : Spec.Structure) (service : String)
     (ask : Spec.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun renamed expected actual => do
-  let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line) renamed
+  let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line) renamed true
   let numbered := compared.findings.map fun f =>
     (f.line, match f with
       | .mismatch m => m.toViolation
@@ -282,7 +282,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
     pure ({ service
             lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
             violations := reportedViolations s c none
-            candidates := ((w.services.lookup service).map fun st => candidates st s c none).getD []
+            candidates := if (w.services.lookup service).isSome then candidates s c none else []
             enabled := next.bind (·.toOption)
             fault := next.bind fun
               | .error f => some (Finding.fault f).toViolation

@@ -86,6 +86,21 @@ def World.only (w : World) (i : Nat) (fact : Fact) : List Nat → Except Invalid
   | [] => .error (.unresolvedReference i (ToValue.toValue fact))
   | ks => .error (.ambiguousReference i (ToValue.toValue fact) (ks.filterMap (w.messages[·]?) |>.map (·.describe)))
 
+/--
+`found` with equal messages on one channel taken as one: the oldest still in flight, or else the first. A line cannot
+tell them apart, and FIFO delivers them in sending order, so a line that names them acts on each in turn.
+-/
+def World.oneOfEqual (w : World) (fsOf : String → Functions m) (found : List Nat) : m (List Nat) := do
+  let some first := found.head?.bind (w.messages[·]?) | return found
+  let keys ← found.filterMapM fun k => do
+    let some msg := w.messages[k]? | return none
+    if !msg.sameChannel first then return none
+    match w.schemaOf? msg, msg.body.value? with
+    | some (side, schema), some v => return some (← (comparedOr (fsOf side) schema v : m Value)).canonical
+    | _, _ => return none
+  if keys.length != found.length || !keys.all (some · == keys.head?) then return found
+  return [(found.find? fun k => (w.messages[k]?).any (·.status == .inFlight)).getD (found.headD 0)]
+
 def ofExcept {α : Type} : Except InvalidScenario α → ExceptT InvalidScenario m α
   | .ok a => pure a
   | .error e => throw e
@@ -148,8 +163,9 @@ partial def World.messageOf (w : World) (fsOf : String → Functions m) (i : Nat
     | some k => pure k
     | none => throw (.unresolvedReference i (ToValue.toValue fact))
   | .event o event payload receiver =>
-    ofExcept (w.only i fact (← picked (fun msg => msg.origin == o && msg.event? == some event &&
-      receiver.all (· == msg.receiver)) payload))
+    let found ← picked (fun msg => msg.origin == o && msg.event? == some event && receiver.all (· == msg.receiver))
+      payload
+    ofExcept (w.only i fact (← (w.oneOfEqual fsOf found : m (List Nat))))
   | .answer o to =>
     match w.sentBy to with
     | none => throw (.unresolvedReference i (ToValue.toValue fact))

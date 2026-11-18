@@ -44,7 +44,8 @@ inductive InvalidScenario where
   | unresolvedReference (scenarioLine : Nat) (fact : Value)
   /--
   Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. For a
-  handle of `requests`, the candidates differ in content, so a pick tells them apart.
+  handle of `requests`, the candidates differ in content, so a pick tells them apart. Equal events on one channel are
+  not several: a line that names them acts on the oldest in flight.
   -/
   | ambiguousReference (scenarioLine : Nat) (fact : Value) (candidates : List Value)
   /-- The line reads the output of the answer to `fact`, which has no answer with an output by then. -/
@@ -81,14 +82,12 @@ inductive InvalidScenario where
   -/
   | unreceivedRequest (scenarioLine : Nat) (peer : String) (fact : Value)
   /--
-  The line delivers `message` while the earlier `earlier` on the same channel is in flight. To deliver `message`, lose or
-  refuse `earlier` first.
+  The line delivers `message` while `earlier`, which must arrive first (one channel, and not events of independent
+  steps), is in flight. To deliver `message`, lose or refuse `earlier` first.
   -/
   | overtaking (scenarioLine : Nat) (message earlier : Value)
   /-- No message in flight from the running peer `peer` to the own service is the line's. -/
   | unpairedPeerLine (scenarioLine : Nat) (peer : String)
-  /-- The messages `candidates` in flight from the running peer `peer` are all the line's; their content must differ. -/
-  | ambiguousPeerLine (scenarioLine : Nat) (peer : String) (candidates : List Value)
   /-- The clock line's time `at` is not later than `now`. -/
   | notLater (scenarioLine : Nat) («at» now : Time)
   /--

@@ -94,7 +94,8 @@ export type InvalidScenario =
     }
   /**
    * Several facts, `candidates`, match the handle `fact`; the handle must name content that tells them apart. For a
-   * handle of `requests`, the candidates differ in content, so a pick tells them apart.
+   * handle of `requests`, the candidates differ in content, so a pick tells them apart. Equal events on one channel are
+   * not several: a line that names them acts on the oldest in flight.
    */
   | {
       readonly kind: "InvalidScenario.ambiguousReference";
@@ -225,8 +226,8 @@ export type InvalidScenario =
       };
     }
   /**
-   * The line delivers `message` while the earlier `earlier` on the same channel is in flight. To deliver `message`, lose or
-   * refuse `earlier` first.
+   * The line delivers `message` while `earlier`, which must arrive first (one channel, and not events of independent
+   * steps), is in flight. To deliver `message`, lose or refuse `earlier` first.
    */
   | {
       readonly kind: "InvalidScenario.overtaking";
@@ -244,16 +245,6 @@ export type InvalidScenario =
       readonly data: {
         readonly scenarioLine: number;
         readonly peer: string;
-      };
-    }
-  /** The messages `candidates` in flight from the running peer `peer` are all the line's; their content must differ. */
-  | {
-      readonly kind: "InvalidScenario.ambiguousPeerLine";
-      readonly definition: null;
-      readonly data: {
-        readonly scenarioLine: number;
-        readonly peer: string;
-        readonly candidates: readonly Json[];
       };
     }
   /** The clock line's time `at` is not later than `now`. */
@@ -373,7 +364,6 @@ export const invalidScenarioKinds = [
   "InvalidScenario.unreceivedRequest",
   "InvalidScenario.overtaking",
   "InvalidScenario.unpairedPeerLine",
-  "InvalidScenario.ambiguousPeerLine",
   "InvalidScenario.notLater",
   "InvalidScenario.writtenKey",
   "InvalidScenario.misplacedCreated",
@@ -403,7 +393,6 @@ export const haltingInvalidScenarioKinds = [
   "InvalidScenario.unreceivedRequest",
   "InvalidScenario.overtaking",
   "InvalidScenario.unpairedPeerLine",
-  "InvalidScenario.ambiguousPeerLine",
   "InvalidScenario.notLater",
   "InvalidScenario.writtenKey",
   "InvalidScenario.misplacedCreated",

@@ -1,5 +1,4 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import type { Channel } from "../data/note.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Obligation } from "../data/uncovered.ts";
@@ -16,16 +15,12 @@ export interface RecordPart {
   readonly field?: string;
 }
 
-/**
- * Lean's ValueKey: a value that steps read and write. Being in a state also stands for the copy set of a map state, and
- * a channel for the order of the lines on it.
- */
+/** Lean's ValueKey: a value that steps read and write. Being in a state also stands for the copy set of a map state. */
 export type ValueKey =
   | { readonly kind: "record"; readonly part: RecordPart }
   | { readonly kind: "context"; readonly id: InstanceId; readonly field: string }
   | { readonly kind: "state"; readonly id: InstanceId; readonly state: string }
-  | { readonly kind: "shown"; readonly id: InstanceId; readonly slot: string }
-  | { readonly kind: "channel"; readonly channel: Channel };
+  | { readonly kind: "shown"; readonly id: InstanceId; readonly slot: string };
 
 /** The one string form of a key, which the footprints' sets and the evaluation cache hold. It is a JSON array. */
 export function valueName(k: ValueKey): string {
@@ -38,8 +33,6 @@ export function valueName(k: ValueKey): string {
       return `["state",${instanceName(k.id)},${JSON.stringify(k.state)}]`;
     case "shown":
       return `["shown",${instanceName(k.id)},${JSON.stringify(k.slot)}]`;
-    case "channel":
-      return JSON.stringify(["channel", k.channel]);
   }
 }
 
@@ -96,8 +89,6 @@ export interface RegionCheck {
  * - reached is TS only: the coverage hits that explore reads.
  */
 export interface Note {
-  /** Reports that step `step` wrote event lines from line `start` in groups of the lengths `groups`. */
-  events(step: number, start: number, groups: readonly number[]): void;
   stepBegins(step: number, name: StepName, started: InstanceId | undefined): void;
   stepEnds(): void;
   /**

@@ -110,20 +110,29 @@ export type FileLine = TraceLine | MalformedLine | undefined;
 
 export const isMalformed = (l: FileLine): l is MalformedLine => l !== undefined && "issues" in l;
 
-export function parseFileLines(values: readonly unknown[]): FileLine[] {
+/** A line of an implementation's trace: test writes `after` and `created` only in a snapshot. */
+const implementationLine = traceLine.superRefine((line, ctx) => {
+  for (const key of ["after", "created"] as const)
+    if (key in line) ctx.addIssue({ code: "custom", path: [key], message: `only a snapshot line has ${key}` });
+});
+
+function parseWith(schema: typeof traceLine, values: readonly unknown[]): FileLine[] {
   return values.map((value, i) => {
     if (value === undefined) return undefined;
-    const line = traceLine.safeParse(plain(value));
+    const line = schema.safeParse(plain(value));
     return line.success ? line.data : { lineNumber: i + 1, issues: line.error.issues };
   });
 }
 
-/** Returns the lines of parseFileLines, with each MalformedLine as undefined in `lines`, and the malformed lines. */
+/** Parses the lines of an implementation's trace. */
+export const parseFileLines = (values: readonly unknown[]): FileLine[] => parseWith(implementationLine, values);
+
+/** Returns the lines of a snapshot, with each MalformedLine as undefined in `lines`, and the malformed lines. */
 export function parseLines(values: readonly unknown[]): {
   lines: (TraceLine | undefined)[];
   malformed: MalformedLine[];
 } {
-  const read = parseFileLines(values);
+  const read = parseWith(traceLine, values);
   return { lines: read.map((l) => (isMalformed(l) ? undefined : l)), malformed: read.filter(isMalformed) };
 }
 

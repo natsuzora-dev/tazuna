@@ -4,7 +4,6 @@ import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } fr
 import { Bag } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
-import type { Channel } from "../data/note.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
@@ -23,13 +22,12 @@ import {
   type Scope,
 } from "../service/functions.ts";
 import { chartOf, type InstanceId, within } from "../service/instance.ts";
-import type { Emit, Line } from "../service/message.ts";
+import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
-import { type Causes, channelOf, leadsTo, lineSteps } from "../sim/trace.ts";
-import { contractsListing } from "../spec/structure.ts";
+import { leadsTo } from "../sim/trace.ts";
 
 /**
  * The values that a step reads and writes, each by its valueName. `keyWrites` holds the key sets of entities that a
@@ -119,11 +117,6 @@ function commutes(a: StepAccess, b: StepAccess): boolean {
   );
 }
 
-/** Lean's comparedEvent: whether the `out` line `l` is an event that a contract lists. */
-function comparedEvent(st: Service, l: Line): boolean {
-  return l.type === "event" && contractsListing(st.structure, l.event).length > 0;
-}
-
 /** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie. */
 function tiedDeadlines(steps: readonly StepInfo[], i: number, j: number): boolean {
   const [a, b] = [steps[i]?.tie, steps[j]?.tie];
@@ -142,7 +135,6 @@ export class Collect
   implements
     Pick<
       Note,
-      | "events"
       | "stepBegins"
       | "stepEnds"
       | "settlesAround"
@@ -169,7 +161,6 @@ export class Collect
   readonly violations: (BagOrderDependent & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */
   private readonly reported = new Set<string>();
-  readonly causes: Causes = { events: [] };
 
   /**
    * Returns a copy for the next input. Between inputs, no step and no microstep is open, and a closed step's access
@@ -182,7 +173,6 @@ export class Collect
     for (const [message, access] of this.afters) copy.afters.set(message, access);
     copy.violations.push(...this.violations);
     for (const key of this.reported) copy.reported.add(key);
-    copy.causes.events.push(...this.causes.events);
     return copy;
   }
 
@@ -228,14 +218,6 @@ export class Collect
     if (this.reported.has(key)) return;
     this.reported.add(key);
     this.violations.push(v);
-  }
-
-  events(step: number, start: number, groups: readonly number[]): void {
-    let first = start;
-    for (const count of groups) {
-      this.causes.events.push([step, first, count]);
-      first += count;
-    }
   }
 
   stepBegins(step: number, name: StepName, started: InstanceId | undefined): void {
@@ -304,34 +286,14 @@ export class Collect
     return [...this.steps].flatMap(([step, access]) => (step < from ? [] : [[step, access.name] as const]));
   }
 
-  /** Lean's channelWrites: each channel that a compared event line writes, with the step of `steps` that wrote it. */
-  private channelWrites(st: Service, s: State): (readonly [number, Channel])[] {
-    const lines = lineSteps(s.lines.length, this.causes);
-    const tops = [...this.steps.keys()];
-    return s.lines.flatMap((l, i) => {
-      const w = lines[i]?.[0];
-      if (w === undefined || l.dir !== "out" || !comparedEvent(st, l)) return [];
-      const t = tops.filter((k) => k <= w).at(-1);
-      const channel = channelOf(l);
-      return t === undefined || channel === undefined ? [] : [[t, channel] as const];
-    });
-  }
-
   /** Lean's involved: the footprint of what step `n` stands for when the search swaps its order. */
-  private involved(s: State, channels: readonly (readonly [number, Channel])[], n: number, a: StepAccess): Footprint {
+  private involved(s: State, n: number, a: StepAccess): Footprint {
     const message = s.steps[n]?.message;
     const tied = s.steps[n]?.tie !== undefined;
     const steps: (readonly [number, StepAccess])[] = tied
       ? [...this.steps].filter(([k]) => s.steps[k]?.message === message)
       : [[n, a]];
-    const numbers = new Set(steps.map(([k]) => k));
-    const f: Footprint = {
-      reads: new Set(),
-      writes: new Set(
-        channels.filter(([t]) => numbers.has(t)).map(([, channel]) => valueName({ kind: "channel", channel })),
-      ),
-      keyWrites: new Set(),
-    };
+    const f: Footprint = { reads: new Set(), writes: new Set(), keyWrites: new Set() };
     const after = tied && message !== undefined ? this.afters.get(message) : undefined;
     for (const x of [...(after === undefined ? [] : [after]), ...steps.map(([, x]) => x)]) {
       for (const v of x.reads) f.reads.add(v);
@@ -342,9 +304,8 @@ export class Collect
   }
 
   /** Returns Lean's candidates of a run that did not halt, of the steps from step `from` on. */
-  candidates(st: Service, s: State, from: number): (readonly [number, number])[] {
-    const channels = this.channelWrites(st, s);
-    const footprints = new Map([...this.steps].map(([n, a]) => [n, this.involved(s, channels, n, a)] as const));
+  candidates(s: State, from: number): (readonly [number, number])[] {
+    const footprints = new Map([...this.steps].map(([n, a]) => [n, this.involved(s, n, a)] as const));
     const tagged = [...this.steps].filter(([step]) => step >= from);
     return tagged.flatMap(([i, a], n) =>
       tagged

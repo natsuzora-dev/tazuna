@@ -369,13 +369,14 @@ theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenar
   · exact keeps_report (keeps_refl w) r
 
 /--
-A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the
-simulation with a violation: messages on one channel reach their receiver in sending order.
+A deliver line whose message has an earlier message in flight that must arrive first (World.precedes) delivers
+nothing and stops the simulation with a violation: ordered messages on one channel reach their receiver in sending
+order.
 -/
 theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (f : Scenario.Fact) (k : Nat) (msg : Message)
     (hk : (w.messageOf fsOf i f).run = .ok k) (hm : w.messages[k]? = some msg) (j : Nat) (n : Message) (hj : j < k)
-    (hn : w.messages[j]? = some n) (hs : n.status = .inFlight) (hc : n.sameChannel msg = true) :
+    (hn : w.messages[j]? = some n) (hs : n.status = .inFlight) (hc : w.precedes n msg = true) :
     ∃ r, r.halts = true ∧ w.line fsOf own lines i (.deliver f) = w.report r := by
   rcases line_eq w own lines i (.deliver f) with h | h
   · rw [h]
@@ -387,7 +388,7 @@ theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scena
       have hmem : n ∈ w.messages.toList.take k := by
         apply List.mem_of_getElem? (i := j)
         simp [hj, hn]
-      have hfind : ((w.messages.toList.take k).find? fun x => x.status == .inFlight && x.sameChannel msg).isSome :=
+      have hfind : ((w.messages.toList.take k).find? fun x => x.status == .inFlight && w.precedes x msg).isSome :=
         List.find?_isSome.mpr ⟨n, hmem, by simp [hs, hc]⟩
       obtain ⟨earlier, he⟩ := Option.isSome_iff_exists.mp hfind
       rw [he]

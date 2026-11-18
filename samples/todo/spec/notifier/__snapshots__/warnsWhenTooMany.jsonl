@@ -28,7 +28,7 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"You have 11 open tasks"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"todo/taskAdded#12","name":"todo.taskAdded","payload":{"taskId":"task-11"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"openTaskRecorded#12","name":"openTaskRecorded","payload":{"taskId":"task-11"}}
-{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"tooManyWarned#2","name":"tooManyWarned","payload":{"count":12},"after":["openTaskRecorded#12"]}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"tooManyWarned#2","name":"tooManyWarned","payload":{"count":12}}
 {"time":"2026-10-25T02:00:00Z","dir":"out","type":"command","id":"device.showNotification#2","name":"device.showNotification","input":{"text":"You have 12 open tasks"}}
 {"time":"2026-10-25T02:30:00Z","dir":"in","type":"time","id":"time#1"}
 {"time":"2026-10-25T02:30:00Z","dir":"in","type":"event","id":"todo/taskCompleted#1","name":"todo.taskCompleted","payload":{"taskId":"task-0"}}

@@ -15,6 +15,7 @@ import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import { arriveFrom, receivedId } from "./receive.ts";
+import { sentBefore } from "./trace.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -109,6 +110,19 @@ export interface World {
 }
 
 export const stateOf = (w: World, service: string): State | undefined => w.services.get(service)?.processing.state;
+
+/**
+ * Lean's World.precedes: whether message `n` must arrive before message `m`, sent later. Events of a running sender
+ * keep the order of its trace (sentBefore), so events of independent steps may arrive in either order.
+ */
+export function precedes(w: World, n: Message, m: Message): boolean {
+  if (!sameChannel(n, m)) return false;
+  const s = n.body.type === "event" && m.body.type === "event" ? stateOf(w, n.sender) : undefined;
+  if (s === undefined) return true;
+  const lineOf = (msg: Message) => s.lines.findIndex((l) => l.dir === "out" && sameLineId(l.id, msg.id));
+  const [a, b] = [lineOf(n), lineOf(m)];
+  return a < 0 || b < 0 || sentBefore(s.lines, s.steps, a, b);
+}
 
 /** Lean's World.stopped. */
 export const stopped = (w: World): boolean =>

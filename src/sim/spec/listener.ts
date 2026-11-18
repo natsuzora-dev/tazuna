@@ -44,9 +44,6 @@ export class Listener implements Note, Evaluations {
     this.collected.write(key, keyWrite);
   }
 
-  events(step: number, start: number, groups: readonly number[]): void {
-    this.collected.events(step, start, groups);
-  }
   stepBegins(step: number, name: StepName, started: InstanceId | undefined): void {
     this.collected.stepBegins(step, name, started);
   }

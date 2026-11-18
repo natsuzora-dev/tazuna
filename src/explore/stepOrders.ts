@@ -11,7 +11,7 @@ import { created } from "../service/state.ts";
 import type { Span, StepOrder } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
 import { leadsTo } from "../sim/trace.ts";
-import { compareTrace } from "../verify/compare.ts";
+import { compareRuns } from "../verify/compare.ts";
 import { type Compare, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
 
 /** Lean's Tried: a step order that the search ran, refused (Execution.refused) or with the violation found, if any. */
@@ -34,7 +34,7 @@ const violationValue = ({ kind, definition, data }: ViolationValue): ViolationVa
 export const compareOf =
   (spec: Spec, service: string): Compare =>
   (renamed, expected, actual) => {
-    const { found, set } = compareTrace(spec, service, expected, actual, renamed);
+    const { found, set } = compareRuns(spec, service, expected, actual, renamed);
     const [mismatch] = found;
     return mismatch === undefined ? { set } : { mismatch: violationValue(mismatch) };
   };
@@ -87,9 +87,7 @@ function candidatesOf(m: Made, span: Span): (readonly [number, number])[] {
   const p = m.world.services.get(span.service);
   if (p === undefined || haltedIn(m, span)) return [];
   const collected = m.listeners.get(span.service)?.collected;
-  return (collected?.candidates(p.processing.st, p.processing.state, span.stepsFrom) ?? []).filter(
-    ([i]) => i < span.stepsTo,
-  );
+  return (collected?.candidates(p.processing.state, span.stepsFrom) ?? []).filter(([i]) => i < span.stepsTo);
 }
 
 /** Lean's findingKey. */

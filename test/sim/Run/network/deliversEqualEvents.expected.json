@@ -1,0 +1,89 @@
+{
+  "services": [
+    {
+      "service": "metronome",
+      "lines": [
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "id": "beat#1",
+          "name": "beat",
+          "input": {}
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "id": "answer#1",
+          "to": "beat#1",
+          "answer": {
+            "result": "accepted"
+          }
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "tick#1",
+          "name": "tick",
+          "payload": {},
+          "resultOf": "beat#1"
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "tock#1",
+          "name": "tock",
+          "payload": {},
+          "resultOf": "beat#1"
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "tick#2",
+          "name": "tick",
+          "payload": {},
+          "resultOf": "beat#1"
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    },
+    {
+      "service": "listener",
+      "lines": [
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "metronome/tick#1",
+          "name": "metronome.tick",
+          "payload": {}
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "metronome/tock#1",
+          "name": "metronome.tock",
+          "payload": {}
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "metronome/tick#2",
+          "name": "metronome.tick",
+          "payload": {}
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "violations": [],
+  "halted": null
+}

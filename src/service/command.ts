@@ -51,17 +51,17 @@ export function processCommand(
   r.note.reached({ kind: "request", definition, data: {} });
   const done = (answer: Answer, reached?: Obligation, groups: readonly (readonly Encoded[])[] = []) => {
     if (id !== undefined) write(s, { dir: "out", type: "answer", to: id, answer });
-    const events = groups.flat();
-    const lengths = groups.map((g) => g.length);
-    if (events.length > 0) r.note.events(step, s.lines.length, lengths);
-    for (const e of events)
-      write(s, {
-        dir: "out",
-        type: "event",
-        event: e.emit.event,
-        payload: e.encoded,
-        ...(id === undefined ? {} : { resultOf: id }),
-      });
+    groups.forEach((g, group) => {
+      for (const e of g)
+        write(s, {
+          dir: "out",
+          type: "event",
+          event: e.emit.event,
+          payload: e.encoded,
+          ...(id === undefined ? {} : { resultOf: id }),
+          emitted: { step, group },
+        });
+    });
     if (reached !== undefined) r.note.reached(reached);
     return { answer, groups: groups.map((g) => g.map((e) => e.emit)) };
   };

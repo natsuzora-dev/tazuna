@@ -30,7 +30,10 @@ for (const [folder, group] of Object.entries(groups))
   for (const [target, args] of Object.entries(commands))
     testExamples(folders(join(verifyRoot, folder, target)), group, args);
 
-testEveryKind(groupExamples("verify"), [...mismatchKinds, ...uncomparableKinds]);
+testEveryKind(groupExamples("verify"), [...mismatchKinds, ...uncomparableKinds], {
+  "Mismatch.after":
+    "Only test compares `after`, between two runs of the simulation, and reports it inside ChoiceDependent; an example needs two step orders whose lines both relations allow in one line order, and test/run/choiceDependent/Explore/ChoiceDependent/same-channel/echoes differs in line order first",
+});
 
 const snapshotChecks = Object.values(groups).map((group) => `${group}.`);
 

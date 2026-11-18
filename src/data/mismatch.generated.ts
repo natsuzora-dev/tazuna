@@ -144,6 +144,20 @@ export type Mismatch =
         readonly before: Subject;
       };
     }
+  /**
+   * The line follows other lines of its group than its snapshot line follows (`after`, compared through the pairing). Only
+   * test compares this, on two runs of the simulation, since an implementation's trace has no `after`.
+   */
+  | {
+      readonly kind: "Mismatch.after";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly subject: Subject;
+        readonly snapshot: readonly string[];
+        readonly trace: readonly string[];
+      };
+    }
   | {
       readonly kind: "Mismatch.time";
       readonly definition: null;
@@ -298,6 +312,7 @@ export const mismatchKinds = [
   "Mismatch.unexpectedSubscription",
   "Mismatch.unexpectedLine",
   "Mismatch.lineOrder",
+  "Mismatch.after",
   "Mismatch.time",
   "Mismatch.resultOf",
   "Mismatch.line",

@@ -142,9 +142,9 @@ theorem matchLine_content {v : Values} {b : Binding} {s t : Line} {out : List (F
   · cases h; cases hc
 
 theorem exact_step {root : Binding} {dom : String → String} {set : List (From root)} {v : Values} (hd : v.domain = dom)
-    {snapshot trace : List Numbered} {place : Nat} {same : State root → State root → Bool}
+    {relation : Bool} {snapshot trace : List Numbered} {place : Nat} {same : State root → State root → Bool}
     (pre : List Numbered) (s : Numbered) (rest : List Numbered) (a a' : List (State root) × List Numbered)
-    (hi : ExactInv dom set snapshot trace pre (s :: rest) a) (h : pairExact v snapshot trace place same a s = .ok a') :
+    (hi : ExactInv dom set snapshot trace pre (s :: rest) a) (h : pairExact v relation snapshot trace place same a s = .ok a') :
     ExactInv dom set snapshot trace (pre ++ [s]) rest a' := by
   obtain ⟨states, failed⟩ := a
   obtain ⟨hsplit, hne, hf, hst⟩ := hi
@@ -182,7 +182,7 @@ theorem exact_step {root : Binding} {dom : String → String} {set : List (From 
           obtain ⟨c, hc, -, hpairs⟩ := paired_mem hwl
           have hcm := (matchLine_content hml hc).2
           obtain ⟨hp, hwi⟩ := hst st hst'
-          refine ⟨?_, wayInv_paired hwi hs ht.1 (by simpa [State.used] using ht.2.1) hd hcm hwl⟩
+          refine ⟨?_, wayInv_paired hwi hs ht.1 (by simpa [State.used] using ht.2.1.1) hd hcm hwl⟩
           rw [hpairs]
           simp only [List.map_append, List.map_cons, List.map_nil]
           refine List.Perm.trans ?_ (hp.append_right [s.index])
@@ -393,8 +393,8 @@ theorem find?_linePairs {snapshot trace : List Numbered} (hsn : (snapshot.map (�
 
 /-- The ways that a group without a difference ends with, and what its empty findings say of the first. -/
 theorem compareGroup_final {root : Binding} {set : List (From root)} {v : Values} {snapshot trace : List Numbered}
-    {place : Nat} {set' : List (From root)} {stop : Bool} (hset : set ≠ [])
-    (h : compareGroup set v snapshot trace place = ([], set', stop)) :
+    {place : Nat} {set' : List (From root)} {stop : Bool} {relation : Bool} (hset : set ≠ [])
+    (h : compareGroup set v relation snapshot trace place = ([], set', stop)) :
     ∃ first firsts, stop = false ∧
       set' = distinctBy From.same (((first :: firsts).filter fun st => sameSet st.used first.used).map (·.binding)) ∧
       (∀ st ∈ first :: firsts, (st.pairs.map (·.1)).Perm (snapshot.map (·.index)) ∧
@@ -422,7 +422,7 @@ theorem compareGroup_final {root : Binding} {set : List (From root)} {v : Values
           exact ⟨by simpa [unplaced] using hp, by simpa [misplaced] using hw⟩⟩ hplace
       obtain ⟨-, hne', hst'⟩ := hP
       simp only [Prod.mk.injEq, List.append_eq_nil_iff] at h
-      obtain ⟨⟨⟨⟨hdiff, hunexp⟩, htimes⟩, horders⟩, hset', hstop⟩ := h
+      obtain ⟨⟨⟨⟨⟨hdiff, hunexp⟩, htimes⟩, horders⟩, -⟩, hset', hstop⟩ := h
       have hall : ∀ x ∈ placed, ∃ t, x.2 = some (t, true) := by
         intro x hx
         have := List.filterMap_eq_nil_iff.mp hdiff x hx
@@ -470,8 +470,8 @@ binding that it carries on, each pair comparing equal under that binding, and ea
 group started from.
 -/
 theorem compareGroup_paired {root : Binding} {set : List (From root)} {v : Values} {snapshot trace : List Numbered}
-    {place : Nat} {set' : List (From root)} {stop : Bool} (htn : (trace.map (·.index)).Nodup) (hset : set ≠ [])
-    (h : compareGroup set v snapshot trace place = ([], set', stop)) :
+    {place : Nat} {set' : List (From root)} {stop : Bool} {relation : Bool} (htn : (trace.map (·.index)).Nodup) (hset : set ≠ [])
+    (h : compareGroup set v relation snapshot trace place = ([], set', stop)) :
     stop = false ∧ set' ≠ [] ∧ ∀ c' ∈ set', (∃ c ∈ set, c.val.Extends c'.val) ∧
       ∃ pairs, Covers snapshot trace pairs ∧ ∀ p ∈ pairs, PairMatch v.domain snapshot trace c'.val p := by
   obtain ⟨first, firsts, hstop, rfl, hst, hused, -, -⟩ := compareGroup_final hset h
@@ -500,9 +500,9 @@ The pairing that compareGroup reports by, its first way, also pairs lines at equ
 snapshot line's `after` names.
 -/
 theorem compareGroup_ordered {root : Binding} {set : List (From root)} {v : Values} {snapshot trace : List Numbered}
-    {place : Nat} {set' : List (From root)} {stop : Bool} (hsn : (snapshot.map (·.index)).Nodup)
+    {place : Nat} {set' : List (From root)} {stop : Bool} {relation : Bool} (hsn : (snapshot.map (·.index)).Nodup)
     (htn : (trace.map (·.index)).Nodup) (hset : set ≠ [])
-    (h : compareGroup set v snapshot trace place = ([], set', stop)) :
+    (h : compareGroup set v relation snapshot trace place = ([], set', stop)) :
     ∃ pairs, Covers snapshot trace pairs ∧
       (∀ p ∈ pairs, ∃ s ∈ snapshot, s.index = p.1 ∧ ∃ t ∈ trace, t.index = p.2 ∧ s.line.time.time = t.line.time.time) ∧
       ∀ sk ∈ snapshot.zipIdx, ∀ n ∈ mustFollow snapshot sk.1 sk.2, ∀ j j', (sk.1.index, j) ∈ pairs → (n, j') ∈ pairs →
@@ -605,15 +605,16 @@ Comparing groups without a finding matches each snapshot group with the trace gr
 that the comparison ends with; each of those extends a binding that it started from. Only a first group lacks an `in`
 line, as `groups` makes them.
 -/
-theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (inputs : List Line) (outs : List Numbered)
+theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (relation : Bool) (inputs : List Line)
+    (outs : List Numbered)
     {root : Binding} : ∀ (expected actual : List Group) (fuel : Nat) (v : Values) (set : List (From root)),
       expected.length ≤ fuel → actual.length ≤ fuel → set ≠ [] → (∀ e ∈ expected, (e.outs.map (·.index)).Nodup) →
       (∀ a ∈ actual, (a.outs.map (·.index)).Nodup) →
       (expected = [] → ∀ a ∈ actual, a.input.isSome) → (actual = [] → ∀ e ∈ expected, e.input.isSome) →
       (∀ e ∈ expected.drop 1, e.input.isSome) → (∀ a ∈ actual.drop 1, a.input.isSome) →
-      (compareGroups lineCount internal inputs outs expected actual false fuel v set).1 = [] →
-      (compareGroups lineCount internal inputs outs expected actual false fuel v set).2 ≠ [] ∧
-      ∀ c ∈ (compareGroups lineCount internal inputs outs expected actual false fuel v set).2,
+      (compareGroups lineCount internal relation inputs outs expected actual false fuel v set).1 = [] →
+      (compareGroups lineCount internal relation inputs outs expected actual false fuel v set).2 ≠ [] ∧
+      ∀ c ∈ (compareGroups lineCount internal relation inputs outs expected actual false fuel v set).2,
         (∃ c₀ ∈ set, c₀.val.Extends c.val) ∧ GroupsMatch v.domain internal c.val expected actual
   | [], [], fuel, v, set, _, _, hset, _, _, _, _, _, _, _ => by
     cases fuel <;> exact ⟨hset, fun c hc => ⟨⟨c, hc, .refl _⟩, trivial⟩⟩
@@ -637,7 +638,7 @@ theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (inputs
       · rename_i hn; rw [hn] at he; cases he
   | _ :: _, _, 0, _, _, hfuel, _, _, _, _, _, _, _, _, _ => by simp at hfuel
   | e :: es, a :: as, fuel + 1, v, set, hfuel, hfuel', hset, hen, han, _, _, hes, has, h => by
-    generalize hr : compareGroups lineCount internal inputs outs (e :: es) (a :: as) false (fuel + 1) v set = r at h ⊢
+    generalize hr : compareGroups lineCount internal relation inputs outs (e :: es) (a :: as) false (fuel + 1) v set = r at h ⊢
     rw [compareGroups] at hr
     have hin : ∀ set₁ : List (From root),
         (match e.input, a.input with
@@ -690,11 +691,11 @@ theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (inputs
     · rename_i set₁ hinputs
       obtain ⟨hne₁, hset₁⟩ := hin set₁ hinputs
       simp only [Bool.false_and, Bool.false_eq_true, ↓reduceIte] at hr
-      generalize hcg : compareGroup set₁ { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) }
+      generalize hcg : compareGroup set₁ { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) } relation
         (e.outs.filter fun o => !internal o.line) (a.outs.filter fun o => !internal o.line)
         ((a.input.map (·.index)).getD 1) = cg at hr
       obtain ⟨found, set₂, stop⟩ := cg
-      generalize hrest : compareGroups lineCount internal inputs outs es as false fuel
+      generalize hrest : compareGroups lineCount internal relation inputs outs es as false fuel
         { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) } set₂ = rest at hr
       subst hr
       by_cases hstop : stop = true
@@ -711,7 +712,7 @@ theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (inputs
         have han' := han a List.mem_cons_self
         obtain ⟨-, hne₂, hset₂⟩ := compareGroup_paired (filter_nodup han' _) hne₁ hcg
         have hord := compareGroup_ordered (filter_nodup hen' _) (filter_nodup han' _) hne₁ hcg
-        have ih := compareGroups_match lineCount internal inputs outs es as fuel
+        have ih := compareGroups_match lineCount internal relation inputs outs es as fuel
           { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) } set₂ (by simpa using hfuel)
           (by simpa using hfuel') hne₂ (fun g hg => hen g (List.mem_cons_of_mem _ hg))
           (fun g hg => han g (List.mem_cons_of_mem _ hg))
@@ -755,9 +756,10 @@ comparison ends with, each snapshot group matches the trace group at its place (
 within each domain.
 -/
 theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool)
-    (renamed : Values → Values) (h : (Verify.compare snapshot lines cut internal renamed).findings = []) :
-    cut = none ∧ (Verify.compare snapshot lines cut internal renamed).bindings ≠ [] ∧
-      ∀ b ∈ (Verify.compare snapshot lines cut internal renamed).bindings, OneToOne b.pairs ∧
+    (renamed : Values → Values) (relation : Bool)
+    (h : (Verify.compare snapshot lines cut internal renamed relation).findings = []) :
+    cut = none ∧ (Verify.compare snapshot lines cut internal renamed relation).bindings ≠ [] ∧
+      ∀ b ∈ (Verify.compare snapshot lines cut internal renamed relation).bindings, OneToOne b.pairs ∧
         GroupsMatch (renamed { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true }).domain
           internal b (groups snapshot) (groups lines) := by
   unfold Verify.compare at h ⊢
@@ -766,7 +768,7 @@ theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Unco
   simp only [Option.isSome_none] at hfound ⊢
   obtain ⟨hes, hes'⟩ := groups_shape snapshot
   obtain ⟨has, has'⟩ := groups_shape lines
-  have := compareGroups_match lines.length internal _ _ (groups snapshot) (groups lines) _ _
+  have := compareGroups_match lines.length internal relation _ _ (groups snapshot) (groups lines) _ _
     [⟨Binding.empty, .refl _⟩] (by omega) (by omega) (by simp) (groups_nodup snapshot) (groups_nodup lines)
     (fun e => absurd e hes) (fun e => absurd e has) hes' has' hfound
   obtain ⟨hne, hall⟩ := this

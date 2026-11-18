@@ -3,4 +3,4 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTasks#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2"},"resultOf":"addTasks#1","after":["taskAdded#1"]}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"claimed#1","name":"claimed","payload":{"taskId":"task-1"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"claimed#2","name":"claimed","payload":{"taskId":"task-2"},"after":["claimed#1"]}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"claimed#2","name":"claimed","payload":{"taskId":"task-2"}}

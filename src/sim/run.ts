@@ -25,9 +25,9 @@ import {
   type Message,
   noteTo,
   type Opened,
+  precedes,
   reportTo,
   running,
-  sameChannel,
   stateOf,
   stopped,
   type World,
@@ -325,24 +325,9 @@ const isCarried = (w: World, k: number): boolean => w.carried.some(([, j]) => j 
 
 /** Lean's World.peerMessage. */
 function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => boolean): number {
-  const found = w.messages.flatMap((m, k) =>
-    m.status === "inFlight" && m.sender === peer && !isCarried(w, k) && fits(m) ? [k] : [],
-  );
-  const oldest = found.filter(
-    (k) => !found.some((j) => j < k && sameChannel(w.messages[j] as Message, w.messages[k] as Message)),
-  );
-  if (oldest.length === 1) return oldest[0] as number;
-  if (oldest.length === 0)
-    return reportedHere({
-      kind: "InvalidScenario.unpairedPeerLine",
-      definition: null,
-      data: { scenarioLine: i, peer },
-    });
-  return reportedHere({
-    kind: "InvalidScenario.ambiguousPeerLine",
-    definition: null,
-    data: { scenarioLine: i, peer, candidates: oldest.map((k) => describe(w.messages[k] as Message)) },
-  });
+  const k = w.messages.findIndex((m, k) => m.status === "inFlight" && m.sender === peer && !isCarried(w, k) && fits(m));
+  if (k >= 0) return k;
+  return reportedHere({ kind: "InvalidScenario.unpairedPeerLine", definition: null, data: { scenarioLine: i, peer } });
 }
 
 const isRequest = (l: LineBody): boolean => l.type === "command" || l.type === "query" || l.type === "subscribe";
@@ -366,7 +351,7 @@ function deliverCarried(w: World, i: number, k: number): void {
 function deliverInOrder(w: World, i: number, k: number): void {
   const m = w.messages[k];
   if (m === undefined) return;
-  const earlier = w.messages.slice(0, k).find((n) => n.status === "inFlight" && sameChannel(n, m));
+  const earlier = w.messages.slice(0, k).find((n) => n.status === "inFlight" && precedes(w, n, m));
   if (earlier !== undefined)
     reportedHere({
       kind: "InvalidScenario.overtaking",

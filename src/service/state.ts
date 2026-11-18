@@ -24,7 +24,7 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import { type Emit, type Halting, halts, idKey, type Line, type LineBody } from "./message.ts";
+import { type Emit, type EmittedBy, type Halting, halts, idKey, type Line, type LineBody } from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";
 
@@ -302,7 +302,7 @@ export function newState(st: Service): State {
 }
 
 /** A line before `write` adds the time and, unless the line gives one, the id. */
-type UnwrittenLine = LineBody & { readonly dir: "in" | "out"; readonly id?: LineId };
+type UnwrittenLine = LineBody & { readonly dir: "in" | "out"; readonly id?: LineId; readonly emitted?: EmittedBy };
 
 /** Lean's LineBody.idName: the name that line ids count, as the trace of `service` writes it. */
 function idName(service: string, body: LineBody): string {

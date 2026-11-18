@@ -23,8 +23,8 @@ structure Fixed where
 def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
   ⟨s.commandAnswers, s.records, s.now, s.started, s.outgoing.filter (·.answer.isSome)⟩
 
-@[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) :
-    (s.write d g b).1.fixed = s.fixed := rfl
+@[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) :
+    (s.write d g b w).1.fixed = s.fixed := rfl
 
 @[simp] theorem await_fixed (b : LineBody) (q : Requester) (a : Activity) (i : Value) :
     (s.await b q a i).fixed = s.fixed := by
@@ -155,10 +155,10 @@ theorem documentOrder_owner (i : Instance) :
       simpa using copy_ne i.id cs.name k
     simp [hb]
 
-theorem emitAll_fixed (r : Option LineId) (es : List Emit) : (s.emitAll r es).fixed = s.fixed := by
+theorem emitAll_fixed (r : Option LineId) (es : List (Emit × EmittedBy)) : (s.emitAll r es).fixed = s.fixed := by
   induction es generalizing s with
   | nil => rfl
-  | cons e es ih => exact ih (s := (s.write .out none (.event e.event e.payload r)).1)
+  | cons e es ih => exact ih (s := (s.write .out none (.event e.1.event e.1.payload r) (some e.2)).1)
 
 theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t x).fixed = t.fixed) (xs : List α)
     (t : State) : (xs.foldl f t).fixed = t.fixed := by
@@ -169,7 +169,7 @@ theorem foldl_fixed {α : Type} (f : State → α → State) (h : ∀ t x, (f t 
 /-- The parts of a state that a message never changes. -/
 def _root_.Tazuna.Service.State.clock (s : State) : CommandAnswers × Time := (s.commandAnswers, s.now)
 
-theorem emitAll_clock (t : State) (r : Option LineId) (es : List Emit) : (t.emitAll r es).clock = t.clock := by
+theorem emitAll_clock (t : State) (r : Option LineId) (es : List (Emit × EmittedBy)) : (t.emitAll r es).clock = t.clock := by
   have h := emitAll_fixed (s := t) r es
   exact Prod.ext (congrArg Fixed.commandAnswers h) (congrArg Fixed.now h)
 
@@ -211,7 +211,8 @@ theorem Grows.trans {a b c : State} (h₁ : Grows a b) (hn : b.now = a.now) (h�
 theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now) : Grows a c :=
   (Grows.of_lines hl).trans hn h
 
-theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) : Grows s (s.write d g b).1 :=
+theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy := none) :
+    Grows s (s.write d g b w).1 :=
   ⟨#[_], Array.push_eq_append, by simp⟩
 
 theorem foldl_grows {α : Type} (f : State → α → State) (h : ∀ t x, Grows t (f t x)) (hn : ∀ t x, (f t x).now = t.now)
@@ -220,11 +221,11 @@ theorem foldl_grows {α : Type} (f : State → α → State) (h : ∀ t x, Grows
   | nil => exact Grows.refl _
   | cons x xs ih => simp only [List.foldl_cons]; exact (h t x).trans (hn t x) (ih _)
 
-theorem emitAll_grows (t : State) (r : Option LineId) (es : List Emit) : Grows t (t.emitAll r es) := by
+theorem emitAll_grows (t : State) (r : Option LineId) (es : List (Emit × EmittedBy)) : Grows t (t.emitAll r es) := by
   unfold State.emitAll
   induction es generalizing t with
   | nil => exact Grows.refl _
-  | cons e es ih => exact (grows_write _ _ _).trans rfl (ih _)
+  | cons e es ih => exact (grows_write _ _ _ _).trans rfl (ih _)
 
 theorem answer_grows (t : State) (to : Option LineId) (a : Answer) : Grows t (t.answer to a) := by
   cases to

@@ -2,7 +2,7 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"tick#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"ticked#1","name":"ticked","payload":{},"resultOf":"tick#1"}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{"count":1}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#2","name":"counted","payload":{"count":2},"after":["counted#1"]}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#3","name":"counted","payload":{"count":3},"after":["counted#1","counted#2"]}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#4","name":"counted","payload":{"count":4},"after":["counted#1","counted#2","counted#3"]}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#5","name":"counted","payload":{"count":5},"after":["counted#1","counted#2","counted#3","counted#4"]}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#2","name":"counted","payload":{"count":2}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#3","name":"counted","payload":{"count":3}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#4","name":"counted","payload":{"count":4}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#5","name":"counted","payload":{"count":5}}

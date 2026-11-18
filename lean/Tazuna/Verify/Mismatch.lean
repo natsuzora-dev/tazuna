@@ -45,6 +45,11 @@ inductive Mismatch where
   | unexpectedLine (line : Nat) (subject : Subject)
   /-- The line comes before the line `before`, which its snapshot line must follow. -/
   | lineOrder (line : Nat) (subject before : Subject)
+  /--
+  The line follows other lines of its group than its snapshot line follows (`after`, compared through the pairing). Only
+  test compares this, on two runs of the simulation, since an implementation's trace has no `after`.
+  -/
+  | after (line : Nat) (subject : Subject) (snapshot trace : List String)
   | time (line : Nat) (subject : Subject) (snapshot trace : String)
   /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/
   | resultOf (line : Nat) (subject : Subject) (snapshot trace : Option String)

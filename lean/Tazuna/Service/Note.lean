@@ -28,16 +28,12 @@ deriving DecidableEq, Repr
 
 derive_wire Channel tag "kind"
 
-/--
-A value that steps read and write. Being in a state also stands for the copy set of a map state, and a channel for the
-order of the lines on it.
--/
+/-- A value that steps read and write. Being in a state also stands for the copy set of a map state. -/
 inductive ValueKey where
   | record (part : RecordPart)
   | context (id : InstanceId) (field : String)
   | state (id : InstanceId) (state : String)
   | shown (id : InstanceId) (slot : String)
-  | channel (c : Channel)
 deriving DecidableEq, Repr, Inhabited
 
 structure RegionPair where
@@ -55,8 +51,6 @@ structure RegionCheck where
 deriving DecidableEq, Repr, Inhabited
 
 inductive Note where
-  /-- The event lines that step `step` wrote from line `start`, in groups of the lengths `groups`. -/
-  | events (step start : Nat) (groups : List Nat)
   /-- The record parts that `definition` read without asking Functions. -/
   | read (definition : Spec.Ref) (parts : List RecordPart)
   | stepBegins (step : Nat) (name : StepName) (started : Option InstanceId)

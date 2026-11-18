@@ -185,9 +185,10 @@ def namedCount (service : String) (lines : Array Line) (name : String) : Nat :=
 def State.lineId (s : State) (givenId : Option LineId) (name : String) : LineId :=
   givenId.getD (.own s!"{name}#{namedCount s.service s.lines name + 1}")
 
-def State.write (s : State) (dir : Dir) (givenId : Option LineId) (body : LineBody) : State × LineId :=
+def State.write (s : State) (dir : Dir) (givenId : Option LineId) (body : LineBody) (emitted : Option EmittedBy := none) :
+    State × LineId :=
   let id := s.lineId givenId (body.idName s.service)
-  ({ s with lines := s.lines.push { time := s.now, dir, id, body } }, id)
+  ({ s with lines := s.lines.push { time := s.now, dir, id, body, emitted } }, id)
 
 def State.await (s : State) (body : LineBody) (requester : Requester) (activity : Activity) (input : Value) : State :=
   let (s, id) := s.write .out none body
@@ -265,9 +266,13 @@ def State.answer (s : State) (to : Option LineId) (answer : Answer) : State :=
   | some to => (s.write .out none (.answer to answer)).1
   | none => s
 
+/-- Each event of `groups`, which step `step` decided, with the step and the place of its group. -/
+def emittedBy (step : Nat) (groups : List (List Emit)) : List (Emit × EmittedBy) :=
+  groups.zipIdx.flatMap fun (g, group) => g.map (·, { step, group })
+
 /-- The state with the event lines of `emits` written, each the result of the request `resultOf`. -/
-def State.emitAll (s : State) (resultOf : Option LineId) (emits : List Emit) : State :=
-  emits.foldl (fun s e => (s.write .out none (.event e.event e.payload resultOf)).1) s
+def State.emitAll (s : State) (resultOf : Option LineId) (emits : List (Emit × EmittedBy)) : State :=
+  emits.foldl (fun s (e, w) => (s.write .out none (.event e.event e.payload resultOf) (some w)).1) s
 
 def State.machine? (s : State) (id : InstanceId) : Option Instance :=
   (s.machines ++ s.copies).find? (·.id == id)

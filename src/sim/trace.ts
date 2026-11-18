@@ -21,22 +21,15 @@ export function leadsTo(steps: readonly StepInfo[], earlier: number, later: numb
   return last.cause !== undefined && last.cause < later && leadsTo(steps, earlier, last.cause);
 }
 
-/** The causes of trace lines: the step, first line, and line count of each group of event lines that a step wrote. */
-export interface Causes {
-  readonly events: (readonly [number, number, number])[];
-}
-
-/** Returns, for each line, the step that wrote it and the number of its group if it is an event line. */
-export function lineSteps(lineCount: number, causes: Causes): (readonly [number, number] | undefined)[] {
-  const steps: (readonly [number, number] | undefined)[] = Array.from({ length: lineCount }, () => undefined);
-  causes.events.forEach(([step, start, count], group) => {
-    steps.fill([step, group], start, start + count);
-  });
-  return steps;
+/** Lean's causedBy: whether step `later` is step `earlier` or one that it caused, following the cause chain only. */
+function causedBy(steps: readonly StepInfo[], earlier: number, later: number): boolean {
+  if (later === earlier) return true;
+  const cause = steps[later]?.cause;
+  return cause !== undefined && cause < later && causedBy(steps, earlier, cause);
 }
 
 /** Lean's channelOf: the channel that an `out` line travels on, seen from its sender. */
-export function channelOf(l: Line): Channel | undefined {
+function channelOf(l: Line): Channel | undefined {
   switch (l.type) {
     case "command":
     case "query":
@@ -54,19 +47,21 @@ export function channelOf(l: Line): Channel | undefined {
 }
 
 /**
- * Returns Lean's `ordered`: whether line `a` must precede line `b`, because they travel on one channel and are not two
- * lines of one group of events.
+ * Returns Lean's `ordered`: whether line `a` must precede line `b` among the lines of one window, because they travel
+ * on one channel and `b` is caused by `a`.
  */
-function ordered(
-  lines: readonly Line[],
-  lineSteps: readonly (readonly [number, number] | undefined)[],
-  a: number,
-  b: number,
-): boolean {
-  const [channel, other] = [channelOf(lines[a] as Line), channelOf(lines[b] as Line)];
+function ordered(lines: readonly Line[], steps: readonly StepInfo[], a: number, b: number): boolean {
+  const [la, lb] = [lines[a] as Line, lines[b] as Line];
+  const [channel, other] = [channelOf(la), channelOf(lb)];
   if (channel === undefined || other === undefined || !sameJson(channel, other)) return false;
-  const [writerA, writerB] = [lineSteps[a], lineSteps[b]];
-  return writerA === undefined || writerB === undefined || writerA[1] !== writerB[1];
+  const [ea, eb] = [la.emitted, lb.emitted];
+  if (ea === undefined || eb === undefined) return true;
+  return ea.step === eb.step ? ea.group !== eb.group : causedBy(steps, ea.step, eb.step);
+}
+
+/** Lean's sentBefore: whether line `a` reaches a receiver before line `b`. */
+export function sentBefore(lines: readonly Line[], steps: readonly StepInfo[], a: number, b: number): boolean {
+  return a < b && (lines.slice(a + 1, b).some((l) => l.dir === "in") || ordered(lines, steps, a, b));
 }
 
 /** Lean's window: the indexes of the `out` lines of each window, between two input lines. */
@@ -137,14 +132,13 @@ export function traceLineOf(
 export function snapshotLines(
   service: string,
   lines: readonly Line[],
-  causes: Causes,
+  steps: readonly StepInfo[],
   created: readonly string[],
 ): TraceLine[] {
-  const ls = lineSteps(lines.length, causes);
   const after = new Map<number, number[]>();
   for (const window of windows(lines)) {
     for (const b of window) {
-      const earlier = window.filter((a) => a < b && ordered(lines, ls, a, b));
+      const earlier = window.filter((a) => a < b && ordered(lines, steps, a, b));
       if (earlier.length > 0) after.set(b, earlier);
     }
   }

@@ -20,6 +20,9 @@ Messages travel on *channels*.
 A request, its answers, its end, and the events that name it as their `resultOf` share the request's channel.
 An event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
+Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused.
+Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
+A snapshot keeps no order between a request's answers and its result events, although the simulation delivers them on one channel.
 
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 
@@ -59,7 +62,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
   `test` runs every assignment.
 
 When an order or an assignment changes the outcome, `test` reports `ChoiceDependent`.
-Two outcomes are the same when both halt with the same violation, or when neither halts, each channel carries the same messages in the same order, and the records are equal up to a renaming of created keys.
+Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
 The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike wherever the key appears.
 
 ### When a trace matches a snapshot
@@ -72,7 +75,7 @@ A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 - Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
 - The `out` lines after each `in` line pair one to one with the snapshot's, each pair equal under the binding.
   A one-to-one pairing, which can be another one, pairs them at equal times and keeps the order that each snapshot line's `after` names.
-  `after` names only lines on one channel, and never two events of one group that `decide` returns (`ordered_same_channel`, `group_lines_unordered`).
+  `after` names only lines on one channel, never two events of one group that `decide` returns, and never two events of steps that no cause chain links (`ordered_same_channel`, `group_lines_unordered`, `independent_unordered`).
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
   The binding is one to one within each domain: the request ids, and the keys of each entity.
@@ -86,7 +89,8 @@ The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against 
 Keys that only a later line tells apart wait for that line.
 When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind, and its doc comment states the case.
 
-`test` compares outcomes the same way, so a spec without a `ChoiceDependent` violation fixes the order that `verify` asks of each channel.
+`test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
+An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
 Because created keys compare only up to renaming, a string that a spec computes in the form of a created key is `Fault.computedKey`.
 
 ## Who fixes a violation
@@ -191,7 +195,7 @@ A map state has one *copy* of its child states for each key of its items.
 - Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone (`then_only_reports`). The checks at the end of a run also only add violations (`simulate_reported`).
 - A line changes no message in flight except the one that its handle names, and only a deliver, lose, or refuse line removes one (`line_keeps_leftInFlight`, `moving_line_keeps_others`).
 - Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line (`line_keeps_states`).
-- A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
+- A deliver line whose message has an earlier message in flight that must arrive first, on its channel and not an event of a step that no cause chain links to its own, delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer to a request that has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A halting `InvalidScenario` violation stops the simulation, and once the simulation stops, the steps of the later lines take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
 - No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity, provided the service's state names the service as the owner of its keys, which `World.start` sets but no theorem proves (`unwritten_not_created`, `execute_unwritten_not_created`).
@@ -244,7 +248,7 @@ The following items are tazuna's own:
 ### Ordering
 
 - The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of their canonical JSON (`bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order`).
-- A snapshot orders two `out` lines after one `in` line only when they travel on one channel (`ordered_same_channel`), and never two lines of one group of events that `decide` returns (`group_lines_unordered`).
+- A snapshot orders two `out` lines after one `in` line only when they travel on one channel (`ordered_same_channel`), never two lines of one group of events that `decide` returns (`group_lines_unordered`), and never two events of steps that no cause chain links (`independent_unordered`).
 
 ### Identity
 

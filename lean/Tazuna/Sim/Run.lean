@@ -110,18 +110,16 @@ def World.sameValue (w : World) (fs : Functions m) (schema : Schema) (peer : Str
   pure ((← comparedOr fs schema e).canonical == (← comparedOr fs schema masked).canonical)
 
 /--
-The message in flight from the running peer `peer` that the line `i` states, among those that `fits` accepts and no
-earlier line stated: of each channel the oldest, which FIFO delivers first; the only such one, or the report of none or
-of several channels.
+The message in flight from the running peer `peer` that the line `i` states: the first in sending order that `fits`
+accepts and no earlier line stated, or the report of none. Every message that `fits` accepts is equal to the line once
+the keys that the peer created are masked, so the line cannot tell them apart, and the first stands for each.
 -/
 def World.peerMessage (w : World) (i : Nat) (peer : String) (fits : Message → m Bool) : m (Except InvalidScenario Nat) := do
   let found ← w.messages.toList.zipIdx.filterM fun (msg, k) =>
     if msg.status == .inFlight && msg.sender == peer && !w.carried.any (·.2 == k) then fits msg else pure false
-  let oldest := found.filter fun (msg, k) => !found.any fun (n, j) => j < k && n.sameChannel msg
-  pure (match oldest with
-    | [(_, k)] => .ok k
-    | [] => .error (.unpairedPeerLine i peer)
-    | several => .error (.ambiguousPeerLine i peer (several.map (·.1.describe))))
+  pure (match found with
+    | (_, k) :: _ => .ok k
+    | [] => .error (.unpairedPeerLine i peer))
 
 /--
 The world after the message `k` reaches its receiver by line `i`: a running receiver processes it, and a request that
@@ -138,14 +136,14 @@ def World.deliverCarried (w : World) (fsOf : String → Functions m) (i k : Nat)
   pure (carriers.foldl (init := w) fun w l => if (w.sentBy l).isSome then w else w.recordSent l msg.receiver before)
 
 /--
-The world after line `i` delivers the in-flight message `k`, unless an earlier message on its channel is in flight,
-which FIFO delivers first.
+The world after line `i` delivers the in-flight message `k`, unless an earlier message in flight must arrive before it
+(World.precedes), which FIFO delivers first.
 -/
 def World.deliverInOrder (w : World) (fsOf : String → Functions m) (i k : Nat) : m World :=
   match w.messages[k]? with
   | none => pure w
   | some msg =>
-    match (w.messages.toList.take k).find? fun n => n.status == .inFlight && n.sameChannel msg with
+    match (w.messages.toList.take k).find? fun n => n.status == .inFlight && w.precedes n msg with
     | some earlier => pure (w.report (.overtaking i msg.describe earlier.describe))
     | none => w.deliverCarried fsOf i k
 

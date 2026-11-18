@@ -188,15 +188,57 @@
       "candidates": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.ambiguousPeerLine",
-    "definition": null,
-    "data": {
-      "scenarioLine": 6,
-      "peer": "notifier",
-      "candidates": [
-        {
+  "violations": [
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "todo",
+          "receiver": "notifier",
+          "id": "noted#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
+        }
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "todo",
+          "receiver": "notifier",
+          "id": "noted#2",
+          "origin": {
+            "type": "line",
+            "index": 3
+          }
+        }
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "notifier",
+          "receiver": "todo",
+          "id": "todo.markSeen#1",
+          "origin": {
+            "type": "line",
+            "index": 4
+          }
+        }
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
           "sender": "notifier",
           "receiver": "todo",
           "id": "todo.ping#1",
@@ -204,8 +246,29 @@
             "type": "line",
             "index": 4
           }
-        },
-        {
+        }
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "notifier",
+          "receiver": "todo",
+          "id": "todo.markSeen#2",
+          "origin": {
+            "type": "line",
+            "index": 5
+          }
+        }
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
           "sender": "notifier",
           "receiver": "todo",
           "id": "todo.ping#2",
@@ -214,7 +277,8 @@
             "index": 5
           }
         }
-      ]
+      }
     }
-  }
+  ],
+  "halted": null
 }

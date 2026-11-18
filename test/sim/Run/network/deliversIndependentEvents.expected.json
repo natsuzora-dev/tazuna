@@ -1,0 +1,105 @@
+{
+  "services": [
+    {
+      "service": "metronome",
+      "lines": [
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "id": "addBeats#1",
+          "name": "addBeats",
+          "input": {
+            "beatIds": [
+              "beat-1",
+              "beat-2"
+            ]
+          }
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "id": "answer#1",
+          "to": "addBeats#1",
+          "answer": {
+            "result": "accepted"
+          }
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "beatAdded#1",
+          "name": "beatAdded",
+          "payload": {
+            "id": "beat-1"
+          },
+          "resultOf": "addBeats#1"
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "beatAdded#2",
+          "name": "beatAdded",
+          "payload": {
+            "id": "beat-2"
+          },
+          "resultOf": "addBeats#1"
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "marked#1",
+          "name": "marked",
+          "payload": {
+            "beatId": "beat-1"
+          }
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "marked#2",
+          "name": "marked",
+          "payload": {
+            "beatId": "beat-2"
+          }
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    },
+    {
+      "service": "listener",
+      "lines": [
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "metronome/marked#2",
+          "name": "metronome.marked",
+          "payload": {
+            "beatId": "beat-2"
+          }
+        },
+        {
+          "time": "2026-10-25T00:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "metronome/marked#1",
+          "name": "metronome.marked",
+          "payload": {
+            "beatId": "beat-1"
+          }
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "violations": [],
+  "halted": null
+}

@@ -149,7 +149,6 @@ structure Collect where
   /-- For each message, the values that its afterMessage read: subscription answers, holds, invariants, and rearm. -/
   afters : List (Nat × Footprint) := []
   violations : List Violation := []
-  causes : Causes := {}
 deriving Repr, Inhabited
 
 /--
@@ -241,7 +240,6 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
     | .microstepEnds check => c.checkRegions check
     | .afterMessageBegins message => { c with afterMessage := some message }
     | .afterMessageEnds => { c with afterMessage := none }
-    | n => { c with causes := c.causes.notice n }
 
 /-- The functions that ask `fs` and carry each answer into `n` by `f`. -/
 def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where
@@ -456,51 +454,25 @@ def tiedDeadlines (s : State) (i j : Nat) : Bool :=
   | some a, some b => a == b
   | _, _ => false
 
-/-- Whether the `out` line `l` is an event that a contract lists, which verify compares (Verify's internalEvent). -/
-def comparedEvent (st : Service) (l : Line) : Bool :=
-  match l.body with
-  | .event r _ _ => !(st.«structure».contractsListing r).isEmpty
-  | _ => false
-
-/--
-The channels that the compared event lines of a run write, each with the step of `c.steps` that wrote it: the last that
-began at or before the line's writer, since nested steps are spans of their outer step.
--/
-def channelWrites (st : Service) (s : State) (c : Collect) : List (Nat × Channel) :=
-  let ls := lineSteps s c.causes
-  let tops := c.steps.toList.map (·.1)
-  s.lines.toList.zipIdx.filterMap fun (l, i) =>
-    match ls[i]? with
-    | some (some (w, _)) =>
-      if l.dir == .out && comparedEvent st l then
-        match (tops.filter (· ≤ w)).getLast?, channelOf l with
-        | some t, some ch => some (t, ch)
-        | _, _ => none
-      else none
-    | _ => none
-
 /--
 The footprint of what step `n` stands for when the search swaps its order (one independence relation for every choice
 of order): a deadline of a tie stands for its whole message, since its effects run in the later steps of that message
 and the state at the end of the message is observed before the next deadline fires, so the reads of its afterMessage
-count too; any other step stands for itself. Each channel that those steps wrote (channelWrites) is a write, since one
-channel keeps its order (Sim.ordered). Keys that the steps create are not in it, since test compares outcomes up to a
-renaming of created keys.
+count too; any other step stands for itself. The lines that the steps write are not in it: swapping steps that no cause
+chain links changes no order of a snapshot (Sim.ordered). Keys that the steps create are not in it, since test compares
+outcomes up to a renaming of created keys.
 -/
-def involved (s : State) (c : Collect) (channels : List (Nat × Channel)) (n : Nat) (a : StepAccess) : Footprint :=
+def involved (s : State) (c : Collect) (n : Nat) (a : StepAccess) : Footprint :=
   let message := s.steps[n]?.map (·.message)
   let (steps, after) := if (s.steps[n]?.bind (·.tie)).isSome then
       (c.steps.toList.filter fun (k, _) => s.steps[k]?.map (·.message) == message,
         (message.bind (c.afters.lookup ·)).getD {})
     else ([(n, a)], {})
-  let numbers := steps.map (·.1)
-  steps.foldl (fun f (_, x) => f.union x.access)
-    (after.union { writes := (channels.filter fun (t, _) => numbers.contains t).map (.channel ·.2) })
+  steps.foldl (fun f (_, x) => f.union x.access) after
 
 /-- The footprint (involved) of each step of `c.steps`, by position. -/
-def footprints (st : Service) (s : State) (c : Collect) : Array Footprint :=
-  let channels := channelWrites st s c
-  c.steps.map fun (n, a) => involved s c channels n a
+def footprints (s : State) (c : Collect) : Array Footprint :=
+  c.steps.map fun (n, a) => involved s c n a
 
 /--
 The pairs of steps whose other order test runs, by step number in the order they began, whose names differ so that a
@@ -510,9 +482,9 @@ the search. A run that halted (in the semantic run, or `stopped` from enabled) s
 none. Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
 orders to run.
 -/
-def candidates (st : Service) (s : State) (c : Collect) (stopped : Option Finding) : List (Nat × Nat) :=
+def candidates (s : State) (c : Collect) (stopped : Option Finding) : List (Nat × Nat) :=
   if (s.halted <|> stopped).isSome then [] else
-  let fps := footprints st s c
+  let fps := footprints s c
   c.steps.toList.zipIdx.flatMap fun ((i, a), n) =>
     (c.steps.toList.zipIdx.drop (n + 1)).filterMap fun ((j, b), k) =>
       if (tiedDeadlines s i j || (s.steps[i]?.map (·.message)) == (s.steps[j]?.map (·.message))) &&

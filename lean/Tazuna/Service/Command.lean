@@ -102,8 +102,7 @@ def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
   | .rejected r => pure (s.answer id (.rejected r), .rejected r, [])
   | .accepted records groups violations =>
     let s := ({ s with records }.reportAll violations).answer id (.accepted none)
-    MonadNote.note (.events step s.lines.size (groups.map (·.length)))
-    pure (s.emitAll id groups.flatten, .accepted none, groups)
+    pure (s.emitAll id (emittedBy step groups), .accepted none, groups)
   | .halted violations => pure (s.reportAll violations, outcome.answer, [])
 
 end Tazuna.Service

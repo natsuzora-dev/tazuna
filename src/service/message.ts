@@ -59,8 +59,19 @@ export function bodyContent(b: LineBody): unknown {
   }
 }
 
+/** Lean's EmittedBy: the step that wrote an event line, and the place of its group among the groups of the decide. */
+export interface EmittedBy {
+  readonly step: number;
+  readonly group: number;
+}
+
 /** Lean's Line: a line of a run, which traceLineOf turns into a trace line. */
-export type Line = LineBody & { readonly time: string; readonly dir: "in" | "out"; readonly id: LineId };
+export type Line = LineBody & {
+  readonly time: string;
+  readonly dir: "in" | "out";
+  readonly id: LineId;
+  readonly emitted?: EmittedBy;
+};
 
 /** The key of a line id in a map, as Lean compares line ids. */
 export const idKey = (id: LineId): string => JSON.stringify(id.kind === "own" ? [id.id] : [id.sender, id.id]);

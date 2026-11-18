@@ -8,7 +8,17 @@ import { Failed } from "../service/functions.ts";
 import { chartOf } from "../service/instance.ts";
 import { type Line, type LineBody, sameLineId } from "../service/message.ts";
 import { created } from "../service/state.ts";
-import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
+import {
+  describe,
+  type Message,
+  type Opened,
+  running,
+  type Sent,
+  sameChannel,
+  sameOrigin,
+  stateOf,
+  type World,
+} from "./network.ts";
 
 /** A violation that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
@@ -134,6 +144,21 @@ function only(w: World, i: number, fact: Fact, found: readonly number[]): number
   });
 }
 
+/** Lean's World.oneOfEqual: `found` with equal messages on one channel as one, the oldest in flight or the first. */
+function oneOfEqual(w: World, found: readonly number[]): readonly number[] {
+  const first = found[0] === undefined ? undefined : w.messages[found[0]];
+  if (first === undefined) return found;
+  const keys = found.flatMap((k) => {
+    const m = w.messages[k];
+    if (m === undefined || !sameChannel(m, first)) return [];
+    const schema = schemaOf(w, m);
+    const v = valueOfLine(m.body);
+    return schema === undefined || v === undefined ? [] : [canonicalJson(comparedOr(w, schema[0], schema[1], v))];
+  });
+  if (keys.length !== found.length || !keys.every((k) => k === keys[0])) return found;
+  return [found.find((k) => w.messages[k]?.status === "inFlight") ?? (found[0] as number)];
+}
+
 /** Lean's Fact.group?. */
 export const groupOf = (fact: Extract<Fact, { type: "requests" }>): Fact => ({ ...fact, handle: 0 });
 
@@ -201,12 +226,15 @@ export function messageOf(w: World, i: number, fact: Fact): number {
         w,
         i,
         fact,
-        picked(
-          (m) =>
-            sameOrigin(m.origin, fact.origin) &&
-            sameRef(eventOf(m) ?? null, fact.event) &&
-            (fact.receiver === undefined || fact.receiver === m.receiver),
-          fact.payload,
+        oneOfEqual(
+          w,
+          picked(
+            (m) =>
+              sameOrigin(m.origin, fact.origin) &&
+              sameRef(eventOf(m) ?? null, fact.event) &&
+              (fact.receiver === undefined || fact.receiver === m.receiver),
+            fact.payload,
+          ),
         ),
       );
     case "answer": {

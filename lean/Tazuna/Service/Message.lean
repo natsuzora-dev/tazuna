@@ -43,6 +43,12 @@ def LineBody.idName (service : String) : LineBody → String
   | .time => "time"
   | .restart => "restart"
 
+/-- The step that wrote an event line, and the place of the line's group among the groups that its decide returned. -/
+structure EmittedBy where
+  step : Nat
+  group : Nat
+deriving DecidableEq, Repr, Inhabited
+
 /--
 A trace line. Test adds `after` and `created` when it writes a snapshot.
 -/
@@ -51,6 +57,8 @@ structure Line where
   dir : Dir
   id : LineId
   body : LineBody
+  /-- Set on the `out` event lines that a command writes, and on no other line. -/
+  emitted : Option EmittedBy := none
 deriving DecidableEq, Repr, Inhabited
 
 structure Emit where

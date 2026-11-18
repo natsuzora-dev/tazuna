@@ -12,4 +12,4 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"addTask#4","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"id":"task-4"},"resultOf":"addTask#4"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"listed#1","name":"listed","payload":{},"after":["counted#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"listed#1","name":"listed","payload":{}}

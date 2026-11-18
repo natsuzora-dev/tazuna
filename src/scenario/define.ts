@@ -212,7 +212,10 @@ export interface Caused<S extends string = string> {
     query: Q & OwnedBy<Q, S>,
     pick?: { readonly input?: SomeFields<InputOf<Q>> },
   ): OutSubscription<Q>;
-  /** The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. */
+  /**
+   * The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. Equal events
+   * on one channel are one handle, and a line that names it acts on the oldest in flight.
+   */
   event<Ev extends AnyEvent>(
     event: Ev & OwnedBy<Ev, S>,
     pick?: { readonly payload?: SomeFields<EncodedPayload<Ev>>; readonly to?: Contract<unknown, unknown, "spec", S> },
@@ -489,7 +492,7 @@ export interface When<
   readonly net: {
     /**
      * The network delivers the message in flight to its receiver. A message never overtakes an earlier one on its
-     * channel (InvalidScenario.overtaking).
+     * channel, except an event of a step that no cause chain links to the earlier one's (InvalidScenario.overtaking).
      */
     deliver<M extends Message>(message: M): Delivered<M, S, X>;
     /** The network delivers the delivered message again, with the same id. */

@@ -3,4 +3,4 @@
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","completedAt":null},"resultOf":"addTasks#1"}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","completedAt":null},"resultOf":"addTasks#1","after":["taskAdded#1"]}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"greeted#1","name":"greeted","payload":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"greeted#2","name":"greeted","payload":{"taskId":"task-2"},"after":["greeted#1"]}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"greeted#2","name":"greeted","payload":{"taskId":"task-2"}}

@@ -67,17 +67,17 @@ theorem keeps_reportAll (s : State) (fs : List Fault) : KeepsKeys s (s.reportAll
   | nil => rfl
   | cons f fs ih => simp only [List.foldl_cons]; rw [ih]; split <;> simp
 
-theorem keeps_emitAll (s : State) (r : Option LineId) (es : List Emit) : KeepsKeys s (s.emitAll r es) :=
+theorem keeps_emitAll (s : State) (r : Option LineId) (es : List (Emit × EmittedBy)) : KeepsKeys s (s.emitAll r es) :=
   keeps_foldl _ (fun t x => by keys_leaf) _ _
 
-@[simp] theorem emitAll_createdEntities (s : State) (r : Option LineId) (es : List Emit) :
+@[simp] theorem emitAll_createdEntities (s : State) (r : Option LineId) (es : List (Emit × EmittedBy)) :
     (s.emitAll r es).createdEntities = s.createdEntities := by
   unfold State.emitAll
   induction es generalizing s with
   | nil => rfl
   | cons e es ih => simp only [List.foldl_cons]; rw [ih]; rfl
 
-@[simp] theorem emitAll_service (s : State) (r : Option LineId) (es : List Emit) :
+@[simp] theorem emitAll_service (s : State) (r : Option LineId) (es : List (Emit × EmittedBy)) :
     (s.emitAll r es).service = s.service := (keeps_emitAll s r es).1
 
 theorem keeps_addDeadlines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
@@ -372,7 +372,7 @@ theorem keeps_automationAnswer (a : String) (answer : Answer) (s : State) :
 
 theorem keeps_processCommand (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
     KeepsKeys s (processCommand st fs s name raw id step).1 := by
-  simp only [processCommand, id_bind, note_id]
+  simp only [processCommand, id_bind]
   split
   · keys_leaf
   · rename_i records groups violations _
@@ -597,7 +597,7 @@ macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, S
 
 @[simp] theorem processCommand_createdEntities (name : String) (raw : Value) (id : Option LineId) (step : Nat)
     (s : State) : (processCommand st fs s name raw id step).1.createdEntities = s.createdEntities := by
-  simp only [processCommand, id_bind, note_id]
+  simp only [processCommand, id_bind]
   split <;> keys_same
 
 @[simp] theorem addResult_service (id : LineId) (e : Emit) (s : State) : (s.addResult id e).service = s.service :=

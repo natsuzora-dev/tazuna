@@ -1,6 +1,7 @@
 import Tazuna.Scenario.Given
 import Tazuna.Sim.Receive
 import Tazuna.Sim.InvalidScenario
+import Tazuna.Sim.Trace
 
 /-!
 The world of a simulation: the running services, each with its state, and the network, a list of messages that each
@@ -123,6 +124,22 @@ deriving Inhabited
 def World.state (w : World) (service : String) : State := (w.states.lookup service).getD { service }
 
 def World.role (w : World) (service : String) : Option Role := w.roles.lookup service
+
+/--
+Whether message `n` must arrive before message `m`, sent later: they travel on one channel, and, when both are events
+of a running sender, its trace orders their lines (Sim.sentBefore), so that events of independent steps may arrive in
+either order. An answer and a result event travel on one channel here, unlike in the snapshot.
+-/
+def World.precedes (w : World) (n m : Message) : Bool :=
+  n.sameChannel m &&
+    match n.body, m.body, w.role n.sender with
+    | .event .., .event .., some .own | .event .., .event .., some .run =>
+      let s := w.state n.sender
+      let lineOf (msg : Message) := s.lines.toList.findIdx? fun l => l.dir == .out && l.id == msg.id
+      match lineOf n, lineOf m with
+      | some a, some b => Sim.sentBefore s a b
+      | _, _ => true
+    | _, _, _ => true
 
 /-- Whether no later line takes place: the simulation or a running service halted. -/
 def World.stopped (w : World) : Bool := w.halted.isSome || w.states.any (·.2.halted.isSome)

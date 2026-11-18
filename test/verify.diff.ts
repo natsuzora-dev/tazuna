@@ -512,7 +512,9 @@ describe("Content comparison", () => {
     assert.ok(seenOnce !== undefined);
     for (const value of ["task-1", "addTask#1"]) {
       const trace = JSON.parse(
-        JSON.stringify(seenOnce.snapshot.filter((l) => l !== undefined)).replaceAll("todo/Seen-1", value),
+        JSON.stringify(
+          seenOnce.snapshot.flatMap((l) => (l === undefined ? [] : [{ ...l, after: undefined, created: undefined }])),
+        ).replaceAll("todo/Seen-1", value),
       ) as Line[];
       assert.equal(violationCountOfBoth(seenOnce, trace, value), 0, value);
     }

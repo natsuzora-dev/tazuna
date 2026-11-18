@@ -62,17 +62,16 @@ export const executeSpec = (
 ): Made => made(spec, sc, execute, stepOrders, assignments);
 
 /** Each running service's trace as its snapshot holds it. */
-export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, readonly TraceLine[]> =>
+export const snapshotsOf = ({ world }: Made): ReadonlyMap<string, readonly TraceLine[]> =>
   new Map(
     [...world.services].map(([service, p]) => {
       const s = p.processing.state;
-      const causes = (listeners.get(service) as Listener).collected.causes;
       return [
         service,
         snapshotLines(
           service,
           s.lines,
-          causes,
+          s.steps,
           created(s).map(([, key]) => key),
         ),
       ];
@@ -97,7 +96,7 @@ export function serviceViolations({ world, listeners }: Made, service: string): 
 function serviceCandidates({ world, listeners }: Made, service: string): (readonly [number, number])[] {
   const p = world.services.get(service);
   if (p === undefined || p.halted !== undefined) return [];
-  return listeners.get(service)?.collected.candidates(p.processing.st, p.processing.state, 0) ?? [];
+  return listeners.get(service)?.collected.candidates(p.processing.state, 0) ?? [];
 }
 
 /**

@@ -67,9 +67,9 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option L
   · cases id <;> exact h
   · rename_i written groups vs he
     have hr := congrArg Fixed.records
-      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) id groups.flatten)
-    show KeysDistinct (State.emitAll _ id groups.flatten).records
-    rw [show (State.emitAll _ id groups.flatten).records = _ from hr]
+      (emitAll_fixed (s := ({ s with records := written }.reportAll vs).answer id (.accepted none)) id (emittedBy n groups))
+    show KeysDistinct (State.emitAll _ id (emittedBy n groups)).records
+    rw [show (State.emitAll _ id (emittedBy n groups)).records = _ from hr]
     show KeysDistinct ((State.answer _ id _).records)
     rw [answer_records, reportAll_records]
     exact keysDistinct_of_not_duplicated (evaluate_accepted_applies _ _ _ _ _ _ _ he).2.1

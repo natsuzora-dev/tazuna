@@ -1,0 +1,71 @@
+{
+  "service": "metronome",
+  "given": {
+    "start": "2026-10-25T00:00:00Z",
+    "records": [],
+    "peers": [
+      {
+        "service": "listener",
+        "role": "run",
+        "records": []
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "request",
+      "kind": "command",
+      "target": {
+        "service": "metronome",
+        "name": "addBeats"
+      },
+      "input": {
+        "value": {
+          "beatIds": ["beat-1", "beat-2"]
+        },
+        "holes": []
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "event": {
+          "service": "metronome",
+          "name": "marked"
+        },
+        "payload": {
+          "value": {
+            "beatId": "beat-2"
+          },
+          "holes": []
+        }
+      }
+    },
+    {
+      "type": "deliver",
+      "message": {
+        "type": "event",
+        "origin": {
+          "type": "line",
+          "index": 0
+        },
+        "event": {
+          "service": "metronome",
+          "name": "marked"
+        },
+        "payload": {
+          "value": {
+            "beatId": "beat-1"
+          },
+          "holes": []
+        }
+      }
+    }
+  ],
+  "expectations": []
+}

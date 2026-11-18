@@ -13,7 +13,8 @@ open Tazuna.Data Tazuna.Service
 
 /--
 Whether step `earlier` leads to step `later`. Nested steps are spans of their outer step, so only steps that write
-event lines are compared. Reachability between them follows the cause chain and barriers.
+event lines are compared. Reachability between them follows the cause chain and barriers, which the search of step
+orders keeps fixed.
 -/
 def leadsTo (s : State) (earlier later : Nat) : Bool :=
   later == earlier ||
@@ -28,6 +29,14 @@ def leadsTo (s : State) (earlier later : Nat) : Bool :=
     | none => false
 termination_by later
 
+/-- Whether step `later` is step `earlier` or one that it caused, following the cause chain only. -/
+def causedBy (s : State) (earlier later : Nat) : Bool :=
+  later == earlier ||
+    match s.steps[later]?.bind (·.cause) with
+    | some cause => if cause < later then causedBy s earlier cause else false
+    | none => false
+termination_by later
+
 def channelOf (l : Line) : Option Channel :=
   match l.body with
   | .command .. | .query .. | .subscribe .. => some (.request l.id)
@@ -37,38 +46,28 @@ def channelOf (l : Line) : Option Channel :=
   | .time | .restart | .operation .. => none
 
 /--
-The causes that the notes record: the step, first line and line count of each group of event lines that a step wrote.
+Whether line `a` must precede line `b` among the lines of one window: they travel on one channel, and `b` is caused by
+`a`. The lines of one request's channel all are. Of two event lines, `b` is when its step is `a`'s and its group a
+different one, since decide orders its groups and not the events of one group, or when its step is one that `a`'s step
+caused. Events of steps that no cause chain links keep no order, even on one channel, as two senders' messages do not;
+lines on different channels keep none either. Precedents: Lamport's happens-before, Kafka (order within a partition),
+HTTP/2 (independent streams), and Mazurkiewicz traces (independent actions commute).
 -/
-structure Causes where
-  events : Array (Nat × Nat × Nat) := #[]
-deriving Repr, Inhabited
-
-def Causes.notice (c : Causes) : Note → Causes
-  | .events step start groups =>
-    { c with events := (groups.foldl (fun (events, start) n => (events.push (step, start, n), start + n))
-        (c.events, start)).1 }
-  | .read .. | .transitionPart _ | .microstepEnds _ | .stepBegins .. | .stepEnds | .settlesAround _ | .readStates _ | .wroteState ..
-  | .wroteCopies .. | .wroteShown .. | .afterMessageBegins _ | .afterMessageEnds => c
-
-/-- For each line, the step that wrote it and the number of its group if it is an event line. -/
-def lineSteps (s : State) (c : Causes) : Array (Option (Nat × Nat)) :=
-  c.events.zipIdx.foldl (init := Array.replicate s.lines.size none) fun steps ((step, start, count), group) =>
-    (List.range' start count).foldl (fun steps i => steps.setIfInBounds i (some (step, group))) steps
-
-/--
-Whether line `a` must precede line `b`: they travel on one channel, whose messages keep their order, and are not two
-lines of one group of events, because decide gives those no order. Lines on different channels keep no order, as
-messages on different connections do not. Precedents: Kafka (order within a partition), HTTP/2 (independent streams),
-and Mazurkiewicz traces (independent actions commute).
--/
-def ordered (s : State) (lineSteps : Array (Option (Nat × Nat))) (a b : Nat) : Bool :=
+def ordered (s : State) (a b : Nat) : Bool :=
   match s.lines[a]?, s.lines[b]? with
   | some la, some lb =>
     (channelOf la).isSome && channelOf la == channelOf lb &&
-      match lineSteps[a]?, lineSteps[b]? with
-      | some (some (_, ga)), some (some (_, gb)) => ga != gb
+      match la.emitted, lb.emitted with
+      | some ea, some eb => if ea.step == eb.step then ea.group != eb.group else causedBy s ea.step eb.step
       | _, _ => true
   | _, _ => false
+
+/--
+Whether line `a` reaches a receiver before line `b` (`a < b`): an `in` line lies between them, since every line caused
+by an input comes before the next input, or they are ordered.
+-/
+def sentBefore (s : State) (a b : Nat) : Bool :=
+  a < b && ((s.lines.extract (a + 1) b).any (·.dir == .in) || ordered s a b)
 
 /-- The `out` lines of the window that contains line `i`. -/
 def window (s : State) (i : Nat) : List Nat :=
@@ -78,12 +77,12 @@ def window (s : State) (i : Nat) : List Nat :=
   (before.reverse ++ after).map (·.2)
 
 /-- The ids of the earlier lines in the same window that must precede line `i` (ordered). -/
-def after (s : State) (lineSteps : Array (Option (Nat × Nat))) (i : Nat) : List LineId :=
+def after (s : State) (i : Nat) : List LineId :=
   match s.lines[i]? with
   | none => []
   | some line =>
     if line.dir == .in then [] else
-    ((window s i).filter fun a => a < i && ordered s lineSteps a i).filterMap fun a => s.lines[a]?.map (·.id)
+    ((window s i).filter fun a => a < i && ordered s a i).filterMap fun a => s.lines[a]?.map (·.id)
 
 /--
 The strings of a line body in which createKey values are searched. Rejection kinds are excluded, since they can never
@@ -108,9 +107,8 @@ def firstOut (s : State) (v : String) : Option Nat :=
 def createdAt (s : State) (i : Nat) : List String :=
   (s.created.map (·.2)).filter (firstOut s · == some i)
 
-def trace (s : State) (c : Causes) : List (Line × List LineId × List String) :=
-  let lineSteps := lineSteps s c
-  s.lines.toList.zipIdx.map fun (line, i) => (line, after s lineSteps i, createdAt s i)
+def trace (s : State) : List (Line × List LineId × List String) :=
+  s.lines.toList.zipIdx.map fun (line, i) => (line, after s i, createdAt s i)
 
 /--
 The trace line of `line` of the trace of `service` as a snapshot holds it, with its `after` and `created`. This is where

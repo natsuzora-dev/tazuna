@@ -270,6 +270,23 @@ const followsPaired =
     });
   };
 
+/** Lean's sameAfter: whether trace line `t` follows the lines that the pairs give those that `s` follows. */
+function sameAfter(
+  snapshot: readonly Numbered[],
+  trace: readonly Numbered[],
+  pairs: readonly (readonly [number, number])[],
+  s: Numbered,
+  t: Numbered,
+): boolean {
+  const follows = (outs: readonly Numbered[], o: Numbered) => {
+    const k = outs.findIndex((x) => x.index === o.index);
+    return k < 0 ? [] : mustFollow(outs, outs[k] as Numbered, k);
+  };
+  const expected = follows(snapshot, s);
+  const images = expected.flatMap((n) => pairs.find(([i]) => i === n)?.slice(1) ?? []);
+  return images.length === expected.length && sameSet(images, follows(trace, t));
+}
+
 type Finding = Mismatch | Uncomparable;
 
 /** Lean's State: one way of pairing a group's lines so far. */
@@ -298,6 +315,7 @@ const sameState =
 function compareGroup(
   set: readonly Binding[],
   v: Values,
+  relation: boolean,
   snapshot: readonly Numbered[],
   trace: readonly Numbered[],
   place: number,
@@ -319,6 +337,7 @@ function compareGroup(
       const next: State[] = [];
       for (const t of trace) {
         if (usedOf(st).includes(t.index) || !followsPaired(snapshot)(st.pairs, s.index, t.index)) continue;
+        if (relation && !sameAfter(snapshot, trace, st.pairs, s, t)) continue;
         const cs = matchLine(v, st.binding, s.line, t.line);
         if (cs === undefined) return undefined;
         next.push(...paired(st, s, t, cs));
@@ -402,9 +421,23 @@ function compareGroup(
       ];
     });
   });
+  const afters = relation
+    ? pairs.flatMap(([s, t]): Finding[] =>
+        sameAfter(snapshot, trace, first?.pairs ?? [], s, t)
+          ? []
+          : [
+              {
+                kind: "Mismatch.after",
+                definition: null,
+                line: t.index,
+                data: { subject: subjectOf(t.line), snapshot: s.line.after ?? [], trace: t.line.after ?? [] },
+              },
+            ],
+      )
+    : [];
   const kept = states.filter((st) => sameSet(usedOf(st), used));
   return [
-    [...differences, ...unexpectedLines, ...times, ...orders],
+    [...differences, ...unexpectedLines, ...times, ...orders, ...afters],
     distinctBy(
       sameBinding,
       kept.map((st) => st.binding),
@@ -502,6 +535,7 @@ function unrouted(
 function compareGroups(
   lineCount: number,
   internal: (l: TraceLine) => boolean,
+  relation: boolean,
   inputs: readonly TraceLine[],
   outs: readonly Numbered[],
   values: Values,
@@ -573,6 +607,7 @@ function compareGroups(
     const [groupFound, next, stop] = compareGroup(
       set,
       { ...values, fresh },
+      relation,
       compared(e.outs),
       compared(a.outs),
       t?.index ?? 1,
@@ -602,12 +637,14 @@ function compare(
   cut: boolean,
   internal: (l: TraceLine) => boolean,
   renamed: (v: Values) => Values,
+  relation: boolean,
 ): readonly [Finding[], readonly Binding[]] {
   const expected = groups(snapshot);
   const actual = groups(lines);
   return compareGroups(
     lines.length,
     internal,
+    relation,
     expected.flatMap((g) => (g.input === undefined ? [] : [g.input.line])),
     actual.flatMap((g) => g.outs),
     renamed({ domain: valueDomains(snapshot), fresh: new Set(), image: () => true }),
@@ -644,7 +681,7 @@ function comparedLines(trace: readonly FileLine[]): {
 /**
  * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
  * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Outcome.renaming, or
- * `verifying` for verify.
+ * `verifying` for verify. `relation` compares the lines' `after` too, as test does for two runs of the simulation.
  */
 export function verifyLines(
   spec: Spec,
@@ -652,12 +689,13 @@ export function verifyLines(
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly FileLine[],
   renamed: (v: Values) => Values,
+  relation = false,
 ): Compared {
   const { lines, cut } = comparedLines(trace);
   const read = readLine(spec, service);
   const expected = snapshot.map((l) => l && read(l));
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
-  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed);
+  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed, relation);
   const bindings = set.map((b) => new Map(stringPairs(b)));
   return { found: [...found, ...(cut === undefined ? [] : [cut])], set, bindings, first: bindings[0] ?? new Map() };
 }
@@ -674,5 +712,17 @@ export function compareTrace(
   renamed: (v: Values) => Values,
 ): Compared {
   const compared = verifyLines(spec, service, snapshot, parseFileLines(trace), renamed);
+  return { ...compared, found: compared.found.sort(byLine) };
+}
+
+/** Lean's DiffTest compareOf: compares two runs of the simulation, their `after` included, sorted by line. */
+export function compareRuns(
+  spec: Spec,
+  service: string,
+  snapshot: readonly TraceLine[],
+  run: readonly TraceLine[],
+  renamed: (v: Values) => Values,
+): Compared {
+  const compared = verifyLines(spec, service, snapshot, run, renamed, true);
   return { ...compared, found: compared.found.sort(byLine) };
 }
