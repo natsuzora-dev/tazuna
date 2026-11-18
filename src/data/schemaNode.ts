@@ -12,7 +12,8 @@ export type SchemaNode =
       readonly shape: Readonly<Record<string, z.ZodType>>;
       readonly catchall: z.ZodType | undefined;
     }
-  | { readonly type: "union"; readonly options: readonly z.ZodType[] }
+  /** `discriminator` is the field that names the option of a z.discriminatedUnion; a plain z.union has none. */
+  | { readonly type: "union"; readonly options: readonly z.ZodType[]; readonly discriminator: string | undefined }
   | { readonly type: "optional" | "nullable" | "default"; readonly inner: z.ZodType }
   /**
    * A codec: `in` is the side that messages carry and `out` the parsed side. `encode` runs only its encode transform,
@@ -67,7 +68,11 @@ export function schemaNode(schema: z.ZodType): SchemaNode {
       };
     }
     case "union":
-      return { type: "union", options: def["options"] as z.ZodType[] };
+      return {
+        type: "union",
+        options: def["options"] as z.ZodType[],
+        discriminator: typeof def["discriminator"] === "string" ? def["discriminator"] : undefined,
+      };
     case "optional":
     case "nullable":
     case "default":
@@ -127,26 +132,18 @@ export function childrenOf(node: SchemaNode): readonly z.ZodType[] {
 export const fieldSchema = (node: Extract<SchemaNode, { type: "object" }>, key: string): z.ZodType | undefined =>
   Object.hasOwn(node.shape, key) ? node.shape[key] : node.catchall;
 
-/** The issue codes of Zod's checks, as opposed to the codes of a value of another type or shape. */
-const checkCodes = new Set<string>(["too_small", "too_big", "invalid_format", "not_multiple_of", "custom"]);
+/** The option of a discriminated union that `value` names by its discriminator, if any. */
+export function namedOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
+  const { discriminator } = node;
+  if (discriminator === undefined || value === null || typeof value !== "object") return undefined;
+  const tag = (value as Readonly<Record<string, unknown>>)[discriminator];
+  return node.options.find((o) => o._zod.propValues?.[discriminator]?.has(tag as never));
+}
 
-const onlyChecks = (issues: readonly z.core.$ZodIssue[]): boolean =>
-  issues.every((i) => checkCodes.has(i.code) || (i.code === "invalid_union" && i.errors.some(onlyChecks)));
-
-/**
- * Returns the option of a union that a value takes, with the value as `candidate` makes it for the option: the first
- * option that the value passes, as in Zod, else the first whose type and shape it has whatever the checks say, so that a
- * value that fails a check is written as it would be outside a union.
- */
-export function unionOption(
-  options: readonly z.ZodType[],
-  candidate: (option: z.ZodType) => unknown,
-): { readonly option: z.ZodType; readonly value: unknown } | undefined {
-  const tried = options.map((option) => {
-    const value = candidate(option);
-    return { option, value, result: z.safeEncode(option, value as never) };
-  });
-  const found =
-    tried.find((t) => t.result.success) ?? tried.find((t) => !t.result.success && onlyChecks(t.result.error.issues));
-  return found && { option: found.option, value: found.value };
+/** Whether a codec is at any depth of `schema`, `schema` included. */
+export function holdsCodec(schema: z.ZodType, seen = new Set<z.ZodType>()): boolean {
+  if (seen.has(schema)) return false;
+  seen.add(schema);
+  const node = schemaNode(schema);
+  return node.type === "codec" || childrenOf(node).some((child) => holdsCodec(child, seen));
 }

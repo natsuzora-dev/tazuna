@@ -1,7 +1,7 @@
 import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
-import { bagged, sorted } from "../../src/data/collections.ts";
-import type { DefinitionRef } from "../../src/data/definitionRef.ts";
+import { bagged, sorted, written } from "../../src/data/collections.ts";
+import { type DefinitionRef, sameRef } from "../../src/data/definitionRef.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import {
   canonicalJson,
@@ -9,6 +9,7 @@ import {
   type Fields,
   type Json,
   objectOf,
+  plain,
   type Shape,
   strictObjectOf,
 } from "../../src/data/values.ts";
@@ -60,9 +61,6 @@ const keysOf = ({ owner, next }: LeanKeys): Keys => ({
 const idOf = (id: InstanceId): InstanceId =>
   id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, canonicalJson(id.key));
 
-const json = (value: unknown): Json | undefined =>
-  value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as Json);
-
 /**
  * Returns `f()`, which decodes a value of Lean's message, or, when it throws, a `thrown` failure of `schema`, as in
  * src/sim/spec.
@@ -75,8 +73,21 @@ function decoding<T>(f: () => T, schema?: Schema): T | Failed {
   }
 }
 
+/**
+ * The values that parse gave Lean, by shape and canonical JSON. Lean holds a parsed value as TS wrote it back, which
+ * runs no check, so decoding it takes the parsed value instead of parsing it again.
+ */
+const parsedValues = new WeakMap<Shape, Map<string, Fields>>();
+
+function remember(shape: Shape, encoded: unknown, value: Fields): void {
+  const known = parsedValues.get(shape) ?? new Map<string, Fields>();
+  parsedValues.set(shape, known.set(canonicalJson(encoded), value));
+}
+
 /** Decodes `value`, an encoded value of `shape`, as spec code receives it. */
 function decode(schema: Schema, shape: Shape, value: unknown): Fields | Failed {
+  const parsed = parsedValues.get(shape)?.get(canonicalJson(value));
+  if (parsed !== undefined) return parsed;
   return decoding(() => bagged(objectOf(shape), objectOf(shape).parse(value)) as Fields, schema);
 }
 
@@ -186,6 +197,14 @@ export class RunFunctions implements Answering {
     });
     this.records = source({});
     this.before = source({ beforeEventWrite: true });
+  }
+
+  /** The payload of a decided event as its schema writes it, or as plain JSON for an event that the spec lacks. */
+  private writtenPayload(e: Emit): Json {
+    const defined = this.spec.definitions.some((d) => d.definition.kind === "event" && sameRef(d, e.event));
+    return defined
+      ? written(objectOf(this.functions.shape({ kind: "payload", event: e.event })), e.payload)
+      : plain(e.payload);
   }
 
   private decoded(schema: Schema, value: unknown): Fields | Failed {
@@ -324,9 +343,11 @@ export class RunFunctions implements Answering {
     const now = (q: { readonly now: string }) => Temporal.Instant.from(q.now);
     switch (q.type) {
       case "parse":
-        return this.replied(this.functions.parse(q.schema, q.value), (parsed) =>
-          "error" in parsed ? { type: "parse" } : { type: "parse", value: parsed.encoded as Json },
-        );
+        return this.replied(this.functions.parse(q.schema, q.value), (parsed) => {
+          if ("error" in parsed) return { type: "parse" };
+          remember(this.functions.shape(q.schema), parsed.encoded, parsed.value);
+          return { type: "parse", value: parsed.encoded as Json };
+        });
       case "unordered":
         return this.replied(this.functions.unordered(q.schema, q.value), (value) => ({
           type: "unordered",
@@ -370,7 +391,12 @@ export class RunFunctions implements Answering {
         return this.replied(this.ownInputOf(q.command, q.input), (input) =>
           this.replied(this.functions.decide(q.command, input, this.records, now(q)), (decided) => ({
             type: "decide",
-            groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: json(e.payload) ?? null }))),
+            groups: decided.map((g) =>
+              g.map((e) => ({
+                event: e.event,
+                payload: this.writtenPayload(e),
+              })),
+            ),
           })),
         );
       case "ensures":
@@ -418,7 +444,10 @@ export class RunFunctions implements Answering {
           // Lean's Value has no undefined, so an output that author code left undefined is sent as null.
           this.replied(this.functions.resolve(q.query, input, this.records, now(q)), (output) => ({
             type: "resolve",
-            output: json(output) ?? null,
+            output: written(
+              objectOf(this.functions.shape({ kind: "output", definition: { service: this.service, name: q.query } })),
+              output,
+            ),
           })),
         );
       case "react": {

@@ -59,6 +59,8 @@ A spec that relies on an order across channels relies on an order that a deploye
 
 A message carries its value as the sender wrote it, and only the receiver parses it, as in a web API.
 A sender that checked or normalized the value first would make the simulation accept a message that the deployed receiver rejects.
+Turning a value back into JSON, for the sender's message or the receiver's record, runs only its codecs and no check, as Pydantic and serde serialize a parsed value.
+So a union that holds a codec must be a `z.discriminatedUnion`, whose tag names the option to encode.
 
 A subscription lives as long as the process that serves it, as a WebSocket does.
 A restart ends every subscription, and a subscription with the same id after the restart is a new one that gets its first answer again.

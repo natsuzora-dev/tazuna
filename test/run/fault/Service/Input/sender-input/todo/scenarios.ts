@@ -18,7 +18,7 @@ export const emptyTitle = scenario(
 );
 
 export const paddedTitle = scenario(
-  "Add a task whose title is one space; noteAdded sends addNote with the text as written, and only notes parses it: one character passes min(1) before trim, but the trimmed empty text fails min(1) when notes encodes it again, so test reports an exception of addNote, whose schema cannot write what it parsed",
+  "Add a task whose title is one space; noteAdded sends addNote with the text as written, and only notes parses it: one character passes min(1) before trim, and notes records the trimmed empty text in noteKept without checking it again; no violation",
   {
     given,
     when: (w) => {

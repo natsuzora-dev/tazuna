@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { collectionOf } from "./collections.ts";
-import { fieldSchema, schemaNode } from "./schemaNode.ts";
+import type { z } from "zod";
+import { collectionOf, toJson } from "./collections.ts";
+import { fieldSchema, namedOption, schemaNode } from "./schemaNode.ts";
 import type { Answer } from "./trace.generated.ts";
 import { canonicalJson, objectOf, type Shape } from "./values.ts";
 
@@ -42,7 +42,7 @@ function canonical(shape: Shape, value: unknown): unknown {
       const given = Object.hasOwn(fields, k);
       const parsed = schema.safeParse(given ? fields[k] : undefined);
       if (!parsed.success) return given ? [[k, fields[k]]] : [];
-      const encoded = z.encode(schema, parsed.data as never);
+      const encoded = toJson(schema, parsed.data);
       return encoded === undefined && !given ? [] : [[k, encoded]];
     }),
   );
@@ -115,7 +115,10 @@ function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefi
         }),
       );
     case "union": {
-      const option = node.options.find((o) => tolerant(o).safeParse(value).success);
+      const option =
+        node.discriminator === undefined
+          ? node.options.find((o) => tolerant(o).safeParse(value).success)
+          : namedOption(node, value);
       return option === undefined ? value : bagged(option, value, refEntity);
     }
     case "optional":

@@ -137,8 +137,8 @@ def issueViolation (owner : Spec.Ref) (e : Issue)
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code; deadlines (no author code), copyContext, and singleRecord (defaults, checked
 at load) always answer.
-- parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and re-encoded if it
-  matches the schema (the canonical value), or none otherwise.
+- parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and
+  written back as JSON (only its codecs run, encoding) if it matches the schema (the canonical value), or none otherwise.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.

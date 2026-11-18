@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
-import { fieldSchema, type SchemaNode, schemaNode, unionOption } from "./schemaNode.ts";
+import { fieldSchema, namedOption, type SchemaNode, schemaNode } from "./schemaNode.ts";
 import {
   byCodePoint,
   canonicalJson,
@@ -125,7 +125,7 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union":
-      return (unionOption(node.options, (o) => sorted(o, value)) ?? { value }).value;
+      return (unionOption(node, value, (o) => sorted(o, value)) ?? { value }).value;
     case "optional":
     case "nullable":
     case "default":
@@ -140,52 +140,74 @@ export const sortsInside = (node: SchemaNode): boolean =>
   ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
 /**
- * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
- * `sorted` orders it: each codec at any depth encodes its part, and no check or other transform runs, so that only the
- * receiver parses the value. A part that its codec cannot encode stays as it is.
+ * Returns the option of a union that `value` takes, with the value as `candidate` makes it for the option: the option
+ * that its discriminator names, or in a plain union the first option that it passes, as in Zod.
  */
-export const written = (schema: z.ZodType, value: unknown): Json => plain(encodedParts(schema, sorted(schema, value)));
+function unionOption(
+  node: Extract<SchemaNode, { type: "union" }>,
+  value: unknown,
+  candidate: (option: z.ZodType) => unknown = () => value,
+): { readonly option: z.ZodType; readonly value: unknown } | undefined {
+  if (node.discriminator !== undefined) {
+    const option = namedOption(node, value);
+    return option && { option, value: candidate(option) };
+  }
+  return node.options
+    .map((option) => ({ option, value: candidate(option) }))
+    .find((t) => z.safeEncode(t.option, t.value as never).success);
+}
 
-function encodedParts(schema: z.ZodType, value: unknown): unknown {
+/**
+ * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
+ * `sorted` orders it and encoded by toJson, so that only the receiver parses the value.
+ */
+export const written = (schema: z.ZodType, value: unknown): Json => plain(toJson(schema, sorted(schema, value)));
+
+/**
+ * Returns a value of `schema` as JSON holds it: each codec at any depth encodes its part, and no check or other
+ * transform runs. A part that its codec cannot encode stays as it is. Check reports a plain union that holds a codec, so
+ * a union picks the option that the discriminator names and needs no other choice.
+ */
+export function toJson(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
   switch (node.type) {
     case "codec": {
-      const wire = node.encode(encodedParts(node.out, value));
-      return wire === undefined ? value : encodedParts(node.in, wire.value);
+      const wire = node.encode(toJson(node.out, value));
+      return wire === undefined ? value : toJson(node.in, wire.value);
     }
     case "pipe":
-      return encodedParts(node.in, encodedParts(node.out, value));
+      return toJson(node.in, toJson(node.out, value));
     case "array":
-      return Array.isArray(value) ? value.map((v) => encodedParts(node.element, v)) : value;
+      return Array.isArray(value) ? value.map((v) => toJson(node.element, v)) : value;
     case "tuple":
       if (!Array.isArray(value)) return value;
       return value.map((v, i) => {
         const item = node.items[i] ?? node.rest;
-        return item === undefined ? v : encodedParts(item, v);
+        return item === undefined ? v : toJson(item, v);
       });
     case "object":
       if (!isRecord(value)) return value;
       return Object.fromEntries(
         Object.entries(value).map(([k, v]) => {
           const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : encodedParts(field, v)];
+          return [k, field === undefined ? v : toJson(field, v)];
         }),
       );
     case "record":
       if (!isRecord(value)) return value;
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encodedParts(node.value, v)]));
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toJson(node.value, v)]));
     case "union": {
-      const chosen = unionOption(node.options, () => value);
-      return chosen === undefined ? value : encodedParts(chosen.option, value);
+      const option = namedOption(node, value);
+      return option === undefined ? value : toJson(option, value);
     }
     case "intersection":
-      return encodedParts(node.right, encodedParts(node.left, value));
+      return toJson(node.right, toJson(node.left, value));
     case "lazy":
-      return encodedParts(node.inner, value);
+      return toJson(node.inner, value);
     case "opaque":
-      return value == null || node.inner === undefined ? value : encodedParts(node.inner, value);
+      return value == null || node.inner === undefined ? value : toJson(node.inner, value);
     default:
-      return value == null ? value : encodedParts(node.inner, value);
+      return value == null ? value : toJson(node.inner, value);
   }
 }
 
@@ -217,7 +239,7 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union": {
-      const chosen = unionOption(node.options, () => value);
+      const chosen = unionOption(node, value);
       return chosen === undefined ? value : bagged(chosen.option, value);
     }
     case "optional":

@@ -11,18 +11,17 @@ test("canonicalJson of a copy key sorts object keys in UTF-16 order", () => {
   );
 });
 
-test("written encodes a value that fails its codec's check alike inside and outside a union", () => {
+test("written encodes a codec's part that fails its check, inside a discriminated union by the option that its tag names", () => {
   const cents = z.codec(z.string(), z.number().min(10), { decode: Number, encode: String });
   const schema = z.object({
     alone: cents,
-    inUnion: z.union([cents, z.boolean()]),
-    inTuple: z.tuple([z.union([cents, z.null()])]),
-    valid: z.union([cents, z.number()]),
+    tagged: z.discriminatedUnion("unit", [
+      z.object({ unit: z.literal("cents"), amount: cents }),
+      z.object({ unit: z.literal("count"), amount: z.number() }),
+    ]),
   });
-  assert.deepEqual(written(schema, { alone: 5, inUnion: 5, inTuple: [5], valid: 5 }), {
+  assert.deepEqual(written(schema, { alone: 5, tagged: { unit: "cents", amount: 5 } }), {
     alone: "5",
-    inUnion: "5",
-    inTuple: ["5"],
-    valid: 5,
+    tagged: { unit: "cents", amount: "5" },
   });
 });

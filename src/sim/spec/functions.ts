@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
 import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
-import { bag, bagged, defaultRow, sorted, written } from "../../data/collections.ts";
+import { bag, bagged, defaultRow, sorted, toJson, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
@@ -420,9 +420,7 @@ export class SpecFunctions implements Functions {
     const parsed = attempt(() => object.safeParse(value), schema);
     if (parsed instanceof Failed) return parsed;
     if (!parsed.success) return { error: zodError(parsed.error.issues) };
-    const encoded = attempt(() => z.encode(object, parsed.data as never), schema);
-    if (encoded instanceof Failed) return encoded;
-    return { value: bagged(object, parsed.data) as Fields, encoded };
+    return { value: bagged(object, parsed.data) as Fields, encoded: toJson(object, parsed.data) };
   }
 
   unordered(schema: Schema, value: unknown): unknown {

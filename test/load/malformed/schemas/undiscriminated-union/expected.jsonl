@@ -1,0 +1,6 @@
+{"kind":"Malformed.undiscriminatedUnion","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","kelvin"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Malformed.undiscriminatedUnion","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","due"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Malformed.undiscriminatedUnion","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","deep"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Malformed.undiscriminatedUnion","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","nested","kelvin"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Malformed.undiscriminatedUnion","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","outer"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Malformed.undiscriminatedUnion","definition":null,"data":{"name":"limits","path":["most"]},"location":{"file":"todo/todo.ts","line":32}}
