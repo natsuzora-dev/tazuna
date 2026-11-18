@@ -9,23 +9,62 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const docs = ["README.md", "docs/guarantees.md", "docs/concepts.md"].map((path) => ({ path, text: read(path) }));
 const guarantees = read("docs/guarantees.md");
 
-const leanText = readdirSync(leanRoot, { recursive: true, encoding: "utf8" })
-  .filter((f) => f.endsWith(".lean"))
-  .map((f) => readFileSync(join(leanRoot, f), "utf8"))
-  .join("\n");
+/** The declarations of lean/Tazuna outside comments: each name as written, its keyword, and its file. */
+const declarations = readdirSync(leanRoot, { recursive: true, encoding: "utf8" })
+  .filter((file) => file.endsWith(".lean"))
+  .flatMap((file) => {
+    const code = readFileSync(join(leanRoot, file), "utf8")
+      .replace(/\/-[\s\S]*?-\//g, "")
+      .replace(/--.*$/gm, "");
+    return [
+      ...code.matchAll(
+        /^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|partial)\s+)*(theorem|def|abbrev|structure|inductive)\s+([^\s(:{[]+)/gm,
+      ),
+    ].map(([, keyword = "", name = ""]) => ({ keyword, name, file: `lean/Tazuna/${file}` }));
+  });
+const isTheorem = (name: string) =>
+  declarations.some((d) => d.keyword === "theorem" && d.name === name && d.file.startsWith("lean/Tazuna/Thm/"));
 
 const groups = [...read("src/data/violation.ts").matchAll(/^ {2}\| "(\w+)"/gm)].map((m) => m[1] ?? "");
 
-test("Each theorem that docs/guarantees.md names under Proven properties is a theorem of lean/Tazuna", () => {
-  const section = guarantees.slice(guarantees.indexOf("## Proven properties"));
-  assert.ok(!section.includes("\n## "), "Proven properties is the last section");
-  const names = [...section.matchAll(/\((`[\w.]+`(?:, `[\w.]+`)*)\)/g)].flatMap((m) =>
-    [...(m[1] ?? "").matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? ""),
-  );
-  assert.ok(names.length > 0);
-  const declared = (name: string) => new RegExp(`theorem ${name.replaceAll(".", "\\.")}[\\s(:{]`).test(leanText);
+const proven = guarantees.slice(guarantees.indexOf("## Proven properties"));
+const citationList = /\((`[\w.]+`(?:, `[\w.]+`)*)\)/g;
+const namesIn = (list: string) => [...list.matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? "");
+
+test("Proven properties is the last section of docs/guarantees.md, and each of its items cites the theorems that prove it", () => {
+  assert.ok(!proven.includes("\n## "));
+  const items = proven.split("\n").filter((line) => line.startsWith("- "));
+  assert.ok(items.length > 0);
   assert.deepEqual(
-    names.filter((n) => !declared(n)),
+    items.filter((item) => item.match(citationList) === null),
+    [],
+  );
+});
+
+test("Each theorem that a doc cites is a theorem stated in lean/Tazuna/Thm: every name in a citation under Proven properties, and every name with an underscore elsewhere", () => {
+  const cited = [
+    ...[...proven.matchAll(citationList)].flatMap((m) => namesIn(m[1] ?? "")),
+    ...docs.flatMap(({ text }) => [...text.matchAll(/`([a-z][A-Za-z0-9]*_\w*)`/g)].map((m) => m[1] ?? "")),
+  ];
+  assert.ok(cited.length > 0);
+  assert.deepEqual(
+    [...new Set(cited)].filter((name) => !isTheorem(name)),
+    [],
+  );
+});
+
+test("Each Lean name that a doc cites with its files is declared in each of them, in its namespace or not", () => {
+  const cited = docs.flatMap(({ text }) =>
+    [...text.matchAll(/`([\w.]+)` in ((?:`lean\/[\w/]+\.lean`(?:,? and |, )?)+)/g)].flatMap(
+      ([, name = "", files = ""]) => namesIn(files).map((file) => ({ name, file })),
+    ),
+  );
+  assert.ok(cited.length > 0);
+  assert.deepEqual(
+    cited.filter(
+      ({ name, file }) =>
+        !declarations.some((d) => (d.name === name || d.name.endsWith(`.${name}`)) && d.file === file),
+    ),
     [],
   );
 });
