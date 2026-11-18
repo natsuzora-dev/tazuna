@@ -70,13 +70,15 @@ The implementation creates its keys and request ids in its own way.
 A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 
 - Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
-- The `out` lines after each `in` line pair one to one with the snapshot's.
-  The pairing that `verify` reports by has equal times and keeps the snapshot's order on each channel and no order across channels.
+- The `out` lines after each `in` line pair one to one with the snapshot's, comparing equal under the binding.
+  The pairing that `verify` reports by has equal times and keeps the order that each snapshot line's `after` names.
+  The theorem proves the equal comparison and the times and order for pairings that may differ.
+  The simulation orders only lines on one channel (`ordered_same_channel`), so the order kept is per channel.
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
   The events of one group that `decide` returns have no order, even on one channel.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
   The binding is one to one within each domain: the request ids, and the keys of each entity.
-  Paired lines have the same type, direction, and name, and their ids and contents are equal up to the binding (`contentMatch_renamed`).
+  Paired lines have the same type, direction, and name, and their contents, and the ids of `in` lines and outgoing requests, are equal up to the binding (`contentMatch_renamed`).
 
 An implementation that reuses an existing request id or key for a new one does not match.
 An implementation that uses a string of its input, such as an idempotency key, as a new key can match.
@@ -192,7 +194,7 @@ A map state has one *copy* of its child states for each key of its items.
 - A deliver line whose message has an earlier message in flight on its channel delivers nothing and stops the simulation (`overtaking_delivery_halts`).
 - An external peer's answer to a request that has not reached the peer sends nothing and stops the simulation (`external_answer_needs_delivery`).
 - A halting `InvalidScenario` violation stops the simulation, and once the simulation stops, the steps of the later lines take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
-- No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created, provided the key names the service as its owner (`unwritten_not_created`, `execute_unwritten_not_created`).
+- No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity, provided the service's state names the service as the owner of its keys, which `World.start` sets but no theorem proves (`unwritten_not_created`, `execute_unwritten_not_created`).
 - The order in which Given writes the records does not matter: a scenario that writes the same records, no two with one key, in another order simulates alike (`simulate_records_perm`).
 - The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no run of the pure definitions: a service whose spec functions are audited starts, processes each input, and checks the end of a run as it does without the audit (`instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkResults_agrees`).
 
@@ -253,7 +255,7 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
 - The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
 - When an event without `resultOf` or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
-- Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each string or key as the binding pairs it, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain (`matchValue_strRenamed`).
+- Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each string or key as the binding pairs it, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this is a renaming in the sense of the theorems that follow (`matchValue_strRenamed`). The renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain. No theorem shows that the bindings that `test` and `verify` end with pair no value of domain "" or keep keys in their domains.
 
 ### Restart
 

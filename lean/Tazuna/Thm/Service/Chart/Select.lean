@@ -15,17 +15,6 @@ theorem leaf_selects_innermost (s : State) (extra : Extra) (i : Instance) (ts : 
     firstLevel fs st s extra ((i, ts) :: rest) = .ok (some (i.id, t)) := by
   simp [firstLevel, h]
 
-theorem descendant_replaces_ancestor (s : State) (c : Chart) (a d : InstanceId × Transition) (x : InstanceId × String)
-    (hxa : x ∈ s.exitKeys a) (hxd : x ∈ s.exitKeys d) (hin : c.tree.isInside d.2.source a.2.source = true) :
-    s.removeConflicts c [a, d] = [d] := by
-  simp only [State.removeConflicts, List.any_filter, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq, Prod.exists,
-      Bool.not_eq_eq_eq_not, Bool.not_true, List.mem_filter, not_and, not_exists, decide_not, List.foldl_cons,
-      List.filter_nil, List.any_nil, Bool.false_eq_true, ↓reduceIte, List.not_mem_nil, decide_false, Bool.not_false,
-      List.nil_append, List.any_cons, hin, Bool.and_false, Bool.or_self, List.mem_cons, or_false, List.foldl_nil,
-      List.append_left_eq_self, List.filter_eq_nil_iff, decide_eq_false_iff_not, not_imp, Classical.not_forall,
-      Decidable.not_not, forall_eq, true_and]
-  exact ⟨x.1, x.2, hxa, hxd⟩
-
 theorem keyed_payload_reaches_matching (chart map : String) (payload : Value) (k : String)
     (hk : fs.copyKey chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) =
@@ -242,60 +231,5 @@ theorem select_error_halts (s : State) (top : Instance) (trigger : Spec.Trigger)
     injection h with h
     exact h ▸ key leaves _ (fun w hw => by cases hw) u hfound
   | ok e => simp [Except.map] at h
-
-theorem copyLeaves_any (s : State) (reached : List InstanceId) (h : InstanceId) (n : String)
-    (ha : ((reached.filterMap fun h => (s.machine? h).map fun ci => (h, ci.chart.tree.leaves ci.active)).lookup h).any
-      (n ∈ ·) = true) :
-    ∃ ci, s.machine? h = some ci ∧ n ∈ ci.chart.tree.leaves ci.active := by
-  induction reached with
-  | nil => simp at ha
-  | cons r rs ih =>
-    cases hm : s.machine? r with
-    | none => simp only [List.filterMap_cons, hm, Option.map_none] at ha; exact ih ha
-    | some ci =>
-      simp only [List.filterMap_cons, hm, Option.map_some, List.lookup] at ha
-      split at ha
-      · rename_i heq
-        have hr : h = r := by simpa using heq
-        subst hr
-        simp only [Option.any_some, decide_eq_true_eq] at ha
-        exact ⟨ci, hm, ha⟩
-      · exact ih ha
-
-theorem leavesOf_atomic (s : State) (top : Instance) (reached : List InstanceId) :
-    ∀ l ∈ leavesOf s top reached, l.2 = none ∨ ∃ n, l.2 = some n ∧
-      (l.1 = top.id ∧ n ∈ top.chart.tree.leaves top.active ∨ ∃ ci, s.machine? l.1 = some ci ∧ n ∈ ci.chart.tree.leaves ci.active) := by
-  intro l hl
-  unfold leavesOf at hl
-  simp only at hl
-  split at hl
-  · simp only [List.mem_singleton] at hl; subst hl; exact Or.inl rfl
-  · obtain ⟨⟨h, n⟩, hm, rfl⟩ := List.mem_map.mp hl
-    have ha := (List.mem_filter.mp hm).2
-    refine Or.inr ⟨n, rfl, ?_⟩
-    by_cases e : h = top.id
-    · simp only [e, beq_self_eq_true, ↓reduceIte, Bool.and_eq_true, decide_eq_true_eq] at ha
-      exact Or.inl ⟨e, ha.1⟩
-    · have : (h == top.id) = false := by simpa using e
-      simp only [this, Bool.false_eq_true, ↓reduceIte] at ha
-      exact Or.inr (copyLeaves_any s reached h n ha)
-
-theorem select_one_per_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
-    (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition))
-    (h : select fs st s top trigger extra leaves = .ok chosen) :
-    ∃ f : InstanceId × Transition → InstanceId × Option String,
-      (∀ c ∈ chosen, f c ∈ leaves) ∧ ∀ c₁ ∈ chosen, ∀ c₂ ∈ chosen, f c₁ = f c₂ → c₁ = c₂ := by
-  classical
-  have hp := select_picked_by_leaf s top trigger extra leaves chosen h
-  let f : InstanceId × Transition → InstanceId × Option String := fun c =>
-    if hc : c ∈ chosen then (hp c hc).choose else default
-  refine ⟨f, fun c hc => ?_, fun c₁ h₁ c₂ h₂ he => ?_⟩
-  · simp only [f, hc, ↓reduceDIte]; exact (hp c hc).choose_spec.1
-  · simp only [f, h₁, h₂, ↓reduceDIte] at he
-    have hf₁ := (hp c₁ h₁).choose_spec.2
-    have hf₂ := (hp c₂ h₂).choose_spec.2
-    rw [he, hf₂] at hf₁
-    cases hf₁
-    rfl
 
 end Tazuna.Thm.Service.Chart.Select

@@ -35,6 +35,7 @@ def Limit.max : Limit → Nat
 
 def Limit.name (l : Limit) : String := (constructorNames% Limit).getD l.ctorIdx ""
 
-#guard (samples% Limit).all fun l => (samples% Fault).any (·.kind == s!"Fault.exceeded{l.name.capitalize}")
+#guard (samples% Limit).all fun l =>
+  (samples% Fault).any fun f => f.kind == s!"Fault.exceeded{l.name.capitalize}" && f.halts
 
 end Tazuna.Service

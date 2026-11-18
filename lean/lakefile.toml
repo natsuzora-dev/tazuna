@@ -1,6 +1,6 @@
 name = "tazuna-lean"
 version = "0.1.0"
-defaultTargets = ["Tazuna", "tazuna-lean", "tazuna-generate", "tazuna-axioms"]
+defaultTargets = ["Tazuna", "tazuna-lean", "tazuna-generate", "tazuna-axioms", "tazuna-graph"]
 
 [leanOptions]
 autoImplicit = false
@@ -25,3 +25,7 @@ root = "Generate.Main"
 [[lean_exe]]
 name = "tazuna-axioms"
 root = "Axioms.Main"
+
+[[lean_exe]]
+name = "tazuna-graph"
+root = "Graph.Main"

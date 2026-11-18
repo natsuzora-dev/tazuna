@@ -215,15 +215,4 @@ theorem always_step_independent (a b : Nat) (owner : InstanceId) (f : Processing
   rw [settleFrom_idem, settleFrom_idem, settleFrom_idem, settleFrom_idem]
   exact ⟨rfl, rfl⟩
 
-theorem always_one_per_atomic (s : State) (o : Instance) (chosen : List (InstanceId × Transition))
-    (h : select fs st s o .always .none (leavesOf s o o.copyIds) = .ok chosen) :
-    ∃ f : InstanceId × Transition → InstanceId × Option String,
-      (∀ c ∈ chosen, f c ∈ leavesOf s o o.copyIds ∧ ((f c).2 = none ∨ ∃ n, (f c).2 = some n ∧
-        ((f c).1 = o.id ∧ n ∈ o.chart.tree.leaves o.active ∨
-          ∃ ci, s.machine? (f c).1 = some ci ∧ n ∈ ci.chart.tree.leaves ci.active))) ∧
-      ∀ c₁ ∈ chosen, ∀ c₂ ∈ chosen, f c₁ = f c₂ → c₁ = c₂ := by
-  obtain ⟨f, hf, hinj⟩ := Tazuna.Thm.Service.Chart.Select.select_one_per_leaf s o .always .none _ chosen h
-  exact ⟨f, fun c hc => ⟨hf c hc,
-    Tazuna.Thm.Service.Chart.Select.leavesOf_atomic s o _ (f c) (hf c hc)⟩, hinj⟩
-
 end Tazuna.Thm.Service.Chart.Always
