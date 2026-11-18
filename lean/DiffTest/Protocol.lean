@@ -80,7 +80,7 @@ inductive Question where
   | input (scope : Scope) (activity : Activity) (keys : Keys)
   | holds (scope : Scope)
   | deadlines (machine state : String)
-  | deadlineAt (scope : Scope) (name : String)
+  | deadlineTime (scope : Scope) (name : String)
   | offers (scope : Scope) (control : String)
   | showInput (scope : Scope) (activity : Activity)
   | items (scope : Scope)
@@ -107,13 +107,6 @@ structure ItemKey where
   canonical : Value
 
 derive_wire ItemKey
-
-/-- An `after` deadline of a state: its delay in milliseconds, or none when an expression sets its time. -/
-structure Deadline where
-  name : String
-  delay : Option Nat
-
-derive_wire Deadline skip_serializing_none
 
 /--
 A message that TS sends while it answers a question: a read of a record, an issue that stops the answer, or the answer
@@ -143,8 +136,8 @@ inductive Reply where
   | assign (context : Value) (copy : Option Value) (created : List String)
   | input (input : Value) (created : List String)
   | holds
-  | deadlines (deadlines : List Deadline)
-  | deadlineAt (time : Time)
+  | deadlines (names : List String)
+  | deadlineTime (time : Time)
   | offers (payloads : List Value)
   | showInput (input : Value)
   | items (keys : List ItemKey)

@@ -2,7 +2,7 @@ import { emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna"
 import { z } from "zod";
 
 export const Note = entity({ description: "A note", fields: { id: z.string() }, key: "id" });
-export const Last = singleEntity({ description: "The token set last", fields: { id: z.string().default("") } });
+export const Last = singleEntity({ description: "The token set last", fields: { id: Note.fields.id.default("") } });
 
 export const { command, machine, event, updateEvent, contract, scenario } = service({
   name: "tokens",
@@ -16,7 +16,7 @@ export const moved = updateEvent({ entity: Last, writes: ["id"] });
 export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const setLast = command({
-  input: { id: z.string() },
+  input: { id: Last.fields.id },
   emits: [moved],
 }).decide(({ input }) => [emit(moved, { id: input.id })]);
 

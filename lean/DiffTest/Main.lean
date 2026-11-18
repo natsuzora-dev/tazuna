@@ -162,11 +162,9 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       answered (.input scope a keys) (records := records) fun
         | .input input created => some (input, created) | _ => none
     holds := fun scope records => answered (.holds scope) (records := records) fun | .holds => some () | _ => none
-    deadlines := fun machine state => do
-      let deadlines ← always (.deadlines machine state) fun | .deadlines ds => some ds | _ => none
-      pure (deadlines.map fun d => (d.name, (d.delay.map fun ms => DeadlineTime.delay ms).getD .atExpression))
-    deadlineAt := fun scope records name =>
-      answered (.deadlineAt scope name) (records := records) fun | .deadlineAt time => some time | _ => none
+    deadlines := fun machine state => always (.deadlines machine state) fun | .deadlines names => some names | _ => none
+    deadlineTime := fun scope records name =>
+      answered (.deadlineTime scope name) (records := records) fun | .deadlineTime time => some time | _ => none
     offers := fun scope records control =>
       answered (.offers scope control) (records := records) fun | .offers payloads => some payloads | _ => none
     showInput := fun scope records a =>

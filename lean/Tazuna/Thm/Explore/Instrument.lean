@@ -89,7 +89,7 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   input : ∀ a b c d, Agrees (fsI.input a b c d) (fs.input a b c d)
   holds : ∀ a b, Agrees (fsI.holds a b) (fs.holds a b)
   deadlines : ∀ a b, Agrees (fsI.deadlines a b) (fs.deadlines a b)
-  deadlineAt : ∀ a b c, Agrees (fsI.deadlineAt a b c) (fs.deadlineAt a b c)
+  deadlineTime : ∀ a b c, Agrees (fsI.deadlineTime a b c) (fs.deadlineTime a b c)
   offers : ∀ a b c, Agrees (fsI.offers a b c) (fs.offers a b c)
   showInput : ∀ a b c, Agrees (fsI.showInput a b c) (fs.showInput a b c)
   items : ∀ a b, Agrees (fsI.items a b) (fs.items a b)
@@ -202,9 +202,9 @@ theorem sendEntered_agrees (r : Processing) : Agrees (sendEntered fsI st r) (sen
   unfold sendEntered; agree [activateEntered_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem addDeadlines_agrees (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime))
+theorem addDeadlines_agrees (step : Nat) (name : InstanceId) (n : String) (ds : List String)
     (s : State) : Agrees (addDeadlines st fsI step name n ds s) (addDeadlines st fs step name n ds s) := by
-  unfold addDeadlines; agree [h.deadlineAt]
+  unfold addDeadlines; agree [h.deadlineTime]
 
 theorem enterOne_agrees (step : Nat) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (enterOne fsI st step name n r) (enterOne fs st step name n r) := by

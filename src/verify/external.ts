@@ -57,25 +57,40 @@ const resultOfKinds = {
 const isInRequest = (l: TraceLine): l is Extract<TraceLine, { readonly type: "command" | "query" }> =>
   l.dir === "in" && (l.type === "command" || l.type === "query");
 
-/** The event lines whose names are events of `service`. */
-const eventLines = (spec: Spec, service: string, lines: readonly (TraceLine | undefined)[]): EventLine[] =>
+/** The definition that a compared line names: a request's or an event's, looked up once per line. */
+interface Named {
+  readonly request?: AnyCommand | AnyQuery;
+  readonly event?: AnyEvent;
+}
+
+function namedBy(spec: Spec, service: string, l: TraceLine | undefined): Named {
+  if (l === undefined) return {};
+  if (isInRequest(l)) {
+    const request = definitionOfTraceName(spec, service, l.name, l.type);
+    return request === undefined ? {} : { request };
+  }
+  if (l.dir !== "out" || l.type !== "event") return {};
+  const event = definitionOfTraceName(spec, service, l.name, "event");
+  return event === undefined ? {} : { event };
+}
+
+/** The event lines whose names are events of the service. */
+const eventLines = (lines: readonly (TraceLine | undefined)[], named: readonly Named[]): EventLine[] =>
   lines.flatMap((l, i) => {
-    if (l?.dir !== "out" || l.type !== "event") return [];
-    const event = definitionOfTraceName(spec, service, l.name, "event");
-    return event === undefined ? [] : [{ at: i + 1, event, payload: l.payload, resultOf: l.resultOf }];
+    const event = named[i]?.event;
+    if (l?.dir !== "out" || l.type !== "event" || event === undefined) return [];
+    return [{ at: i + 1, event, payload: l.payload, resultOf: l.resultOf }];
   });
 
-/** Lean's exchanges: the requests that have a definition of `service`, each with what later lines record of it. */
+/** Lean's exchanges: the requests that have a definition of the service, each with what later lines record of it. */
 function exchanges(
-  spec: Spec,
-  service: string,
   lines: readonly (TraceLine | undefined)[],
+  named: readonly Named[],
   events: readonly EventLine[],
 ): Exchange[] {
   return lines.flatMap((l, i): Exchange[] => {
-    if (l === undefined || !isInRequest(l)) return [];
-    const definition = definitionOfTraceName(spec, service, l.name, l.type);
-    if (definition === undefined) return [];
+    const definition = named[i]?.request;
+    if (l === undefined || !isInRequest(l) || definition === undefined) return [];
     const at = i + 1;
     const answers = lines.flatMap((a, j) =>
       j > i && a?.dir === "out" && a.type === "answer" && a.to === l.id ? [{ at: j + 1, answer: a.answer }] : [],
@@ -93,16 +108,20 @@ function exchanges(
   });
 }
 
-/** Lean's checkLine: the violation of the line alone. `requests` are the ids of the earlier request lines. */
+/**
+ * Lean's checkLine: the violation of the line alone, which names `named`. `requests` are the ids of the earlier request
+ * lines.
+ */
 function checkLine(
   spec: Spec,
   service: string,
   requests: ReadonlySet<string>,
   at: number,
   l: TraceLine,
+  named: Named,
 ): Found | undefined {
   if (isInRequest(l))
-    return definitionOfTraceName(spec, service, l.name, l.type) === undefined
+    return named.request === undefined
       ? { kind: "Uncomparable.unknownRequest", definition: null, line: at, data: { subject: subjectOf(l) } }
       : undefined;
   if (l.dir === "out" && l.type === "answer")
@@ -110,7 +129,7 @@ function checkLine(
       ? undefined
       : { kind: "Uncomparable.unknownAnswer", definition: null, line: at, data: { subject: subjectOf(l) } };
   if (l.dir !== "out" || l.type !== "event") return undefined;
-  const event = definitionOfTraceName(spec, service, l.name, "event");
+  const { event } = named;
   if (event === undefined)
     return { kind: "Uncomparable.unknownEvent", definition: null, line: at, data: { subject: subjectOf(l) } };
   const ref = refOfDefinition(spec, event);
@@ -182,14 +201,15 @@ export function checkExternal(
   trace: readonly FileLine[],
 ): { found: Found[]; exchanges: Exchange[]; events: EventLine[] } {
   const { lines, cut } = comparedLines("in", trace);
+  const named = lines.map((l) => namedBy(spec, service, l));
   const requests = new Set<string>();
   const found = lines.flatMap((l, i) => {
     if (l === undefined) return [];
     if (isInRequest(l)) requests.add(l.id);
-    return checkLine(spec, service, requests, i + 1, l) ?? [];
+    return checkLine(spec, service, requests, i + 1, l, named[i] ?? {}) ?? [];
   });
-  const events = eventLines(spec, service, lines);
-  const exchanged = exchanges(spec, service, lines, events);
+  const events = eventLines(lines, named);
+  const exchanged = exchanges(lines, named, events);
   return {
     found: [
       ...[...found, ...exchanged.flatMap((x) => checkExchange(spec, service, x))].sort(byLine),

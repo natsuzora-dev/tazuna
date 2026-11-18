@@ -431,7 +431,7 @@ export type Question =
       readonly state: string;
     }
   | {
-      readonly type: "deadlineAt";
+      readonly type: "deadlineTime";
       readonly scope: Scope;
       readonly name: string;
     }
@@ -491,12 +491,6 @@ export type Asked = {
 export type ItemKey = {
   readonly key: Json;
   readonly canonical: Json;
-};
-
-/** An `after` deadline of a state: its delay in milliseconds, or none when an expression sets its time. */
-export type Deadline = {
-  readonly name: string;
-  readonly delay?: number;
 };
 
 /**
@@ -604,10 +598,10 @@ export type Reply =
     }
   | {
       readonly type: "deadlines";
-      readonly deadlines: readonly Deadline[];
+      readonly names: readonly string[];
     }
   | {
-      readonly type: "deadlineAt";
+      readonly type: "deadlineTime";
       readonly time: string;
     }
   | {

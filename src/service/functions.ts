@@ -133,8 +133,6 @@ export function givenKeys(keys: Keys, created: readonly string[]): [string, stri
   });
 }
 
-export type DeadlineTime = { readonly kind: "delay"; readonly ms: number } | { readonly kind: "atExpression" };
-
 /** A checked value, decoded for spec functions and encoded as written, or why it does not match its schema. */
 export type Checked = { readonly value: Fields; readonly encoded: unknown } | { readonly error: ViolationError };
 
@@ -247,9 +245,10 @@ export interface Functions {
     access: Access,
   ): { readonly written: Json; readonly created: readonly string[] } | Failed;
   holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;
-  /** Returns the names of a state's `after` deadlines and how each time is set, in declaration order. */
-  deadlines(machine: string, state: string): readonly (readonly [string, DeadlineTime])[];
-  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed;
+  /** Returns the names of a state's `after` deadlines, in declaration order. */
+  deadlines(machine: string, state: string): readonly string[];
+  /** Lean's deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes. */
+  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed;
   offers(
     scope: Scope,
     records: RecordSource,

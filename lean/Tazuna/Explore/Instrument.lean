@@ -271,7 +271,7 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   input a b c d := f (fs.input a b c d)
   holds a b := f (fs.holds a b)
   deadlines a b := f (fs.deadlines a b)
-  deadlineAt a b c := f (fs.deadlineAt a b c)
+  deadlineTime a b c := f (fs.deadlineTime a b c)
   offers a b c := f (fs.offers a b c)
   showInput a b c := f (fs.showInput a b c)
   items a b := f (fs.items a b)
@@ -454,8 +454,8 @@ def instrument : Functions (StateT Collect m) :=
         fun a b => textSet (a.map (·.canonical)) == textSet (b.map (·.canonical))
     showInput := fun scope records a =>
       audit (collect (some scope)) (st.ref scope.machine) "showInput" (·.showInput scope records a) sameValue
-    deadlineAt := fun scope records name =>
-      audit (collect (some scope)) (st.ref scope.machine) "deadlineAt" (·.deadlineAt scope records name) (· == ·)
+    deadlineTime := fun scope records name =>
+      audit (collect (some scope)) (st.ref scope.machine) "deadlineTime" (·.deadlineTime scope records name) (· == ·)
     close := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
         fun a b => sameValue a.1 b.1 && a.2 == b.2 }

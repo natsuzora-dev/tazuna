@@ -149,8 +149,13 @@ variable {m : Type → Type} [Monad m]
 
 /--
 The search after the pair `(i, j)` of the execution `parent`, whose step order is `parentOrder`: the pair's order
-(pairOrder) is run unless it ran before or undoes the swap that made `parent` (its order ends with `a` then `b`, as a sleep
-set skips it), compared with `parent` unless refused, and queued when it reaches a new sequence of taken steps. At stepOrderLimit orders the search stops with searchLimit at the first step it swapped.
+(pairOrder) is run unless it ran before or undoes the swap that made `parent` (its order ends with `a` then `b`),
+compared with `parent` unless refused, and queued when it reaches a new sequence of taken steps. At stepOrderLimit
+orders the search stops with searchLimit at the first step it swapped. Skipping the undo misses no order. Call `g` the
+execution that `parent` came from. If `a` conflicts with a step between, `g` reverses that pair itself. If a step between
+conflicts with `b`, `g` reverses that pair, and its order is the skipped one. Otherwise the skipped order commutes to
+the order of `g`. This rests on the premises of the search (steps whose reads and writes do not overlap commute, and
+each race is reversed at the execution where it occurs), not on sleep sets, which carry a set down every branch.
 -/
 def searchPair (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin) (st : Service)
     (parent : Execution) (parentOrder : List StepName) (parentOutcome : Explore.Outcome) (taken : List (Nat × StepName))
@@ -199,8 +204,8 @@ The search of the step orders of the processing while `o` is processed of the ru
 result, from `base`, the scenario executed up to that processing without an order; `executeWith` executes it with a step
 order of the processing. Each pair of an execution's candidates runs in the other order (pairOrder) and is compared with
 that execution, and each execution that reaches a new sequence of taken steps is searched in turn, so the search reaches
-every order of dependent steps (dynamic partial-order reduction, Flanagan and Godefroid, POPL 2005; sleep sets,
-Godefroid 1996), up to stepOrderLimit orders. Each queued execution follows a new order, so stepOrderLimit + 1
+every order of dependent steps (dynamic partial-order reduction, Flanagan and Godefroid, POPL 2005), up to
+stepOrderLimit orders. Each queued execution follows a new order, so stepOrderLimit + 1
 executions bound the queue.
 -/
 def stepOrderSearch (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin)

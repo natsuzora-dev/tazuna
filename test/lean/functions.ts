@@ -481,16 +481,11 @@ export class RunFunctions implements Answering {
           this.replied(this.functions.holds(scope, this.records, access), () => ({ type: "holds" })),
         );
       case "deadlines":
-        return {
-          type: "deadlines",
-          deadlines: this.functions
-            .deadlines(q.machine, q.state)
-            .map(([name, d]) => (d.kind === "delay" ? { name, delay: d.ms } : { name })),
-        };
-      case "deadlineAt":
+        return { type: "deadlines", names: [...this.functions.deadlines(q.machine, q.state)] };
+      case "deadlineTime":
         return this.scoped(q.scope, (scope, access) =>
-          this.replied(this.functions.deadlineAt(scope, this.records, q.name, access), (time) => ({
-            type: "deadlineAt",
+          this.replied(this.functions.deadlineTime(scope, this.records, q.name, access), (time) => ({
+            type: "deadlineTime",
             time: time.toString(),
           })),
         );

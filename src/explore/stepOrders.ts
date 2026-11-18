@@ -165,6 +165,7 @@ function stepOrderSearch(
       const [a, b] = [nameOf.get(i), nameOf.get(j)];
       if (a === undefined || b === undefined) continue;
       const [last2, last] = parentOrder.slice(-2);
+      // Lean's searchPair states why skipping the undo of the parent's own swap misses no order.
       if (last2 !== undefined && last !== undefined && sameStep(last2, a) && sameStep(last, b)) continue;
       const order = [
         ...names.filter(([n]) => n < i).map(([, name]) => name),

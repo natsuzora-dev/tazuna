@@ -96,13 +96,6 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Extra tag "kind"
 
-inductive DeadlineTime where
-  /-- A delay of `ms` milliseconds after entering the state. -/
-  | delay (ms : Time)
-  /-- A time that the run computes from current values once, on entering the state. -/
-  | atExpression
-deriving DecidableEq, Repr, Inhabited
-
 /--
 The reason that a question has no answer: its author code threw (with `schema`, inside that schema's refinement or
 codec), a value does not match `schema`, an expression read a `held` name that no enclosing state holds, or it called
@@ -182,8 +175,8 @@ at load) always answer.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - holds: the check of a state's holds values against their held schemas.
-- deadlines: a state's `after` deadline names and how each time is set, in declaration order.
-- deadlineAt: the time of a state's `at` deadline.
+- deadlines: a state's `after` deadline names, in declaration order.
+- deadlineTime: the time of a state's `after` deadline on entering it: `now` plus a delay, or what `at` computes.
 -/
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
@@ -209,8 +202,8 @@ structure Functions (m : Type → Type) where
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
   holds : Scope → Records → m (Except Issue Unit)
-  deadlines : String → String → m (List (String × DeadlineTime))
-  deadlineAt : Scope → Records → String → m (Except Issue Time)
+  deadlines : String → String → m (List String)
+  deadlineTime : Scope → Records → String → m (Except Issue Time)
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
   items : Scope → Records → m (Except Issue (List (Value × Value)))

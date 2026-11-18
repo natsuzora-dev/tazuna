@@ -31,7 +31,6 @@ import {
   type Access,
   type Assignment,
   type Checked,
-  type DeadlineTime,
   Failed,
   type Functions,
   givenKeys,
@@ -739,19 +738,15 @@ export class SpecFunctions implements Functions {
     return undefined;
   }
 
-  deadlines(machine: string, state: string): readonly (readonly [string, DeadlineTime])[] {
-    const after = this.node(machine, state)?.after;
-    if (after === undefined) return [];
-    // Unlike Duration.total, Instant.add rejects date units and gives whole milliseconds, as Lean's Time is.
-    const start = Temporal.Instant.fromEpochMilliseconds(0);
-    return Object.entries(after).map(([name, d]) => [
-      name,
-      d.at === undefined ? { kind: "delay", ms: start.add(d.delay ?? {}).epochMilliseconds } : { kind: "atExpression" },
-    ]);
+  deadlines(machine: string, state: string): readonly string[] {
+    return Object.keys(this.node(machine, state)?.after ?? {});
   }
 
-  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed {
-    const at = this.node(chartOf(scope.id), this.stateOf(scope))?.after?.[name]?.at as (args: unknown) => unknown;
+  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed {
+    const d = this.node(chartOf(scope.id), this.stateOf(scope))?.after?.[name];
+    const at = d?.at as ((args: unknown) => unknown) | undefined;
+    // Instant.add rejects date units and gives whole milliseconds, as Lean's Time is.
+    if (at === undefined) return scope.now.add(d?.delay ?? {});
     return attempt(() => at(this.args(scope, records, access)) as Temporal.Instant);
   }
 
