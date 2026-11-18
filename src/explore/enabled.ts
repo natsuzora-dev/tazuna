@@ -14,10 +14,10 @@ export interface Enabled {
     readonly id: InstanceId;
     readonly control: string;
     /**
-     * The payloads encoded as in the trace, or "any" when no offers apply and every payload that matches the schema is
+     * The payloads encoded as in the trace, or null when no offers apply and every payload that matches the schema is
      * accepted.
      */
-    readonly payloads: readonly unknown[] | "any";
+    readonly payloads: readonly unknown[] | null;
   }[];
   readonly awaiting: readonly {
     readonly id: string;
@@ -43,7 +43,7 @@ export function enabled(r: Processing): Enabled {
     return {
       operations: [...new Set(r.state.stack)]
         .flatMap((id) => operationsOf(r, id))
-        .map(({ screen, id, control, payloads }) => ({ screen, id, control, payloads: payloads ?? "any" })),
+        .map(({ screen, id, control, payloads }) => ({ screen, id, control, payloads: payloads ?? null })),
       awaiting: r.state.pending.map((p) => ({
         id: p.id,
         name: p.activity.target.name,

@@ -19,11 +19,18 @@ structure Awaiting where
   sender : String
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Awaiting
+
+local instance : ToValue Time := ⟨Time.toValue⟩
+local instance : FromValue Time := ⟨Time.fromValue⟩
+
 structure Enabled where
   operations : List Operation
   awaiting : List Awaiting
   nextDeadline : Option Time
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire Enabled skip_serializing_none
 
 /-- The requests that await their answers, including stale requests. -/
 def awaiting (s : State) : List Awaiting :=

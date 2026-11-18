@@ -40,7 +40,7 @@ inductive InvalidInput where
   | resultOfUnansweredRequest (event : Spec.Ref) (requestId : String)
 deriving Repr
 
-local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
+local instance : ToValue Time := ⟨Time.toValue⟩
 
 derive_group InvalidInput flatten mismatch
 

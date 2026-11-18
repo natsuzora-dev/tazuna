@@ -63,6 +63,8 @@ inductive Part where
   | payload
   | control (name : String)
 
+derive_wire Part tag "kind"
+
 /-- The value read by the definition's schema when the definition is known, and as a plain CValue otherwise. -/
 def readValue {m : Type → Type} [Monad m] (ask : Definition → Part → Value → m CValue) (d : Option Definition)
     (part : Part) (v : Value) : m CValue :=

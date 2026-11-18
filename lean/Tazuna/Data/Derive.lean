@@ -13,7 +13,7 @@ def namedFields {m : Type → Type} [Monad m] [MonadEnv m] [MonadError m] (ctor 
     | .forallE n type body _ => do
       if n.hasMacroScopes then throwError "{ctor}: every argument needs a name, which names its field"
       if type.hasLooseBVars then throwError "{ctor}: an argument's type depends on another argument"
-      pure ((n.toString, type) :: (← go body))
+      pure ((n.toString (escape := false), type) :: (← go body))
     | _ => pure []
   go (← getConstInfoCtor ctor).type
 

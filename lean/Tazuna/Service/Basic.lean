@@ -49,6 +49,8 @@ inductive Schema where
   | record (entity : String)
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Schema tag "kind"
+
 end Tazuna.Service
 
 namespace Tazuna

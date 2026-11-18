@@ -17,6 +17,7 @@ import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Folder, PairingScenario } from "../../src/verify/pairing.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
+import type { Asked, Reply, Request } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -28,6 +29,13 @@ process.once("exit", () => {
 });
 
 export type Message = Readonly<Record<string, unknown>>;
+
+/** `T` with every array and object readonly, so that TS values pass where a generated message type is mutable. */
+type Immutable<T> = T extends readonly (infer U)[]
+  ? readonly Immutable<U>[]
+  : T extends object
+    ? { readonly [K in keyof T]: Immutable<T[K]> }
+    : T;
 
 interface Ref {
   readonly service: string;
@@ -89,7 +97,7 @@ export class Lean {
     rmSync(this.dir, { recursive: true, force: true });
   }
 
-  private send(message: Message): void {
+  private send(message: Immutable<Request> | Reply): void {
     writeSync(this.toLean, `${JSON.stringify(message)}\n`);
   }
 
@@ -109,13 +117,13 @@ export class Lean {
     }
   }
 
-  private exchange(request: Message, answer: string, functions: Answering): Message {
+  private exchange(request: Immutable<Request>, answer: string, functions: Answering): Message {
     this.send(request);
     for (;;) {
       const message = this.receive();
       if (message["type"] === answer) return message;
       if (message["type"] === "error") throw new Error(`tazuna-lean: ${String(message["message"])}`);
-      this.send(functions.answer(message));
+      this.send(functions.answer(message as Asked));
     }
   }
 

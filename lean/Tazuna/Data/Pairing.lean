@@ -1,3 +1,5 @@
+import Tazuna.Data.Wire
+
 namespace Tazuna.Data
 
 inductive EntryKind where
@@ -6,10 +8,14 @@ inductive EntryKind where
   | other
 deriving DecidableEq, Repr
 
+derive_wire EntryKind
+
 structure Entry where
   name : String
   kind : EntryKind
 deriving DecidableEq, Repr
+
+derive_wire Entry
 
 /-- The name of a `<name>.jsonl` file. -/
 def fileName (e : Entry) : Option String :=

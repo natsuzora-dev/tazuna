@@ -206,7 +206,7 @@ export function enabledLines(
       const shape = ((screen.definition as unknown as ChartSpec).controls?.[o.control]?.payload ?? {}) as Shape;
       const listed = seen.payloads.get(`${own}.${o.screen}.${o.control}`) ?? [];
       const payloads =
-        o.payloads === "any"
+        o.payloads === null
           ? valuesFor(shape, listed, seen.words, valuesPerInput)
           : o.payloads.slice(0, valuesPerInput);
       return payloads.map(

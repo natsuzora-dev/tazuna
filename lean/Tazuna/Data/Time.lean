@@ -79,6 +79,11 @@ def renderTime (t : Time) : String :=
     "." ++ String.ofList ((pad 3 (ms % 1000)).toList.reverse.dropWhile (· == '0')).reverse
   s!"{pad 4 y}-{pad 2 mo}-{pad 2 d}T{pad 2 (ms / 3600000)}:{pad 2 (ms / 60000 % 60)}:{pad 2 (ms / 1000 % 60)}{fraction}Z"
 
+/-- An instant as the wire writes it, in the form that renderTime writes. Time is Int, so modules use it locally. -/
+def Time.toValue (t : Time) : Value := .str (renderTime t)
+
+def Time.fromValue (v : Value) : Except String Time := do parseTime (← FromValue.fromValue v)
+
 /-- Whether Zod's `z.iso.datetime({ offset: true })` accepts `text`. -/
 def isOffsetDateTime (text : String) : Bool :=
   let number (a b : Char) : Nat := (a.toNat - '0'.toNat) * 10 + (b.toNat - '0'.toNat)

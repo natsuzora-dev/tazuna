@@ -75,6 +75,8 @@ inductive Holder where
   | copy
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Holder
+
 def Holder.id (scope : Scope) : Holder → InstanceId
   | .owner => scope.id.owner
   | .copy => scope.id
@@ -86,6 +88,8 @@ structure Access where
   assigned : List (Holder × String) := []
   shown : List String := []
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire Access
 
 def Access.valueOf (scope : Scope) : Holder × String → InstanceId × String
   | (holder, field) => (holder.id scope, field)

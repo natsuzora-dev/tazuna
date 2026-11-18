@@ -58,6 +58,8 @@ structure Emit where
   payload : Value
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Emit
+
 /-- What the run reports: a fault of the spec, or a message that the service takes and that is invalid. -/
 inductive Finding where
   | fault (fault : Fault)

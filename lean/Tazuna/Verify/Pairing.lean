@@ -13,11 +13,15 @@ structure Scenario where
   compared : Bool
 deriving DecidableEq, Repr
 
+derive_wire Scenario
+
 /-- The subfolder `service` of the trace folder, or the snapshot folder of `service`. -/
 structure Folder where
   service : String
   entries : List Entry
 deriving DecidableEq, Repr
+
+derive_wire Folder
 
 /-- An entry of the trace folder or of its subfolder `service`, an entry of the snapshot folder of `service`, or a
 scenario. -/

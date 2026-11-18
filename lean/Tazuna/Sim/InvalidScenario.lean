@@ -114,7 +114,7 @@ inductive InvalidScenario where
   | unmetExpectation (expectation : Nat) (expected actual : Value)
 deriving Repr, Inhabited
 
-local instance : ToValue Time := ⟨fun t => .str (renderTime t)⟩
+local instance : ToValue Time := ⟨Time.toValue⟩
 
 derive_group InvalidScenario
 

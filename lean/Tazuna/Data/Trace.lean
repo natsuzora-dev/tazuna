@@ -87,6 +87,17 @@ inductive FileLine (α : Type) where
   | malformed
   | line (l : α)
 
+/-- A line of a trace file as the wire writes it: null when blank, `"malformed"`, or the line. -/
+instance {α : Type} [ToValue α] : ToValue (FileLine α) := ⟨fun
+  | .blank => .null
+  | .malformed => .str "malformed"
+  | .line l => ToValue.toValue l⟩
+
+instance {α : Type} [FromValue α] : FromValue (FileLine α) := ⟨fun
+  | .null => pure .blank
+  | .str "malformed" => pure .malformed
+  | v => .line <$> FromValue.fromValue v⟩
+
 /-- The lines before the first malformed line, `none` for blank lines, and the number of that line, from 1. -/
 def untilMalformed {α : Type} : List (FileLine α) → List (Option α) × Option Nat
   | [] => ([], none)

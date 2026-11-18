@@ -1,7 +1,6 @@
 import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, sorted } from "../../src/data/collections.ts";
-import type { Answer } from "../../src/data/trace.generated.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import {
   canonicalJson,
@@ -17,34 +16,43 @@ import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
 import { refOfDefinition } from "../../src/load/traceName.ts";
 import type { Schema } from "../../src/service/basic.ts";
-import type { Activity } from "../../src/service/chart/basic.ts";
 import {
   type Access,
   type Assignment,
   type CopyScope,
   Failed,
-  type Holder,
   type Issue,
   type Keys,
   type NextKeys,
   type Scope,
 } from "../../src/service/functions.ts";
-import { chartOf, type InstanceId, idOf, mapOf } from "../../src/service/instance.ts";
+import { chartOf, idOf, mapOf } from "../../src/service/instance.ts";
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
-import { type TransitionStructure, traceNameOfRef, transitionRef } from "../../src/spec/structure.ts";
+import { traceNameOfRef, transitionRef } from "../../src/spec/structure.ts";
 import { refEntityOf } from "../../src/verify/compare.ts";
-import type { Message } from "./lean.ts";
+import type {
+  Asked,
+  Extra,
+  Access as LeanAccess,
+  Issue as LeanIssue,
+  Keys as LeanKeys,
+  Schema as LeanSchema,
+  Scope as LeanScope,
+  Question,
+  Replied,
+  Reply,
+} from "./protocol.generated.ts";
 
 /** Encodes a value as spec code receives it, whose bags, sets and sortedBy arrays are Bags and Runs. */
 const encode = (shape: Shape, value: unknown): unknown => encodeArrays(shape, sorted(objectOf(shape), value));
 
-/** The Keys that Lean's nextKeys writes: the owner, if any, and what createKey returns next by entity. */
-const keysOf = (value: unknown): Keys => {
-  const { owner, next } = value as { readonly owner?: string; readonly next: Record<string, NextKeys> };
-  return { ...(owner === undefined ? {} : { owner }), next: Object.entries(next) };
-};
+/** The Keys of Lean's: the owner, if any, and what createKey returns next by entity. */
+const keysOf = ({ owner, next }: LeanKeys): Keys => ({
+  ...(owner === undefined ? {} : { owner }),
+  next: Object.entries(next) as [string, NextKeys][],
+});
 
 const json = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
@@ -95,7 +103,7 @@ export type ReadRecord = (part: {
 }) => unknown;
 
 export interface Answering {
-  answer(message: Message): Message;
+  answer(asked: Asked): Replied;
 }
 
 /** Tags each value with its shape for Lean. Objects become [name, value] pairs to keep their key order. */
@@ -119,15 +127,15 @@ export class VerifyFunctions implements Answering {
     this.spec = spec;
   }
 
-  answer(message: Message): Message {
-    if (message["type"] !== "comparableValue") throw new Error(`verify asks no ${String(message["type"])}`);
-    const ref = message["definition"] as { readonly kind: string; readonly service: string; readonly name: string };
+  answer(asked: Asked): Replied {
+    if (asked.type !== "comparableValue") throw new Error(`verify asks no ${asked.type}`);
+    const { kind, definition: ref, part } = asked;
     const found = this.spec.definitions.find(
-      (d) => d.service === ref.service && d.name === ref.name && d.definition.kind === ref.kind,
+      (d) => d.service === ref.service && d.name === ref.name && d.definition.kind === kind,
     )?.definition;
-    if (found === undefined) throw new Error(`no ${ref.kind} ${ref.service}.${ref.name}`);
+    if (found === undefined) throw new Error(`no ${kind} ${ref.service}.${ref.name}`);
     const shape = ((): Shape | undefined => {
-      switch (message["part"]) {
+      switch (part.kind) {
         case "input":
           return (found as AnyCommand | AnyQuery).input;
         case "output":
@@ -135,40 +143,12 @@ export class VerifyFunctions implements Answering {
         case "payload":
           return (found as AnyEvent).payload;
         default:
-          return (found as { controls?: Record<string, { payload?: Shape }> }).controls?.[message["control"] as string]
-            ?.payload;
+          return (found as { controls?: Record<string, { payload?: Shape }> }).controls?.[part.name]?.payload;
       }
     })();
-    return { type: "compared", value: tagged(comparableValue(shape, message["value"], refEntityOf(this.spec))) };
+    return { type: "comparableValue", value: tagged(comparableValue(shape, asked.value, refEntityOf(this.spec))) };
   }
 }
-
-interface Accessed {
-  readonly holder: Holder;
-  readonly name: string;
-}
-
-/** Lean's Scope as tazuna-lean sends it; `shown` holds null before an answer. */
-interface LeanScope {
-  readonly id: InstanceId;
-  readonly state: string | null;
-  readonly context: unknown;
-  readonly copy: { readonly key: unknown; readonly context: unknown } | null;
-  readonly active: readonly string[];
-  readonly shown: Readonly<Record<string, unknown>>;
-  readonly input: unknown;
-  readonly now: string;
-}
-
-/** Lean's Schema: names as the service's trace names where the TS Schema has refs. */
-type LeanSchema =
-  | { readonly kind: "input" | "output"; readonly definition: string }
-  | { readonly kind: "payload"; readonly event: string }
-  | { readonly kind: "control"; readonly screen: string; readonly control: string }
-  | { readonly kind: "held"; readonly chart: string; readonly state: string; readonly name: string }
-  | { readonly kind: "context"; readonly chart: string }
-  | { readonly kind: "mapContext" | "mapKey"; readonly chart: string; readonly map: string }
-  | { readonly kind: "record"; readonly entity: string };
 
 /**
  * Carries Lean's questions to the spec functions of src/sim/spec: decodes Lean's values, answers with the same SpecFunctions
@@ -256,7 +236,7 @@ export class RunFunctions implements Answering {
     return this.decoded({ kind: "input", definition: name }, value);
   }
 
-  private issue(issue: Issue): Message {
+  private issue(issue: Issue): LeanIssue {
     switch (issue.kind) {
       case "thrown":
         return issue.schema === undefined
@@ -271,12 +251,8 @@ export class RunFunctions implements Answering {
   }
 
   /** Returns the reply of the value, or the Issue of a failed answer. */
-  private replied<T>(value: T | Failed, reply: (value: T) => Message): Message {
-    return value instanceof Failed ? { issue: this.issue(value.issue) } : reply(value);
-  }
-
-  private now(message: Message): Temporal.Instant {
-    return Temporal.Instant.from(String(message["now"]));
+  private replied<T>(value: T | Failed, reply: (value: T) => Replied): Replied {
+    return value instanceof Failed ? { type: "issue", issue: this.issue(value.issue) } : reply(value);
   }
 
   private scopeOf(lean: LeanScope): Scope | Failed {
@@ -318,317 +294,305 @@ export class RunFunctions implements Answering {
     };
   }
 
-  /** Returns the extra of the transition at `keys`, with its payload or output decoded. */
-  private extraOf(machine: string, trigger: Trigger | undefined, extra: Fields): Fields | Failed {
+  /** Returns the extra of a transition with `trigger` as its expressions receive it, its payload or output decoded. */
+  private extraOf(machine: string, trigger: Trigger | undefined, extra: Extra): Fields | Failed {
     const { named, ref } = this.functions.chartOf(machine);
     const chart = named.definition;
     const keyword = trigger?.type;
     const key = trigger !== undefined && "key" in trigger ? trigger.key : "";
-    if ("payload" in extra) {
-      const schema: Schema =
-        chart.controls?.[key] === undefined
-          ? { kind: "payload", event: refOfDefinition(this.spec, chart.receives[key]) }
-          : { kind: "control", screen: ref, control: key };
-      const payload = decode(schema, this.functions.shape(schema), extra["payload"]);
-      return payload instanceof Failed ? payload : { payload };
+    switch (extra.kind) {
+      case "none":
+        return {};
+      case "rejection":
+        return { rejection: { kind: extra.rejection.kind } };
+      case "payload": {
+        const schema: Schema =
+          chart.controls?.[key] === undefined
+            ? { kind: "payload", event: refOfDefinition(this.spec, chart.receives[key]) }
+            : { kind: "control", screen: ref, control: key };
+        const payload = decode(schema, this.functions.shape(schema), extra.payload);
+        return payload instanceof Failed ? payload : { payload };
+      }
+      case "output": {
+        const target = (
+          keyword === "calls" ? chart.queries?.[key] : keyword === "opens" ? chart.screens?.[key] : chart.commands[key]
+        ) as { readonly output?: Shape };
+        const shape = keyword === "opens" ? (target.output ?? {}) : target.output;
+        if (shape === undefined) return { output: extra.output };
+        const output = decode({ kind: "output", definition: refOfDefinition(this.spec, target) }, shape, extra.output);
+        return output instanceof Failed ? output : { output };
+      }
     }
-    if ("output" in extra) {
-      const target = (
-        keyword === "calls" ? chart.queries?.[key] : keyword === "opens" ? chart.screens?.[key] : chart.commands[key]
-      ) as { readonly output?: Shape };
-      const shape = keyword === "opens" ? (target.output ?? {}) : target.output;
-      if (shape === undefined) return extra;
-      const output = decode({ kind: "output", definition: refOfDefinition(this.spec, target) }, shape, extra["output"]);
-      return output instanceof Failed ? output : { output };
-    }
-    return extra;
   }
 
-  /** Returns the reply of a Scope question about `message["scope"]`, with what its expressions read and assigned. */
-  private scoped(message: Message, ask: (scope: Scope, access: Access) => Message): Message {
-    const access = {
-      context: [] as Accessed[],
-      active: [] as Accessed[],
-      assigned: [] as Accessed[],
-      shown: [] as string[],
-    };
+  /** Returns the reply of a question about `scope`, with what its expressions read and assigned. */
+  private scoped(lean: LeanScope, ask: (scope: Scope, access: Access) => Replied): Replied {
+    const access: LeanAccess = { context: [], active: [], assigned: [], shown: [] };
     const told: Access = {
-      context: (holder, name) => access.context.push({ holder, name }),
-      active: (holder, name) => access.active.push({ holder, name }),
-      assigned: (holder, name) => access.assigned.push({ holder, name }),
+      context: (holder, name) => access.context.push([holder, name]),
+      active: (holder, name) => access.active.push([holder, name]),
+      assigned: (holder, name) => access.assigned.push([holder, name]),
       shown: (slot) => access.shown.push(slot),
       now: () => {},
     };
-    return { ...this.replied(this.scopeOf(message["scope"] as LeanScope), (scope) => ask(scope, told)), access };
+    return { ...this.replied(this.scopeOf(lean), (scope) => ask(scope, told)), access };
   }
 
   /**
    * Answers Lean's question, with every Bag in reverse order when it has `reversed`, and tells whether a Bag of two or
    * more values ran a callback while answering, as Lean's lastEnumerated asks.
    */
-  answer(message: Message): Message {
+  answer(asked: Asked): Replied {
     const before = enumerations();
-    const reply = message["reversed"] === true ? reversedBags(() => this.answered(message)) : this.answered(message);
+    const reply = asked.reversed === true ? reversedBags(() => this.answered(asked)) : this.answered(asked);
     return enumerations() === before ? reply : { ...reply, enumerated: true };
   }
 
-  private answered(message: Message): Message {
-    const value = message["value"];
-    const failedReply = (failed: string | undefined): Message => (failed === undefined ? {} : { failed });
-    switch (message["type"]) {
+  private answered(q: Question): Replied {
+    const failed =
+      (type: Exclude<Extract<Reply, { failed?: string }>["type"], "close">) =>
+      (f: string | undefined): Replied =>
+        ({ type, ...(f === undefined ? {} : { failed: f }) }) as Replied;
+    const now = (q: { readonly now: string }) => Temporal.Instant.from(q.now);
+    switch (q.type) {
       case "parse": {
-        const schema = this.schemaOf(message["schema"] as LeanSchema);
-        return this.replied(this.functions.parse(schema, value), (parsed) =>
-          "error" in parsed ? {} : { value: parsed.encoded },
+        const schema = this.schemaOf(q.schema);
+        return this.replied(this.functions.parse(schema, q.value), (parsed) =>
+          "error" in parsed ? { type: "parse" } : { type: "parse", value: parsed.encoded },
         );
       }
       case "unordered": {
-        const schema = this.schemaOf(message["schema"] as LeanSchema);
-        return this.replied(this.functions.unordered(schema, value), (compared) => ({ value: compared }));
+        const schema = this.schemaOf(q.schema);
+        return this.replied(this.functions.unordered(schema, q.value), (value) => ({ type: "unordered", value }));
       }
       case "normalize": {
-        const schema = this.schemaOf(message["schema"] as LeanSchema);
+        const schema = this.schemaOf(q.schema);
         // The value arrives as JSON, so it is decoded first.
-        return this.replied(decodeStrict(schema, this.functions.shape(schema), value), (decoded) =>
+        return this.replied(decodeStrict(schema, this.functions.shape(schema), q.value), (decoded) =>
           decoded === undefined
-            ? {}
+            ? { type: "normalize" }
             : this.replied(this.functions.normalize(schema, decoded), (normalized) =>
-                "error" in normalized ? {} : { value: normalized.encoded },
+                "error" in normalized ? { type: "normalize" } : { type: "normalize", value: normalized.encoded },
               ),
         );
       }
-      case "binding": {
-        const name = String(message["command"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
-          this.replied(
-            this.functions.binding(name, String(message["binding"]), input, this.records, this.now(message)),
-            (bound) => ({ bound }),
-          ),
+      case "binding":
+        return this.replied(this.inputOf(q.command, q.input), (input) =>
+          this.replied(this.functions.binding(q.command, q.binding, input, this.records, now(q)), (bound) => ({
+            type: "binding",
+            bound,
+          })),
         );
-      }
-      case "requirement": {
-        const name = String(message["command"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
-          this.replied(
-            this.functions.requirement(name, String(message["condition"]), input, this.records, this.now(message)),
-            (holds) => ({ holds }),
-          ),
-        );
-      }
-      case "inputRequirement": {
-        const name = String(message["target"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
-          this.replied(this.functions.inputRequirement(name, String(message["condition"]), input), (holds) => ({
+      case "requirement":
+        return this.replied(this.inputOf(q.command, q.input), (input) =>
+          this.replied(this.functions.requirement(q.command, q.condition, input, this.records, now(q)), (holds) => ({
+            type: "requirement",
             holds,
           })),
         );
-      }
-      case "decide": {
-        const name = String(message["command"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
-          this.replied(this.functions.decide(name, input, this.records, this.now(message)), (decided) => ({
+      case "inputRequirement":
+        return this.replied(this.inputOf(q.target, q.input), (input) =>
+          this.replied(this.functions.inputRequirement(q.target, q.condition, input), (holds) => ({
+            type: "inputRequirement",
+            holds,
+          })),
+        );
+      case "decide":
+        return this.replied(this.inputOf(q.command, q.input), (input) =>
+          this.replied(this.functions.decide(q.command, input, this.records, now(q)), (decided) => ({
+            type: "decide",
             groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: json(e.payload) }))),
           })),
         );
-      }
-      case "ensures": {
-        const name = String(message["command"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
-          this.replied(this.functions.ensures(name, input, this.before, this.records, this.now(message)), failedReply),
+      case "ensures":
+        return this.replied(this.inputOf(q.command, q.input), (input) =>
+          this.replied(this.functions.ensures(q.command, input, this.before, this.records, now(q)), failed("ensures")),
         );
-      }
-      case "queryEnsures": {
-        const name = String(message["query"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
-          this.replied(this.decoded({ kind: "output", definition: name }, message["output"]), (output) =>
-            this.replied(this.functions.queryEnsures(name, input, output, this.records), failedReply),
+      case "queryEnsures":
+        return this.replied(this.inputOf(q.query, q.input), (input) =>
+          this.replied(this.decoded({ kind: "output", definition: q.query }, q.output), (output) =>
+            this.replied(this.functions.queryEnsures(q.query, input, output, this.records), failed("queryEnsures")),
           ),
         );
-      }
       case "resultEnsures": {
-        const name = String(message["target"]);
-        const input = this.inputOf(name, message["input"]);
-        if (input instanceof Failed) return this.replied(input, failedReply);
-        const target = this.functions.definition<AnyCommand | AnyQuery>(["command", "query"], name).definition;
+        const reply = failed("resultEnsures");
+        const input = this.inputOf(q.target, q.input);
+        if (input instanceof Failed) return this.replied(input, reply);
+        const target = this.functions.definition<AnyCommand | AnyQuery>(["command", "query"], q.target).definition;
         const output =
-          target.output === undefined
-            ? undefined
-            : this.decoded({ kind: "output", definition: name }, message["output"]);
-        if (output instanceof Failed) return this.replied(output, failedReply);
+          target.output === undefined ? undefined : this.decoded({ kind: "output", definition: q.target }, q.output);
+        if (output instanceof Failed) return this.replied(output, reply);
         const events: Emit[] = [];
-        for (const e of message["events"] as { event: string; payload: unknown }[]) {
+        for (const e of q.events) {
           const payload = this.decoded({ kind: "payload", event: e.event }, e.payload);
-          if (payload instanceof Failed) return this.replied(payload, failedReply);
+          if (payload instanceof Failed) return this.replied(payload, reply);
           events.push({ event: e.event, payload });
         }
-        return this.replied(this.functions.resultEnsures(name, input, output, events), failedReply);
+        return this.replied(this.functions.resultEnsures(q.target, input, output, events), reply);
       }
       case "invariant": {
-        const name = String(message["entity"]);
-        const fields = (this.owner.entities[name] as AnyEntity).fields as Shape;
-        return this.replied(decodeFields(fields, message["record"] as Fields), (record) =>
-          this.replied(this.functions.invariant(name, record), failedReply),
+        const fields = (this.owner.entities[q.entity] as AnyEntity).fields as Shape;
+        return this.replied(decodeFields(fields, q.record as Fields), (record) =>
+          this.replied(this.functions.invariant(q.entity, record), failed("invariant")),
         );
       }
       case "serviceInvariant":
-        return this.replied(this.functions.serviceInvariant(this.records), failedReply);
+        return this.replied(this.functions.serviceInvariant(this.records), failed("serviceInvariant"));
       case "chartInvariant":
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.chartInvariant(scope, this.records, access), failedReply),
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.functions.chartInvariant(scope, this.records, access), failed("chartInvariant")),
         );
-      case "resolve": {
-        const name = String(message["query"]);
-        return this.replied(this.inputOf(name, message["input"]), (input) =>
+      case "resolve":
+        return this.replied(this.inputOf(q.query, q.input), (input) =>
           // Lean's Value has no undefined, so an output that author code left undefined is sent as null.
-          this.replied(this.functions.resolve(name, input, this.records, this.now(message)), (output) => ({
+          this.replied(this.functions.resolve(q.query, input, this.records, now(q)), (output) => ({
+            type: "resolve",
             output: json(output) ?? null,
           })),
         );
-      }
       case "react": {
-        const name = String(message["automation"]);
-        const a = this.functions.definition<Automation>(["automation"], name).definition;
+        const a = this.functions.definition<Automation>(["automation"], q.automation).definition;
         const event = this.spec.names.get(Object.values(a.receives)[0]) as Named<AnyEvent>;
         const schema: Schema = { kind: "payload", event: { service: event.service, name: event.name } };
-        const keys = keysOf(message["keys"]);
-        return this.replied(decode(schema, event.definition.payload, message["payload"]), (payload) =>
+        return this.replied(decode(schema, event.definition.payload, q.payload), (payload) =>
           this.replied(
-            this.functions.react(name, payload, this.records, this.now(message), keys),
-            ({ written, created }) => (written === undefined ? { created } : { input: written, created }),
+            this.functions.react(q.automation, payload, this.records, now(q), keysOf(q.keys)),
+            ({ written, created }) =>
+              written === undefined
+                ? { type: "react", created: [...created] }
+                : { type: "react", input: written, created: [...created] },
           ),
         );
       }
       case "comparable":
-        return this.replied(
-          this.functions.comparable(String(message["query"]), message["answer"] as Answer),
-          (compared) => ({ value: canonicalJson(compared) }),
-        );
+        return this.replied(this.functions.comparable(q.query, q.answer), (compared) => ({
+          type: "comparable",
+          value: canonicalJson(compared),
+        }));
       case "initialContext": {
-        const name = String(message["machine"]);
-        const { named, ref } = this.functions.chartOf(name);
+        const { named, ref } = this.functions.chartOf(q.machine);
         const chart = named.definition;
-        const input = decode({ kind: "input", definition: ref }, chart.input ?? {}, message["input"]);
+        const input = decode({ kind: "input", definition: ref }, chart.input ?? {}, q.input);
         return this.replied(input, (decoded) =>
-          this.replied(this.functions.initialContext(name, decoded), (context) => ({
+          this.replied(this.functions.initialContext(q.machine, decoded), (context) => ({
+            type: "initialContext",
             context: encode(chart.context, context),
           })),
         );
       }
-      case "guard": {
-        const t = message["transition"] as TransitionStructure;
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.extraOf(chartOf(scope.id), t.trigger, message["extra"] as Fields), (extra) =>
-            this.replied(this.functions.guard(scope, this.records, transitionRef(t), extra, access), (passes) => ({
-              passes,
-            })),
+      case "guard":
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.extraOf(chartOf(scope.id), q.transition.trigger, q.extra), (extra) =>
+            this.replied(
+              this.functions.guard(scope, this.records, transitionRef(q.transition), extra, access),
+              (passes) => ({ type: "guard", passes }),
+            ),
           ),
         );
-      }
       case "assign": {
-        const at = message["at"] as
-          | { readonly kind: "transition"; readonly transition: TransitionStructure }
-          | { readonly kind: "entry" | "exit"; readonly state: string };
+        const at = q.assignment;
         const assignment: Assignment =
           at.kind === "transition" ? { kind: "transition", transition: transitionRef(at.transition) } : at;
         const trigger = at.kind === "transition" ? at.transition.trigger : undefined;
-        const keys = keysOf(message["keys"]);
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.extraOf(chartOf(scope.id), trigger, message["extra"] as Fields), (extra) =>
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.extraOf(chartOf(scope.id), trigger, q.extra), (extra) =>
             this.replied(
-              this.functions.assign(scope, this.records, assignment, extra, keys, access),
+              this.functions.assign(scope, this.records, assignment, extra, keysOf(q.keys), access),
               ({ context, copyContext, created }) => {
                 const { copy } = scope;
                 const chart = this.functions.chartOf(chartOf(scope.id)).named.definition;
                 const map = mapOf(scope.id);
                 const shape = map === undefined ? {} : (this.functions.node(chartOf(scope.id), map)?.context ?? {});
                 return {
+                  type: "assign",
                   context: encode(chart.context, context),
                   ...(copy === undefined ? {} : { copy: encode(shape, copyContext ?? copy.context) }),
-                  created,
+                  created: [...created],
                 };
               },
             ),
           ),
         );
       }
-      case "input": {
-        const activity = message["activity"] as Activity;
-        const keys = keysOf(message["keys"]);
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.input(scope, this.records, activity, keys, access), ({ written, created }) => ({
-            input: written,
-            created,
-          })),
+      case "input":
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(
+            this.functions.input(scope, this.records, q.activity, keysOf(q.keys), access),
+            ({ written, created }) => ({ type: "input", input: written, created: [...created] }),
+          ),
         );
-      }
       case "holds":
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.holds(scope, this.records, access), () => ({})),
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.functions.holds(scope, this.records, access), () => ({ type: "holds" })),
         );
       case "deadlines":
         return {
+          type: "deadlines",
           deadlines: this.functions
-            .deadlines(String(message["machine"]), String(message["state"]))
+            .deadlines(q.machine, q.state)
             .map(([name, d]) => (d.kind === "delay" ? { name, delay: d.ms } : { name })),
         };
       case "deadlineAt":
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.deadlineAt(scope, this.records, String(message["name"]), access), (time) => ({
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.functions.deadlineAt(scope, this.records, q.name, access), (time) => ({
+            type: "deadlineAt",
             time: time.toString(),
           })),
         );
       case "offers":
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.offers(scope, this.records, String(message["control"]), access), (payloads) => ({
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.functions.offers(scope, this.records, q.control, access), (payloads) => ({
+            type: "offers",
             payloads: payloads.map((p) => p.encoded),
           })),
         );
-      case "showInput": {
-        const activity = message["activity"] as Activity;
-        return this.scoped(message, (scope, access) =>
-          this.replied(this.functions.showInput(scope, this.records, activity, access), (input) => ({ input })),
+      case "showInput":
+        return this.scoped(q.scope, (scope, access) =>
+          this.replied(this.functions.showInput(scope, this.records, q.activity, access), (input) => ({
+            type: "showInput",
+            input,
+          })),
         );
-      }
       case "items":
-        return this.scoped(message, (scope, access) =>
+        return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.items(scope, this.records, access), (keys) => ({
+            type: "items",
             keys: keys.map((k) => ({ key: k.encoded, encodedKey: k.encodedKey })),
           })),
         );
       case "copyContext": {
-        const machine = String(message["machine"]);
-        const map = String(message["map"]);
-        const shape = this.functions.node(machine, map)?.context ?? {};
-        return { context: encode(shape, this.functions.copyContext(machine, map)) };
+        const shape = this.functions.node(q.machine, q.map)?.context ?? {};
+        return { type: "copyContext", context: encode(shape, this.functions.copyContext(q.machine, q.map)) };
       }
-      case "singleRecord": {
-        return { record: this.functions.singleRecord(String(message["entity"])).encoded };
-      }
+      case "singleRecord":
+        return { type: "singleRecord", record: this.functions.singleRecord(q.entity).encoded };
       case "copyKey": {
-        const machine = String(message["machine"]);
-        const map = String(message["map"]);
-        const { ref } = this.functions.chartOf(machine);
-        const row = message["payload"] as Fields;
+        const { ref } = this.functions.chartOf(q.machine);
+        const row = q.payload as Fields;
         const present = Object.fromEntries(
-          Object.entries(this.functions.node(machine, map)?.key ?? {}).filter(([f]) => row[f] !== undefined),
+          Object.entries(this.functions.node(q.machine, q.map)?.key ?? {}).filter(([f]) => row[f] !== undefined),
         );
         // The payload arrives as JSON, so its key fields are decoded first.
         const fields = Object.fromEntries(Object.keys(present).map((f) => [f, row[f]]));
-        return this.replied(decodeStrict({ kind: "mapKey", chart: ref, map }, present, fields), (decoded) =>
+        return this.replied(decodeStrict({ kind: "mapKey", chart: ref, map: q.map }, present, fields), (decoded) =>
           decoded === undefined
-            ? { key: null }
-            : this.replied(this.functions.copyKey(machine, map, decoded), (key) => (key === undefined ? {} : { key })),
+            ? { type: "copyKey", key: null }
+            : this.replied(this.functions.copyKey(q.machine, q.map, decoded), (key) =>
+                key === undefined ? { type: "copyKey" } : { type: "copyKey", key },
+              ),
         );
       }
       case "close":
-        return this.scoped(message, (scope, access) =>
+        return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.close(scope, this.records, access), ({ output, failed }) => ({
+            type: "close",
             output: encode(this.functions.chartOf(chartOf(scope.id)).named.definition.output ?? {}, output),
             ...(failed === undefined ? {} : { failed }),
           })),
         );
-      default:
-        throw new Error(`tazuna-lean sent ${JSON.stringify(message)}`);
+      case "comparableValue":
+      case "served":
+        throw new Error(`tazuna-lean sent ${JSON.stringify(q)} to the spec functions`);
     }
   }
 }
@@ -644,9 +608,9 @@ export class SimFunctions implements Answering {
     this.read = read;
   }
 
-  answer(message: Message): Message {
-    const service = message["service"] as string;
-    const { service: _, ...question } = message;
+  answer(asked: Asked): Replied {
+    const { service, ...question } = asked;
+    if (service === undefined) throw new Error(`tazuna-lean asked ${asked.type} about no service`);
     const known = this.services.get(service) ?? new RunFunctions(this.spec, service, this.read);
     this.services.set(service, known);
     return known.answer(question);

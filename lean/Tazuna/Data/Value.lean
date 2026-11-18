@@ -153,6 +153,10 @@ instance {α : Type} [ToValue α] : ToValue (List α) := ⟨fun l => .arr (l.map
 instance (priority := high) {α : Type} [ToValue α] : ToValue (List (String × α)) :=
   ⟨fun l => .obj (l.map fun (key, a) => (key, ToValue.toValue a))⟩
 
+/-- A pair is an array of its two values. -/
+instance {α β : Type} [ToValue α] [ToValue β] : ToValue (α × β) :=
+  ⟨fun (a, b) => .arr [ToValue.toValue a, ToValue.toValue b]⟩
+
 class FromValue (α : Type) where
   fromValue : Value → Except String α
 
@@ -181,6 +185,10 @@ instance {α : Type} [FromValue α] : FromValue (List α) := ⟨fun
 instance (priority := high) {α : Type} [FromValue α] : FromValue (List (String × α)) := ⟨fun
   | .obj fields => fields.mapM fun (key, v) => do pure (key, ← FromValue.fromValue v)
   | _ => throw "expected an object"⟩
+
+instance {α β : Type} [FromValue α] [FromValue β] : FromValue (α × β) := ⟨fun
+  | .arr [a, b] => do pure (← FromValue.fromValue a, ← FromValue.fromValue b)
+  | _ => throw "expected an array of two values"⟩
 
 /-- The JSON text of a string. -/
 def quoted (s : String) : String := Lean.Json.renderString s

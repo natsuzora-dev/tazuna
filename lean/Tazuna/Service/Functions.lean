@@ -16,6 +16,8 @@ structure NextKeys where
   count : Nat
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire NextKeys
+
 /--
 What createKey returns next: `next` per entity (an entity that `next` lacks has none so far), each `<entity>-<n>`
 qualified as `<owner>/<entity>-<n>` by the running service `owner` of a simulation that creates it, as a received id is,
@@ -25,6 +27,8 @@ structure Keys where
   owner : Option String := none
   next : List (String × NextKeys) := []
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire Keys skip_serializing_none
 
 /--
 The createKey values, each with its entity, that createKey gives to calls for the entities `created`, in call order,
@@ -45,6 +49,11 @@ structure CopyScope where
   context : Value
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire CopyScope
+
+local instance : ToValue Time := ⟨Time.toValue⟩
+local instance : FromValue Time := ⟨Time.fromValue⟩
+
 /--
 The values passed to machine and screen expressions; TS builds the expressions' arguments from them and the records.
 `id` is the evaluating instance or copy. `state` is the state that declares the expression (`none` for the chart's own
@@ -64,13 +73,17 @@ structure Scope where
   now : Time
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Scope
+
 def Scope.machine (s : Scope) : String := s.id.chart
 
 inductive Assignment where
-  | transition (t : Transition)
+  | transition (transition : Transition)
   | entry (state : String)
   | exit (state : String)
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire Assignment tag "kind"
 
 /-- What caused the transition, as passed to its expressions. -/
 inductive Extra where
@@ -80,6 +93,8 @@ inductive Extra where
   /-- A rejection, of which expressions receive only the kind. -/
   | rejection (rejection : Rejection)
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire Extra tag "kind"
 
 inductive DeadlineTime where
   /-- A delay of `ms` milliseconds after entering the state. -/
@@ -99,6 +114,8 @@ inductive Issue where
   | unheld (held : String)
   | notOnly
 deriving DecidableEq, Repr, Inhabited
+
+derive_wire Issue tag "kind" skip_serializing_none
 
 /--
 The fault that `e` means at a site whose own author code belongs to `owner`. A throw names `owner`, or the owner of the

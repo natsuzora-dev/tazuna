@@ -19,6 +19,8 @@ structure Transition where
   reenter : Bool
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Transition
+
 def Transition.ref (t : Transition) : TransitionRef := { state := t.source, trigger := t.trigger, index := t.index }
 
 /--

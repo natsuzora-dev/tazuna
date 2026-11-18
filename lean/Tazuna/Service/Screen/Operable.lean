@@ -17,6 +17,8 @@ structure Operation where
   payloads : Option (List Value)
 deriving DecidableEq, Repr, Inhabited
 
+derive_wire Operation
+
 section Operations
 
 variable [Monad m] (fs : Functions m)
