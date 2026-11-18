@@ -45,23 +45,6 @@ def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender : String) (
   | _ => pure s
 
 /--
-The content of a message with body `body` from `sender` as `service` reads it, without the id that only names the
-message: a received id is never read but to route a message, to answer it, and to tell one processed before, so equal
-messages that `service` has not processed are interchangeable.
--/
-def arrivalContent (service sender : String) : LineBody → Value
-  | .command _ v => .obj [("command", v)]
-  | .query _ v => .obj [("query", v)]
-  | .subscribe _ v => .obj [("subscribe", v)]
-  | .event _ payload resultOf =>
-    .obj [("event", payload), ("resultOf", match resultOf.bind (sentId? service) with
-      | some r => .str r.text
-      | none => .null)]
-  | .answer to a => .obj [("answer", ToValue.toValue a), ("to", .str ((sentId? service to).getD to).text)]
-  | .unsubscribe to => .obj [("unsubscribe", .str (receivedId sender to).text)]
-  | _ => .null
-
-/--
 A message of a tie: what `sender` sent with id `id` and body `body`, which carries `definition`'s request or event, or
 answers or ends one. A tie has at most one message per channel (Sim's messagesOf), so its messages arrive in any order.
 -/
@@ -71,9 +54,9 @@ structure Arrival where
   body : LineBody
   definition : Spec.Ref
 
-/-- The name of the step in which `a` arrives at `service`. Equal messages have one name. -/
-def Arrival.name (service : String) (a : Arrival) : StepName :=
-  .arrival a.definition (arrivalContent service a.sender a.body)
+/-- The name of the step in which `a` arrives: each message has its own, so equal messages are ordered like any others. -/
+def Arrival.name (a : Arrival) : StepName :=
+  .arrival a.definition (receivedId a.sender a.id).text
 
 /--
 The state after the messages `arrivals` that one line delivers arrive, each as its own message in a step of the tie
@@ -93,9 +76,9 @@ where
       let chosen : Except InvalidInput (Fin remaining.length × List StepName) := match s.stepOrder with
         | named :: rest =>
           if !named.isArrival then .ok (⟨0, by simp [remaining]⟩, s.stepOrder) else
-          match remaining.findFinIdx? (·.name st.service == named) with
+          match remaining.findFinIdx? (·.name == named) with
           | some i => .ok (i, rest)
-          | none => .error (.unreadyStep named (remaining.map (·.name st.service)))
+          | none => .error (.unreadyStep named (remaining.map (·.name)))
         | [] => .ok (⟨0, by simp [remaining]⟩, [])
       match chosen with
       | .error e => return s.report (.invalidInput e)
@@ -103,7 +86,7 @@ where
         let a := remaining[i]
         let (s, step) := { s with stepOrder }.newStep (.arrival (.arrivals first))
           (message := some (s.messageCount + 1))
-        MonadNote.note (.arrivalBegins step (a.name st.service))
+        MonadNote.note (.arrivalBegins step a.name)
         let t ← arriveFrom st fs s a.sender a.id a.body
         MonadNote.note .arrivalEnds
         go first (remaining.eraseIdx i) t

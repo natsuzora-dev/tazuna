@@ -9,7 +9,7 @@ const given = {
 } as const;
 
 export const sameDay = scenario(
-  "Add task-1 and task-2 for Monday; the copy of each sends calendar the same reserve, so one handle names both, and calendar books Monday for whichever it processes first and refuses the other: it processes equal requests differently, so which task is booked depends on which arrives first, which nothing outside tells, and test reports ChoiceDependent.equalMessages at reserve",
+  "Add task-1 and task-2 for Monday; the copy of each sends calendar the same reserve, so one handle names both, and calendar books Monday for whichever it processes first and refuses the other: it processes equal requests differently, so which task is booked depends on which arrives first, which nothing outside tells, and test runs the other arrival order and reports ChoiceDependent.stepOrder at reserve naming the two messages",
   {
     given,
     when: (w) => {

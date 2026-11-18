@@ -160,19 +160,3 @@ export function stepOrder(
         data: { firstStep: first, secondStep: second, originalOrder, alternativeOrder, difference: found },
       };
 }
-
-/** The equalMessages violation, if any, for two equal messages of a tie that `service` processed alike or not. */
-export function equalMessages(
-  compare: Compare,
-  service: string,
-  arrival: StepName,
-  original: Outcome,
-  swapped: Outcome,
-): Of<"ChoiceDependent.equalMessages" | "ChoiceDependent.uncomparable"> | undefined {
-  const definition = stepNameDefinition(service, arrival);
-  const found = difference(compare, original, swapped);
-  if (found === "uncomparable") return uncomparable(definition);
-  return found === undefined
-    ? undefined
-    : { kind: "ChoiceDependent.equalMessages", definition, data: { service, arrival, difference: found } };
-}

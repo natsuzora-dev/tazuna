@@ -14,7 +14,7 @@ import { type Span, type StepOrder, sameOrigin } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
 import { snapshotLines } from "../sim/trace.ts";
 import { compareRuns } from "../verify/compare.ts";
-import { type Compare, equalMessages, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
+import { type Compare, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
 import { leadsTo } from "./instrument.ts";
 
 /** Lean's Tried: a step order that the search ran, refused (Execution.refused) or with the violation found, if any. */
@@ -103,58 +103,6 @@ function alignTo(ids: readonly LineId[], span: Span, lines: readonly Line[]): Li
   return [...lines.slice(0, span.from), ...pre, ...sorted.flatMap(([w]) => w), ...lines.slice(span.to)];
 }
 
-/** Lean's swapId. */
-const swapId = (x: LineId, y: LineId, i: LineId): LineId => (sameLineId(i, x) ? y : sameLineId(i, y) ? x : i);
-
-/** Lean's Line.swapIds. */
-function swapIds(x: LineId, y: LineId, l: Line): Line {
-  const id = swapId(x, y, l.id);
-  switch (l.type) {
-    case "answer":
-      return { ...l, id, to: swapId(x, y, l.to) };
-    case "event":
-      return l.resultOf === undefined ? { ...l, id } : { ...l, id, resultOf: swapId(x, y, l.resultOf) };
-    case "unsubscribe":
-      return { ...l, id, to: swapId(x, y, l.to) };
-    default:
-      return { ...l, id };
-  }
-}
-
-/** Lean's Execution.arrivals: the arrival steps of `span`, by name, each with its message's id. */
-function arrivals(m: Made, span: Span): (readonly [StepName, LineId])[] {
-  const steps = m.world.services.get(span.service)?.processing.state.steps ?? [];
-  const names = (m.listeners.get(span.service)?.collected.names(span.stepsFrom) ?? []).filter(
-    ([n]) => n < span.stepsTo && tieOf(steps[n])?.kind === "arrivals",
-  );
-  const ids = inIds(linesOf(m, span.service), span);
-  return names.flatMap(([, name], n) => {
-    const id = ids[n];
-    return id === undefined ? [] : [[name, id] as const];
-  });
-}
-
-/** Lean's equalArrivals: the outcome with two equal messages of a tie swapped, which is the run with their ids swapped. */
-function equalArrivals(spec: Spec, base: Made, span: Span): ChoiceDependent | undefined {
-  if (haltedIn(base, span)) return undefined;
-  const service = span.service;
-  const lines = linesOf(base, service);
-  const found = arrivals(base, span);
-  const original = outcomeFor(base, service);
-  for (const [name, x] of found) {
-    const first = found.find(([other]) => sameStep(other, name));
-    if (first === undefined || sameLineId(first[1], x)) continue;
-    const swapped = alignTo(
-      inIds(lines, span),
-      span,
-      lines.map((l) => swapIds(first[1], x, l)),
-    );
-    const result = equalMessages(compareOf(spec, service), service, name, original, outcomeFor(base, service, swapped));
-    if (result !== undefined) return result;
-  }
-  return undefined;
-}
-
 /** Lean's Execution.taken. */
 function taken(m: Made, span: Span): (readonly [number, StepName])[] {
   const steps = m.world.services.get(span.service)?.processing.state.steps ?? [];
@@ -196,9 +144,8 @@ function stepOrderSearch(
   const base = executeSpec(spec, prefix);
   const baseSpan = spanOf(base, origin, service);
   if (baseSpan === undefined) return { tried: [], found: [] };
-  const equal = equalArrivals(spec, base, baseSpan);
-  const found: ChoiceDependent[] = equal === undefined ? [] : [equal];
-  if (candidatesOf(base, baseSpan).length === 0) return { tried: [], found };
+  if (candidatesOf(base, baseSpan).length === 0) return { tried: [], found: [] };
+  const found: ChoiceDependent[] = [];
   const compare = compareOf(spec, service);
   const tried: Tried[] = [];
   const reached = new Set([stepsKey(taken(base, baseSpan).map(([, name]) => name))]);
@@ -215,6 +162,8 @@ function stepOrderSearch(
     for (const [i, j] of candidatesOf(executed, span)) {
       const [a, b] = [nameOf.get(i), nameOf.get(j)];
       if (a === undefined || b === undefined) continue;
+      const [last2, last] = parentOrder.slice(-2);
+      if (last2 !== undefined && last !== undefined && sameStep(last2, a) && sameStep(last, b)) continue;
       const order = [
         ...names.filter(([n]) => n < i).map(([, name]) => name),
         ...names.filter(([n]) => i < n && n < j && leadsTo(steps, n, j)).map(([, name]) => name),
@@ -278,9 +227,7 @@ export function stepOrderChanges(
     const key = canonicalJson([span.origin, span.service] as Json);
     if ((span.origin.type === "startup" ? from > 0 : index < from) || searched.has(key)) return [];
     searched.add(key);
-    const tied = arrivals(executed, span);
-    const equal = tied.some(([name], n) => tied.findIndex(([other]) => sameStep(other, name)) < n);
-    if (candidatesOf(executed, span).length === 0 && !equal) return [];
+    if (candidatesOf(executed, span).length === 0) return [];
     const prefix: Scenario = { ...sc, lines: sc.lines.slice(0, index + 1), expectations: [] };
     const search = stepOrderSearch(spec, prefix, span.origin, span.service);
     if (search.tried.length === 0 && search.found.length === 0) return [];

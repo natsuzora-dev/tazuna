@@ -2,7 +2,6 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
-import type { Json } from "../data/values.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { answerIn, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
 import type { LineBody } from "../service/message.ts";
@@ -52,26 +51,6 @@ export function arriveFrom(r: Processing, sender: string, id: LineId, body: Line
   }
 }
 
-/** Lean's arrivalContent: the message as `service` reads it, without the id that only names it. */
-function arrivalContent(service: string, sender: string, body: LineBody): Json {
-  switch (body.type) {
-    case "command":
-    case "query":
-    case "subscribe":
-      return { [body.type]: body.input as Json };
-    case "event": {
-      const resultOf = body.resultOf === undefined ? undefined : sentId(service, body.resultOf);
-      return { event: body.payload as Json, resultOf: resultOf === undefined ? null : lineIdText(resultOf) };
-    }
-    case "answer":
-      return { answer: body.answer as Json, to: lineIdText(sentId(service, body.to) ?? body.to) };
-    case "unsubscribe":
-      return { unsubscribe: lineIdText(receivedId(sender, body.to)) };
-    default:
-      return null;
-  }
-}
-
 /** Lean's Arrival: a message of a tie. A tie has at most one message per channel, so its messages arrive in any order. */
 export interface Arrival {
   readonly sender: string;
@@ -81,10 +60,10 @@ export interface Arrival {
 }
 
 /** Lean's Arrival.name. */
-const arrivalName = (service: string, a: Arrival): StepName => ({
+const arrivalName = (a: Arrival): StepName => ({
   kind: "arrival",
   definition: a.definition,
-  content: arrivalContent(service, a.sender, a.body),
+  message: lineIdText(receivedId(a.sender, a.id)),
 });
 
 /** Lean's arriveAll: the messages of a tie arrive, each as its own message, in the order that the step order names. */
@@ -96,19 +75,19 @@ export function arriveAll(r: Processing, arrivals: readonly Arrival[]): void {
     const [named, ...rest] = s.stepOrder;
     let chosen = next;
     if (named?.kind === "arrival") {
-      const found = remaining.find((a) => sameStep(arrivalName(r.st.service, a), named));
+      const found = remaining.find((a) => sameStep(arrivalName(a), named));
       if (found === undefined)
         report(s, {
           kind: "InvalidInput.unreadyStep",
           definition: null,
-          data: { named, candidates: remaining.map((a) => arrivalName(r.st.service, a)) },
+          data: { named, candidates: remaining.map(arrivalName) },
         });
       chosen = found;
       s.stepOrder = rest;
     }
     remaining.splice(remaining.indexOf(chosen), 1);
     const step = newStep(s, { kind: "arrival", tie: { kind: "arrivals", first } }, { message: s.messageCount + 1 });
-    r.note.arrivalBegins(step, arrivalName(r.st.service, chosen));
+    r.note.arrivalBegins(step, arrivalName(chosen));
     arriveFrom(r, chosen.sender, chosen.id, chosen.body);
     r.note.arrivalEnds();
   }

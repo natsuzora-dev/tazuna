@@ -117,9 +117,8 @@ export function testSpec(spec: CheckedSpec, options: { readonly update: boolean;
 
 /**
  * Simulates each scenario and returns the violations that it reports, each at the line it names, with the step orders
- * that change the result of one of its processings and the delivery orders of equal messages that change the result of
- * a running service, and the trace of each
- * running service when the simulation did not halt: the own service's, and each running peer's that has lines.
+ * that change the result of one of its processings, and the trace of each running service when the simulation did not
+ * halt: the own service's, and each running peer's that has lines.
  */
 function simulateScenarios(spec: Spec): {
   readonly violations: ReportedViolation[];

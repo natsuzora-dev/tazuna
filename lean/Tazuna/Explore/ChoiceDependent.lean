@@ -46,15 +46,7 @@ inductive ChoiceDependent where
   -/
   | searchLimit (definition : Spec.Ref) (limit : Nat)
   /--
-  Two equal messages that one line delivers to the running service `service`, which arrive in steps of the name
-  `arrival`, are processed differently, so which of them gets which processing depends on which arrives first, which
-  nothing outside tells: the outcome with the two swapped differs by `difference`. That outcome is the same run with the
-  two ids swapped, since the service reads a received id only to name the message, so no search executes it.
-  `definition` is the request or event that the messages carry, or answer or end.
-  -/
-  | equalMessages (definition : Spec.Ref) (service : String) (arrival : StepName) (difference : Difference)
-  /--
-  Comparing the records of two executions that a stepOrder or equalMessages violation at `definition` would name held more
+  Comparing the records of two executions that a stepOrder violation at `definition` would name held more
   than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
   the choice changes the records is not known.
   -/

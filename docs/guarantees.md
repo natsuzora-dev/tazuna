@@ -63,9 +63,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
   A machine receives each event of one group that `decide` returns in a step of its own, so the order of a group is one of these orders.
   Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
   A tied deadline, and a message that a line delivers with others, is a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
-- Equal messages that one line delivers to one service are not searched.
-  A service reads a received id only to route a message, to answer it, and to tell one it processed before, so their other order is the same run with their ids swapped, and `test` compares that run without executing it (`ChoiceDependent.equalMessages`).
-  So `ChoiceDependent.equalMessages` means that what the receiver sends back to the sender depends on the order in which the equal messages arrived, even when nothing downstream reads the difference, as symmetry reduction reports a model that is not symmetric.
+  Each message is told apart by its id, so equal messages are ordered like any others.
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
 Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
@@ -190,7 +188,6 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 - Spec functions read the keys of an entity in one order, whatever order the records were written in.
   Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
 - The step-order search reaches every order of dependent steps that changes a processing's outcome (dynamic partial-order reduction): that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
-- `ChoiceDependent.equalMessages` compares the run with two equal messages' ids swapped instead of executing the other arrival order (`equalArrivals` in `lean/Tazuna/Explore/StepOrders.lean`).
 - The end-of-run checks of the exchanges with external services (`checkExchanges` in `lean/Tazuna/Service/Input.lean`), and which steps cause which (`causedBy` in `lean/Tazuna/Sim/Order.lean`), beyond the `after` theorems under Ordering.
 - `check`'s `Malformed`, `NonCanonical`, and `Restricted` rules exist only in the TypeScript runtime. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it.
 

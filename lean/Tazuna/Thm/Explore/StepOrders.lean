@@ -225,12 +225,12 @@ theorem stepOrderSearch_same (base : Execution)
   | some span =>
     by_cases hc : (base.candidatesOf span).isEmpty = true
     · simp [hc]
-    · simp only [hs, hc, Bool.false_eq_true, ↓reduceIte, bind, pure, List.append_eq_nil_iff] at h ⊢
+    · simp only [hs, hc, Bool.false_eq_true, ↓reduceIte, bind, pure] at h ⊢
       obtain ⟨hran, hnone⟩ := searchQueue_inv compare executeWith o st (stepOrderLimit + 1)
         { reached := [(base.taken span).map (·.2)], queue := [(base, [])] }
         ⟨fun t ht => by simp at ht, fun _ => ⟨fun t ht => by simp at ht, rfl⟩⟩
       intro t ht
-      obtain ⟨hv, -⟩ := hnone h.2
+      obtain ⟨hv, -⟩ := hnone h
       rcases hran t ht with hr | ⟨parent, found, hf, hs⟩
       · exact .inl hr
       · rcases hv t ht with hv | ⟨f, hv, rfl⟩

@@ -506,8 +506,8 @@ def footprints (s : State) (c : Collect) : Array Footprint :=
 /--
 The pairs of steps whose other order test runs, by step number in the order they began, whose names differ so that a
 `stepOrder` names each, that no cause orders, and whose order is a choice: the steps of one tie, or the steps of one
-message that no tie chose. Equal messages of one tie arrive in steps of one name, so no pair of them runs: their other
-order is the same run with their ids swapped (equalArrivals). Of those, only the pairs whose footprints overlap and that do not commute run, the one independence relation of
+message that no tie chose. Each message of a tie arrives in a step named by its id, so equal messages pair like any
+others. Of those, only the pairs whose footprints overlap and that do not commute run, the one independence relation of
 the search. A run that halted (in the semantic run, or `stopped` from enabled) skips the steps after the halt, so it has
 none. Precedent: dynamic partial-order reduction (Flanagan and Godefroid, POPL 2005), where dependence only selects the
 orders to run.
