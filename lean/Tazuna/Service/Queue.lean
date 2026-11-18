@@ -42,7 +42,6 @@ def afterMessage [Monad m] (st : Service) (fs : Functions m) (s : State) : m Sta
   let s ← checkHolds st fs s
   if s.halted.isSome then pure s else
   let s ← checkInvariants st fs s
-  let s ← rearm st fs s
   if s.halted.isSome then pure s else
   publish st fs s
 
@@ -73,10 +72,9 @@ def fireDue [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (to : Time
     match chooseDeadline s e due tied with
     | .error invalid => pure (s.report (.invalidInput invalid))
     | .ok (t, s) => do
-      let time := t.time.getD s.now
-      let s := { s with now := max s.now time }
+      let s := { s with now := max s.now t.time }
       let s := s.newMessage
-      let (s, step) := s.newStep (.deadline t.armedBy t.timedIn (if tied then e.time.map .deadlines else none))
+      let (s, step) := s.newStep (.deadline t.armedBy (if tied then some (.deadlines e.time) else none))
       MonadNote.note (.stepBegins step t.step none)
       let r ← settled fs st step (some t.machine) (fire fs st step t) ⟨s, {}⟩
       MonadNote.note .stepEnds

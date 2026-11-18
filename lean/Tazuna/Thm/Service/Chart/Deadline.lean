@@ -9,54 +9,42 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.State Tazuna.Thm.Spec.Shape Tazuna
 variable {st : Service} {fs : Functions Id} {s : State}
 
 theorem addDeadlines_fixed (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
-    (addDeadlines step name n ds s).fixed = s.fixed := by
+    (addDeadlines st fs step name n ds s).fixed = s.fixed := by
   unfold addDeadlines
-  induction ds generalizing s with
-  | nil => rfl
-  | cons d ds ih => exact ih
-
-theorem rearm_fixed : (rearm st fs s).fixed = s.fixed := by
-  unfold rearm
-  rw [foldlM_id]
-  generalize s.deadlines = ts
-  induction ts generalizing s with
-  | nil => rfl
-  | cons t ts ih =>
-    simp only [List.foldl_cons]
-    rw [ih]
-    split
-    · rfl
-    · split
+  split
+  · rfl
+  · rw [foldlM_id]
+    clear ‹_ = some _›
+    induction ds generalizing s with
+    | nil => rfl
+    | cons d ds ih =>
+      simp only [List.foldl_cons]
+      rw [ih]
+      split
       · rfl
-      · simp only [id_bind]
-        split
-        · simp [report_eq, State.fixed]
-        · rfl
+      · split
+        · simp [State.fixed]
+        · generalize fs.deadlineAt _ _ _ = r
+          rcases r with e | t <;> simp [Functor.map, report_eq, State.fixed]
 
 theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) :
-    (addDeadlines step name n ds s).lines = s.lines := by
+    (addDeadlines st fs step name n ds s).lines = s.lines := by
   unfold addDeadlines
-  induction ds generalizing s with
-  | nil => rfl
-  | cons d ds ih => exact ih
-
-theorem rearm_lines : (rearm st fs s).lines = s.lines := by
-  unfold rearm
-  rw [foldlM_id]
-  generalize s.deadlines = ts
-  induction ts generalizing s with
-  | nil => rfl
-  | cons t ts ih =>
-    simp only [List.foldl_cons]
-    rw [ih]
-    split
-    · rfl
-    · split
+  split
+  · rfl
+  · rw [foldlM_id]
+    clear ‹_ = some _›
+    induction ds generalizing s with
+    | nil => rfl
+    | cons d ds ih =>
+      simp only [List.foldl_cons]
+      rw [ih]
+      split
       · rfl
-      · simp only [id_bind]
-        split
+      · split
         · simp
-        · rfl
+        · generalize fs.deadlineAt _ _ _ = r
+          rcases r with e | t <;> simp [Functor.map]
 
 theorem takeDeadline_fixed (t : Deadline) : (s.takeDeadline t).1.fixed = s.fixed := rfl
 

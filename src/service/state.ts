@@ -144,17 +144,14 @@ export interface Chosen {
   readonly t: Transition;
 }
 
-/** An `after` deadline of an active state. An `at` deadline (`fromAt`) has no `time` until it is computed. */
+/** An `after` deadline of an active state, its time fixed when the state was entered. */
 export interface Deadline {
-  time: Temporal.Instant | undefined;
-  readonly fromAt: boolean;
+  readonly time: Temporal.Instant;
   readonly machine: InstanceId;
   readonly state: string;
   readonly name: string;
   /** The step that entered `state`, which armed the deadline. */
   readonly armedBy: number;
-  /** The last message after which rearm changed `time` by reading what steps write, or undefined when it read nothing. */
-  timedIn: number | undefined;
 }
 
 export const machineOf = (requester: Requester): InstanceId | undefined =>
@@ -198,9 +195,8 @@ export const sameTie = (a: Tie, b: Tie): boolean =>
 
 /**
  * Lean's StepOrigin: what began a step. A root step has no cause: an input's first step, or a screen's settling. A
- * caused step continues the message of its cause. A deadline step names the step that armed the deadline, the message
- * whose end last changed its time by reading what steps write, and its tie, if any. An arrival step names the tie of
- * its message.
+ * caused step continues the message of its cause. A deadline step names the step that armed the deadline and its tie,
+ * if any. An arrival step names the tie of its message.
  */
 export type StepOrigin =
   | { readonly kind: "root" }
@@ -208,7 +204,6 @@ export type StepOrigin =
   | {
       readonly kind: "deadline";
       readonly armedBy: number;
-      readonly timedIn: number | undefined;
       readonly tie: Tie | undefined;
     }
   | { readonly kind: "arrival"; readonly tie: Tie };

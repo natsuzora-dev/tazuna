@@ -178,7 +178,7 @@ export class Collect
   private afterMessage: number | undefined;
   /** The access of the step in which a message of a tie arrives, while it is processed (arrivalBegins). */
   private arrival: StepAccess | undefined;
-  /** For each message, the values that its afterMessage read: subscription answers, holds, invariants, and rearm. */
+  /** For each message, the values that its afterMessage read: subscription answers, holds and invariants. */
   private readonly afters = new Map<number, Footprint>();
   readonly violations: (BagOrderDependent & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */

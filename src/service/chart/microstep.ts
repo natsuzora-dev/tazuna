@@ -60,7 +60,7 @@ function enterOne(r: Processing, instance: Instance, name: string, step: number)
     else endWith(r, instance.id, limits.exitDepth);
     return;
   }
-  addDeadlines(r.state, step, instance.id, name, r.functions.deadlines(instance.chart.name, name));
+  addDeadlines(r, instance, name, step);
   if (state.activities.length > 0) enterQueue(r.queue, instance.id, name, step);
 }
 

@@ -21,15 +21,10 @@ export function fire(r: Processing, due: Deadline, step: number): void {
   );
 }
 
-const hasTime = (t: Deadline): t is Deadline & { time: Temporal.Instant } => t.time !== undefined;
-
 /** Returns the first deadline, in entry order, due at the earliest time at or before `to`. */
-export function earliestDeadline(
-  deadlines: readonly Deadline[],
-  to: Temporal.Instant,
-): (Deadline & { time: Temporal.Instant }) | undefined {
-  return deadlines.reduce<(Deadline & { time: Temporal.Instant }) | undefined>((best, t) => {
-    if (!hasTime(t) || Temporal.Instant.compare(t.time, to) > 0) return best;
+export function earliestDeadline(deadlines: readonly Deadline[], to: Temporal.Instant): Deadline | undefined {
+  return deadlines.reduce<Deadline | undefined>((best, t) => {
+    if (Temporal.Instant.compare(t.time, to) > 0) return best;
     return best === undefined || Temporal.Instant.compare(t.time, best.time) < 0 ? t : best;
   }, undefined);
 }

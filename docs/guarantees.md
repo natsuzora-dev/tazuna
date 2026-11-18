@@ -22,7 +22,7 @@ The events that name one request as their `resultOf` travel on a channel of thei
 An event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
 Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused, or when a clock line sent it after the earlier.
-A deadline counts as caused by the step that entered its state, and, when the end of a message changed its time by reading records, context, states, or shown values, by every step of that message and what caused them. An `at` that reads none of these, like a `delay`, follows only the step that entered its state.
+A deadline counts as caused by the step that entered its state, which also fixed its time.
 Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
 
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
@@ -191,7 +191,7 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
   Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
 - The step-order search reaches every order of dependent steps that changes a processing's outcome (dynamic partial-order reduction): that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
 - `ChoiceDependent.equalMessages` compares the run with two equal messages' ids swapped instead of executing the other arrival order (`equalArrivals` in `lean/Tazuna/Explore/StepOrders.lean`).
-- The end-of-run checks of the exchanges with external services (`checkExchanges` in `lean/Tazuna/Service/Input.lean`), and which steps cause which (`causedBy` in `lean/Tazuna/Sim/Order.lean`, and the `timedIn` that a deadline carries in `lean/Tazuna/Service/State.lean`), beyond the `after` theorems under Ordering.
+- The end-of-run checks of the exchanges with external services (`checkExchanges` in `lean/Tazuna/Service/Input.lean`), and which steps cause which (`causedBy` in `lean/Tazuna/Sim/Order.lean`), beyond the `after` theorems under Ordering.
 - `check`'s `Malformed`, `NonCanonical`, and `Restricted` rules exist only in the TypeScript runtime. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it.
 
 ## Proven properties

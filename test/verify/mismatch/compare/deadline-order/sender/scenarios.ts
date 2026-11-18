@@ -23,6 +23,6 @@ export const latePongFirst = scenario(
 );
 
 export const overdueBeforeLate = scenario(
-  "Arm and move the clock past 10:00; the implementation trace sends overdue's ping and pong before late's ping: overdue's constant `at` reads nothing that a step writes, so its pong follows only its own ping; no violation",
+  "Arm and move the clock past 10:00; the implementation trace sends overdue's ping and pong before late's ping: a deadline follows only the step that entered its state, so overdue's pong follows only its own ping; no violation",
   { given, when, then: () => [] },
 );

@@ -28,13 +28,15 @@ export const pong = command({ emits: [ponged] }).decide(() => [emit(ponged, {})]
 export const setDueOnArm = automation({ receives: { armed }, commands: { setDue } }).send({});
 
 export const waiter = machine({
-  description: "Pong at the setting's due",
+  description: "Pong at the setting's due, entering waiting again whenever the due changes",
+  receives: { dueChanged },
   commands: { pong },
   initial: "waiting",
   states: { waiting: {}, ponging: {}, done: { type: "final" } },
 }).chart({
   states: {
     waiting: {
+      on: { dueChanged: [{ target: "waiting", reenter: true }] },
       after: {
         due: {
           at: ({ records }) => records.Setting.due ?? Temporal.Instant.from("2099-01-01T00:00:00Z"),

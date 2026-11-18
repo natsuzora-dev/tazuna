@@ -86,7 +86,7 @@ export function fingerprint(r: Processing): string {
       ...[...s.records.singles].map(([name, row]) => [name, row.encoded]),
     ],
     requests: requestsFingerprint(r),
-    deadlines: s.deadlines.map((t) => [t.machine, t.state, t.name, t.time?.toString() ?? null]),
+    deadlines: s.deadlines.map((t) => [t.machine, t.state, t.name, t.time.toString()]),
     subscriptions: s.subscriptions.fingerprint(({ query, input }) => [query, input]),
     machines: [...s.machines.values()].map((instance) => [
       instanceFingerprint(instance),

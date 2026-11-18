@@ -26,14 +26,13 @@ export interface Enabled {
     readonly target: string;
     readonly sender: string;
   }[];
-  /** The time of the next deadline, absent when no deadline has a time. */
+  /** The time of the next deadline, absent when there is none. */
   readonly nextDeadline?: string;
 }
 
 function nextDeadline(s: State): Temporal.Instant | undefined {
   return s.deadlines.reduce<Temporal.Instant | undefined>(
-    (best, t) =>
-      t.time === undefined ? best : best === undefined || Temporal.Instant.compare(t.time, best) < 0 ? t.time : best,
+    (best, t) => (best === undefined || Temporal.Instant.compare(t.time, best) < 0 ? t.time : best),
     undefined,
   );
 }

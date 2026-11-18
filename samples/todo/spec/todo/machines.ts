@@ -2,9 +2,12 @@ import { date, datetime, ref } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { recordReminderDecisionFailed, recordReminderTimeReached, setReminder } from "./commands.ts";
 import { machine, Task, todoConstants } from "./data.ts";
+import { dueChanged } from "./events.ts";
 
 export const reminder = machine({
-  description: "Wait until the reminder time of each open task arrives",
+  description:
+    "Wait until the reminder time of each open task arrives, entering waiting again when the due date moves the reminder time",
+  receives: { dueChanged },
   commands: { recordReminderTimeReached },
   initial: "reminding",
   states: {
@@ -23,6 +26,11 @@ export const reminder = machine({
     },
     waiting: {
       holds: { remindAt: ({ key, records }) => records.Task.get(key.taskId)?.remindAt ?? null },
+      on: {
+        dueChanged: [
+          { guard: { sameTask: ({ key, payload }) => payload.id === key.taskId }, target: "waiting", reenter: true },
+        ],
+      },
       after: { reminderTime: { at: ({ held }) => held.remindAt, onFired: [{ target: "recording" }] } },
     },
     recording: {

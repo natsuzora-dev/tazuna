@@ -78,7 +78,10 @@ type Transition<N extends string, Ctx, A> = {
 export type Transitions<N extends string, Ctx, A> = readonly Transition<N, Ctx, A>[];
 type NoAt = { readonly at?: never };
 type NoDelay = { readonly delay?: never };
-/** A deadline. `at` does not read `now`, because a fixed length from now is a `delay`. */
+/**
+ * A deadline, its time fixed when the state is entered. `at` does not read `now`, because a fixed length from now is a
+ * `delay`. To move a deadline, enter its state again (`reenter: true`).
+ */
 type Deadline<N extends string, Ctx, A> = {
   readonly onFired: Transitions<N, Ctx, A>;
 } & (({ readonly delay: Delay } & NoAt) | ({ readonly at: (args: Omit<A, "now">) => Temporal.Instant } & NoDelay));

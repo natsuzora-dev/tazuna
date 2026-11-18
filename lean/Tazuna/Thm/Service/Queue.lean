@@ -35,8 +35,8 @@ theorem afterMessage_fixed : (afterMessage st fs s).fixed = s.fixed := by
   split
   · exact checkHolds_fixed
   · split
-    · exact rearm_fixed.trans (checkInvariants_fixed.trans checkHolds_fixed)
-    · exact publish_fixed.trans (rearm_fixed.trans (checkInvariants_fixed.trans checkHolds_fixed))
+    · exact checkInvariants_fixed.trans checkHolds_fixed
+    · exact publish_fixed.trans (checkInvariants_fixed.trans checkHolds_fixed)
 
 theorem checkHolds_lines : (checkHolds st fs s).lines = s.lines := by
   unfold checkHolds
@@ -57,9 +57,9 @@ theorem afterMessage_grows : Grows s (afterMessage st fs s) := by
   split
   · exact Grows.of_lines checkHolds_lines
   · split
-    · exact Grows.of_lines (rearm_lines.trans (checkInvariants_lines.trans checkHolds_lines))
-    · exact (Grows.of_lines (rearm_lines.trans (checkInvariants_lines.trans checkHolds_lines))).trans
-        (congrArg Fixed.now (rearm_fixed.trans (checkInvariants_fixed.trans checkHolds_fixed))) publish_grows
+    · exact Grows.of_lines (checkInvariants_lines.trans checkHolds_lines)
+    · exact (Grows.of_lines (checkInvariants_lines.trans checkHolds_lines)).trans
+        (congrArg Fixed.now (checkInvariants_fixed.trans checkHolds_fixed)) publish_grows
 
 theorem afterMessage_records : (afterMessage st fs s).records = s.records := congrArg Fixed.records afterMessage_fixed
 
@@ -95,7 +95,7 @@ theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time
       (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
     ∃ s₁ q tie', fireDue st fs to (fuel + 1) tie s =
         fireDue st fs to fuel tie' (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q)) ∧
-      s₁.now = max s'.now (t.time.getD s'.now) := by
+      s₁.now = max s'.now t.time := by
   refine ⟨_, _, _, by simp only [fireDue, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, he, hc, Tazuna.Thm.Service.Note.note_id,
       id_pure, endMessage_id, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _

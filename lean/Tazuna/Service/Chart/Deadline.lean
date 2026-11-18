@@ -6,30 +6,28 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def addDeadlines (step : Nat) (name : InstanceId) (n : String) (deadlines : List (String × DeadlineTime)) (s : State) :
-    State :=
-  deadlines.foldl (fun s (deadline, d) =>
-    { s with deadlineCount := s.deadlineCount + 1,
-             deadlines := s.deadlines ++
-               [{ time := (match d with | .delay delay => some (s.now + delay) | .atExpression => none),
-                  fromAt := d == .atExpression, order := s.deadlineCount + 1, machine := name, state := n,
-                  name := deadline, armedBy := step }] }) s
-
-def rearm [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
-  s.deadlines.foldlM (fun s t =>
-    if s.halted.isSome || !t.fromAt then pure s else
-    match s.machine? t.machine with
-    | none => pure s
-    | some i => do
-      match ← fs.deadlineAt (s.scopeOf i (some t.state)) s.records t.name with
-      | .error e =>
-        pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
-      | .ok (time, read) =>
-        pure { s with deadlines := s.deadlines.map fun u =>
-          if u.order == t.order && u.time != some time then
-            { u with time := some time, timedIn := if read then some s.messageCount else none }
-          else u })
-    s
+/--
+The state with the `after` deadlines of state `n` of instance `name` armed by step `step`. Each time is fixed now, as
+XState and SCXML evaluate a delay when the state is entered: a delay counts from now, and an `at` is computed from
+current values once. A spec moves a deadline by entering its state again.
+-/
+def addDeadlines [Monad m] (st : Service) (fs : Functions m) (step : Nat) (name : InstanceId) (n : String)
+    (deadlines : List (String × DeadlineTime)) (s : State) : m State :=
+  match s.machine? name with
+  | none => pure s
+  | some i =>
+    let add (s : State) (deadline : String) : Except Issue Time → State
+      | .error e => s.report (.fault (issueViolation (st.ref i.chart.name) e))
+      | .ok time =>
+        { s with deadlineCount := s.deadlineCount + 1,
+                 deadlines := s.deadlines ++
+                   [{ time, order := s.deadlineCount + 1, machine := name, state := n, name := deadline,
+                      armedBy := step }] }
+    deadlines.foldlM (fun s (deadline, d) =>
+      if s.halted.isSome then pure s else
+      match d with
+      | .delay delay => pure (add s deadline (.ok (s.now + delay)))
+      | .atExpression => add s deadline <$> fs.deadlineAt (s.scopeOf i (some n)) s.records deadline) s
 
 /-- The state without the deadline `t`, and whether `t` was still waiting. -/
 def State.takeDeadline (s : State) (t : Deadline) : State × Bool :=

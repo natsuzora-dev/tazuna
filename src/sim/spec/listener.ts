@@ -4,7 +4,7 @@ import type { Obligation } from "../../data/uncovered.ts";
 import { type Collect, InstrumentedFunctions, type InstrumentFunctions } from "../../explore/instrument.ts";
 import type { Spec } from "../../load/load.ts";
 import type { InstanceId } from "../../service/instance.ts";
-import { type Note, nowName, type RecordPart, type RegionCheck, type ValueKey, valueName } from "../../service/note.ts";
+import { type Note, type RecordPart, type RegionCheck, type ValueKey, valueName } from "../../service/note.ts";
 import type { Evaluations } from "../../service/state.ts";
 
 import { Cache } from "./cache.ts";
@@ -12,6 +12,7 @@ import { Coverage } from "./coverage.ts";
 import { SpecFunctions } from "./functions.ts";
 
 /** The evaluation cache's name for the time, which no valueName can be. */
+const now = "@now";
 
 /**
  * The note that a TS run listens with: Lean's Collect, the evaluation cache (which the reads and writes keep current),
@@ -98,10 +99,10 @@ export class Listener implements Note, Evaluations {
     if (!this.cache.quiet) this.read({ kind: "shown", id, slot });
   }
   readNow(): void {
-    if (!this.cache.quiet) this.cache.read(nowName);
+    if (!this.cache.quiet) this.cache.read(now);
   }
   wroteNow(): void {
-    this.cache.wrote(nowName);
+    this.cache.wrote(now);
   }
 
   reached(obligation: Obligation): void {
@@ -114,7 +115,7 @@ export class Listener implements Note, Evaluations {
     if (!this.cache.quiet)
       for (const name of reads) {
         this.cache.read(name);
-        if (name !== nowName) this.collected.read(name);
+        if (name !== now) this.collected.read(name);
       }
     return true;
   }

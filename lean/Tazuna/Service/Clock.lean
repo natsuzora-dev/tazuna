@@ -23,13 +23,10 @@ end
 
 def earliestDeadline (deadlines : List Deadline) (to : Time) : Option Deadline :=
   deadlines.foldl (fun best t =>
-    match t.time with
-    | none => best
-    | some time =>
-      if time > to then best else
-      match best with
-      | none => some t
-      | some b => if time < b.time.getD time then some t else some b) none
+    if t.time > to then best else
+    match best with
+    | none => some t
+    | some b => if t.time < b.time then some t else some b) none
 
 /-- The name of the step in which deadline `t` fires. -/
 def Deadline.step (t : Deadline) : StepName := .deadline t.machine t.state t.name

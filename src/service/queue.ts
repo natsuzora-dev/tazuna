@@ -1,14 +1,13 @@
 import { limits } from "../data/limits.generated.ts";
 import { ref } from "./basic.ts";
 import { settled } from "./chart/always.ts";
-import { rearm } from "./chart/deadline.ts";
 import { drain } from "./chart/macrostep.ts";
 import type { Processing } from "./chart/queue.ts";
 import { chooseDeadline, deadlineStep, earliestDeadline, fire } from "./clock.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { publish } from "./query.ts";
 import { LazyRecordSource } from "./records.ts";
-import { type Deadline, halt, inStep, NoteAccess, newMessage, newStep, report, running, scopeOf } from "./state.ts";
+import { halt, inStep, NoteAccess, newMessage, newStep, report, running, scopeOf } from "./state.ts";
 
 function checkHolds(r: Processing): void {
   for (const instance of running(r.state)) {
@@ -37,7 +36,6 @@ function checkInvariants(r: Processing): void {
 function afterMessage(r: Processing): void {
   checkHolds(r);
   checkInvariants(r);
-  rearm(r);
   publish(r);
 }
 
@@ -61,7 +59,7 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
       report(s, { kind: "Fault.exceededDueDeadlines", definition: null, data: { limit: limits.dueDeadlines } });
     fired += 1;
     const { time } = e;
-    const due = s.deadlines.filter((t): t is Deadline & { time: Temporal.Instant } => t.time?.equals(time) === true);
+    const due = s.deadlines.filter((t) => t.time.equals(time));
     tie = due.length > 1 || tie?.equals(time) === true ? time : undefined;
     const deadline = chooseDeadline(r, e, due, tie !== undefined);
     if (Temporal.Instant.compare(deadline.time, s.now) > 0) {
@@ -72,7 +70,6 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
     const step = newStep(s, {
       kind: "deadline",
       armedBy: deadline.armedBy,
-      timedIn: deadline.timedIn,
       tie: tie === undefined ? undefined : { kind: "deadlines", time: tie },
     });
     inStep(r, step, deadlineStep(deadline), undefined, () =>

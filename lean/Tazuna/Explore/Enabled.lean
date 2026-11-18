@@ -37,10 +37,7 @@ def awaiting (s : State) : List Awaiting :=
   s.pending.map fun p => { id := p.id, name := p.activity.ref.name, target := p.activity.ref.service, sender := p.requester.sender }
 
 def nextDeadline (s : State) : Option Time :=
-  s.deadlines.foldl (fun best t => match t.time, best with
-    | none, _ => best
-    | some time, none => some time
-    | some time, some b => some (min b time)) none
+  s.deadlines.foldl (fun best t => some (match best with | none => t.time | some b => min b t.time)) none
 
 /-- What can happen next in a state. Operations are grouped by open screen instance, in opening order. -/
 def enabled [Monad m] (st : Service) (fs : Functions m) (s : State) :

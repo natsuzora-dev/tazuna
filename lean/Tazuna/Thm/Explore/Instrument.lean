@@ -175,10 +175,6 @@ theorem closeFinal_agrees (step : Nat) (name : InstanceId) (r : Processing) :
   agree [h.close, endWith_agrees (exitOne_agrees h _)]
 
 omit [MonadNote (StateT C Id)] in
-theorem rearm_agrees (s : State) : Agrees (rearm st fsI s) (rearm st fs s) := by
-  unfold rearm; agree [h.deadlineAt]
-
-omit [MonadNote (StateT C Id)] in
 theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (request fsI st step name state a r) (request fs st step name state a r) := by
   unfold request; refine withMachine_agrees (fun i r => ?_) r; agree [h.input]
@@ -205,10 +201,16 @@ theorem activateEntered_agrees (e : InstanceId × String × Nat) (r : Processing
 theorem sendEntered_agrees (r : Processing) : Agrees (sendEntered fsI st r) (sendEntered fs st r) := by
   unfold sendEntered; agree [activateEntered_agrees h]
 
+omit [MonadNote (StateT C Id)] in
+theorem addDeadlines_agrees (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime))
+    (s : State) : Agrees (addDeadlines st fsI step name n ds s) (addDeadlines st fs step name n ds s) := by
+  unfold addDeadlines; agree [h.deadlineAt]
+
 theorem enterOne_agrees (step : Nat) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (enterOne fsI st step name n r) (enterOne fs st step name n r) := by
   unfold enterOne; refine withMachine_agrees (fun i r => ?_) r
-  agree [runAssign_agrees h, closeFinal_agrees h, endWith_agrees (exitOne_agrees h _), h.deadlines]
+  agree [runAssign_agrees h, closeFinal_agrees h, endWith_agrees (exitOne_agrees h _), h.deadlines,
+    addDeadlines_agrees h]
 
 theorem enter_agrees (step : Nat) (name : InstanceId) (targets : List String) (r : Processing) :
     Agrees (enter fsI st step name targets r) (enter fs st step name targets r) := by
@@ -419,7 +421,7 @@ theorem checkInvariants_agrees (s : State) : Agrees (checkInvariants st fsI s) (
 omit [MonadNote (StateT C Id)] in
 theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterMessage st fs s) := by
   unfold afterMessage
-  agree [refreshScreens_agrees h, checkHolds_agrees h, checkInvariants_agrees h, rearm_agrees h, publish_agrees h]
+  agree [refreshScreens_agrees h, checkHolds_agrees h, checkInvariants_agrees h, publish_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st fsI s c) (startInstance st fs s c) := by

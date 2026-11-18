@@ -42,19 +42,16 @@ structure Instance where
 deriving Repr, Inhabited
 
 /--
-An `after` deadline of an active state. `order` is the creation order. An `at` deadline has no time until computed.
+An `after` deadline of an active state, its time fixed when the state was entered. `order` is the creation order.
 -/
 structure Deadline where
-  time : Option Time
-  fromAt : Bool := false
+  time : Time
   order : Nat
   machine : InstanceId
   state : String
   name : String
   /-- The step that entered `state`, which armed the deadline. -/
   armedBy : Nat
-  /-- The last message after which rearm changed `time` by reading what steps write, or none when it read nothing. -/
-  timedIn : Option Nat := none
 deriving DecidableEq, Repr, Inhabited
 
 /--
@@ -100,11 +97,10 @@ inductive StepOrigin where
   /-- The step `cause`, whose message the step continues. -/
   | caused (cause : Nat)
   /--
-  A deadline: `armedBy` is the step that armed it, which caused it as `cause` does but in an earlier message, `timedIn`
-  the message whose end last changed its time by reading what steps write (see `Sim.causes`), and `tie` its tie with
-  the other deadlines due at its time, if any.
+  A deadline: `armedBy` is the step that armed it, which caused it as `cause` does but in an earlier message, and `tie`
+  its tie with the other deadlines due at its time, if any.
   -/
-  | deadline (armedBy : Nat) (timedIn : Option Nat) (tie : Option Tie)
+  | deadline (armedBy : Nat) (tie : Option Tie)
   /-- The arrival of a message of the tie `tie`. -/
   | arrival (tie : Tie)
 deriving DecidableEq, Repr, Inhabited
@@ -116,7 +112,7 @@ def StepOrigin.cause : StepOrigin → Option Nat
 
 /-- The tie of a deadline or arrival step, if any. -/
 def StepOrigin.tie : StepOrigin → Option Tie
-  | .deadline _ _ tie => tie
+  | .deadline _ tie => tie
   | .arrival tie => some tie
   | _ => none
 

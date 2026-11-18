@@ -81,8 +81,18 @@ theorem keeps_emitAll (s : State) (r : Option LineId) (es : List (Emit × Emitte
     (s.emitAll r es).service = s.service := (keeps_emitAll s r es).1
 
 theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
-    KeepsKeys s (addDeadlines step name n ds s) :=
-  keeps_foldl _ (fun t x => by keys_leaf) _ _
+    KeepsKeys s (addDeadlines st fs step name n ds s) := by
+  unfold addDeadlines
+  split
+  · exact .refl _
+  · refine keeps_foldlM _ (fun t d => ?_) _ _
+    dsimp only
+    split
+    · exact .refl _
+    · split
+      · keys_leaf
+      · generalize fs.deadlineAt _ _ _ = r
+        rcases r with e | t <;> simp only [Functor.map] <;> keys_leaf
 
 /-- Processing `f` keeps the createKey values. -/
 def KeysBy (f : Processing → Id Processing) : Prop := ∀ r, KeepsKeys r.state (f r).1
@@ -361,10 +371,6 @@ theorem keeps_refresh (s : State) (owner : InstanceId) : KeepsKeys s (refresh st
 theorem keeps_refreshScreens (s : State) : KeepsKeys s (refreshScreens st fs s) :=
   keeps_foldlM _ (fun t i => by split; exact .refl _; exact keeps_refresh _ _) _ _
 
-theorem keeps_rearm (s : State) : KeepsKeys s (rearm st fs s) :=
-  keeps_foldlM _ (fun t d => by simp only [id_bind]; repeat' split
-                                all_goals first | exact .refl _ | keys_leaf) _ _
-
 theorem keeps_automationAnswer (a : String) (answer : Answer) (s : State) :
     KeepsKeys s (automationAnswer st a answer s) := by
   unfold automationAnswer; repeat' split
@@ -558,8 +564,8 @@ theorem keeps_afterMessage (s : State) : KeepsKeys s (afterMessage st fs s) := b
   split
   · exact h1
   · split
-    · exact KeepsKeys.trans (h1.trans (keeps_reportAll _ _)) (keeps_rearm _)
-    · exact KeepsKeys.trans (KeepsKeys.trans (h1.trans (keeps_reportAll _ _)) (keeps_rearm _)) (keeps_publish _)
+    · exact h1.trans (keeps_reportAll _ _)
+    · exact (h1.trans (keeps_reportAll _ _)).trans (keeps_publish _)
 
 theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
     KeepsKeys s (fireDue st fs to fuel tie s) := by
