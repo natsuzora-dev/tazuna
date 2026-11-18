@@ -339,7 +339,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
       if requestTarget? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
       let to := receivedId msg.sender msg.id
-      let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{to.text}",
+      let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
                                body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
                                channel := some to, status := .inFlight }
       let w := w.setStatus k .lost

@@ -6,15 +6,7 @@ import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
-import {
-  canonicalJson,
-  encode,
-  type Fields,
-  type Json,
-  objectOf,
-  type Shape,
-  strictObjectOf,
-} from "../../data/values.ts";
+import { canonicalJson, type Fields, type Json, objectOf, type Shape, strictObjectOf } from "../../data/values.ts";
 import { thrown, zodError } from "../../data/violation.ts";
 import { stateAt, transitionAt } from "../../dsl/chart.ts";
 import { type Conditions, firstFailing } from "../../dsl/conditions.ts";
@@ -277,9 +269,11 @@ export class SpecFunctions implements Functions {
       case "payload":
         return this.definition<AnyEvent>(["event"], schema.event).definition.payload;
       case "control":
-        return this.chartOf(schema.screen.name).named.definition.controls?.[schema.control]?.payload ?? {};
+        return (
+          this.definition<ChartSpec>(["screen"], schema.screen).definition.controls?.[schema.control]?.payload ?? {}
+        );
       case "record":
-        return this.entity(schema.entity.name).fields as Shape;
+        return this.definition<AnyEntity>(["entity"], schema.entity).definition.fields as Shape;
       default:
         throw new Error(`no question checks a value of the ${schema.kind} schema`);
     }
@@ -823,7 +817,7 @@ export class SpecFunctions implements Functions {
   singleRecord(entity: string): Row {
     const shape = this.entity(entity).fields as Shape;
     const value = defaultRow(shape);
-    return { value: bagged(objectOf(shape), value) as Fields, encoded: encode(shape, value) as Fields };
+    return { value: bagged(objectOf(shape), value) as Fields, encoded: toJson(objectOf(shape), value) as Fields };
   }
 
   copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed {

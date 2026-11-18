@@ -60,7 +60,7 @@ function testSnapshots(
   const { services, folders } = snapshotFolders(spec);
   const pairing = pairSnapshots(
     services,
-    snapshotted.map((s) => ({ ...s.run, compared: s.lines !== undefined })),
+    snapshotted.map((s) => ({ run: s.run, compared: s.lines !== undefined })),
     folders,
   );
   const violations = update

@@ -133,9 +133,7 @@ structure Durable where
   outgoing : List Outgoing := []
   /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
   createdEntities : List String := []
-  /-- The name of the service in a simulation, which qualifies its createKey values (Keys). -/
-  keyOwner : Option String := none
-  /-- The service whose state this is, in whose trace names its line ids are written. -/
+  /-- The service whose state this is, which qualifies its createKey values (Keys) and names its line ids. -/
   service : String
 deriving Repr, Inhabited
 
@@ -198,15 +196,15 @@ def State.await (s : State) (body : LineBody) (requester : Requester) (activity 
 
 /--
 The createKey values with their entity, in creation order: the `n`-th value of an entity is `<entity>-<n>`, qualified by
-`keyOwner`. Deriving them from the entities alone keeps any two of them apart.
+the service. Deriving them from the entities alone keeps any two of them apart.
 -/
-def State.created (s : State) : List (String × String) := givenKeys { owner := s.keyOwner } s.createdEntities
+def State.created (s : State) : List (String × String) := givenKeys { owner := some s.service } s.createdEntities
 
 def State.keyCount (s : State) (entity : String) : Nat := (s.createdEntities.filter (· == entity)).length
 
 /-- What createKey returns next for each entity that has a createKey value: its value after the entity's last one. -/
 def State.nextKeys (s : State) : Keys :=
-  { owner := s.keyOwner, next := s.createdEntities.eraseDups.map fun e => (e, { count := s.keyCount e }) }
+  { owner := some s.service, next := s.createdEntities.eraseDups.map fun e => (e, { count := s.keyCount e }) }
 
 def State.createKeys (s : State) (entities : List String) : State :=
   { s with createdEntities := s.createdEntities ++ entities }

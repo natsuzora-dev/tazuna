@@ -134,7 +134,7 @@ export function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
   return [
     ...pairSnapshots(
       services,
-      runs.map((r) => ({ ...r, compared: true })),
+      runs.map((run) => ({ run, compared: true })),
       folders,
     ).compare,
   ];

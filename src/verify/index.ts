@@ -39,7 +39,7 @@ export function verifyTraces(spec: CheckedSpec, folder: string): { traces: numbe
   const snapshotted = withSnapshot(spec, runs);
   const pairing = pairTraces(
     spec.structure.services,
-    runs.map((r) => ({ ...r, compared: snapshotted.some((s) => sameRun(s, r)) })),
+    runs.map((run) => ({ run, compared: snapshotted.some((s) => sameRun(s, run)) })),
     traceFolderOf(folder),
   );
   const atLines = (path: string, found: readonly Found[], scenario?: DefinitionRef) =>

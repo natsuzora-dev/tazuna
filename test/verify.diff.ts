@@ -784,7 +784,7 @@ function pairBoth(spec: Spec, expected: readonly Expected[], folder: TraceFolder
 }
 
 const withSnapshots = (spec: Spec): Expected[] =>
-  (snapshotRunsOf.get(spec) ?? []).map((run) => ({ ...run, compared: snapshotOf(spec, run) }));
+  (snapshotRunsOf.get(spec) ?? []).map((run) => ({ run, compared: snapshotOf(spec, run) }));
 
 const entryKinds = ["file", "folder", "other"] as const;
 
@@ -803,7 +803,7 @@ function entriesOf(names: readonly string[], entries: readonly (readonly [number
 }
 
 const randomScenarios = (spec: Spec, compared: readonly boolean[]): Expected[] =>
-  (snapshotRunsOf.get(spec) ?? []).map((run, i) => ({ ...run, compared: compared[i] ?? true }));
+  (snapshotRunsOf.get(spec) ?? []).map((run, i) => ({ run, compared: compared[i] ?? true }));
 
 const namesOf = (spec: Spec) => [...(snapshotRunsOf.get(spec) ?? []).map(runStem), "removed"];
 
@@ -866,7 +866,7 @@ describe("Pairing scenarios with snapshot files", () => {
       const { services, folders } = snapshotFolders(spec);
       found += pairSnapshotsBoth(
         services,
-        withSnapshots(spec).map((r) => ({ ...r, compared: true })),
+        withSnapshots(spec).map((e) => ({ ...e, compared: true })),
         folders,
         root,
       );

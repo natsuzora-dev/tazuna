@@ -4,13 +4,13 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#2","to":"todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.add#1","name":"taskListScreen.add","payload":{"title":"Buy eggs"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.addTask#1","name":"todo.addTask","input":{"taskId":"screens/Task-1","title":"Buy eggs"},"created":["screens/Task-1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:screens/todo.addTask#1","to":"todo.addTask#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:todo.addTask#1","to":"todo.addTask#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.add#2","name":"taskListScreen.add","payload":{"title":"Buy eggs"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.addTask#2","name":"todo.addTask","input":{"taskId":"screens/Task-2","title":"Buy eggs"},"created":["screens/Task-2"]}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#3","to":"todo.addTask#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.remindersToggle#1","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":false}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.changeReminders#1","name":"todo.changeReminders","input":{"shouldRemind":false}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:screens/todo.changeReminders#1","to":"todo.changeReminders#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:todo.changeReminders#1","to":"todo.changeReminders#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.remindersToggle#2","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":false}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.changeReminders#2","name":"todo.changeReminders","input":{"shouldRemind":false}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#5","to":"todo.changeReminders#2","answer":{"result":"accepted"}}

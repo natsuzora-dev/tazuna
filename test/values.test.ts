@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { written } from "../src/data/collections.ts";
+import { BagValue } from "../src/data/bag.ts";
+import { bag, written } from "../src/data/collections.ts";
 import { canonicalJson } from "../src/data/values.ts";
 
 test("canonicalJson of a copy key sorts object keys in UTF-16 order", () => {
@@ -24,4 +25,9 @@ test("written encodes a codec's part that fails its check, inside a discriminate
     alone: "5",
     tagged: { unit: "cents", amount: "5" },
   });
+});
+
+test("written writes a bag that fails its check inside a plain union as its elements", () => {
+  const schema = z.object({ x: z.union([bag(z.string().min(3)), z.null()]) });
+  assert.deepEqual(written(schema, { x: new BagValue(() => ["bb", "a"]) }), { x: ["a", "bb"] });
 });

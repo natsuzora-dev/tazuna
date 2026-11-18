@@ -499,16 +499,16 @@ theorem endSubscription_agrees (s : State) (id : LineId) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
 
-theorem deliver_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw payload : Value)
+theorem deliver_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw payload : Value)
     (request : Option LineId) :
     Agrees (deliver st fsI s name id raw payload request) (deliver st fs s name id raw payload request) := by
   unfold deliver; exact message_agrees h _ _
 
-theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (resultOf : Option LineId) :
+theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId) :
     Agrees (redeliver st fsI s name id raw resultOf) (redeliver st fs s name id raw resultOf) := by
   unfold redeliver; agree [message_agrees h]
 
-theorem receive_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (resultOf : Option LineId) :
+theorem receive_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 

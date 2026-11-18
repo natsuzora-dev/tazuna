@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { collectionOf } from "./collections.ts";
-import { schemaNode } from "./schemaNode.ts";
+import { holdsCodec, schemaNode } from "./schemaNode.ts";
 import type { Json, Shape } from "./values.ts";
 
 export type JsonSchema = { readonly [key: string]: Json };
@@ -22,10 +22,13 @@ export const unrepresentableTypes = [
   "file",
 ] as const;
 
-export type UnrepresentableType = (typeof unrepresentableTypes)[number];
+/** A Zod type that JSON cannot hold, or `union` for a plain union that holds a codec, whose option no tag names. */
+export type UnrepresentableType = (typeof unrepresentableTypes)[number] | "union";
 
 export function unrepresentableType(schema: z.ZodType): UnrepresentableType | undefined {
   const node = schemaNode(schema);
+  if (node.type === "union")
+    return node.discriminator === undefined && node.options.some((o) => holdsCodec(o)) ? "union" : undefined;
   return node.type === "opaque" ? unrepresentableTypes.find((type) => type === node.kind) : undefined;
 }
 

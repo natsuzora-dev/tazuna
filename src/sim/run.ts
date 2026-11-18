@@ -691,7 +691,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         });
       m.status = "lost";
       const to = receivedId(m.sender, m.id);
-      const id: LineId = { kind: "own", id: `answer:${lineIdText(to)}` };
+      const id: LineId = { kind: "own", id: `answer:${lineIdText(m.id)}` };
       const unavailable: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
       w.messages.push({
         sender: m.receiver,

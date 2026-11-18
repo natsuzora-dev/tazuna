@@ -27,7 +27,6 @@ import { unexportedDefinitions } from "./references.ts";
 import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
 import { structureOf } from "./structureOf.ts";
 import { inexactDelays } from "./times.ts";
-import { undiscriminatedUnions } from "./unions.ts";
 import { unrepresentableSchemas } from "./unrepresentable.ts";
 
 interface Constants {
@@ -289,7 +288,6 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     ...inexactDelays(charts({ definitions, structure })),
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
-    ...undiscriminatedUnions(definitions, constants),
     ...defaultSchemas(definitions, structure, opaque, thrownDefaults),
     ...loaded.malformed,
   ];

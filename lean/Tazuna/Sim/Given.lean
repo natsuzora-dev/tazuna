@@ -50,7 +50,7 @@ def World.start (j : Spec.Structure) (sc : Scenario) : Except String World := do
     | _ => none
   let services ← running.mapM fun s => do pure (s, ← Service.ofStructure j s)
   let now := sc.given.start.time
-  pure { now, roles, services, states := running.map fun s => (s, { now, keyOwner := some s, service := s }) }
+  pure { now, roles, services, states := running.map fun s => (s, { now, service := s }) }
 
 /-- The records that Given writes for the running service `service`, in written order. -/
 def writtenRecords (sc : Scenario) (service : String) : List GivenRecord :=

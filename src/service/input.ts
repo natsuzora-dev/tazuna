@@ -13,7 +13,6 @@ import {
   rejectionReasons,
   requiresOf,
   resultOfMismatch,
-  traceNameOfRef,
 } from "../spec/structure.ts";
 import { ref, type Service } from "./basic.ts";
 import { settled } from "./chart/always.ts";
@@ -34,7 +33,6 @@ import {
   type Finding,
   halt,
   inputFault,
-  lineId,
   machineOf,
   newMessage,
   newStep,
@@ -148,19 +146,13 @@ export function checkResults(r: Run): void {
 }
 
 /** Lean's redeliver. */
-function redeliver(
-  r: Processing,
-  event: DefinitionRef,
-  payload: unknown,
-  given: { readonly id?: LineId },
-  resultOf?: LineId,
-): void {
+function redeliver(r: Processing, event: DefinitionRef, payload: unknown, id: LineId, resultOf?: LineId): void {
   const s = r.state;
   const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
   write(s, {
     dir: "in",
     type: "event",
-    ...given,
+    id,
     event,
     payload,
     ...(request === undefined ? {} : { resultOf: request }),
@@ -169,16 +161,10 @@ function redeliver(
   message(r);
 }
 
-export function receive(
-  r: Processing,
-  event: DefinitionRef,
-  payload: unknown,
-  given: { readonly id?: LineId },
-  resultOf?: LineId,
-): void {
+export function receive(r: Processing, event: DefinitionRef, payload: unknown, id: LineId, resultOf?: LineId): void {
   const s = r.state;
-  if (s.deliveries.has(idKey(lineId(s, given.id, traceNameOfRef(event, s.service))))) {
-    redeliver(r, event, payload, given, resultOf);
+  if (s.deliveries.has(idKey(id))) {
+    redeliver(r, event, payload, id, resultOf);
     return;
   }
   const parsed = r.functions.parse({ kind: "payload", event }, payload);
@@ -193,10 +179,10 @@ export function receive(
     );
   const decoded = parsed.value;
   const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
-  const id = write(s, {
+  write(s, {
     dir: "in",
     type: "event",
-    ...given,
+    id,
     event,
     payload,
     ...(request === undefined ? {} : { resultOf: request }),

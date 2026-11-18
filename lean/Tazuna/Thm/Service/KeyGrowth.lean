@@ -16,7 +16,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Note
 variable {st : Service} {fs : Functions Id}
 
 /-- `t` keeps the createKey values of `s`: the same owner, and the entities of `s` first. -/
-def KeepsKeys (s t : State) : Prop := t.keyOwner = s.keyOwner ∧ s.createdEntities <+: t.createdEntities
+def KeepsKeys (s t : State) : Prop := t.service = s.service ∧ s.createdEntities <+: t.createdEntities
 
 theorem KeepsKeys.refl (s : State) : KeepsKeys s s := ⟨rfl, List.prefix_refl _⟩
 
@@ -33,7 +33,7 @@ theorem keeps_foldlM {α : Type} (f : State → α → Id State) (h : ∀ t x, K
     (s : State) : KeepsKeys s (xs.foldlM f s) := by
   rw [foldlM_id]; exact keeps_foldl _ h xs s
 
-@[simp] theorem report_keyOwner (s : State) (f : Finding) : (s.report f).keyOwner = s.keyOwner := by
+@[simp] theorem report_service (s : State) (f : Finding) : (s.report f).service = s.service := by
   unfold State.report; split <;> rfl
 
 @[simp] theorem report_createdEntities (s : State) (f : Finding) : (s.report f).createdEntities = s.createdEntities := by
@@ -44,7 +44,7 @@ macro "keys_leaf" : tactic => `(tactic| (refine ⟨?_, ?_⟩ <;> simp [State.hal
   State.write, State.newStep, State.newMessage, State.await, State.setMachine, State.setShown, State.removeFromStack,
   State.startQueued, State.takeQueued, State.answered, State.createKeys, State.endSubscription, State.leaveState,
   State.takeDeadline, State.answer, State.newCommandStep, Processing.report, State.stop,
-  apply_ite State.toDurable, apply_ite Durable.keyOwner, apply_ite Durable.createdEntities]
+  apply_ite State.toDurable, apply_ite Durable.service, apply_ite Durable.createdEntities]
   <;> (repeat' split) <;> (try simp)) <;> done)
 
 /-- Closes `KeepsKeys a t` from `h : KeepsKeys a b`, where `t` is `b` with fields other than the keys changed. -/
@@ -52,12 +52,12 @@ macro "keys_close " h:term : tactic => `(tactic| (obtain ⟨hk1, hk2⟩ := $h; (
   State.violate, State.write, State.newStep, State.newMessage, State.await, State.setMachine, State.setShown,
   State.removeFromStack, State.startQueued, State.takeQueued, State.answered, State.createKeys,
   State.leaveState, State.takeDeadline, State.answer, State.newCommandStep, Processing.report,
-  State.stop, apply_ite State.toDurable, apply_ite Durable.keyOwner, apply_ite Durable.createdEntities, hk1] <;> (try split) <;> (try simp [hk1]) <;> (try exact hk2) <;> exact hk2.trans (List.prefix_append _ _)))
+  State.stop, apply_ite State.toDurable, apply_ite Durable.service, apply_ite Durable.createdEntities, hk1] <;> (try split) <;> (try simp [hk1]) <;> (try exact hk2) <;> exact hk2.trans (List.prefix_append _ _)))
 
 theorem keeps_reportAll (s : State) (fs : List Fault) : KeepsKeys s (s.reportAll fs) :=
   keeps_foldl _ (fun t x => by split <;> keys_leaf) _ _
 
-@[simp] theorem reportAll_keyOwner (s : State) (fs : List Fault) : (s.reportAll fs).keyOwner = s.keyOwner :=
+@[simp] theorem reportAll_service (s : State) (fs : List Fault) : (s.reportAll fs).service = s.service :=
   (keeps_reportAll s fs).1
 
 @[simp] theorem reportAll_createdEntities (s : State) (fs : List Fault) :
@@ -77,8 +77,8 @@ theorem keeps_emitAll (s : State) (r : Option LineId) (es : List Emit) : KeepsKe
   | nil => rfl
   | cons e es ih => simp only [List.foldl_cons]; rw [ih]; rfl
 
-@[simp] theorem emitAll_keyOwner (s : State) (r : Option LineId) (es : List Emit) :
-    (s.emitAll r es).keyOwner = s.keyOwner := (keeps_emitAll s r es).1
+@[simp] theorem emitAll_service (s : State) (r : Option LineId) (es : List Emit) :
+    (s.emitAll r es).service = s.service := (keeps_emitAll s r es).1
 
 theorem keeps_addDeadlines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
     KeepsKeys s (addDeadlines name n ds s) :=
@@ -110,8 +110,8 @@ theorem keeps_endSubscriptions (s : State) (ps : List Pending) :
     KeepsKeys s (ps.foldl (fun s p => s.endSubscription p) s) :=
   keeps_foldl _ (fun t p => by keys_leaf) _ _
 
-@[simp] theorem endSubscriptions_keyOwner (s : State) (ps : List Pending) :
-    (ps.foldl (fun s p => s.endSubscription p) s).keyOwner = s.keyOwner := (keeps_endSubscriptions s ps).1
+@[simp] theorem endSubscriptions_service (s : State) (ps : List Pending) :
+    (ps.foldl (fun s p => s.endSubscription p) s).service = s.service := (keeps_endSubscriptions s ps).1
 
 @[simp] theorem endSubscriptions_createdEntities (s : State) (ps : List Pending) :
     (ps.foldl (fun s p => s.endSubscription p) s).createdEntities = s.createdEntities := by
@@ -590,24 +590,24 @@ theorem keeps_message (s : State) (q : Queue) : KeepsKeys s (message st fs s q) 
 /-- Closes an equation between the keys of `t` and of `s`, where `t` is `s` with fields other than the keys changed. -/
 macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, State.violate,
   State.write, State.newStep, State.newMessage, State.answer, apply_ite State.toDurable,
-  apply_ite Durable.keyOwner, apply_ite Durable.createdEntities] <;> (repeat' split) <;> (try simp)) <;> done)
+  apply_ite Durable.service, apply_ite Durable.createdEntities] <;> (repeat' split) <;> (try simp)) <;> done)
 
-@[simp] theorem processCommand_keyOwner (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
-    (processCommand st fs s name raw id step).1.keyOwner = s.keyOwner := (keeps_processCommand _ _ _ _ _).1
+@[simp] theorem processCommand_service (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
+    (processCommand st fs s name raw id step).1.service = s.service := (keeps_processCommand _ _ _ _ _).1
 
 @[simp] theorem processCommand_createdEntities (name : String) (raw : Value) (id : Option LineId) (step : Nat)
     (s : State) : (processCommand st fs s name raw id step).1.createdEntities = s.createdEntities := by
   simp only [processCommand, id_bind, note_id]
   split <;> keys_same
 
-@[simp] theorem addResult_keyOwner (id : LineId) (e : Emit) (s : State) : (s.addResult id e).keyOwner = s.keyOwner :=
+@[simp] theorem addResult_service (id : LineId) (e : Emit) (s : State) : (s.addResult id e).service = s.service :=
   rfl
 
 @[simp] theorem addResult_createdEntities (id : LineId) (e : Emit) (s : State) :
     (s.addResult id e).createdEntities = s.createdEntities := rfl
 
-@[simp] theorem withResultOf_keyOwner (name : Spec.Ref) (k : Option LineId) (s : State) :
-    (withResultOf st s name k).1.keyOwner = s.keyOwner := by
+@[simp] theorem withResultOf_service (name : Spec.Ref) (k : Option LineId) (s : State) :
+    (withResultOf st s name k).1.service = s.service := by
   cases k with
   | none => rfl
   | some h => simp only [withResultOf, resultRequest]; keys_same
@@ -647,7 +647,7 @@ theorem keeps_endSubscription (id : LineId) (s : State) : KeepsKeys s (endSubscr
   refine KeepsKeys.trans ?_ (keeps_message _ _)
   keys_leaf
 
-theorem keeps_receive (name : Spec.Ref) (id : Option LineId) (raw : Value) (resultOf : Option LineId) (s : State) :
+theorem keeps_receive (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId) (s : State) :
     KeepsKeys s (receive st fs s name id raw resultOf) := by
   simp only [receive, redeliver, id_bind]
   repeat' split

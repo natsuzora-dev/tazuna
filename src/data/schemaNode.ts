@@ -16,14 +16,15 @@ export type SchemaNode =
   | { readonly type: "union"; readonly options: readonly z.ZodType[]; readonly discriminator: string | undefined }
   | { readonly type: "optional" | "nullable" | "default"; readonly inner: z.ZodType }
   /**
-   * A codec: `in` is the side that messages carry and `out` the parsed side. `encode` runs only its encode transform,
-   * and gives undefined when that fails.
+   * A codec: `in` is the side that messages carry and `out` the parsed side. `encode` and `decode` run only its encode
+   * or decode transform, and give undefined when that fails.
    */
   | {
       readonly type: "codec";
       readonly in: z.ZodType;
       readonly out: z.ZodType;
       readonly encode: (value: unknown) => { readonly value: unknown } | undefined;
+      readonly decode: (value: unknown) => { readonly value: unknown } | undefined;
     }
   | { readonly type: "pipe"; readonly in: z.ZodType; readonly out: z.ZodType }
   | { readonly type: "tuple"; readonly items: readonly z.ZodType[]; readonly rest: z.ZodType | undefined }
@@ -37,15 +38,15 @@ export type SchemaNode =
       readonly children: readonly z.ZodType[];
     };
 
-type Reverse = (value: unknown, ctx: { readonly value: unknown; readonly issues: unknown[] }) => unknown;
+type Transform = (value: unknown, ctx: { readonly value: unknown; readonly issues: unknown[] }) => unknown;
 
-const encoder =
-  (reverse: Reverse) =>
+const transformer =
+  (transform: Transform) =>
   (value: unknown): { readonly value: unknown } | undefined => {
     try {
       const ctx = { value, issues: [] };
-      const wire = reverse(value, ctx);
-      return wire instanceof Promise || ctx.issues.length > 0 ? undefined : { value: wire };
+      const result = transform(value, ctx);
+      return result instanceof Promise || ctx.issues.length > 0 ? undefined : { value: result };
     } catch {
       return undefined;
     }
@@ -80,7 +81,13 @@ export function schemaNode(schema: z.ZodType): SchemaNode {
     case "pipe": {
       const reverse = def["reverseTransform"];
       return typeof reverse === "function"
-        ? { type: "codec", in: at("in"), out: at("out"), encode: encoder(reverse as Reverse) }
+        ? {
+            type: "codec",
+            in: at("in"),
+            out: at("out"),
+            encode: transformer(reverse as Transform),
+            decode: transformer(def["transform"] as Transform),
+          }
         : { type: "pipe", in: at("in"), out: at("out") };
     }
     case "tuple":

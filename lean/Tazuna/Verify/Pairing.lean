@@ -20,17 +20,13 @@ def Run.stem (r : Run) : String := if r.runner == r.service then r.scenario else
 def Run.ref (r : Run) : Spec.Ref := { service := r.service, name := r.scenario }
 
 structure Expected where
-  service : String
-  scenario : String
-  runner : String
+  run : Run
   /-- Whether the run is compared. A compared run's file is compared when present and reported when missing. The file
   of a run that is not compared is ignored. -/
   compared : Bool
 deriving DecidableEq, Repr
 
 derive_wire Expected
-
-def Expected.toRun (e : Expected) : Run := { service := e.service, scenario := e.scenario, runner := e.runner }
 
 /-- The subfolder `service` of the trace folder, or the snapshot folder of `service`. -/
 structure Folder where
@@ -53,10 +49,10 @@ derive_wire At tag "kind" skip_serializing_none
 def unknownTraceEntry (place : At) : At × Uncomparable := (place, .unknownTraceEntry)
 
 def runsOf (expected : List Expected) (service : String) : List Run :=
-  (expected.filter (·.service == service)).map (·.toRun)
+  (expected.filter (·.run.service == service)).map (·.run)
 
 def comparedRuns (expected : List Expected) (service : String) : List Run :=
-  (expected.filter fun e => e.service == service && e.compared).map (·.toRun)
+  (expected.filter fun e => e.run.service == service && e.compared).map (·.run)
 
 def entriesIn (folders : List Folder) (service : String) : List Entry :=
   ((folders.find? (·.service == service)).map (·.entries)).getD []

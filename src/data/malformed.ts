@@ -27,14 +27,14 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `duplicateName`: `name` also names another definition, scenario, or `constants()` call of the service in the file
  *   `elsewhere`.
  * - `alias`: the definition, scenario, or `constants()` call is already exported as `name`.
- * - `unexportedDefinition`, `opaqueCollection`, `unrepresentableSchema`, and `undiscriminatedUnion`: `path` leads from
- *   the definition, service definer, or `constants()` call through the keys of its object, with array positions as
- *   numbers. A schema inside another schema has the path of the field that holds it, and a chart holds each state's
+ * - `unexportedDefinition`, `opaqueCollection`, and `unrepresentableSchema`: `path` leads from the definition, service
+ *   definer, or `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema has the path of the field that holds it, and a chart holds each state's
  *   `held` under `held` by the state's name.
- * - `unrepresentableSchema`: the schema has a value that JSON cannot hold, of the Zod type `type`, such as
- *   `bigint`, `set`, or a one-way `transform` (a `z.codec` has a way back).
- * - `undiscriminatedUnion`: the `z.union` holds a codec at some depth. Writing a value as JSON runs its codecs and no
- *   check, so it picks the option by the tag of a `z.discriminatedUnion` and cannot guess one in a `z.union`.
+ * - `unrepresentableSchema`: the schema has a value that tazuna cannot write back as JSON, of the Zod type `type`:
+ *   one that JSON cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), or a
+ *   `union` that holds a codec at some depth. Writing a value as JSON runs its codecs and no check, so it picks the
+ *   option by the tag of a `z.discriminatedUnion` and cannot guess one in a `z.union`. A codec or null is written
+ *   `.nullable()`.
  * - `unparsableTime`: a time of the scenario, Given's start or a clock line's time, is not an ISO datetime with
  *   seconds and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds.
  *   The report is at the clock line, or at the scenario for Given's start.
@@ -75,8 +75,6 @@ export type Malformed =
       null,
       { readonly name: string; readonly path: readonly string[]; readonly type: UnrepresentableType }
     >
-  | Of<"undiscriminatedUnion", DefinitionRef, { readonly path: readonly string[] }>
-  | Of<"undiscriminatedUnion", null, { readonly name: string; readonly path: readonly string[] }>
   | Of<"defaultSchema", DefinitionRef, Readonly<Record<string, never>>>
   | Of<"defaultSchema", DefinitionRef, { readonly map: string }>
   | Of<"unexportedDefinition", DefinitionRef, { readonly path: readonly (string | number)[] }>

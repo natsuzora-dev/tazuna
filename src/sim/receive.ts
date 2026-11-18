@@ -37,7 +37,7 @@ export function arriveFrom(r: Processing, sender: string, id: LineId, body: Line
         r,
         body.event,
         body.payload,
-        given,
+        given.id,
         body.resultOf === undefined ? undefined : sentId(r.st.service, body.resultOf),
       );
       return;

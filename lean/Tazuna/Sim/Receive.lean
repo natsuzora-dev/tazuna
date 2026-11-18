@@ -41,7 +41,7 @@ def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender : String) (
     | some own => answerIn st fs s (receivedId sender id) own a
     | none => pure s
   | .event n payload resultOf =>
-    receive st fs s n given payload (resultOf.bind (sentId? st.service))
+    receive st fs s n (receivedId sender id) payload (resultOf.bind (sentId? st.service))
   | _ => pure s
 
 end Tazuna.Sim

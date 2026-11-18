@@ -23,8 +23,6 @@ export const objectOf = (shape: Shape): z.ZodObject => cached(objects, shape, z.
 
 export const strictObjectOf = (shape: Shape): z.ZodObject => cached(strictObjects, shape, z.strictObject);
 
-export const encode = (shape: Shape, value: unknown): unknown => z.encode(objectOf(shape), value as never);
-
 /** Orders strings by code point, as Lean's String order does; `<` on strings compares UTF-16 code units. */
 export function byCodePoint(a: string, b: string): number {
   let i = 0;

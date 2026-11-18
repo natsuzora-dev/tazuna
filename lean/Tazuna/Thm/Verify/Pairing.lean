@@ -13,7 +13,7 @@ service that is not external. -/
 def Paired (services : List (String × Bool)) (expected : List Expected) (service : String) (e : Entry) : Prop :=
   ∃ n, fileName e = some n ∧
     (services.lookup service = some true ∨
-      services.lookup service = some false ∧ ∃ s ∈ expected, s.toRun.service = service ∧ s.toRun.stem = n)
+      services.lookup service = some false ∧ ∃ s ∈ expected, s.run.service = service ∧ s.run.stem = n)
 
 theorem entriesIn_of_mem (folders : List Folder) (unique : (folders.map (·.service)).Nodup) (f : Folder)
     (hf : f ∈ folders) : entriesIn folders f.service = f.entries := by
@@ -36,14 +36,14 @@ theorem entriesIn_cases (folders : List Folder) (s : String) :
     exact ⟨f, List.mem_of_find?_eq_some h, by simpa using List.find?_some h, by simp⟩
 
 theorem mem_comparedRuns (expected : List Expected) (service : String) (r : Run) :
-    r ∈ comparedRuns expected service ↔ ∃ s ∈ expected, s.toRun.service = service ∧ s.toRun = r ∧ s.compared = true := by
+    r ∈ comparedRuns expected service ↔ ∃ s ∈ expected, s.run.service = service ∧ s.run = r ∧ s.compared = true := by
   simp only [comparedRuns, List.mem_map, List.mem_filter, Bool.and_eq_true, beq_iff_eq]
   constructor
   · rintro ⟨s, ⟨hs, h1, h2⟩, h3⟩; exact ⟨s, hs, h1, h3, h2⟩
   · rintro ⟨s, hs, h1, h3, h2⟩; exact ⟨s, ⟨hs, h1, h2⟩, h3⟩
 
 theorem mem_stems (expected : List Expected) (service n : String) :
-    n ∈ (runsOf expected service).map Run.stem ↔ ∃ s ∈ expected, s.toRun.service = service ∧ s.toRun.stem = n := by
+    n ∈ (runsOf expected service).map Run.stem ↔ ∃ s ∈ expected, s.run.service = service ∧ s.run.stem = n := by
   simp only [runsOf, List.map_map, List.mem_map, List.mem_filter, beq_iff_eq, Function.comp_def]
   constructor
   · rintro ⟨s, ⟨hs, h1⟩, h2⟩; exact ⟨s, hs, h1, h2⟩
@@ -89,8 +89,8 @@ theorem no_violation_iff (services : List (String × Bool)) (expected : List Exp
     (uniqueFolders : (folders.map (·.service)).Nodup) :
     (pairTraces services expected others folders).violations = [] ↔
       others = [] ∧ (∀ f ∈ folders, ∀ e ∈ f.entries, Paired services expected f.service e) ∧
-        ∀ s ∈ expected, s.compared = true → services.lookup s.toRun.service = some false →
-          ∃ f ∈ folders, f.service = s.toRun.service ∧ ∃ e ∈ f.entries, fileName e = some s.toRun.stem := by
+        ∀ s ∈ expected, s.compared = true → services.lookup s.run.service = some false →
+          ∃ f ∈ folders, f.service = s.run.service ∧ ∃ e ∈ f.entries, fileName e = some s.run.stem := by
   rw [pairTraces_nil]
   apply and_congr Iff.rfl
   constructor
@@ -107,10 +107,10 @@ theorem no_violation_iff (services : List (String × Bool)) (expected : List Exp
         cases b
         · exact Or.inr ⟨hl, (mem_stems expected f.service n).mp ((h.2 rfl).1 e he n hn)⟩
         · exact Or.inl hl
-    · have h := (servicePairing_nil expected folders sc.toRun.service false).mp (hs _ (mem_of_lookup hl))
+    · have h := (servicePairing_nil expected folders sc.run.service false).mp (hs _ (mem_of_lookup hl))
       obtain ⟨e, he, hn⟩ :=
-        (h.2 rfl).2 sc.toRun ((mem_comparedRuns expected sc.toRun.service sc.toRun).mpr ⟨sc, hsc, rfl, rfl, hsn⟩)
-      rcases entriesIn_cases folders sc.toRun.service with h0 | ⟨f, hf, hfs, hfe⟩
+        (h.2 rfl).2 sc.run ((mem_comparedRuns expected sc.run.service sc.run).mpr ⟨sc, hsc, rfl, rfl, hsn⟩)
+      rcases entriesIn_cases folders sc.run.service with h0 | ⟨f, hf, hfs, hfe⟩
       · rw [h0] at he; exact absurd he List.not_mem_nil
       · exact ⟨f, hf, hfs, e, hfe ▸ he, hn⟩
   · rintro ⟨hp, hs⟩

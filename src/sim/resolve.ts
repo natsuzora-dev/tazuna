@@ -1,4 +1,4 @@
-import type { DefinitionRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
@@ -99,9 +99,6 @@ function valueOfLine(l: LineBody): unknown {
   }
 }
 
-const sameRef = (a: DefinitionRef | undefined, b: DefinitionRef): boolean =>
-  a !== undefined && a.service === b.service && a.name === b.name;
-
 /** Lean's Message.target?. */
 export function targetOf(m: Message): DefinitionRef | undefined {
   const b = m.body;
@@ -145,7 +142,7 @@ export function requestsOf(w: World, i: number, fact: Fact): number[] {
   if (fact.type !== "requests") return unresolved(i, fact);
   const pick = fact.input === undefined ? undefined : fill(w, i, fact.input);
   const found = w.messages.flatMap((m, k) => {
-    if (!(sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m), fact.target)))
+    if (!(sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m) ?? null, fact.target)))
       return [];
     const schema = schemaOf(w, m);
     const v = valueOfLine(m.body);
@@ -187,7 +184,8 @@ export function messageOf(w: World, i: number, fact: Fact): number {
         i,
         fact,
         picked(
-          (m) => sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m), fact.target),
+          (m) =>
+            sameOrigin(m.origin, fact.origin) && m.body.type === fact.kind && sameRef(targetOf(m) ?? null, fact.target),
           fact.input,
         ),
       );
@@ -206,7 +204,7 @@ export function messageOf(w: World, i: number, fact: Fact): number {
         picked(
           (m) =>
             sameOrigin(m.origin, fact.origin) &&
-            sameRef(eventOf(m), fact.event) &&
+            sameRef(eventOf(m) ?? null, fact.event) &&
             (fact.receiver === undefined || fact.receiver === m.receiver),
           fact.payload,
         ),

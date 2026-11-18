@@ -124,8 +124,10 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
           return [k, field === undefined ? v : sorted(field, v)];
         }),
       );
-    case "union":
-      return (unionOption(node, value, (o) => sorted(o, value)) ?? { value }).value;
+    case "union": {
+      const option = unionOption(node, value, (o) => z.safeEncode(o, sorted(o, value) as never).success);
+      return option === undefined ? value : sorted(option, value);
+    }
     case "optional":
     case "nullable":
     case "default":
@@ -140,21 +142,17 @@ export const sortsInside = (node: SchemaNode): boolean =>
   ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
 /**
- * Returns the option of a union that `value` takes, with the value as `candidate` makes it for the option: the option
- * that its discriminator names, or in a plain union the first option that it passes, as in Zod.
+ * Returns the option of a union that `value` takes: the option that its discriminator names, or in a plain union the
+ * first option that `accepts`, as in Zod, else the first option. Walks that only change what they recognise use it, so
+ * a value that no option accepts still has its collections written.
  */
-function unionOption(
+export function unionOption(
   node: Extract<SchemaNode, { type: "union" }>,
   value: unknown,
-  candidate: (option: z.ZodType) => unknown = () => value,
-): { readonly option: z.ZodType; readonly value: unknown } | undefined {
-  if (node.discriminator !== undefined) {
-    const option = namedOption(node, value);
-    return option && { option, value: candidate(option) };
-  }
-  return node.options
-    .map((option) => ({ option, value: candidate(option) }))
-    .find((t) => z.safeEncode(t.option, t.value as never).success);
+  accepts: (option: z.ZodType) => boolean,
+): z.ZodType | undefined {
+  if (node.discriminator !== undefined) return namedOption(node, value);
+  return node.options.find(accepts) ?? node.options[0];
 }
 
 /**
@@ -211,6 +209,53 @@ export function toJson(schema: z.ZodType, value: unknown): unknown {
   }
 }
 
+/**
+ * Returns a value of `schema` from the JSON that toJson wrote of it: the mirror of toJson, which runs only the decode of
+ * each codec. The value was checked when it was parsed, so no check runs again.
+ */
+export function fromJson(schema: z.ZodType, json: unknown): unknown {
+  const node = schemaNode(schema);
+  switch (node.type) {
+    case "codec": {
+      const value = node.decode(fromJson(node.in, json));
+      return value === undefined ? json : fromJson(node.out, value.value);
+    }
+    case "pipe":
+      return fromJson(node.out, fromJson(node.in, json));
+    case "array":
+      return Array.isArray(json) ? json.map((v) => fromJson(node.element, v)) : json;
+    case "tuple":
+      if (!Array.isArray(json)) return json;
+      return json.map((v, i) => {
+        const item = node.items[i] ?? node.rest;
+        return item === undefined ? v : fromJson(item, v);
+      });
+    case "object":
+      if (!isRecord(json)) return json;
+      return Object.fromEntries(
+        Object.entries(json).map(([k, v]) => {
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : fromJson(field, v)];
+        }),
+      );
+    case "record":
+      if (!isRecord(json)) return json;
+      return Object.fromEntries(Object.entries(json).map(([k, v]) => [k, fromJson(node.value, v)]));
+    case "union": {
+      const option = namedOption(node, json);
+      return option === undefined ? json : fromJson(option, json);
+    }
+    case "intersection":
+      return fromJson(node.left, fromJson(node.right, json));
+    case "lazy":
+      return fromJson(node.inner, json);
+    case "opaque":
+      return json == null || node.inner === undefined ? json : fromJson(node.inner, json);
+    default:
+      return json == null ? json : fromJson(node.inner, json);
+  }
+}
+
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -239,8 +284,8 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
         }),
       );
     case "union": {
-      const chosen = unionOption(node, value);
-      return chosen === undefined ? value : bagged(chosen.option, value);
+      const option = unionOption(node, value, (o) => z.safeEncode(o, value as never).success);
+      return option === undefined ? value : bagged(option, value);
     }
     case "optional":
     case "nullable":

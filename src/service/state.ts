@@ -220,9 +220,7 @@ interface Durable {
   readonly outgoing: Map<string, Outgoing>;
   /** Lean's State.createdEntities: the entities that createKey was called for, in call order. */
   readonly createdEntities: string[];
-  /** Lean's State.keyOwner. */
-  keyOwner: string | undefined;
-  /** The service whose state this is, in whose trace names its line ids are written. */
+  /** The service whose state this is, which qualifies its createKey values and names its line ids. */
   readonly service: string;
 }
 
@@ -289,7 +287,6 @@ export function newState(st: Service): State {
     deliveries: new Set(),
     outgoing: new Map(),
     createdEntities: [],
-    keyOwner: undefined,
     service: st.service,
     ...newProcess(),
     now: Temporal.Instant.fromEpochMilliseconds(0),
@@ -323,7 +320,7 @@ function idName(service: string, body: LineBody): string {
   }
 }
 
-export function lineId(s: State, givenId: LineId | undefined, name: string): LineId {
+function lineId(s: State, givenId: LineId | undefined, name: string): LineId {
   return givenId ?? { kind: "own", id: `${name}#${(s.lineCounts.get(name) ?? 0) + 1}` };
 }
 
@@ -350,7 +347,7 @@ export function awaitAnswer(
 
 /** Lean's State.created: the createKey values with their entity, in creation order. */
 export function created(s: State): [string, string][] {
-  return givenKeys({ ...(s.keyOwner === undefined ? {} : { owner: s.keyOwner }), next: [] }, s.createdEntities);
+  return givenKeys({ owner: s.service, next: [] }, s.createdEntities);
 }
 
 function keyCount(s: State, entity: string): number {
@@ -365,7 +362,7 @@ export function keyCounts(s: State): [string, number][] {
 /** Lean's State.nextKeys: what createKey returns next for each entity that has a createKey value. */
 export function nextKeys(s: State): Keys {
   return {
-    ...(s.keyOwner === undefined ? {} : { owner: s.keyOwner }),
+    owner: s.service,
     next: [...new Set(s.createdEntities)].map((e) => [e, { count: keyCount(s, e) }] as const),
   };
 }

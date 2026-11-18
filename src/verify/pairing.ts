@@ -48,13 +48,14 @@ interface TracePairing {
   readonly violations: readonly PairingViolation<TraceEntry | SnapshotEntry>[];
 }
 
-export type Expected = Run & {
+export interface Expected {
+  readonly run: Run;
   /**
    * Whether the run is compared. A compared run's file is compared when present and reported when missing; the file of
    * a run that is not compared is ignored.
    */
   readonly compared: boolean;
-};
+}
 
 export const unpaired = <A extends At>(at: A, violation: Uncomparable): PairingViolation<A> => ({ at, violation });
 
@@ -76,13 +77,11 @@ const unknownTraceEntry = (at: TraceEntry) =>
 export const entriesIn = (folders: readonly Folder[], service: string): readonly Entry[] =>
   folders.find((f) => f.service === service)?.entries ?? [];
 
-const toRun = ({ service, scenario, runner }: Expected): Run => ({ service, scenario, runner });
-
 export const runsOf = (expected: readonly Expected[], service: string): Run[] =>
-  expected.filter((s) => s.service === service).map(toRun);
+  expected.filter((s) => s.run.service === service).map((s) => s.run);
 
 export const comparedRuns = (expected: readonly Expected[], service: string): Run[] =>
-  expected.filter((s) => s.service === service && s.compared).map(toRun);
+  expected.filter((s) => s.run.service === service && s.compared).map((s) => s.run);
 
 export const scenarioOf = (run: Run): DefinitionRef => ({ service: run.service, name: run.scenario });
 

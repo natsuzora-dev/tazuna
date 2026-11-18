@@ -38,6 +38,6 @@ theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value)
 
 theorem redelivered_event_not_processed (name : Spec.Ref) (id : LineId) (raw : Value) (hh : s.halted = none)
     (hd : id ∈ s.deliveries) :
-    receive st fs s name (some id) raw none = message st fs (delivered s name id raw).newMessage {} := by
-  simp [receive, redeliver, withResultOf, hh, hd, delivered, State.lineId]
+    receive st fs s name id raw none = message st fs (delivered s name id raw).newMessage {} := by
+  simp [receive, redeliver, withResultOf, hh, hd, delivered]
 end Tazuna.Thm.Service.Input

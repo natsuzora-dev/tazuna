@@ -18,7 +18,7 @@ A string that writtenKey? lets a scenario write is no createKey value of a keyed
 in any state whose values `p` qualifies.
 -/
 theorem unwritten_not_created {w : World} {p : String} {st : Service} (hs : (p, st) ∈ w.services) {s : State}
-    (ho : s.keyOwner = some p) {e k : String} (he : e ∈ st.entities) (hk : st.singles.contains e = false)
+    (ho : s.service = p) {e k : String} (he : e ∈ st.entities) (hk : st.singles.contains e = false)
     (hw : w.writtenKey? (.str k) = none) : (e, k) ∉ s.created := by
   intro h
   obtain ⟨n, hn, hc⟩ := created_form h
@@ -140,7 +140,7 @@ theorem keepsWorld_checkComputed {w w' : World} (h : KeepsWorld w w') (service :
       | some x =>
         simp only [Option.map_some, Option.getD_some]
         split
-        · exact ⟨report_keyOwner _ _, by rw [report_createdEntities]; exact List.prefix_refl _⟩
+        · exact ⟨report_service _ _, by rw [report_createdEntities]; exact List.prefix_refl _⟩
         · exact .refl _
     · exact h
 
@@ -435,7 +435,7 @@ No createKey value of a running service at the end of the lines of a scenario eq
 the start's writtenKey? lets the scenario write: the running service qualifies its values by its name throughout the run.
 -/
 theorem execute_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
-    (hs : (p, st) ∈ start.services) (ho : (start.state p).keyOwner = some p) {e k : String} (he : e ∈ st.entities)
+    (hs : (p, st) ∈ start.services) (ho : (start.state p).service = p) {e k : String} (he : e ∈ st.entities)
     (hk : st.singles.contains e = false) (hw : start.writtenKey? (.str k) = none) :
     (e, k) ∉ ((execute j fsOf start sc).state p).created :=
   unwritten_not_created hs (((execute_keepsKeys j start sc) p).1.trans ho) he hk hw

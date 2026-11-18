@@ -8,13 +8,13 @@
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#3","to":"todo.tasks#2","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-2","title":"Buy eggs","dueAt":null,"completedAt":"2026-10-25T00:00:00Z"},{"taskId":"task-1","title":"Buy milk","dueAt":"2026-10-26T09:00:00Z","completedAt":null}]}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.complete#1","name":"taskListScreen.complete","payload":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:screens/todo.completeTask#1","to":"todo.completeTask#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:todo.completeTask#1","to":"todo.completeTask#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.complete#2","name":"taskListScreen.complete","payload":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.completeTask#2","name":"todo.completeTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#4","to":"todo.completeTask#2","answer":{"result":"accepted"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.reopen#1","name":"taskListScreen.reopen","payload":{"taskId":"task-2"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.reopenTask#1","name":"todo.reopenTask","input":{"taskId":"task-2"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:screens/todo.reopenTask#1","to":"todo.reopenTask#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer:todo.reopenTask#1","to":"todo.reopenTask#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"taskListScreen.reopen#2","name":"taskListScreen.reopen","payload":{"taskId":"task-2"}}
 {"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.reopenTask#2","name":"todo.reopenTask","input":{"taskId":"task-2"}}
 {"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#7","to":"todo.reopenTask#2","answer":{"result":"accepted"}}

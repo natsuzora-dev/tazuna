@@ -56,7 +56,6 @@ export function start(sc: Scenario, processingFor: (service: string) => Processi
     running.map((service) => {
       const processing = processingFor(service);
       processing.state.now = now;
-      processing.state.keyOwner = service;
       return [service, { processing, halted: undefined }];
     }),
   );

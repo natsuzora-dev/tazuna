@@ -71,7 +71,7 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "answer",
-          "id": "calendar/answer:todo/calendar.book#1",
+          "id": "calendar/answer:calendar.book#1",
           "to": "calendar.book#1",
           "answer": {
             "result": "rejected",

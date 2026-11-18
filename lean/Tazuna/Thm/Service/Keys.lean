@@ -108,12 +108,12 @@ theorem givenKeys_getElem_pair (o : Option String) (es : List String) (i : Nat)
           (((es.take i).filter (· == es[i]'(by simpa [length_givenKeys] using h))).length + 1) := by
   cases o <;> simp [givenKeys, keyChars, keyPrefix, String.toList_append, Nat.toList_repr, toString]
 
-/-- Each createKey value of a state is `<owner>/<entity>-<n>`, `n` > 0, for its entity and the state's `keyOwner`. -/
+/-- Each createKey value of a state is `<owner>/<entity>-<n>`, `n` > 0, for its entity and the state's service. -/
 theorem created_form {s : State} {e k : String} (h : (e, k) ∈ s.created) :
-    ∃ n, 0 < n ∧ k.toList = keyChars s.keyOwner e n := by
+    ∃ n, 0 < n ∧ k.toList = keyChars (some s.service) e n := by
   unfold State.created at h
   obtain ⟨i, hi, he⟩ := List.mem_iff_getElem.mp h
-  obtain ⟨h₁, h₂⟩ := givenKeys_getElem_pair s.keyOwner s.createdEntities i hi
+  obtain ⟨h₁, h₂⟩ := givenKeys_getElem_pair (some s.service) s.createdEntities i hi
   rw [he] at h₁ h₂
   simp only at h₁ h₂
   exact ⟨_, Nat.succ_pos _, h₁ ▸ h₂⟩

@@ -85,8 +85,8 @@ def checkResults [Monad m] (fs : Functions m) (s : State) : m State :=
 
 /-- The state after the event that arrived as `raw` and parsed as `payload` is delivered. -/
 def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (event : Spec.Ref)
-    (givenId : Option LineId) (raw payload : Value) (request : Option LineId) : m State := do
-  let (s, id) := s.write .in givenId (.event event raw request)
+    (id : LineId) (raw payload : Value) (request : Option LineId) : m State := do
+  let (s, _) := s.write .in (some id) (.event event raw request)
   let s := { s with deliveries := s.deliveries ++ [id] }
   let s := match request with
     | some r => s.addResult r { event, payload }
@@ -104,16 +104,16 @@ again. The message itself is processed, so due deadlines and changed subscriptio
 simulation redelivers a message as it was, so the name and payload are those of the first delivery.
 -/
 def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (event : Spec.Ref)
-    (givenId : Option LineId) (raw : Value) (resultOf : Option LineId) : m State := do
+    (id : LineId) (raw : Value) (resultOf : Option LineId) : m State := do
   let (s, request) := withResultOf st s event resultOf
   if s.halted.isSome then pure s else
-  let (s, _) := s.write .in givenId (.event event raw request)
+  let (s, _) := s.write .in (some id) (.event event raw request)
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (event : Spec.Ref)
-    (givenId : Option LineId) (raw : Value) (resultOf : Option LineId) : m State := do
-  if s.deliveries.contains (s.lineId givenId (event.traceName s.service)) then
-    redeliver st fs s event givenId raw resultOf
+    (id : LineId) (raw : Value) (resultOf : Option LineId) : m State := do
+  if s.deliveries.contains id then
+    redeliver st fs s event id raw resultOf
   else
     match ← fs.parse (.payload event) raw with
     | .error e =>
@@ -121,7 +121,7 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     | .ok none => pure (s.report (.invalidInput (.eventPayloadSchema event)))
     | .ok (some payload) =>
       let (s, request) := withResultOf st s event resultOf
-      if s.halted.isSome then pure s else deliver st fs s event givenId raw payload request
+      if s.halted.isSome then pure s else deliver st fs s event id raw payload request
 
 /-- The assumption that an answer to the request `requestId` to `target` breaks (Spec.assumptionMismatch). -/
 def brokenAssumption (requestId : LineId) (target : Spec.Ref) (answer : Answer)
