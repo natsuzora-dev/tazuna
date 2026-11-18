@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, join } from "node:path";
+import type * as Api from "typescript/unstable/sync";
 
 /**
- * The result of a type check. `output` is what tsc wrote to stdout, then to stderr, without the file list;
- * `includes` tells whether tsc's program has the file at an absolute path.
+ * The result of a type check. `output` is what tsc wrote to stdout, then to stderr; `includes` tells whether the
+ * program of the tsconfig, as the TypeScript API reads it, has the file at an absolute path.
  */
 export type TypeCheck =
   | { readonly kind: "noTsconfig" }
@@ -28,25 +29,31 @@ function nearestTsconfig(folder: string): string | undefined {
 export function typeCheck(specRoot: string, cwd: string): TypeCheck {
   const tsconfig = nearestTsconfig(specRoot);
   if (tsconfig === undefined) return { kind: "noTsconfig" };
+  // The trailing slash makes createRequire resolve from specRoot, not its parent.
+  const resolveTypescript = createRequire(join(specRoot, "/"));
   let typescript: string;
   try {
-    // The trailing slash makes createRequire resolve from specRoot, not its parent.
-    typescript = createRequire(join(specRoot, "/")).resolve("typescript/package.json");
+    typescript = resolveTypescript.resolve("typescript/package.json");
   } catch {
     return { kind: "noTypescript" };
   }
   const tsc = join(dirname(typescript), "bin", "tsc");
-  const result = spawnSync(process.execPath, [tsc, "--noEmit", "--listFiles", "-p", tsconfig], {
+  const result = spawnSync(process.execPath, [tsc, "--noEmit", "-p", tsconfig], {
     cwd,
     encoding: "utf8",
     maxBuffer: Infinity,
   });
   if (result.error !== undefined) return { kind: "unfinished", reason: result.error.message };
   if (result.signal !== null) return { kind: "unfinished", reason: `terminated by ${result.signal}` };
-  // --listFiles writes each file of the program as a line of its own: an absolute path that exists.
-  const lines = (result.stdout + result.stderr).split(/\r?\n/);
-  const isListed = (line: string) => isAbsolute(line) && existsSync(line);
-  if (result.status !== 0) return { kind: "typeErrors", output: lines.filter((line) => !isListed(line)).join("\n") };
-  const files = new Set(lines.filter(isListed));
-  return { kind: "passed", tsconfig, includes: (file) => files.has(file) || files.has(realpathSync(file)) };
+  if (result.status !== 0) return { kind: "typeErrors", output: result.stdout + result.stderr };
+  const { API }: typeof Api = resolveTypescript("typescript/unstable/sync");
+  const api = new API({ cwd });
+  try {
+    const project = api.updateSnapshot({ openProjects: [tsconfig] }).getProject(tsconfig);
+    if (project === undefined) return { kind: "unfinished", reason: `the TypeScript API did not open ${tsconfig}` };
+    const files = new Set(project.program.getSourceFileNames());
+    return { kind: "passed", tsconfig, includes: (file) => files.has(file) || files.has(realpathSync(file)) };
+  } finally {
+    api.close();
+  }
 }
