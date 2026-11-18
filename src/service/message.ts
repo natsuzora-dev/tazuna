@@ -1,7 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { haltingFaultKinds } from "../data/fault.generated.ts";
 import { haltingInvalidInputKinds } from "../data/invalidInput.generated.ts";
-import { type Answer, byCallerKinds, type RejectionKind } from "../data/trace.generated.ts";
+import { type Answer, byCallerKinds, type LineId, type RejectionKind } from "../data/trace.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
 import type { Kind } from "../data/violation.ts";
 
@@ -30,9 +30,9 @@ export interface Emitted extends Emit {
 /** Lean's LineBody: what a line of a run carries. `operation` writes `payload` only when its control has fields. */
 export type LineBody =
   | { readonly type: "command" | "query" | "subscribe"; readonly target: DefinitionRef; readonly input: unknown }
-  | { readonly type: "event"; readonly event: DefinitionRef; readonly payload: unknown; readonly resultOf?: string }
-  | { readonly type: "answer"; readonly to: string; readonly answer: Answer }
-  | { readonly type: "unsubscribe"; readonly to: string }
+  | { readonly type: "event"; readonly event: DefinitionRef; readonly payload: unknown; readonly resultOf?: LineId }
+  | { readonly type: "answer"; readonly to: LineId; readonly answer: Answer }
+  | { readonly type: "unsubscribe"; readonly to: LineId }
   | { readonly type: "time" | "restart" }
   | {
       readonly type: "operation";
@@ -60,4 +60,10 @@ export function bodyContent(b: LineBody): unknown {
 }
 
 /** Lean's Line: a line of a run, which traceLineOf turns into a trace line. */
-export type Line = LineBody & { readonly time: string; readonly dir: "in" | "out"; readonly id: string };
+export type Line = LineBody & { readonly time: string; readonly dir: "in" | "out"; readonly id: LineId };
+
+/** The key of a line id in a map, as Lean compares line ids. */
+export const idKey = (id: LineId): string => JSON.stringify(id.kind === "own" ? [id.id] : [id.sender, id.id]);
+
+export const sameLineId = (a: LineId | undefined, b: LineId | undefined): boolean =>
+  a === undefined || b === undefined ? a === b : idKey(a) === idKey(b);

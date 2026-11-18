@@ -60,7 +60,7 @@ subscription ended. A stale request still awaits an answer, but its sender ignor
 cancelled invoke.
 -/
 structure Pending where
-  id : String
+  id : LineId
   activity : Activity
   requester : Requester
   input : Value
@@ -101,7 +101,7 @@ deriving DecidableEq, Repr, Inhabited
 An open subscription. `input` is as the scenario gave it, and `last` is the comparable value of the last answer sent.
 -/
 structure Subscription where
-  id : String
+  id : LineId
   query : String
   input : Value
   last : Option Value := none
@@ -116,7 +116,7 @@ deriving DecidableEq, Repr, Inhabited
 
 /-- A request that the service sent with a request line. `answer` is the last answer that arrived. -/
 structure Outgoing where
-  id : String
+  id : LineId
   activity : Activity
   answer : Option Answer := none
   /-- Set for an assumed peer's acceptance of a command, whose ensures the end of the run checks. -/
@@ -128,7 +128,7 @@ structure Durable where
   records : Records := []
   commandAnswers : CommandAnswers := []
   /-- The ids of the events and answers that arrived; one that arrives again is not processed again. -/
-  deliveries : List String := []
+  deliveries : List LineId := []
   /-- The requests sent, in sending order, so that a result event finds its request also after a restart. -/
   outgoing : List Outgoing := []
   /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
@@ -178,16 +178,16 @@ deriving Repr, Inhabited
 def State.answers (s : State) : List Outgoing := s.outgoing.filter (·.answer.isSome)
 
 /-- The target of the request `id` and the last answer to it, when an answer arrived. -/
-def State.answerTo? (s : State) (id : String) : Option (Spec.Ref × Answer) :=
+def State.answerTo? (s : State) (id : LineId) : Option (Spec.Ref × Answer) :=
   (s.answers.find? (·.id == id)).bind fun o => o.answer.map (o.activity.ref, ·)
 
 def namedCount (service : String) (lines : Array Line) (name : String) : Nat :=
   lines.countP (·.body.idName service == name)
 
-def State.lineId (s : State) (givenId : Option String) (name : String) : String :=
-  givenId.getD s!"{name}#{namedCount s.service s.lines name + 1}"
+def State.lineId (s : State) (givenId : Option LineId) (name : String) : LineId :=
+  givenId.getD (.own s!"{name}#{namedCount s.service s.lines name + 1}")
 
-def State.write (s : State) (dir : Dir) (givenId : Option String) (body : LineBody) : State × String :=
+def State.write (s : State) (dir : Dir) (givenId : Option LineId) (body : LineBody) : State × LineId :=
   let id := s.lineId givenId (body.idName s.service)
   ({ s with lines := s.lines.push { time := s.now, dir, id, body } }, id)
 
@@ -262,13 +262,13 @@ def State.reportAll (s : State) (faults : List Fault) : State :=
   faults.foldl (fun s fault => if s.halted.isSome then s else s.report (.fault fault)) s
 
 /-- The state with the answer line to `to` written. An own-service command has no id and writes no answer line. -/
-def State.answer (s : State) (to : Option String) (answer : Answer) : State :=
+def State.answer (s : State) (to : Option LineId) (answer : Answer) : State :=
   match to with
   | some to => (s.write .out none (.answer to answer)).1
   | none => s
 
 /-- The state with the event lines of `emits` written, each the result of the request `resultOf`. -/
-def State.emitAll (s : State) (resultOf : Option String) (emits : List Emit) : State :=
+def State.emitAll (s : State) (resultOf : Option LineId) (emits : List Emit) : State :=
   emits.foldl (fun s e => (s.write .out none (.event e.event e.payload resultOf)).1) s
 
 def State.machine? (s : State) (id : InstanceId) : Option Instance :=

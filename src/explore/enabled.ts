@@ -1,3 +1,4 @@
+import type { LineId } from "../data/trace.generated.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import type { InstanceId } from "../service/instance.ts";
 import { operationsOf } from "../service/screen/operable.ts";
@@ -20,7 +21,7 @@ export interface Enabled {
     readonly payloads: readonly unknown[] | null;
   }[];
   readonly awaiting: readonly {
-    readonly id: string;
+    readonly id: LineId;
     readonly name: string;
     readonly target: string;
     readonly sender: string;

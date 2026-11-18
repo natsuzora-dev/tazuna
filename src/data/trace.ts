@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { Subject } from "./mismatch.generated.ts";
-import { type TraceLine, traceLine } from "./trace.generated.ts";
+import { type LineId, type TraceLine, traceLine } from "./trace.generated.ts";
 import { type Json, plain } from "./values.ts";
 
 /** A trace line before its writer adds the time. */
@@ -40,17 +40,10 @@ export const subjectOf = (l: TraceLine): Subject =>
 
 export const resultOf = (l: TraceLine): string | undefined => ("resultOf" in l ? l.resultOf : undefined);
 
-/**
- * Lean's receivedId: the id by which the receiver of a message from `sender` names it in its trace. `sentId` and
- * `senderOf` read it back; together they are the one place a simulated message's id meets a string.
- */
-export const receivedId = (sender: string, id: string): string => `${sender}/${id}`;
+/** Lean's LineId.text: the id as a trace line writes it, `<sender>/<id>` for a received message. */
+export const lineIdText = (id: LineId): string => (id.kind === "own" ? id.id : `${id.sender}/${id.id}`);
 
-/** Lean's sentId?: the sender's id of a message that `service` received with the id `id`, when `service` sent it. */
-export const sentId = (service: string, id: string): string | undefined =>
-  id.startsWith(`${service}/`) ? id.slice(service.length + 1) : undefined;
-
-/** Lean's senderOf?: the service whose message `id` names, when another service sent it. */
+/** The sender that a trace line id written by lineIdText names, when it is a received message's id. */
 export function senderOf(id: string): string | undefined {
   const parts = id.split("/");
   return parts.length === 2 ? parts[0] : undefined;

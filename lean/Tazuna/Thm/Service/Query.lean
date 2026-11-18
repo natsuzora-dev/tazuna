@@ -96,7 +96,7 @@ theorem publish_answers_only_open_subscriptions :
       exact ⟨hd, sub, hsub sub (List.mem_cons_self ..), a, ha⟩
   exact key _ _ fun _ h => h
 
-theorem ended_subscription_not_answered (id : String) (hid : ∀ sub ∈ s.subscriptions, sub.id ≠ id) :
+theorem ended_subscription_not_answered (id : LineId) (hid : ∀ sub ∈ s.subscriptions, sub.id ≠ id) :
     ∃ new, (publish st fs s).lines = s.lines ++ new ∧ ∀ l ∈ new, ∀ a, l.body ≠ .answer id a := by
   obtain ⟨new, e, p⟩ := publish_answers_only_open_subscriptions (st := st) (fs := fs) (s := s)
   refine ⟨new, e, fun l hl a ha => ?_⟩

@@ -15,9 +15,9 @@ inductive LineBody where
   | query (target : Spec.Ref) (input : Value)
   | subscribe (target : Spec.Ref) (input : Value)
   /-- An event whose `resultOf` is the id of the request line of the command that the event results from. -/
-  | event (event : Spec.Ref) (payload : Value) (resultOf : Option String)
-  | answer (to : String) (answer : Answer)
-  | unsubscribe (to : String)
+  | event (event : Spec.Ref) (payload : Value) (resultOf : Option LineId)
+  | answer (to : LineId) (answer : Answer)
+  | unsubscribe (to : LineId)
   | time
   | restart
   /--
@@ -49,7 +49,7 @@ A trace line. Test adds `after` and `created` when it writes a snapshot.
 structure Line where
   time : Time
   dir : Dir
-  id : String
+  id : LineId
   body : LineBody
 deriving DecidableEq, Repr, Inhabited
 

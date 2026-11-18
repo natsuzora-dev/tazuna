@@ -78,7 +78,7 @@ def window (s : State) (i : Nat) : List Nat :=
   (before.reverse ++ after).map (·.2)
 
 /-- The ids of the earlier lines in the same window that must precede line `i` (ordered). -/
-def after (s : State) (lineSteps : Array (Option (Nat × Nat))) (i : Nat) : List String :=
+def after (s : State) (lineSteps : Array (Option (Nat × Nat))) (i : Nat) : List LineId :=
   match s.lines[i]? with
   | none => []
   | some line =>
@@ -108,30 +108,30 @@ def firstOut (s : State) (v : String) : Option Nat :=
 def createdAt (s : State) (i : Nat) : List String :=
   (s.created.map (·.2)).filter (firstOut s · == some i)
 
-def trace (s : State) (c : Causes) : List (Line × List String × List String) :=
+def trace (s : State) (c : Causes) : List (Line × List LineId × List String) :=
   let lineSteps := lineSteps s c
   s.lines.toList.zipIdx.map fun (line, i) => (line, after s lineSteps i, createdAt s i)
 
 /--
 The trace line of `line` of the trace of `service` as a snapshot holds it, with its `after` and `created`. This is where
-a definition gets its trace name.
+a definition gets its trace name and a line id its text.
 -/
-def traceLineOf (service : String) (line : Line) (after created : List String) : TraceLine :=
-  let (dir, id) := (line.dir, line.id)
+def traceLineOf (service : String) (line : Line) (after : List LineId) (created : List String) : TraceLine :=
+  let (dir, id) := (line.dir, line.id.text)
   let name (r : Spec.Ref) := r.traceName service
   let body : TraceLine.Body := match line.body with
     | .command r input => .command dir id (name r) input
     | .query r input => .query dir id (name r) input
     | .subscribe r input => .subscribe dir id (name r) input
-    | .event r payload resultOf => .event dir id (name r) payload resultOf
-    | .answer to answer => .answer dir id to answer
-    | .unsubscribe to => .unsubscribe dir id to
+    | .event r payload resultOf => .event dir id (name r) payload (resultOf.map (·.text))
+    | .answer to answer => .answer dir id to.text answer
+    | .unsubscribe to => .unsubscribe dir id to.text
     | .time => .time .in id
     | .restart => .restart .in id
     | .operation screen control nth payload => .operation dir id (operationName (name screen) control) nth payload
   { time := { text := renderTime line.time, time := line.time }
     body
-    after := if after.isEmpty then none else some after
+    after := if after.isEmpty then none else some (after.map (·.text))
     created := if created.isEmpty then none else some created }
 
 end Tazuna.Sim

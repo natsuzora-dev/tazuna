@@ -6,7 +6,7 @@ import type { InvalidScenario } from "../../src/data/invalidScenario.generated.t
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
 import type { Activity, InstanceId, StepName } from "../../src/data/step.generated.ts";
-import type { Answer, Rejection, TraceLine } from "../../src/data/trace.generated.ts";
+import type { Answer, LineId, Rejection, TraceLine } from "../../src/data/trace.generated.ts";
 import type { Run } from "../../src/data/traceFile.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
@@ -218,7 +218,7 @@ export type Operation = {
  * sending definition.
  */
 export type Awaiting = {
-  readonly id: string;
+  readonly id: LineId;
   readonly name: string;
   readonly target: string;
   readonly sender: string;

@@ -1,13 +1,14 @@
 import { sameRef } from "../data/definitionRef.ts";
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { Answer } from "../data/trace.generated.ts";
+import type { Answer, LineId } from "../data/trace.generated.ts";
 import { canonicalJson, type Shape } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, ChartSpec, Named } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { serviceOf } from "../service/basic.ts";
+import { idKey, sameLineId } from "../service/message.ts";
 import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
@@ -72,11 +73,11 @@ const reject: Answer = { result: "rejected", rejection: { kind: "unavailable" } 
 const isAnswer = (v: unknown): v is Answer =>
   typeof v === "object" && v !== null && "result" in v && typeof (v as { result: unknown }).result === "string";
 
-function awaitedMessage(w: World, own: string, id: string): Message | undefined {
+function awaitedMessage(w: World, own: string, id: LineId): Message | undefined {
   return w.messages.find(
     (m) =>
       m.sender === own &&
-      m.id === id &&
+      sameLineId(m.id, id) &&
       (m.status === "inFlight" || m.status === "delivered") &&
       w.roles.get(m.receiver) === "external" &&
       (m.body.type === "command" || m.body.type === "query" || m.body.type === "subscribe"),
@@ -148,9 +149,9 @@ export function enabledLines(
     if (r === undefined) return [];
     const next = enabled(r);
     const ownLines = stateOf(w, own)?.lines ?? [];
-    const ended = new Set(ownLines.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [l.to] : [])));
+    const ended = new Set(ownLines.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [idKey(l.to)] : [])));
     const answers = next.awaiting.flatMap((a) => {
-      const m = ended.has(a.id) ? undefined : awaitedMessage(w, own, a.id);
+      const m = ended.has(idKey(a.id)) ? undefined : awaitedMessage(w, own, a.id);
       const request = m === undefined ? undefined : requestFact(m);
       const target = spec.definitions.find(
         (d) =>

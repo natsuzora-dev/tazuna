@@ -43,16 +43,17 @@ order (FIFO), as a connection delivers them.
 structure Message where
   sender : String
   receiver : String
-  id : String
+  id : LineId
   body : LineBody
   origin : Origin
-  channel : Option String
+  channel : Option LineId
   status : Status
 deriving Repr, Inhabited
 
 /-- The message as a report names it: its sender, its receiver, the sender's id of it, and what caused it. -/
 def Message.describe (m : Message) : Value :=
-  .obj [("sender", .str m.sender), ("receiver", .str m.receiver), ("id", .str m.id), ("origin", ToValue.toValue m.origin)]
+  .obj [("sender", .str m.sender), ("receiver", .str m.receiver), ("id", .str m.id.text),
+    ("origin", ToValue.toValue m.origin)]
 
 def Message.sameChannel (m n : Message) : Bool :=
   m.sender == n.sender && m.receiver == n.receiver && m.channel == n.channel
@@ -84,7 +85,7 @@ The request that the client or a peer line `line` sent: its receiver, the receiv
 structure Sent where
   line : Nat
   receiver : String
-  id : String
+  id : LineId
   position : Nat
 deriving Repr, Inhabited
 
@@ -138,7 +139,7 @@ def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
 def screensOf (s : State) : List InstanceId := (s.machines.filter (·.chart.screen)).map (·.id)
 
 /-- The service that the request `id` of the lines `lines` went to. -/
-def targetOf (lines : Array Line) (id : String) : Option String :=
+def targetOf (lines : Array Line) (id : LineId) : Option String :=
   lines.toList.findSome? fun l =>
     match l.dir, l.body with
     | .out, .command r _ | .out, .query r _ | .out, .subscribe r _ =>
@@ -146,7 +147,7 @@ def targetOf (lines : Array Line) (id : String) : Option String :=
     | _, _ => none
 
 /-- The world with a message from `sender` to `receiver`, kept in flight, discarded, or reported as unlisted. -/
-def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) (channel : Option String) : World :=
+def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) (channel : Option LineId) : World :=
   let line := match o with
     | .line i => some i
     | .startup => none
@@ -174,9 +175,9 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
       | some target => w.post o service target l (some (receivedId service to))
       | none => w
     | .answer to _ =>
-      match senderOf? to with
-      | some requester => w.post o service requester l (some to)
-      | none => w
+      match to with
+      | .received requester _ => w.post o service requester l (some to)
+      | .own _ => w
     | .event event _ resultOf =>
       w.services.foldl (init := w) fun w (r, st) =>
         if r != service && st.receives.contains event then w.post o service r l resultOf else w

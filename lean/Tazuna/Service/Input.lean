@@ -10,7 +10,7 @@ open Tazuna.Data
 variable {m : Type → Type}
 
 def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (target : Spec.Ref)
-    (givenId : Option String) (raw : Value) : m State := do
+    (givenId : Option LineId) (raw : Value) : m State := do
   if target.service = st.service ∧ target.name ∈ st.commands then
     let (s, id) := s.write .in givenId (.command target raw)
     let (s, step) := s.newMessage.newStep none
@@ -24,7 +24,7 @@ def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
   else pure (s.report (.invalidInput (.unownedTarget target)))
 
 def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (target : Spec.Ref)
-    (givenId : Option String) (raw : Value) : m State := do
+    (givenId : Option LineId) (raw : Value) : m State := do
   if target.service = st.service ∧ target.name ∈ st.queries then
     let (s, id) := s.write .in givenId (.query target raw)
     let s := s.newMessage
@@ -35,36 +35,36 @@ def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (
 
 /-- The state after a subscribe input. The first answer is sent when the message finishes. -/
 def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (target : Spec.Ref)
-    (givenId : Option String) (raw : Value) : m State := do
+    (givenId : Option LineId) (raw : Value) : m State := do
   if target.service = st.service ∧ target.name ∈ st.queries then
     let (s, id) := s.write .in givenId (.subscribe target raw)
     let s := if s.subscriptions.any (·.id == id) then
-        s.report (.invalidInput (.reusedSubscriptionId id))
+        s.report (.invalidInput (.reusedSubscriptionId id.text))
       else { s with subscriptions := s.subscriptions ++ [{ id, query := target.name, input := raw }] }
     message st fs s.newMessage {}
   else pure (s.report (.invalidInput (.unownedTarget target)))
 
 /-- The state after an unsubscribe input that ends the subscription `id`. -/
-def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : String) : m State :=
+def endSubscription [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id : LineId) : m State :=
   let s := (s.write .in none (.unsubscribe id)).1
   let s := if s.subscriptions.any (·.id == id) then { s with subscriptions := s.subscriptions.filter (·.id != id) }
-    else s.report (.invalidInput (.unopenedSubscription id))
+    else s.report (.invalidInput (.unopenedSubscription id.text))
   message st fs s.newMessage {}
 
 /--
 The request `handle` whose answer arrived (State.answerTo?), which an event names as its resultOf. It is none after
 reporting that no answer to it arrived, or that the request cannot have the event as its result (resultOfMismatch).
 -/
-def resultRequest (st : Service) (s : State) (event : Spec.Ref) (handle : String) : State × Option String :=
+def resultRequest (st : Service) (s : State) (event : Spec.Ref) (handle : LineId) : State × Option LineId :=
   match s.answerTo? handle with
   | some (target, answer) =>
     match st.«structure».resultOfMismatch target (answer matches .accepted _) event with
-    | some mismatch => (s.report (.invalidInput (.resultOf event handle target mismatch)), none)
+    | some mismatch => (s.report (.invalidInput (.resultOf event handle.text target mismatch)), none)
     | none => (s, some handle)
-  | none => (s.report (.invalidInput (.resultOfUnansweredRequest event handle)), none)
+  | none => (s.report (.invalidInput (.resultOfUnansweredRequest event handle.text)), none)
 
 /-- The state after the result event `e` of the request `id`, an assumed peer's accepted command, arrives. -/
-def State.addResult (s : State) (id : String) (e : Emit) : State :=
+def State.addResult (s : State) (id : LineId) (e : Emit) : State :=
   { s with outgoing := s.outgoing.map fun (o : Outgoing) => if o.id == id then
       { o with accepted := o.accepted.map fun a => { a with events := a.events ++ [e] } } else o }
 
@@ -80,12 +80,12 @@ def checkResults [Monad m] (fs : Functions m) (s : State) : m State :=
     | some a =>
     match ← fs.resultEnsures o.activity.ref a.input a.output a.events with
     | .error issue => return s.report (.fault (issueViolation o.activity.ref issue))
-    | .ok (some c) => return s.report (.invalidInput (.assumption o.id o.activity.ref (.failedAssumedEnsures c)))
+    | .ok (some c) => return s.report (.invalidInput (.assumption o.id.text o.activity.ref (.failedAssumedEnsures c)))
     | .ok none => return s
 
 /-- The state after the event that arrived as `raw` and parsed as `payload` is delivered. -/
 def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (event : Spec.Ref)
-    (givenId : Option String) (raw payload : Value) (request : Option String) : m State := do
+    (givenId : Option LineId) (raw payload : Value) (request : Option LineId) : m State := do
   let (s, id) := s.write .in givenId (.event event raw request)
   let s := { s with deliveries := s.deliveries ++ [id] }
   let s := match request with
@@ -94,7 +94,7 @@ def deliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   let (s, step) := s.newMessage.newStep none
   message st fs s { tasks := reactions st s [[{ event, payload }]] false step }
 
-def withResultOf (st : Service) (s : State) (event : Spec.Ref) : Option String → State × Option String
+def withResultOf (st : Service) (s : State) (event : Spec.Ref) : Option LineId → State × Option LineId
   | some handle => resultRequest st s event handle
   | none => (s, none)
 
@@ -104,14 +104,14 @@ again. The message itself is processed, so due deadlines and changed subscriptio
 simulation redelivers a message as it was, so the name and payload are those of the first delivery.
 -/
 def redeliver [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (event : Spec.Ref)
-    (givenId : Option String) (raw : Value) (resultOf : Option String) : m State := do
+    (givenId : Option LineId) (raw : Value) (resultOf : Option LineId) : m State := do
   let (s, request) := withResultOf st s event resultOf
   if s.halted.isSome then pure s else
   let (s, _) := s.write .in givenId (.event event raw request)
   message st fs s.newMessage {}
 
 def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (event : Spec.Ref)
-    (givenId : Option String) (raw : Value) (resultOf : Option String) : m State := do
+    (givenId : Option LineId) (raw : Value) (resultOf : Option LineId) : m State := do
   if s.deliveries.contains (s.lineId givenId (event.traceName s.service)) then
     redeliver st fs s event givenId raw resultOf
   else
@@ -124,9 +124,10 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
       if s.halted.isSome then pure s else deliver st fs s event givenId raw payload request
 
 /-- The assumption that an answer to the request `requestId` to `target` breaks (Spec.assumptionMismatch). -/
-def brokenAssumption (requestId : String) (target : Spec.Ref) (answer : Answer)
+def brokenAssumption (requestId : LineId) (target : Spec.Ref) (answer : Answer)
     (failedRequires failedEnsures : Option String) : Option Finding :=
-  (Spec.assumptionMismatch answer failedRequires failedEnsures).map (.invalidInput ∘ .assumption requestId target)
+  (Spec.assumptionMismatch answer failedRequires failedEnsures).map
+    (.invalidInput ∘ .assumption requestId.text target)
 
 /--
 The check of an answer to a request of the service. `assumption` is the assumption that the answer breaks, reported
@@ -156,14 +157,14 @@ def decodedAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (ans
   match answer with
   | .rejected r =>
     if !(j.rejectionKinds st.service target).contains r.kind then
-      return .ok (.error (.invalidInput (.assumption p.id target (.unlistedRejectionKind r))))
+      return .ok (.error (.invalidInput (.assumption p.id.text target (.unlistedRejectionKind r))))
     if r.kind == .requires && !(j.rejectionReasons target).contains (r.reason.getD "") then
-      return .ok (.error (.invalidInput (.unlistedRejectionReason p.id target r)))
+      return .ok (.error (.invalidInput (.unlistedRejectionReason p.id.text target r)))
     return .ok (.ok answer)
   | _ =>
     match ← decodedOutput st fs p.activity answer with
     | .error e => return .error e
-    | .ok none => return .ok (.error (.invalidInput (.assumption p.id target .answerOutputSchema)))
+    | .ok none => return .ok (.error (.invalidInput (.assumption p.id.text target .answerOutputSchema)))
     | .ok (some decoded) => return .ok (.ok decoded)
 
 /-- The check of an answer to the request `p` from a spec service, which parsed the input itself. -/
@@ -213,7 +214,7 @@ def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answe
 The state after an answer input with id `givenId` answers the request `p`, as checkAnswer checks the answer. The line
 holds the answer as it arrived, and the requester gets it decoded.
 -/
-def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (givenId : Option String)
+def answerRequest [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (givenId : Option LineId)
     (p : Pending) (answer : Answer) : m State := do
   match ← checkAnswer st fs p answer with
   | .error e =>
@@ -237,7 +238,7 @@ The state after the answer `a` to the request `to` arrives with the id `id`. A l
 so the answer is kept with it, also when the request no longer waits, as after a restart; such an answer is a message
 with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
 -/
-def answerIn [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id to : String) (a : Answer) :
+def answerIn [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (id to : LineId) (a : Answer) :
     m State :=
   if s.deliveries.contains id then message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} else
   let s := { s with deliveries := s.deliveries ++ [id],

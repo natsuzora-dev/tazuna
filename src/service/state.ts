@@ -4,7 +4,7 @@ import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import { limits } from "../data/limits.generated.ts";
 import type { Activity, Requester, StepName } from "../data/step.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
-import type { Answer } from "../data/trace.generated.ts";
+import type { Answer, LineId } from "../data/trace.generated.ts";
 import { operationName } from "../data/trace.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type Location, type Violation, type ViolationError, withExtra } from "../data/violation.ts";
@@ -24,7 +24,7 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import { type Emit, type Halting, halts, type Line, type LineBody } from "./message.ts";
+import { type Emit, type Halting, halts, idKey, type Line, type LineBody } from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";
 
@@ -161,7 +161,7 @@ export const machineOf = (requester: Requester): InstanceId | undefined =>
  * subscription has ended; a stale request still awaits an answer, but its sender ignores it.
  */
 export interface Pending {
-  readonly id: string;
+  readonly id: LineId;
   readonly activity: Activity;
   readonly requester: Requester;
   readonly input: Json;
@@ -204,6 +204,7 @@ export interface StepInfo {
  * run checks.
  */
 export interface Outgoing {
+  readonly id: LineId;
   readonly activity: Activity;
   answer: Answer | undefined;
   accepted: { readonly input: Fields; readonly output: unknown; readonly events: Emit[] } | undefined;
@@ -213,9 +214,9 @@ export interface Outgoing {
 interface Durable {
   readonly records: Records;
   readonly commandAnswers: CommandAnswers;
-  /** The ids of the events and answers that arrived; one that arrives again is not processed again. */
+  /** The ids (idKey) of the events and answers that arrived; one that arrives again is not processed again. */
   readonly deliveries: Set<string>;
-  /** The requests sent, by request id, so that a result event finds its request also after a restart. */
+  /** The requests sent, by idKey of the request id, so that a result event finds its request also after a restart. */
   readonly outgoing: Map<string, Outgoing>;
   /** Lean's State.createdEntities: the entities that createKey was called for, in call order. */
   readonly createdEntities: string[];
@@ -240,7 +241,7 @@ interface Process {
   readonly pending: Pending[];
   readonly queued: Queued[];
   /** The subscriptions that other services opened, in opening order. */
-  readonly subscriptions: Subscriptions<{ readonly query: string; readonly input: unknown }>;
+  readonly subscriptions: Subscriptions<LineId, { readonly query: string; readonly input: unknown }>;
 }
 
 /**
@@ -276,7 +277,7 @@ export const newProcess = (): Process => ({
   deadlines: [],
   pending: [],
   queued: [],
-  subscriptions: new Subscriptions(),
+  subscriptions: new Subscriptions(idKey),
 });
 
 export function newState(st: Service): State {
@@ -304,7 +305,7 @@ export function newState(st: Service): State {
 }
 
 /** A line before `write` adds the time and, unless the line gives one, the id. */
-type UnwrittenLine = LineBody & { readonly dir: "in" | "out"; readonly id?: string };
+type UnwrittenLine = LineBody & { readonly dir: "in" | "out"; readonly id?: LineId };
 
 /** Lean's LineBody.idName: the name that line ids count, as the trace of `service` writes it. */
 function idName(service: string, body: LineBody): string {
@@ -322,11 +323,11 @@ function idName(service: string, body: LineBody): string {
   }
 }
 
-export function lineId(s: State, givenId: string | undefined, name: string): string {
-  return givenId ?? `${name}#${(s.lineCounts.get(name) ?? 0) + 1}`;
+export function lineId(s: State, givenId: LineId | undefined, name: string): LineId {
+  return givenId ?? { kind: "own", id: `${name}#${(s.lineCounts.get(name) ?? 0) + 1}` };
 }
 
-export function write(s: State, line: UnwrittenLine): string {
+export function write(s: State, line: UnwrittenLine): LineId {
   const name = idName(s.service, line);
   const id = lineId(s, line.id, name);
   s.lineCounts.set(name, (s.lineCounts.get(name) ?? 0) + 1);
@@ -342,7 +343,7 @@ export function awaitAnswer(
   activity: Activity,
 ): void {
   const id = write(s, line);
-  s.outgoing.set(id, { activity, answer: undefined, accepted: undefined });
+  s.outgoing.set(idKey(id), { id, activity, answer: undefined, accepted: undefined });
   s.pending.push({ id, activity, requester, input: line.input as Json, stale: false, turn: s.turn });
   s.turn += 1;
 }

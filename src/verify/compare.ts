@@ -90,11 +90,11 @@ function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
 
 /** Lean's withoutRepeatedAnswers. */
 function withoutRepeatedAnswers(lines: readonly (TraceLine | undefined)[]): (TraceLine | undefined)[] {
-  let open = new Subscriptions<undefined>();
+  let open = new Subscriptions<string, undefined>((id) => id);
   return lines.map((l) => {
     if (l?.dir === "in" && l.type === "subscribe") open.subscribe(l.id, undefined);
     else if (l?.dir === "in" && l.type === "unsubscribe") open.unsubscribe(l.to);
-    else if (l?.dir === "in" && l.type === "restart") open = new Subscriptions();
+    else if (l?.dir === "in" && l.type === "restart") open = new Subscriptions<string, undefined>((id) => id);
     else if (l?.dir === "out" && l.type === "answer" && open.repeats(l.to, l.answer)) return undefined;
     return l;
   });

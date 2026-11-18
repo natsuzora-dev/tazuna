@@ -6,7 +6,7 @@ import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../dat
 import type { Schema } from "../service/basic.ts";
 import { Failed } from "../service/functions.ts";
 import { chartOf } from "../service/instance.ts";
-import type { Line, LineBody } from "../service/message.ts";
+import { type Line, type LineBody, sameLineId } from "../service/message.ts";
 import { created } from "../service/state.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
 
@@ -223,7 +223,7 @@ export function messageOf(w: World, i: number, fact: Fact): number {
             sameOrigin(m.origin, fact.origin) &&
             m.sender === s.receiver &&
             m.body.type === "answer" &&
-            m.body.to === s.id,
+            sameLineId(m.body.to, s.id),
         ),
       );
     }
@@ -240,7 +240,7 @@ export function messageOf(w: World, i: number, fact: Fact): number {
             m.sender === sub.sender &&
             m.receiver === sub.receiver &&
             m.body.type === "unsubscribe" &&
-            m.body.to === sub.id,
+            sameLineId(m.body.to, sub.id),
         ),
       );
     }
@@ -282,9 +282,9 @@ export function spanLines(w: World, origin: Origin, service: string): Line[] {
 /** Lean's World.answersOf. */
 export function answersOf(w: World, s: Sent): Answer[] {
   const lines = stateOf(w, s.receiver)?.lines ?? [];
-  const next = lines.findIndex((l, n) => n > s.position && l.dir === "in" && l.id === s.id);
+  const next = lines.findIndex((l, n) => n > s.position && l.dir === "in" && sameLineId(l.id, s.id));
   return lines.flatMap((l, n) =>
-    n > s.position && (next < 0 || n < next) && l.type === "answer" && l.dir === "out" && l.to === s.id
+    n > s.position && (next < 0 || n < next) && l.type === "answer" && l.dir === "out" && sameLineId(l.to, s.id)
       ? [l.answer]
       : [],
   );
@@ -305,7 +305,7 @@ function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
     if (m.body.type === "answer" && part === "output") return present(outputOf(m.body.answer));
     if (part === "input") return present(valueOfLine(m.body));
     const received = (stateOf(w, m.sender)?.lines ?? []).find(
-      (l) => l.dir === "in" && l.type === "answer" && l.to === m.id,
+      (l) => l.dir === "in" && l.type === "answer" && sameLineId(l.to, m.id),
     );
     return present(received?.type === "answer" ? outputOf(received.answer) : undefined);
   };
@@ -322,7 +322,7 @@ function partOf(w: World, i: number, fact: Fact, part: Part): unknown {
     const s = sentBy(w, fact.to);
     if (s === undefined) return unresolved(i, fact);
     const given = spanLines(w, fact.origin, s.receiver).flatMap((l) =>
-      l.dir === "out" && l.type === "answer" && l.to === s.id ? [l.answer] : [],
+      l.dir === "out" && l.type === "answer" && sameLineId(l.to, s.id) ? [l.answer] : [],
     );
     if (given.length === 1) return present(outputOf(given[0]));
     if (given.length === 0) return unresolved(i, fact);

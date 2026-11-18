@@ -176,7 +176,7 @@ theorem keeps_setStatus {w w' : World} (h : KeepsInFlight e w w') (k : Nat) (sta
   · exact hj'
 
 theorem keeps_post {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
-    (channel : Option String) : KeepsInFlight e w (w'.post o sender receiver l channel) := by
+    (channel : Option LineId) : KeepsInFlight e w (w'.post o sender receiver l channel) := by
   unfold World.post
   dsimp only
   split
@@ -496,7 +496,7 @@ theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line
     | _ => simp only [reaches, reduceCtorEq] at hl <;> simp only [World.take, bind, pure] <;> same_tac
   · exact same_report (same_refl w) r
 /-- An answer that arrives again with the id of an earlier one is written and not processed again. -/
-theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer)
+theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer)
     (hd : id ∈ s.deliveries) :
     answerIn st fs s id to a = message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} := by
   simp [answerIn, hd]
@@ -505,7 +505,7 @@ theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s :
 An answer to a request of the service is kept for a later result event, also when the request waits no more, as after
 a restart.
 -/
-theorem find?_answered (l : List Outgoing) (to : String) (a : Answer) (o : Outgoing)
+theorem find?_answered (l : List Outgoing) (to : LineId) (a : Answer) (o : Outgoing)
     (ho : l.find? (·.id == to) = some o) :
     ((l.map fun (x : Outgoing) => if x.id == to then { x with answer := some a } else x).filter
       (·.answer.isSome)).find? (·.id == to) = some { o with answer := some a } := by
@@ -516,7 +516,7 @@ theorem find?_answered (l : List Outgoing) (to : String) (a : Answer) (o : Outgo
     · simp_all
     · simp_all
 
-theorem late_answer_taken (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer) (o : Outgoing)
+theorem late_answer_taken (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer) (o : Outgoing)
     (hd : id ∉ s.deliveries) (ho : s.outgoing.find? (·.id == to) = some o) (hp : s.pending.find? (·.id == to) = none) :
     (answerIn st fs s id to a).answerTo? to = some (o.activity.ref, a) := by
   simp only [answerIn, List.contains_iff_mem, hd, ↓reduceIte, hp]

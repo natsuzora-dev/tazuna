@@ -1,15 +1,15 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { Answer } from "../data/trace.generated.ts";
-import { receivedId } from "../data/trace.ts";
+import type { Answer, LineId } from "../data/trace.generated.ts";
+import { lineIdText } from "../data/trace.ts";
 import { byCodePoint, canonicalJson } from "../data/values.ts";
 import { ref, type Schema } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { begin, call, checkResults, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { chartOf } from "../service/instance.ts";
-import type { LineBody } from "../service/message.ts";
+import { type LineBody, sameLineId } from "../service/message.ts";
 import { publish } from "../service/query.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
@@ -32,6 +32,7 @@ import {
   stopped,
   type World,
 } from "./network.ts";
+import { receivedId } from "./receive.ts";
 import {
   answersOf,
   fill,
@@ -232,7 +233,7 @@ function recordSent(w: World, i: number, service: string, before: number): void 
 function requestOf(
   type: RequestType,
   target: DefinitionRef,
-  id: string | undefined,
+  id: LineId | undefined,
   v: unknown,
 ): (r: Processing) => void {
   const given = id === undefined ? {} : { id };
@@ -256,7 +257,7 @@ function clientRequest(
   const p = processingOf(w, receiver);
   if (!running(w.roles.get(receiver)) || p === undefined) wrongRole(i, receiver);
   const v = fill(w, i, input);
-  let id: string | undefined;
+  let id: LineId | undefined;
   if (sameIdAs !== undefined) {
     const s = sentBy(w, sameIdAs);
     if (s === undefined)
@@ -292,12 +293,12 @@ function stated(w: World, i: number, m: Message): void {
 }
 
 /** Lean's World.nextId. */
-function nextId(w: World, peer: string, name: string): string {
+function nextId(w: World, peer: string, name: string): LineId {
   const byName = w.counts.get(peer) ?? new Map<string, number>();
   w.counts.set(peer, byName);
   const n = (byName.get(name) ?? 0) + 1;
   byName.set(name, n);
-  return `${name}#${n}`;
+  return { kind: "own", id: `${name}#${n}` };
 }
 
 /** Lean's bodyOf. */
@@ -376,7 +377,7 @@ function deliverInOrder(w: World, i: number, k: number): void {
 }
 
 /** Lean's World.requestId. */
-function requestId(w: World, i: number, peer: string, fact: Fact): string {
+function requestId(w: World, i: number, peer: string, fact: Fact): LineId {
   const unreceived = (): never =>
     reportedHere({
       kind: "InvalidScenario.unreceivedRequest",
@@ -443,8 +444,8 @@ const notDelivered = (i: number, m: Message): never =>
   });
 
 /** Lean's World.answered. */
-const answered = (w: World, sender: string, to: string): boolean =>
-  w.messages.some((n) => n.sender === sender && n.channel === to && n.body.type === "answer");
+const answered = (w: World, sender: string, to: LineId): boolean =>
+  w.messages.some((n) => n.sender === sender && sameLineId(n.channel, to) && n.body.type === "answer");
 
 /** Lean's World.take. */
 function take(w: World, own: string, lines: readonly Line[], i: number, l: Line) {
@@ -508,7 +509,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         w,
         i,
         peer,
-        (m) => m.receiver === sub.receiver && m.body.type === "unsubscribe" && m.body.to === sub.id,
+        (m) => m.receiver === sub.receiver && m.body.type === "unsubscribe" && sameLineId(m.body.to, sub.id),
       );
       return carry(w, i, k);
     }
@@ -579,7 +580,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
             n.receiver === m.sender &&
             !isCarried(w, k) &&
             n.body.type === "answer" &&
-            n.body.to === to,
+            sameLineId(n.body.to, to),
         );
         if (j < 0)
           return reportedHere({
@@ -636,7 +637,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           return (
             m.receiver === own &&
             sameRef(b.event, l.event) &&
-            b.resultOf === resultId &&
+            sameLineId(b.resultOf, resultId) &&
             sameValue(w, r, payloadSchema(b.event), peer, l.payload, v, b.payload)
           );
         });
@@ -690,7 +691,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         });
       m.status = "lost";
       const to = receivedId(m.sender, m.id);
-      const id = `answer:${to}`;
+      const id: LineId = { kind: "own", id: `answer:${lineIdText(to)}` };
       const unavailable: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
       w.messages.push({
         sender: m.receiver,
@@ -865,14 +866,17 @@ function compared(
     }
     case "requested": {
       const span = spanLines(w, { type: "line", index: e.line }, own);
-      const actualEnds = span.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [l.to] : []));
+      const actualEnds = span.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [lineIdText(l.to)] : []));
       const actual = span.flatMap((l) =>
         l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe")
           ? [{ kind: l.type, target: l.target, input: comparedOr(r, inputSchema(l.target), l.input) }]
           : [],
       );
       const filled = e.requests.map((q) => [q, fill(w, e.line, q.input)] as const);
-      const expectedEnds = e.ends.map((f) => w.messages[messageOf(w, e.line, f)]?.id ?? "");
+      const expectedEnds = e.ends.map((f) => {
+        const m = w.messages[messageOf(w, e.line, f)];
+        return m === undefined ? "" : lineIdText(m.id);
+      });
       const expected = filled.map(([q, v]) => ({
         kind: q.kind,
         target: q.target,

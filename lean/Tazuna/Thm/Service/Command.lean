@@ -11,7 +11,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Integ
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem processCommand_clock (name : String) (raw : Value) (id : Option String) (n : Nat) :
+theorem processCommand_clock (name : String) (raw : Value) (id : Option LineId) (n : Nat) :
     (processCommand st fs s name raw id n).1.clock = s.clock := by
   simp only [processCommand, id_bind]
   split
@@ -19,7 +19,7 @@ theorem processCommand_clock (name : String) (raw : Value) (id : Option String) 
   · exact (emitAll_clock _ _ _).trans (by simp [State.clock])
   · simp [State.clock]
 
-theorem processCommand_grows (name : String) (raw : Value) (id : Option String) (n : Nat) :
+theorem processCommand_grows (name : String) (raw : Value) (id : Option LineId) (n : Nat) :
     Grows s (processCommand st fs s name raw id n).1 := by
   simp only [processCommand, id_bind]
   split
@@ -60,7 +60,7 @@ theorem evaluate_accepted_applies (records : Records) (now : Time) (name : Strin
                   subst h₁ h₂ h₃
                   exact ⟨rfl, by simpa using hd, input, hp, rfl⟩
 
-theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option String) (n : Nat)
+theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option LineId) (n : Nat)
     (h : KeysDistinct s.records) : KeysDistinct (processCommand st fs s name raw id n).1.records := by
   simp only [processCommand, id_bind]
   split
@@ -78,7 +78,7 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option S
     exact h
 
 /-- A rejected command writes no record and emits no event: the state only gains the answer line. -/
-theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option String) (n : Nat) (r : Rejection)
+theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option LineId) (n : Nat) (r : Rejection)
     (h : evaluate st fs s.records s.now name raw = .rejected r) :
     processCommand st fs s name raw id n = (s.answer id (.rejected r), .rejected r, []) ∧
       (processCommand st fs s name raw id n).1.records = s.records := by
@@ -86,7 +86,7 @@ theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Opt
     simp only [processCommand, id_bind, h]; rfl
   exact ⟨hp, by rw [hp]; exact answer_records s id _⟩
 
-theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option String) (n : Nat)
+theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option LineId) (n : Nat)
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
     (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
     applyAll st s.records groups.flatten = written ∧
@@ -177,7 +177,7 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                   refine ⟨input, decided, hp, hd, fun e he => ?_, out, hn, hl, hz, rfl⟩
                   simpa using List.find?_eq_none.mp hf e he
 
-theorem processCommand_answers (name : String) (raw : Value) (id : Option String) (n : Nat) :
+theorem processCommand_answers (name : String) (raw : Value) (id : Option LineId) (n : Nat) :
     (processCommand st fs s name raw id n).1.answers = s.answers := by
   simp only [processCommand, id_bind]
   split

@@ -3,17 +3,18 @@ import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
-import { receivedId, senderOf } from "../data/trace.ts";
+import type { LineId } from "../data/trace.generated.ts";
+import { lineIdText } from "../data/trace.ts";
 import { byCodePoint, stringsOf } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import type { InstanceId } from "../service/instance.ts";
-import { bodyContent, type Line, type LineBody } from "../service/message.ts";
+import { bodyContent, type Line, type LineBody, sameLineId } from "../service/message.ts";
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
-import { arriveFrom } from "./receive.ts";
+import { arriveFrom, receivedId } from "./receive.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -27,18 +28,23 @@ export type Status = "inFlight" | "delivered" | "lost" | "unanswered" | "discard
 export interface Message {
   readonly sender: string;
   readonly receiver: string;
-  readonly id: string;
+  readonly id: LineId;
   readonly body: LineBody;
   readonly origin: Origin;
-  readonly channel: string | undefined;
+  readonly channel: LineId | undefined;
   status: Status;
 }
 
 /** Lean's Message.describe. */
-export const describe = (m: Message) => ({ sender: m.sender, receiver: m.receiver, id: m.id, origin: m.origin });
+export const describe = (m: Message) => ({
+  sender: m.sender,
+  receiver: m.receiver,
+  id: lineIdText(m.id),
+  origin: m.origin,
+});
 
 export const sameChannel = (m: Message, n: Message): boolean =>
-  m.sender === n.sender && m.receiver === n.receiver && m.channel === n.channel;
+  m.sender === n.sender && m.receiver === n.receiver && sameLineId(m.channel, n.channel);
 
 export const sameOrigin = (a: Origin, b: Origin): boolean =>
   a.type === b.type && (a.type === "startup" || (b.type === "line" && a.index === b.index));
@@ -71,7 +77,7 @@ export interface Opened {
 export interface Sent {
   readonly line: number;
   readonly receiver: string;
-  readonly id: string;
+  readonly id: LineId;
   readonly position: number;
 }
 
@@ -125,15 +131,19 @@ export function noteTo(w: World, r: InvalidScenario): void {
 const screensOf = (s: State): InstanceId[] => [...s.machines.values()].filter((i) => i.chart.screen).map((i) => i.id);
 
 /** Lean's targetOf. */
-function targetOf(lines: readonly Line[], id: string): string | undefined {
+function targetOf(lines: readonly Line[], id: LineId): string | undefined {
   for (const l of lines)
-    if (l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe") && l.id === id)
+    if (
+      l.dir === "out" &&
+      (l.type === "command" || l.type === "query" || l.type === "subscribe") &&
+      sameLineId(l.id, id)
+    )
       return l.target.service;
   return undefined;
 }
 
 /** Lean's World.post. */
-function post(w: World, o: Origin, sender: string, receiver: string, l: Line, channel: string | undefined): void {
+function post(w: World, o: Origin, sender: string, receiver: string, l: Line, channel: LineId | undefined): void {
   const role = w.roles.get(receiver);
   if (role === undefined) {
     reportTo(w, {
@@ -173,8 +183,7 @@ function route(w: World, o: Origin, service: string, lines: readonly Line[]): vo
         break;
       }
       case "answer": {
-        const requester = senderOf(l.to);
-        if (requester !== undefined) post(w, o, service, requester, l, l.to);
+        if (l.to.kind === "received") post(w, o, service, l.to.sender, l, l.to);
         break;
       }
       case "event":

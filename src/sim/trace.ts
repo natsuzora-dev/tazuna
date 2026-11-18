@@ -1,7 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Channel } from "../data/note.generated.ts";
-import type { TraceLine } from "../data/trace.generated.ts";
-import { operationName } from "../data/trace.ts";
+import type { LineId, TraceLine } from "../data/trace.generated.ts";
+import { lineIdText, operationName } from "../data/trace.ts";
 import { sameJson } from "../data/values.ts";
 import { bodyContent, type Line } from "../service/message.ts";
 import type { StepInfo } from "../service/state.ts";
@@ -81,19 +81,20 @@ function windows(lines: readonly Line[]): number[][] {
 
 /**
  * Lean's traceLineOf: the trace line of `line` of the trace of `service`, with its `after` and `created`. This is where
- * a definition gets its trace name.
+ * a definition gets its trace name and a line id its text.
  */
 export function traceLineOf(
   service: string,
   line: Line,
-  after: readonly string[] = [],
+  after: readonly LineId[] = [],
   created: readonly string[] = [],
 ): TraceLine {
   const extra = {
-    ...(after.length > 0 ? { after: [...after] } : {}),
+    ...(after.length > 0 ? { after: after.map(lineIdText) } : {}),
     ...(created.length > 0 ? { created: [...created] } : {}),
   };
-  const { time, dir, id } = line;
+  const { time, dir } = line;
+  const id = lineIdText(line.id);
   const name = (r: DefinitionRef) => traceNameOfRef(r, service);
   switch (line.type) {
     case "command":
@@ -108,13 +109,13 @@ export function traceLineOf(
         id,
         name: name(line.event),
         payload: line.payload,
-        ...(line.resultOf === undefined ? {} : { resultOf: line.resultOf }),
+        ...(line.resultOf === undefined ? {} : { resultOf: lineIdText(line.resultOf) }),
         ...extra,
       };
     case "answer":
-      return { time, dir, type: "answer", id, to: line.to, answer: line.answer, ...extra };
+      return { time, dir, type: "answer", id, to: lineIdText(line.to), answer: line.answer, ...extra };
     case "unsubscribe":
-      return { time, dir, type: "unsubscribe", id, to: line.to, ...extra };
+      return { time, dir, type: "unsubscribe", id, to: lineIdText(line.to), ...extra };
     case "time":
     case "restart":
       return { time, dir: "in", type: line.type, id, ...extra };
@@ -160,7 +161,7 @@ export function snapshotLines(
     traceLineOf(
       service,
       l,
-      (after.get(i) ?? []).map((a) => lines[a]?.id as string),
+      (after.get(i) ?? []).map((a) => (lines[a] as Line).id),
       created.filter((v) => firstLine.get(v) === i),
     ),
   );

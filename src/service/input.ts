@@ -1,6 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
-import type { Answer } from "../data/trace.generated.ts";
+import type { Answer, LineId } from "../data/trace.generated.ts";
+import { lineIdText } from "../data/trace.ts";
 import type { Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import {
@@ -25,7 +26,7 @@ import { firstFalse } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
-import type { Emitted } from "./message.ts";
+import { type Emitted, idKey, sameLineId } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
@@ -50,7 +51,7 @@ import {
 const owns = (st: Service, names: readonly string[], target: DefinitionRef): boolean =>
   target.service === st.service && names.includes(target.name);
 
-export function send(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: string }): void {
+export function send(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: LineId }): void {
   const s = r.state;
   if (!owns(r.st, r.st.commands, target)) unownedTarget(r, target);
   const name = target.name;
@@ -58,7 +59,7 @@ export function send(r: Processing, target: DefinitionRef, input: unknown, given
   const id = write(s, { dir: "in", type: "command", ...given, target, input });
   newMessage(s);
   const step = newStep(s, undefined);
-  const known = s.commandAnswers.get(id);
+  const known = s.commandAnswers.get(idKey(id));
   if (known === undefined) {
     const { answer, groups } = processCommand(r, name, input, id, step);
     r.queue.tasks.push(...commandWork(r.st, s, groups, step));
@@ -71,7 +72,7 @@ function unownedTarget(r: Processing, target: DefinitionRef): never {
   return report(r.state, { kind: "InvalidInput.unownedTarget", definition: null, data: { target } });
 }
 
-export function call(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: string }): void {
+export function call(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: LineId }): void {
   const s = r.state;
   if (!owns(r.st, r.st.queries, target)) unownedTarget(r, target);
   const id = write(s, { dir: "in", type: "query", ...given, target, input });
@@ -80,34 +81,42 @@ export function call(r: Processing, target: DefinitionRef, input: unknown, given
   message(r);
 }
 
-export function subscribe(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: string }): void {
+export function subscribe(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: LineId }): void {
   const s = r.state;
   if (!owns(r.st, r.st.queries, target)) unownedTarget(r, target);
   const id = write(s, { dir: "in", type: "subscribe", ...given, target, input });
   if (!s.subscriptions.subscribe(id, { query: target.name, input }))
-    report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
+    report(r.state, {
+      kind: "InvalidInput.reusedSubscriptionId",
+      definition: null,
+      data: { subscriptionId: lineIdText(id) },
+    });
   newMessage(s);
   message(r);
 }
 
 /** Lean's endSubscription: the unsubscribe input that ends the subscription `id`. */
-export function endSubscription(r: Processing, id: string): void {
+export function endSubscription(r: Processing, id: LineId): void {
   const s = r.state;
   write(s, { dir: "in", type: "unsubscribe", to: id });
   if (!s.subscriptions.unsubscribe(id))
-    report(r.state, { kind: "InvalidInput.unopenedSubscription", definition: null, data: { subscriptionId: id } });
+    report(r.state, {
+      kind: "InvalidInput.unopenedSubscription",
+      definition: null,
+      data: { subscriptionId: lineIdText(id) },
+    });
   newMessage(s);
   message(r);
 }
 
 /** Lean's resultRequest: the request `handle` whose answer arrived, which an event names as its resultOf. */
-function resultRequest(r: Processing, event: DefinitionRef, handle: string): string | undefined {
-  const outgoing = r.state.outgoing.get(handle);
+function resultRequest(r: Processing, event: DefinitionRef, handle: LineId): LineId | undefined {
+  const outgoing = r.state.outgoing.get(idKey(handle));
   if (outgoing?.answer === undefined)
     return report(r.state, {
       kind: "InvalidInput.resultOfUnansweredRequest",
       definition: null,
-      data: { event, requestId: handle },
+      data: { event, requestId: lineIdText(handle) },
     });
   const target = outgoing.activity.target;
   const mismatch = resultOfMismatch(r.st.structure, target, outgoing.answer.result === "accepted", event);
@@ -115,13 +124,13 @@ function resultRequest(r: Processing, event: DefinitionRef, handle: string): str
   return report(r.state, {
     kind: `InvalidInput.${mismatch}`,
     definition: null,
-    data: { event, requestId: handle, target },
+    data: { event, requestId: lineIdText(handle), target },
   });
 }
 
 /** Lean's checkResults. */
 export function checkResults(r: Run): void {
-  for (const [requestId, { activity, accepted }] of r.state.outgoing) {
+  for (const { id, activity, accepted } of r.state.outgoing.values()) {
     if (accepted === undefined) continue;
     const target = activity.target;
     const failed = r.functions.resultEnsures(target, accepted.input, accepted.output, accepted.events);
@@ -129,7 +138,11 @@ export function checkResults(r: Run): void {
     if (failed !== undefined)
       report(
         r.state,
-        assumptionViolation("InvalidInput", { requestId, target }, { kind: "failedAssumedEnsures", condition: failed }),
+        assumptionViolation(
+          "InvalidInput",
+          { requestId: lineIdText(id), target },
+          { kind: "failedAssumedEnsures", condition: failed },
+        ),
       );
   }
 }
@@ -139,8 +152,8 @@ function redeliver(
   r: Processing,
   event: DefinitionRef,
   payload: unknown,
-  given: { readonly id?: string },
-  resultOf?: string,
+  given: { readonly id?: LineId },
+  resultOf?: LineId,
 ): void {
   const s = r.state;
   const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
@@ -160,11 +173,11 @@ export function receive(
   r: Processing,
   event: DefinitionRef,
   payload: unknown,
-  given: { readonly id?: string },
-  resultOf?: string,
+  given: { readonly id?: LineId },
+  resultOf?: LineId,
 ): void {
   const s = r.state;
-  if (s.deliveries.has(lineId(s, given.id, traceNameOfRef(event, s.service)))) {
+  if (s.deliveries.has(idKey(lineId(s, given.id, traceNameOfRef(event, s.service))))) {
     redeliver(r, event, payload, given, resultOf);
     return;
   }
@@ -188,9 +201,9 @@ export function receive(
     payload,
     ...(request === undefined ? {} : { resultOf: request }),
   });
-  s.deliveries.add(id);
+  s.deliveries.add(idKey(id));
   const e: Emitted = { event, payload: decoded, encoded: parsed.encoded as Json };
-  if (request !== undefined) s.outgoing.get(request)?.accepted?.events.push(e);
+  if (request !== undefined) s.outgoing.get(idKey(request))?.accepted?.events.push(e);
   newMessage(s);
   const step = newStep(s, undefined);
   r.queue.tasks.push(...reactions(r.st, s, [[e]], false, step));
@@ -199,14 +212,16 @@ export function receive(
 
 /** Returns the assumption that an answer to the request `requestId` to `target` breaks (assumptionMismatch). */
 function brokenAssumption(
-  requestId: string,
+  requestId: LineId,
   target: DefinitionRef,
   answer: Answer,
   failedRequires: string | undefined,
   failedEnsures: string | undefined,
 ): InvalidInput | undefined {
   const m = assumptionMismatch(answer, failedRequires, failedEnsures);
-  return m === undefined ? undefined : assumptionViolation("InvalidInput", { requestId, target }, m);
+  return m === undefined
+    ? undefined
+    : assumptionViolation("InvalidInput", { requestId: lineIdText(requestId), target }, m);
 }
 
 interface AnswerCheck {
@@ -221,7 +236,7 @@ interface AnswerCheck {
 /** Lean's decodedAnswer: the answer decoded, or why its rejection kind or output does not match the target. */
 function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["checked"] {
   const target = p.activity.target;
-  const request = { requestId: p.id, target };
+  const request = { requestId: lineIdText(p.id), target };
   const structure = r.st.structure;
   if (answer.result === "rejected") {
     const { rejection } = answer;
@@ -281,7 +296,7 @@ function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
 }
 
 /** Lean's answerRequest. */
-function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answer): void {
+function answerRequest(r: Processing, givenId: LineId, p: Pending, answer: Answer): void {
   const s = r.state;
   const { assumption, checked, accepted } = isAssumed(r.st.structure, p.activity.target)
     ? assumedAnswer(r, p, answer)
@@ -291,7 +306,7 @@ function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answe
     report(s, checked.violation);
     return;
   }
-  const outgoing = s.outgoing.get(p.id);
+  const outgoing = s.outgoing.get(idKey(p.id));
   if (outgoing !== undefined && accepted !== undefined) outgoing.accepted = accepted;
   write(s, { dir: "in", type: "answer", id: givenId, to: p.id, answer });
   newMessage(s);
@@ -305,13 +320,13 @@ function answerRequest(r: Processing, givenId: string, p: Pending, answer: Answe
  * request, so the answer is kept with it, also when the request no longer waits, as after a restart; such an answer is a
  * message with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
  */
-export function answerIn(r: Processing, id: string, to: string, a: Answer): void {
+export function answerIn(r: Processing, id: LineId, to: LineId, a: Answer): void {
   const s = r.state;
-  if (!s.deliveries.has(id)) {
-    s.deliveries.add(id);
-    const outgoing = s.outgoing.get(to);
+  if (!s.deliveries.has(idKey(id))) {
+    s.deliveries.add(idKey(id));
+    const outgoing = s.outgoing.get(idKey(to));
     if (outgoing !== undefined) outgoing.answer = a;
-    const p = s.pending.find((q) => q.id === to);
+    const p = s.pending.find((q) => sameLineId(q.id, to));
     if (p !== undefined) {
       answerRequest(r, id, p, a);
       return;

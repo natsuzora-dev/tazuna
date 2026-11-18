@@ -58,7 +58,7 @@ def World.recordSent (w : World) (i : Nat) (service : String) (before : Nat) : W
   | some (l, position) => { w with sent := w.sent ++ [{ line := i, receiver := service, id := l.id, position }] }
   | none => w
 
-def requestOf (type : RequestType) (target : Spec.Ref) (id : Option String) (v : Value) :
+def requestOf (type : RequestType) (target : Spec.Ref) (id : Option LineId) (v : Value) :
     Service → Functions m → State → m State :=
   fun st fs s => match type with
     | .command => send st fs s target id v
@@ -94,10 +94,10 @@ def World.stated (w : World) (i : Nat) (msg : Message) : World :=
   else { w with messages := w.messages.push msg }.carry i w.messages.size
 
 /-- The world with the next id of the messages of `name` that the external peer `peer` sends. -/
-def World.nextId (w : World) (peer name : String) : World × String :=
+def World.nextId (w : World) (peer name : String) : World × LineId :=
   let key := (peer, name)
   let n := (w.counts.lookup key).getD 0 + 1
-  ({ w with counts := (key, n) :: w.counts.filter (·.1 != key) }, s!"{name}#{n}")
+  ({ w with counts := (key, n) :: w.counts.filter (·.1 != key) }, .own s!"{name}#{n}")
 
 /--
 Whether the running peer's message carries `actual` equal to the line's `expected`, compared for `schema` of the peer,
@@ -153,7 +153,7 @@ def World.deliverInOrder (w : World) (fsOf : String → Functions m) (i k : Nat)
 The id by which `peer` names the request that the handle `fact` of line `i` names, which a line delivered to `peer`.
 -/
 def World.requestId (w : World) (fsOf : String → Functions m) (i : Nat) (peer : String) (fact : Fact) :
-    ExceptT InvalidScenario m String :=
+    ExceptT InvalidScenario m LineId :=
   match fact with
   | .line j =>
     match w.sentBy j with
@@ -188,7 +188,7 @@ def fireTo (time : Time) : Service → Functions m → State → m State :=
     if s.halted.isSome then pure s else publish st fs (s.write .in none .time).1
 
 /-- Whether an answer to the request `to` from `sender` is among the messages. -/
-def World.answered (w : World) (sender to : String) : Bool :=
+def World.answered (w : World) (sender : String) (to : LineId) : Bool :=
   w.messages.any fun n => n.sender == sender && n.channel == some to && match n.body with
     | .answer .. => true
     | _ => false
@@ -283,7 +283,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
             pure (w.carry i j)
       | _ => pure (w.report (.wrongRole i peer))
   | .emit peer event payload resultOf => do
-    let resultId : ExceptT InvalidScenario m (Option String) := match resultOf with
+    let resultId : ExceptT InvalidScenario m (Option LineId) := match resultOf with
       | none => pure none
       | some f => some <$> w.requestId fsOf i peer f
     w.resolving resultId fun resultId =>
@@ -339,7 +339,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
       if requestTarget? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
       let to := receivedId msg.sender msg.id
-      let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := s!"answer:{to}",
+      let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{to.text}",
                                body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
                                channel := some to, status := .inFlight }
       let w := w.setStatus k .lost
@@ -450,11 +450,11 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
   | .requested line requests ends =>
     let span := w.spanLines (.line line) own
     let actualEnds := span.filterMap fun l => match l.dir, l.body with
-      | .out, .unsubscribe to => some (Value.str to)
+      | .out, .unsubscribe to => some (Value.str to.text)
       | _, _ => none
     let endIds ← ends.mapM fun f => do
       let k ← w.messageOf fsOf line f
-      pure (Value.str ((w.messages[k]?.map (·.id)).getD ""))
+      pure (Value.str ((w.messages[k]?.map (·.id.text)).getD ""))
     let actual ← (span.filterMap fun l =>
       match l.dir, l.body with
       | .out, .command r input => some (RequestType.command, r, input)

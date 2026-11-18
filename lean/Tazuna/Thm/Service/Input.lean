@@ -11,7 +11,7 @@ open Tazuna.Thm.Spec.Structure (resultOfMismatch_eq_none_iff resultOfMismatch_un
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem send_keysDistinct (name : Spec.Ref) (id : Option String) (raw : Value) (h : KeysDistinct s.records) :
+theorem send_keysDistinct (name : Spec.Ref) (id : Option LineId) (raw : Value) (h : KeysDistinct s.records) :
     KeysDistinct (send st fs s name id raw).records := by
   unfold send
   split
@@ -20,7 +20,7 @@ theorem send_keysDistinct (name : Spec.Ref) (id : Option String) (raw : Value) (
     · exact message_keysDistinct _ (by rw [answer_records]; exact h)
     · exact message_keysDistinct _ (processCommand_keysDistinct _ _ _ _ h)
   · exact h
-theorem resent_command_gets_first_answer (name : Spec.Ref) (id : String) (raw : Value)
+theorem resent_command_gets_first_answer (name : Spec.Ref) (id : LineId) (raw : Value)
     (known : Request × Answer) (hs : name.service = st.service) (hc : name.name ∈ st.commands)
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 = { name := name.name, input := raw }) :
     send st fs s name (some id) raw =
@@ -28,7 +28,7 @@ theorem resent_command_gets_first_answer (name : Spec.Ref) (id : String) (raw : 
       message st fs (s'.answer (some id) known.2) {} := by
   simp [send, hs, hc, hk, answerAgain, hr, sent]
 
-theorem reused_id_rejected (name : Spec.Ref) (id : String) (raw : Value)
+theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value)
     (known : Request × Answer) (hs : name.service = st.service) (hc : name.name ∈ st.commands)
     (hk : s.commandAnswers.find? id = some known) (hr : known.1 ≠ { name := name.name, input := raw }) :
     send st fs s name (some id) raw =
@@ -36,7 +36,7 @@ theorem reused_id_rejected (name : Spec.Ref) (id : String) (raw : Value)
       message st fs (s'.answer (some id) (.rejected { kind := .reusedId })) {} := by
   simp [send, hs, hc, hk, answerAgain, hr, sent]
 
-theorem redelivered_event_not_processed (name : Spec.Ref) (id : String) (raw : Value) (hh : s.halted = none)
+theorem redelivered_event_not_processed (name : Spec.Ref) (id : LineId) (raw : Value) (hh : s.halted = none)
     (hd : id ∈ s.deliveries) :
     receive st fs s name (some id) raw none = message st fs (delivered s name id raw).newMessage {} := by
   simp [receive, redeliver, withResultOf, hh, hd, delivered, State.lineId]

@@ -10,18 +10,18 @@ namespace Tazuna.Sim
 
 open Tazuna.Data Tazuna.Service
 
-/-- The id by which the receiver of a message from `sender` names it. -/
-def receivedId (sender id : String) : String := s!"{sender}/{id}"
+/--
+The id by which the receiver of a message from `sender` names the sender's id `id` of it. Only another service's
+message has a received id, and a service sends on only its own lines, so a received `id` stays as it is.
+-/
+def receivedId (sender : String) : LineId → LineId
+  | .own id => .received sender id
+  | id => id
 
 /-- The sender's id of a message that `service` received with the id `id`, when `service` sent it. -/
-def sentId? (service id : String) : Option String :=
-  if id.startsWith (service ++ "/") then some (id.drop (service.length + 1)).toString else none
-
-/-- The service whose message `id` names, when another service sent it. -/
-def senderOf? (id : String) : Option String :=
-  match id.splitOn "/" with
-  | [sender, _] => some sender
-  | _ => none
+def sentId? (service : String) : LineId → Option LineId
+  | .received sender id => if sender == service then some (.own id) else none
+  | .own _ => none
 
 variable {m : Type → Type} [Monad m] [MonadNote m]
 
@@ -29,7 +29,8 @@ variable {m : Type → Type} [Monad m] [MonadNote m]
 The state after the message with body `body`, which `sender` sent with id `id`, arrives at the service. An event names
 its resultOf by the id of the request, which is the service's own request when `sender` received it from the service.
 -/
-def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender id : String) (body : LineBody) : m State :=
+def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender : String) (id : LineId) (body : LineBody) :
+    m State :=
   let given := some (receivedId sender id)
   match body with
   | .command n input => send st fs s n given input

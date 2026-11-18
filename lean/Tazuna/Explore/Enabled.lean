@@ -13,7 +13,7 @@ A request that awaits its answer. `id` is the request line's id, `target` is the
 sending definition.
 -/
 structure Awaiting where
-  id : String
+  id : LineId
   name : String
   target : String
   sender : String

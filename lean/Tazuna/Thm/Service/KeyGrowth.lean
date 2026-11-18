@@ -67,17 +67,17 @@ theorem keeps_reportAll (s : State) (fs : List Fault) : KeepsKeys s (s.reportAll
   | nil => rfl
   | cons f fs ih => simp only [List.foldl_cons]; rw [ih]; split <;> simp
 
-theorem keeps_emitAll (s : State) (r : Option String) (es : List Emit) : KeepsKeys s (s.emitAll r es) :=
+theorem keeps_emitAll (s : State) (r : Option LineId) (es : List Emit) : KeepsKeys s (s.emitAll r es) :=
   keeps_foldl _ (fun t x => by keys_leaf) _ _
 
-@[simp] theorem emitAll_createdEntities (s : State) (r : Option String) (es : List Emit) :
+@[simp] theorem emitAll_createdEntities (s : State) (r : Option LineId) (es : List Emit) :
     (s.emitAll r es).createdEntities = s.createdEntities := by
   unfold State.emitAll
   induction es generalizing s with
   | nil => rfl
   | cons e es ih => simp only [List.foldl_cons]; rw [ih]; rfl
 
-@[simp] theorem emitAll_keyOwner (s : State) (r : Option String) (es : List Emit) :
+@[simp] theorem emitAll_keyOwner (s : State) (r : Option LineId) (es : List Emit) :
     (s.emitAll r es).keyOwner = s.keyOwner := (keeps_emitAll s r es).1
 
 theorem keeps_addDeadlines (name : InstanceId) (n : String) (ds : List (String × DeadlineTime)) (s : State) :
@@ -370,7 +370,7 @@ theorem keeps_automationAnswer (a : String) (answer : Answer) (s : State) :
   unfold automationAnswer; repeat' split
   all_goals keys_leaf
 
-theorem keeps_processCommand (name : String) (raw : Value) (id : Option String) (step : Nat) (s : State) :
+theorem keeps_processCommand (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
     KeepsKeys s (processCommand st fs s name raw id step).1 := by
   simp only [processCommand, id_bind, note_id]
   split
@@ -592,33 +592,33 @@ macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, S
   State.write, State.newStep, State.newMessage, State.answer, apply_ite State.toDurable,
   apply_ite Durable.keyOwner, apply_ite Durable.createdEntities] <;> (repeat' split) <;> (try simp)) <;> done)
 
-@[simp] theorem processCommand_keyOwner (name : String) (raw : Value) (id : Option String) (step : Nat) (s : State) :
+@[simp] theorem processCommand_keyOwner (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
     (processCommand st fs s name raw id step).1.keyOwner = s.keyOwner := (keeps_processCommand _ _ _ _ _).1
 
-@[simp] theorem processCommand_createdEntities (name : String) (raw : Value) (id : Option String) (step : Nat)
+@[simp] theorem processCommand_createdEntities (name : String) (raw : Value) (id : Option LineId) (step : Nat)
     (s : State) : (processCommand st fs s name raw id step).1.createdEntities = s.createdEntities := by
   simp only [processCommand, id_bind, note_id]
   split <;> keys_same
 
-@[simp] theorem addResult_keyOwner (id : String) (e : Emit) (s : State) : (s.addResult id e).keyOwner = s.keyOwner :=
+@[simp] theorem addResult_keyOwner (id : LineId) (e : Emit) (s : State) : (s.addResult id e).keyOwner = s.keyOwner :=
   rfl
 
-@[simp] theorem addResult_createdEntities (id : String) (e : Emit) (s : State) :
+@[simp] theorem addResult_createdEntities (id : LineId) (e : Emit) (s : State) :
     (s.addResult id e).createdEntities = s.createdEntities := rfl
 
-@[simp] theorem withResultOf_keyOwner (name : Spec.Ref) (k : Option String) (s : State) :
+@[simp] theorem withResultOf_keyOwner (name : Spec.Ref) (k : Option LineId) (s : State) :
     (withResultOf st s name k).1.keyOwner = s.keyOwner := by
   cases k with
   | none => rfl
   | some h => simp only [withResultOf, resultRequest]; keys_same
 
-@[simp] theorem withResultOf_createdEntities (name : Spec.Ref) (k : Option String) (s : State) :
+@[simp] theorem withResultOf_createdEntities (name : Spec.Ref) (k : Option LineId) (s : State) :
     (withResultOf st s name k).1.createdEntities = s.createdEntities := by
   cases k with
   | none => rfl
   | some h => simp only [withResultOf, resultRequest]; keys_same
 
-theorem keeps_send (name : Spec.Ref) (id : Option String) (raw : Value) (s : State) :
+theorem keeps_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
     KeepsKeys s (send st fs s name id raw) := by
   simp only [send, id_bind]
   repeat' split
@@ -626,7 +626,7 @@ theorem keeps_send (name : Spec.Ref) (id : Option String) (raw : Value) (s : Sta
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_call (name : Spec.Ref) (id : Option String) (raw : Value) (s : State) :
+theorem keeps_call (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
     KeepsKeys s (call st fs s name id raw) := by
   simp only [call, id_bind]
   repeat' split
@@ -634,7 +634,7 @@ theorem keeps_call (name : Spec.Ref) (id : Option String) (raw : Value) (s : Sta
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_subscribe (name : Spec.Ref) (id : Option String) (raw : Value) (s : State) :
+theorem keeps_subscribe (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
     KeepsKeys s (subscribe st fs s name id raw) := by
   simp only [subscribe]
   repeat' split
@@ -642,12 +642,12 @@ theorem keeps_subscribe (name : Spec.Ref) (id : Option String) (raw : Value) (s 
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_endSubscription (id : String) (s : State) : KeepsKeys s (endSubscription st fs s id) := by
+theorem keeps_endSubscription (id : LineId) (s : State) : KeepsKeys s (endSubscription st fs s id) := by
   simp only [endSubscription]
   refine KeepsKeys.trans ?_ (keeps_message _ _)
   keys_leaf
 
-theorem keeps_receive (name : Spec.Ref) (id : Option String) (raw : Value) (resultOf : Option String) (s : State) :
+theorem keeps_receive (name : Spec.Ref) (id : Option LineId) (raw : Value) (resultOf : Option LineId) (s : State) :
     KeepsKeys s (receive st fs s name id raw resultOf) := by
   simp only [receive, redeliver, id_bind]
   repeat' split
@@ -655,7 +655,7 @@ theorem keeps_receive (name : Spec.Ref) (id : Option String) (raw : Value) (resu
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_answerRequest (id : Option String) (p : Pending) (answer : Answer) (s : State) :
+theorem keeps_answerRequest (id : Option LineId) (p : Pending) (answer : Answer) (s : State) :
     KeepsKeys s (answerRequest st fs s id p answer) := by
   simp only [answerRequest, id_bind]
   repeat' split

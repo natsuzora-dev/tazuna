@@ -50,7 +50,7 @@ theorem keepsWorld_report {w w' : World} (h : KeepsWorld w w') (r : InvalidScena
   keepsWorld_states h (by unfold World.report; split <;> rfl)
 
 theorem keepsWorld_post {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
-    (channel : Option String) : KeepsWorld w (w'.post o sender receiver l channel) := by
+    (channel : Option LineId) : KeepsWorld w (w'.post o sender receiver l channel) := by
   unfold World.post; dsimp only; split
   · exact keepsWorld_report h _
   · exact keepsWorld_states h rfl
@@ -171,7 +171,7 @@ theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin
     · rw [lookup_map_ne _ _ _ _ (by simpa using hp)]
       exact .refl _
 
-theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : String) (a : Answer) :
+theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer) :
     KeepsKeys s (answerIn st fs s id to a) := by
   unfold answerIn
   split
@@ -183,7 +183,8 @@ theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : S
     · refine KeepsKeys.trans ?_ (keeps_message _ _)
       keys_leaf
 
-theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender id : String) (body : LineBody) :
+theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender : String) (id : LineId)
+    (body : LineBody) :
     KeepsKeys s (arriveFrom st fs s sender id body) := by
   unfold arriveFrom
   dsimp only
@@ -207,7 +208,7 @@ theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State
   · refine KeepsKeys.trans ?_ (keeps_publish _)
     keys_close h
 
-theorem keeps_requestOf (type : Scenario.RequestType) (name : Spec.Ref) (id : Option String) (v : Value)
+theorem keeps_requestOf (type : Scenario.RequestType) (name : Spec.Ref) (id : Option LineId) (v : Value)
     (st : Service) (fs : Functions Id) (s : State) : KeepsKeys s (requestOf type name id v st fs s) := by
   cases type
   · exact keeps_send _ _ _ _

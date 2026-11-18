@@ -11,9 +11,9 @@ structure Request where
 deriving DecidableEq, Repr, Inhabited
 
 /-- The first recorded answer for each id, with the request that it answered. -/
-abbrev CommandAnswers := List (String × Request × Answer)
+abbrev CommandAnswers := List (LineId × Request × Answer)
 
-def CommandAnswers.find? (table : CommandAnswers) (id : String) : Option (Request × Answer) :=
+def CommandAnswers.find? (table : CommandAnswers) (id : LineId) : Option (Request × Answer) :=
   (List.find? (·.1 == id) table).map (·.2)
 
 def answerAgain (known : Request × Answer) (request : Request) : Answer :=
@@ -29,7 +29,7 @@ def keepsAnswer : Answer → Bool
   | .rejected { kind := .invalidInput, .. } => false
   | _ => true
 
-def CommandAnswers.keep (table : CommandAnswers) (id : String) (request : Request) (answer : Answer) :
+def CommandAnswers.keep (table : CommandAnswers) (id : LineId) (request : Request) (answer : Answer) :
     CommandAnswers :=
   if keepsAnswer answer then table ++ [(id, request, answer)] else table
 

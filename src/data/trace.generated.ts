@@ -33,6 +33,21 @@ const answer = z.discriminatedUnion("result", [
 /** The answer to a request. A command is accepted or rejected, and a query is fulfilled or rejected. */
 export type Answer = z.infer<typeof answer>;
 
+const lineId = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("own"),
+    id: z.string(),
+  }),
+  z.object({
+    kind: z.literal("received"),
+    sender: z.string(),
+    id: z.string(),
+  }),
+]);
+
+/** The id of a line of a run: one that the run gives, or the id that `sender` gave a message that the run received. */
+export type LineId = z.infer<typeof lineId>;
+
 export const traceLine = z.discriminatedUnion("type", [
   z.object({
     time: z.iso.datetime({ offset: true }),

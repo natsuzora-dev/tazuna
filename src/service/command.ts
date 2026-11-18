@@ -1,5 +1,5 @@
 import { sameRef } from "../data/definitionRef.ts";
-import type { Answer } from "../data/trace.generated.ts";
+import type { Answer, LineId } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { byCodePoint, canonicalJson, type Fields, type Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
@@ -43,7 +43,7 @@ export function processCommand(
   r: Run,
   name: string,
   encoded: unknown,
-  id: string | undefined,
+  id: LineId | undefined,
   step: number,
 ): { readonly answer: Answer; readonly groups: readonly (readonly Emitted[])[] } {
   const s = r.state;

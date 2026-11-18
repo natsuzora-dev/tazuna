@@ -454,7 +454,7 @@ theorem evaluate_agrees (records : Records) (now : Time) (name : String) (raw : 
   agree [h.parse, requirementsRejection_agrees h, h.decide, normalizeEmits_agrees h, commandEnsures_agrees h,
     integrityViolations_agrees h]
 
-theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Option String) (step : Nat) :
+theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Option LineId) (step : Nat) :
     Agrees (processCommand st fsI s name raw id step) (processCommand st fs s name raw id step) := by
   unfold processCommand; agree [evaluate_agrees h, note_agrees]
 
@@ -483,32 +483,32 @@ theorem finish_agrees (s : State) : Agrees (finish st fsI s) (finish st fs s) :=
 theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (message st fs s q) := by
   unfold message; agree [drain_agrees h, finish_agrees h]
 
-theorem send_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) :
+theorem send_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
   unfold send; agree [message_agrees h, processCommand_agrees h]
 
-theorem call_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) :
+theorem call_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
   unfold call; agree [resolveChecked_agrees h, message_agrees h]
 
-theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) :
+theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
   unfold subscribe; agree [message_agrees h]
 
-theorem endSubscription_agrees (s : State) (id : String) :
+theorem endSubscription_agrees (s : State) (id : LineId) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
 
-theorem deliver_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw payload : Value)
-    (request : Option String) :
+theorem deliver_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw payload : Value)
+    (request : Option LineId) :
     Agrees (deliver st fsI s name id raw payload request) (deliver st fs s name id raw payload request) := by
   unfold deliver; exact message_agrees h _ _
 
-theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) (resultOf : Option String) :
+theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (resultOf : Option LineId) :
     Agrees (redeliver st fsI s name id raw resultOf) (redeliver st fs s name id raw resultOf) := by
   unfold redeliver; agree [message_agrees h]
 
-theorem receive_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) (resultOf : Option String) :
+theorem receive_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (resultOf : Option LineId) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 
@@ -531,12 +531,12 @@ theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
   dsimp only
   agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), decodedAnswer_agrees h, h.resultEnsures]
 
-theorem answerRequest_agrees (s : State) (id : Option String) (p : Pending) (answer : Answer) :
+theorem answerRequest_agrees (s : State) (id : Option LineId) (p : Pending) (answer : Answer) :
     Agrees (answerRequest st fsI s id p answer) (answerRequest st fs s id p answer) := by
   unfold answerRequest
   agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
-theorem answerIn_agrees (s : State) (id to : String) (answer : Answer) :
+theorem answerIn_agrees (s : State) (id to : LineId) (answer : Answer) :
     Agrees (answerIn st fsI s id to answer) (answerIn st fs s id to answer) := by
   unfold answerIn; agree [message_agrees h, answerRequest_agrees h]
 

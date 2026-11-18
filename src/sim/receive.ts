@@ -1,10 +1,18 @@
-import { receivedId, sentId } from "../data/trace.ts";
+import type { LineId } from "../data/trace.generated.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { answerIn, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
 import type { LineBody } from "../service/message.ts";
 
+/** Lean's receivedId: the id by which the receiver of a message from `sender` names the sender's id `id` of it. */
+export const receivedId = (sender: string, id: LineId): LineId =>
+  id.kind === "own" ? { kind: "received", sender, id: id.id } : id;
+
+/** Lean's sentId?: the sender's id of a message that `service` received with the id `id`, when `service` sent it. */
+const sentId = (service: string, id: LineId): LineId | undefined =>
+  id.kind === "received" && id.sender === service ? { kind: "own", id: id.id } : undefined;
+
 /** Lean's arriveFrom. */
-export function arriveFrom(r: Processing, sender: string, id: string, body: LineBody): void {
+export function arriveFrom(r: Processing, sender: string, id: LineId, body: LineBody): void {
   const given = { id: receivedId(sender, id) };
   switch (body.type) {
     case "command":

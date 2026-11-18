@@ -96,7 +96,7 @@ sender reads records with a query. An external service's command may return outp
 APIs like Stripe do.
 -/
 def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value)
-    (id : Option String) (step : Nat) : m (State × Answer × List (List Emit)) := do
+    (id : Option LineId) (step : Nat) : m (State × Answer × List (List Emit)) := do
   let outcome ← evaluate st fs s.records s.now name raw
   match outcome with
   | .rejected r => pure (s.answer id (.rejected r), .rejected r, [])

@@ -1,7 +1,9 @@
 import type { Requester } from "../../data/step.generated.ts";
+import type { LineId } from "../../data/trace.generated.ts";
 import { canonicalJson } from "../../data/values.ts";
 import type { Processing } from "../../service/chart/queue.ts";
 import { copyId } from "../../service/instance.ts";
+import { sameLineId } from "../../service/message.ts";
 import { type Instance, keyCounts, machine } from "../../service/state.ts";
 
 const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) => (a < b ? -1 : 1);
@@ -29,8 +31,8 @@ function requestsFingerprint(r: Processing): unknown {
   const s = r.state;
   const { lines } = s;
   const rank = (all: readonly number[], n: number) => new Set(all.filter((x) => x < n)).size;
-  const inputsBefore = (id: string) => {
-    const at = lines.findIndex((l) => l.dir === "out" && l.id === id);
+  const inputsBefore = (id: LineId) => {
+    const at = lines.findIndex((l) => l.dir === "out" && sameLineId(l.id, id));
     return { time: lines[at]?.time ?? null, inputs: lines.slice(0, at).filter((l) => l.dir === "in").length };
   };
   const traced = s.pending.map((p) => inputsBefore(p.id));
@@ -50,7 +52,7 @@ function requestsFingerprint(r: Processing): unknown {
         traced.map((t) => t.inputs),
         traced[i]?.inputs ?? 0,
       ),
-      lines.some((l) => "to" in l && l.to === p.id),
+      lines.some((l) => "to" in l && sameLineId(l.to, p.id)),
     ]),
     queued: s.queued.map((q) => [q.machine, q.state, q.stale]),
   };

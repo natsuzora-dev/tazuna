@@ -16,6 +16,19 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire InDir
 
+/-- The id of a line of a run: one that the run gives, or the id that `sender` gave a message that the run received. -/
+inductive LineId where
+  | own (id : String)
+  | received (sender id : String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire LineId tag "kind"
+
+/-- The id as a trace line writes it, `<sender>/<id>` for a received message. -/
+def LineId.text : LineId → String
+  | .own id => id
+  | .received sender id => s!"{sender}/{id}"
+
 /--
 The body of a trace line. Every line has `dir` and `id`, `type` decides the other fields, and the `dir` of a time or
 restart line is "in".

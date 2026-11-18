@@ -1,4 +1,5 @@
 import Tazuna.Data.Time
+import Tazuna.Data.Trace
 import Tazuna.Service.Step
 
 /-! This module defines the notes that the semantic run sends to the instrumentation. -/
@@ -20,9 +21,9 @@ received request travel back to its sender, and events travel to their receivers
 or on the sender's channel when they name none. A line that no sender writes `out` travels on none.
 -/
 inductive Channel where
-  | request (id : String)
-  | answers (request : String)
-  | events (resultOf : Option String)
+  | request (id : LineId)
+  | answers (request : LineId)
+  | events (resultOf : Option LineId)
 deriving DecidableEq, Repr
 
 derive_wire Channel tag "kind"
