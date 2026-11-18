@@ -17,20 +17,52 @@ interface Io {
   readonly typeCheck?: (specRoot: string, cwd: string) => TypeCheck;
 }
 
-interface Command {
+/** A command's arguments, parsed before the spec is checked. */
+type Invocation =
+  | { readonly command: "check"; readonly root: string }
+  | {
+      readonly command: "test";
+      readonly root: string;
+      readonly depth: number;
+      readonly update: boolean;
+      readonly coverage: boolean;
+    }
+  | { readonly command: "verify"; readonly root: string; readonly traces: string }
+  | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string };
+
+type Name = Invocation["command"];
+
+/** A usage error; `help` adds the hint to run tazuna --help. */
+interface Misuse {
+  readonly misuse: string;
+  readonly help?: true;
+}
+
+interface Given {
+  readonly positionals: readonly string[];
+  /** The value of each given option, or "" for an option without a value. */
+  readonly options: ReadonlyMap<string, string>;
+}
+
+interface Command<N extends Name> {
   readonly positionals: readonly string[];
   readonly description: string;
   /** An option with `value` takes the next argument. */
   readonly options: Readonly<
     Record<string, { readonly value?: string; readonly required?: true; readonly description: string }>
   >;
+  /** Parses what the table's arity and option checks let through. */
+  readonly parse: (given: Given, io: Io) => Extract<Invocation, { readonly command: N }> | Misuse;
 }
 
-const commands: Readonly<Record<string, Command>> = {
+const isFolder = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+
+const commands: { readonly [N in Name]: Command<N> } = {
   check: {
     positionals: ["spec"],
     description: "Check the spec's structure and source without running it.",
     options: {},
+    parse: ({ positionals: [root = ""] }) => ({ command: "check", root }),
   },
   test: {
     positionals: ["spec"],
@@ -52,18 +84,36 @@ const commands: Readonly<Record<string, Command>> = {
           "Also report the parts of commands, queries, automations, and charts that neither a scenario's run nor an explored path reaches (Uncovered).",
       },
     },
+    parse: ({ positionals: [root = ""], options }) => {
+      const depth = options.get("--depth") ?? "";
+      if (!/^\d+$/.test(depth)) return { misuse: `invalid depth ${depth} (expected a non-negative integer)` };
+      const update = options.has("--update");
+      return { command: "test", root, depth: Number(depth), update, coverage: options.has("--coverage") };
+    },
   },
   verify: {
     positionals: ["spec", "traces"],
     description:
       "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of another spec service <peer> that runs as a peer in the scenario, which verify compares with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace; any other entry of it is a violation. verify checks a trace of an external service against the service's contract once the trace ends, so a result event may come before or after its request's answer. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
     options: {},
+    parse: ({ positionals: [root = "", traces = ""] }, io) =>
+      isFolder(resolve(io.cwd, traces))
+        ? { command: "verify", root, traces: resolve(io.cwd, traces) }
+        : { misuse: `no such folder ${traces}` },
   },
   view: {
     positionals: ["spec"],
     description:
       "Serve the viewer of the spec's services, definitions, and scenario snapshots, and print its URL. The viewer reloads when a spec file or snapshot changes.",
     options: { "--port": { value: "n", description: "Serve on port n instead of a free port." } },
+    parse: ({ positionals: [root = ""], options }, io) => {
+      const port = options.get("--port") ?? "0";
+      if (!/^\d+$/.test(port) || Number(port) > 65535)
+        return { misuse: `invalid port ${port} (expected an integer from 0 to 65535)` };
+      const viewer = io.viewer ?? viewerFolder;
+      if (!isViewerBuilt(viewer)) return { misuse: "viewer not built. Run npm run build -w tazuna" };
+      return { command: "view", root, port: Number(port), viewer };
+    },
   },
 };
 
@@ -120,8 +170,6 @@ const help = [
   ),
 ].join("\n");
 
-const isFolder = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
-
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 function record(io: Io, specRoot: string, r: ReportedViolation): string {
@@ -134,50 +182,49 @@ function report(io: Io, specRoot: string, violations: readonly ReportedViolation
   return violations.length === 0 ? 0 : 1;
 }
 
-export async function main(args: readonly string[], io: Io): Promise<number> {
-  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-    io.log(help);
-    return 0;
-  }
+const isName = (command: string): command is Name => Object.hasOwn(commands, command);
+
+/** Parses `args` by the command table, before anything reads the spec. */
+function parse(args: readonly string[], io: Io): Invocation | Misuse {
   const [command = "", ...rest] = args;
-  const misused = (message: string) => {
-    io.error(`tazuna: ${message}.`);
-    return 2;
-  };
-  const usage = (message: string) => misused(`${message}. Run tazuna --help for usage`);
-  const known = Object.hasOwn(commands, command) ? commands[command] : undefined;
-  if (known === undefined) return usage(`unknown command ${command}`);
+  if (!isName(command)) return { misuse: `unknown command ${command}`, help: true };
+  const known = commands[command];
   const options = new Map<string, string>();
-  const positional: string[] = [];
+  const positionals: string[] = [];
   for (let i = 0; i < rest.length; i += 1) {
     const arg = rest[i] ?? "";
     const value = rest[i + 1];
-    if (!arg.startsWith("-")) positional.push(arg);
-    else if (known.options[arg] === undefined) return usage(`unknown option ${arg} for ${command}`);
+    if (!arg.startsWith("-")) positionals.push(arg);
+    else if (known.options[arg] === undefined) return { misuse: `unknown option ${arg} for ${command}`, help: true };
     else if (known.options[arg].value === undefined) options.set(arg, "");
-    else if (value === undefined || value.startsWith("-")) return usage(`missing value for ${arg}`);
+    else if (value === undefined || value.startsWith("-")) return { misuse: `missing value for ${arg}`, help: true };
     else {
       options.set(arg, value);
       i += 1;
     }
   }
-  if (positional.length !== known.positionals.length) return usage(`wrong number of arguments for ${command}`);
+  if (positionals.length !== known.positionals.length)
+    return { misuse: `wrong number of arguments for ${command}`, help: true };
   const missing = Object.keys(known.options).find((o) => known.options[o]?.required === true && !options.has(o));
-  if (missing !== undefined) return usage(`missing option ${missing} for ${command}`);
-  const [target, traceFolder] = positional;
-  const root = target ?? "";
-  if (!isFolder(resolve(io.cwd, root))) return misused(`no such folder ${root}`);
-  const givenDepth = options.get("--depth");
-  if (givenDepth !== undefined && !/^\d+$/.test(givenDepth))
-    return misused(`invalid depth ${givenDepth} (expected a non-negative integer)`);
-  const given = options.get("--port") ?? "0";
-  const port = Number(given);
-  if (!/^\d+$/.test(given) || port > 65535)
-    return misused(`invalid port ${given} (expected an integer from 0 to 65535)`);
-  const folder = io.viewer ?? viewerFolder;
-  if (command === "view" && !isViewerBuilt(folder)) return misused("viewer not built. Run npm run build -w tazuna");
-  const traces = resolve(io.cwd, traceFolder ?? "");
-  if (command === "verify" && !isFolder(traces)) return misused(`no such folder ${traceFolder}`);
+  if (missing !== undefined) return { misuse: `missing option ${missing} for ${command}`, help: true };
+  const [root = ""] = positionals;
+  if (!isFolder(resolve(io.cwd, root))) return { misuse: `no such folder ${root}` };
+  return known.parse({ positionals, options }, io);
+}
+
+export async function main(args: readonly string[], io: Io): Promise<number> {
+  if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+    io.log(help);
+    return 0;
+  }
+  const misused = (message: string) => {
+    io.error(`tazuna: ${message}.`);
+    return 2;
+  };
+  const invocation = parse(args, io);
+  if ("misuse" in invocation)
+    return misused(invocation.help === true ? `${invocation.misuse}. Run tazuna --help for usage` : invocation.misuse);
+  const { root } = invocation;
   const specRoot = resolve(io.cwd, root);
   const result = await checkSpecWith(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd));
   if (result.kind === "typeErrors") {
@@ -185,28 +232,32 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     return 1;
   }
   if (result.kind !== "violations" && result.kind !== "checked") return misused(failureText(result, root));
-  if (result.kind === "violations" || command === "check") {
+  if (result.kind === "violations" || invocation.command === "check") {
     const files = result.kind === "violations" ? result.files : result.spec.sources.length;
     const violations = result.kind === "violations" ? result.violations : [];
     return report(io, specRoot, violations, `Checked ${count(files, "file")}`);
   }
   const { spec } = result;
-  if (command === "view") {
-    const server = await viewSpec(spec, root, io.cwd, port, folder);
-    if (server === undefined) return misused(`port ${port} in use`);
-    io.log(`Serving the viewer at ${server.url}`);
-    await server.closed;
-    return 0;
+  switch (invocation.command) {
+    case "view": {
+      const server = await viewSpec(spec, root, io.cwd, invocation.port, invocation.viewer);
+      if (server === undefined) return misused(`port ${invocation.port} in use`);
+      io.log(`Serving the viewer at ${server.url}`);
+      await server.closed;
+      return 0;
+    }
+    case "test": {
+      const { depth } = invocation;
+      const tested = testSpec(spec, { update: invocation.update, depth });
+      for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
+      for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
+      const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
+      const paths = `explored paths of up to ${count(depth, "move")} after each scenario`;
+      return report(io, spec.root, violations, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
+    }
+    case "verify": {
+      const verified = verifyTraces(spec, invocation.traces);
+      return report(io, spec.root, verified.violations, `Verified ${count(verified.traces, "trace")}`);
+    }
   }
-  if (command === "test") {
-    const depth = Number(givenDepth);
-    const tested = testSpec(spec, { update: options.has("--update"), depth });
-    for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
-    for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
-    const violations = [...(options.has("--coverage") ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
-    const paths = `explored paths of up to ${count(depth, "move")} after each scenario`;
-    return report(io, spec.root, violations, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
-  }
-  const verified = verifyTraces(spec, traces);
-  return report(io, spec.root, verified.violations, `Verified ${count(verified.traces, "trace")}`);
 }
