@@ -451,70 +451,120 @@ theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenar
           omega
   · exact keeps_report (keeps_refl w) r
 
-theorem forEach_stopped {α : Type} {v : World} {xs : List α} {f : World → α → Id World}
-    (h : v.stopped = true) : xs.foldl (fun v x => if v.stopped then v else f v x) v = v := by
-  induction xs with
-  | nil => rfl
-  | cons y ys ih =>
-    simp only [List.foldl_cons, h, ite_true]
-    exact ih
-
-/-- The world after `f` takes the first of `x :: xs` in a world that has not stopped, when that take stops it. -/
-theorem forEach_first_stops {α : Type} {w : World} {x : α} {xs : List α} {f : World → α → Id World}
-    (hw : w.stopped = false) (hf : (f w x).stopped = true) : w.forEach (x :: xs) f = f w x := by
-  unfold World.forEach
-  rw [foldlM_id]
-  simp only [List.foldl_cons, hw, Bool.false_eq_true, ite_false]
-  exact forEach_stopped hf
+theorem overtaken_halts {w : World} {i : Nat} {ks : List Nat} {k : Nat} {r : InvalidScenario}
+    (h : w.overtaken i ks k = some r) : r.halts = true := by
+  unfold World.overtaken at h
+  simp only [bind, Option.bind_eq_some_iff] at h
+  obtain ⟨_, _, _, _, h⟩ := h
+  cases h; rfl
 
 /--
-A deliver line whose first message has an earlier message in flight that it does not name and that must arrive first
-(World.precedes) delivers nothing and stops the simulation with a violation: ordered messages on one channel reach their
-receiver in sending order.
+A deliver line any of whose messages has an earlier message in flight that the line does not name and that must arrive
+first (World.precedes) delivers nothing and stops the simulation with a violation: ordered messages on one channel reach
+their receiver in sending order. A line that names both delivers them in one processing.
 -/
 theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
-    (i : Nat) (f : Scenario.Fact) (rest : List Nat) (k : Nat) (msg : Message)
-    (hk : (w.messagesOf fsOf i f).run = .ok (k :: rest)) (hm : w.messages[k]? = some msg)
-    (j : Nat) (n : Message) (hj : j < k) (hjk : j ∉ k :: rest) (hn : w.messages[j]? = some n)
+    (i : Nat) (f : Scenario.Fact) (ks : List Nat) (k : Nat) (msg : Message)
+    (hk : (w.messagesOf fsOf i f).run = .ok ks) (hkm : k ∈ ks) (hm : w.messages[k]? = some msg)
+    (j : Nat) (n : Message) (hj : j < k) (hjk : j ∉ ks) (hn : w.messages[j]? = some n)
     (hs : n.status = .inFlight) (hc : w.precedes n msg = true) :
     ∃ r, r.halts = true ∧ w.line fsOf own lines i (.deliver f) = w.report r := by
   rcases line_eq w own lines i (.deliver f) with h | h
   · rw [h]
-    have hmem : (n, j) ∈ w.messages.toList.zipIdx.take k :=
-      List.mem_iff_getElem?.mpr ⟨j, by simp [hj, hn]⟩
-    have hfind : ((w.messages.toList.zipIdx.take k).find? fun x =>
-        !(k :: rest).contains x.2 && x.1.status == .inFlight && w.precedes x.1 msg).isSome :=
-      List.find?_isSome.mpr ⟨(n, j), hmem, by simp_all⟩
-    obtain ⟨⟨earlier, je⟩, he⟩ := Option.isSome_iff_exists.mp hfind
-    by_cases hst : msg.status = .inFlight
-    · refine ⟨.overtaking i msg.describe earlier.describe, rfl, ?_⟩
-      simp only [World.take, World.resolving, bind, pure, hk, List.findSome?_cons, hm, Option.bind_some,
-        World.overtaken, hst, bne_self_eq_false, Bool.false_eq_true, ite_false, he]
-    · refine ⟨.notInFlight i msg.describe, rfl, ?_⟩
-      simp [World.take, World.resolving, hk, hm, hst]
+    simp only [World.take, World.resolving, bind, pure, hk]
+    split
+    · rename_i r hr
+      refine ⟨r, ?_, rfl⟩
+      obtain ⟨k', -, hk'⟩ := List.exists_of_findSome?_eq_some hr
+      obtain ⟨msg', -, hr'⟩ := Option.bind_eq_some_iff.mp hk'
+      split at hr'
+      · cases hr'; rfl
+      · exact overtaken_halts hr'
+    · rename_i hnone
+      exfalso
+      have hmem : (n, j) ∈ w.messages.toList.zipIdx.take k :=
+        List.mem_iff_getElem?.mpr ⟨j, by simp [hj, hn]⟩
+      have hfind : ((w.messages.toList.zipIdx.take k).find? fun x =>
+          !ks.contains x.2 && x.1.status == .inFlight && w.precedes x.1 msg).isSome :=
+        List.find?_isSome.mpr ⟨(n, j), hmem, by simp_all⟩
+      obtain ⟨⟨earlier, je⟩, he⟩ := Option.isSome_iff_exists.mp hfind
+      have := List.findSome?_eq_none_iff.mp hnone k hkm
+      rw [hm] at this
+      by_cases hst : msg.status = .inFlight
+      · simp [World.overtaken, hm, hst] at this
+        exact this earlier je (by simpa using he)
+      · simp [hst] at this
   · exact h
 
+theorem foldl_stopped {α : Type} {v : World} {xs : List α} {f : World → α → Id World} (h : v.stopped = true) :
+    xs.foldl (fun v x => if v.stopped = true then pure v else f v x) v = v := by
+  induction xs with
+  | nil => rfl
+  | cons y ys ih => simp only [List.foldl_cons, h, ite_true]; exact ih
+
+/-- The world after `f` takes each of `xs` stops when `f` stops it at one of them, while `P` holds before each take. -/
+theorem forEach_hits {α : Type} (P : World → Prop) {xs : List α} {f : World → α → Id World} {x : α} (hx : x ∈ xs)
+    (hP : ∀ v y, P v → v.stopped = false → P (f v y)) (hs : ∀ v, P v → v.stopped = false → (f v x).stopped = true)
+    {w : World} (hw : P w) : (w.forEach xs f).stopped = true := by
+  unfold World.forEach
+  rw [foldlM_id]
+  induction xs generalizing w with
+  | nil => cases hx
+  | cons y ys ih =>
+    simp only [List.foldl_cons]
+    by_cases hst : w.stopped = true
+    · simp only [hst, ite_true]
+      exact (congrArg World.stopped (foldl_stopped (xs := ys) (f := f) hst)).trans hst
+    · simp only [hst, Bool.false_eq_true, ite_false]
+      have hst' : w.stopped = false := by simpa using hst
+      rcases List.mem_cons.mp hx with rfl | hx
+      · exact (congrArg World.stopped (foldl_stopped (xs := ys) (f := f) (hs w hw hst'))).trans (hs w hw hst')
+      · exact ih hx (hP w y hw hst')
+
+/-- Whether `w` holds `msg` at place `k`, and `peer` is external in `w`. -/
+def Holds (k : Nat) (msg : Message) (peer : String) (w : World) : Prop :=
+  w.messages[k]? = some msg ∧ w.role peer = some .external
+
+theorem holds_report {k : Nat} {msg : Message} {peer : String} {w : World} (h : Holds k msg peer w)
+    (r : InvalidScenario) : Holds k msg peer (w.report r) := by
+  unfold World.report; split <;> exact h
+
+theorem holds_stated {k : Nat} {msg : Message} {peer : String} {w : World} (h : Holds k msg peer w) (i : Nat)
+    (m : Message) : Holds k msg peer (w.stated i m) := by
+  unfold World.stated
+  split
+  · exact holds_report h _
+  · refine ⟨?_, h.2⟩
+    have hk : k < w.messages.size := by
+      have := h.1; rw [Array.getElem?_eq_some_iff] at this; exact this.1
+    simp only [World.carry, Array.getElem?_push, Nat.ne_of_lt hk, ite_false]
+    exact h.1
+
 /--
-An external peer's answer line names requests that reached that peer: when the first it takes did not, it sends
-nothing and stops the simulation with a report.
+An external peer's answer line names requests that reached that peer: when any it takes did not, the simulation stops.
 -/
 theorem external_answer_needs_delivery (w : World) (own : String) (lines : List Scenario.Line)
-    (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (ks rest : List Nat) (k : Nat)
-    (msg : Message) (hw : w.stopped = false) (hr : w.role peer = some .external)
-    (hk : (w.messagesOf fsOf i f).run = .ok ks) (ho : ks = k :: rest)
+    (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (ks : List Nat) (k : Nat)
+    (msg : Message) (hr : w.role peer = some .external)
+    (hk : (w.messagesOf fsOf i f).run = .ok ks) (hkm : k ∈ ks)
     (hm : w.messages[k]? = some msg) (hd : ¬(msg.receiver = peer ∧ msg.status = .delivered)) :
-    ∃ r, r.halts = true ∧ w.line fsOf own lines i (.answer peer f a) = w.report r := by
+    (w.line fsOf own lines i (.answer peer f a)).stopped = true := by
   rcases line_eq w own lines i (.answer peer f a) with h | h
   · rw [h]
-    simp only [World.take, World.resolving, bind, pure, hk, ho]
-    rw [forEach_first_stops hw] <;> simp only [hm, hr] <;> split <;> (try split) <;>
-      first
-      | exact ⟨_, rfl, rfl⟩
-      | rfl
-      | (rename_i hne hst
-         simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hne hst
-         exact absurd ⟨hne, hst⟩ hd)
-  · exact h
+    simp only [World.take, World.resolving, bind, pure, hk]
+    refine forEach_hits (Holds k msg peer) hkm (fun v y hv _ => ?_) (fun v hv hst => ?_) ⟨hm, hr⟩
+    · simp only [hv.2]
+      (repeat' split) <;> first
+        | exact hv
+        | exact holds_report hv _
+        | exact holds_stated (by unfold World.nextId; exact hv) _ _
+    · simp only [hv.1, hv.2]
+      by_cases hrec : msg.receiver = peer
+      · have hst' : msg.status ≠ .delivered := fun e => hd ⟨hrec, e⟩
+        simp [hrec, hst', World.report, World.stopped, InvalidScenario.halts]
+      · simp [hrec, World.report, World.stopped, InvalidScenario.halts]
+  · obtain ⟨r, hh, e⟩ := h
+    rw [e]; simp [World.report, World.stopped, hh]
 
 /-- `w'` holds every running service's state as `w` holds it. -/
 def SameStates (w w' : World) : Prop := w'.states = w.states
