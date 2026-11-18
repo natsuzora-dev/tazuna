@@ -131,8 +131,10 @@ function groups(lines: readonly (TraceLine | undefined)[]): Group[] {
   return result;
 }
 
-const isOutRequest = (l: TraceLine): boolean =>
-  l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe");
+const isRequestOf = (dir: TraceLine["dir"], l: TraceLine): boolean =>
+  l.dir === dir && (l.type === "command" || l.type === "query" || l.type === "subscribe");
+
+const isOutRequest = (l: TraceLine): boolean => isRequestOf("out", l);
 
 /** Lean's Line.fresh. */
 const freshOf = (l: TraceLine): string[] => [
@@ -667,11 +669,11 @@ function compare(
   );
 }
 
-/** Lean's firstDuplicate: the first out request line with the id of an earlier out request line. */
-function firstDuplicate(lines: readonly (TraceLine | undefined)[]): Found | undefined {
+/** Lean's firstDuplicate: the first request line of the direction `dir` with the id of an earlier one. */
+function firstDuplicate(dir: TraceLine["dir"], lines: readonly (TraceLine | undefined)[]): Found | undefined {
   const seen = new Map<string, number>();
   for (const [i, l] of lines.entries()) {
-    if (l === undefined || !isOutRequest(l)) continue;
+    if (l === undefined || !isRequestOf(dir, l)) continue;
     const first = seen.get(l.id);
     if (first !== undefined)
       return { kind: "Uncomparable.duplicateId", definition: null, line: i + 1, data: { id: l.id, firstLine: first } };
@@ -680,13 +682,16 @@ function firstDuplicate(lines: readonly (TraceLine | undefined)[]): Found | unde
   return undefined;
 }
 
-/** Lean's comparedLines: the trace lines that verify compares, and the finding of the line that ends them, if any. */
-function comparedLines(trace: readonly FileLine[]): {
+/** Lean's comparedLines: the trace lines that verify checks, and the finding of the line that ends them, if any. */
+export function comparedLines(
+  dir: TraceLine["dir"],
+  trace: readonly FileLine[],
+): {
   readonly lines: readonly (TraceLine | undefined)[];
   readonly cut: Found | undefined;
 } {
   const { lines, malformed } = untilMalformed(trace);
-  const duplicate = firstDuplicate(lines);
+  const duplicate = firstDuplicate(dir, lines);
   if (duplicate !== undefined) return { lines: lines.slice(0, (duplicate.line ?? 1) - 1), cut: duplicate };
   return { lines, cut: malformed === undefined ? undefined : lineSchema(malformed) };
 }
@@ -704,7 +709,7 @@ export function verifyLines(
   renamed: (v: Values) => Values = (v) => v,
   relation = false,
 ): Compared {
-  const { lines, cut } = comparedLines(trace);
+  const { lines, cut } = comparedLines("out", trace);
   const read = readLine(spec, service);
   const expected = snapshot.map((l) => l && read(l));
   const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));

@@ -15,8 +15,9 @@ export type Uncomparable =
       readonly data: Readonly<Record<string, never>>;
     }
   /**
-   * The line is an `out` request line (a command, query or subscribe line) with the id of the earlier `out` request line
-   * `firstLine`, so the answers that name that id do not tell which request they answer.
+   * The line is a request line (a command, query or subscribe line) with the id of the earlier request line `firstLine`,
+   * so the answers that name that id do not tell which request they answer: an `out` request in a trace that verify
+   * compares with a snapshot, an `in` request in an external service's trace (Verify/Compare's firstDuplicate).
    */
   | {
       readonly kind: "Uncomparable.duplicateId";

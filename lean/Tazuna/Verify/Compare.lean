@@ -594,40 +594,45 @@ def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (i
       [⟨Binding.empty, .refl _⟩]
   { findings := found ++ (cut.map Finding.uncomparable).toList, bindings := set.map (·.val) }
 
-def isOutRequestLine (l : TraceLine) : Bool :=
+/-- Whether the line is a request line (a command, query or subscribe line) of the direction `dir`. -/
+def isRequestLine (dir : Dir) (l : TraceLine) : Bool :=
   match l.body with
-  | .command .out .. | .query .out .. | .subscribe .out .. => true
+  | .command d .. | .query d .. | .subscribe d .. => d == dir
   | _ => false
 
 /--
-The number of the first `out` request line with the id of an earlier `out` request line, and its report. An `in` line's
-answer names an `out` request and an `out` answer an `in` one, so only `out` request ids must differ; a redelivered
-`in` request keeps its id.
+The number of the first request line of the direction `dir` with the id of an earlier one, and its report. Answers in
+the other direction name those requests, so their ids must differ. Compare checks `out` requests: an `in` request of a
+spec service may come again with its id, as a resent request does, and the snapshot fixes how the service answers it.
+The check of an external service's trace, which has no snapshot, checks `in` requests (External).
 -/
-def firstDuplicate (lines : List (Option TraceLine)) : Option (Nat × Uncomparable) :=
+def firstDuplicate (dir : Dir) (lines : List (Option TraceLine)) : Option (Nat × Uncomparable) :=
   go lines 1 []
 where
   go : List (Option TraceLine) → Nat → List (String × Nat) → Option (Nat × Uncomparable)
     | [], _, _ => none
     | none :: ls, i, seen => go ls (i + 1) seen
     | some l :: ls, i, seen =>
-      if !isOutRequestLine l then go ls (i + 1) seen
+      if !isRequestLine dir l then go ls (i + 1) seen
       else
         match seen.lookup l.body.id with
         | some first => some (i, .duplicateId i l.body.id first)
         | none => go ls (i + 1) (seen ++ [(l.body.id, i)])
 
-/-- The trace lines that verify compares, and the report of the line that ends them, if any. -/
-def comparedLines (trace : List (FileLine TraceLine)) : List (Option TraceLine) × Option Uncomparable :=
+/--
+The trace lines that verify checks, and the report of the line that ends them, if any: the first malformed line, or the
+first request line of the direction `dir` with an earlier one's id (firstDuplicate).
+-/
+def comparedLines (dir : Dir) (trace : List (FileLine TraceLine)) : List (Option TraceLine) × Option Uncomparable :=
   let (lines, malformed) := untilMalformed trace
-  match firstDuplicate lines with
+  match firstDuplicate dir lines with
   | some (i, u) => (lines.take (i - 1), some u)
   | none => (lines, malformed.map .lineSchema)
 
 def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
     (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) (renamed : Values → Values)
     (relation : Bool := false) : m Compared := do
-  let (lines, cut) := comparedLines trace
+  let (lines, cut) := comparedLines .out trace
   let (expected, outputByRequestId) ← readLines s service ask snapshot []
   let (actual, _) ← readLines s service ask lines outputByRequestId
   pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service) renamed relation)

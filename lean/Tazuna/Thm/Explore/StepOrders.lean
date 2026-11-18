@@ -38,7 +38,7 @@ theorem compareTraces_ok {spec : Spec.Structure} {service : String}
   have he : e = E := by simp only [e, read, hr]
   have ha : a = Verify.withoutRepeatedAnswers A := by simp only [a, read, hr, hr']
   rw [he, ha]
-  cases hd : Verify.firstDuplicate (actual.map some) with
+  cases hd : Verify.firstDuplicate .out (actual.map some) with
   | some p =>
     obtain ⟨i, u⟩ := p
     simp only [Verify.compareTraces, Verify.verifyLines, Verify.comparedLines, untilMalformed_lines, hd, hr, bind,

@@ -11,3 +11,7 @@
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c4","name":"book","input":{"day":"2026-10-28T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e8","name":"booked","resultOf":"c4","payload":{"day":"2026-10-28T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"c4","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c5","name":"book","input":{"day":"2026-10-29T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#5","to":"c5","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e9","name":"booked","resultOf":"c5","payload":{"day":"2026-10-29T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#6","to":"c5","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}

@@ -4,8 +4,8 @@ namespace Tazuna.Thm.Spec.Structure
 
 open Tazuna.Data Tazuna.Spec
 
-theorem resultOfMismatch_eq_none_iff (s : Structure) (target : Ref) (accepted : Bool) (event : Ref) :
-    s.resultOfMismatch target accepted event = none ↔ accepted = true ∧
+theorem resultOfMismatch_eq_none_iff (s : Structure) (target : Ref) (answers : List Answer) (event : Ref) :
+    s.resultOfMismatch target answers event = none ↔ answers.all (· matches .accepted _) = true ∧
       ∃ d ∈ s.definitions.find? (·.ref == target), match d.body with
         | .command _ _ _ emits .. => some event ∈ emits
         | _ => False := by
@@ -13,12 +13,14 @@ theorem resultOfMismatch_eq_none_iff (s : Structure) (target : Ref) (accepted : 
   cases h : s.definitions.find? (·.ref == target) with
   | none => simp
   | some d =>
-    cases hb : d.body <;> cases accepted <;> simp [hb]
+    cases hb : d.body <;> cases answers.all (· matches .accepted _) <;> simp [hb]
 
-theorem resultOfMismatch_unaccepted (s : Structure) (target event : Ref) :
-    s.resultOfMismatch target false event ≠ none := by
+theorem resultOfMismatch_unaccepted (s : Structure) (target event : Ref) (answers : List Answer)
+    (h : ∃ a ∈ answers, ¬ a matches .accepted _) : s.resultOfMismatch target answers event ≠ none := by
   rw [Ne, resultOfMismatch_eq_none_iff]
-  simp
+  obtain ⟨a, ha, hn⟩ := h
+  simp only [List.all_eq_true, not_and]
+  exact fun hall => absurd (hall a ha) (by simpa using hn)
 
 theorem emitsOf_mem (s : Structure) (command : Option Ref) (r : Ref) (h : some r ∈ s.emitsOf command) :
     ∃ d ∈ s.definitions, sameRef (some d.ref) command = true ∧ match d.body with

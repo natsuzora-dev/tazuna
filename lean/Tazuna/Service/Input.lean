@@ -201,14 +201,12 @@ def decodedEvents [Monad m] (fs : Functions m) (x : Exchange) : m (Except Issue 
       | .ok (some payload) => pure (.ok (emits ++ [{ event, payload }]))
 
 /--
-The finding of a result event of `x` that cannot be the result of its request: one whose target is no command or does
-not list it, or one of a request that an answer did not accept. A request that no answer reached may have results, as
-an API response may be lost after the webhook is sent.
+The finding of a result event of `x` that cannot be the result of its request (Structure.resultOfMismatch), as verify
+checks an external service's trace.
 -/
 def resultOfFinding (st : Service) (x : Exchange) : Option Finding :=
-  let accepted := x.answers.all (· matches .accepted _)
   x.events.findSome? fun (event, _) =>
-    (st.«structure».resultOfMismatch x.target accepted event).map
+    (st.«structure».resultOfMismatch x.target x.answers event).map
       (.invalidInput ∘ .resultOf event x.id.text x.target)
 
 /--

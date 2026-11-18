@@ -347,14 +347,15 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire ResultOfMismatch
 
 /--
-Why `event` cannot be the result of a request to `target`, or none when it can. `event` can be the result only when
-`target` is a command that accepted the request and lists `event` in its emits.
+Why `event` cannot be the result of a request to `target` that got `answers`, or none when it can. `event` can be the
+result only when `target` is a command that lists `event` in its emits and no answer did not accept the request. A
+request that no answer reached may have results, as an API response may be lost after the webhook is sent.
 -/
-def Structure.resultOfMismatch (s : Structure) (target : Ref) (accepted : Bool) (event : Ref) :
+def Structure.resultOfMismatch (s : Structure) (target : Ref) (answers : List Answer) (event : Ref) :
     Option ResultOfMismatch :=
   match (s.definitions.find? (·.ref == target)).map Definition.body with
   | some (.command _ _ _ emits ..) =>
-    if !accepted then some .resultOfUnacceptedRequest
+    if !answers.all (· matches .accepted _) then some .resultOfUnacceptedRequest
     else if emits.contains (some event) then none
     else some .resultOfUnlistedEvent
   | _ => some .resultOfNonCommand

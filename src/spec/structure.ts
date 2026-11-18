@@ -162,19 +162,16 @@ export function isAssumed(structure: Structure, target: DefinitionRef): boolean 
   );
 }
 
-/**
- * Returns why `event` cannot be the result of a request to `target`, or undefined when it can. `event` can be the
- * result only when `target` is a command that accepted the request and lists `event` in its emits.
- */
+/** Lean's Structure.resultOfMismatch: why `event` cannot be the result of a request to `target` that got `answers`. */
 export function resultOfMismatch(
   structure: Structure,
   target: DefinitionRef,
-  accepted: boolean,
+  answers: readonly Answer[],
   event: DefinitionRef,
 ): ResultOfMismatch | undefined {
   const definition = structure.definitions.find((d) => sameRef(d, target));
   if (definition?.kind !== "command") return "resultOfNonCommand";
-  if (!accepted) return "resultOfUnacceptedRequest";
+  if (!answers.every((a) => a.result === "accepted")) return "resultOfUnacceptedRequest";
   return definition.emits.some((e) => sameRef(e, event)) ? undefined : "resultOfUnlistedEvent";
 }
 

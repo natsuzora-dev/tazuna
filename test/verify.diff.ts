@@ -736,6 +736,10 @@ const externalMutations: Record<string, (values: FileValue[], names: readonly st
             : { result: "accepted" },
     }),
   ),
+  reuseId: rewrite(
+    (l) => l["dir"] === "in" && (l["type"] === "command" || l["type"] === "query"),
+    (l, ids, _names, b) => ({ ...l, id: pick(ids, b) as string }),
+  ),
   dropId: rewrite(
     (l) => l["dir"] === "in" && (l["type"] === "command" || l["type"] === "query") && "id" in l,
     (l) => Object.fromEntries(Object.entries(l).filter(([k]) => k !== "id")),

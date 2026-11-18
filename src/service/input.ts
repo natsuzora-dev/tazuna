@@ -279,14 +279,10 @@ export function exchanges(s: State): Exchange[] {
   );
 }
 
-/**
- * Lean's resultOfFinding: the finding of a result event of `x` that cannot be the result of its request. A request
- * that no answer reached may have results, as an API response may be lost after the webhook is sent.
- */
+/** Lean's resultOfFinding: the finding of a result event of `x` that cannot be the result of its request. */
 function resultOfFinding(r: Run, x: Exchange): InvalidInput | undefined {
-  const accepted = x.answers.every((a) => a.result === "accepted");
   for (const { event } of x.events) {
-    const mismatch = resultOfMismatch(r.st.structure, x.target, accepted, event);
+    const mismatch = resultOfMismatch(r.st.structure, x.target, x.answers, event);
     if (mismatch !== undefined)
       return {
         kind: `InvalidInput.${mismatch}`,

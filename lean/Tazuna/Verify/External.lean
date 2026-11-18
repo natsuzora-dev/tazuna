@@ -2,7 +2,9 @@ import Tazuna.Verify.Compare
 
 /-!
 This module checks an external service's trace against the service's contract, as far as the spec's structure
-allows.
+allows. As test does with the requests that a service sent (Service.Exchange), verify gathers each request that the
+external service received with its answers and result events, and checks it once the trace ends, since a result event
+may come before or after its request's answer.
 -/
 
 namespace Tazuna.Verify
@@ -10,77 +12,101 @@ namespace Tazuna.Verify
 open Tazuna.Data
 open Tazuna.Spec
 
-/-- A request of the trace: its first answer, if any, and the lines of the events naming it as their resultOf. -/
-structure Request where
+/--
+A request that the external service received, as its trace records it: its line, and the answers and the events naming
+it as their resultOf that later lines record, in trace order, each with its line.
+-/
+structure Exchange where
+  line : Nat
+  id : String
   definition : Definition
-  answer : Option Answer := none
-  results : List (Nat × Ref) := []
+  answers : List (Nat × Answer)
+  events : List (Nat × Ref)
 
-/-- Whether no answer rejected the request. -/
-def Request.accepted (r : Request) : Bool := r.answer.all (· matches .accepted _)
+/-- The trace's requests that have a definition of `service`, in trace order, each with what later lines record of it. -/
+def exchanges (s : Structure) (service : String) (lines : List (Option TraceLine)) : List Exchange :=
+  let numbered := (lines.zipIdx 1).filterMap fun (l, i) => l.map (i, ·)
+  numbered.filterMap fun (i, l) =>
+    let later := numbered.filter (·.1 > i)
+    match l.body with
+    | .command .in id name _ | .query .in id name _ =>
+      (s.named service (some name) [l.body.type]).map fun definition =>
+        { line := i, id, definition
+          answers := later.filterMap fun (j, a) => match a.body with
+            | .answer .out _ to answer => if to == id then some (j, answer) else none
+            | _ => none
+          events := later.filterMap fun (j, e) => match e.body with
+            | .event .out _ name _ (some r) =>
+              if r == id then (s.named service (some name) ["event"]).map (j, ·.ref) else none
+            | _ => none }
+    | _ => none
+
+/-- The violation of the line alone. `requests` are the ids of the earlier request lines. -/
+def checkLine (s : Structure) (service : String) (requests : List String) (line : Nat) (l : TraceLine) :
+    Option Finding :=
+  match l.body with
+  | .command .in _ name _ | .query .in _ name _ =>
+    if (s.named service (some name) [l.body.type]).isSome then none
+    else some (.uncomparable (.unknownRequest line (Subject.of l)))
+  | .answer .out _ to _ =>
+    if requests.contains to then none else some (.uncomparable (.unknownAnswer line (Subject.of l)))
+  | .event .out _ name _ resultOf =>
+    match s.named service (some name) ["event"], resultOf with
+    | none, _ => some (.uncomparable (.unknownEvent line (Subject.of l)))
+    | some event, none =>
+      if (s.contractsListing event.ref).contains service then none
+      else some (.mismatch (.unlistedEvent line event.ref))
+    | some event, some id =>
+      if requests.contains id then none else some (.uncomparable (.resultOfUnknownRequest line event.ref id))
+  | _ => none
+
+/-- The violations of the lines alone. `line` is the number of the first of `lines`. -/
+def checkLines (s : Structure) (service : String) : List (Option TraceLine) → Nat → List String → List Finding
+  | [], _, _ => []
+  | none :: ls, line, requests => checkLines s service ls (line + 1) requests
+  | some l :: ls, line, requests =>
+    let requests := match l.body with
+      | .command .in id .. | .query .in id .. => requests ++ [id]
+      | _ => requests
+    (checkLine s service requests line l).toList ++ checkLines s service ls (line + 1) requests
+
+/-- The violation of the answer `answer` at `line` to the request `id` of `definition`. -/
+def checkAnswer (s : Structure) (service : String) (id : String) (definition : Definition) (line : Nat) :
+    Answer → Option Finding
+  | .rejected rejection =>
+    if (s.rejectionKinds service definition.ref).contains rejection.kind then none
+    else some (.mismatch (.assumption line id definition.ref (.unlistedRejectionKind rejection)))
+  | .accepted _ => if definition.kind == "command" then none
+    else some (.mismatch (.answerResult line id definition.ref "accepted"))
+  | .fulfilled _ => if definition.kind == "query" then none
+    else some (.mismatch (.answerResult line id definition.ref "fulfilled"))
 
 def resultOfFinding (line : Nat) (event : Ref) (requestId : String) (target : Ref) : ResultOfMismatch → Finding
   | .resultOfNonCommand => .uncomparable (.resultOfNonCommand line event requestId target)
   | .resultOfUnacceptedRequest => .mismatch (.resultOfUnacceptedRequest line event requestId target)
   | .resultOfUnlistedEvent => .mismatch (.resultOfUnlistedEvent line event requestId target)
 
-def checkLine (s : Structure) (service : String) (requests : List (String × Option Request)) (line : Nat)
-    (l : TraceLine) : Option Finding × List (String × Option Request) :=
-  match l.body with
-  | .command .in id name _ | .query .in id name _ =>
-    let definition := s.named service (some name) [l.body.type]
-    (if definition.isSome then none else some (.uncomparable (.unknownRequest line (Subject.of l))),
-      setAt requests id (definition.map fun definition => { definition }))
-  | .answer .out _ to answer =>
-    match requests.lookup to, answer with
-    | none, _ => (some (.uncomparable (.unknownAnswer line (Subject.of l))), requests)
-    | some none, _ => (none, requests)
-    | some (some r), _ =>
-      if r.answer.isSome then (some (.mismatch (.repeatedAnswer line to r.definition.ref)), requests) else
-      let answered := setAt requests to (some { r with answer })
-      match answer, r.definition.kind with
-      | .rejected rejection, _ =>
-        (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none
-         else some (.mismatch (.assumption line to r.definition.ref (.unlistedRejectionKind rejection))), answered)
-      | .accepted _, "command" | .fulfilled _, "query" => (none, answered)
-      | .accepted _, _ => (some (.mismatch (.answerResult line to r.definition.ref "accepted")), answered)
-      | .fulfilled _, _ => (some (.mismatch (.answerResult line to r.definition.ref "fulfilled")), answered)
-  | .event .out _ name _ resultOf =>
-    match s.named service (some name) ["event"], resultOf with
-    | none, _ => (some (.uncomparable (.unknownEvent line (Subject.of l))), requests)
-    | some event, none =>
-      (if (s.contractsListing event.ref).contains service then none
-       else some (.mismatch (.unlistedEvent line event.ref)), requests)
-    | some event, some id =>
-      match requests.lookup id with
-      | none => (some (.uncomparable (.resultOfUnknownRequest line event.ref id)), requests)
-      | some none => (none, requests)
-      | some (some r) => (none, setAt requests id (some { r with results := r.results ++ [(line, event.ref)] }))
-  | _ => (none, requests)
+/--
+The violations of the request `x`: of its first answer, of each later answer as repeated, and of each result event
+against the target and all the answers (Structure.resultOfMismatch, as test checks them).
+-/
+def checkExchange (s : Structure) (service : String) (x : Exchange) : List Finding :=
+  let target := x.definition.ref
+  let answers := match x.answers with
+    | [] => []
+    | (line, answer) :: repeated =>
+      (checkAnswer s service x.id x.definition line answer).toList ++
+        repeated.map fun (line, _) => .mismatch (.repeatedAnswer line x.id target)
+  answers ++ x.events.filterMap fun (line, event) =>
+    (s.resultOfMismatch target (x.answers.map (·.2)) event).map (resultOfFinding line event x.id target)
 
 /--
-The violations of the result events of the requests, found once the trace ends, since a result event may come before
-or after its request's answer. A request that no answer reached may have results.
+The violations of the lines that verify checks (comparedLines with `in` requests), by line, followed by the violation of
+the line that ends them.
 -/
-def checkResults (s : Structure) (requests : List (String × Option Request)) : List Finding :=
-  requests.flatMap fun (id, r) => match r with
-    | none => []
-    | some r => r.results.filterMap fun (line, event) =>
-      (s.resultOfMismatch r.definition.ref r.accepted event).map
-        (resultOfFinding line event id r.definition.ref)
-
-/-- The violations of the lines, then of their result events. `line` is the number of the first of `lines`. -/
-def checkLines (s : Structure) (service : String) :
-    List (Option TraceLine) → Nat → List (String × Option Request) → List Finding
-  | [], _, requests => checkResults s requests
-  | none :: ls, line, requests => checkLines s service ls (line + 1) requests
-  | some l :: ls, line, requests =>
-    let (found, requests) := checkLine s service requests line l
-    found.toList ++ checkLines s service ls (line + 1) requests
-
-/-- The violations of the lines before the trace's first malformed line, followed by that line's violation. -/
 def checkExternal (s : Structure) (service : String) (trace : List (FileLine TraceLine)) : List Finding :=
-  let (lines, malformed) := untilMalformed trace
-  checkLines s service lines 1 [] ++ (malformed.map fun n => .uncomparable (.lineSchema n)).toList
+  let (lines, cut) := comparedLines .in trace
+  let found := checkLines s service lines 1 [] ++ (exchanges s service lines).flatMap (checkExchange s service)
+  found.mergeSort (fun a b => decide (a.line ≤ b.line)) ++ (cut.map .uncomparable).toList
 
 end Tazuna.Verify

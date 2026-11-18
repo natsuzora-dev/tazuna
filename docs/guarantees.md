@@ -161,6 +161,7 @@ tazuna detects a break of each assumption only partly or not at all.
   An adapter that can only wait, such as one that drives a browser, bounds the wait and rejects with `Unsettled`.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
+  Each request in such a trace has its own id, since the answers and result events name requests by id: `verify` reports a request with an earlier request's id as `Uncomparable.duplicateId` and checks no later line.
   Every exchange with an external service is recorded and checked once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
   `test` checks the input that the service sent against the external target's input schema, also when no answer came, each answer against the target's contract, also one that came after a restart, a command's `ensures`, once an answer accepted the command, with all its result events, and each result event against its request's answer, which may come before or after it.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
