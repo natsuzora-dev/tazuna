@@ -67,15 +67,16 @@ The renaming maps each key that one run created to a key that the other run crea
 `drive` from `@natsuzora-dev/tazuna/verify` controls only the implementation's world: the start, the clock, the messages that the implementation receives, and restarts.
 The implementation creates its keys and request ids in its own way.
 
-A trace *matches* a snapshot when all of the following hold:
+A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 
-- Its `in` lines equal the snapshot's `in` lines.
+- Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
 - The `out` lines after each `in` line pair one to one with the snapshot's.
-  They keep the snapshot's order on each channel and no order across channels (`ordered_same_channel`).
+  The pairing that `verify` reports by has equal times and keeps the snapshot's order on each channel and no order across channels.
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
   The events of one group that `decide` returns have no order, even on one channel.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
-  The binding is one to one within each domain: the request ids, and the keys of each entity (`compare_oneToOne`).
+  The binding is one to one within each domain: the request ids, and the keys of each entity.
+  Paired lines have the same type, direction, and name, and their ids and contents are equal up to the binding (`contentMatch_renamed`).
 
 An implementation that reuses an existing request id or key for a new one does not match.
 An implementation that uses a string of its input, such as an idempotency key, as a new key can match.
@@ -246,7 +247,7 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
 - The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
 - When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
-- Equality up to a renaming of created keys, by which `test` compares two runs, is an equivalence. Every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain, as `test`'s bindings do.
+- Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each string or key as the binding pairs it, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain (`matchValue_strRenamed`).
 
 ### Restart
 
@@ -258,5 +259,5 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 ### Comparison
 
 - A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
-- Every binding that a trace comparison ends with is one to one within each domain, and keeps every pair that an earlier step bound (`compare_oneToOne`, `compareGroups_extends`).
+- A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states (`compare_matches`, `contentMatch_renamed`).
 - `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace (`no_violation_iff`).

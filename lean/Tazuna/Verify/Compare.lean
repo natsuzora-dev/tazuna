@@ -361,6 +361,66 @@ def State.same {root : Binding} (named : List Nat) (a b : State root) : Bool :=
 def distinctBy {α : Type} (same : α → α → Bool) (xs : List α) : List α :=
   xs.foldl (fun acc x => if acc.any (same x) then acc else acc ++ [x]) []
 
+/-- The ways that pair snapshot line `s` with trace line `t` under the bindings `cs` that extend the way's binding. -/
+def State.paired {root : Binding} (st : State root) (s t : Numbered) (cs : List (From st.binding.val)) :
+    List (State root) :=
+  (lift st.binding.property cs).map fun c => { binding := c, pairs := st.pairs ++ [(s.index, t.index)] }
+
+def overLimit (place : Nat) (s : Numbered) : Finding :=
+  .uncomparable (.bindingLimit place (Subject.of s.line.toTraceLine) s.index bindingLimit)
+
+/--
+One snapshot line of the exact pass: each way pairs it with every unpaired trace line of the group that compares equal,
+at the same time and after the lines it must follow. A line that pairs in no way goes to the failed lines.
+-/
+def pairExact {root : Binding} (v : Values) (snapshot trace : List Numbered) (place : Nat)
+    (same : State root → State root → Bool) (acc : List (State root) × List Numbered) (s : Numbered) :
+    Except Finding (List (State root) × List Numbered) :=
+  let (states, failed) := acc
+  let next (st : State root) : Option (List (State root)) := do
+    let ways ← (trace.filter fun t => !st.used.contains t.index && followsPaired snapshot st.pairs s.index t.index).mapM
+      fun t => (matchLine v st.binding.val s.line t.line).map (st.paired s t)
+    pure ways.flatten
+  match expand same states next with
+  | none => .error (overLimit place s)
+  | some [] => .ok (states, failed ++ [s])
+  | some ways => .ok (ways, failed)
+
+/--
+One failed line of the place pass. It pairs, in snapshot order, with the first trace line at its place that the first
+way leaves unpaired; `true` when its content compares equal, so that it differs only in its time or order, which
+compareGroup reports. A line with no place stays unpaired.
+-/
+def pairPlace {root : Binding} (v : Values) (trace : List Numbered) (place : Nat) (same : State root → State root → Bool)
+    (acc : List (State root) × List (Numbered × Option (Numbered × Bool))) (s : Numbered) :
+    Except Finding (List (State root) × List (Numbered × Option (Numbered × Bool))) :=
+  let (states, placed) := acc
+  let first := states.head?
+  let at? := first.bind fun w =>
+    trace.find? fun t => !w.used.contains t.index && samePlace w.binding.val.strings s.line t.line
+  match at? with
+  | none => .ok (states, placed ++ [(s, none)])
+  | some t =>
+    let free := states.filter fun st => !st.used.contains t.index
+    match expand same free fun st => (matchContent v st.binding.val s.line t.line).map (st.paired s t) with
+    | none => .error (overLimit place s)
+    | some (w :: ws) => .ok (w :: ws, placed ++ [(s, some (t, true))])
+    | some [] =>
+      let bound := free.map fun st =>
+        let id := s.line.body.id
+        let c : From root :=
+          if s.line.isOutRequest then
+            match st.binding.val.bindString (v.binds id t.line.body.id) (v.domain id, id) (v.domain id, t.line.body.id) with
+            | some c => ⟨c.val, st.binding.property.trans c.property⟩
+            | none => st.binding
+          else st.binding
+        { binding := c, pairs := st.pairs ++ [(s.index, t.index)] }
+      .ok (bound, placed ++ [(s, some (t, false))])
+
+/-- The snapshot lines that the group's snapshot line `s`, its `k`th, must follow, by number. -/
+def namedLines (snapshot : List Numbered) : List Nat :=
+  snapshot.zipIdx.flatMap fun (s, k) => mustFollow snapshot s k
+
 /--
 Pairs the `out` lines of one group under the set of bindings and reports their differences. `v.fresh` holds the values
 that this and earlier groups introduced, also on lines that are not compared; one that is not bound yet binds where a
@@ -369,52 +429,13 @@ later is compared.
 -/
 def compareGroup {root : Binding} (set : List (From root)) (v : Values) (snapshot trace : List Numbered) (place : Nat) :
     List Finding × List (From root) × Bool :=
-  let named := snapshot.zipIdx.flatMap fun (s, k) => mustFollow snapshot s k
-  let same := State.same named
-  let over (s : Numbered) : Finding :=
-    .uncomparable (.bindingLimit place (Subject.of s.line.toTraceLine) s.index bindingLimit)
-  let paired (st : State root) (s t : Numbered) (cs : List (From st.binding.val)) : List (State root) :=
-    (lift st.binding.property cs).map fun c => { binding := c, pairs := st.pairs ++ [(s.index, t.index)] }
+  let same := State.same (namedLines snapshot)
   let start : Except Finding (List (State root) × List Numbered) := .ok (set.map ({ binding := ·, pairs := [] }), [])
-  let exact := snapshot.foldl (fun acc s => acc.bind fun (states, failed) =>
-    let next (st : State root) : Option (List (State root)) := do
-      let ways ← (trace.filter fun t => !st.used.contains t.index && followsPaired snapshot st.pairs s.index t.index).mapM
-        fun t => (matchLine v st.binding.val s.line t.line).map (paired st s t)
-      pure ways.flatten
-    match expand same states next with
-    | none => .error (over s)
-    | some [] => .ok (states, failed ++ [s])
-    | some ways => .ok (ways, failed)) start
-  match exact with
+  match snapshot.foldl (fun acc s => acc.bind fun a => pairExact v snapshot trace place same a s) start with
   | .error f => ([f], set, true)
   | .ok (states, failed) =>
-  -- A snapshot line that pairs in no way pairs by place, in snapshot order, with the first trace line at its place that
-  -- the first way leaves unpaired. A pair whose content compares equal differs only in its time or order, which the
-  -- checks below report.
-  let placing : Except Finding (List (State root) × List (Numbered × Option (Numbered × Bool))) :=
-    failed.foldl (fun acc s => acc.bind fun (states, placed) =>
-      let first := states.head?
-      let at? := first.bind fun w =>
-        trace.find? fun t => !w.used.contains t.index && samePlace w.binding.val.strings s.line t.line
-      match at? with
-      | none => .ok (states, placed ++ [(s, none)])
-      | some t =>
-        let free := states.filter fun st => !st.used.contains t.index
-        match expand same free fun st => (matchContent v st.binding.val s.line t.line).map (paired st s t) with
-        | none => .error (over s)
-        | some (w :: ws) => .ok (w :: ws, placed ++ [(s, some (t, true))])
-        | some [] =>
-          let bound := free.map fun st =>
-            let id := s.line.body.id
-            let c : From root :=
-              if s.line.isOutRequest then
-                match st.binding.val.bindString (v.binds id t.line.body.id) (v.domain id, id) (v.domain id, t.line.body.id) with
-                | some c => ⟨c.val, st.binding.property.trans c.property⟩
-                | none => st.binding
-              else st.binding
-            { binding := c, pairs := st.pairs ++ [(s.index, t.index)] }
-          .ok (bound, placed ++ [(s, some (t, false))])) (.ok (states, []))
-  match placing with
+  let start : Except Finding (List (State root) × List (Numbered × Option (Numbered × Bool))) := .ok (states, [])
+  match failed.foldl (fun acc s => acc.bind fun a => pairPlace v trace place same a s) start with
   | .error f => ([f], set, true)
   | .ok (states, placed) =>
   let first := states.head?
@@ -440,7 +461,6 @@ def compareGroup {root : Binding} (set : List (From root)) (v : Values) (snapsho
           (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
   let kept := states.filter fun st => sameSet st.used used
   (differences ++ unexpectedLines ++ times ++ orders, distinctBy From.same (kept.map (·.binding)), false)
-
 
 /-- The line without its own id, which names the line rather than what it gives. -/
 def useValue (l : Line) : Value :=
