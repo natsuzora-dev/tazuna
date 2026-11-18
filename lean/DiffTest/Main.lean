@@ -191,21 +191,6 @@ def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Spec.Defini
   | .comparableValue v => IO.ofExcept (CValue.decode v)
   | reply => throw (IO.userError s!"TS answered comparableValue with {reply.type}")
 
-/--
-The first violation, by line, that verify finds in `actual` with `expected` as the snapshot, comparing their `after`
-too, as TS `compareTrace` returns.
--/
-def compareOf (spec : Spec.Structure) (service : String)
-    (ask : Spec.Definition → Verify.Part → Value → IO CValue) : Compare IO := fun renamed expected actual => do
-  let compared ← Verify.verifyLines spec service ask (expected.map some) (actual.map .line) renamed true
-  let numbered := compared.findings.map fun f =>
-    (f.line, match f with
-      | .mismatch m => m.toViolation
-      | .uncomparable u => u.toViolation)
-  pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
-    | some (_, v) => .error v
-    | none => .ok compared.bindings)
-
 /-- The comparison violations of `trace` against `snapshot`, and the pairs of each binding that it ends with. -/
 def verify (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (service : String)
     (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) : IO Response := do
@@ -308,7 +293,7 @@ def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure
     let (w, acting) ← ran.run {}
     pure { world := w, collect := acting.collect }
   let reads ← IO.mkRef {}
-  let searched ← stepOrderChanges (fun service => compareOf spec service (askComparable stdin stdout reads))
+  let searched ← stepOrderChanges (fun service => Verify.compareTraces spec service (askComparable stdin stdout reads))
     executeWith sc (← executeWith sc []) 0
   pure (.stepOrderChanges (searched.map searchedOf))
 

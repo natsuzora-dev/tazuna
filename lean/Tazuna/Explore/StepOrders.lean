@@ -171,6 +171,17 @@ then the steps between that lead to `j`, then `b` (step `j`) and `a` (step `i`).
 def pairOrder (s : State) (taken : List (Nat × StepName)) (i j : Nat) (a b : StepName) : List StepName :=
   (taken.filter (·.1 < i)).map (·.2) ++ (taken.filter fun (n, _) => i < n && n < j && leadsTo s n j).map (·.2) ++ [b, a]
 
+/--
+The outcome of `alternative` for the running service `st`, with the lines of its processing while `o` was processed in
+the order in which `parent` took their messages (alignTo).
+-/
+def aligned (o : Origin) (st : Service) (parent alternative : Execution) : Explore.Outcome :=
+  match parent.span? o st.service, alternative.span? o st.service with
+  | some ps, some alt =>
+    alternative.outcomeWith st (alignTo (inIds (parent.world.state st.service) ps) alt
+      (alternative.world.state st.service))
+  | _, _ => alternative.outcome st
+
 /-- The state of a search: what it did, the taken-step sequences it reached, the first step it swapped, and its queue. -/
 structure Searching where
   search : Search := {}
@@ -205,12 +216,7 @@ def searchPair (compare : Compare m) (executeWith : List StepName → m Executio
   let alternative ← executeWith order
   if alternative.refused st.service then
     return { r with search := { r.search with tried := r.search.tried ++ [{ order, verdict := .refused }] } }
-  let aligned := match parent.span? o st.service, alternative.span? o st.service with
-    | some ps, some alt =>
-      alternative.outcomeWith st (alignTo (inIds (parent.world.state st.service) ps) alt
-        (alternative.world.state st.service))
-    | _, _ => alternative.outcome st
-  let found ← stepOrder compare st.service a b parentOrder order parentOutcome aligned
+  let found ← stepOrder compare st.service a b parentOrder order parentOutcome (aligned o st parent alternative)
   let fresh := found.filter fun v => !r.search.found.any (findingKey · == findingKey v)
   let r := { r with search := { tried := r.search.tried ++ [{ order, verdict := .decided found }],
                                 found := r.search.found ++ fresh.toList } }

@@ -53,9 +53,9 @@ test("Each file outside Thm opens only Tazuna and the namespaces under its folde
   assert.deepEqual(outside, []);
 });
 
-test("Each Validation file except Check.lean and Illegal.lean has a file of the same name in Thm/Validation, and the other way around", () => {
+test("Each Validation file except Illegal.lean has a file of the same name in Thm/Validation, and the other way around", () => {
   assert.deepEqual(
-    leanModulePaths("Validation").filter((path) => path !== "Check" && path !== "Illegal"),
+    leanModulePaths("Validation").filter((path) => path !== "Illegal"),
     leanModulePaths("Thm/Validation"),
   );
 });

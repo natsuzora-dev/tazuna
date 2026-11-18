@@ -186,6 +186,9 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 - A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it (`withoutRepeatedAnswers` in `lean/Tazuna/Verify/Compare.lean`).
 - Spec functions read the keys of an entity in one order, whatever order the records were written in.
   Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
+- The step-order search reaches every order of dependent steps that changes a processing's outcome (dynamic partial-order reduction): that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
+- `ChoiceDependent.equalMessages` compares the run with two equal messages' ids swapped instead of executing the other arrival order (`equalArrivals` in `lean/Tazuna/Explore/StepOrders.lean`).
+- `check`'s `Malformed`, `NonCanonical`, and `Restricted` rules exist only in the TypeScript runtime. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it.
 
 ## Proven properties
 
@@ -275,4 +278,6 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 
 - A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
 - A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states (`compare_matches`, `contentMatch_renamed`).
+- When `check` reports no `Illegal` violation, the spec keeps every structural rule that `Checked` lists, one per `Illegal` kind (`check_eq_nil_iff`).
+- When the step-order search of a processing reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from (`stepOrderSearch_same`). The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and records equal up to a renaming of created keys, or outputs that do not compare even with themselves and records equal up to renaming (`difference_same`, `compareTraces_ok`, `sameRecords_renamed`).
 - `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace (`no_violation_iff`).
