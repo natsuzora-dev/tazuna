@@ -32,13 +32,15 @@ def causedBy (s : State) (earlier later : Nat) : Bool :=
     | none => false
 termination_by later
 
-def channelOf (l : Line) : Option Channel :=
-  match l.body with
-  | .command .. | .query .. | .subscribe .. => some (.request l.id)
+/-- The channel of the line with id `id` and body `body`. -/
+def _root_.Tazuna.Service.LineBody.channel (id : LineId) : LineBody → Option Channel
+  | .command .. | .query .. | .subscribe .. => some (.request id)
   | .unsubscribe to => some (.request to)
   | .answer to _ => some (.answers to)
   | .event _ _ resultOf => some (.events resultOf)
   | .time | .restart | .operation .. => none
+
+def channelOf (l : Line) : Option Channel := l.body.channel l.id
 
 /--
 Whether line `a` must precede line `b` among the lines of one window: they travel on one channel, and `b` is caused by

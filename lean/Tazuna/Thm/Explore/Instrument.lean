@@ -422,10 +422,6 @@ theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterM
   agree [refreshScreens_agrees h, checkHolds_agrees h, checkInvariants_agrees h, rearm_agrees h, publish_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem checkResults_agrees (s : State) : Agrees (checkResults fsI s) (checkResults fs s) := by
-  unfold checkResults; agree [h.resultEnsures]
-
-omit [MonadNote (StateT C Id)] in
 theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st fsI s c) (startInstance st fs s c) := by
   unfold startInstance; agree [initialContextOf_agrees h]
 
@@ -513,13 +509,13 @@ theorem receive_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Value)
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem decodedOutput_agrees (a : Activity) (answer : Answer) :
-    Agrees (decodedOutput st fsI a answer) (decodedOutput st fs a answer) := by
+theorem decodedOutput_agrees (target : Spec.Ref) (answer : Answer) :
+    Agrees (decodedOutput st fsI target answer) (decodedOutput st fs target answer) := by
   unfold decodedOutput; agree [h.parse]
 
 omit [MonadNote (StateT C Id)] in
-theorem decodedAnswer_agrees (p : Pending) (answer : Answer) :
-    Agrees (decodedAnswer st fsI p answer) (decodedAnswer st fs p answer) := by
+theorem decodedAnswer_agrees (id : LineId) (target : Spec.Ref) (answer : Answer) :
+    Agrees (decodedAnswer st fsI id target answer) (decodedAnswer st fs id target answer) := by
   unfold decodedAnswer
   dsimp only
   agree [decodedOutput_agrees h]
@@ -527,9 +523,9 @@ theorem decodedAnswer_agrees (p : Pending) (answer : Answer) :
 omit [MonadNote (StateT C Id)] in
 theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
     Agrees (checkAnswer st fsI p answer) (checkAnswer st fs p answer) := by
-  unfold checkAnswer assumedAnswer specAnswer
+  unfold checkAnswer
   dsimp only
-  agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), decodedAnswer_agrees h, h.resultEnsures]
+  agree [decodedAnswer_agrees h]
 
 theorem answerRequest_agrees (s : State) (id : Option LineId) (p : Pending) (answer : Answer) :
     Agrees (answerRequest st fsI s id p answer) (answerRequest st fs s id p answer) := by
@@ -539,6 +535,21 @@ theorem answerRequest_agrees (s : State) (id : Option LineId) (p : Pending) (ans
 theorem answerIn_agrees (s : State) (id to : LineId) (answer : Answer) :
     Agrees (answerIn st fsI s id to answer) (answerIn st fs s id to answer) := by
   unfold answerIn; agree [message_agrees h, answerRequest_agrees h]
+
+omit [MonadNote (StateT C Id)] in
+theorem decodedEvents_agrees (x : Exchange) : Agrees (decodedEvents fsI x) (decodedEvents fs x) := by
+  unfold decodedEvents; agree [h.parse]
+
+omit [MonadNote (StateT C Id)] in
+theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List Emit) (s : State) (a : Answer) :
+    Agrees (checkAssumedAnswer st fsI x input events s a) (checkAssumedAnswer st fs x input events s a) := by
+  unfold checkAssumedAnswer
+  agree [decodedAnswer_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resultEnsures]
+
+omit [MonadNote (StateT C Id)] in
+theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by
+  unfold checkExchanges checkExchange
+  agree [h.parse, decodedEvents_agrees h, checkAssumedAnswer_agrees h]
 
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by

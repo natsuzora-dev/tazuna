@@ -177,12 +177,4 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                   refine ⟨input, decided, hp, hd, fun e he => ?_, out, hn, hl, hz, rfl⟩
                   simpa using List.find?_eq_none.mp hf e he
 
-theorem processCommand_answers (name : String) (raw : Value) (id : Option LineId) (n : Nat) :
-    (processCommand st fs s name raw id n).1.answers = s.answers := by
-  simp only [processCommand, id_bind]
-  split
-  · cases id <;> rfl
-  · exact (congrArg Fixed.answers (emitAll_fixed _ _)).trans (by cases id <;> exact congrArg Fixed.answers (reportAll_fixed _))
-  · exact congrArg Fixed.answers (reportAll_fixed ..)
-
 end Tazuna.Thm.Service.Command

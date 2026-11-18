@@ -63,7 +63,7 @@ theorem subscribeStep_grows (opened : List Pending) (owner : InstanceId) (t : St
   dsimp only [State.subscribeStep]
   split
   · exact Grows.refl _
-  · exact (grows_write (s := t) Dir.out none _).trans rfl (Grows.of_lines rfl)
+  · exact (grows_write (s := t) Dir.out none _ none _).trans rfl (Grows.of_lines rfl)
 
 theorem syncShows_grows (owner : InstanceId) (wanted : List Wanted) :
     Grows s (s.syncShows owner wanted) :=

@@ -205,9 +205,7 @@ def fireTo (time : Time) : Service → Functions m → State → m State :=
 
 /-- Whether an answer to the request `to` from `sender` is among the messages. -/
 def World.answered (w : World) (sender : String) (to : LineId) : Bool :=
-  w.messages.any fun n => n.sender == sender && n.channel == some to && match n.body with
-    | .answer .. => true
-    | _ => false
+  w.messages.any fun n => n.sender == sender && n.channel == some (.answers to)
 
 /-- The world after line `i` of the scenario of the own service `own`. -/
 def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (i : Nat) :
@@ -219,7 +217,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       w.resolving (w.fill fsOf i input) fun v => do
         let (w, id) := w.nextId peer target.name
         pure (w.stated i { sender := peer, receiver := target.service, id, body := bodyOf type target v,
-                           origin := .line i, channel := some (receivedId peer id), status := .inFlight })
+                           origin := .line i, status := .inFlight })
     | some .run =>
       w.resolving (w.fill fsOf i input) fun v => do
         let fits (msg : Message) : m Bool :=
@@ -242,7 +240,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       | some .external =>
         let (w, id) := w.nextId p "unsubscribe"
         pure (w.stated i { sender := p, receiver := sub.receiver, id, body := .unsubscribe sub.id, origin := .line i,
-                           channel := some (receivedId p sub.id), status := .inFlight })
+                           status := .inFlight })
       | some .run =>
         let fits (msg : Message) : m Bool := pure (msg.receiver == sub.receiver && match msg.body with
           | .unsubscribe to => to == sub.id
@@ -277,7 +275,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
           let .ok (a : Answer) := FromValue.fromValue v | return w.report (.malformedValue i v)
           let (w, id) := w.nextId peer "answer"
           pure (w.stated i { sender := peer, receiver := msg.sender, id, body := .answer to a, origin := .line i,
-                             channel := some to, status := .inFlight })
+                             status := .inFlight })
       | some .run =>
         match w.messages.toList.zipIdx.find? fun (n, j) =>
             n.status == .inFlight && n.sender == peer && n.receiver == msg.sender && !w.carried.any (·.2 == j) &&
@@ -311,8 +309,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         let receivers := w.services.filter fun (_, st) => st.receives.contains event
         if receivers.isEmpty then return w.report (.unreceivedEvent i event)
         pure (receivers.foldl (init := w) fun w (r, _) =>
-          w.stated i { sender := peer, receiver := r, id, body, origin := .line i, channel := resultId,
-                       status := .inFlight })
+          w.stated i { sender := peer, receiver := r, id, body, origin := .line i, status := .inFlight })
       | some .run =>
         let fits (msg : Message) : m Bool :=
           match msg.body with
@@ -363,7 +360,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         let to := receivedId msg.sender msg.id
         let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
                                  body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
-                                 channel := some to, status := .inFlight }
+                                 status := .inFlight }
         let w := w.setStatus k .lost
         pure { w with messages := w.messages.push reply }
       if w.stopped then return w
@@ -551,15 +548,12 @@ def execute (j : Spec.Structure) (fsOf : String → Functions m) (start : World)
   if !w.violations.isEmpty then return w
   w.execute fsOf sc
 
-/--
-`w` after its run ends, unless it stopped: each running service checks the ensures of the commands that assumed peers
-accepted.
--/
+/-- `w` after its run ends, unless it stopped: each running service checks the requests it sent (checkExchanges). -/
 def World.ended (w : World) (fsOf : String → Functions m) : m World := do
   if w.stopped then return w
   let states ← w.states.mapM fun (q, s) => do
     match w.services.lookup q with
-    | some _ => pure (q, ← checkResults (fsOf q) s)
+    | some st => pure (q, ← checkExchanges st (fsOf q) s)
     | none => pure (q, s)
   pure { w with states }
 

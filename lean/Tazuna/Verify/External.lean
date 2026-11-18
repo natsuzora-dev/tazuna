@@ -10,10 +10,12 @@ namespace Tazuna.Verify
 open Tazuna.Data
 open Tazuna.Spec
 
+/-- A request of the trace: whether an answer accepted it, and the lines of the events naming it as their resultOf. -/
 structure Request where
   definition : Definition
   accepted : Bool
   answered : Bool
+  results : List (Nat × Ref) := []
 
 def resultOfFinding (line : Nat) (event : Ref) (requestId : String) (target : Ref) : ResultOfMismatch → Finding
   | .resultOfNonCommand => .uncomparable (.resultOfNonCommand line event requestId target)
@@ -42,27 +44,33 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
       | .accepted _, _ => (some (.mismatch (.answerResult line to r.definition.ref "accepted")), answered)
       | .fulfilled _, _ => (some (.mismatch (.answerResult line to r.definition.ref "fulfilled")), answered)
   | .event .out _ name _ resultOf =>
-    let found := match s.named service (some name) ["event"] with
-      | none => some (.uncomparable (.unknownEvent line (Subject.of l)))
-      | some event =>
-        match resultOf with
-        | none =>
-          if (s.contractsListing event.ref).contains service then none
-          else some (.mismatch (.unlistedEvent line event.ref))
-        | some id =>
-          match requests.lookup id with
-          | none => some (.uncomparable (.resultOfUnknownRequest line event.ref id))
-          | some none => none
-          | some (some r) =>
-            (s.resultOfMismatch r.definition.ref r.accepted event.ref).map
-              (resultOfFinding line event.ref id r.definition.ref)
-    (found, requests)
+    match s.named service (some name) ["event"], resultOf with
+    | none, _ => (some (.uncomparable (.unknownEvent line (Subject.of l))), requests)
+    | some event, none =>
+      (if (s.contractsListing event.ref).contains service then none
+       else some (.mismatch (.unlistedEvent line event.ref)), requests)
+    | some event, some id =>
+      match requests.lookup id with
+      | none => (some (.uncomparable (.resultOfUnknownRequest line event.ref id)), requests)
+      | some none => (none, requests)
+      | some (some r) => (none, setAt requests id (some { r with results := r.results ++ [(line, event.ref)] }))
   | _ => (none, requests)
 
-/-- The violations of the lines. `line` is the number of the first of `lines`. -/
+/--
+The violations of the result events of the requests, found once the trace ends, since a result event may come before
+or after its request's answer. A request that no answer reached may have results.
+-/
+def checkResults (s : Structure) (requests : List (String × Option Request)) : List Finding :=
+  requests.flatMap fun (id, r) => match r with
+    | none => []
+    | some r => r.results.filterMap fun (line, event) =>
+      (s.resultOfMismatch r.definition.ref (r.accepted || !r.answered) event).map
+        (resultOfFinding line event id r.definition.ref)
+
+/-- The violations of the lines, then of their result events. `line` is the number of the first of `lines`. -/
 def checkLines (s : Structure) (service : String) :
     List (Option TraceLine) → Nat → List (String × Option Request) → List Finding
-  | [], _, _ => []
+  | [], _, requests => checkResults s requests
   | none :: ls, line, requests => checkLines s service ls (line + 1) requests
   | some l :: ls, line, requests =>
     let (found, requests) := checkLine s service requests line l

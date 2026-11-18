@@ -36,10 +36,9 @@ inductive Status where
 deriving DecidableEq, Repr, Inhabited
 
 /--
-A message: the line `body` that `sender` wrote with id `id` while `origin` was processed. `channel` is the request whose
-channel carries it, by its receiver's id: a request's own, an answer's or an end's request, an event's resultOf, or none
-for an event without resultOf. Messages between the same sender and receiver on the same channel arrive in sending
-order (FIFO), as a connection delivers them.
+A message: the line `body` that `sender` wrote with id `id` while `origin` was processed. Messages between the same
+sender and receiver on the same channel (LineBody.channel) arrive in sending order (FIFO), as a connection delivers
+them.
 -/
 structure Message where
   sender : String
@@ -47,9 +46,10 @@ structure Message where
   id : LineId
   body : LineBody
   origin : Origin
-  channel : Option LineId
   status : Status
 deriving Repr, Inhabited
+
+def Message.channel (m : Message) : Option Channel := m.body.channel m.id
 
 /-- The message as a report names it: its sender, its receiver, the sender's id of it, and what caused it. -/
 def Message.describe (m : Message) : Value :=
@@ -122,7 +122,7 @@ def World.role (w : World) (service : String) : Option Role := w.roles.lookup se
 /--
 Whether message `n` must arrive before message `m`, sent later: they travel on one channel, and, when both are events
 of a running sender, its trace orders their lines (Sim.sentBefore), so that events of independent steps may arrive in
-either order. An answer and a result event travel on one channel here, unlike in the snapshot.
+either order.
 -/
 def World.precedes (w : World) (n m : Message) : Bool :=
   n.sameChannel m &&
@@ -158,7 +158,7 @@ def targetOf (lines : Array Line) (id : LineId) : Option String :=
     | _, _ => none
 
 /-- The world with a message from `sender` to `receiver`, kept in flight, discarded, or reported as unlisted. -/
-def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) (channel : Option LineId) : World :=
+def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) : World :=
   let line := match o with
     | .line i => some i
     | .startup => none
@@ -166,7 +166,7 @@ def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) (c
   | none => w.report (.unlistedService line receiver)
   | some role =>
     let status := if role == .skip then .discarded else .inFlight
-    let msg : Message := { sender, receiver, id := l.id, body := l.body, origin := o, channel, status }
+    let msg : Message := { sender, receiver, id := l.id, body := l.body, origin := o, status }
     { w with messages := w.messages.push msg }
 
 /--
@@ -176,22 +176,21 @@ subscription, an answer to another service, and an event to each running service
 def World.route (w : World) (o : Origin) (service : String) (lines : List Line) : World :=
   lines.foldl (init := w) fun w l =>
     if l.dir != .out || w.stopped then w else
-    let own := receivedId service l.id
     match l.body with
     | .command r _ | .query r _ | .subscribe r _ =>
       let target := r.service
-      if target == service then w else w.post o service target l (some own)
+      if target == service then w else w.post o service target l
     | .unsubscribe to =>
       match targetOf (w.state service).lines to with
-      | some target => w.post o service target l (some (receivedId service to))
+      | some target => w.post o service target l
       | none => w
     | .answer to _ =>
       match to with
-      | .received requester _ => w.post o service requester l (some to)
+      | .received requester _ => w.post o service requester l
       | .own _ => w
-    | .event event _ resultOf =>
+    | .event event _ _ =>
       w.services.foldl (init := w) fun w (r, st) =>
-        if r != service && st.receives.contains event then w.post o service r l resultOf else w
+        if r != service && st.receives.contains event then w.post o service r l else w
     | _ => w
 
 /--

@@ -12,6 +12,17 @@
           "input": {
             "noteId": "notes/Note-1"
           }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "event",
+          "id": "tags/registered#1",
+          "name": "tags.registered",
+          "payload": {
+            "noteId": "notes/Note-1"
+          },
+          "resultOf": "tags.register#1"
         }
       ],
       "violations": [],
@@ -78,30 +89,37 @@
       "candidates": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.overtaking",
-    "definition": null,
-    "data": {
-      "scenarioLine": 2,
-      "message": {
-        "sender": "tags",
-        "receiver": "notes",
-        "id": "registered#1",
-        "origin": {
-          "type": "line",
-          "index": 0
+  "violations": [
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "tags",
+          "receiver": "notes",
+          "id": "answer#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
         }
-      },
-      "earlier": {
-        "sender": "tags",
-        "receiver": "notes",
-        "id": "answer#1",
-        "origin": {
-          "type": "line",
-          "index": 0
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "tags",
+          "receiver": "notes",
+          "id": "notes.attach#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
         }
       }
     }
-  }
+  ],
+  "halted": null
 }

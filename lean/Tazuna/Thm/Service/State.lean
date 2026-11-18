@@ -18,13 +18,12 @@ structure Fixed where
   records : Records
   now : Time
   started : Bool
-  answers : List Outgoing
 
 def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
-  ⟨s.commandAnswers, s.records, s.now, s.started, s.outgoing.filter (·.answer.isSome)⟩
+  ⟨s.commandAnswers, s.records, s.now, s.started⟩
 
-@[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy) :
-    (s.write d g b w).1.fixed = s.fixed := rfl
+@[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy)
+    (q : Option String) : (s.write d g b w q).1.fixed = s.fixed := rfl
 
 @[simp] theorem await_fixed (b : LineBody) (q : Requester) (a : Activity) (i : Value) :
     (s.await b q a i).fixed = s.fixed := by
@@ -82,9 +81,6 @@ theorem report_eq (f : Finding) :
 @[simp] theorem report_stack (f : Finding) : (s.report f).stack = s.stack := by
   simp [report_eq]
 
-@[simp] theorem report_answers (f : Finding) : (s.report f).answers = s.answers := by
-  simp [report_eq, State.answers]
-
 theorem report_halted (f : Finding) (h : f.halts = true) : (s.report f).halted = some f := by
   simp [State.report, h, State.halt]
 
@@ -121,9 +117,6 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 
 @[simp] theorem reportAll_now (fs : List Fault) : (s.reportAll fs).now = s.now :=
   reportAll_preserves State.now (fun _ _ => report_now ..) fs s
-
-@[simp] theorem reportAll_answers (fs : List Fault) : (s.reportAll fs).answers = s.answers :=
-  reportAll_preserves State.answers (fun _ _ => report_answers ..) fs s
 
 @[simp] theorem setMachine_commandAnswers (name : InstanceId) (f : Instance → Instance) :
     (s.setMachine name f).commandAnswers = s.commandAnswers := rfl
@@ -211,8 +204,8 @@ theorem Grows.trans {a b c : State} (h₁ : Grows a b) (hn : b.now = a.now) (h�
 theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now) : Grows a c :=
   (Grows.of_lines hl).trans hn h
 
-theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy := none) :
-    Grows s (s.write d g b w).1 :=
+theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) (w : Option EmittedBy := none)
+    (q : Option String := none) : Grows s (s.write d g b w q).1 :=
   ⟨#[_], Array.push_eq_append, by simp⟩
 
 theorem foldl_grows {α : Type} (f : State → α → State) (h : ∀ t x, Grows t (f t x)) (hn : ∀ t x, (f t x).now = t.now)
@@ -296,9 +289,6 @@ def sent (s : State) (name : Spec.Ref) (id : LineId) (input : Value) : State × 
   (s.write .in (some id) (.command name input)).1.newMessage.newStep none
 
 /-- The state after `receive` writes the input line. -/
-def delivered (s : State) (name : Spec.Ref) (id : LineId) (payload : Value) : State :=
-  (s.write .in (some id) (.event name payload none)).1
-
 def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l
 
 theorem AddsOnly.trans {P : Line → Prop} {a b c : State} (h₁ : AddsOnly P a b) (h₂ : AddsOnly P b c) :

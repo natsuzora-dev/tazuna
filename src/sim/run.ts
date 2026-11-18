@@ -7,7 +7,7 @@ import { byCodePoint, canonicalJson } from "../data/values.ts";
 import { ref, type Schema } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
-import { begin, call, checkResults, endSubscription, operate, send, subscribe } from "../service/input.ts";
+import { begin, call, checkExchanges, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { chartOf } from "../service/instance.ts";
 import { type LineBody, sameLineId } from "../service/message.ts";
 import { publish } from "../service/query.ts";
@@ -418,7 +418,7 @@ const notDelivered = (i: number, m: Message): never =>
 
 /** Lean's World.answered. */
 const answered = (w: World, sender: string, to: LineId): boolean =>
-  w.messages.some((n) => n.sender === sender && sameLineId(n.channel, to) && n.body.type === "answer");
+  w.messages.some((n) => n.sender === sender && n.body.type === "answer" && sameLineId(n.body.to, to));
 
 /** Lean's World.take. */
 function take(w: World, own: string, lines: readonly Line[], i: number, l: Line) {
@@ -437,7 +437,6 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           id,
           body: bodyOf(l.kind, l.target, v),
           origin,
-          channel: receivedId(peer, id),
           status: "inFlight",
         });
       }
@@ -474,7 +473,6 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
             id,
             body: { type: "unsubscribe", to: sub.id },
             origin,
-            channel: receivedId(peer, sub.id),
             status: "inFlight",
           });
         }
@@ -543,7 +541,6 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
             id,
             body: { type: "answer", to, answer: a },
             origin,
-            channel: to,
             status: "inFlight",
           });
         }
@@ -604,7 +601,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
               data: { scenarioLine: i, event: l.event },
             });
           for (const [r] of receivers)
-            stated(w, i, { sender: l.peer, receiver: r, id, body, origin, channel: resultId, status: "inFlight" });
+            stated(w, i, { sender: l.peer, receiver: r, id, body, origin, status: "inFlight" });
           return;
         }
         if (role === "run") {
@@ -687,7 +684,6 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           id,
           body: { type: "answer", to, answer: unavailable },
           origin,
-          channel: to,
           status: "inFlight",
         });
       });
@@ -960,7 +956,7 @@ function ended(w: World): void {
   if (stopped(w)) return;
   for (const p of w.services.values())
     try {
-      checkResults(p.processing);
+      checkExchanges(p.processing);
     } catch (error) {
       if (!(error instanceof Halt)) throw error;
       p.halted = error.violation;

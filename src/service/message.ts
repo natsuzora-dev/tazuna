@@ -71,6 +71,8 @@ export type Line = LineBody & {
   readonly dir: "in" | "out";
   readonly id: LineId;
   readonly emitted?: EmittedBy;
+  /** Set on the `out` request lines: the definition of the service that sent the request. */
+  readonly sender?: string;
 };
 
 /** The key of a line id in a map, as Lean compares line ids. */

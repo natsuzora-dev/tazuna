@@ -600,24 +600,6 @@ macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, S
   simp only [processCommand, id_bind]
   split <;> keys_same
 
-@[simp] theorem addResult_service (id : LineId) (e : Emit) (s : State) : (s.addResult id e).service = s.service :=
-  rfl
-
-@[simp] theorem addResult_createdEntities (id : LineId) (e : Emit) (s : State) :
-    (s.addResult id e).createdEntities = s.createdEntities := rfl
-
-@[simp] theorem withResultOf_service (name : Spec.Ref) (k : Option LineId) (s : State) :
-    (withResultOf st s name k).1.service = s.service := by
-  cases k with
-  | none => rfl
-  | some h => simp only [withResultOf, resultRequest]; keys_same
-
-@[simp] theorem withResultOf_createdEntities (name : Spec.Ref) (k : Option LineId) (s : State) :
-    (withResultOf st s name k).1.createdEntities = s.createdEntities := by
-  cases k with
-  | none => rfl
-  | some h => simp only [withResultOf, resultRequest]; keys_same
-
 theorem keeps_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
     KeepsKeys s (send st fs s name id raw) := by
   simp only [send, id_bind]

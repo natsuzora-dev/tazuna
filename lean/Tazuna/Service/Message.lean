@@ -59,6 +59,8 @@ structure Line where
   body : LineBody
   /-- Set on the `out` event lines that a command writes, and on no other line. -/
   emitted : Option EmittedBy := none
+  /-- Set on the `out` request lines: the definition of the service that sent the request (Requester.sender). -/
+  sender : Option String := none
 deriving DecidableEq, Repr, Inhabited
 
 structure Emit where

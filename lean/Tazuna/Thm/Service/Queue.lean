@@ -100,32 +100,6 @@ theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time
       id_pure, endMessage_id, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _
 
-theorem afterMessage_answers : (afterMessage st fs s).answers = s.answers :=
-  congrArg Fixed.answers afterMessage_fixed
-
-theorem fireDue_answers (to : Time) (fuel : Nat) (tie : Option Time) :
-    (fireDue st fs to fuel tie s).answers = s.answers := by
-  induction fuel generalizing s tie with
-  | zero => simp only [fireDue]; split <;> rfl
-  | succ fuel ih =>
-    rw [fireDue]
-    split
-    · rfl
-    · split
-      · rfl
-      · dsimp only
-        split
-        · exact congrArg Fixed.answers (report_fixed ..)
-        · rename_i hc
-          obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          try simp only [id_bind, endMessage_id]
-          rw [ih, afterMessage_answers, drain_answers, (keeps_settled _ _ (keeps_fire _ _)).answers]
-          rfl
-
-theorem message_answers (q : Queue) : (message st fs s q).answers = s.answers := by
-  simp only [message, finish, id_bind, endMessage_id]
-  rw [fireDue_answers, afterMessage_answers, drain_answers]
-
 theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
     ∃ new, (afterMessage st fs (drain st fs n s q)).lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now :=
   (drain_grows n q).trans (drain_keeps_now n q) afterMessage_grows

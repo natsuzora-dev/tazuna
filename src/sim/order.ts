@@ -1,6 +1,6 @@
 import type { LineId } from "../data/trace.generated.ts";
 import { sameJson } from "../data/values.ts";
-import type { Line } from "../service/message.ts";
+import type { Line, LineBody } from "../service/message.ts";
 import type { StepInfo } from "../service/state.ts";
 
 /** Lean's Channel: the channel that an `out` line travels on, seen from its sender. */
@@ -16,13 +16,13 @@ function causedBy(steps: readonly StepInfo[], earlier: number, later: number): b
   return cause !== undefined && cause < later && causedBy(steps, earlier, cause);
 }
 
-/** Lean's channelOf: the channel that an `out` line travels on, seen from its sender. */
-function channelOf(l: Line): Channel | undefined {
+/** Lean's LineBody.channel: the channel of the line with id `id` and body `l`, seen from its sender. */
+export function channelOf(id: LineId, l: LineBody): Channel | undefined {
   switch (l.type) {
     case "command":
     case "query":
     case "subscribe":
-      return { kind: "request", id: l.id };
+      return { kind: "request", id };
     case "unsubscribe":
       return { kind: "request", id: l.to };
     case "answer":
@@ -40,7 +40,7 @@ function channelOf(l: Line): Channel | undefined {
  */
 export function ordered(lines: readonly Line[], steps: readonly StepInfo[], a: number, b: number): boolean {
   const [la, lb] = [lines[a] as Line, lines[b] as Line];
-  const [channel, other] = [channelOf(la), channelOf(lb)];
+  const [channel, other] = [channelOf(la.id, la), channelOf(lb.id, lb)];
   if (channel === undefined || other === undefined || !sameJson(channel, other)) return false;
   const [ea, eb] = [la.emitted, lb.emitted];
   if (ea === undefined || eb === undefined) return true;

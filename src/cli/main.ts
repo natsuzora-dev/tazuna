@@ -56,7 +56,7 @@ const commands: Readonly<Record<string, Command>> = {
   verify: {
     positionals: ["spec", "traces"],
     description:
-      "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of another spec service <peer> that runs as a peer in the scenario, which verify compares with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace; any other entry of it is a violation. verify checks a trace of an external service against the service's contract. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
+      "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of another spec service <peer> that runs as a peer in the scenario, which verify compares with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace; any other entry of it is a violation. verify checks a trace of an external service against the service's contract once the trace ends, so a result event may come before or after its request's answer. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
     options: {},
   },
   view: {

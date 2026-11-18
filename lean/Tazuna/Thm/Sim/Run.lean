@@ -218,8 +218,8 @@ theorem keeps_setStatus {w w' : World} (h : KeepsInFlight e w w') (k : Nat) (sta
       · exact absurd hs (hk m hw)
     · exact hj'⟩
 
-theorem keeps_post {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
-    (channel : Option LineId) : KeepsInFlight e w (w'.post o sender receiver l channel) := by
+theorem keeps_post {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (sender receiver : String) (l : Line) :
+    KeepsInFlight e w (w'.post o sender receiver l) := by
   unfold World.post
   dsimp only
   split
@@ -233,9 +233,9 @@ theorem keeps_route {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Orig
   dsimp only
   (repeat' split) <;> first
     | exact hv
-    | exact keeps_post hv _ _ _ _ _
+    | exact keeps_post hv _ _ _ _
     | (refine foldl_keeps (KeepsInFlight e w) _ (fun u x hu => ?_) _ _ hv
-       split <;> first | exact hu | exact keeps_post hu _ _ _ _ _)
+       split <;> first | exact hu | exact keeps_post hu _ _ _ _)
 
 theorem keeps_checkComputed {w w' : World} (h : KeepsInFlight e w w') (service : String) (sent : List Line)
     (records : Records) : KeepsInFlight e w (w'.checkComputed service sent records) := by
@@ -603,28 +603,11 @@ theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s :
     answerIn st fs s id to a = message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} := by
   simp [answerIn, hd]
 
-/--
-An answer to a request of the service is kept for a later result event, also when the request waits no more, as after
-a restart.
--/
-theorem find?_answered (l : List Outgoing) (to : LineId) (a : Answer) (o : Outgoing)
-    (ho : l.find? (·.id == to) = some o) :
-    ((l.map fun (x : Outgoing) => if x.id == to then { x with answer := some a } else x).filter
-      (·.answer.isSome)).find? (·.id == to) = some { o with answer := some a } := by
-  induction l with
-  | nil => simp at ho
-  | cons x xs ih =>
-    by_cases h : x.id = to
-    · simp_all
-    · simp_all
-
-theorem late_answer_taken (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer) (o : Outgoing)
-    (hd : id ∉ s.deliveries) (ho : s.outgoing.find? (·.id == to) = some o) (hp : s.pending.find? (·.id == to) = none) :
-    (answerIn st fs s id to a).answerTo? to = some (o.activity.ref, a) := by
-  simp only [answerIn, List.contains_iff_mem, hd, ↓reduceIte, hp]
-  rw [State.answerTo?, Tazuna.Thm.Service.Queue.message_answers]
-  simp only [State.answers, State.newMessage, State.write]
-  rw [find?_answered _ _ _ _ ho]
-  rfl
+/-- An answer to a request that waits no more, as after a restart, is written and has no other effect. -/
+theorem late_answer_written (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer)
+    (hd : id ∉ s.deliveries) (hp : s.pending.find? (·.id == to) = none) :
+    answerIn st fs s id to a =
+      message st fs ({ s with deliveries := s.deliveries ++ [id] }.write .in (some id) (.answer to a)).1.newMessage {} := by
+  simp [answerIn, hd, hp]
 
 end Tazuna.Thm.Sim.Run

@@ -119,30 +119,12 @@ structure Subscription where
   last : Option Value := none
 deriving DecidableEq, Repr, Inhabited
 
-/-- An assumed peer's acceptance of a command, and the result events received so far. -/
-structure Accepted where
-  input : Value
-  output : Option Value
-  events : List Emit := []
-deriving DecidableEq, Repr, Inhabited
-
-/-- A request that the service sent with a request line. `answer` is the last answer that arrived. -/
-structure Outgoing where
-  id : LineId
-  activity : Activity
-  answer : Option Answer := none
-  /-- Set for an assumed peer's acceptance of a command, whose ensures the end of the run checks. -/
-  accepted : Option Accepted := none
-deriving DecidableEq, Repr, Inhabited
-
 /-- The part of the state that the service persists; a restart keeps it, as in the Raft TLA+ spec's Restart. -/
 structure Durable where
   records : Records := []
   commandAnswers : CommandAnswers := []
   /-- The ids of the events and answers that arrived; one that arrives again is not processed again. -/
   deliveries : List LineId := []
-  /-- The requests sent, in sending order, so that a result event finds its request also after a restart. -/
-  outgoing : List Outgoing := []
   /-- The entities that createKey was called for, in call order; State.created derives the values from them. -/
   createdEntities : List String := []
   /-- The service whose state this is, which qualifies its createKey values (Keys) and names its line ids. -/
@@ -184,28 +166,20 @@ structure State extends Durable, Process where
   halted : Option Finding := none
 deriving Repr, Inhabited
 
-/-- The outgoing requests that an answer arrived to. -/
-def State.answers (s : State) : List Outgoing := s.outgoing.filter (·.answer.isSome)
-
-/-- The target of the request `id` and the last answer to it, when an answer arrived. -/
-def State.answerTo? (s : State) (id : LineId) : Option (Spec.Ref × Answer) :=
-  (s.answers.find? (·.id == id)).bind fun o => o.answer.map (o.activity.ref, ·)
-
 def namedCount (service : String) (lines : Array Line) (name : String) : Nat :=
   lines.countP (·.body.idName service == name)
 
 def State.lineId (s : State) (givenId : Option LineId) (name : String) : LineId :=
   givenId.getD (.own s!"{name}#{namedCount s.service s.lines name + 1}")
 
-def State.write (s : State) (dir : Dir) (givenId : Option LineId) (body : LineBody) (emitted : Option EmittedBy := none) :
-    State × LineId :=
+def State.write (s : State) (dir : Dir) (givenId : Option LineId) (body : LineBody) (emitted : Option EmittedBy := none)
+    (sender : Option String := none) : State × LineId :=
   let id := s.lineId givenId (body.idName s.service)
-  ({ s with lines := s.lines.push { time := s.now, dir, id, body, emitted } }, id)
+  ({ s with lines := s.lines.push { time := s.now, dir, id, body, emitted, sender } }, id)
 
 def State.await (s : State) (body : LineBody) (requester : Requester) (activity : Activity) (input : Value) : State :=
-  let (s, id) := s.write .out none body
-  { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }],
-           outgoing := s.outgoing ++ [{ id, activity }] }
+  let (s, id) := s.write .out none body none (some requester.sender)
+  { s with turn := s.turn + 1, pending := s.pending ++ [{ id, activity, requester, input, turn := s.turn }] }
 
 /--
 The createKey values with their entity, in creation order: the `n`-th value of an entity is `<entity>-<n>`, qualified by

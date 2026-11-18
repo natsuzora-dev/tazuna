@@ -24,7 +24,7 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import { type Emit, type EmittedBy, type Halting, halts, idKey, type Line, type LineBody } from "./message.ts";
+import { type EmittedBy, type Halting, halts, idKey, type Line, type LineBody } from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";
 
@@ -211,26 +211,12 @@ export interface StepInfo {
   readonly tie: Tie | undefined;
 }
 
-/**
- * A request that the service sent with a request line. `answer` is the last answer that arrived. `accepted` is an
- * assumed peer's acceptance of a command, with decoded values and the result events so far, whose ensures the end of the
- * run checks.
- */
-export interface Outgoing {
-  readonly id: LineId;
-  readonly activity: Activity;
-  answer: Answer | undefined;
-  accepted: { readonly input: Fields; readonly output: unknown; readonly events: Emit[] } | undefined;
-}
-
 /** The part of the state that the service persists; a restart keeps it, as in the Raft TLA+ spec's Restart. */
 interface Durable {
   readonly records: Records;
   readonly commandAnswers: CommandAnswers;
   /** The ids (idKey) of the events and answers that arrived; one that arrives again is not processed again. */
   readonly deliveries: Set<string>;
-  /** The requests sent, by idKey of the request id, so that a result event finds its request also after a restart. */
-  readonly outgoing: Map<string, Outgoing>;
   /** Lean's State.createdEntities: the entities that createKey was called for, in call order. */
   readonly createdEntities: string[];
   /** The service whose state this is, which qualifies its createKey values and names its line ids. */
@@ -262,7 +248,7 @@ interface Process {
  *   report throws Halt, and the run stops there.
  * - `lineCounts` is TS only: it counts `lines` per id name.
  * - `machines` and `copies` are maps by id, in the order of Lean's lists.
- * - Records, command answers, deliveries and outgoing requests are maps; `subscriptions` is the class that verify also
+ * - Records, command answers and deliveries are maps; `subscriptions` is the class that verify also
  *   uses.
  */
 export interface State extends Durable, Process {
@@ -298,7 +284,6 @@ export function newState(st: Service): State {
     records: { keyed, singles: new Map() },
     commandAnswers: new Map(),
     deliveries: new Set(),
-    outgoing: new Map(),
     createdEntities: [],
     service: st.service,
     ...newProcess(),
@@ -315,7 +300,12 @@ export function newState(st: Service): State {
 }
 
 /** A line before `write` adds the time and, unless the line gives one, the id. */
-type UnwrittenLine = LineBody & { readonly dir: "in" | "out"; readonly id?: LineId; readonly emitted?: EmittedBy };
+type UnwrittenLine = LineBody & {
+  readonly dir: "in" | "out";
+  readonly id?: LineId;
+  readonly emitted?: EmittedBy;
+  readonly sender?: string;
+};
 
 /** Lean's LineBody.idName: the name that line ids count, as the trace of `service` writes it. */
 function idName(service: string, body: LineBody): string {
@@ -352,8 +342,7 @@ export function awaitAnswer(
   requester: Requester,
   activity: Activity,
 ): void {
-  const id = write(s, line);
-  s.outgoing.set(idKey(id), { id, activity, answer: undefined, accepted: undefined });
+  const id = write(s, { ...line, sender: sender(requester) });
   s.pending.push({ id, activity, requester, input: line.input as Json, stale: false, turn: s.turn });
   s.turn += 1;
 }
@@ -520,15 +509,10 @@ export function nthOpen(s: State, id: InstanceId): number | undefined {
  * Lean's State.inputFault: the fault of the sender of an input to `target` that the receiver's input schema does not
  * take. Only TS has `error`, the schema's issues.
  */
-export function inputFault(
-  r: Run,
-  target: DefinitionRef,
-  requester: Requester,
-  error: ViolationError | undefined,
-): Finding {
+export function inputFault(r: Run, target: DefinitionRef, sender: string, error: ViolationError | undefined): Finding {
   const fault: Fault = {
     kind: "Fault.inputSchema",
-    definition: ref(r.st, sender(requester)),
+    definition: ref(r.st, sender),
     data: { target },
   };
   return error === undefined ? fault : withExtra(fault, { error });
@@ -547,7 +531,12 @@ export function rejectedInput(
 ): Finding | undefined {
   if (answer.result !== "rejected" || answer.rejection.kind !== "invalid-input") return undefined;
   const parsed = r.functions.parse({ kind: "input", definition: target }, input);
-  return inputFault(r, target, requester, parsed instanceof Failed || !("error" in parsed) ? undefined : parsed.error);
+  return inputFault(
+    r,
+    target,
+    sender(requester),
+    parsed instanceof Failed || !("error" in parsed) ? undefined : parsed.error,
+  );
 }
 
 /** Returns the definition that sent the request: the chart of the sending instance, or the automation. */

@@ -409,7 +409,7 @@ interface PeerActor<C, W extends "run" | "external", S extends string> {
   ): PeerAnswerLine<T>;
   /**
    * The peer emits `event`. `resultOf` names the command request whose result the event is, and the event travels on
-   * that request's channel; null names none.
+   * its own channel, so it may arrive before or after the request's answer; null names none.
    */
   emit<Ev extends Extract<Members<C>, AnyEvent>>(
     event: Ev,

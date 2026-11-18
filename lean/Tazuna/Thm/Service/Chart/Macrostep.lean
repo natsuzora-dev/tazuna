@@ -424,24 +424,4 @@ theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : S
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 
-theorem drain_answers (n : Nat) (q : Queue) : (drain st fs n s q).answers = s.answers := by
-  induction n generalizing s q with
-  | zero =>
-    simp only [drain, id_bind]
-    repeat' split
-    all_goals first | rfl | exact congrArg Fixed.answers (refreshScreens_fixed (fs := fs))
-  | succ n ih =>
-    have hm : ∀ {t : State}, t.fixed = s.fixed → t.answers = s.answers := fun e => congrArg Fixed.answers e
-    simp only [drain, id_bind]
-    repeat' split
-    all_goals first
-      | rfl
-      | exact hm refreshScreens_fixed
-      | exact hm ((report_fixed _).trans rfl)
-      | (rw [ih]; first
-          | exact hm (runWork_fixed _ _ _)
-          | exact hm (keeps_sendEntered _)
-          | exact hm (settleScreens_fixed _ _)
-          | (rw [processCommand_answers]; rfl))
-
 end Tazuna.Thm.Service.Chart.Macrostep

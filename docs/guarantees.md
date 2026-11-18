@@ -17,13 +17,13 @@ A message to or from a running service stays *in flight* until a line of `w.net`
 The simulation is deterministic: the scenario writes every choice that no service's code makes, such as which message arrives next and when the time advances.
 
 Messages travel on *channels*.
-A request, its answers, its end, and the events that name it as their `resultOf` share the request's channel.
+A request and its end share the request's channel, and its answers travel back on a channel of their own.
+The events that name one request as their `resultOf` travel on a channel of their own, so a result event may arrive before or after the request's answer, as a Stripe webhook may arrive before the API response.
 An event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
 Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused, or when a clock line sent it after the earlier.
 A deadline counts as caused by the step that entered its state.
 Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
-A snapshot keeps no order between a request's answers and its result events, although the simulation delivers them on one channel.
 
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 
@@ -157,8 +157,9 @@ tazuna detects a break of each assumption only partly or not at all.
   An adapter that can only wait, such as one that drives a browser, bounds the wait and rejects with `Unsettled`.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
-  An external command's `ensures` is checked once, at the end of the scenario or trace, with all its result events.
-  An external query's `ensures` is checked when its answer arrives.
+  Every exchange with an external service is recorded and checked once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
+  `test` checks the input that the service sent against the external target's input schema, also when no answer came, each answer against the target's contract, also one that came after a restart, a command's `ensures` with all its result events, and each result event against its request's answer, which may come before or after it.
+  A scenario that halts before its end gets none of these checks.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
   Replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
   A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so `verify` assumes that the implementation behaves the same with either set of values.
@@ -202,7 +203,7 @@ A map state has one *copy* of its child states for each key of its items.
 - A halting `InvalidScenario` violation stops the simulation, and once the simulation stops, the steps of the later lines take no effect (`halting_report_stops`, `lines_after_stop_ignored`).
 - No two createKey calls of one service return the same key. Each line keeps every created key (`execute_keepsKeys`, `created_kept`), the `n`-th key of an entity is `<owner>/<Entity>-<n>` (`created_form`, `created_distinct`), and no key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity, provided the service's state names the service as the owner of its keys, which `World.start` sets but no theorem proves (`unwritten_not_created`, `execute_unwritten_not_created`).
 - The order in which Given writes the records does not matter: a scenario that writes the same records, no two with one key, in another order simulates alike (`simulate_records_perm`).
-- The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no run of the pure definitions: a service whose spec functions are audited starts, processes each input, and checks the end of a run as it does without the audit (`instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkResults_agrees`).
+- The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no run of the pure definitions: a service whose spec functions are audited starts, processes each input, and checks the end of a run as it does without the audit (`instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees`).
 
 ### Data validity
 
@@ -260,13 +261,13 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - A reference that does not resolve is a `Fault` (`dangling_ref_reported_iff`).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
 - The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
-- When an event without `resultOf` or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
+- When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
 - Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each string or key as the binding pairs it, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `sameRecords_renamed`). For a binding that pairs no value of domain "", this is a renaming in the sense of the theorems that follow (`matchValue_strRenamed`). The renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain. No theorem shows that the bindings that `test` and `verify` end with pair no value of domain "" or keep keys in their domains.
 
 ### Restart
 
-- A restart begins the service again from the part of its state that it persists: its records, its command answers, the events and answers that arrived, the requests it sent, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
-- A result event finds the answer to its request also when the answer arrived after a restart (`late_answer_taken`).
+- A restart begins the service again from the part of its state that it persists: its records, its command answers, the events and answers that arrived, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
+- An answer that arrives when its request waits no more, as after a restart, is written and has no other effect (`late_answer_written`). The end of the run checks it with the other answers; no theorem states that check.
 - A restart reads nothing of the state that it discards (`restart_forgets`).
 
 ### Comparison

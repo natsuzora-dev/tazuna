@@ -1,7 +1,8 @@
 import type { Requester } from "../../data/step.generated.ts";
 import type { LineId } from "../../data/trace.generated.ts";
-import { canonicalJson } from "../../data/values.ts";
+import { canonicalJson, type Json } from "../../data/values.ts";
 import type { Processing } from "../../service/chart/queue.ts";
+import { exchanges } from "../../service/input.ts";
 import { copyId } from "../../service/instance.ts";
 import { sameLineId } from "../../service/message.ts";
 import { type Instance, keyCounts, machine } from "../../service/state.ts";
@@ -66,8 +67,8 @@ function requestsFingerprint(r: Processing): unknown {
  * stale. The counts of line ids and of created keys decide the ids and keys that later lines and records get. Also left
  * out are the records of what happened: the trace, violations, steps, messageCount, coverage and request pairs, and the
  * write counts of values, which only decide whether a cached evaluation is reused. The sets of violations already
- * reported are left out too: they only stop a run from reporting a violation twice. The outgoing requests are compared as a
- * set. The copies of a map state follow their owner, in the order of their keys; a closed copy that no map state lists
+ * reported are left out too: they only stop a run from reporting a violation twice. The requests sent, with what arrived of each
+ * (exchanges), are compared as a set: the end of the run checks them. The copies of a map state follow their owner, in the order of their keys; a closed copy that no map state lists
  * is left out, since the run reads from it only what its id names (owner, map and key) and that it is closed. The
  * deadlines stay in entry order, which is the order of the due deadlines.
  */
@@ -102,16 +103,9 @@ export function fingerprint(r: Processing): string {
       .toSorted(byKey)
       .map(([id, { request, answer }]) => [id, request.name, JSON.stringify(request.input), answer]),
     deliveries: [...s.deliveries].toSorted(),
-    outgoing: [...s.outgoing]
-      .map(([id, { activity, answer, accepted }]) =>
-        canonicalJson([
-          id,
-          activity.target,
-          answer ?? null,
-          accepted === undefined
-            ? null
-            : [accepted.input, accepted.output ?? null, accepted.events.map((e) => [e.event, e.payload])],
-        ]),
+    exchanges: exchanges(s)
+      .map(({ id, target, sender, input, answers, events }) =>
+        canonicalJson([id, target, sender, input, answers, events] as Json),
       )
       .toSorted(),
     started: s.started,

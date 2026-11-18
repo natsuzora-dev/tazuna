@@ -50,8 +50,8 @@ theorem keepsWorld_states {w w' w'' : World} (h : KeepsWorld w w') (hs : w''.sta
 theorem keepsWorld_report {w w' : World} (h : KeepsWorld w w') (r : InvalidScenario) : KeepsWorld w (w'.report r) :=
   keepsWorld_states h (by unfold World.report; split <;> rfl)
 
-theorem keepsWorld_post {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
-    (channel : Option LineId) : KeepsWorld w (w'.post o sender receiver l channel) := by
+theorem keepsWorld_post {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (sender receiver : String)
+    (l : Line) : KeepsWorld w (w'.post o sender receiver l) := by
   unfold World.post; dsimp only; split
   · exact keepsWorld_report h _
   · exact keepsWorld_states h rfl
@@ -63,9 +63,9 @@ theorem keepsWorld_route {w w' : World} (h : KeepsWorld w w') (o : Scenario.Orig
   dsimp only
   (repeat' split) <;> first
     | exact hv
-    | exact keepsWorld_post hv _ _ _ _ _
+    | exact keepsWorld_post hv _ _ _ _
     | (refine foldl_keeps (KeepsWorld w) _ (fun u x hu => ?_) _ _ hv
-       split <;> first | exact hu | exact keepsWorld_post hu _ _ _ _ _)
+       split <;> first | exact hu | exact keepsWorld_post hu _ _ _ _)
 
 theorem lookup_map_ne (l : List (String × State)) (k p : String) (t : State) (hp : (p == k) = false) :
     (l.map fun (q, x) => if q == k then (q, t) else (q, x)).lookup p = l.lookup p := by
@@ -180,7 +180,7 @@ theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : L
     keys_leaf
   · dsimp only
     split
-    · exact (by keys_leaf : KeepsKeys s { s with deliveries := _, outgoing := _ }).trans (keeps_answerRequest _ _ _ _)
+    · exact (by keys_leaf : KeepsKeys s { s with deliveries := _ }).trans (keeps_answerRequest _ _ _ _)
     · refine KeepsKeys.trans ?_ (keeps_message _ _)
       keys_leaf
 

@@ -5,7 +5,7 @@ import type { Origin } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
-import { byCodePoint, stringsOf } from "../data/values.ts";
+import { byCodePoint, sameJson, stringsOf } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
@@ -14,7 +14,7 @@ import { bodyContent, type Line, type LineBody, sameLineId } from "../service/me
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
-import { sentBefore } from "./order.ts";
+import { channelOf, sentBefore } from "./order.ts";
 import { type Arrival, arriveAll, arriveFrom, receivedId } from "./receive.ts";
 
 /** Lean's Role. */
@@ -32,7 +32,6 @@ export interface Message {
   readonly id: LineId;
   readonly body: LineBody;
   readonly origin: Origin;
-  readonly channel: LineId | undefined;
   status: Status;
 }
 
@@ -45,7 +44,7 @@ export const describe = (m: Message) => ({
 });
 
 export const sameChannel = (m: Message, n: Message): boolean =>
-  m.sender === n.sender && m.receiver === n.receiver && sameLineId(m.channel, n.channel);
+  m.sender === n.sender && m.receiver === n.receiver && sameJson(channelOf(m.id, m.body), channelOf(n.id, n.body));
 
 export const sameOrigin = (a: Origin, b: Origin): boolean =>
   a.type === b.type && (a.type === "startup" || (b.type === "line" && a.index === b.index));
@@ -152,7 +151,7 @@ function targetOf(lines: readonly Line[], id: LineId): string | undefined {
 }
 
 /** Lean's World.post. */
-function post(w: World, o: Origin, sender: string, receiver: string, l: Line, channel: LineId | undefined): void {
+function post(w: World, o: Origin, sender: string, receiver: string, l: Line): void {
   const role = w.roles.get(receiver);
   if (role === undefined) {
     reportTo(w, {
@@ -168,7 +167,6 @@ function post(w: World, o: Origin, sender: string, receiver: string, l: Line, ch
     id: l.id,
     body: l,
     origin: o,
-    channel,
     status: role === "skip" ? "discarded" : "inFlight",
   });
 }
@@ -177,28 +175,26 @@ function post(w: World, o: Origin, sender: string, receiver: string, l: Line, ch
 function route(w: World, o: Origin, service: string, lines: readonly Line[]): void {
   for (const l of lines) {
     if (l.dir !== "out" || stopped(w)) continue;
-    const own = receivedId(service, l.id);
     switch (l.type) {
       case "command":
       case "query":
       case "subscribe": {
         const target = l.target.service;
-        if (target !== service) post(w, o, service, target, l, own);
+        if (target !== service) post(w, o, service, target, l);
         break;
       }
       case "unsubscribe": {
         const target = targetOf(stateOf(w, service)?.lines ?? [], l.to);
-        if (target !== undefined) post(w, o, service, target, l, receivedId(service, l.to));
+        if (target !== undefined) post(w, o, service, target, l);
         break;
       }
       case "answer": {
-        if (l.to.kind === "received") post(w, o, service, l.to.sender, l, l.to);
+        if (l.to.kind === "received") post(w, o, service, l.to.sender, l);
         break;
       }
       case "event":
         for (const [r, p] of w.services)
-          if (r !== service && p.processing.st.receives.some((e) => sameRef(e, l.event)))
-            post(w, o, service, r, l, l.resultOf);
+          if (r !== service && p.processing.st.receives.some((e) => sameRef(e, l.event))) post(w, o, service, r, l);
         break;
       default:
         break;

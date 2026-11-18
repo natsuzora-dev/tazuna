@@ -2,7 +2,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer, LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
-import type { Json } from "../data/values.ts";
+import type { Fields, Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import {
   assumptionMismatch,
@@ -25,7 +25,7 @@ import { firstFalse } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
-import { type Emitted, idKey, sameLineId } from "./message.ts";
+import { type Emitted, idKey, type Line, sameLineId } from "./message.ts";
 import { resolveChecked } from "./query.ts";
 import { message } from "./queue.ts";
 import { accepting } from "./screen/operable.ts";
@@ -37,11 +37,11 @@ import {
   newMessage,
   newStep,
   nthOpen,
-  type Outgoing,
   type Pending,
   type Run,
   rejectedInput,
   report,
+  type State,
   write,
 } from "./state.ts";
 
@@ -107,60 +107,18 @@ export function endSubscription(r: Processing, id: LineId): void {
   message(r);
 }
 
-/** Lean's resultRequest: the request `handle` whose answer arrived, which an event names as its resultOf. */
-function resultRequest(r: Processing, event: DefinitionRef, handle: LineId): LineId | undefined {
-  const outgoing = r.state.outgoing.get(idKey(handle));
-  if (outgoing?.answer === undefined)
-    return report(r.state, {
-      kind: "InvalidInput.resultOfUnansweredRequest",
-      definition: null,
-      data: { event, requestId: lineIdText(handle) },
-    });
-  const target = outgoing.activity.target;
-  const mismatch = resultOfMismatch(r.st.structure, target, outgoing.answer.result === "accepted", event);
-  if (mismatch === undefined) return handle;
-  return report(r.state, {
-    kind: `InvalidInput.${mismatch}`,
-    definition: null,
-    data: { event, requestId: lineIdText(handle), target },
-  });
-}
-
-/** Lean's checkResults. */
-export function checkResults(r: Run): void {
-  for (const { id, activity, accepted } of r.state.outgoing.values()) {
-    if (accepted === undefined) continue;
-    const target = activity.target;
-    const failed = r.functions.resultEnsures(target, accepted.input, accepted.output, accepted.events);
-    if (failed instanceof Failed) halt(issueViolation(target, failed));
-    if (failed !== undefined)
-      report(
-        r.state,
-        assumptionViolation(
-          "InvalidInput",
-          { requestId: lineIdText(id), target },
-          { kind: "failedAssumedEnsures", condition: failed },
-        ),
-      );
-  }
-}
-
 /** Lean's redeliver. */
 function redeliver(r: Processing, event: DefinitionRef, payload: unknown, id: LineId, resultOf?: LineId): void {
   const s = r.state;
-  const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
-  write(s, {
-    dir: "in",
-    type: "event",
-    id,
-    event,
-    payload,
-    ...(request === undefined ? {} : { resultOf: request }),
-  });
+  write(s, { dir: "in", type: "event", id, event, payload, ...(resultOf === undefined ? {} : { resultOf }) });
   newMessage(s);
   message(r);
 }
 
+/**
+ * Lean's receive. The resultOf is only written: the end of the run checks it against the request (checkExchanges),
+ * since the event may arrive before or after the answer.
+ */
 export function receive(r: Processing, event: DefinitionRef, payload: unknown, id: LineId, resultOf?: LineId): void {
   const s = r.state;
   if (s.deliveries.has(idKey(id))) {
@@ -177,19 +135,9 @@ export function receive(r: Processing, event: DefinitionRef, payload: unknown, i
         { error: parsed.error },
       ),
     );
-  const decoded = parsed.value;
-  const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
-  write(s, {
-    dir: "in",
-    type: "event",
-    id,
-    event,
-    payload,
-    ...(request === undefined ? {} : { resultOf: request }),
-  });
+  write(s, { dir: "in", type: "event", id, event, payload, ...(resultOf === undefined ? {} : { resultOf }) });
   s.deliveries.add(idKey(id));
-  const e: Emitted = { event, payload: decoded, encoded: parsed.encoded as Json };
-  if (request !== undefined) s.outgoing.get(idKey(request))?.accepted?.events.push(e);
+  const e: Emitted = { event, payload: parsed.value, encoded: parsed.encoded as Json };
   newMessage(s);
   const step = newStep(s, undefined);
   r.queue.tasks.push(...reactions(r.st, s, [[e]], false, step));
@@ -210,19 +158,12 @@ function brokenAssumption(
     : assumptionViolation("InvalidInput", { requestId: lineIdText(requestId), target }, m);
 }
 
-interface AnswerCheck {
-  /** The assumption that the answer breaks, reported without halting. */
-  readonly assumption?: InvalidInput | undefined;
-  /** The answer to deliver, decoded, or why it is malformed or the sender's fault. */
-  readonly checked: { readonly decoded: Answer } | { readonly violation: Finding };
-  /** An assumed peer's acceptance of a command, whose ensures the end of the run checks with its result events. */
-  readonly accepted?: Outgoing["accepted"];
-}
+/** The answer to deliver, decoded, or why it is malformed or the sender's fault. */
+type Decoded = { readonly decoded: Answer } | { readonly violation: Finding };
 
 /** Lean's decodedAnswer: the answer decoded, or why its rejection kind or output does not match the target. */
-function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["checked"] {
-  const target = p.activity.target;
-  const request = { requestId: lineIdText(p.id), target };
+function decodedAnswer(r: Run, id: LineId, target: DefinitionRef, answer: Answer): Decoded {
+  const request = { requestId: lineIdText(id), target };
   const structure = r.st.structure;
   if (answer.result === "rejected") {
     const { rejection } = answer;
@@ -248,52 +189,25 @@ function decodedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck["
   return { decoded: { ...answer, output: parsed.value } as Answer };
 }
 
-/** Lean's specAnswer: the check of an answer from a spec service, which parsed the input itself. */
-function specAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
-  const fault = rejectedInput(r, p.activity.target, p.requester, p.input, answer);
-  return { checked: fault === undefined ? decodedAnswer(r, p, answer) : { violation: fault } };
-}
-
 /**
- * Lean's assumedAnswer: the check of an answer from an assumed peer. Its input schema stands for the peer's parse, and
- * the answer is also checked against its requires over the input alone and, for a query, its ensures that read no
- * records; a command's ensures waits for the end of the run, when all its result events arrived.
+ * Lean's checkAnswer: the answer to the request `p` decoded for its requester. A spec service parsed the input itself,
+ * so its rejection as invalid is the requester's fault. What an assumed peer's answer assumes is checked at the end of
+ * the run (checkExchanges).
  */
-function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
+function checkAnswer(r: Processing, p: Pending, answer: Answer): Decoded {
   const target = p.activity.target;
-  const parsed = r.functions.parse({ kind: "input", definition: target }, p.input);
-  if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
-  if ("error" in parsed) return { checked: { violation: inputFault(r, target, p.requester, parsed.error) } };
-  const input = parsed.value;
-  const failedRequires = firstFalse(
-    (condition) => r.functions.inputRequirement(target, condition, input),
-    requiresOf(r.st.structure, target),
-  );
-  if (failedRequires instanceof Failed) return halt(issueViolation(target, failedRequires));
-  const broken = (failedEnsures?: string) => brokenAssumption(p.id, target, answer, failedRequires, failedEnsures);
-  const checked = decodedAnswer(r, p, answer);
-  if ("violation" in checked || checked.decoded.result === "rejected" || failedRequires !== undefined)
-    return { assumption: broken(), checked };
-  const { output } = checked.decoded;
-  if (p.activity.keyword === "sends") return { assumption: broken(), checked, accepted: { input, output, events: [] } };
-  const failedEnsures = r.functions.resultEnsures(target, input, output, []);
-  if (failedEnsures instanceof Failed) return halt(issueViolation(target, failedEnsures));
-  return { assumption: broken(failedEnsures), checked };
+  const fault = isAssumed(r.st.structure, target) ? undefined : rejectedInput(r, target, p.requester, p.input, answer);
+  return fault === undefined ? decodedAnswer(r, p.id, target, answer) : { violation: fault };
 }
 
 /** Lean's answerRequest. */
 function answerRequest(r: Processing, givenId: LineId, p: Pending, answer: Answer): void {
   const s = r.state;
-  const { assumption, checked, accepted } = isAssumed(r.st.structure, p.activity.target)
-    ? assumedAnswer(r, p, answer)
-    : specAnswer(r, p, answer);
-  if (assumption !== undefined) report(s, assumption);
+  const checked = checkAnswer(r, p, answer);
   if ("violation" in checked) {
     report(s, checked.violation);
     return;
   }
-  const outgoing = s.outgoing.get(idKey(p.id));
-  if (outgoing !== undefined && accepted !== undefined) outgoing.accepted = accepted;
   write(s, { dir: "in", type: "answer", id: givenId, to: p.id, answer });
   newMessage(s);
   const step = newStep(s, undefined);
@@ -302,16 +216,14 @@ function answerRequest(r: Processing, givenId: LineId, p: Pending, answer: Answe
 }
 
 /**
- * Lean's answerIn: the answer `a` to the request `to` arrives with the id `id`. A later event's resultOf names the
- * request, so the answer is kept with it, also when the request no longer waits, as after a restart; such an answer is a
- * message with no effect. As in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
+ * Lean's answerIn: the answer `a` to the request `to` arrives with the id `id`. An answer to a request that no longer
+ * waits, as after a restart, is a message with no effect; its line keeps it for the end of the run (checkExchanges). As
+ * in the EIP Idempotent Receiver, an answer that arrives again is not processed again.
  */
 export function answerIn(r: Processing, id: LineId, to: LineId, a: Answer): void {
   const s = r.state;
   if (!s.deliveries.has(idKey(id))) {
     s.deliveries.add(idKey(id));
-    const outgoing = s.outgoing.get(idKey(to));
-    if (outgoing !== undefined) outgoing.answer = a;
     const p = s.pending.find((q) => sameLineId(q.id, to));
     if (p !== undefined) {
       answerRequest(r, id, p, a);
@@ -321,6 +233,125 @@ export function answerIn(r: Processing, id: LineId, to: LineId, a: Answer): void
   write(s, { dir: "in", type: "answer", id, to, answer: a });
   newMessage(s);
   message(r);
+}
+
+/**
+ * Lean's Exchange: a request that the service sent, as its lines record it: its input as sent, and the answers and the
+ * events naming it as their resultOf that arrived, in arrival order. A message that arrived again counts once.
+ */
+interface Exchange {
+  readonly id: LineId;
+  readonly target: DefinitionRef;
+  readonly sender: string;
+  readonly input: unknown;
+  readonly answers: readonly Answer[];
+  readonly events: readonly { readonly event: DefinitionRef; readonly payload: unknown }[];
+}
+
+/** Lean's State.exchanges: the requests that the service sent, in sending order, each with what arrived of it. */
+export function exchanges(s: State): Exchange[] {
+  const arrived = new Map<string, Line>();
+  for (const l of s.lines) if (l.dir === "in" && !arrived.has(idKey(l.id))) arrived.set(idKey(l.id), l);
+  const answers = new Map<string, Answer[]>();
+  const events = new Map<string, Exchange["events"][number][]>();
+  const add = <T>(map: Map<string, T[]>, to: LineId, x: T) => map.set(idKey(to), [...(map.get(idKey(to)) ?? []), x]);
+  for (const l of arrived.values()) {
+    if (l.type === "answer") add(answers, l.to, l.answer);
+    else if (l.type === "event" && l.resultOf !== undefined)
+      add(events, l.resultOf, { event: l.event, payload: l.payload });
+  }
+  return s.lines.flatMap((l) =>
+    l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe") && l.sender !== undefined
+      ? [
+          {
+            id: l.id,
+            target: l.target,
+            sender: l.sender,
+            input: l.input,
+            answers: answers.get(idKey(l.id)) ?? [],
+            events: events.get(idKey(l.id)) ?? [],
+          },
+        ]
+      : [],
+  );
+}
+
+/**
+ * Lean's resultOfFinding: the finding of a result event of `x` that cannot be the result of its request. A request
+ * that no answer reached may have results, as an API response may be lost after the webhook is sent.
+ */
+function resultOfFinding(r: Run, x: Exchange): InvalidInput | undefined {
+  const accepted = x.answers.every((a) => a.result === "accepted");
+  for (const { event } of x.events) {
+    const mismatch = resultOfMismatch(r.st.structure, x.target, accepted, event);
+    if (mismatch !== undefined)
+      return {
+        kind: `InvalidInput.${mismatch}`,
+        definition: null,
+        data: { event, requestId: lineIdText(x.id), target: x.target },
+      };
+  }
+  return undefined;
+}
+
+/**
+ * Lean's checkAssumedAnswer: the answer `a` of the request `x` to an assumed peer, whose input decoded as `input`: its
+ * rejection kind or output, the target's requires over the input alone, and its ensures, a command's with all the
+ * result events.
+ */
+function checkAssumedAnswer(r: Run, x: Exchange, input: Fields, events: readonly Emitted[], a: Answer): void {
+  const { target } = x;
+  const checked = decodedAnswer(r, x.id, target, a);
+  if ("violation" in checked) {
+    report(r.state, checked.violation);
+    return;
+  }
+  const { decoded } = checked;
+  const failedRequires = firstFalse(
+    (condition) => r.functions.inputRequirement(target, condition, input),
+    requiresOf(r.st.structure, target),
+  );
+  if (failedRequires instanceof Failed) halt(issueViolation(target, failedRequires));
+  const failedEnsures =
+    decoded.result === "rejected" || failedRequires !== undefined
+      ? undefined
+      : r.functions.resultEnsures(target, input, decoded.output, decoded.result === "accepted" ? events : []);
+  if (failedEnsures instanceof Failed) halt(issueViolation(target, failedEnsures));
+  const broken = brokenAssumption(x.id, target, a, failedRequires, failedEnsures);
+  if (broken !== undefined) report(r.state, broken);
+}
+
+/**
+ * Lean's checkExchange: the result events of the request `x` against its target, and, for an assumed peer, its input
+ * against the target's input schema, also when no answer arrived, and each answer, also one that arrived when the
+ * request no longer waited.
+ */
+function checkExchange(r: Run, x: Exchange): void {
+  const { target } = x;
+  if (!isAssumed(r.st.structure, target)) {
+    const found = resultOfFinding(r, x);
+    if (found !== undefined) report(r.state, found);
+    return;
+  }
+  const parsed = r.functions.parse({ kind: "input", definition: target }, x.input);
+  if (parsed instanceof Failed) halt(issueViolation(target, parsed));
+  if ("error" in parsed) halt(inputFault(r, target, x.sender, parsed.error));
+  const found = resultOfFinding(r, x);
+  if (found !== undefined) report(r.state, found);
+  const events = x.events.flatMap(({ event, payload }): Emitted[] => {
+    const e = r.functions.parse({ kind: "payload", event }, payload);
+    if (e instanceof Failed) return halt(issueViolation(target, e));
+    return "error" in e ? [] : [{ event, payload: e.value, encoded: e.encoded as Json }];
+  });
+  for (const a of x.answers) checkAssumedAnswer(r, x, parsed.value, events, a);
+}
+
+/**
+ * Lean's checkExchanges: at the end of the run, each request that the service sent is checked once against what its
+ * lines record of it, as a Pact provider verification replays the recorded interactions.
+ */
+export function checkExchanges(r: Run): void {
+  for (const x of exchanges(r.state)) checkExchange(r, x);
 }
 
 function startInstance(r: Processing, c: Chart): void {
