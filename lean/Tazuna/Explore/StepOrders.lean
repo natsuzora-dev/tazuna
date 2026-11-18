@@ -62,7 +62,7 @@ def Execution.refused (w : Execution) (service : String) : Bool :=
 /-- What the relation compares of the execution for the running service `st`, whose state is `s`. -/
 def Execution.outcomeWith (w : Execution) (st : Service) (s : State) : Explore.Outcome :=
   let lines := (Sim.trace s).map fun (line, after, created) => Sim.traceLineOf st.service line after created
-  Outcome.of st (s.halted.map (·.toViolation)) lines s.records (w.world.states.flatMap fun (q, x) =>
+  Outcome.of st (s.halted.map (·.toViolation)) lines s.records s.deadlines (w.world.states.flatMap fun (q, x) =>
     x.created.map fun (entity, key) => (key, s!"{q}/{entity}"))
 
 /-- What the relation compares of the execution for the running service `st`. -/

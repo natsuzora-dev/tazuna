@@ -24,6 +24,11 @@ export type Difference =
       readonly aspect: "records";
       readonly original: Json;
       readonly alternative: Json;
+    }
+  | {
+      readonly aspect: "deadlines";
+      readonly original: readonly Json[];
+      readonly alternative: readonly Json[];
     };
 
 /**

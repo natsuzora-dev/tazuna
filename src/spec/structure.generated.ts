@@ -85,14 +85,28 @@ export type Reference = {
   readonly entity: DefinitionRef | null;
 };
 
+/**
+ * A key position of an entity's records: the field path to a value whose schema is `ref(entity)` or `entity`'s key field
+ * (its own key field included), with `entity` null when it is no definition. Array elements and union options do not
+ * extend the path. Lines and records rename created keys at the same positions.
+ */
+export type KeyPosition = {
+  readonly path: readonly string[];
+  readonly entity: DefinitionRef | null;
+};
+
 export type Body =
-  /** An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. */
+  /**
+   * An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. `keys` are
+   * its key positions.
+   */
   | {
       readonly kind: "entity";
       readonly key: string | null;
       readonly fields: readonly string[];
       readonly unique: readonly string[];
       readonly references: readonly Reference[];
+      readonly keys: readonly KeyPosition[];
     }
   /** An event. `entity` is null when `change` is none. */
   | {

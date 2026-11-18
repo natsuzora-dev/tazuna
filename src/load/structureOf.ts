@@ -13,7 +13,6 @@ import {
 } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-
 import type {
   ActivityStructure,
   ChartStructure,
@@ -21,6 +20,7 @@ import type {
   StateStructure,
   TransitionStructure,
 } from "../spec/structure.ts";
+import { keyPositions } from "./schemas.ts";
 
 type RefOf = (value: unknown) => DefinitionRef | null;
 
@@ -79,6 +79,7 @@ export function structureOf(
           fields: Object.keys(d.fields),
           unique: d.single ? [] : [...d.unique],
           references: references(d.fields as Shape),
+          keys: keyPositions(d.fields as Shape).map(({ path, entity }) => ({ path: [...path], entity: ref(entity) })),
         };
       if (d.kind === "event")
         return {

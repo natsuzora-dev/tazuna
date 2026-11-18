@@ -63,7 +63,8 @@ function outcomeFor(m: Made, service: string, lines?: readonly Line[]): Outcome 
     p.processing.st,
     p.halted === undefined ? null : violationValue(p.halted),
     traceLines,
-    p.processing.state.records,
+    s.records,
+    s.deadlines,
     new Map(keys),
   );
 }

@@ -12,48 +12,63 @@ import type { ChoiceDependent, Difference } from "../data/choiceDependent.genera
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
-import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, type Json, plain } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
-import { ref, type Service } from "../service/basic.ts";
+import type { Service } from "../service/basic.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import type { Records } from "../service/records.ts";
+import type { Deadline } from "../service/state.ts";
 
 /**
- * Lean's Outcome: the violation that halted a run, the trace lines that verify reads, its records (recordsValue), and
- * the keys that its running services created, each with its domain.
+ * Lean's Outcome: the violation that halted a run, the trace lines that verify reads, its records (recordsValue), its
+ * pending deadlines (deadlineValue, in canonical order), and the keys that its running services created, each with its
+ * domain.
  */
 export interface Outcome {
   readonly halted: ViolationValue | null;
   readonly lines: readonly TraceLine[];
   readonly records: unknown;
+  readonly deadlines: readonly Json[];
   readonly created: ReadonlyMap<string, string>;
 }
 
-/** Lean's keyFields: entity `e`'s key field and ref() fields, each with the domain of the entity it names. */
-function keyFields(st: Service, e: string): ReadonlyMap<string, string> {
+/** Lean's deadlineValue. */
+const deadlineValue = (d: Deadline): Json => ({
+  machine: d.machine as unknown as Json,
+  state: d.state,
+  name: d.name,
+  time: d.time.toString(),
+});
+
+/** Lean's keyPaths: entity `e`'s key positions, each path as JSON text with the domain of the entity it names. */
+function keyPaths(st: Service, e: string): ReadonlyMap<string, string> {
   const found = st.structure.definitions.find((d) => d.kind === "entity" && d.service === st.service && d.name === e);
   if (found?.kind !== "entity") return new Map();
-  const domain = ({ service, name }: { service: string; name: string }) => `${service}/${name}`;
-  return new Map([
-    ...(found.key === null ? [] : [[found.key, domain(ref(st, e))] as const]),
-    ...found.references.flatMap((r) => (r.entity === null ? [] : [[r.field, domain(r.entity)] as const])),
-  ]);
+  return new Map(
+    found.keys.flatMap((k) =>
+      k.entity === null ? [] : [[JSON.stringify(k.path), `${k.entity.service}/${k.entity.name}`] as const],
+    ),
+  );
 }
 
-/** Lean's rowValue. */
-const rowValue = (fields: ReadonlyMap<string, string>, row: Fields): unknown =>
-  Object.fromEntries(
-    Object.entries(row).map(([k, x]) => {
-      const entity = fields.get(k);
-      return [k, entity !== undefined && typeof x === "string" ? new Ref(entity, x) : x];
-    }),
-  );
+/** Lean's keyed. */
+function keyed(keys: ReadonlyMap<string, string>, path: readonly string[], v: unknown): unknown {
+  if (typeof v === "string") {
+    const entity = keys.get(JSON.stringify(path));
+    return entity === undefined ? v : new Ref(entity, v);
+  }
+  if (Array.isArray(v)) return v.map((x) => keyed(keys, path, x));
+  if (v !== null && typeof v === "object")
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keyed(keys, [...path, k], x)]));
+  return v;
+}
 
 /** Lean's recordsValue. */
 function recordsValue(st: Service, records: Records): unknown {
   return Object.fromEntries(
     st.entities.flatMap((e) => {
-      const row = (r: Fields) => rowValue(keyFields(st, e), r);
+      const keys = keyPaths(st, e);
+      const row = (r: Fields) => keyed(keys, [], r);
       const single = records.singles.get(e);
       if (st.singles.includes(e)) return single === undefined ? [] : [[e, row(single.encoded)]];
       const rows = [...(records.keyed.get(e) ?? [])].toSorted(([a], [b]) => byCodePoint(a, b));
@@ -68,10 +83,12 @@ export function outcomeOf(
   halted: ViolationValue | null,
   lines: readonly TraceLine[],
   records: Records,
+  deadlines: readonly Deadline[],
   created: ReadonlyMap<string, string>,
 ): Outcome {
-  if (halted !== null) return { halted, lines: [], records: null, created: new Map() };
-  return { halted: null, lines, records: recordsValue(st, records), created };
+  if (halted !== null) return { halted, lines: [], records: null, deadlines: [], created: new Map() };
+  const sorted = deadlines.map(deadlineValue).toSorted((a, b) => byCodePoint(canonicalJson(a), canonicalJson(b)));
+  return { halted: null, lines, records: recordsValue(st, records), deadlines: sorted, created };
 }
 
 /**
@@ -121,7 +138,10 @@ function difference(compare: Compare, original: Outcome, alternative: Outcome): 
       : { aspect: "halt", original: original.halted, alternative: alternative.halted };
   const records = (set: readonly Binding[]): Comparison => {
     const same = sameRecords(set, original, alternative);
-    if (same === "same") return undefined;
+    if (same === "same")
+      return canonicalJson(original.deadlines) === canonicalJson(alternative.deadlines)
+        ? undefined
+        : { aspect: "deadlines", original: original.deadlines, alternative: alternative.deadlines };
     if (same === "uncomparable") return same;
     return { aspect: "records", original: plain(original.records), alternative: plain(alternative.records) };
   };

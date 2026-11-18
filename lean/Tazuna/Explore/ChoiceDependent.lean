@@ -21,6 +21,7 @@ inductive Difference where
   | halt (original alternative : Option Violation)
   | outputs (mismatch : Violation)
   | records (original alternative : Value)
+  | deadlines (original alternative : List Value)
 deriving Repr, Inhabited
 
 derive_wire Difference tag "aspect"
@@ -62,55 +63,69 @@ processing with many steps that touch the same values, whose count grows factori
 def stepOrderLimit : Nat := 64
 
 /--
-The result of a run: the violation that halted it, the trace lines that verify reads, its records (recordsValue), and
-the keys that its running services created, each with its domain `<service>/<entity>` as verify's valueDomains names a
-key reference's.
+The result of a run: the violation that halted it, the trace lines that verify reads, its records (recordsValue), its
+pending deadlines (deadlineValue, in canonical order), and the keys that its running services created, each with its
+domain `<service>/<entity>` as verify's valueDomains names a key reference's.
 -/
 structure Outcome where
   halted : Option Violation
   lines : List TraceLine
   records : CValue
+  deadlines : List Value
   created : List (String × String)
 
-/-- The key positions of entity `e`'s records: its key field and its ref() fields, each with the entity it names. -/
-def keyFields (st : Service) (e : String) : List (String × Spec.Ref) :=
+/--
+A pending deadline as the relation compares it: its instance, state, name and time. A later clock line reads the time,
+so two orders that set it differently differ even when no line of the processing tells them apart.
+-/
+def deadlineValue (d : Deadline) : Value :=
+  .obj [("machine", ToValue.toValue d.machine), ("state", .str d.state), ("name", .str d.name),
+    ("time", Time.toValue d.time)]
+
+/-- The key positions of entity `e`'s records (Structure.KeyPosition), each path with the entity it names. -/
+def keyPaths (st : Service) (e : String) : List (List String × Spec.Ref) :=
   let found := st.structure.definitions.findSome? fun d =>
     match d.body with
-    | .entity key _ _ references => if d.service == st.service && d.name == e then some (key, references) else none
+    | .entity _ _ _ _ keys => if d.service == st.service && d.name == e then some keys else none
     | _ => none
-  match found with
-  | some (key, references) => key.toList.map (·, st.ref e) ++ references.filterMap fun r => r.entity.map (r.field, ·)
-  | none => []
+  (found.getD []).filterMap fun k => k.entity.map (k.path, ·)
 
-/-- A record's encoded fields with the strings at its key positions `fields` as key references. -/
-def rowValue (fields : List (String × Spec.Ref)) : Value → CValue
-  | .obj fs => .obj (fs.map fun (k, x) => (k, match fields.lookup k, x with
-      | some r, .str s => .ref s!"{r.service}/{r.name}" s
-      | _, x => CValue.ofValue x))
-  | v => CValue.ofValue v
+/-- The value `v` at field path `path` with the strings at the key positions `keys` as key references. -/
+def keyed (keys : List (List String × Spec.Ref)) (path : List String) : Value → CValue
+  | .str s => match keys.lookup path with
+    | some r => .ref s!"{r.service}/{r.name}" s
+    | none => .leaf (.str s)
+  | .arr xs => .arr (xs.attach.map fun ⟨x, _⟩ => keyed keys path x)
+  | .obj fs => .obj (fs.attach.map fun ⟨p, _⟩ => (p.1, keyed keys (path ++ [p.1]) p.2))
+  | v => .leaf v
+termination_by v => sizeOf v
+decreasing_by all_goals nested_decreasing
 
 /--
 The records as the relation compares them: each keyed entity as a bag of its encoded rows, in key order, since renamed
 keys no longer order them, and each single entity as its encoded row once it has one. Only the key positions
-(keyFields) rename.
+(keyPaths) rename.
 -/
 def recordsValue (st : Service) (records : Records) : CValue :=
   .obj (st.entities.filterMap fun e =>
-    let row (r : Row) := rowValue (keyFields st e) r.value
+    let keys := keyPaths st e
+    let row (r : Row) := keyed keys [] r.value
     if e ∈ st.singles then (records.find? (·.entity == e)).map fun r => (e, row r)
     else
       let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.key.getD "" ≤ b.key.getD "")
       some (e, .bag (rows.map row)))
 
 /--
-The outcome of a run as the relation compares it: only the violation that halted the run, or else its trace lines and
-its records.
+The outcome of a run as the relation compares it: only the violation that halted the run, or else its trace lines, its
+records and its pending deadlines.
 -/
 def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLine) (records : Records)
-    (created : List (String × String)) : Outcome :=
+    (deadlines : List Deadline) (created : List (String × String)) : Outcome :=
   match halted with
-  | some v => { halted := some v, lines := [], records := .leaf .null, created := [] }
-  | none => { halted := none, lines, records := recordsValue st records, created }
+  | some v => { halted := some v, lines := [], records := .leaf .null, deadlines := [], created := [] }
+  | none =>
+    { halted := none, lines, records := recordsValue st records, created,
+      deadlines := (deadlines.map deadlineValue).mergeSort fun a b => decide (a.canonical ≤ b.canonical) }
 
 /--
 The first violation that verify finds in the second lines, with the first lines as the snapshot, or else the set of
@@ -162,7 +177,8 @@ variable {m : Type → Type} [Monad m]
 
 /--
 The first difference: the halting violations, then the outputs as `compare` finds them with `original` as the
-snapshot, then the records, which later inputs read, under the bindings of the outputs (sameRecords). Two outcomes
+snapshot, then the records, which later inputs read, under the bindings of the outputs (sameRecords), then the pending
+deadlines, whose times later clock lines read. Two outcomes
 without a difference are equal up to a renaming of their created keys (symmetry, as TLA+ symmetry sets reduce states).
 Outputs that `compare` cannot compare with themselves, as when equal requests get different answers, tell no choice
 apart, so only the records are compared then.
@@ -173,7 +189,9 @@ def difference (compare : Compare m) (original alternative : Outcome) : m Compar
       else .differ (.halt original.halted alternative.halted)
   let records (set : List Binding) : Comparison :=
     match sameRecords set original alternative with
-    | .same => .same
+    | .same =>
+      if original.deadlines == alternative.deadlines then .same
+      else .differ (.deadlines original.deadlines alternative.deadlines)
     | .different => .differ (.records original.records.flatten alternative.records.flatten)
     | .uncomparable => .uncomparable
   match ← compare (original.renaming alternative) original.lines alternative.lines with

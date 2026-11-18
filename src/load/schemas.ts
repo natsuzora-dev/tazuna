@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
+import type { Shape } from "../data/values.ts";
 import type { Definition } from "../dsl/definition.ts";
+import { type AnyKeyedEntity, keyTarget } from "../dsl/entity.ts";
 import { definitionKinds } from "../spec/structure.ts";
 
 export interface SchemaAt {
@@ -60,3 +62,23 @@ export const definitionSchemas = (definition: Definition, stop?: (schema: z.ZodT
   Object.entries(definition)
     .filter(([key]) => !derived(definition, key))
     .flatMap(([key, value]) => schemasIn(value, [key], stop));
+
+/** Lean's KeyPosition: a field path to a value whose schema is `ref(entity)` or `entity`'s key field. */
+export interface KeyPosition {
+  readonly path: readonly string[];
+  readonly entity: AnyKeyedEntity;
+}
+
+/**
+ * Returns the key positions of `shape`, each path once: a key schema and the nullable or default around it are found on
+ * the same path. Lines and records rename created keys at these positions.
+ */
+export function keyPositions(shape: Shape): KeyPosition[] {
+  const found = new Map<string, KeyPosition>();
+  for (const { path, schema } of schemasIn(shape, [])) {
+    const entity = keyTarget(schema);
+    const at = JSON.stringify(path);
+    if (entity !== undefined && !found.has(at)) found.set(at, { path, entity });
+  }
+  return [...found.values()];
+}

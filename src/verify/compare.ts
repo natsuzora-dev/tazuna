@@ -18,7 +18,7 @@ import {
   type Values,
   valuePart,
 } from "../data/binding.ts";
-import { Bag, comparable, comparableAnswer, orderFree, Ref, type RefEntity, Runs } from "../data/canonical.ts";
+import { Bag, comparable, comparableAnswer, type KeyPositions, orderFree, Ref, Runs } from "../data/canonical.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
@@ -39,38 +39,49 @@ import {
 } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import { canonicalJson, type Json, mapStrings, plain, type Shape, stringsOf } from "../data/values.ts";
-import { keyTarget } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
+import { keyPositions } from "../load/schemas.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
 import { contractsListing } from "../spec/structure.ts";
 import { byLine, type Found, lineSchema } from "./lines.ts";
 
-/** Names the entity of a key position (keyTarget) as `<service>/<name>`, the domain of its values. */
-export function refEntityOf(spec: Spec): RefEntity {
-  return (schema) => {
-    const target = keyTarget(schema);
-    if (target === undefined) return undefined;
-    const ref = refOfDefinition(spec, target);
-    return `${ref.service}/${ref.name}`;
+/** Returns the key positions of a shape, each with its entity as `<service>/<name>`, the domain of its values. */
+export function keyPositionsOf(spec: Spec): (shape: Shape | undefined) => KeyPositions | undefined {
+  const known = new WeakMap<Shape, KeyPositions>();
+  return (shape) => {
+    if (shape === undefined) return undefined;
+    const found = known.get(shape);
+    if (found !== undefined) return found;
+    const keys = new Map(
+      keyPositions(shape).map(({ path, entity }) => {
+        const ref = refOfDefinition(spec, entity);
+        return [JSON.stringify(path), `${ref.service}/${ref.name}`] as const;
+      }),
+    );
+    known.set(shape, keys);
+    return keys;
   };
 }
 
 /** Lean's readLine: the line with its input, payload or answer output read by its definition's schema. */
 export function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLine {
   const outputByRequestId = new Map<string, Shape>();
-  const refEntity = refEntityOf(spec);
+  const keys = keyPositionsOf(spec);
   return (l) => {
     switch (l.type) {
       case "operation": {
         const { screen, control } = operationParts(l.name);
         const def = definitionOfTraceName(spec, service, screen, "screen");
-        return { ...l, payload: comparable(def?.controls?.[control]?.payload, l.payload, refEntity) };
+        const payload = def?.controls?.[control]?.payload;
+        return { ...l, payload: comparable(payload, l.payload, keys(payload)) };
       }
-      case "answer":
-        return { ...l, answer: comparableAnswer(l.answer, outputByRequestId.get(l.to), refEntity) };
+      case "answer": {
+        const output = outputByRequestId.get(l.to);
+        return { ...l, answer: comparableAnswer(l.answer, output, keys(output)) };
+      }
       case "event": {
         const def = definitionOfTraceName(spec, service, l.name, "event");
-        return def === undefined ? l : { ...l, payload: comparable(def.payload, l.payload, refEntity) };
+        return def === undefined ? l : { ...l, payload: comparable(def.payload, l.payload, keys(def.payload)) };
       }
       case "command":
       case "query":
@@ -78,7 +89,7 @@ export function readLine(spec: Spec, service: string): (l: TraceLine) => TraceLi
         const def = definitionOfTraceName(spec, service, l.name, l.type === "command" ? "command" : "query");
         if (def === undefined) return l;
         if (def.output !== undefined) outputByRequestId.set(l.id, def.output);
-        return { ...l, input: comparable(def.input, l.input, refEntity) };
+        return { ...l, input: comparable(def.input, l.input, keys(def.input)) };
       }
       case "unsubscribe":
       case "time":

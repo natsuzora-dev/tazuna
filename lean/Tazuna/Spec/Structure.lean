@@ -167,6 +167,18 @@ deriving Repr, Inhabited
 
 derive_wire Reference
 
+/--
+A key position of an entity's records: the field path to a value whose schema is `ref(entity)` or `entity`'s key field
+(its own key field included), with `entity` null when it is no definition. Array elements and union options do not
+extend the path. Lines and records rename created keys at the same positions.
+-/
+structure KeyPosition where
+  path : List String
+  entity : Option Ref
+deriving Repr, Inhabited
+
+derive_wire KeyPosition
+
 inductive Change where
   | none
   | create
@@ -177,8 +189,12 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Change
 
 inductive Body where
-  /-- An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. -/
+  /--
+  An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. `keys` are
+  its key positions.
+  -/
   | entity (key : Option String) (fields : List String) (unique : List String) (references : List Reference)
+      (keys : List KeyPosition)
   /-- An event. `entity` is null when `change` is none. -/
   | event (change : Change) (entity : Option Ref) (payload : Value)
   /--

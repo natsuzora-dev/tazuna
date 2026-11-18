@@ -68,14 +68,15 @@ theorem compareTraces_ok {spec : Spec.Structure} {service : String}
 /--
 Two outcomes that difference finds the same halt alike, and when neither halts, either the outputs compare under bindings
 of which one makes the records equal (sameRecords), or the original outputs do not compare even with themselves, and the
-records are equal (sameRecords under the empty binding).
+records are equal (sameRecords under the empty binding); and the pending deadlines are equal.
 -/
 theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (difference compare o a : Id _) = .same) :
     haltIdentity o.halted = haltIdentity a.halted ∧
     (o.halted = none →
-      (∃ set, compare (o.renaming a) o.lines a.lines = .ok set ∧ sameRecords set o a = .same) ∨
+      ((∃ set, compare (o.renaming a) o.lines a.lines = .ok set ∧ sameRecords set o a = .same) ∨
       ((∃ v, compare (o.renaming a) o.lines a.lines = .error v) ∧
-        (∃ v, compare (o.renaming o) o.lines o.lines = .error v) ∧ sameRecords [.empty] o a = .same)) := by
+        (∃ v, compare (o.renaming o) o.lines o.lines = .error v) ∧ sameRecords [.empty] o a = .same)) ∧
+      o.deadlines = a.deadlines) := by
   unfold difference at h
   by_cases hh : (o.halted.isSome || a.halted.isSome) = true
   · simp only [hh, ↓reduceIte, pure] at h
@@ -92,14 +93,24 @@ theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (dif
     refine ⟨by rw [hh.1, hh.2], fun _ => ?_⟩
     split at h
     · rename_i set hc
-      refine .inl ⟨set, hc, ?_⟩
-      split at h <;> first | rfl | assumption | cases h
+      split at h
+      · rename_i hs
+        split at h
+        · exact ⟨.inl ⟨set, hc, hs⟩, beq_iff_eq.mp ‹_›⟩
+        · cases h
+      · cases h
+      · cases h
     · rename_i v hc
       split at h
       · cases h
       · rename_i w hc'
-        refine .inr ⟨⟨v, hc⟩, ⟨w, hc'⟩, ?_⟩
-        split at h <;> first | rfl | assumption | cases h
+        split at h
+        · rename_i hs
+          split at h
+          · exact ⟨.inr ⟨⟨v, hc⟩, ⟨w, hc'⟩, hs⟩, beq_iff_eq.mp ‹_›⟩
+          · cases h
+        · cases h
+        · cases h
 
 theorem violation_none {d : Spec.Ref} {f : Difference → ChoiceDependent} {c : Comparison}
     (h : c.violation d f = none) : c = .same := by

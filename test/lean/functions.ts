@@ -34,7 +34,7 @@ import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
 import { transitionRef } from "../../src/spec/structure.ts";
-import { refEntityOf } from "../../src/verify/compare.ts";
+import { keyPositionsOf } from "../../src/verify/compare.ts";
 import type {
   Asked,
   Extra,
@@ -136,7 +136,10 @@ export class VerifyFunctions implements Answering {
           return (found as { controls?: Record<string, { payload?: Shape }> }).controls?.[part.name]?.payload;
       }
     })();
-    return { type: "comparableValue", value: tagged(comparableValue(shape, asked.value, refEntityOf(this.spec))) };
+    return {
+      type: "comparableValue",
+      value: tagged(comparableValue(shape, asked.value, keyPositionsOf(this.spec)(shape))),
+    };
   }
 }
 

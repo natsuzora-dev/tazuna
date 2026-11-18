@@ -52,8 +52,11 @@ export class Ref {
   }
 }
 
-/** Names the entity that a key-reference schema refers to, or returns undefined for any other schema. */
-export type RefEntity = (schema: z.ZodType) => string | undefined;
+/**
+ * The key positions of a shape (Lean's KeyPosition): each field path, as JSON text, with the domain `<service>/<entity>`
+ * of the keys there.
+ */
+export type KeyPositions = ReadonlyMap<string, string>;
 
 function runsOf(items: readonly unknown[], key: string): Runs {
   const keyOf = (item: unknown) => JSON.stringify((item as Record<string, unknown> | null)?.[key]);
@@ -65,14 +68,15 @@ function runsOf(items: readonly unknown[], key: string): Runs {
   return new Runs(runs.map((r) => new Bag(r)));
 }
 
-function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefined): unknown {
-  const entity = typeof value === "string" ? refEntity?.(schema) : undefined;
+/** The value read by `schema` at field path `path`; array elements and union options do not extend the path. */
+function bagged(schema: z.ZodType, value: unknown, keys: KeyPositions | undefined, path: readonly string[]): unknown {
+  const entity = typeof value === "string" ? keys?.get(JSON.stringify(path)) : undefined;
   if (entity !== undefined) return new Ref(entity, value as string);
   const node = schemaNode(schema);
   switch (node.type) {
     case "array": {
       if (!Array.isArray(value)) return value;
-      const items = value.map((v) => bagged(node.element, v, refEntity));
+      const items = value.map((v) => bagged(node.element, v, keys, path));
       const collection = collectionOf(schema);
       if (collection === undefined) return items;
       return collection.kind === "sortedBy" ? runsOf(items, collection.key) : new Bag(items);
@@ -82,17 +86,18 @@ function bagged(schema: z.ZodType, value: unknown, refEntity: RefEntity | undefi
       return Object.fromEntries(
         Object.entries(value).map(([k, v]) => {
           const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : bagged(field, v, refEntity)];
+          const at = Object.hasOwn(node.shape, k) ? [...path, k] : path;
+          return [k, field === undefined ? v : bagged(field, v, keys, at)];
         }),
       );
     case "union": {
       const option = unionOption(node, value);
-      return option === undefined ? value : bagged(option, value, refEntity);
+      return option === undefined ? value : bagged(option, value, keys, path);
     }
     case "optional":
     case "nullable":
     case "default":
-      return value == null ? value : bagged(node.inner, value, refEntity);
+      return value == null ? value : bagged(node.inner, value, keys, path);
     default:
       return value;
   }
@@ -113,13 +118,13 @@ export function orderFree(value: unknown): unknown {
   return value;
 }
 
-/** The value read by `shape`, with its bags, runs and, when `refEntity` names entities, key references wrapped. */
-export const comparable = (shape: Shape | undefined, value: unknown, refEntity?: RefEntity): unknown =>
-  shape === undefined ? value : bagged(objectOf(shape), canonical(shape, value), refEntity);
+/** The value read by `shape`, with its bags, runs and, at the key positions `keys`, key references wrapped. */
+export const comparable = (shape: Shape | undefined, value: unknown, keys?: KeyPositions): unknown =>
+  shape === undefined ? value : bagged(objectOf(shape), canonical(shape, value), keys, []);
 
-export const comparableAnswer = (answer: Answer, output: Shape | undefined, refEntity?: RefEntity): Answer =>
+export const comparableAnswer = (answer: Answer, output: Shape | undefined, keys?: KeyPositions): Answer =>
   answer.result === "rejected"
     ? { result: answer.result, rejection: { kind: answer.rejection.kind } }
     : answer.output === undefined
       ? answer
-      : { ...answer, output: comparable(output, answer.output, refEntity) };
+      : { ...answer, output: comparable(output, answer.output, keys) };

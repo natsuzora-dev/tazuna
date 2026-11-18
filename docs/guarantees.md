@@ -75,7 +75,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
   Each message is told apart by its id, so equal messages are ordered like any others.
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
-Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
+Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, the records are equal up to a renaming of created keys, and the pending deadlines are equal, since a later clock line reads their times.
 The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position.
 Lines that a service wrote for messages that one line delivered compare by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
 
@@ -104,7 +104,8 @@ When the bindings cannot decide what the implementation gets, or a trace cannot 
 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
-A key position is a value whose schema is `ref(E)` or `E`'s key field, such as `Task.fields.id`, and in records the key field and the `ref()` fields.
+A key position is a value whose schema is `ref(E)` or `E`'s key field, such as `Task.fields.id`, at any depth of a message or a record.
+An entity cannot name itself with `ref()`, so a self-reference such as a reply's `replyTo` compares as text.
 Both commands rename a string only at a key position. Any other string, such as a key held in a plain `z.string()`, compares as text.
 
 ## Who fixes a violation
@@ -290,5 +291,5 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
 - A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states (`compare_matches`, `contentMatch_renamed`).
 - When `check` reports no `Illegal` violation, the spec keeps every structural rule that `Checked` lists, one per `Illegal` kind (`check_eq_nil_iff`).
-- When the step-order search of a message reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from (`stepOrderSearch_same`). The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and records equal up to a renaming of created keys, or outputs that do not compare even with themselves and records equal up to renaming (`difference_same`, `compareTraces_ok`, `sameRecords_renamed`).
+- When the step-order search of a message reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from (`stepOrderSearch_same`). The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and records equal up to a renaming of created keys, or outputs that do not compare even with themselves and records equal up to renaming, and in both cases equal pending deadlines (`difference_same`, `compareTraces_ok`, `sameRecords_renamed`).
 - `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace (`no_violation_iff`).

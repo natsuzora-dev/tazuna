@@ -120,7 +120,7 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
   let entity (r : Ref) : Except String (String × List String) :=
     match j.definitions.findSome? fun d =>
       match d.body with
-      | .entity (some key) fields _ _ => if d.ref == r then some (key, fields) else none
+      | .entity (some key) fields _ _ _ => if d.ref == r then some (key, fields) else none
       | _ => none with
     | some found => pure found
     | none => throw s!"the entity {r.name} has no key"
@@ -204,12 +204,12 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
   let references := entities.flatMap fun e =>
     ((j.definitions.findSome? fun d =>
       match d.body with
-      | .entity _ _ _ references => if d.service == service && d.name == e then some references else none
+      | .entity _ _ _ references _ => if d.service == service && d.name == e then some references else none
       | _ => none).getD []).filterMap fun r => r.entity.map fun target => (e, r.field, target.name)
   let uniques := entities.filterMap fun e =>
     j.definitions.findSome? fun d =>
       match d.body with
-      | .entity _ _ unique _ => if d.service == service && d.name == e then some (e, unique) else none
+      | .entity _ _ unique _ _ => if d.service == service && d.name == e then some (e, unique) else none
       | _ => none
   let singles := entities.filter fun e => single { service, name := e }
   pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities, singles,

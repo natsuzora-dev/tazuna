@@ -78,7 +78,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Data.TraceLine]),
    ("src/spec/structure.generated.ts",
     [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.State, ``Tazuna.Spec.ChartFields,
-     ``Tazuna.Spec.Reference, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
+     ``Tazuna.Spec.Reference, ``Tazuna.Spec.KeyPosition, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
      ``Tazuna.Spec.Structure]),
    ("test/lean/protocol.generated.ts",
