@@ -13,7 +13,7 @@ export const armAndWait = scenario(
 );
 
 export const overduePongFirst = scenario(
-  "Arm and move the clock past 10:00; the implementation trace sends overdue's pong before its ping, which armed the deadline that pong follows, so verify reports lineOrder",
+  "Arm and move the clock past 10:00; the implementation trace sends overdue's pong before both pings: the deadline follows every step of the message at whose end its time was set, both pings included, so verify reports lineOrder twice",
   { given, when, then: () => [] },
 );
 

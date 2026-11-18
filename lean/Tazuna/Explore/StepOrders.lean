@@ -94,11 +94,12 @@ def swapId (x y i : LineId) : LineId := if i == x then y else if i == y then x e
 
 /-- The line `l` with the ids `x` and `y` swapped wherever it names a message. -/
 def Line.swapIds (x y : LineId) (l : Line) : Line :=
-  { l with id := swapId x y l.id, body := match l.body with
-    | .answer to a => .answer (swapId x y to) a
-    | .event e p r => .event e p (r.map (swapId x y))
-    | .unsubscribe to => .unsubscribe (swapId x y to)
-    | b => b }
+  let swap := swapId x y
+  match l with
+  | ⟨time, dir, id, .answer to a, emitted, _⟩ => ⟨time, dir, swap id, .answer (swap to) a, emitted, ()⟩
+  | ⟨time, dir, id, .event e p r, emitted, _⟩ => ⟨time, dir, swap id, .event e p (r.map swap), emitted, ()⟩
+  | ⟨time, dir, id, .unsubscribe to, emitted, _⟩ => ⟨time, dir, swap id, .unsubscribe (swap to), emitted, ()⟩
+  | ⟨time, dir, id, body, emitted, sender⟩ => ⟨time, dir, swap id, body, emitted, sender⟩
 
 /-- The arrival steps of the processing of `span` (Tie.arrivals), by name, each with its message's id, in arrival order. -/
 def Execution.arrivals (w : Execution) (span : Sim.Span) : List (StepName × LineId) :=
@@ -260,7 +261,7 @@ structure Searched where
 
 /--
 The searches of the processings of the execution `executed` of the scenario `sc` whose origin is the startup (when `from`
-is 0) or a line from `from` on, each processing once, that have candidates or take messages of a tie: each on the
+is 0) or a line from `from` on, each processing once, that have candidates or take equal messages of a tie: each on the
 scenario executed up to its line (`executeWith` executes a scenario with step orders), so a later halt hides none.
 `compareFor` compares the trace lines of a service.
 -/
@@ -277,7 +278,9 @@ def stepOrderChanges (compareFor : String → Compare m)
     if !inRange || seen.any (fun s => s.origin == span.origin && s.service == span.service) then seen
     else seen ++ [span]) []
   spans.filterMapM fun span => do
-    if (executed.candidatesOf span).isEmpty && (executed.arrivals span).isEmpty then return none
+    let tied := executed.arrivals span
+    let equal := tied.zipIdx.any fun ((name, _), n) => tied.findIdx (·.1 == name) < n
+    if (executed.candidatesOf span).isEmpty && !equal then return none
     let some st := executed.world.services.lookup span.service | return none
     let count := match span.origin with
       | .startup => 0

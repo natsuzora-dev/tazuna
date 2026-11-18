@@ -50,6 +50,29 @@ structure EmittedBy where
 deriving DecidableEq, Repr, Inhabited
 
 /--
+What a line with direction `dir` and body `body` names besides: an `out` request line names the definition of the
+service that sent the request (Requester.sender), which a check of the request at the end of the run blames after a
+restart forgot who waits for it. No other line names one.
+-/
+abbrev SenderOf (dir : Dir) (body : LineBody) : Type :=
+  match body, dir with
+  | .command .., .out | .query .., .out | .subscribe .., .out => String
+  | _, _ => Unit
+
+/-- `sender` on the line with direction `dir` and body `body` if it names one (SenderOf). -/
+def SenderOf.given (sender : String) (dir : Dir) : (body : LineBody) → SenderOf dir body
+  | .command .. | .query .. | .subscribe .. => match dir with
+    | .out => sender
+    | .in => ()
+  | .event .. | .answer .. | .unsubscribe .. | .time | .restart | .operation .. => ()
+
+instance (dir : Dir) (body : LineBody) : DecidableEq (SenderOf dir body) := by
+  unfold SenderOf; split <;> infer_instance
+
+instance (dir : Dir) (body : LineBody) : Repr (SenderOf dir body) := by
+  unfold SenderOf; split <;> infer_instance
+
+/--
 A trace line. Test adds `after` and `created` when it writes a snapshot.
 -/
 structure Line where
@@ -59,9 +82,10 @@ structure Line where
   body : LineBody
   /-- Set on the `out` event lines that a command writes, and on no other line. -/
   emitted : Option EmittedBy := none
-  /-- Set on the `out` request lines: the definition of the service that sent the request (Requester.sender). -/
-  sender : Option String := none
-deriving DecidableEq, Repr, Inhabited
+  sender : SenderOf dir body := by exact ()
+deriving DecidableEq, Repr
+
+instance : Inhabited Line := ⟨{ time := default, dir := .in, id := default, body := .time }⟩
 
 structure Emit where
   event : Spec.Ref

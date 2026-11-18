@@ -201,7 +201,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     let (s, live) := match c.serial with
       | some serial => s.takeQueued serial
       | none => (s, true)
-    match c.requester.rejectedInput? st c.activity.ref answer with
+    match rejectedInput? st c.requester.sender c.activity.ref answer with
     | some fault => pure ⟨s.report (.fault fault), q⟩
     | none => if live then answerTo fs st step c.activity answer c.requester ⟨s, q⟩ else pure ⟨s, q⟩
   | .start name _, r => startWork fs st step name r

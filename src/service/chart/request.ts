@@ -79,7 +79,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
     return;
   }
   const type = a.keyword === "calls" ? "query" : "command";
-  awaitAnswer(r.state, { dir: "out", type, target: a.target, input }, requester, a);
+  awaitAnswer(r.state, { type, target: a.target, input }, requester, a);
   r.note.reached({ kind: "request", definition: target, data: {} });
 }
 

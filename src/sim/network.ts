@@ -15,7 +15,7 @@ import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import { channelOf, sentBefore } from "./order.ts";
-import { type Arrival, arriveAll, arriveFrom, receivedId } from "./receive.ts";
+import { arriveAll, arriveFrom } from "./receive.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -25,12 +25,16 @@ export const running = (role: Role | undefined): boolean => role === "own" || ro
 /** Lean's Status. */
 export type Status = "inFlight" | "delivered" | "lost" | "unanswered" | "discarded";
 
-/** Lean's Message: `body` is the line that `sender` wrote. */
+/**
+ * Lean's Message: `body` is the line that `sender` wrote, which carries `definition`'s request or event, or answers or
+ * ends one.
+ */
 export interface Message {
   readonly sender: string;
   readonly receiver: string;
   readonly id: LineId;
   readonly body: LineBody;
+  readonly definition: DefinitionRef;
   readonly origin: Origin;
   status: Status;
 }
@@ -138,20 +142,16 @@ export function noteTo(w: World, r: InvalidScenario): void {
 /** Lean's screensOf. */
 const screensOf = (s: State): InstanceId[] => [...s.machines.values()].filter((i) => i.chart.screen).map((i) => i.id);
 
-/** Lean's targetOf. */
-function targetOf(lines: readonly Line[], id: LineId): string | undefined {
+/** Lean's requestDefinition?: the definition of the request line `id` in the direction `dir` of the lines `lines`. */
+function requestDefinition(lines: readonly Line[], dir: Line["dir"], id: LineId): DefinitionRef | undefined {
   for (const l of lines)
-    if (
-      l.dir === "out" &&
-      (l.type === "command" || l.type === "query" || l.type === "subscribe") &&
-      sameLineId(l.id, id)
-    )
-      return l.target.service;
+    if (l.dir === dir && (l.type === "command" || l.type === "query" || l.type === "subscribe") && sameLineId(l.id, id))
+      return l.target;
   return undefined;
 }
 
 /** Lean's World.post. */
-function post(w: World, o: Origin, sender: string, receiver: string, l: Line): void {
+function post(w: World, o: Origin, sender: string, receiver: string, l: Line, definition: DefinitionRef): void {
   const role = w.roles.get(receiver);
   if (role === undefined) {
     reportTo(w, {
@@ -166,6 +166,7 @@ function post(w: World, o: Origin, sender: string, receiver: string, l: Line): v
     receiver,
     id: l.id,
     body: l,
+    definition,
     origin: o,
     status: role === "skip" ? "discarded" : "inFlight",
   });
@@ -180,21 +181,23 @@ function route(w: World, o: Origin, service: string, lines: readonly Line[]): vo
       case "query":
       case "subscribe": {
         const target = l.target.service;
-        if (target !== service) post(w, o, service, target, l);
+        if (target !== service) post(w, o, service, target, l, l.target);
         break;
       }
       case "unsubscribe": {
-        const target = targetOf(stateOf(w, service)?.lines ?? [], l.to);
-        if (target !== undefined) post(w, o, service, target, l);
+        const request = requestDefinition(stateOf(w, service)?.lines ?? [], "out", l.to);
+        if (request !== undefined) post(w, o, service, request.service, l, request);
         break;
       }
       case "answer": {
-        if (l.to.kind === "received") post(w, o, service, l.to.sender, l);
+        const request = requestDefinition(stateOf(w, service)?.lines ?? [], "in", l.to);
+        if (l.to.kind === "received" && request !== undefined) post(w, o, service, l.to.sender, l, request);
         break;
       }
       case "event":
         for (const [r, p] of w.services)
-          if (r !== service && p.processing.st.receives.some((e) => sameRef(e, l.event))) post(w, o, service, r, l);
+          if (r !== service && p.processing.st.receives.some((e) => sameRef(e, l.event)))
+            post(w, o, service, r, l, l.event);
         break;
       default:
         break;
@@ -271,47 +274,12 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
   checkComputed(w, service, sent, s.records);
 }
 
-/** Lean's World.definitionOf?. */
-function definitionOf(w: World, msg: Message): DefinitionRef | undefined {
-  const requested = (to: LineId) => {
-    for (const r of w.messages)
-      if (sameLineId(receivedId(r.sender, r.id), to))
-        return r.body.type === "command" || r.body.type === "query" || r.body.type === "subscribe"
-          ? r.body.target
-          : undefined;
-    return undefined;
-  };
-  switch (msg.body.type) {
-    case "command":
-    case "query":
-    case "subscribe":
-      return msg.body.target;
-    case "event":
-      return msg.body.event;
-    case "answer":
-      return requested(msg.body.to);
-    case "unsubscribe":
-      return requested(receivedId(msg.sender, msg.body.to));
-    default:
-      return undefined;
-  }
-}
-
 /** Lean's World.deliver: the messages `ks` to `receiver` arrive in one processing, several as a tie. */
 export function deliver(w: World, o: Origin, receiver: string, ks: readonly number[]): void {
   const msgs = ks.flatMap((k) => w.messages[k] ?? []);
-  const arrivals = msgs.map(
-    (msg, n): Arrival => ({
-      sender: msg.sender,
-      id: msg.id,
-      body: msg.body,
-      definition: definitionOf(w, msg) ?? { service: "", name: "" },
-      waitsFor: msgs.slice(0, n).flatMap((e, j) => (precedes(w, e, msg) ? [j] : [])),
-    }),
-  );
   for (const msg of msgs) msg.status = "delivered";
   const [only] = msgs;
   if (msgs.length === 1 && only !== undefined)
     act(w, o, receiver, (r) => arriveFrom(r, only.sender, only.id, only.body));
-  else act(w, o, receiver, (r) => arriveAll(r, arrivals));
+  else act(w, o, receiver, (r) => arriveAll(r, msgs));
 }

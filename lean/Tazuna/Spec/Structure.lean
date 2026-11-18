@@ -284,7 +284,7 @@ The kinds that an answer to the command or query `r` may be rejected with when a
 an external `r`, the kinds it declares. Otherwise `requires` needs a requires condition or a binds value, `notFound` an
 input ref field, and `alreadyExists` an emitted event that creates or updates a record, and a request to another
 service may also be rejected with `unavailable`, and a command to another service with `reusedId`. An answer
-rejected with `invalidInput` is the sender's fault (Requester.inputFault), so it is not listed.
+rejected with `invalidInput` is the sender's fault (rejectedInput?), so it is not listed.
 -/
 def Structure.rejectionKinds (s : Structure) (service : String) (r : Ref) : List RejectionKind :=
   let other (kinds : List RejectionKind) := if r.service == service then [] else kinds

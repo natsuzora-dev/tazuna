@@ -436,6 +436,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           receiver: l.target.service,
           id,
           body: bodyOf(l.kind, l.target, v),
+          definition: l.target,
           origin,
           status: "inFlight",
         });
@@ -472,6 +473,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
             receiver: sub.receiver,
             id,
             body: { type: "unsubscribe", to: sub.id },
+            definition: sub.definition,
             origin,
             status: "inFlight",
           });
@@ -540,6 +542,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
             receiver: m.sender,
             id,
             body: { type: "answer", to, answer: a },
+            definition: m.definition,
             origin,
             status: "inFlight",
           });
@@ -601,7 +604,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
               data: { scenarioLine: i, event: l.event },
             });
           for (const [r] of receivers)
-            stated(w, i, { sender: l.peer, receiver: r, id, body, origin, status: "inFlight" });
+            stated(w, i, { sender: l.peer, receiver: r, id, body, definition: l.event, origin, status: "inFlight" });
           return;
         }
         if (role === "run") {
@@ -683,6 +686,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           receiver: m.sender,
           id,
           body: { type: "answer", to, answer: unavailable },
+          definition: m.definition,
           origin,
           status: "inFlight",
         });

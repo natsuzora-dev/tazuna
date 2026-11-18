@@ -9,9 +9,14 @@ type Channel =
   | { readonly kind: "answers"; readonly request: LineId }
   | { readonly kind: "events"; readonly resultOf: LineId | null };
 
-/** Lean's causedBy: whether step `later` is step `earlier` or one that it caused, a deadline step by its arming step. */
+/**
+ * Lean's causedBy: whether step `later` is step `earlier` or one that it caused, a deadline step by its arming step and
+ * by every step of the message whose end set its time.
+ */
 function causedBy(steps: readonly StepInfo[], earlier: number, later: number): boolean {
   if (later === earlier) return true;
+  const timedIn = steps[later]?.timedIn;
+  if (timedIn !== undefined && earlier < later && steps[earlier]?.message === timedIn) return true;
   const cause = steps[later]?.cause ?? steps[later]?.armedBy;
   return cause !== undefined && cause < later && causedBy(steps, earlier, cause);
 }

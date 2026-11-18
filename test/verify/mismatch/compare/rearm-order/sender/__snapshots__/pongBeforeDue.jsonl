@@ -1,0 +1,6 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"due":"2026-10-24T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"dueSet#1","name":"dueSet","payload":{},"after":["dueChanged#1"]}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"ponged#1","name":"ponged","payload":{},"after":["dueChanged#1","dueSet#1"]}

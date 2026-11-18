@@ -19,6 +19,7 @@ export function addDeadlines(
       state,
       name,
       armedBy: step,
+      timedIn: undefined,
     });
 }
 
@@ -30,7 +31,10 @@ export function rearm(r: Run): void {
     const records = new LazyRecordSource(r.state.records, r.note);
     const time = r.functions.deadlineAt(scope, records, deadline.name, new NoteAccess(r, scope));
     if (time instanceof Failed) halt(issueViolation(ref(r.st, instance.chart.name), time));
-    deadline.time = time;
+    if (deadline.time === undefined || !deadline.time.equals(time)) {
+      deadline.time = time;
+      deadline.timedIn = r.state.messageCount;
+    }
   }
 }
 

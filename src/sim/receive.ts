@@ -72,13 +72,12 @@ function arrivalContent(service: string, sender: string, body: LineBody): Json {
   }
 }
 
-/** Lean's Arrival: a message of a tie, with the places of the earlier ones that must arrive before it. */
+/** Lean's Arrival: a message of a tie. A tie has at most one message per channel, so its messages arrive in any order. */
 export interface Arrival {
   readonly sender: string;
   readonly id: LineId;
   readonly body: LineBody;
   readonly definition: DefinitionRef;
-  readonly waitsFor: readonly number[];
 }
 
 /** Lean's Arrival.name. */
@@ -92,33 +91,25 @@ const arrivalName = (service: string, a: Arrival): StepName => ({
 export function arriveAll(r: Processing, arrivals: readonly Arrival[]): void {
   const s = r.state;
   const first = s.steps.length;
-  const done: number[] = [];
-  for (let fuel = arrivals.length; fuel > 0; fuel -= 1) {
-    const ready = arrivals.flatMap((a, n) =>
-      !done.includes(n) && a.waitsFor.every((j) => done.includes(j)) ? [[a, n] as const] : [],
-    );
-    const [next] = ready;
-    if (next === undefined) return;
+  const remaining = [...arrivals];
+  for (let next = remaining[0]; next !== undefined; next = remaining[0]) {
     const [named, ...rest] = s.stepOrder;
     let chosen = next;
     if (named?.kind === "arrival") {
-      const found = ready.find(([a]) => sameStep(arrivalName(r.st.service, a), named));
+      const found = remaining.find((a) => sameStep(arrivalName(r.st.service, a), named));
       if (found === undefined)
         report(s, {
           kind: "InvalidInput.unreadyStep",
           definition: null,
-          data: { named, candidates: ready.map(([a]) => arrivalName(r.st.service, a)) },
+          data: { named, candidates: remaining.map((a) => arrivalName(r.st.service, a)) },
         });
-      else chosen = found;
+      chosen = found;
       s.stepOrder = rest;
     }
-    const [a, n] = chosen;
-    const step = newStep(s, undefined, { tie: { kind: "arrivals", first } });
-    r.note.arrivalBegins(step, arrivalName(r.st.service, a));
-    arriveFrom(r, a.sender, a.id, a.body);
+    remaining.splice(remaining.indexOf(chosen), 1);
+    const step = newStep(s, undefined, { tie: { kind: "arrivals", first }, message: s.messageCount + 1 });
+    r.note.arrivalBegins(step, arrivalName(r.st.service, chosen));
+    arriveFrom(r, chosen.sender, chosen.id, chosen.body);
     r.note.arrivalEnds();
-    const info = s.steps[step];
-    if (info !== undefined) s.steps[step] = { ...info, message: s.messageCount };
-    done.push(n);
   }
 }

@@ -1,0 +1,1 @@
+{"kind":"Mismatch.lineOrder","definition":null,"data":{"subject":{"type":"event","name":"ponged","id":"ponged#1"},"before":{"type":"event","name":"dueSet","id":"dueSet#1"}},"location":{"file":"traces/sender/pongBeforeDue.jsonl","line":4},"scenario":{"service":"sender","name":"pongBeforeDue"}}

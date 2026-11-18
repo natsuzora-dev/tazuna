@@ -23,10 +23,12 @@ deriving DecidableEq, Repr
 
 /--
 Whether step `later` is step `earlier` or one that it caused, following the cause chain, in which a deadline step's
-cause is the step that armed it.
+cause is the step that armed it, and every step of the message whose end set its time.
 -/
 def causedBy (s : State) (earlier later : Nat) : Bool :=
   later == earlier ||
+    (earlier < later && (s.steps[later]?.bind (·.timedIn)).isSome &&
+      s.steps[later]?.bind (·.timedIn) == s.steps[earlier]?.map (·.message)) ||
     match s.steps[later]?.bind fun i => i.cause <|> i.armedBy with
     | some cause => if cause < later then causedBy s earlier cause else false
     | none => false

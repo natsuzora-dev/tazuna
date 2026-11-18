@@ -72,6 +72,7 @@ export function fireDue(r: Processing, to: Temporal.Instant): void {
     const step = newStep(s, undefined, {
       tie: tie === undefined ? undefined : { kind: "deadlines", time: tie },
       armedBy: deadline.armedBy,
+      timedIn: deadline.timedIn,
     });
     inStep(r, step, deadlineStep(deadline), undefined, () =>
       settled(r, deadline.machine, step, () => fire(r, deadline, step)),

@@ -24,7 +24,16 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import { type EmittedBy, type Halting, halts, idKey, type Line, type LineBody } from "./message.ts";
+import {
+  type EmittedBy,
+  type Halting,
+  halts,
+  idKey,
+  type Line,
+  type LineBody,
+  type LineKind,
+  type RequestBody,
+} from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";
 
@@ -153,6 +162,8 @@ export interface Deadline {
   readonly name: string;
   /** The step that entered `state`, which armed the deadline. */
   readonly armedBy: number;
+  /** The last message after which rearm changed `time`: it read the records that the whole message wrote. */
+  timedIn: number | undefined;
 }
 
 export const machineOf = (requester: Requester): InstanceId | undefined =>
@@ -196,7 +207,8 @@ export const sameTie = (a: Tie, b: Tie): boolean =>
 
 /**
  * A step of a message. `cause` is the step that caused this one, undefined for input and deadline steps. `armedBy` is,
- * for a deadline step, the step that armed the deadline. `message` is the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
+ * for a deadline step, the step that armed the deadline, and `timedIn` the message whose end last changed its time.
+ * `message` is the message number, inherited from the cause. `command` marks a step that processes an own-service command. `barrier`
  * marks a step that comes after every earlier step of the same message and before every later one. `nested` marks a
  * step that began while its cause was running (a copy start), so it ends before its cause does. `tie` is, for a
  * deadline step or the step in which a message of a tie arrives, its tie.
@@ -204,6 +216,7 @@ export const sameTie = (a: Tie, b: Tie): boolean =>
 export interface StepInfo {
   readonly cause: number | undefined;
   readonly armedBy: number | undefined;
+  readonly timedIn: number | undefined;
   readonly message: number;
   readonly command: boolean;
   readonly barrier: boolean;
@@ -300,11 +313,9 @@ export function newState(st: Service): State {
 }
 
 /** A line before `write` adds the time and, unless the line gives one, the id. */
-type UnwrittenLine = LineBody & {
-  readonly dir: "in" | "out";
+type UnwrittenLine = LineKind & {
   readonly id?: LineId;
   readonly emitted?: EmittedBy;
-  readonly sender?: string;
 };
 
 /** Lean's LineBody.idName: the name that line ids count, as the trace of `service` writes it. */
@@ -336,13 +347,8 @@ export function write(s: State, line: UnwrittenLine): LineId {
 }
 
 /** Lean's State.await: writes the request line and waits for its answer. TS cannot name a function `await`. */
-export function awaitAnswer(
-  s: State,
-  line: Extract<UnwrittenLine, { readonly type: "command" | "query" | "subscribe" }>,
-  requester: Requester,
-  activity: Activity,
-): void {
-  const id = write(s, { ...line, sender: sender(requester) });
+export function awaitAnswer(s: State, line: RequestBody, requester: Requester, activity: Activity): void {
+  const id = write(s, { ...line, dir: "out", sender: sender(requester) });
   s.pending.push({ id, activity, requester, input: line.input as Json, stale: false, turn: s.turn });
   s.turn += 1;
 }
@@ -385,10 +391,18 @@ export function newStep(
     nested = false,
     tie,
     armedBy,
-  }: { barrier?: boolean; nested?: boolean; tie?: Tie | undefined; armedBy?: number } = {},
+    timedIn,
+    message = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount,
+  }: {
+    barrier?: boolean;
+    nested?: boolean;
+    tie?: Tie | undefined;
+    armedBy?: number;
+    timedIn?: number | undefined;
+    message?: number;
+  } = {},
 ): number {
-  const message = (cause === undefined ? undefined : s.steps[cause])?.message ?? s.messageCount;
-  s.steps.push({ cause, armedBy, message, command: false, barrier, nested, tie });
+  s.steps.push({ cause, armedBy, timedIn, message, command: false, barrier, nested, tie });
   return s.steps.length - 1;
 }
 
@@ -519,24 +533,19 @@ export function inputFault(r: Run, target: DefinitionRef, sender: string, error:
 }
 
 /**
- * Lean's State.rejectedInput?: the sender's fault when the receiver rejected its input as invalid. Only the receiver
+ * Lean's rejectedInput?: the sender's fault when the receiver rejected its input as invalid. Only the receiver
  * parses a message, so the sender wrote an input that the receiver's schema does not take.
  */
 export function rejectedInput(
   r: Run,
   target: DefinitionRef,
-  requester: Requester,
+  sender: string,
   input: unknown,
   answer: Answer,
 ): Finding | undefined {
   if (answer.result !== "rejected" || answer.rejection.kind !== "invalid-input") return undefined;
   const parsed = r.functions.parse({ kind: "input", definition: target }, input);
-  return inputFault(
-    r,
-    target,
-    sender(requester),
-    parsed instanceof Failed || !("error" in parsed) ? undefined : parsed.error,
-  );
+  return inputFault(r, target, sender, parsed instanceof Failed || !("error" in parsed) ? undefined : parsed.error);
 }
 
 /** Returns the definition that sent the request: the chart of the sending instance, or the automation. */

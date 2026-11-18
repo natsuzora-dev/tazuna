@@ -51,7 +51,7 @@ theorem keepsWorld_report {w w' : World} (h : KeepsWorld w w') (r : InvalidScena
   keepsWorld_states h (by unfold World.report; split <;> rfl)
 
 theorem keepsWorld_post {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (sender receiver : String)
-    (l : Line) : KeepsWorld w (w'.post o sender receiver l) := by
+    (l : Line) (definition : Spec.Ref) : KeepsWorld w (w'.post o sender receiver l definition) := by
   unfold World.post; dsimp only; split
   · exact keepsWorld_report h _
   · exact keepsWorld_states h rfl
@@ -63,9 +63,9 @@ theorem keepsWorld_route {w w' : World} (h : KeepsWorld w w') (o : Scenario.Orig
   dsimp only
   (repeat' split) <;> first
     | exact hv
-    | exact keepsWorld_post hv _ _ _ _
+    | exact keepsWorld_post hv _ _ _ _ _
     | (refine foldl_keeps (KeepsWorld w) _ (fun u x hu => ?_) _ _ hv
-       split <;> first | exact hu | exact keepsWorld_post hu _ _ _ _)
+       split <;> first | exact hu | exact keepsWorld_post hu _ _ _ _ _)
 
 theorem lookup_map_ne (l : List (String × State)) (k p : String) (t : State) (hp : (p == k) = false) :
     (l.map fun (q, x) => if q == k then (q, t) else (q, x)).lookup p = l.lookup p := by
@@ -203,20 +203,17 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender 
 theorem keeps_arriveAll (st : Service) (fs : Functions Id) (arrivals : List Arrival) (s : State) :
     KeepsKeys s (arriveAll st fs arrivals s) := by
   unfold arriveAll
-  suffices ∀ first fuel done s, KeepsKeys s (arriveAll.go st fs arrivals first fuel done s) from this _ _ _ s
-  intro first fuel
-  induction fuel with
-  | zero => intro _ s; exact .refl _
-  | succ n ih =>
-    intro done s
-    simp only [arriveAll.go, bind, pure]
-    repeat' split
-    all_goals first
-      | exact .refl _
-      | keys_leaf
-      | (refine KeepsKeys.trans ?_ (ih _ _)
-         refine KeepsKeys.trans (KeepsKeys.trans ?_ (keeps_arriveFrom st fs _ _ _ _)) ⟨rfl, List.prefix_refl _⟩
-         keys_leaf)
+  suffices ∀ first arrivals s, KeepsKeys s (arriveAll.go st fs first arrivals s) from this _ _ s
+  intro first arrivals s
+  fun_induction arriveAll.go st fs first arrivals s
+  all_goals simp only [bind, pure]
+  all_goals first
+    | exact .refl _
+    | keys_leaf
+    | (rename_i hx ih; refine KeepsKeys.trans ?_ (ih _)
+       refine KeepsKeys.trans (KeepsKeys.trans ?_ (keeps_arriveFrom st fs _ _ _ _)) ⟨rfl, List.prefix_refl _⟩
+       have hs := congrArg Prod.fst hx; simp only at hs; rw [← hs]
+       keys_leaf)
 
 theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State) :
     KeepsKeys s (fireTo time st fs s) := by

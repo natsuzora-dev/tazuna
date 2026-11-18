@@ -217,7 +217,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       w.resolving (w.fill fsOf i input) fun v => do
         let (w, id) := w.nextId peer target.name
         pure (w.stated i { sender := peer, receiver := target.service, id, body := bodyOf type target v,
-                           origin := .line i, status := .inFlight })
+                           definition := target, origin := .line i, status := .inFlight })
     | some .run =>
       w.resolving (w.fill fsOf i input) fun v => do
         let fits (msg : Message) : m Bool :=
@@ -239,8 +239,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       match w.role p with
       | some .external =>
         let (w, id) := w.nextId p "unsubscribe"
-        pure (w.stated i { sender := p, receiver := sub.receiver, id, body := .unsubscribe sub.id, origin := .line i,
-                           status := .inFlight })
+        pure (w.stated i { sender := p, receiver := sub.receiver, id, body := .unsubscribe sub.id,
+                           definition := sub.definition, origin := .line i, status := .inFlight })
       | some .run =>
         let fits (msg : Message) : m Bool := pure (msg.receiver == sub.receiver && match msg.body with
           | .unsubscribe to => to == sub.id
@@ -274,8 +274,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         w.resolving (w.fill fsOf i answer) fun v => do
           let .ok (a : Answer) := FromValue.fromValue v | return w.report (.malformedValue i v)
           let (w, id) := w.nextId peer "answer"
-          pure (w.stated i { sender := peer, receiver := msg.sender, id, body := .answer to a, origin := .line i,
-                             status := .inFlight })
+          pure (w.stated i { sender := peer, receiver := msg.sender, id, body := .answer to a,
+                             definition := msg.definition, origin := .line i, status := .inFlight })
       | some .run =>
         match w.messages.toList.zipIdx.find? fun (n, j) =>
             n.status == .inFlight && n.sender == peer && n.receiver == msg.sender && !w.carried.any (·.2 == j) &&
@@ -309,7 +309,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         let receivers := w.services.filter fun (_, st) => st.receives.contains event
         if receivers.isEmpty then return w.report (.unreceivedEvent i event)
         pure (receivers.foldl (init := w) fun w (r, _) =>
-          w.stated i { sender := peer, receiver := r, id, body, origin := .line i, status := .inFlight })
+          w.stated i { sender := peer, receiver := r, id, body, definition := event, origin := .line i,
+                       status := .inFlight })
       | some .run =>
         let fits (msg : Message) : m Bool :=
           match msg.body with
@@ -359,8 +360,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         if requestTarget? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
         let to := receivedId msg.sender msg.id
         let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
-                                 body := .answer to (.rejected { kind := .unavailable }), origin := .line i,
-                                 status := .inFlight }
+                                 body := .answer to (.rejected { kind := .unavailable }),
+                                 definition := msg.definition, origin := .line i, status := .inFlight }
         let w := w.setStatus k .lost
         pure { w with messages := w.messages.push reply }
       if w.stopped then return w

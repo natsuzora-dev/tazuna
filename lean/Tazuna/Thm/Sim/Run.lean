@@ -218,8 +218,8 @@ theorem keeps_setStatus {w w' : World} (h : KeepsInFlight e w w') (k : Nat) (sta
       · exact absurd hs (hk m hw)
     · exact hj'⟩
 
-theorem keeps_post {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (sender receiver : String) (l : Line) :
-    KeepsInFlight e w (w'.post o sender receiver l) := by
+theorem keeps_post {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
+    (definition : Spec.Ref) : KeepsInFlight e w (w'.post o sender receiver l definition) := by
   unfold World.post
   dsimp only
   split
@@ -233,9 +233,9 @@ theorem keeps_route {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Orig
   dsimp only
   (repeat' split) <;> first
     | exact hv
-    | exact keeps_post hv _ _ _ _
+    | exact keeps_post hv _ _ _ _ _
     | (refine foldl_keeps (KeepsInFlight e w) _ (fun u x hu => ?_) _ _ hv
-       split <;> first | exact hu | exact keeps_post hu _ _ _ _)
+       split <;> first | exact hu | exact keeps_post hu _ _ _ _ _)
 
 theorem keeps_checkComputed {w w' : World} (h : KeepsInFlight e w w') (service : String) (sent : List Line)
     (records : Records) : KeepsInFlight e w (w'.checkComputed service sent records) := by

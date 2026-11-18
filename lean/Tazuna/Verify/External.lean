@@ -10,7 +10,7 @@ namespace Tazuna.Verify
 open Tazuna.Data
 open Tazuna.Spec
 
-/-- A request of the trace: whether an answer accepted it, and the lines of the events naming it as their resultOf. -/
+/-- A request of the trace: whether no answer rejected it, and the lines of the events naming it as their resultOf. -/
 structure Request where
   definition : Definition
   accepted : Bool
@@ -28,14 +28,15 @@ def checkLine (s : Structure) (service : String) (requests : List (String × Opt
   | .command .in id name _ | .query .in id name _ =>
     let definition := s.named service (some name) [l.body.type]
     (if definition.isSome then none else some (.uncomparable (.unknownRequest line (Subject.of l))),
-      setAt requests id (definition.map fun definition => { definition, accepted := false, answered := false }))
+      setAt requests id (definition.map fun definition => { definition, accepted := true, answered := false }))
   | .answer .out _ to answer =>
     match requests.lookup to, answer with
     | none, _ => (some (.uncomparable (.unknownAnswer line (Subject.of l))), requests)
     | some none, _ => (none, requests)
     | some (some r), _ =>
       if r.answered then (some (.mismatch (.repeatedAnswer line to r.definition.ref)), requests) else
-      let answered := setAt requests to (some { r with accepted := answer matches .accepted _, answered := true })
+      let answered := setAt requests to
+        (some { r with accepted := r.accepted && answer matches .accepted _, answered := true })
       match answer, r.definition.kind with
       | .rejected rejection, _ =>
         (if (s.rejectionKinds service r.definition.ref).contains rejection.kind then none
@@ -64,7 +65,7 @@ def checkResults (s : Structure) (requests : List (String × Option Request)) : 
   requests.flatMap fun (id, r) => match r with
     | none => []
     | some r => r.results.filterMap fun (line, event) =>
-      (s.resultOfMismatch r.definition.ref (r.accepted || !r.answered) event).map
+      (s.resultOfMismatch r.definition.ref r.accepted event).map
         (resultOfFinding line event id r.definition.ref)
 
 /-- The violations of the lines, then of their result events. `line` is the number of the first of `lines`. -/

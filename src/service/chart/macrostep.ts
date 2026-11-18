@@ -248,7 +248,7 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (isOwn(activity, r.st.service))
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });
       else {
-        awaitAnswer(r.state, { dir: "out", type: "command", target: activity.target, input }, requester, activity);
+        awaitAnswer(r.state, { type: "command", target: activity.target, input }, requester, activity);
         r.note.reached({ kind: "request", definition: activity.target, data: {} });
       }
       return;
@@ -264,7 +264,7 @@ function workBody(r: Processing, work: Work, step: number): void {
           r.note.readStates([[name, state]]);
       }
       const live = sent.serial === undefined || takeQueued(r.state, sent.serial);
-      const fault = rejectedInput(r, sent.activity.target, sent.requester, sent.input, answer);
+      const fault = rejectedInput(r, sent.activity.target, sender(sent.requester), sent.input, answer);
       if (fault !== undefined) {
         report(r.state, fault);
         return;

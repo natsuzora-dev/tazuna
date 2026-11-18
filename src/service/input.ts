@@ -42,6 +42,7 @@ import {
   rejectedInput,
   report,
   type State,
+  sender,
   write,
 } from "./state.ts";
 
@@ -196,7 +197,9 @@ function decodedAnswer(r: Run, id: LineId, target: DefinitionRef, answer: Answer
  */
 function checkAnswer(r: Processing, p: Pending, answer: Answer): Decoded {
   const target = p.activity.target;
-  const fault = isAssumed(r.st.structure, target) ? undefined : rejectedInput(r, target, p.requester, p.input, answer);
+  const fault = isAssumed(r.st.structure, target)
+    ? undefined
+    : rejectedInput(r, target, sender(p.requester), p.input, answer);
   return fault === undefined ? decodedAnswer(r, p.id, target, answer) : { violation: fault };
 }
 
@@ -261,7 +264,7 @@ export function exchanges(s: State): Exchange[] {
       add(events, l.resultOf, { event: l.event, payload: l.payload });
   }
   return s.lines.flatMap((l) =>
-    l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe") && l.sender !== undefined
+    l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe")
       ? [
           {
             id: l.id,
@@ -315,20 +318,24 @@ function checkAssumedAnswer(r: Run, x: Exchange, input: Fields, events: readonly
   const failedEnsures =
     decoded.result === "rejected" || failedRequires !== undefined
       ? undefined
-      : r.functions.resultEnsures(target, input, decoded.output, decoded.result === "accepted" ? events : []);
+      : r.functions.resultEnsures(target, input, decoded.output, events);
   if (failedEnsures instanceof Failed) halt(issueViolation(target, failedEnsures));
   const broken = brokenAssumption(x.id, target, a, failedRequires, failedEnsures);
   if (broken !== undefined) report(r.state, broken);
 }
 
 /**
- * Lean's checkExchange: the result events of the request `x` against its target, and, for an assumed peer, its input
- * against the target's input schema, also when no answer arrived, and each answer, also one that arrived when the
- * request no longer waited.
+ * Lean's checkExchange: the result events of the request `x` against its target, a spec peer's rejection of its input as
+ * invalid, and, for an assumed peer, its input against the target's input schema, also when no answer arrived, and each
+ * answer. Each answer counts, also one that arrived when the request no longer waited.
  */
 function checkExchange(r: Run, x: Exchange): void {
   const { target } = x;
   if (!isAssumed(r.st.structure, target)) {
+    for (const a of x.answers) {
+      const fault = rejectedInput(r, target, x.sender, x.input, a);
+      if (fault !== undefined) report(r.state, fault);
+    }
     const found = resultOfFinding(r, x);
     if (found !== undefined) report(r.state, found);
     return;

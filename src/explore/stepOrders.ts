@@ -278,7 +278,9 @@ export function stepOrderChanges(
     const key = canonicalJson([span.origin, span.service] as Json);
     if ((span.origin.type === "startup" ? from > 0 : index < from) || searched.has(key)) return [];
     searched.add(key);
-    if (candidatesOf(executed, span).length === 0 && arrivals(executed, span).length === 0) return [];
+    const tied = arrivals(executed, span);
+    const equal = tied.some(([name], n) => tied.findIndex(([other]) => sameStep(other, name)) < n);
+    if (candidatesOf(executed, span).length === 0 && !equal) return [];
     const prefix: Scenario = { ...sc, lines: sc.lines.slice(0, index + 1), expectations: [] };
     const search = stepOrderSearch(spec, prefix, span.origin, span.service);
     if (search.tried.length === 0 && search.found.length === 0) return [];

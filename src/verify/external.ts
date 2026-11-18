@@ -24,7 +24,7 @@ import { byLine, type Found, lineSchema } from "./lines.ts";
 
 type LineOf<T extends TraceLine["type"]> = Extract<TraceLine, { readonly type: T }>;
 
-/** Lean's Request: a request of the trace, whether an answer accepted it, and the events naming it as resultOf. */
+/** Lean's Request: a request of the trace, whether no answer rejected it, and the events naming it as resultOf. */
 interface Request {
   readonly definition: AnyCommand | AnyQuery;
   readonly line: LineOf<"command" | "query">;
@@ -59,7 +59,7 @@ function checkLine(
     const definition = definitionOfTraceName(spec, service, l.name, l.type);
     requests.set(
       l.id,
-      definition === undefined ? undefined : { definition, line: l, accepted: false, answered: false, results: [] },
+      definition === undefined ? undefined : { definition, line: l, accepted: true, answered: false, results: [] },
     );
     return definition === undefined
       ? ({
@@ -89,7 +89,7 @@ function checkLine(
         data: { requestId: l.to, target },
       } satisfies Mismatch;
     request.answered = true;
-    request.accepted = l.answer.result === "accepted";
+    request.accepted &&= l.answer.result === "accepted";
     if (l.answer.result === "rejected")
       return rejectionKinds(spec.structure, service, target).includes(l.answer.rejection.kind)
         ? { at, line: l, request }
@@ -150,8 +150,7 @@ function checkResults(spec: Spec, requests: ReadonlyMap<string, Request | undefi
       ? []
       : request.results.flatMap(({ at, event }): Found[] => {
           const target = refOfDefinition(spec, request.definition);
-          const accepted = request.accepted || !request.answered;
-          const mismatch = resultOfMismatch(spec.structure, target, accepted, refOfDefinition(spec, event));
+          const mismatch = resultOfMismatch(spec.structure, target, request.accepted, refOfDefinition(spec, event));
           return mismatch === undefined
             ? []
             : [

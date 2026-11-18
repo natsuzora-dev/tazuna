@@ -65,14 +65,23 @@ export interface EmittedBy {
   readonly group: number;
 }
 
+export type RequestBody = Extract<LineBody, { readonly type: "command" | "query" | "subscribe" }>;
+
+/**
+ * A line's direction and body, with Lean's SenderOf: an `out` request line names `sender`, the definition of the service
+ * that sent the request, which a check of the request at the end of the run blames after a restart forgot who waits for
+ * it. No other line names one.
+ */
+export type LineKind =
+  | (RequestBody & { readonly dir: "out"; readonly sender: string })
+  | (RequestBody & { readonly dir: "in"; readonly sender?: never })
+  | (Exclude<LineBody, RequestBody> & { readonly dir: "in" | "out"; readonly sender?: never });
+
 /** Lean's Line: a line of a run, which traceLineOf turns into a trace line. */
-export type Line = LineBody & {
+export type Line = LineKind & {
   readonly time: string;
-  readonly dir: "in" | "out";
   readonly id: LineId;
   readonly emitted?: EmittedBy;
-  /** Set on the `out` request lines: the definition of the service that sent the request. */
-  readonly sender?: string;
 };
 
 /** The key of a line id in a map, as Lean compares line ids. */

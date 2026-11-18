@@ -410,17 +410,17 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
       | exact ih _ (hr (settleScreens_fixed _ _))
       | exact ih _ (processCommand_keysDistinct _ _ _ _ h)
 
-/-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (Requester.inputFault). -/
+/-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (rejectedInput?). -/
 theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : Sent) (serial cause : Nat)
     (answer : Answer) (sent : Queued) (hc : c.serial = some serial) (hq : s.queued.find? (·.serial == serial) = some sent)
     (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
   rcases answer with _ | _ | ⟨kind, reason⟩
-  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]; split <;> rfl
-  · simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]; split <;> rfl
+  · simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
+  · simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
   · cases kind
     · exact absurd rfl (ha reason)
-    all_goals simp [workBody, State.takeQueued, Requester.rejectedInput?, hc, hq, hs]; split <;> rfl
+    all_goals simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
 theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 

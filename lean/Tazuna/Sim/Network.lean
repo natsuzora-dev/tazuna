@@ -36,15 +36,16 @@ inductive Status where
 deriving DecidableEq, Repr, Inhabited
 
 /--
-A message: the line `body` that `sender` wrote with id `id` while `origin` was processed. Messages between the same
-sender and receiver on the same channel (LineBody.channel) arrive in sending order (FIFO), as a connection delivers
-them.
+A message: the line `body` that `sender` wrote with id `id` while `origin` was processed, which carries `definition`'s
+request or event, or answers or ends one. Messages between the same sender and receiver on the same channel
+(LineBody.channel) arrive in sending order (FIFO), as a connection delivers them.
 -/
 structure Message where
   sender : String
   receiver : String
   id : LineId
   body : LineBody
+  definition : Spec.Ref
   origin : Origin
   status : Status
 deriving Repr, Inhabited
@@ -149,16 +150,18 @@ def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
 
 def screensOf (s : State) : List InstanceId := (s.machines.filter (·.chart.screen)).map (·.id)
 
-/-- The service that the request `id` of the lines `lines` went to. -/
-def targetOf (lines : Array Line) (id : LineId) : Option String :=
+/-- The definition of the request line `id` in the direction `dir` of the lines `lines`. -/
+def requestDefinition? (lines : Array Line) (dir : Dir) (id : LineId) : Option Spec.Ref :=
   lines.toList.findSome? fun l =>
-    match l.dir, l.body with
-    | .out, .command r _ | .out, .query r _ | .out, .subscribe r _ =>
-      if l.id == id then some r.service else none
-    | _, _ => none
+    match l.body with
+    | .command r _ | .query r _ | .subscribe r _ => if l.dir == dir && l.id == id then some r else none
+    | _ => none
 
-/-- The world with a message from `sender` to `receiver`, kept in flight, discarded, or reported as unlisted. -/
-def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) : World :=
+/--
+The world with a message from `sender` to `receiver` that carries `definition`, kept in flight, discarded, or reported
+as unlisted.
+-/
+def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) (definition : Spec.Ref) : World :=
   let line := match o with
     | .line i => some i
     | .startup => none
@@ -166,7 +169,7 @@ def World.post (w : World) (o : Origin) (sender receiver : String) (l : Line) : 
   | none => w.report (.unlistedService line receiver)
   | some role =>
     let status := if role == .skip then .discarded else .inFlight
-    let msg : Message := { sender, receiver, id := l.id, body := l.body, origin := o, status }
+    let msg : Message := { sender, receiver, id := l.id, body := l.body, definition, origin := o, status }
     { w with messages := w.messages.push msg }
 
 /--
@@ -179,18 +182,18 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
     match l.body with
     | .command r _ | .query r _ | .subscribe r _ =>
       let target := r.service
-      if target == service then w else w.post o service target l
+      if target == service then w else w.post o service target l r
     | .unsubscribe to =>
-      match targetOf (w.state service).lines to with
-      | some target => w.post o service target l
+      match requestDefinition? (w.state service).lines .out to with
+      | some r => w.post o service r.service l r
       | none => w
     | .answer to _ =>
-      match to with
-      | .received requester _ => w.post o service requester l
-      | .own _ => w
+      match to, requestDefinition? (w.state service).lines .in to with
+      | .received requester _, some r => w.post o service requester l r
+      | _, _ => w
     | .event event _ _ =>
       w.services.foldl (init := w) fun w (r, st) =>
-        if r != service && st.receives.contains event then w.post o service r l else w
+        if r != service && st.receives.contains event then w.post o service r l event else w
     | _ => w
 
 /--
@@ -261,23 +264,9 @@ def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : 
     let sent := (t.lines.extract before t.lines.size).toList
     pure ((w.route o service sent).checkComputed service sent t.records)
 
-/-- The definition that the message carries: its request's or event's, or that of the request that it answers or ends. -/
-def World.definitionOf? (w : World) (msg : Message) : Option Spec.Ref :=
-  let requested (to : LineId) := w.messages.toList.findSome? fun r =>
-    if receivedId r.sender r.id != to then none else
-    match r.body with
-    | .command t _ | .query t _ | .subscribe t _ => some t
-    | _ => none
-  match msg.body with
-  | .command r _ | .query r _ | .subscribe r _ | .event r _ _ => some r
-  | .answer to _ => requested to
-  | .unsubscribe to => requested (receivedId msg.sender to)
-  | _ => none
-
 /--
 The world after the messages `ks`, all to the running service `receiver`, arrive in one processing while `o` is
-processed: one message as it is, and several as a tie (arriveAll), each waiting for those that must arrive before it
-(World.precedes).
+processed: one message as it is, and several as a tie (arriveAll).
 -/
 def World.deliver {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (w : World) (fsOf : String → Functions m)
     (o : Origin) (receiver : String) (ks : List Nat) : m World :=
@@ -286,9 +275,8 @@ def World.deliver {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (w
   match msgs with
   | [msg] => w'.act fsOf o receiver fun st fs s => arriveFrom st fs s msg.sender msg.id msg.body
   | _ =>
-    let arrivals := msgs.zipIdx.map fun (msg, n) =>
-      { sender := msg.sender, id := msg.id, body := msg.body, definition := (w.definitionOf? msg).getD default
-        waitsFor := (msgs.take n).zipIdx.filterMap fun (e, j) => if w.precedes e msg then some j else none : Arrival }
+    let arrivals := msgs.map fun msg =>
+      { sender := msg.sender, id := msg.id, body := msg.body, definition := msg.definition : Arrival }
     w'.act fsOf o receiver (arriveAll · · arrivals)
 
 end Tazuna.Sim

@@ -125,7 +125,7 @@ end of the run (checkExchanges).
 def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
     m (Except Issue (Except Finding Answer)) :=
   let target := p.activity.ref
-  match (if st.«structure».isAssumed target then none else p.requester.rejectedInput? st target answer) with
+  match (if st.«structure».isAssumed target then none else rejectedInput? st p.requester.sender target answer) with
   | some fault => pure (.ok (.error (.fault fault)))
   | none => decodedAnswer st fs p.id target answer
 
@@ -174,18 +174,18 @@ structure Exchange where
 def State.exchanges (s : State) : List Exchange :=
   let arrived := s.lines.toList.foldl (init := []) fun (acc : List Line) l =>
     if l.dir == .in && !acc.any (·.id == l.id) then acc ++ [l] else acc
-  s.lines.toList.filterMap fun l =>
-    let sent (target : Spec.Ref) (input : Value) : Option Exchange := l.sender.map fun sender =>
-      { id := l.id, target, sender, input
-        answers := arrived.filterMap fun a => match a.body with
-          | .answer to x => if to == l.id then some x else none
-          | _ => none
-        events := arrived.filterMap fun a => match a.body with
-          | .event e p (some r) => if r == l.id then some (e, p) else none
-          | _ => none }
-    match l.dir, l.body with
-    | .out, .command r input | .out, .query r input | .out, .subscribe r input => sent r input
-    | _, _ => none
+  let sent (id : LineId) (target : Spec.Ref) (input : Value) (sender : String) : Exchange :=
+    { id, target, sender, input
+      answers := arrived.filterMap fun a => match a.body with
+        | .answer to x => if to == id then some x else none
+        | _ => none
+      events := arrived.filterMap fun a => match a.body with
+        | .event e p (some r) => if r == id then some (e, p) else none
+        | _ => none }
+  s.lines.toList.filterMap fun
+    | ⟨_, .out, id, .command r input, _, sender⟩ | ⟨_, .out, id, .query r input, _, sender⟩
+    | ⟨_, .out, id, .subscribe r input, _, sender⟩ => some (sent id r input sender)
+    | _ => none
 
 /--
 The result events of `x` decoded. Each was decoded when it arrived, so an event that does not decode now is left out.
@@ -228,7 +228,7 @@ def checkAssumedAnswer [Monad m] (st : Service) (fs : Functions m) (x : Exchange
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok failedRequires =>
   let ensured : Except Issue (Option String) ←
-    if decoded matches .rejected _ || failedRequires.isSome then pure (.ok none) else fs.resultEnsures target input decoded.output? (if decoded matches .accepted _ then events else [])
+    if decoded matches .rejected _ || failedRequires.isSome then pure (.ok none) else fs.resultEnsures target input decoded.output? events
   match ensured with
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok failedEnsures =>
@@ -237,13 +237,15 @@ def checkAssumedAnswer [Monad m] (st : Service) (fs : Functions m) (x : Exchange
     | none => return s
 
 /--
-The state after the request `x` is checked: its result events against its target, and, for an assumed peer, its input
-against the target's input schema, which stands for the peer's parse, also when no answer arrived, and each answer
-(checkAssumedAnswer), also one that arrived when the request no longer waited.
+The state after the request `x` is checked: its result events against its target, a spec peer's rejection of its input
+as invalid, and, for an assumed peer, its input against the target's input schema, which stands for the peer's parse,
+also when no answer arrived, and each answer (checkAssumedAnswer). Each answer counts, also one that arrived when the
+request no longer waited.
 -/
 def checkExchange [Monad m] (st : Service) (fs : Functions m) (s : State) (x : Exchange) : m State := do
   if s.halted.isSome then return s
   if !st.«structure».isAssumed x.target then
+    if let some f := x.answers.findSome? (rejectedInput? st x.sender x.target) then return s.report (.fault f)
     return (resultOfFinding st x).elim s s.report
   match ← fs.parse (.input x.target) x.input with
   | .error e => return s.report (.fault (issueViolation x.target e))

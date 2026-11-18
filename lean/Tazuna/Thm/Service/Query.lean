@@ -40,7 +40,7 @@ theorem publish_grows : Grows s (publish st fs s) := by
       · exact Grows.of_lines (by simp)
       · split
         · exact Grows.of_lines (reportAll_lines _)
-        · exact (Grows.of_lines (reportAll_lines (s := t) _)).trans (reportAll_now (s := t) _) (grows_write _ _ _)
+        · exact (Grows.of_lines (reportAll_lines (s := t) _)).trans (reportAll_now (s := t) _) (grows_write _ _ _ _ _)
 
 theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
     (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input = .answered a vs)

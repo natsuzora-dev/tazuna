@@ -52,7 +52,7 @@ function refresh(r: Processing, instance: Instance): boolean {
     if (open.some((p) => p.requester.slot === slot && JSON.stringify(p.input) === text)) continue;
     awaitAnswer(
       r.state,
-      { dir: "out", type: "subscribe", target: activity.target, input },
+      { type: "subscribe", target: activity.target, input },
       { kind: "slot", machine: instance.id, slot },
       activity,
     );

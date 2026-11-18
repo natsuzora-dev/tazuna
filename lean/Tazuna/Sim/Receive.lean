@@ -63,14 +63,13 @@ def arrivalContent (service sender : String) : LineBody → Value
 
 /--
 A message of a tie: what `sender` sent with id `id` and body `body`, which carries `definition`'s request or event, or
-answers or ends one. `waitsFor` are the places of the earlier messages of the tie that must arrive before it (FIFO).
+answers or ends one. A tie has at most one message per channel (Sim's messagesOf), so its messages arrive in any order.
 -/
 structure Arrival where
   sender : String
   id : LineId
   body : LineBody
   definition : Spec.Ref
-  waitsFor : List Nat := []
 
 /-- The name of the step in which `a` arrives at `service`. Equal messages have one name. -/
 def Arrival.name (service : String) (a : Arrival) : StepName :=
@@ -79,34 +78,36 @@ def Arrival.name (service : String) (a : Arrival) : StepName :=
 /--
 The state after the messages `arrivals` that one line delivers arrive, each as its own message in a step of the tie
 `first`, the step number of the first: nothing outside tells which arrives first, so the next entry of the input's
-`stepOrder` that names an arrival chooses among those whose `waitsFor` arrived, as chooseDeadline chooses a deadline of
-a tie, and without one it is the first in sending order. What a message's processing does outside any step belongs to
-its arrival step.
+`stepOrder` that names an arrival chooses it, as chooseDeadline chooses a deadline of a tie, and without one it is the
+first left in sending order. The step belongs to the message that the arrival opens, whatever messages the processing
+opens after it, and what the processing does outside any step belongs to the step.
 -/
 def arriveAll (st : Service) (fs : Functions m) (arrivals : List Arrival) (s : State) : m State :=
-  go s.steps.size arrivals.length [] s
+  go s.steps.size arrivals s
 where
-  go (first : Nat) : Nat → List Nat → State → m State
-    | 0, _, s => pure s
-    | fuel + 1, done, s => do
+  go (first : Nat) : List Arrival → State → m State
+    | [], s => pure s
+    | next :: more, s => do
       if s.halted.isSome then return s
-      let ready := arrivals.zipIdx.filter fun (a, n) => !done.contains n && a.waitsFor.all done.contains
-      let some next := ready.head? | return s
-      let chosen : Except InvalidInput ((Arrival × Nat) × List StepName) := match s.stepOrder with
+      let remaining := next :: more
+      let chosen : Except InvalidInput (Fin remaining.length × List StepName) := match s.stepOrder with
         | named :: rest =>
-          if !named.isArrival then .ok (next, s.stepOrder) else
-          match ready.find? (·.1.name st.service == named) with
-          | some c => .ok (c, rest)
-          | none => .error (.unreadyStep named (ready.map (·.1.name st.service)))
-        | [] => .ok (next, [])
+          if !named.isArrival then .ok (⟨0, by simp [remaining]⟩, s.stepOrder) else
+          match remaining.findFinIdx? (·.name st.service == named) with
+          | some i => .ok (i, rest)
+          | none => .error (.unreadyStep named (remaining.map (·.name st.service)))
+        | [] => .ok (⟨0, by simp [remaining]⟩, [])
       match chosen with
       | .error e => return s.report (.invalidInput e)
-      | .ok ((a, n), stepOrder) =>
+      | .ok (i, stepOrder) =>
+        let a := remaining[i]
         let (s, step) := { s with stepOrder }.newStep none (tie := some (.arrivals first))
+          (message := some (s.messageCount + 1))
         MonadNote.note (.arrivalBegins step (a.name st.service))
         let t ← arriveFrom st fs s a.sender a.id a.body
         MonadNote.note .arrivalEnds
-        let t := { t with steps := t.steps.modify step fun i => { i with message := t.messageCount } }
-        go first fuel (done ++ [n]) t
+        go first (remaining.eraseIdx i) t
+  termination_by arrivals => arrivals.length
+  decreasing_by simp only [remaining, List.length_eraseIdx_of_lt i.isLt]; simp
 
 end Tazuna.Sim

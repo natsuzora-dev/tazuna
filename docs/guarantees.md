@@ -22,7 +22,7 @@ The events that name one request as their `resultOf` travel on a channel of thei
 An event without `resultOf` travels on the channel of its sender and receiver.
 Messages on one channel keep their order, and messages on different channels keep none.
 Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused, or when a clock line sent it after the earlier.
-A deadline counts as caused by the step that entered its state.
+A deadline counts as caused by the step that entered its state, and, when the end of a message changed its time, by every step of that message, since the time reads the records that the whole message wrote.
 Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
 
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
@@ -31,6 +31,7 @@ A *violation* is what a command reports.
 Each violation has a kind, such as `Fault.failedEnsures`, and the part before the dot is its *group*.
 The doc comment of a kind states what it means.
 A run stops at a violation of a *halting* kind, because after it the spec's behavior is undefined or the scenario describes no run.
+A run that stops gets none of the checks at the end of a run: the expectations of Then, the check of the messages left in flight, and the checks of the exchanges with external services, since the lines after the halt never took place and those checks would read a cut-off record.
 `halts` in `lean/Tazuna/Service/Fault.lean`, `lean/Tazuna/Service/InvalidInput.lean`, and `lean/Tazuna/Sim/InvalidScenario.lean` defines which kinds halt.
 
 ## What a passing command means
@@ -61,6 +62,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
   A tied deadline, and a message that a line delivers with others, is a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
 - Equal messages that one line delivers to one service are not searched.
   A service reads a received id only to route a message, to answer it, and to tell one it processed before, so their other order is the same run with their ids swapped, and `test` compares that run without executing it (`ChoiceDependent.equalMessages`).
+  So `ChoiceDependent.equalMessages` means that what the receiver sends back to the sender depends on the order in which the equal messages arrived, even when nothing downstream reads the difference, as symmetry reduction reports a model that is not symmetric.
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
 Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, and the records are equal up to a renaming of created keys.
@@ -158,8 +160,7 @@ tazuna detects a break of each assumption only partly or not at all.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
   Every exchange with an external service is recorded and checked once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
-  `test` checks the input that the service sent against the external target's input schema, also when no answer came, each answer against the target's contract, also one that came after a restart, a command's `ensures` with all its result events, and each result event against its request's answer, which may come before or after it.
-  A scenario that halts before its end gets none of these checks.
+  `test` checks the input that the service sent against the external target's input schema, also when no answer came, each answer against the target's contract, also one that came after a restart, a command's `ensures`, once an answer accepted the command, with all its result events, and each result event against its request's answer, which may come before or after it.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
   Replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
   A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so `verify` assumes that the implementation behaves the same with either set of values.
