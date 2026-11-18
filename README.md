@@ -102,4 +102,4 @@ Run the commands in [samples/todo](samples/todo).
 - To learn the ideas behind specs and scenarios, see [Concepts](docs/concepts.md).
 - To learn what `check`, `test`, and `verify` guarantee when they pass, see [Guarantees](docs/guarantees.md).
 - To list the commands and their options, run `npx tazuna --help`.
-- Each definer, such as `service()`, `scenario`, or `drive`, documents itself in its doc comment.
+- Each exported function, such as `service()`, `scenario`, or `drive`, documents itself in its doc comment.

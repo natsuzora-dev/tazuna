@@ -20,10 +20,19 @@ Messages travel on *channels*.
 A request and its end share the request's channel, and its answers travel back on a channel of their own.
 The events that name one request as their `resultOf` travel on a channel of their own, so a result event may arrive before or after the request's answer, as a Stripe webhook may arrive before the API response.
 An event without `resultOf` travels on the channel of its sender and receiver.
-Messages on one channel keep their order, and messages on different channels keep none.
-Of two events on one channel, the later keeps its place only when the step that emitted it is the earlier's step, in a later group of its `decide`, or one that the earlier's step caused, or when a clock line sent it after the earlier.
-A deadline counts as caused by the step that entered its state, which also fixed its time.
-Events of steps that no cause chain links, such as two map copies or two tied deadlines, keep no order.
+Messages on one channel arrive in the order in which they were sent, and messages on different channels keep no order.
+
+The spec fixes the send order of the messages on one request's channel and of the answers to one request.
+Of two events `a` and `b` on one channel, the spec sends `b` after `a` only in the following cases:
+
+- `b` comes from `a`'s step, in a later group of its `decide`.
+- `b` comes from a step that `a`'s step caused, such as a machine's step that receives `a`.
+  This chain of causes is the *cause chain*.
+  The step that enters a state causes the steps of that state's deadlines.
+- `b` is sent at a later time than `a`, or while the service processes a later input.
+
+Steps that no cause chain links, such as the steps of two parallel regions, two map copies, or two deadlines due at the same time, have no send order.
+Their events on one channel may arrive in either order.
 
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 
@@ -59,10 +68,10 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
 
 `test` searches the orders that no line writes:
 
-- Deadlines of one service due at the same time, the messages that one line delivers to one service, and the steps of one processing that no cause orders.
+- Deadlines of one service due at the same time, the messages that one line delivers to one service, and the steps of one message that no cause orders.
   A machine receives each event of one group that `decide` returns in a step of its own, so the order of a group is one of these orders.
   Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
-  A tied deadline, and a message that a line delivers with others, is a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
+  A deadline due at the same time as another, and a message that a line delivers with others, is a message of its own, so what it reads and writes includes every step of that message and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
   Each message is told apart by its id, so equal messages are ordered like any others.
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
@@ -73,7 +82,6 @@ Lines that a service wrote for messages that one line delivered compare by messa
 ### When a trace matches a snapshot
 
 `drive` from `@natsuzora-dev/tazuna/verify` controls only the implementation's world: the start, the clock, the messages that the implementation receives, and restarts.
-The implementation creates its keys and request ids in its own way.
 
 A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 
@@ -97,7 +105,7 @@ When the bindings cannot decide what the implementation gets, or a trace cannot 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
 A key position is a value whose schema is `ref(E)` or `E`'s key field, such as `Task.fields.id`, and in records the key field and the `ref()` fields.
-Both commands rename a string only at a key position; any other string, such as a key held in a plain `z.string()`, compares as text.
+Both commands rename a string only at a key position. Any other string, such as a key held in a plain `z.string()`, compares as text.
 
 ## Who fixes a violation
 
@@ -134,7 +142,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
-| `ChoiceDependent` | Orders beyond `ChoiceDependent.searchLimit`. The order of two ready steps with equal step names, which the search takes as one step: such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
+| `ChoiceDependent` | Orders beyond `ChoiceDependent.searchLimit`. The order of two ready steps that run the same definition on equal inputs, which the search takes as one step. Such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 
@@ -189,7 +197,7 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 - A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it (`withoutRepeatedAnswers` in `lean/Tazuna/Verify/Compare.lean`).
 - Spec functions read the keys of an entity in one order, whatever order the records were written in.
   Only the TypeScript runtime orders them: the Lean definitions give spec functions the records in write order.
-- The step-order search reaches every order of dependent steps that changes a processing's outcome (dynamic partial-order reduction): that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
+- The step-order search reaches every order of dependent steps that changes a message's outcome (dynamic partial-order reduction): that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
 - The end-of-run checks of the exchanges with external services (`checkExchanges` in `lean/Tazuna/Service/Input.lean`), and which steps cause which (`causedBy` in `lean/Tazuna/Sim/Order.lean`), beyond the `after` theorems under Ordering.
 - `check`'s `Malformed`, `NonCanonical`, and `Restricted` rules exist only in the TypeScript runtime. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it.
 
@@ -274,7 +282,7 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 ### Restart
 
 - A restart begins the service again from the part of its state that it persists: its records, its command answers, the events and answers that arrived, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions (`restart_keeps`).
-- An answer that arrives when its request waits no more, as after a restart, is written and has no other effect (`late_answer_written`). The end of the run checks it with the other answers; no theorem states that check.
+- An answer that arrives when its request waits no more, as after a restart, is written and has no other effect (`late_answer_written`). The end of the run checks it with the other answers, and no theorem states that check.
 - A restart reads nothing of the state that it discards (`restart_forgets`).
 
 ### Comparison
@@ -282,5 +290,5 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields (`compareSnapshot_eq_none_iff`, `compareSnapshot_reordered`).
 - A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states (`compare_matches`, `contentMatch_renamed`).
 - When `check` reports no `Illegal` violation, the spec keeps every structural rule that `Checked` lists, one per `Illegal` kind (`check_eq_nil_iff`).
-- When the step-order search of a processing reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from (`stepOrderSearch_same`). The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and records equal up to a renaming of created keys, or outputs that do not compare even with themselves and records equal up to renaming (`difference_same`, `compareTraces_ok`, `sameRecords_renamed`).
+- When the step-order search of a message reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from (`stepOrderSearch_same`). The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and records equal up to a renaming of created keys, or outputs that do not compare even with themselves and records equal up to renaming (`difference_same`, `compareTraces_ok`, `sameRecords_renamed`).
 - `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace (`no_violation_iff`).

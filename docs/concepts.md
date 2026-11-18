@@ -1,7 +1,7 @@
 # Concepts
 
 This page explains the ideas behind tazuna's specs and scenarios, and why tazuna works the way it does.
-What each definer, actor, and violation kind does is in its doc comment.
+What each function, actor, and violation kind does is in its doc comment.
 What a passing command guarantees is in [Guarantees](guarantees.md).
 
 ## The scenario writes the whole world
@@ -53,10 +53,11 @@ The scenario reads a created key through the handle of the line that returned it
 A message stays *in flight* from the moment its sender sends it until a line of `w.net` decides its fate.
 While a message is in flight, other lines can run, which is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
 
-Messages on one channel keep their order, and messages on different channels keep none.
-[Terms](guarantees.md#terms) defines the channels.
-This model follows what a real transport promises: one connection or one queue keeps its order, and nothing orders two connections.
-A spec that relies on an order across channels relies on an order that a deployed system does not keep, so neither the snapshot nor `verify` records one.
+Messages on one channel arrive in the order in which they were sent, as on one TCP connection or one Kafka partition, and nothing orders two channels.
+The spec fixes the send order of two events only along a chain of causes, as Lamport's happens-before orders messages.
+Two steps that no chain of causes links, such as the steps of two parallel regions, could run in two processes of a deployed system, and nothing orders the messages of two processes.
+[Terms](guarantees.md#terms) defines the channels and the send order.
+Neither the snapshot nor `verify` records an order that a deployed system does not keep, so a spec cannot rely on one.
 
 A message carries its value as the sender wrote it, and only the receiver parses it, as in a web API.
 A sender that checked or normalized the value first would make the simulation accept a message that the deployed receiver rejects.
@@ -77,24 +78,22 @@ Spec functions receive the records of an entity as a `Bag`, which has no index a
 To order records, the spec sorts them by a key with `sortedBy`, and records with equal keys stay one group without order.
 A function can still depend on the order through a variable outside its callbacks, which `test` detects only partly as `BagOrderDependent`.
 
-Some steps have no cause that orders them: deadlines of one service due at the same time, the steps of one processing that read and write the same data, and the events of one group that `decide` returns.
+Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one group that `decide` returns.
 One search runs all of these orders, and `test` reports `ChoiceDependent.stepOrder` when two orders give different outcomes.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
-Two outcomes are the same when their lines have the same contents and the same causal relation: which earlier lines each line must follow.
-A line must follow the message that caused it, the earlier lines of its request's channel, and the events on its channel that its own step's earlier groups or a step that caused it emitted, as happens-before orders messages.
-A deadline counts as caused by the step that entered its state, and what a clock line fires follows the lines before the clock line.
+Two outcomes are the same when their lines have the same contents and each line follows the same earlier lines, which the snapshot records as `after`.
 Whether two orders give the same outcome depends on what each step changes:
 
 - Two tied deadlines that each send one request give the same outcome, because the requests keep no order between them.
-- Two tied deadlines that each emit an event without `resultOf` to the same receiver also do, because no cause chain links the two steps, as two senders' messages keep no order.
+- Two tied deadlines that each emit an event without `resultOf` to the same receiver also do, because the two steps have no send order.
 - Two tied deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
 - Two tied deadlines whose events a machine reacts to only the first time do not, because the reaction's event follows whichever event came first.
 
 The same rule covers the messages that one line delivers to one service, since nothing outside tells which of them arrives first.
 The same search runs their orders and reports `ChoiceDependent.stepOrder`.
-Equal messages are searched too, each named by its id.
-For example, two copies that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
+Equal messages are searched too, since each has its own id.
+For example, two copies of a map state that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
 The requests then need content that tells them apart, such as the task's id in the input.
 
 ## Each meaning has one form

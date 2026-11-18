@@ -49,8 +49,8 @@ different one, since decide orders its groups and not the events of one group, w
 caused, or when it is later than `a`: within one window only the clock line moves time, and it fires its deadlines
 before its own line, so `b` is an output of that clock line and `a` was sent before it. Events of steps that no cause
 chain links keep no order, even on one channel, as two senders' messages do not; lines on different channels keep none
-either. Precedents: Lamport's happens-before, Kafka (order within a partition), HTTP/2 (independent streams), and
-Mazurkiewicz traces (independent actions commute).
+either. Precedents: Lamport's happens-before (order along a cause chain), Kafka (send order within a partition),
+HTTP/2 (independent streams), and Mazurkiewicz traces (independent actions commute).
 -/
 def ordered (s : State) (a b : Nat) : Bool :=
   match s.lines[a]?, s.lines[b]? with
