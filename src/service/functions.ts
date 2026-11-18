@@ -139,8 +139,9 @@ export type DeadlineTime = { readonly kind: "delay"; readonly ms: number } | { r
 export type Checked = { readonly value: Fields; readonly encoded: unknown } | { readonly error: ViolationError };
 
 /**
- * Lean's Functions, the TS side of the questions in the same order. Definitions are named by trace name as seen from
- * the service; values are decoded. Each question that runs author code answers its value or the Failed that stopped it.
+ * Lean's Functions, the TS side of the questions in the same order. An own definition is named by its name, and a
+ * definition that may belong to another service by its ref; values are decoded. Each question that runs author code
+ * answers its value or the Failed that stopped it.
  */
 export interface Functions {
   parse(schema: Schema, value: unknown): Checked | Failed;
@@ -164,7 +165,7 @@ export interface Functions {
     records: RecordSource,
     now: Temporal.Instant,
   ): boolean | Failed;
-  inputRequirement(target: string, condition: string, input: Fields): boolean | Failed;
+  inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed;
   /** Returns the events in groups: the groups are in order, and the events of one group have none. */
   decide(
     command: string,
@@ -183,7 +184,12 @@ export interface Functions {
     now: Temporal.Instant,
   ): string | undefined | Failed;
   queryEnsures(query: string, input: Fields, output: Fields, records: RecordSource): string | undefined | Failed;
-  resultEnsures(target: string, input: Fields, output: unknown, events: readonly Emit[]): string | undefined | Failed;
+  resultEnsures(
+    target: DefinitionRef,
+    input: Fields,
+    output: unknown,
+    events: readonly Emit[],
+  ): string | undefined | Failed;
   invariant(entity: string, record: Fields): string | undefined | Failed;
   serviceInvariant(records: RecordSource): string | undefined | Failed;
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed;

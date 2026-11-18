@@ -112,19 +112,23 @@ def trace (s : State) (c : Causes) : List (Line × List String × List String) :
   let lineSteps := lineSteps s c
   s.lines.toList.zipIdx.map fun (line, i) => (line, after s lineSteps i, createdAt s i)
 
-/-- The trace line of `line` as a snapshot holds it, with its `after` and `created`. -/
-def traceLineOf (line : Line) (after created : List String) : TraceLine :=
+/--
+The trace line of `line` of the trace of `service` as a snapshot holds it, with its `after` and `created`. This is where
+a definition gets its trace name.
+-/
+def traceLineOf (service : String) (line : Line) (after created : List String) : TraceLine :=
   let (dir, id) := (line.dir, line.id)
+  let name (r : Spec.Ref) := r.traceName service
   let body : TraceLine.Body := match line.body with
-    | .command name input => .command dir id name input
-    | .query name input => .query dir id name input
-    | .subscribe name input => .subscribe dir id name input
-    | .event name payload resultOf => .event dir id name payload resultOf
+    | .command r input => .command dir id (name r) input
+    | .query r input => .query dir id (name r) input
+    | .subscribe r input => .subscribe dir id (name r) input
+    | .event r payload resultOf => .event dir id (name r) payload resultOf
     | .answer to answer => .answer dir id to answer
     | .unsubscribe to => .unsubscribe dir id to
     | .time => .time .in id
     | .restart => .restart .in id
-    | .operation screen control nth payload => .operation dir id (operationName screen control) nth payload
+    | .operation screen control nth payload => .operation dir id (operationName (name screen) control) nth payload
   { time := { text := renderTime line.time, time := line.time }
     body
     after := if after.isEmpty then none else some after

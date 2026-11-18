@@ -51,7 +51,7 @@ def uniqueReads (st : Service) (records : Records) (entity : String) (key : Opti
       unique.map (.field entity r.key ·)
 
 def eventFields (st : Service) (e : Emit) : List String :=
-  match st.events.lookup e.event with
+  match st.changeOf e.event with
   | some (.create _ _ fields) | some (.update _ _ fields) | some (.delete _ _ fields) | some (.set _ fields) => fields
   | _ => []
 
@@ -405,7 +405,7 @@ def instrument : Functions (StateT Collect m) :=
     requirement := fun name c input records now =>
       audit (collect none) (st.ref name) "requirement" (·.requirement name c input records now) (· == ·)
     inputRequirement := fun target c input =>
-      audit (pure ()) (st.refOf target) "inputRequirement" (·.inputRequirement target c input) (· == ·)
+      audit (pure ()) target "inputRequirement" (·.inputRequirement target c input) (· == ·)
     decide := fun name input records now =>
       observe (fs.decide name input records now) fun r => do
         auditCollect ifs (collect none) (st.ref name) "decide" (·.decide name input records now)
@@ -416,7 +416,7 @@ def instrument : Functions (StateT Collect m) :=
     queryEnsures := fun name input output records =>
       audit (collect none) (st.ref name) "queryEnsures" (·.queryEnsures name input output records) (· == ·)
     resultEnsures := fun target input output events =>
-      audit (pure ()) (st.refOf target) "resultEnsures" (·.resultEnsures target input output events) (· == ·)
+      audit (pure ()) target "resultEnsures" (·.resultEnsures target input output events) (· == ·)
     invariant := fun entity record => audit (pure ()) (st.ref entity) "invariant" (·.invariant entity record) (· == ·)
     chartInvariant := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "chartInvariant" (·.chartInvariant scope records) (· == ·)
@@ -459,10 +459,7 @@ def tiedDeadlines (s : State) (i j : Nat) : Bool :=
 /-- Whether the `out` line `l` is an event that a contract lists, which verify compares (Verify's internalEvent). -/
 def comparedEvent (st : Service) (l : Line) : Bool :=
   match l.body with
-  | .event name _ _ =>
-    match st.«structure».named st.service (some name) ["event"] with
-    | some d => !(st.«structure».contractsListing d.ref).isEmpty
-    | none => false
+  | .event r _ _ => !(st.«structure».contractsListing r).isEmpty
   | _ => false
 
 /--

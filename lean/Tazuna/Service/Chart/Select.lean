@@ -18,7 +18,7 @@ def choose (st : Service) (s : State) (i : Instance) (extra : Extra) :
   | t :: rest =>
     if t.guarded then do
       match ← fs.guard (s.scopeOf i t.source) s.records t extra with
-      | .error e => pure (.error (issueViolation st (st.ref i.chart.name) e))
+      | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
       | .ok true => pure (.ok (some t))
       | .ok false => choose st s i extra rest
     else pure (.ok (some t))
@@ -42,7 +42,7 @@ def reaches (st : Service) (c : Instance) (payload : Value) : m (Except Fault Bo
   | none => pure (.ok true)
   | some map =>
     match ← fs.copyKey c.chart.name map payload with
-    | .error e => pure (.error (issueViolation st (st.ref c.chart.name) e))
+    | .error e => pure (.error (issueViolation (st.ref c.chart.name) e))
     | .ok none => pure (.ok true)
     | .ok (some none) => pure (.ok false)
     | .ok (some (some k)) => pure (.ok (c.id.key? == some k))

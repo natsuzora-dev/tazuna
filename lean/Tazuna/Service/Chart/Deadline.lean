@@ -22,7 +22,7 @@ def rearm [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
     | some i => do
       match ← fs.deadlineAt (s.scopeOf i (some t.state)) s.records t.name with
       | .error e =>
-        pure (s.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+        pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok time =>
         pure { s with
           deadlines := s.deadlines.map fun u => if u.order == t.order then { u with time := some time } else u })

@@ -1,7 +1,7 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-import { isOpenedByScreen, refOfTraceName, schemaProperties, traceNameOfRef } from "../spec/structure.ts";
+import { isOpenedByScreen, schemaProperties } from "../spec/structure.ts";
 import { type Chart, executableChart } from "./chart/basic.ts";
 
 type Change =
@@ -25,8 +25,7 @@ export interface Automation {
   readonly name: string;
   /** The rank among the spec's definitions. */
   readonly order: number;
-  /** The trace name of the received event (`todo.taskAdded` for another service's event). */
-  readonly receives: string;
+  readonly receives: DefinitionRef;
   readonly sends: Activity;
 }
 
@@ -57,11 +56,11 @@ export interface Service {
   /** The own events and how each changes records. */
   readonly events: ReadonlyMap<string, Change>;
   /**
-   * The trace names of the events of other services' contracts that the service's definitions receive: an automation's
-   * or a chart's event, or a result event of a command that an automation or a chart sends. A simulation delivers an
-   * event only to the services that receive it.
+   * The events of other services' contracts that the service's definitions receive: an automation's or a chart's
+   * event, or a result event of a command that an automation or a chart sends. A simulation delivers an event only to
+   * the services that receive it.
    */
-  readonly receives: readonly string[];
+  readonly receives: readonly DefinitionRef[];
   /** The automations in definition order. */
   readonly automations: readonly Automation[];
   /** The machines and screens, in definition order. */
@@ -77,11 +76,9 @@ export interface Service {
 
 export const ref = (st: Service, name: string): DefinitionRef => ({ service: st.service, name });
 
-/** Returns the ref of a trace name as seen from the service, without looking the definition up. */
-export const refOf = (st: Service, traceName: string): DefinitionRef => refOfTraceName(st.service, traceName);
-
-/** The trace name of `r` as seen from the service. */
-export const traceNameOf = (st: Service, r: DefinitionRef): string => traceNameOfRef(r, st.service);
+/** Lean's Service.changeOf: how the event `r` changes records, when it is an own event. */
+export const changeOf = (st: Service, r: DefinitionRef): Change | undefined =>
+  r.service === st.service ? st.events.get(r.name) : undefined;
 
 export function schemaOwner(schema: Schema): DefinitionRef {
   switch (schema.kind) {
@@ -129,7 +126,7 @@ export function serviceOf(structure: Structure, service: string): Service {
       case "machine":
       case "screen": {
         const opened = d.kind === "screen" && isOpenedByScreen(structure, d);
-        charts.set(name, executableChart(d, service, order, opened));
+        charts.set(name, executableChart(d, order, opened));
         if (d.kind === "screen") requirements.set(name, { refs: [], binds: [], requires: d.requires });
         break;
       }
@@ -168,7 +165,7 @@ export function serviceOf(structure: Structure, service: string): Service {
         const { receives, command } = d;
         if (receives === null || command === null) break;
         const sends: Activity = { keyword: "sends", key: name, target: command };
-        automations.push({ name, order, receives: traceNameOfRef(receives, service), sends });
+        automations.push({ name, order, receives, sends });
         break;
       }
       default:
@@ -179,9 +176,7 @@ export function serviceOf(structure: Structure, service: string): Service {
     .filter((c) => c.service !== service)
     .flatMap((c) =>
       Object.values(c.members).flatMap((r) =>
-        r !== null && structure.definitions.some((d) => d.kind === "event" && sameRef(d, r))
-          ? [traceNameOfRef(r, service)]
-          : [],
+        r !== null && structure.definitions.some((d) => d.kind === "event" && sameRef(d, r)) ? [r] : [],
       ),
     );
   const refs = (m: Readonly<Record<string, DefinitionRef | null>>) =>
@@ -207,7 +202,7 @@ export function serviceOf(structure: Structure, service: string): Service {
   const results = structure.definitions.flatMap((d) =>
     d.kind === "command" && sent.some((c) => sameRef(c, d)) ? d.emits.flatMap((e) => (e === null ? [] : [e])) : [],
   );
-  const receives = listed.filter((n) => [...heard, ...results].some((r) => traceNameOfRef(r, service) === n));
+  const receives = listed.filter((n) => [...heard, ...results].some((r) => sameRef(r, n)));
   const entities = structure.services.find((s) => s.name === service)?.entities ?? [];
   const ownEntity = (e: string) => entity({ service, name: e });
   const references = entities.flatMap((e) =>

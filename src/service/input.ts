@@ -1,7 +1,6 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import { operationName } from "../data/trace.ts";
 import type { Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
 import {
@@ -13,8 +12,9 @@ import {
   rejectionReasons,
   requiresOf,
   resultOfMismatch,
+  traceNameOfRef,
 } from "../spec/structure.ts";
-import { ref, refOf, type Service, traceNameOf } from "./basic.ts";
+import { ref, type Service } from "./basic.ts";
 import { settled } from "./chart/always.ts";
 import type { Chart } from "./chart/basic.ts";
 import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
@@ -46,11 +46,16 @@ import {
   write,
 } from "./state.ts";
 
-export function send(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
+/** Whether `target` is an own definition named in `names`. */
+const owns = (st: Service, names: readonly string[], target: DefinitionRef): boolean =>
+  target.service === st.service && names.includes(target.name);
+
+export function send(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
-  if (!r.st.commands.includes(name)) unownedTarget(r, name);
+  if (!owns(r.st, r.st.commands, target)) unownedTarget(r, target);
+  const name = target.name;
   const request: Request = { name, input };
-  const id = write(s, { dir: "in", type: "command", ...given, ...request });
+  const id = write(s, { dir: "in", type: "command", ...given, target, input });
   newMessage(s);
   const step = newStep(s, undefined);
   const known = s.commandAnswers.get(id);
@@ -62,24 +67,24 @@ export function send(r: Processing, name: string, input: unknown, given: { reado
   message(r);
 }
 
-function unownedTarget(r: Processing, name: string): never {
-  return report(r.state, { kind: "InvalidInput.unownedTarget", definition: null, data: { target: refOf(r.st, name) } });
+function unownedTarget(r: Processing, target: DefinitionRef): never {
+  return report(r.state, { kind: "InvalidInput.unownedTarget", definition: null, data: { target } });
 }
 
-export function call(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
+export function call(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
-  if (!r.st.queries.includes(name)) unownedTarget(r, name);
-  const id = write(s, { dir: "in", type: "query", ...given, name, input });
+  if (!owns(r.st, r.st.queries, target)) unownedTarget(r, target);
+  const id = write(s, { dir: "in", type: "query", ...given, target, input });
   newMessage(s);
-  write(s, { dir: "out", type: "answer", to: id, answer: resolveChecked(r, name, input) });
+  write(s, { dir: "out", type: "answer", to: id, answer: resolveChecked(r, target.name, input) });
   message(r);
 }
 
-export function subscribe(r: Processing, name: string, input: unknown, given: { readonly id?: string }): void {
+export function subscribe(r: Processing, target: DefinitionRef, input: unknown, given: { readonly id?: string }): void {
   const s = r.state;
-  if (!r.st.queries.includes(name)) unownedTarget(r, name);
-  const id = write(s, { dir: "in", type: "subscribe", ...given, name, input });
-  if (!s.subscriptions.subscribe(id, { query: name, input }))
+  if (!owns(r.st, r.st.queries, target)) unownedTarget(r, target);
+  const id = write(s, { dir: "in", type: "subscribe", ...given, target, input });
+  if (!s.subscriptions.subscribe(id, { query: target.name, input }))
     report(r.state, { kind: "InvalidInput.reusedSubscriptionId", definition: null, data: { subscriptionId: id } });
   newMessage(s);
   message(r);
@@ -96,9 +101,8 @@ export function endSubscription(r: Processing, id: string): void {
 }
 
 /** Lean's resultRequest: the request `handle` whose answer arrived, which an event names as its resultOf. */
-function resultRequest(r: Processing, name: string, handle: string): string | undefined {
+function resultRequest(r: Processing, event: DefinitionRef, handle: string): string | undefined {
   const outgoing = r.state.outgoing.get(handle);
-  const event = refOf(r.st, name);
   if (outgoing?.answer === undefined)
     return report(r.state, {
       kind: "InvalidInput.resultOfUnansweredRequest",
@@ -120,12 +124,7 @@ export function checkResults(r: Run): void {
   for (const [requestId, { activity, accepted }] of r.state.outgoing) {
     if (accepted === undefined) continue;
     const target = activity.target;
-    const failed = r.functions.resultEnsures(
-      traceNameOf(r.st, activity.target),
-      accepted.input,
-      accepted.output,
-      accepted.events,
-    );
+    const failed = r.functions.resultEnsures(target, accepted.input, accepted.output, accepted.events);
     if (failed instanceof Failed) halt(issueViolation(target, failed));
     if (failed !== undefined)
       report(
@@ -138,18 +137,18 @@ export function checkResults(r: Run): void {
 /** Lean's redeliver. */
 function redeliver(
   r: Processing,
-  name: string,
+  event: DefinitionRef,
   payload: unknown,
   given: { readonly id?: string },
   resultOf?: string,
 ): void {
   const s = r.state;
-  const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
+  const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
   write(s, {
     dir: "in",
     type: "event",
     ...given,
-    name,
+    event,
     payload,
     ...(request === undefined ? {} : { resultOf: request }),
   });
@@ -159,17 +158,16 @@ function redeliver(
 
 export function receive(
   r: Processing,
-  name: string,
+  event: DefinitionRef,
   payload: unknown,
   given: { readonly id?: string },
   resultOf?: string,
 ): void {
   const s = r.state;
-  if (s.deliveries.has(lineId(s, given.id, name))) {
-    redeliver(r, name, payload, given, resultOf);
+  if (s.deliveries.has(lineId(s, given.id, traceNameOfRef(event, s.service)))) {
+    redeliver(r, event, payload, given, resultOf);
     return;
   }
-  const event = refOf(r.st, name);
   const parsed = r.functions.parse({ kind: "payload", event }, payload);
   if (parsed instanceof Failed) halt(issueViolation(event, parsed));
   if ("error" in parsed)
@@ -181,17 +179,17 @@ export function receive(
       ),
     );
   const decoded = parsed.value;
-  const request = resultOf === undefined ? undefined : resultRequest(r, name, resultOf);
+  const request = resultOf === undefined ? undefined : resultRequest(r, event, resultOf);
   const id = write(s, {
     dir: "in",
     type: "event",
     ...given,
-    name,
+    event,
     payload,
     ...(request === undefined ? {} : { resultOf: request }),
   });
   s.deliveries.add(id);
-  const e: Emitted = { event: name, payload: decoded, encoded: parsed.encoded as Json };
+  const e: Emitted = { event, payload: decoded, encoded: parsed.encoded as Json };
   if (request !== undefined) s.outgoing.get(request)?.accepted?.events.push(e);
   newMessage(s);
   const step = newStep(s, undefined);
@@ -262,13 +260,12 @@ function specAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
  */
 function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
   const target = p.activity.target;
-  const name = traceNameOf(r.st, target);
   const parsed = r.functions.parse({ kind: "input", definition: target }, p.input);
   if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
   if ("error" in parsed) return { checked: { violation: inputFault(r, target, p.requester, parsed.error) } };
   const input = parsed.value;
   const failedRequires = firstFalse(
-    (condition) => r.functions.inputRequirement(name, condition, input),
+    (condition) => r.functions.inputRequirement(target, condition, input),
     requiresOf(r.st.structure, target),
   );
   if (failedRequires instanceof Failed) return halt(issueViolation(target, failedRequires));
@@ -278,7 +275,7 @@ function assumedAnswer(r: Processing, p: Pending, answer: Answer): AnswerCheck {
     return { assumption: broken(), checked };
   const { output } = checked.decoded;
   if (p.activity.keyword === "sends") return { assumption: broken(), checked, accepted: { input, output, events: [] } };
-  const failedEnsures = r.functions.resultEnsures(name, input, output, []);
+  const failedEnsures = r.functions.resultEnsures(target, input, output, []);
   if (failedEnsures instanceof Failed) return halt(issueViolation(target, failedEnsures));
   return { assumption: broken(failedEnsures), checked };
 }
@@ -388,8 +385,8 @@ export function operate(r: Processing, resource: InstanceId, key: string, payloa
  */
 function writeOperation(r: Processing, resource: InstanceId, screen: string, key: string, payload: unknown) {
   const chart = r.st.charts.get(screen);
-  if (chart === undefined) return unownedTarget(r, screen);
   const definition = ref(r.st, screen);
+  if (chart === undefined) return unownedTarget(r, definition);
   const control = chart.controls.find((c) => c.name === key);
   if (control === undefined)
     return report(r.state, {
@@ -397,12 +394,12 @@ function writeOperation(r: Processing, resource: InstanceId, screen: string, key
       definition: null,
       data: { screen: definition, control: key },
     });
-  const name = operationName(screen, key);
   const nth = nthOpen(r.state, resource);
   write(r.state, {
     dir: "in",
     type: "operation",
-    name,
+    screen: definition,
+    control: key,
     ...(nth === undefined ? {} : { nth }),
     ...(control.hasPayload ? { payload } : {}),
   });

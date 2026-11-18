@@ -69,13 +69,13 @@ theorem mem_danglingRefs (records : Records) (name : String) (row : Row) (f : Fa
 
 theorem mem_rowViolations (records : Records) (name : String) (row : Row) (f : Fault) :
     f ∈ (rowViolations st fs records name row).run ↔
-      (∃ e, fs.invariant row.entity row.value = .error e ∧ f = issueViolation st (st.ref row.entity) e) ∨
+      (∃ e, fs.invariant row.entity row.value = .error e ∧ f = issueViolation (st.ref row.entity) e) ∨
       (∃ c, fs.invariant row.entity row.value = .ok (some c) ∧ f = row.failedInvariant st c (st.ref name)) ∨
         f ∈ danglingRefs st records name row := by
   cases h : fs.invariant row.entity row.value with
   | error e =>
     have : (rowViolations st fs records name row).run =
-        issueViolation st (st.ref row.entity) e :: danglingRefs st records name row := by
+        issueViolation (st.ref row.entity) e :: danglingRefs st records name row := by
       simp only [rowViolations, h]; rfl
     rw [this, List.mem_cons]
     constructor
@@ -111,7 +111,7 @@ theorem mem_rowViolations (records : Records) (name : String) (row : Row) (f : F
 theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) :
     f ∈ (integrityViolations st fs records name).run ↔
       (∃ row ∈ records, row.entity ∈ st.entities ∧ f ∈ (rowViolations st fs records name row).run) ∨
-        (∃ schema, fs.serviceInvariant records = .error schema ∧ f = .exception (schema.map st.schemaOwner)) ∨
+        (∃ schema, fs.serviceInvariant records = .error schema ∧ f = .exception (schema.map Schema.owner)) ∨
         ∃ c, fs.serviceInvariant records = .ok (some c) ∧ f = .failedServiceInvariant c (st.ref name) := by
   let rows := ((st.entities.flatMap fun e => records.filter (·.entity == e)).map fun x =>
     (rowViolations st fs records name x).run).flatten
@@ -125,7 +125,7 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
       exact ⟨_, ⟨row, ⟨row.entity, he, hr, rfl⟩, rfl⟩, hm⟩
   cases h : fs.serviceInvariant records with
   | error e =>
-    have : (integrityViolations st fs records name).run = rows ++ [.exception (e.map st.schemaOwner)] := by
+    have : (integrityViolations st fs records name).run = rows ++ [.exception (e.map Schema.owner)] := by
       simp only [integrityViolations, mapM_id, h]; rfl
     rw [this, List.mem_append, hrows, List.mem_singleton]
     constructor

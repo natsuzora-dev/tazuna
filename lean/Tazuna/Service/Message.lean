@@ -11,11 +11,11 @@ namespace Tazuna.Service
 open Tazuna.Data
 
 inductive LineBody where
-  | command (name : String) (input : Value)
-  | query (name : String) (input : Value)
-  | subscribe (name : String) (input : Value)
+  | command (target : Spec.Ref) (input : Value)
+  | query (target : Spec.Ref) (input : Value)
+  | subscribe (target : Spec.Ref) (input : Value)
   /-- An event whose `resultOf` is the id of the request line of the command that the event results from. -/
-  | event (name : String) (payload : Value) (resultOf : Option String)
+  | event (event : Spec.Ref) (payload : Value) (resultOf : Option String)
   | answer (to : String) (answer : Answer)
   | unsubscribe (to : String)
   | time
@@ -24,7 +24,7 @@ inductive LineBody where
   An operation of `control` of an instance of `screen`: the `nth` of its open instances in opening order when more than
   one is open. `payload` is written only when the control's payload schema has fields.
   -/
-  | operation (screen control : String) (nth : Option Nat) (payload : Option Value)
+  | operation (screen : Spec.Ref) (control : String) (nth : Option Nat) (payload : Option Value)
 deriving DecidableEq, Repr, Inhabited
 
 /-- What the line carries, as TS contentOf gives it: a request's input, an event's or operation's payload, an answer. -/
@@ -34,10 +34,10 @@ def LineBody.content : LineBody → Value
   | .answer _ a => ToValue.toValue a
   | .unsubscribe _ | .time | .restart => .null
 
-/-- The name that LineIds counts. -/
-def LineBody.idName : LineBody → String
-  | .command name _ | .query name _ | .subscribe name _ | .event name _ _ => name
-  | .operation screen control _ _ => operationName screen control
+/-- The name that LineIds counts, as the trace of `service` writes it. -/
+def LineBody.idName (service : String) : LineBody → String
+  | .command r _ | .query r _ | .subscribe r _ | .event r _ _ => r.traceName service
+  | .operation screen control _ _ => operationName (screen.traceName service) control
   | .answer _ _ => "answer"
   | .unsubscribe _ => "unsubscribe"
   | .time => "time"
@@ -54,7 +54,7 @@ structure Line where
 deriving DecidableEq, Repr, Inhabited
 
 structure Emit where
-  event : String
+  event : Spec.Ref
   payload : Value
 deriving DecidableEq, Repr, Inhabited
 

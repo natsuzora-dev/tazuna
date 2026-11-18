@@ -23,7 +23,7 @@ export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
   if ("error" in parsed) return { result: "rejected", rejection: { kind: "invalid-input" } };
   const input = parsed.value;
   const reason = firstFalse(
-    (condition) => r.functions.inputRequirement(name, condition, input),
+    (condition) => r.functions.inputRequirement(definition, condition, input),
     requirementsOf(r.st, name).requires,
   );
   if (reason instanceof Failed) return halt(issueViolation(definition, reason));

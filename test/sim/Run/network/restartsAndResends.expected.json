@@ -7,65 +7,65 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "command",
+          "id": "addTask#1",
           "name": "addTask",
           "input": {
             "taskId": "task-1",
             "title": "Buy milk"
-          },
-          "id": "addTask#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "answer",
+          "id": "answer#1",
           "to": "addTask#1",
           "answer": {
             "result": "accepted"
-          },
-          "id": "answer#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "event",
+          "id": "taskAddedRecorded#1",
           "name": "taskAddedRecorded",
           "payload": {
             "id": "task-1",
             "title": "Buy milk",
             "seen": false
           },
-          "resultOf": "addTask#1",
-          "id": "taskAddedRecorded#1"
+          "resultOf": "addTask#1"
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "event",
+          "id": "taskAdded#1",
           "name": "taskAdded",
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1",
-          "id": "taskAdded#1"
+          "resultOf": "addTask#1"
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "event",
+          "id": "noted#1",
           "name": "noted",
-          "payload": {},
-          "id": "noted#1"
+          "payload": {}
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "command",
+          "id": "calendar.book#1",
           "name": "calendar.book",
           "input": {
             "bookingId": "todo/Booking-1",
             "taskId": "task-1"
-          },
-          "id": "calendar.book#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
@@ -101,11 +101,11 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "answer",
+          "id": "answer#3",
           "to": "addTask#1",
           "answer": {
             "result": "accepted"
-          },
-          "id": "answer#3"
+          }
         }
       ],
       "violations": [],

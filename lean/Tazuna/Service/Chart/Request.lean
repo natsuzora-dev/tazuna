@@ -12,14 +12,14 @@ def initialContextOf [Monad m] (fs : Functions m) (st : Service) (chart : String
     m (Except Fault Value) := do
   let definition := st.ref chart
   match ← fs.initialContext chart input with
-  | .error e => pure (.error (issueViolation st definition e fun _ => .initialContextSchema definition))
+  | .error e => pure (.error (issueViolation definition e fun _ => .initialContextSchema definition))
   | .ok context => pure (.ok context)
 
 /-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`. -/
-def Activity.requestLine (a : Activity) (target : String) (input : Value) : LineBody :=
+def Activity.requestLine (a : Activity) (input : Value) : LineBody :=
   match a with
-  | .calls .. => .query target input
-  | _ => .command target input
+  | .calls .. => .query a.ref input
+  | _ => .command a.ref input
 
 section
 
@@ -28,7 +28,7 @@ variable [Monad m] [MonadNote m] (fs : Functions m)
 def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
     match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
-    | .error e => pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+    | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
     | .ok (input, keys) =>
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
       if a.isOwn st.service then
@@ -37,7 +37,7 @@ def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a 
                              input, cause := step }
         pure ⟨s, { r.queue with round := r.queue.round ++ [sent] }⟩
       else
-        pure ⟨r.state.await (a.requestLine (st.traceNameOf a.ref) input) (.state name state) a input, r.queue⟩
+        pure ⟨r.state.await (a.requestLine input) (.state name state) a input, r.queue⟩
 
 def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
@@ -45,14 +45,14 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
     | none => pure r
     | some c =>
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
-      | .error e => pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+      | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok (raw, _) =>
-      match ← fs.parse (.input c.name) raw with
-      | .error e => pure (r.report (.fault (issueViolation st (st.ref c.name) e)))
+      match ← fs.parse (.input (st.ref c.name)) raw with
+      | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok none => pure (r.report (.fault (.inputSchema (st.ref i.chart.name) (st.ref c.name))))
       | .ok (some input) =>
-      match ← firstFalse (fs.inputRequirement c.name · input) (st.requirementsOf c.name).requires with
-      | .error e => pure (r.report (.fault (issueViolation st (st.ref c.name) e)))
+      match ← firstFalse (fs.inputRequirement (st.ref c.name) · input) (st.requirementsOf c.name).requires with
+      | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok (some condition) =>
         pure (r.report (.fault (.failedRequires (st.ref i.chart.name) (st.ref c.name) condition)))
       | .ok none =>

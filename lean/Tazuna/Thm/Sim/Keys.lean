@@ -207,7 +207,7 @@ theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State
   · refine KeepsKeys.trans ?_ (keeps_publish _)
     keys_close h
 
-theorem keeps_requestOf (type : Scenario.RequestType) (name : String) (id : Option String) (v : Value)
+theorem keeps_requestOf (type : Scenario.RequestType) (name : Spec.Ref) (id : Option String) (v : Value)
     (st : Service) (fs : Functions Id) (s : State) : KeepsKeys s (requestOf type name id v st fs s) := by
   cases type
   · exact keeps_send _ _ _ _
@@ -352,13 +352,13 @@ theorem keepsWorld_beginAll (w : World) : KeepsWorld w (w.beginAll fsOf) := by
 
 theorem keeps_lookup_map (l : List (String × State)) (g : String × State → String × State)
     (h : ∀ a, (g a).1 = a.1 ∧ KeepsKeys a.2 (g a).2) (p : String) :
-    KeepsKeys ((l.lookup p).getD {}) (((l.map g).lookup p).getD {}) := by
+    KeepsKeys ((l.lookup p).getD { service := p }) (((l.map g).lookup p).getD { service := p }) := by
   induction l with
   | nil => exact .refl _
   | cons a l ih =>
     obtain ⟨q, x⟩ := a
     obtain ⟨h₁, h₂⟩ := h (q, x)
-    show KeepsKeys ((List.lookup p ((q, x) :: l)).getD {}) ((List.lookup p (g (q, x) :: _)).getD {})
+    show KeepsKeys ((List.lookup p ((q, x) :: l)).getD { service := p }) ((List.lookup p (g (q, x) :: _)).getD { service := p })
     rw [show g (q, x) = (q, (g (q, x)).2) from Prod.ext h₁ rfl, List.lookup_cons, List.lookup_cons]
     split
     · exact h₂

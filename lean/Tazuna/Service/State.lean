@@ -135,6 +135,8 @@ structure Durable where
   createdEntities : List String := []
   /-- The name of the service in a simulation, which qualifies its createKey values (Keys). -/
   keyOwner : Option String := none
+  /-- The service whose state this is, in whose trace names its line ids are written. -/
+  service : String
 deriving Repr, Inhabited
 
 /-- The part of the state that lives in the service process's memory; a restart drops it. -/
@@ -179,13 +181,14 @@ def State.answers (s : State) : List Outgoing := s.outgoing.filter (·.answer.is
 def State.answerTo? (s : State) (id : String) : Option (Spec.Ref × Answer) :=
   (s.answers.find? (·.id == id)).bind fun o => o.answer.map (o.activity.ref, ·)
 
-def namedCount (lines : Array Line) (name : String) : Nat := lines.countP (·.body.idName == name)
+def namedCount (service : String) (lines : Array Line) (name : String) : Nat :=
+  lines.countP (·.body.idName service == name)
 
 def State.lineId (s : State) (givenId : Option String) (name : String) : String :=
-  givenId.getD s!"{name}#{namedCount s.lines name + 1}"
+  givenId.getD s!"{name}#{namedCount s.service s.lines name + 1}"
 
 def State.write (s : State) (dir : Dir) (givenId : Option String) (body : LineBody) : State × String :=
-  let id := s.lineId givenId body.idName
+  let id := s.lineId givenId (body.idName s.service)
   ({ s with lines := s.lines.push { time := s.now, dir, id, body } }, id)
 
 def State.await (s : State) (body : LineBody) (requester : Requester) (activity : Activity) (input : Value) : State :=

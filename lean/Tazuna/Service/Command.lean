@@ -14,9 +14,9 @@ def normalizeEmits [Monad m] (st : Service) (fs : Functions m) (command : String
     | .error r => pure (.error r)
     | .ok done =>
       match ← fs.normalize (.payload e.event) (st.sorted (.payload e.event) e.payload) with
-      | .error issue => pure (.error (issueViolation st (st.ref command) issue))
+      | .error issue => pure (.error (issueViolation (st.ref command) issue))
       | .ok (some payload) => pure (.ok (done ++ [{ e with payload }]))
-      | .ok none => pure (.error (.emittedPayloadSchema (st.ref command) (st.refOf e.event)))
+      | .ok none => pure (.error (.emittedPayloadSchema (st.ref command) e.event))
 
 /-- `xs` cut into consecutive lists of the lengths `lengths`. -/
 def chunks {α : Type} : List Nat → List α → List (List α)
@@ -24,7 +24,7 @@ def chunks {α : Type} : List Nat → List α → List (List α)
   | n :: ns, xs => xs.take n :: chunks ns (xs.drop n)
 
 /-- The text that orders the events of one group. -/
-def Emit.text (e : Emit) : String := (Value.obj [("event", .str e.event), ("payload", e.payload)]).canonical
+def Emit.text (e : Emit) : String := (ToValue.toValue e).canonical
 
 /--
 The groups of `decided` with the events of `normalized`, the normalized flattening of `decided`, each group in the
@@ -43,7 +43,7 @@ def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) 
 
 /-- Whether the command `command` lists the event of `e` in its emits. -/
 def lists (st : Service) (command : String) (e : Emit) : Bool :=
-  (st.«structure».emitsOf (some (st.ref command))).any (·.any (·.traceName st.service == e.event))
+  (st.«structure».emitsOf (some (st.ref command))).any (· == some e.event)
 
 inductive Outcome where
   | rejected (rejection : Rejection)
@@ -60,8 +60,8 @@ def Outcome.answer : Outcome → Answer
 
 def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records : Records) (now : Time) (name : String)
     (raw : Value) : m Outcome := do
-  match ← fs.parse (.input name) raw with
-  | .error e => pure (.halted [issueViolation st (st.ref name) e])
+  match ← fs.parse (.input (st.ref name)) raw with
+  | .error e => pure (.halted [issueViolation (st.ref name) e])
   | .ok none => pure (.rejected { kind := .invalidInput })
   | .ok (some input) =>
     match ← requirementsRejection st fs records now name input with
@@ -69,11 +69,11 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
     | .ok (some r) => pure (.rejected r)
     | .ok none =>
       match ← fs.decide name input records now with
-      | .error e => pure (.halted [issueViolation st (st.ref name) e])
+      | .error e => pure (.halted [issueViolation (st.ref name) e])
       | .ok decided =>
       match decided.flatten.find? (!st.lists name ·) with
       | some e =>
-        let event := (st.«structure».named st.service (some e.event) ["event"]).map (·.ref)
+        let event := (st.«structure».definitions.find? fun d => d.kind == "event" && d.ref == e.event).map (·.ref)
         pure (.halted [.unlistedEmittedEvent (st.ref name) event])
       | none =>
       match ← normalizeEmits st fs name decided.flatten with

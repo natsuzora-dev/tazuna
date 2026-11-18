@@ -1,3 +1,4 @@
+import { sameRef } from "../data/definitionRef.ts";
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
@@ -13,7 +14,7 @@ import { Coverage } from "../sim/spec/coverage.ts";
 import { fingerprint } from "../sim/spec/fingerprint.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec } from "../sim/spec/simulate.ts";
-import { refOfTraceName, rejectionKinds, traceNameOfRef } from "../spec/structure.ts";
+import { rejectionKinds } from "../spec/structure.ts";
 import { enabled } from "./enabled.ts";
 import { search } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
@@ -89,7 +90,7 @@ function requestFact(m: Message): Fact | undefined {
     type: "request",
     origin: m.origin,
     kind: m.body.type,
-    target: refOfTraceName(m.sender, m.body.name),
+    target: m.body.target,
     input: literal(m.body.input),
   };
 }
@@ -136,7 +137,7 @@ export function enabledLines(
   const receives = serviceOf(spec.structure, own).receives;
   const events = spec.definitions.flatMap(({ service, name, definition: d }): Line[] => {
     const event = { service, name };
-    if (d.kind !== "event" || !externals.includes(service) || !receives.includes(traceNameOfRef(event, own))) return [];
+    if (d.kind !== "event" || !externals.includes(service) || !receives.some((r) => sameRef(r, event))) return [];
     return values(nameOf(event), (d as AnyEvent).payload).map(
       (payload): Line => ({ type: "emit", peer: service, event, payload: literal(payload) }),
     );

@@ -34,7 +34,6 @@ import type {
 } from "../../dsl/definition.ts";
 import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../../dsl/entity.ts";
 import type { Spec } from "../../load/load.ts";
-import { traceName } from "../../load/traceName.ts";
 import { type Schema, type Service, serviceOf } from "../../service/basic.ts";
 import {
   type Access,
@@ -52,7 +51,7 @@ import { chartOf, mapOf } from "../../service/instance.ts";
 import type { Emit } from "../../service/message.ts";
 import type { Note } from "../../service/note.ts";
 import type { RecordSource, Row } from "../../service/records.ts";
-import { type ChartStructure, chartStructure, stateNamed, traceNameOfRef } from "../../spec/structure.ts";
+import { type ChartStructure, chartStructure, stateNamed } from "../../spec/structure.ts";
 import { isDescendant, pathOf } from "../../spec/tree.ts";
 import { assumedEnsures } from "./contract.ts";
 import { recordsView } from "./records.ts";
@@ -203,11 +202,11 @@ interface ChartOf {
 }
 
 /**
- * The definitions of a service's spec by kind and trace name as seen from the service, its charts, and the view of the
- * service that semantics reads.
+ * The definitions of the spec by kind, service and name, the charts of a service, and the view of the service that
+ * semantics reads.
  */
 interface Index {
-  readonly definitions: ReadonlyMap<Definition["kind"], ReadonlyMap<string, Named<Definition>>>;
+  readonly definitions: ReadonlyMap<Definition["kind"], ReadonlyMap<string, ReadonlyMap<string, Named<Definition>>>>;
   readonly charts: Map<string, ChartOf>;
   readonly st: Service;
 }
@@ -219,11 +218,13 @@ function indexOf(spec: Spec, service: string): Index {
   indexes.set(spec, byService);
   const known = byService.get(service);
   if (known !== undefined) return known;
-  const definitions = new Map<Definition["kind"], Map<string, Named<Definition>>>();
+  const definitions = new Map<Definition["kind"], Map<string, Map<string, Named<Definition>>>>();
   for (const named of spec.definitions) {
-    const byName = definitions.get(named.definition.kind) ?? new Map<string, Named<Definition>>();
-    definitions.set(named.definition.kind, byName);
-    byName.set(traceName(spec, named.definition, service), named);
+    const byService = definitions.get(named.definition.kind) ?? new Map<string, Map<string, Named<Definition>>>();
+    definitions.set(named.definition.kind, byService);
+    const byName = byService.get(named.service) ?? new Map<string, Named<Definition>>();
+    byService.set(named.service, byName);
+    byName.set(named.name, named);
   }
   const index = { definitions, charts: new Map<string, ChartOf>(), st: serviceOf(spec.structure, service) };
   byService.set(service, index);
@@ -248,13 +249,18 @@ export class SpecFunctions implements Functions {
     this.note = note;
   }
 
-  /** Returns the definition of one of `kinds` that `name`, a trace name as seen from the service, names. */
-  definition<D>(kinds: readonly Definition["kind"][], name: string): Named<D> {
+  /** Returns the definition of one of `kinds` that `r` names. */
+  definition<D>(kinds: readonly Definition["kind"][], r: DefinitionRef): Named<D> {
     for (const kind of kinds) {
-      const found = this.index.definitions.get(kind)?.get(name);
+      const found = this.index.definitions.get(kind)?.get(r.service)?.get(r.name);
       if (found !== undefined) return found as Named<D>;
     }
-    throw new Error(`the spec has no ${kinds.join(" or ")} named ${name}`);
+    throw new Error(`the spec has no ${kinds.join(" or ")} ${r.name} of ${r.service}`);
+  }
+
+  /** Returns the own definition of one of `kinds` named `name`. */
+  private own<D>(kinds: readonly Definition["kind"][], name: string): Named<D> {
+    return this.definition(kinds, { service: this.service, name });
   }
 
   /** Returns the shape of the values that `schema` checks: an input, output, payload or control payload. */
@@ -264,41 +270,34 @@ export class SpecFunctions implements Functions {
       case "output": {
         const found = this.definition<{ readonly input?: Shape; readonly output?: Shape }>(
           ["command", "query", "screen"],
-          traceNameOfRef(schema.definition, this.service),
+          schema.definition,
         ).definition;
         return (schema.kind === "input" ? found.input : found.output) ?? {};
       }
       case "payload":
-        return this.definition<AnyEvent>(["event"], traceNameOfRef(schema.event, this.service)).definition.payload;
+        return this.definition<AnyEvent>(["event"], schema.event).definition.payload;
       case "control":
-        return (
-          this.chartOf(traceNameOfRef(schema.screen, this.service)).named.definition.controls?.[schema.control]
-            ?.payload ?? {}
-        );
+        return this.chartOf(schema.screen.name).named.definition.controls?.[schema.control]?.payload ?? {};
       case "record":
-        return this.entity(traceNameOfRef(schema.entity, this.service)).fields as Shape;
+        return this.entity(schema.entity.name).fields as Shape;
       default:
         throw new Error(`no question checks a value of the ${schema.kind} schema`);
     }
   }
 
   private command(name: string): AnyCommand {
-    return this.definition<AnyCommand>(["command"], name).definition;
+    return this.own<AnyCommand>(["command"], name).definition;
   }
 
   private query(name: string): Named<AnyQuery> {
-    return this.definition<AnyQuery>(["query"], name);
+    return this.own<AnyQuery>(["query"], name);
   }
 
-  private request(name: string): AnyCommand | AnyQuery {
-    return this.definition<AnyCommand | AnyQuery>(["command", "query"], name).definition;
-  }
-
-  /** Returns the machine or screen that `name`, a trace name as seen from the service, names. */
+  /** Returns the own machine or screen named `name`. */
   chartOf(name: string): ChartOf {
     const known = this.index.charts.get(name);
     if (known !== undefined) return known;
-    const named = this.definition<ChartSpec>(["machine", "screen"], name);
+    const named = this.own<ChartSpec>(["machine", "screen"], name);
     const structure = chartStructure(this.spec.structure, named.service, named.name);
     if (structure === undefined) throw new Error(`the spec has no structure of the chart ${name}`);
     const chart = { named, ref: { service: named.service, name: named.name }, structure, nodes: new Map() };
@@ -458,10 +457,19 @@ export class SpecFunctions implements Functions {
     return attempt(() => Boolean(f?.({ ...args, bound })));
   }
 
-  inputRequirement(target: string, condition: string, input: Fields): boolean | Failed {
+  inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed {
     type Requiring = { readonly requires?: Conditions<{ input: Fields }> };
     const f = this.definition<Requiring>(["command", "query", "screen"], target).definition.requires?.[condition];
     return attempt(() => Boolean(f?.({ input })));
+  }
+
+  /**
+   * Returns the ref of an event that decide emits. An event value that is no named definition of the spec gets a ref
+   * that names no definition, which the run reports as an unlisted emitted event.
+   */
+  private emittedRef(event: unknown): DefinitionRef {
+    const named = this.spec.names.get(event);
+    return named === undefined ? { service: this.service, name: "?" } : { service: named.service, name: named.name };
   }
 
   decide(
@@ -478,7 +486,7 @@ export class SpecFunctions implements Functions {
     return attempt(() =>
       (f?.({ ...args, bound }) ?? []).map((item) =>
         ((bagValues(item) ?? [item]) as readonly DefinedEmit[]).map((e) => ({
-          event: traceName(this.spec, e.event, this.service),
+          event: this.emittedRef(e.event),
           payload: sortedFields(e.event.payload, e.payload) as Fields,
         })),
       ),
@@ -513,8 +521,13 @@ export class SpecFunctions implements Functions {
    * Returns the first failing ensures of a request's result. An ensures that reads records is skipped. `output` counts
    * only when the target has an output schema; a query's results have no events.
    */
-  resultEnsures(name: string, input: Fields, output: unknown, events: readonly Emit[]): string | undefined | Failed {
-    const target = this.request(name);
+  resultEnsures(
+    request: DefinitionRef,
+    input: Fields,
+    output: unknown,
+    events: readonly Emit[],
+  ): string | undefined | Failed {
+    const target = this.definition<AnyCommand | AnyQuery>(["command", "query"], request).definition;
     const emits = events.map(
       (e): DefinedEmit => ({
         kind: "emit",
@@ -562,7 +575,7 @@ export class SpecFunctions implements Functions {
     now: Temporal.Instant,
     keys: Keys,
   ): { readonly written?: Json; readonly created: readonly string[] } | Failed {
-    const found = this.definition<Automation>(["automation"], name);
+    const found = this.own<Automation>(["automation"], name);
     const a = found.definition;
     const definition = { service: found.service, name: found.name };
     const { createKey, created } = this.keysFrom(keys);

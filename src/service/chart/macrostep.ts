@@ -3,7 +3,7 @@ import type { Activity, Received, Requester, StepName } from "../../data/step.ge
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
-import { ref, refOf, traceNameOf } from "../basic.ts";
+import { ref } from "../basic.ts";
 import { processCommand } from "../command.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { chartOf, type InstanceId } from "../instance.ts";
@@ -42,13 +42,13 @@ function firstEvent(work: Extract<Work, { readonly kind: "reaction" }>): Emitted
   return e;
 }
 
-function workName(r: Processing, work: Work): StepName {
+function workName(work: Work): StepName {
   switch (work.kind) {
     case "reaction":
       return {
         kind: "reaction",
         automation: work.automation.name,
-        event: refOf(r.st, work.automation.receives),
+        event: work.automation.receives,
         payload: work.groups[0]?.[0]?.encoded ?? null,
         delivered: work.delivered.map((g) => g.map((e) => e.encoded)),
       };
@@ -78,8 +78,8 @@ function workName(r: Processing, work: Work): StepName {
 }
 
 /** Lean's Ready.name. */
-function readyName(r: Processing, ready: Ready): StepName {
-  if (ready.kind === "work") return workName(r, ready.work);
+function readyName(ready: Ready): StepName {
+  if (ready.kind === "work") return workName(ready.work);
   const { activity, requester, input } = ready.sent;
   return { kind: "command", activity, sender: requester, input: input as Json };
 }
@@ -248,8 +248,7 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (isOwn(activity, r.st.service))
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });
       else {
-        const name = traceNameOf(r.st, activity.target);
-        awaitAnswer(r.state, { dir: "out", type: "command", name, input }, requester, activity);
+        awaitAnswer(r.state, { dir: "out", type: "command", target: activity.target, input }, requester, activity);
         r.note.reached({ kind: "request", definition: activity.target, data: {} });
       }
       return;
@@ -320,7 +319,7 @@ export function drain(r: Processing): void {
     messageWork += 1;
   };
   for (;;) {
-    const next = take(r, (ready) => readyName(r, ready));
+    const next = take(r, readyName);
     if (next === undefined) {
       if (queue.entered.length > 0) {
         countWork();
@@ -339,14 +338,14 @@ export function drain(r: Processing): void {
       const step = newStep(s, w.cause);
       const left = workLeft(w, step);
       if (left !== undefined) queue.tasks.splice(next.at, 0, left);
-      inStep(r, step, workName(r, w), started(w), () => runWork(r, w, step));
+      inStep(r, step, workName(w), started(w), () => runWork(r, w, step));
       continue;
     }
     const c = next.ready.sent;
     const { step, exceeded } = newCommandStep(s, c.cause, ref(r.st, sender(c.requester)));
     if (exceeded !== undefined) report(r.state, exceeded);
-    inStep(r, step, readyName(r, next.ready), undefined, () => {
-      const { answer, groups } = processCommand(r, traceNameOf(r.st, c.activity.target), c.input, undefined, step);
+    inStep(r, step, readyName(next.ready), undefined, () => {
+      const { answer, groups } = processCommand(r, c.activity.target.name, c.input, undefined, step);
       queue.tasks.push(...commandWork(r.st, s, groups, step), {
         kind: "answered",
         sent: c,

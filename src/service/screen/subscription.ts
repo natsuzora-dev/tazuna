@@ -1,7 +1,7 @@
 import type { Activity } from "../../data/step.generated.ts";
 import type { Json } from "../../data/values.ts";
 import { isDescendant } from "../../spec/tree.ts";
-import { ref, traceNameOf } from "../basic.ts";
+import { ref } from "../basic.ts";
 import { openShows, stateEndSubscription } from "../chart/exit.ts";
 import type { Processing } from "../chart/queue.ts";
 import { Failed, issueViolation } from "../functions.ts";
@@ -52,7 +52,7 @@ function refresh(r: Processing, instance: Instance): boolean {
     if (open.some((p) => p.requester.slot === slot && JSON.stringify(p.input) === text)) continue;
     awaitAnswer(
       r.state,
-      { dir: "out", type: "subscribe", name: traceNameOf(r.st, activity.target), input },
+      { dir: "out", type: "subscribe", target: activity.target, input },
       { kind: "slot", machine: instance.id, slot },
       activity,
     );

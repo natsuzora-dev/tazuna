@@ -25,7 +25,7 @@ def closeFinal (st : Service) (step : Nat) (name : InstanceId) : Processing → 
   withMachine name fun i r => do
     match ← fs.close (r.state.scopeOf i none) r.state.records with
     | .error e =>
-      pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun _ =>
+      pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun _ =>
         .screenOutputSchema (st.ref i.chart.name))))
     | .ok (output, failed) =>
       let ensures := failed.toList.map (st.failedEnsures i.chart.name)

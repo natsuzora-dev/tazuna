@@ -64,11 +64,11 @@ inductive Question where
   | normalize (schema : Schema) (value : Value)
   | binding (command binding : String) (input : Value) (now : Time)
   | requirement (command condition : String) (input : Value) (now : Time)
-  | inputRequirement (target condition : String) (input : Value)
+  | inputRequirement (target : Spec.Ref) (condition : String) (input : Value)
   | decide (command : String) (input : Value) (now : Time)
   | ensures (command : String) (input : Value) (now : Time)
   | queryEnsures (query : String) (input output : Value)
-  | resultEnsures (target : String) (input : Value) (output : Option Value) (events : List Emit)
+  | resultEnsures (target : Spec.Ref) (input : Value) (output : Option Value) (events : List Emit)
   | invariant (entity : String) (record : Value)
   | serviceInvariant
   | chartInvariant (scope : Scope)

@@ -1,6 +1,7 @@
 import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, sorted } from "../../src/data/collections.ts";
+import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import {
   canonicalJson,
@@ -31,7 +32,7 @@ import { chartOf, copyId, type InstanceId, mapOf, topId } from "../../src/servic
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
-import { traceNameOfRef, transitionRef } from "../../src/spec/structure.ts";
+import { transitionRef } from "../../src/spec/structure.ts";
 import { refEntityOf } from "../../src/verify/compare.ts";
 import type {
   Asked,
@@ -40,7 +41,6 @@ import type {
   Access as LeanAccess,
   Issue as LeanIssue,
   Keys as LeanKeys,
-  Schema as LeanSchema,
   Scope as LeanScope,
   Question,
   Replied,
@@ -188,69 +188,26 @@ export class RunFunctions implements Answering {
     this.before = source({ beforeEventWrite: true });
   }
 
-  private leanSchema(schema: Schema): LeanSchema {
-    switch (schema.kind) {
-      case "input":
-      case "output":
-        return { kind: schema.kind, definition: traceNameOfRef(schema.definition, this.service) };
-      case "payload":
-        return { kind: "payload", event: traceNameOfRef(schema.event, this.service) };
-      case "control":
-        return { kind: "control", screen: schema.screen.name, control: schema.control };
-      case "held":
-        return { kind: "held", chart: schema.chart.name, state: schema.state, name: schema.name };
-      case "context":
-        return { kind: "context", chart: schema.chart.name };
-      case "mapContext":
-      case "mapKey":
-        return { kind: schema.kind, chart: schema.chart.name, map: schema.map };
-      case "record":
-        return { kind: "record", entity: schema.entity.name };
-    }
-  }
-
-  private schemaOf(lean: LeanSchema): Schema {
-    const ref = ({ service, name }: Named<unknown>) => ({ service, name });
-    switch (lean.kind) {
-      case "input":
-      case "output":
-        return {
-          kind: lean.kind,
-          definition: ref(this.functions.definition(["command", "query", "screen"], lean.definition)),
-        };
-      case "payload":
-        return { kind: "payload", event: ref(this.functions.definition(["event"], lean.event)) };
-      case "control":
-        return {
-          kind: "control",
-          screen: ref(this.functions.definition(["screen"], lean.screen)),
-          control: lean.control,
-        };
-      case "record":
-        return { kind: "record", entity: { service: this.service, name: lean.entity } };
-      default:
-        throw new Error(`tazuna-lean sent a value of the ${lean.kind} schema`);
-    }
-  }
-
-  private decoded(lean: LeanSchema, value: unknown): Fields | Failed {
-    const schema = this.schemaOf(lean);
+  private decoded(schema: Schema, value: unknown): Fields | Failed {
     return decode(schema, this.functions.shape(schema), value);
   }
 
-  /** Decodes the input of a request to the command or query `name`. */
-  private inputOf(name: string, value: unknown): Fields | Failed {
-    return this.decoded({ kind: "input", definition: name }, value);
+  /** Decodes the input of a request to the command or query `definition`. */
+  private inputOf(definition: DefinitionRef, value: unknown): Fields | Failed {
+    return this.decoded({ kind: "input", definition }, value);
+  }
+
+  /** Decodes the input of a request to the own command or query `name`. */
+  private ownInputOf(name: string, value: unknown): Fields | Failed {
+    return this.inputOf({ service: this.service, name }, value);
   }
 
   private issue(issue: Issue): LeanIssue {
     switch (issue.kind) {
       case "thrown":
-        return issue.schema === undefined
-          ? { kind: "thrown" }
-          : { kind: "thrown", schema: this.leanSchema(issue.schema) };
+        return issue.schema === undefined ? { kind: "thrown" } : { kind: "thrown", schema: issue.schema };
       case "schema":
-        return { kind: "schema", schema: this.leanSchema(issue.schema) };
+        return { kind: "schema", schema: issue.schema };
       case "unheld":
       case "notOnly":
         return issue;
@@ -366,21 +323,17 @@ export class RunFunctions implements Answering {
         ({ type, ...(f === undefined ? {} : { failed: f }) }) as Replied;
     const now = (q: { readonly now: string }) => Temporal.Instant.from(q.now);
     switch (q.type) {
-      case "parse": {
-        const schema = this.schemaOf(q.schema);
-        return this.replied(this.functions.parse(schema, q.value), (parsed) =>
+      case "parse":
+        return this.replied(this.functions.parse(q.schema, q.value), (parsed) =>
           "error" in parsed ? { type: "parse" } : { type: "parse", value: parsed.encoded as Json },
         );
-      }
-      case "unordered": {
-        const schema = this.schemaOf(q.schema);
-        return this.replied(this.functions.unordered(schema, q.value), (value) => ({
+      case "unordered":
+        return this.replied(this.functions.unordered(q.schema, q.value), (value) => ({
           type: "unordered",
           value: value as Json,
         }));
-      }
       case "normalize": {
-        const schema = this.schemaOf(q.schema);
+        const schema = q.schema;
         // The value arrives as JSON, so it is decoded first.
         return this.replied(decodeStrict(schema, this.functions.shape(schema), q.value), (decoded) =>
           decoded === undefined
@@ -393,14 +346,14 @@ export class RunFunctions implements Answering {
         );
       }
       case "binding":
-        return this.replied(this.inputOf(q.command, q.input), (input) =>
+        return this.replied(this.ownInputOf(q.command, q.input), (input) =>
           this.replied(this.functions.binding(q.command, q.binding, input, this.records, now(q)), (bound) => ({
             type: "binding",
             bound,
           })),
         );
       case "requirement":
-        return this.replied(this.inputOf(q.command, q.input), (input) =>
+        return this.replied(this.ownInputOf(q.command, q.input), (input) =>
           this.replied(this.functions.requirement(q.command, q.condition, input, this.records, now(q)), (holds) => ({
             type: "requirement",
             holds,
@@ -414,20 +367,22 @@ export class RunFunctions implements Answering {
           })),
         );
       case "decide":
-        return this.replied(this.inputOf(q.command, q.input), (input) =>
+        return this.replied(this.ownInputOf(q.command, q.input), (input) =>
           this.replied(this.functions.decide(q.command, input, this.records, now(q)), (decided) => ({
             type: "decide",
             groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: json(e.payload) ?? null }))),
           })),
         );
       case "ensures":
-        return this.replied(this.inputOf(q.command, q.input), (input) =>
+        return this.replied(this.ownInputOf(q.command, q.input), (input) =>
           this.replied(this.functions.ensures(q.command, input, this.before, this.records, now(q)), failed("ensures")),
         );
       case "queryEnsures":
-        return this.replied(this.inputOf(q.query, q.input), (input) =>
-          this.replied(this.decoded({ kind: "output", definition: q.query }, q.output), (output) =>
-            this.replied(this.functions.queryEnsures(q.query, input, output, this.records), failed("queryEnsures")),
+        return this.replied(this.ownInputOf(q.query, q.input), (input) =>
+          this.replied(
+            this.decoded({ kind: "output", definition: { service: this.service, name: q.query } }, q.output),
+            (output) =>
+              this.replied(this.functions.queryEnsures(q.query, input, output, this.records), failed("queryEnsures")),
           ),
         );
       case "resultEnsures": {
@@ -459,7 +414,7 @@ export class RunFunctions implements Answering {
           this.replied(this.functions.chartInvariant(scope, this.records, access), failed("chartInvariant")),
         );
       case "resolve":
-        return this.replied(this.inputOf(q.query, q.input), (input) =>
+        return this.replied(this.ownInputOf(q.query, q.input), (input) =>
           // Lean's Value has no undefined, so an output that author code left undefined is sent as null.
           this.replied(this.functions.resolve(q.query, input, this.records, now(q)), (output) => ({
             type: "resolve",
@@ -467,7 +422,10 @@ export class RunFunctions implements Answering {
           })),
         );
       case "react": {
-        const a = this.functions.definition<Automation>(["automation"], q.automation).definition;
+        const a = this.functions.definition<Automation>(["automation"], {
+          service: this.service,
+          name: q.automation,
+        }).definition;
         const event = this.spec.names.get(Object.values(a.receives)[0]) as Named<AnyEvent>;
         const schema: Schema = { kind: "payload", event: { service: event.service, name: event.name } };
         return this.replied(decode(schema, event.definition.payload, q.payload), (payload) =>

@@ -7,8 +7,8 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "operation",
-          "name": "listScreen.close",
-          "id": "listScreen.close#1"
+          "id": "listScreen.close#1",
+          "name": "listScreen.close"
         }
       ],
       "violations": [],

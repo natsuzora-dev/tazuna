@@ -106,8 +106,8 @@ theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : Strin
     (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : st.chart? a.ref.name = some c)
     (raw : Value) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (raw, keys))
-    (hq : fs.parse (.input c.name) raw = .ok (some given))
-    (hr : firstFalse (fs.inputRequirement c.name · given) (st.requirementsOf c.name).requires = .ok none)
+    (hq : fs.parse (.input (st.ref c.name)) raw = .ok (some given))
+    (hr : firstFalse (fs.inputRequirement (st.ref c.name) · given) (st.requirementsOf c.name).requires = .ok none)
     (hx : fs.initialContext c.name given = .ok context) :
     ∃ child : Instance, (openScreen fs st step name state a r).1.machines = r.state.machines ++ [child] ∧
       child.chart = c ∧ child.opener = some { parent := name, state, key := a.key, modal := a.isModal } ∧

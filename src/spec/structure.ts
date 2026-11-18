@@ -83,17 +83,6 @@ export function isOpenedByScreen(structure: Structure, definition: DefinitionRef
   );
 }
 
-/** Returns the definition with trace name `name` whose kind is one of `kinds`. */
-export function named(
-  structure: Structure,
-  service: string,
-  name: string | undefined,
-  kinds: readonly DefinitionStructure["kind"][],
-): DefinitionStructure | undefined {
-  if (name === undefined) return undefined;
-  return structure.definitions.find((d) => kinds.includes(d.kind) && traceNameOfRef(d, service) === name);
-}
-
 /** Returns the services whose contract lists `ref`. */
 export function contractsListing(structure: Structure, ref: DefinitionRef): string[] {
   return structure.contracts

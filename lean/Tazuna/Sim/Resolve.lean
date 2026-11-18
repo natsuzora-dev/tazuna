@@ -59,12 +59,12 @@ def _root_.Tazuna.Service.LineBody.requestType? : LineBody → Option Scenario.R
 
 def Message.target? (m : Message) : Option Spec.Ref :=
   match m.body with
-  | .command name _ | .query name _ | .subscribe name _ => some (Spec.Ref.ofTraceName m.sender name)
+  | .command r _ | .query r _ | .subscribe r _ => some r
   | _ => none
 
 def Message.event? (m : Message) : Option Spec.Ref :=
   match m.body with
-  | .event name _ _ => some (Spec.Ref.ofTraceName m.sender name)
+  | .event r _ _ => some r
   | _ => none
 
 /--
@@ -74,8 +74,8 @@ an event's payload. The sender is that end when it runs, and the receiver otherw
 def World.schemaOf? (w : World) (msg : Message) : Option (String × Schema) :=
   let side := if (w.role msg.sender).any (·.running) then msg.sender else msg.receiver
   match msg.body with
-  | .command name _ | .query name _ | .subscribe name _ => some (side, .input (nameIn msg.sender side name))
-  | .event name _ _ => some (side, .payload (nameIn msg.sender side name))
+  | .command r _ | .query r _ | .subscribe r _ => some (side, .input r)
+  | .event r _ _ => some (side, .payload r)
   | _ => none
 
 def World.sentBy (w : World) (line : Nat) : Option Sent := w.sent.find? (·.line == line)

@@ -1,15 +1,14 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generated.ts";
-import type { Answer, TraceLine } from "../data/trace.generated.ts";
+import type { Answer } from "../data/trace.generated.ts";
 import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
-import { refOf, type Schema } from "../service/basic.ts";
+import type { Schema } from "../service/basic.ts";
 import { Failed } from "../service/functions.ts";
 import { chartOf } from "../service/instance.ts";
+import type { Line, LineBody } from "../service/message.ts";
 import { created } from "../service/state.ts";
-import { refOfTraceName } from "../spec/structure.ts";
 import { describe, type Message, type Opened, running, type Sent, sameOrigin, stateOf, type World } from "./network.ts";
-import { nameIn } from "./receive.ts";
 
 /** A violation that a line's handle cannot resolve, which the line reports in place of taking place. */
 export class Reported extends Error {
@@ -78,17 +77,16 @@ const picks = (w: World, service: string, schema: Schema, pick: unknown, v: unkn
 /** Lean's World.schemaOf?. */
 function schemaOf(w: World, m: Message): readonly [string, Schema] | undefined {
   const side = running(w.roles.get(m.sender)) ? m.sender : m.receiver;
-  const st = w.services.get(side)?.processing.st;
-  if (st === undefined) return undefined;
+  if (!w.services.has(side)) return undefined;
   const b = m.body;
   if (b.type === "command" || b.type === "query" || b.type === "subscribe")
-    return [side, { kind: "input", definition: refOf(st, nameIn(m.sender, side, b.name)) }];
-  if (b.type === "event") return [side, { kind: "payload", event: refOf(st, nameIn(m.sender, side, b.name)) }];
+    return [side, { kind: "input", definition: b.target }];
+  if (b.type === "event") return [side, { kind: "payload", event: b.event }];
   return undefined;
 }
 
 /** Lean's LineBody.value?. */
-function valueOfLine(l: TraceLine): unknown {
+function valueOfLine(l: LineBody): unknown {
   switch (l.type) {
     case "command":
     case "query":
@@ -107,13 +105,10 @@ const sameRef = (a: DefinitionRef | undefined, b: DefinitionRef): boolean =>
 /** Lean's Message.target?. */
 export function targetOf(m: Message): DefinitionRef | undefined {
   const b = m.body;
-  return b.type === "command" || b.type === "query" || b.type === "subscribe"
-    ? refOfTraceName(m.sender, b.name)
-    : undefined;
+  return b.type === "command" || b.type === "query" || b.type === "subscribe" ? b.target : undefined;
 }
 
-const eventOf = (m: Message): DefinitionRef | undefined =>
-  m.body.type === "event" ? refOfTraceName(m.sender, m.body.name) : undefined;
+const eventOf = (m: Message): DefinitionRef | undefined => (m.body.type === "event" ? m.body.event : undefined);
 
 export const sentBy = (w: World, line: number): Sent | undefined => w.sent.find((s) => s.line === line);
 
@@ -277,7 +272,7 @@ export function screenOf(w: World, i: number, fact: Fact): Opened {
 }
 
 /** Lean's World.spanLines. */
-export function spanLines(w: World, origin: Origin, service: string): TraceLine[] {
+export function spanLines(w: World, origin: Origin, service: string): Line[] {
   const lines = stateOf(w, service)?.lines ?? [];
   return w.spans.flatMap((sp) =>
     sameOrigin(sp.origin, origin) && sp.service === service ? lines.slice(sp.from, sp.to) : [],

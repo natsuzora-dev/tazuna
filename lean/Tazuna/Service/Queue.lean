@@ -20,14 +20,14 @@ def checkHolds [Monad m] (st : Service) (fs : Functions m) (s : State) : m State
       if s.halted.isSome then pure s else
       match ← fs.holds (s.scopeOf i (some n)) s.records with
       | .error e =>
-        pure (s.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+        pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok () => pure s) s) s
 
 def invariantViolations [Monad m] (st : Service) (fs : Functions m) (s : State) :
     m (List Fault) := do
   let found ← (s.machines.filter (!·.closed)).mapM fun i => do
     match ← fs.chartInvariant (s.scopeOf i none) s.records with
-    | .error e => pure (some (issueViolation st (st.ref i.chart.name) e))
+    | .error e => pure (some (issueViolation (st.ref i.chart.name) e))
     | .ok failed => pure (failed.map (.failedChartInvariant (st.ref i.chart.name)))
   pure (found.filterMap id)
 

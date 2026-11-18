@@ -344,8 +344,8 @@ theorem keysBy_settled (step : Nat) (name : Option InstanceId) {f : Processing â
     simp only [settled, settleAround, id_bind, note_id]
     exact (keysBy_settleFrom _ _ _ r).trans ((keysBy_unlessHalted hf _).trans (keysBy_settleFrom _ _ _ _))
 
-theorem keeps_syncShows (s : State) (owner : InstanceId) (service : String) (wanted : List Wanted) :
-    KeepsKeys s (s.syncShows service owner wanted) := by
+theorem keeps_syncShows (s : State) (owner : InstanceId) (wanted : List Wanted) :
+    KeepsKeys s (s.syncShows owner wanted) := by
   unfold State.syncShows
   refine KeepsKeys.trans (keeps_foldl _ (fun t p => ?_) _ s) (keeps_foldl _ (fun t w => ?_) _ _)
   Â· unfold State.endShowStep; repeat' split
@@ -356,7 +356,7 @@ theorem keeps_syncShows (s : State) (owner : InstanceId) (service : String) (wan
 theorem keeps_refresh (s : State) (owner : InstanceId) : KeepsKeys s (refresh st fs s owner) := by
   simp only [refresh, id_bind]
   repeat' split
-  all_goals first | exact .refl _ | exact keeps_syncShows _ _ _ _ | keys_leaf
+  all_goals first | exact .refl _ | exact keeps_syncShows _ _ _ | keys_leaf
 
 theorem keeps_refreshScreens (s : State) : KeepsKeys s (refreshScreens st fs s) :=
   keeps_foldlM _ (fun t i => by split; exact .refl _; exact keeps_refresh _ _) _ _
@@ -606,19 +606,19 @@ macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, S
 @[simp] theorem addResult_createdEntities (id : String) (e : Emit) (s : State) :
     (s.addResult id e).createdEntities = s.createdEntities := rfl
 
-@[simp] theorem withResultOf_keyOwner (name : String) (k : Option String) (s : State) :
+@[simp] theorem withResultOf_keyOwner (name : Spec.Ref) (k : Option String) (s : State) :
     (withResultOf st s name k).1.keyOwner = s.keyOwner := by
   cases k with
   | none => rfl
   | some h => simp only [withResultOf, resultRequest]; keys_same
 
-@[simp] theorem withResultOf_createdEntities (name : String) (k : Option String) (s : State) :
+@[simp] theorem withResultOf_createdEntities (name : Spec.Ref) (k : Option String) (s : State) :
     (withResultOf st s name k).1.createdEntities = s.createdEntities := by
   cases k with
   | none => rfl
   | some h => simp only [withResultOf, resultRequest]; keys_same
 
-theorem keeps_send (name : String) (id : Option String) (raw : Value) (s : State) :
+theorem keeps_send (name : Spec.Ref) (id : Option String) (raw : Value) (s : State) :
     KeepsKeys s (send st fs s name id raw) := by
   simp only [send, id_bind]
   repeat' split
@@ -626,7 +626,7 @@ theorem keeps_send (name : String) (id : Option String) (raw : Value) (s : State
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_call (name : String) (id : Option String) (raw : Value) (s : State) :
+theorem keeps_call (name : Spec.Ref) (id : Option String) (raw : Value) (s : State) :
     KeepsKeys s (call st fs s name id raw) := by
   simp only [call, id_bind]
   repeat' split
@@ -634,7 +634,7 @@ theorem keeps_call (name : String) (id : Option String) (raw : Value) (s : State
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_subscribe (name : String) (id : Option String) (raw : Value) (s : State) :
+theorem keeps_subscribe (name : Spec.Ref) (id : Option String) (raw : Value) (s : State) :
     KeepsKeys s (subscribe st fs s name id raw) := by
   simp only [subscribe]
   repeat' split
@@ -647,7 +647,7 @@ theorem keeps_endSubscription (id : String) (s : State) : KeepsKeys s (endSubscr
   refine KeepsKeys.trans ?_ (keeps_message _ _)
   keys_leaf
 
-theorem keeps_receive (name : String) (id : Option String) (raw : Value) (resultOf : Option String) (s : State) :
+theorem keeps_receive (name : Spec.Ref) (id : Option String) (raw : Value) (resultOf : Option String) (s : State) :
     KeepsKeys s (receive st fs s name id raw resultOf) := by
   simp only [receive, redeliver, id_bind]
   repeat' split

@@ -50,7 +50,7 @@ def World.start (j : Spec.Structure) (sc : Scenario) : Except String World := do
     | _ => none
   let services ← running.mapM fun s => do pure (s, ← Service.ofStructure j s)
   let now := sc.given.start.time
-  pure { now, roles, services, states := running.map fun s => (s, { now, keyOwner := some s }) }
+  pure { now, roles, services, states := running.map fun s => (s, { now, keyOwner := some s, service := s }) }
 
 /-- The records that Given writes for the running service `service`, in written order. -/
 def writtenRecords (sc : Scenario) (service : String) : List GivenRecord :=
@@ -96,7 +96,7 @@ def givenRows (st : Service) (fs : Functions m) (written : Value → Option (Str
     if !st.entities.contains g.entity || st.singles.contains g.entity != g.key.isNone then return invalid
     if let some (key, e) := written (.arr ((g.key.map Value.str).toList ++ [g.value])) then
       return (rows, found ++ [.writtenGivenKey service g.entity g.key key e])
-    match ← fs.parse (.record g.entity) g.value with
+    match ← fs.parse (.record (st.ref g.entity)) g.value with
     | .ok (some value) =>
       let row : Row := { entity := g.entity, key := g.key, value }
       if rows.any (clash st · row) then return (rows, found ++ [.duplicateRecord service g.entity g.key])

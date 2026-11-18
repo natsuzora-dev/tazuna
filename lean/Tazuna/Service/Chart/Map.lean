@@ -48,7 +48,7 @@ def syncMap (st : Service) (step : Nat) (owner : InstanceId) (r : Processing) (m
     MonadNote.note (.readStates [(o.id, map)])
     match ← fs.items (r.state.scopeOf o (some map)) r.state.records with
     | .error e =>
-      pure (r.report (.fault (issueViolation st (st.ref o.chart.name) e fun _ =>
+      pure (r.report (.fault (issueViolation (st.ref o.chart.name) e fun _ =>
         .itemsSchema (st.ref o.chart.name) map)), true)
     | .ok items =>
       let keys := sortItemKeys items

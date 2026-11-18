@@ -23,10 +23,6 @@ def senderOf? (id : String) : Option String :=
   | [sender, _] => some sender
   | _ => none
 
-/-- The name by which `receiver` names the definition that `sender` names `name`. -/
-def nameIn (sender receiver name : String) : String :=
-  (Spec.Ref.ofTraceName sender name).traceName receiver
-
 variable {m : Type → Type} [Monad m] [MonadNote m]
 
 /--
@@ -34,18 +30,17 @@ The state after the message with body `body`, which `sender` sent with id `id`, 
 its resultOf by the id of the request, which is the service's own request when `sender` received it from the service.
 -/
 def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender id : String) (body : LineBody) : m State :=
-  let name := nameIn sender st.service
   let given := some (receivedId sender id)
   match body with
-  | .command n input => send st fs s (name n) given input
-  | .query n input => call st fs s (name n) given input
-  | .subscribe n input => subscribe st fs s (name n) given input
+  | .command n input => send st fs s n given input
+  | .query n input => call st fs s n given input
+  | .subscribe n input => subscribe st fs s n given input
   | .unsubscribe to => endSubscription st fs s (receivedId sender to)
   | .answer to a => match sentId? st.service to with
     | some own => answerIn st fs s (receivedId sender id) own a
     | none => pure s
   | .event n payload resultOf =>
-    receive st fs s (name n) given payload (resultOf.bind (sentId? st.service))
+    receive st fs s n given payload (resultOf.bind (sentId? st.service))
   | _ => pure s
 
 end Tazuna.Sim

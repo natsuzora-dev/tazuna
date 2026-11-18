@@ -27,8 +27,7 @@ structure Automation where
   name : String
   /-- The rank among the spec's definitions. -/
   order : Nat
-  /-- The trace name of the received event (`todo.taskAdded` for another service's event). -/
-  receives : String
+  receives : Spec.Ref
   /-- The command that the automation sends, a `sends` activity. -/
   sends : Activity
 deriving DecidableEq, Repr, Inhabited
@@ -38,15 +37,15 @@ A schema that a definition declares. `mapContext` is the copy context of the map
 of the entity `entity`.
 -/
 inductive Schema where
-  | input (definition : String)
-  | payload (event : String)
-  | output (definition : String)
-  | control (screen control : String)
-  | held (chart state name : String)
-  | context (chart : String)
-  | mapContext (chart map : String)
-  | mapKey (chart map : String)
-  | record (entity : String)
+  | input (definition : Spec.Ref)
+  | payload (event : Spec.Ref)
+  | output (definition : Spec.Ref)
+  | control (screen : Spec.Ref) (control : String)
+  | held (chart : Spec.Ref) (state name : String)
+  | context (chart : Spec.Ref)
+  | mapContext (chart : Spec.Ref) (map : String)
+  | mapKey (chart : Spec.Ref) (map : String)
+  | record (entity : Spec.Ref)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Schema tag "kind"
@@ -66,11 +65,11 @@ structure Service where
   /-- The own events, each with how it changes records. -/
   events : List (String × Change)
   /--
-  The trace names of the events of other services' contracts that the service's definitions receive: an automation's
-  or a chart's event, or a result event of a command that an automation or a chart sends. A simulation delivers an
-  event only to the services that receive it.
+  The events of other services' contracts that the service's definitions receive: an automation's or a chart's event,
+  or a result event of a command that an automation or a chart sends. A simulation delivers an event only to the
+  services that receive it.
   -/
-  receives : List String
+  receives : List Spec.Ref
   /-- The automations in definition order. -/
   automations : List Automation
   /-- The machines and screens in definition order. -/
@@ -99,18 +98,16 @@ def chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.
 
 def ref (st : Service) (name : String) : Spec.Ref := { service := st.service, name }
 
-/-- The trace name of `r` as seen from the service. -/
-def traceNameOf (st : Service) (r : Spec.Ref) : String := r.traceName st.service
+def Schema.owner : Schema → Spec.Ref
+  | .input d | .output d => d
+  | .payload e => e
+  | .control screen _ => screen
+  | .held chart .. | .context chart | .mapContext chart _ | .mapKey chart _ => chart
+  | .record entity => entity
 
-/-- The ref that a trace name, as seen from the service, spells, without looking the definition up. -/
-def refOf (st : Service) (traceName : String) : Spec.Ref := Spec.Ref.ofTraceName st.service traceName
-
-def schemaOwner (st : Service) : Schema → Spec.Ref
-  | .input d | .output d => st.refOf d
-  | .payload e => st.refOf e
-  | .control screen _ => st.ref screen
-  | .held chart .. | .context chart | .mapContext chart _ | .mapKey chart _ => st.ref chart
-  | .record entity => st.ref entity
+/-- How the event `r` changes records, when it is an own event. -/
+def changeOf (st : Service) (r : Spec.Ref) : Option Change :=
+  if r.service == st.service then st.events.lookup r.name else none
 
 def uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
 
@@ -132,7 +129,7 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
       | .entity none .. => true
       | _ => false
   let charts ← (own.filterMap fun (d, order) => d.chart?.map (d, ·, order)).mapM fun (d, c, order) =>
-    Chart.ofSpec c service d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)
+    Chart.ofSpec c d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)
   let mut commands := []
   let mut queries := []
   let mut events : List (String × Change) := []
@@ -144,7 +141,7 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
     match d.body with
     | .entity .. => pure ()
     | .event change entityRef payload =>
-      schemas := schemas ++ [(.payload name, payload)]
+      schemas := schemas ++ [(.payload d.ref, payload)]
       match change, entityRef with
       | .none, _ => events := events ++ [(name, .none)]
       | .create, some e =>
@@ -165,29 +162,29 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
         | some e => pure (r.field, e)
         | none => throw s!"the ref field {r.field} of {name} points to no entity"
       commands := commands ++ [name]
-      schemas := schemas ++ [(.input name, input)]
+      schemas := schemas ++ [(.input d.ref, input)]
       requirements := requirements ++ [(name, { refs, binds, requires := conditions })]
     | .query _ input output conditions =>
       queries := queries ++ [name]
-      schemas := schemas ++ [(.input name, input)] ++ (output.map fun o => [(.output name, o)]).getD []
+      schemas := schemas ++ [(.input d.ref, input)] ++ (output.map fun o => [(.output d.ref, o)]).getD []
       requirements := requirements ++ [(name, { requires := conditions })]
     | .automation (some receives) (some command) _ _ =>
       let sends := Activity.sends name command
-      automations := automations ++ [{ name, order, receives := receives.traceName service, sends }]
+      automations := automations ++ [({ name, order, receives, sends } : Automation)]
       if command.service != service then
         if let some input := j.definitions.findSome? fun d =>
             match d.body with
             | .command _ input .. => if d.ref == command then some input else none
             | _ => none then
-          schemas := schemas ++ [(.input (command.traceName service), input)]
+          schemas := schemas ++ [(.input command, input)]
     | .automation .. => throw s!"the automation {name} has no event or command"
     | .machine _ => pure ()
     | .screen c =>
-      schemas := schemas ++ c.controls.filterMap fun (control, payload) => payload.map ((.control name control, ·))
+      schemas := schemas ++ c.controls.filterMap fun (control, payload) => payload.map ((.control d.ref control, ·))
       requirements := requirements ++ [(name, { requires := c.requires })]
   let listed := j.contracts.filter (·.service != service) |>.flatMap fun c =>
     c.members.filterMap fun (_, r) => r.bind fun r =>
-      if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some (r.traceName service) else none
+      if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some r else none
   let heard := own.flatMap fun (d, _) =>
     match d.body with
     | .automation (some e) .. => [e]
@@ -202,7 +199,7 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
     match d.body with
     | .command _ _ _ emits .. => if sent.contains d.ref then emits.filterMap id else []
     | _ => []
-  let receives := listed.filter fun n => (heard ++ results).any (·.traceName service == n)
+  let receives := listed.filter (heard ++ results).contains
   let entities := ((j.services.find? (·.name == service)).map (·.entities)).getD []
   let references := entities.flatMap fun e =>
     ((j.definitions.findSome? fun d =>

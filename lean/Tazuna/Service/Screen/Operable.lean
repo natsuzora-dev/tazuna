@@ -115,7 +115,7 @@ def offered (st : Service) (s : State) (top : Instance) (control : String) (payl
       | .listed =>
         match ← fs.offers (s.scopeOf holder state) s.records control with
         | .error e =>
-          pure (.error (issueViolation st (st.ref top.chart.name) e fun _ =>
+          pure (.error (issueViolation (st.ref top.chart.name) e fun _ =>
             .offersSchema (st.ref top.chart.name) control state))
         | .ok payloads => pure (.ok (done ++ [(state, .listed payloads)]))
 

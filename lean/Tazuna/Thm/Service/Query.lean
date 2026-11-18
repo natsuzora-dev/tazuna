@@ -106,15 +106,15 @@ theorem ended_subscription_not_answered (id : String) (hid : ∀ sub ∈ s.subsc
   exact hid sub hsub h.symm
 
 theorem query_invalid_input_rejected (name : String) (raw : Value)
-    (hp : fs.parse (.input name) raw = .ok none) :
+    (hp : fs.parse (.input (st.ref name)) raw = .ok none) :
     resolveChecked st fs s name raw = .answered (.rejected { kind := .invalidInput }) [] := by
   simp [resolveChecked, hp]
 
 theorem resolve_output_sorted_before_normalize (name : String) (raw input output normalized : Value)
-    (failed : Option String) (hp : fs.parse (.input name) raw = .ok (some input))
-    (hr : firstFalse (fs.inputRequirement name · input) (st.requirementsOf name).requires = .ok none)
+    (failed : Option String) (hp : fs.parse (.input (st.ref name)) raw = .ok (some input))
+    (hr : firstFalse (fs.inputRequirement (st.ref name) · input) (st.requirementsOf name).requires = .ok none)
     (hv : fs.resolve name input s.records s.now = .ok output)
-    (hn : fs.normalize (.output name) (st.sorted (.output name) output) = .ok (some normalized))
+    (hn : fs.normalize (.output (st.ref name)) (st.sorted (.output (st.ref name)) output) = .ok (some normalized))
     (he : fs.queryEnsures name input normalized s.records = .ok failed) :
     ∃ vs, resolveChecked st fs s name raw = .answered (.fulfilled normalized) vs := by
   cases failed <;> simp [resolveChecked, normalizeOutput, hp, hr, hv, hn, he] <;> exact ⟨_, rfl⟩

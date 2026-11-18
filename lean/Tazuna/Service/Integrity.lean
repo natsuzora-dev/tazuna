@@ -57,7 +57,7 @@ def danglingRefs (st : Service) (records : Records) (name : String) (row : Row) 
 def rowViolations [Monad m] (st : Service) (fs : Functions m) (records : Records) (name : String) (row : Row) :
     m (List Fault) := do
   let invariant := match ← fs.invariant row.entity row.value with
-    | .error e => [issueViolation st (st.ref row.entity) e]
+    | .error e => [issueViolation (st.ref row.entity) e]
     | .ok (some c) => [row.failedInvariant st c (st.ref name)]
     | .ok none => []
   pure (invariant ++ danglingRefs st records name row)
@@ -66,7 +66,7 @@ def integrityViolations [Monad m] (st : Service) (fs : Functions m) (records : R
     m (List Fault) := do
   let rows ← (st.entities.flatMap fun e => records.filter (·.entity == e)).mapM (rowViolations st fs records name)
   match ← fs.serviceInvariant records with
-  | .error schema => pure (rows.flatten ++ [.exception (schema.map st.schemaOwner)])
+  | .error schema => pure (rows.flatten ++ [.exception (schema.map Schema.owner)])
   | .ok (some c) => pure (rows.flatten ++ [.failedServiceInvariant c (st.ref name)])
   | .ok none => pure rows.flatten
 

@@ -119,7 +119,7 @@ structure World where
   assignments : List (Scenario.Fact × List Nat) := []
 deriving Inhabited
 
-def World.state (w : World) (service : String) : State := (w.states.lookup service).getD {}
+def World.state (w : World) (service : String) : State := (w.states.lookup service).getD { service }
 
 def World.role (w : World) (service : String) : Option Role := w.roles.lookup service
 
@@ -138,11 +138,11 @@ def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
 def screensOf (s : State) : List InstanceId := (s.machines.filter (·.chart.screen)).map (·.id)
 
 /-- The service that the request `id` of the lines `lines` went to. -/
-def targetOf (service : String) (lines : Array Line) (id : String) : Option String :=
+def targetOf (lines : Array Line) (id : String) : Option String :=
   lines.toList.findSome? fun l =>
     match l.dir, l.body with
-    | .out, .command name _ | .out, .query name _ | .out, .subscribe name _ =>
-      if l.id == id then some (Spec.Ref.ofTraceName service name).service else none
+    | .out, .command r _ | .out, .query r _ | .out, .subscribe r _ =>
+      if l.id == id then some r.service else none
     | _, _ => none
 
 /-- The world with a message from `sender` to `receiver`, kept in flight, discarded, or reported as unlisted. -/
@@ -166,20 +166,20 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
     if l.dir != .out || w.stopped then w else
     let own := receivedId service l.id
     match l.body with
-    | .command name _ | .query name _ | .subscribe name _ =>
-      let target := (Spec.Ref.ofTraceName service name).service
+    | .command r _ | .query r _ | .subscribe r _ =>
+      let target := r.service
       if target == service then w else w.post o service target l (some own)
     | .unsubscribe to =>
-      match targetOf service (w.state service).lines to with
+      match targetOf (w.state service).lines to with
       | some target => w.post o service target l (some (receivedId service to))
       | none => w
     | .answer to _ =>
       match senderOf? to with
       | some requester => w.post o service requester l (some to)
       | none => w
-    | .event name _ resultOf =>
+    | .event event _ resultOf =>
       w.services.foldl (init := w) fun w (r, st) =>
-        if r != service && st.receives.contains (nameIn service r name) then w.post o service r l resultOf else w
+        if r != service && st.receives.contains event then w.post o service r l resultOf else w
     | _ => w
 
 /--

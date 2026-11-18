@@ -280,7 +280,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
       | true, none, some st => do pure (some (← Explore.enabled st (fsOf service) s))
       | _, _, _ => pure none
     pure ({ service
-            lines := s.lines.toList.map (Sim.traceLineOf · [] [])
+            lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
             violations := reportedViolations s c none
             candidates := ((w.services.lookup service).map fun st => candidates st s c none).getD []
             enabled := next.bind (·.toOption)

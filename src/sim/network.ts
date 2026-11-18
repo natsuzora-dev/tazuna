@@ -1,19 +1,19 @@
-import type { DefinitionRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import { haltingInvalidScenarioKinds, type InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
-import type { TraceLine } from "../data/trace.generated.ts";
-import { contentOf, receivedId, senderOf } from "../data/trace.ts";
+import { receivedId, senderOf } from "../data/trace.ts";
 import { byCodePoint, stringsOf } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import { ref } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import type { InstanceId } from "../service/instance.ts";
+import { bodyContent, type Line, type LineBody } from "../service/message.ts";
 import type { Records } from "../service/records.ts";
 import { created, Halt, report, type State } from "../service/state.ts";
-import { isKeyOf, refOfTraceName } from "../spec/structure.ts";
-import { arriveFrom, nameIn } from "./receive.ts";
+import { isKeyOf } from "../spec/structure.ts";
+import { arriveFrom } from "./receive.ts";
 
 /** Lean's Role. */
 export type Role = "own" | "run" | "external" | "skip";
@@ -28,7 +28,7 @@ export interface Message {
   readonly sender: string;
   readonly receiver: string;
   readonly id: string;
-  readonly body: TraceLine;
+  readonly body: LineBody;
   readonly origin: Origin;
   readonly channel: string | undefined;
   status: Status;
@@ -125,15 +125,15 @@ export function noteTo(w: World, r: InvalidScenario): void {
 const screensOf = (s: State): InstanceId[] => [...s.machines.values()].filter((i) => i.chart.screen).map((i) => i.id);
 
 /** Lean's targetOf. */
-function targetOf(service: string, lines: readonly TraceLine[], id: string): string | undefined {
+function targetOf(lines: readonly Line[], id: string): string | undefined {
   for (const l of lines)
     if (l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe") && l.id === id)
-      return refOfTraceName(service, l.name).service;
+      return l.target.service;
   return undefined;
 }
 
 /** Lean's World.post. */
-function post(w: World, o: Origin, sender: string, receiver: string, l: TraceLine, channel: string | undefined): void {
+function post(w: World, o: Origin, sender: string, receiver: string, l: Line, channel: string | undefined): void {
   const role = w.roles.get(receiver);
   if (role === undefined) {
     reportTo(w, {
@@ -155,7 +155,7 @@ function post(w: World, o: Origin, sender: string, receiver: string, l: TraceLin
 }
 
 /** Lean's World.route. */
-function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]): void {
+function route(w: World, o: Origin, service: string, lines: readonly Line[]): void {
   for (const l of lines) {
     if (l.dir !== "out" || stopped(w)) continue;
     const own = receivedId(service, l.id);
@@ -163,12 +163,12 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
       case "command":
       case "query":
       case "subscribe": {
-        const target = refOfTraceName(service, l.name).service;
+        const target = l.target.service;
         if (target !== service) post(w, o, service, target, l, own);
         break;
       }
       case "unsubscribe": {
-        const target = targetOf(service, stateOf(w, service)?.lines ?? [], l.to);
+        const target = targetOf(stateOf(w, service)?.lines ?? [], l.to);
         if (target !== undefined) post(w, o, service, target, l, receivedId(service, l.to));
         break;
       }
@@ -179,7 +179,7 @@ function route(w: World, o: Origin, service: string, lines: readonly TraceLine[]
       }
       case "event":
         for (const [r, p] of w.services)
-          if (r !== service && p.processing.st.receives.includes(nameIn(service, r, l.name)))
+          if (r !== service && p.processing.st.receives.some((e) => sameRef(e, l.event)))
             post(w, o, service, r, l, l.resultOf);
         break;
       default:
@@ -199,13 +199,9 @@ export function keyEntity(w: World, x: string): DefinitionRef | undefined {
 }
 
 /** Lean's World.computedKey?. */
-function computedKey(
-  w: World,
-  sent: readonly TraceLine[],
-  records: Records,
-): readonly [string, DefinitionRef] | undefined {
+function computedKey(w: World, sent: readonly Line[], records: Records): readonly [string, DefinitionRef] | undefined {
   const strings = [
-    ...sent.filter((l) => l.dir === "out").flatMap((l) => stringsOf(contentOf(l))),
+    ...sent.filter((l) => l.dir === "out").flatMap((l) => stringsOf(bodyContent(l))),
     ...[...records.keyed.values()].flatMap((rows) =>
       [...rows].flatMap(([key, row]) => [key, ...stringsOf(row.encoded)]),
     ),
@@ -218,7 +214,7 @@ function computedKey(
 }
 
 /** Lean's World.checkComputed: the fault halts the service. */
-function checkComputed(w: World, service: string, sent: readonly TraceLine[], records: Records): void {
+function checkComputed(w: World, service: string, sent: readonly Line[], records: Records): void {
   const p = w.services.get(service);
   if (p === undefined || stopped(w)) return;
   const found = computedKey(w, sent, records);

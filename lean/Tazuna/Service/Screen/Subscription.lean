@@ -33,7 +33,7 @@ def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Ins
     | .error v => pure (.error v)
     | .ok wanted =>
       match ← fs.showInput (s.scopeOf i (some n)) s.records a with
-      | .error e => pure (.error (issueViolation st (st.ref i.chart.name) e))
+      | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
       | .ok input => pure (.ok (setWanted wanted { slot := a.key, activity := a, input }))) (.ok [])
 
 def inputOf (wanted : List Wanted) (slot : String) : Option Value := (wanted.find? (·.slot == slot)).map (·.input)
@@ -44,13 +44,12 @@ def State.endShowStep (wanted : List Wanted) (owner : InstanceId) (s : State) (p
   let s := s.endSubscription p
   if (inputOf wanted slot).isNone then s.setShown owner slot .null else s
 
-/-- `service` is the subscribing service, from which the subscribe line names the query. -/
-def State.subscribeStep (service : String) (opened : List Pending) (owner : InstanceId) (s : State) (w : Wanted) : State :=
+def State.subscribeStep (opened : List Pending) (owner : InstanceId) (s : State) (w : Wanted) : State :=
   if opened.any (fun p => p.requester.slot? == some w.slot && p.input == w.input) then s else
-  s.await (.subscribe (w.activity.ref.traceName service) w.input) (.slot owner w.slot) w.activity w.input
+  s.await (.subscribe w.activity.ref w.input) (.slot owner w.slot) w.activity w.input
 
-def State.syncShows (s : State) (service : String) (owner : InstanceId) (wanted : List Wanted) : State :=
-  wanted.foldl (State.subscribeStep service (s.openShows owner) owner)
+def State.syncShows (s : State) (owner : InstanceId) (wanted : List Wanted) : State :=
+  wanted.foldl (State.subscribeStep (s.openShows owner) owner)
     ((s.openShows owner).foldl (State.endShowStep wanted owner) s)
 
 def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : InstanceId) : m State := do
@@ -60,7 +59,7 @@ def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : Ins
     if i.closed then pure s else
     match ← wantedShows st fs s i with
     | .error fault => pure (s.report (.fault fault))
-    | .ok wanted => pure (s.syncShows st.service owner wanted)
+    | .ok wanted => pure (s.syncShows owner wanted)
 
 def refreshScreens [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.id) s

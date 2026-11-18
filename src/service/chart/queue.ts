@@ -1,3 +1,4 @@
+import { sameRef } from "../../data/definitionRef.ts";
 import type { Activity, Received, Requester, StepName } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { Fields } from "../../data/values.ts";
@@ -209,7 +210,7 @@ function machineWork(
     .map((g) =>
       g.flatMap((e) =>
         instance.chart.receives
-          .filter(([, event]) => event === e.event)
+          .filter(([, event]) => sameRef(event, e.event))
           .map(([key]): ReceivedEvent => ({ key, payload: e.encoded, decoded: e.payload })),
       ),
     )
@@ -232,7 +233,9 @@ export function reactions(
   return [
     ...[...s.machines.values()].flatMap((i) => machineWork(groups, recordsChanged, cause, i) ?? []),
     ...st.automations.flatMap((automation): Work[] => {
-      const received = groups.map((g) => g.filter((e) => e.event === automation.receives)).filter((g) => g.length > 0);
+      const received = groups
+        .map((g) => g.filter((e) => sameRef(e.event, automation.receives)))
+        .filter((g) => g.length > 0);
       return received.length === 0
         ? []
         : [{ kind: "reaction", automation, groups: received, delivered: received, cause }];

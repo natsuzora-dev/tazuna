@@ -4,10 +4,11 @@ import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import { limits } from "../data/limits.generated.ts";
 import type { Activity, Requester, StepName } from "../data/step.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
-import type { Answer, TraceLine } from "../data/trace.generated.ts";
-import type { UntimedTraceLine } from "../data/trace.ts";
+import type { Answer } from "../data/trace.generated.ts";
+import { operationName } from "../data/trace.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type Location, type Violation, type ViolationError, withExtra } from "../data/violation.ts";
+import { traceNameOfRef } from "../spec/structure.ts";
 import { descendants, pathOf } from "../spec/tree.ts";
 import { ref, type Service } from "./basic.ts";
 import type { Chart, Transition } from "./chart/basic.ts";
@@ -23,7 +24,7 @@ import {
 } from "./functions.ts";
 import type { CommandAnswers } from "./idempotency.ts";
 import { chartOf, copyId, type InstanceId, mapOf, ownerId } from "./instance.ts";
-import { type Emit, type Halting, halts } from "./message.ts";
+import { type Emit, type Halting, halts, type Line, type LineBody } from "./message.ts";
 import type { Note } from "./note.ts";
 import type { Records, Row } from "./records.ts";
 
@@ -220,6 +221,8 @@ interface Durable {
   readonly createdEntities: string[];
   /** Lean's State.keyOwner. */
   keyOwner: string | undefined;
+  /** The service whose state this is, in whose trace names its line ids are written. */
+  readonly service: string;
 }
 
 /** The part of the state that lives in the service process's memory; a restart drops it. */
@@ -257,7 +260,7 @@ export interface State extends Durable, Process {
   serial: number;
   /** The number of the next request to start waiting. */
   turn: number;
-  readonly lines: TraceLine[];
+  readonly lines: Line[];
   readonly lineCounts: Map<string, number>;
   readonly steps: StepInfo[];
   /** The number of messages begun. Messages are numbered from 1. */
@@ -286,6 +289,7 @@ export function newState(st: Service): State {
     outgoing: new Map(),
     createdEntities: [],
     keyOwner: undefined,
+    service: st.service,
     ...newProcess(),
     now: Temporal.Instant.fromEpochMilliseconds(0),
     stepOrder: [],
@@ -299,19 +303,31 @@ export function newState(st: Service): State {
   };
 }
 
-/** A trace line before `write` adds the time and, unless the line gives one, the id. */
-type UnwrittenLine = UntimedTraceLine extends infer L
-  ? L extends UntimedTraceLine
-    ? Omit<L, "id"> & { readonly id?: string }
-    : never
-  : never;
+/** A line before `write` adds the time and, unless the line gives one, the id. */
+type UnwrittenLine = LineBody & { readonly dir: "in" | "out"; readonly id?: string };
+
+/** Lean's LineBody.idName: the name that line ids count, as the trace of `service` writes it. */
+function idName(service: string, body: LineBody): string {
+  switch (body.type) {
+    case "command":
+    case "query":
+    case "subscribe":
+      return traceNameOfRef(body.target, service);
+    case "event":
+      return traceNameOfRef(body.event, service);
+    case "operation":
+      return operationName(traceNameOfRef(body.screen, service), body.control);
+    default:
+      return body.type;
+  }
+}
 
 export function lineId(s: State, givenId: string | undefined, name: string): string {
   return givenId ?? `${name}#${(s.lineCounts.get(name) ?? 0) + 1}`;
 }
 
 export function write(s: State, line: UnwrittenLine): string {
-  const name = "name" in line ? line.name : line.type;
+  const name = idName(s.service, line);
   const id = lineId(s, line.id, name);
   s.lineCounts.set(name, (s.lineCounts.get(name) ?? 0) + 1);
   s.lines.push({ time: s.now.toString(), ...line, id });

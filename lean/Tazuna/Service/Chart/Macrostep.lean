@@ -29,9 +29,9 @@ def mapStateReads (i : Instance) : List (InstanceId × String) :=
   let tree := i.chart.tree
   (i.active.filter (tree.kindOf · == some .map)).map (i.id, ·)
 
-def Work.name (st : Service) : Work → StepName
-  | .reaction a ((e :: _) :: _) d _ => .reaction a.name (st.refOf a.receives) e.payload (d.map (·.map (·.payload)))
-  | .reaction a _ d _ => .reaction a.name (st.refOf a.receives) .null (d.map (·.map (·.payload)))
+def Work.name : Work → StepName
+  | .reaction a ((e :: _) :: _) d _ => .reaction a.name a.receives e.payload (d.map (·.map (·.payload)))
+  | .reaction a _ d _ => .reaction a.name a.receives .null (d.map (·.map (·.payload)))
   | .answered c answer _ => .answer c.activity c.requester c.input (ToValue.toValue answer)
   | .start name _ => .start name
   | .receive name ((e :: _) :: _) d _ => .receive name e d
@@ -39,8 +39,8 @@ def Work.name (st : Service) : Work → StepName
   | .onDone name _ => .onDone name
   | .opensDone name state key _ _ _ => .opensDone name state key
 
-def Ready.name (st : Service) : Ready → StepName
-  | .work w => w.name st
+def Ready.name : Ready → StepName
+  | .work w => w.name
   | .command c => .command c.activity c.requester c.input
 
 def Work.cause : Work → Option Nat
@@ -182,7 +182,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     let definition := st.ref a.name
     match ← fs.react a.name e.payload s.records s.now s.nextKeys with
     | .error issue =>
-      pure ⟨s.report (.fault (issueViolation st definition issue)), q⟩
+      pure ⟨s.report (.fault (issueViolation definition issue)), q⟩
     | .ok (reacted, keys) =>
     let s := s.createKeys keys
     match reacted with
@@ -191,7 +191,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
         if a.sends.isOwn st.service then
           pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
                                                     serial := none, input, cause := step }] }⟩
-        else pure ⟨s.await (.command (st.traceNameOf a.sends.ref) input) (.automation a.name) a.sends input, q⟩
+        else pure ⟨s.await (.command a.sends.ref input) (.automation a.name) a.sends input, q⟩
   | .answered c answer _, ⟨s, q⟩ => do
     -- Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
     -- answer has a transition to take.
@@ -245,11 +245,11 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
     pure (if refreshed.halted.isNone && !(shownChanged s refreshed).isEmpty then
       refreshed.report (.fault (.exceededMessageWork Limit.messageWork.max)) else refreshed)
   | fuel + 1 =>
-    match q.take (Ready.name st) s.stepOrder with
+    match q.take Ready.name s.stepOrder with
     | .error invalid => pure (s.report (.invalidInput invalid))
     | .ok (some (.work w, i, rest, stepOrder)) => do
       let (s, step) := { s with stepOrder }.newStep w.cause
-      MonadNote.note (.stepBegins step (w.name st) w.started)
+      MonadNote.note (.stepBegins step w.name w.started)
       let r ← runWork st fs s (rest.putBack i (w.rest step)) step w
       MonadNote.note .stepEnds
       drain st fs fuel r.state r.queue
@@ -258,8 +258,8 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
       match runaway with
       | some exceeded => pure (s.report (.fault exceeded))
       | none =>
-        MonadNote.note (.stepBegins step ((Ready.command c).name st) none)
-        let pc ← processCommand st fs s (st.traceNameOf c.activity.ref) c.input none step
+        MonadNote.note (.stepBegins step (Ready.command c).name none)
+        let pc ← processCommand st fs s c.activity.ref.name c.input none step
         MonadNote.note .stepEnds
         drain st fs fuel pc.1
           { rest with tasks := rest.tasks ++ commandWork st pc.1 pc.2.2 step ++ [.answered c pc.2.1 step] }

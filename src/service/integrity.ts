@@ -2,7 +2,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { Fields } from "../data/values.ts";
 import { type Located, withExtra } from "../data/violation.ts";
-import { ref, type Service, schemaOwner, uniqueOf } from "./basic.ts";
+import { changeOf, ref, type Service, schemaOwner, uniqueOf } from "./basic.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import type { Emitted } from "./message.ts";
 import { type Records, type Row, recordSource } from "./records.ts";
@@ -37,7 +37,7 @@ export function writtenRecord(
   st: Service,
   { emit: emitted }: Encoded,
 ): { readonly entity: string; readonly key?: string } | undefined {
-  const change = st.events.get(emitted.event);
+  const change = changeOf(st, emitted.event);
   if (change === undefined || change.kind === "none") return undefined;
   return change.kind === "set"
     ? { entity: change.entity }
@@ -45,7 +45,7 @@ export function writtenRecord(
 }
 
 function apply(r: Run, { emit: emitted, encoded }: Encoded, written: Written): void {
-  const change = r.st.events.get(emitted.event);
+  const change = changeOf(r.st, emitted.event);
   if (change === undefined || change.kind === "none") return;
   const records = r.state.records;
   const payload = emitted.payload;

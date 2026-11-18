@@ -179,7 +179,7 @@ theorem holdsFold_fixed (i : Instance) (es : List (String × Time)) :
       else do
         match ← fs.holds (s.scopeOf i (some x.fst)) s.records with
         | .error e =>
-          pure (s.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+          pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
         | .ok () => pure s) s : Id State).fixed = s.fixed := by
   induction es generalizing s with
   | nil => rfl
@@ -237,7 +237,7 @@ theorem holdsFold_lines (i : Instance) (es : List (String × Time)) :
       else do
         match ← fs.holds (s.scopeOf i (some x.fst)) s.records with
         | .error e =>
-          pure (s.report (.fault (issueViolation st (st.ref i.chart.name) e)))
+          pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
         | .ok () => pure s) s : Id State).lines = s.lines := by
   induction es generalizing s with
   | nil => rfl
@@ -291,11 +291,11 @@ theorem answer_records (t : State) (to : Option String) (a : Answer) : (t.answer
   cases to <;> rfl
 
 /-- The state and the step after `send` writes the input line and begins the message and its step. -/
-def sent (s : State) (name id : String) (input : Value) : State × Nat :=
+def sent (s : State) (name : Spec.Ref) (id : String) (input : Value) : State × Nat :=
   (s.write .in (some id) (.command name input)).1.newMessage.newStep none
 
 /-- The state after `receive` writes the input line. -/
-def delivered (s : State) (name id : String) (payload : Value) : State :=
+def delivered (s : State) (name : Spec.Ref) (id : String) (payload : Value) : State :=
   (s.write .in (some id) (.event name payload none)).1
 
 def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l

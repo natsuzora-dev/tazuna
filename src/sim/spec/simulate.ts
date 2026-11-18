@@ -10,7 +10,7 @@ import type { Structure } from "../../spec/structure.generated.ts";
 import { encodedGivenRecords, start } from "../given.ts";
 import type { Assignment, StepOrder, World } from "../network.ts";
 import { execute, simulate } from "../run.ts";
-import { snapshotLines } from "../trace.ts";
+import { snapshotLines, traceLineOf } from "../trace.ts";
 import { instrumented, Listener } from "./listener.ts";
 import { newProcessing } from "./processing.ts";
 
@@ -70,6 +70,7 @@ export const snapshotsOf = ({ world, listeners }: Made): ReadonlyMap<string, rea
       return [
         service,
         snapshotLines(
+          service,
           s.lines,
           causes,
           created(s).map(([, key]) => key),
@@ -119,7 +120,7 @@ const violationValue = ({ kind, definition, data }: Violation) => ({ kind, defin
 export const outcomeOf = (m: Made): Outcome => ({
   services: [...m.world.services].map(([service, p]) => ({
     service,
-    lines: p.processing.state.lines,
+    lines: p.processing.state.lines.map((l) => traceLineOf(service, l)),
     violations: serviceViolations(m, service).map(violationValue),
     candidates: serviceCandidates(m, service),
   })),

@@ -59,12 +59,6 @@ def sameRef : Option Ref → Option Ref → Bool
 def Ref.traceName (r : Ref) (service : String) : String :=
   if r.service == service then r.name else s!"{r.service}.{r.name}"
 
-/-- The ref that a trace name as seen from `service` spells: the part before the last dot, if any, is the service. -/
-def Ref.ofTraceName (service traceName : String) : Ref :=
-  match (traceName.splitOn ".").reverse with
-  | name :: owner@(_ :: _) => { service := ".".intercalate owner.reverse, name }
-  | _ => { service, name := traceName }
-
 /--
 An activity of a state. `name` is the key under the keyword, and `definition` is the query, command, or screen of
 that key, or null when the key names no definition.

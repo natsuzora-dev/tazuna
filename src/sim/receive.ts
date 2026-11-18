@@ -1,42 +1,36 @@
-import type { TraceLine } from "../data/trace.generated.ts";
 import { receivedId, sentId } from "../data/trace.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { answerIn, call, endSubscription, receive, send, subscribe } from "../service/input.ts";
-import { refOfTraceName, traceNameOfRef } from "../spec/structure.ts";
-
-/** Lean's nameIn. */
-export const nameIn = (sender: string, receiver: string, name: string): string =>
-  traceNameOfRef(refOfTraceName(sender, name), receiver);
+import type { LineBody } from "../service/message.ts";
 
 /** Lean's arriveFrom. */
-export function arriveFrom(r: Processing, sender: string, id: string, line: TraceLine): void {
-  const name = (n: string) => nameIn(sender, r.st.service, n);
+export function arriveFrom(r: Processing, sender: string, id: string, body: LineBody): void {
   const given = { id: receivedId(sender, id) };
-  switch (line.type) {
+  switch (body.type) {
     case "command":
-      send(r, name(line.name), line.input, given);
+      send(r, body.target, body.input, given);
       return;
     case "query":
-      call(r, name(line.name), line.input, given);
+      call(r, body.target, body.input, given);
       return;
     case "subscribe":
-      subscribe(r, name(line.name), line.input, given);
+      subscribe(r, body.target, body.input, given);
       return;
     case "unsubscribe":
-      endSubscription(r, receivedId(sender, line.to));
+      endSubscription(r, receivedId(sender, body.to));
       return;
     case "answer": {
-      const own = sentId(r.st.service, line.to);
-      if (own !== undefined) answerIn(r, receivedId(sender, id), own, line.answer);
+      const own = sentId(r.st.service, body.to);
+      if (own !== undefined) answerIn(r, receivedId(sender, id), own, body.answer);
       return;
     }
     case "event":
       receive(
         r,
-        name(line.name),
-        line.payload,
+        body.event,
+        body.payload,
         given,
-        line.resultOf === undefined ? undefined : sentId(r.st.service, line.resultOf),
+        body.resultOf === undefined ? undefined : sentId(r.st.service, body.resultOf),
       );
       return;
     default:

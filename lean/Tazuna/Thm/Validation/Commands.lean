@@ -34,7 +34,7 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
     (ha : evaluate st fs records now name raw = .accepted written groups vs) :
     ∀ e ∈ groups.flatten,
-      ∃ r, some r ∈ j.emitsOf (some (st.ref name)) ∧ r.service = st.service ∧ e.event = r.name := by
+      ∃ r, some r ∈ j.emitsOf (some (st.ref name)) ∧ r.service = st.service ∧ e.event = r := by
   intro e he
   obtain ⟨_, decided, _, _, hl, out, -, hlen, hz, rfl⟩ := accepted_emits_decided records now name raw written groups vs ha
   obtain ⟨e', hx⟩ := Tazuna.Thm.Data.Basic.exists_zip_of_mem_right hlen (mem_orderedGroups _ _ e he)
@@ -44,7 +44,7 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
   simp only [Service.lists, hj, List.any_eq_true] at hlist
   obtain ⟨_ | r, ho, hname⟩ := hlist
   · simp at hname
-  simp only [Option.any_some] at hname
+  have hname : r = e'.event := by simpa using hname
   obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Spec.Structure.emitsOf_mem j _ r ho
   have hsv : r.service = st.service := by
     cases hb : d.body with
@@ -56,6 +56,6 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
       rfl
     | _ => simp [hb] at hm
   refine ⟨r, ho, hsv, ?_⟩
-  rw [hev, ← beq_iff_eq.mp hname, Ref.traceName, ite_eq_left (by simp [hsv])]
+  rw [hev, hname]
 
 end Tazuna.Thm.Validation.Commands

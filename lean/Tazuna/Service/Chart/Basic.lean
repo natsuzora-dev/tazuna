@@ -99,8 +99,8 @@ structure Chart where
   /-- The states in document order. -/
   states : List ChartState
   shaped : chartTree (states.map (·.shape)) initial (on.filterMap (·.target)) = true := by decide
-  /-- The key of each `receives` and the trace name of the event that it receives. -/
-  receives : List (String × String)
+  /-- The key of each `receives` and the event that it receives. -/
+  receives : List (String × Spec.Ref)
   screen : Bool := false
   /-- Whether another screen's opens opens the chart. -/
   opened : Bool := false
@@ -151,7 +151,7 @@ def Activity.ofSpec : Spec.Activity → Except String Activity
     throw s!"the activity {key}, which names no definition, is outside the Lean model"
 
 /-- The executable form of a chart. -/
-def Chart.ofSpec (c : Spec.Chart) (service name : String) (order : Nat) (screen opened : Bool) :
+def Chart.ofSpec (c : Spec.Chart) (name : String) (order : Nat) (screen opened : Bool) :
     Except String Chart := do
   let toState (st : Spec.State) : Except String ChartState := do
     pure { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
@@ -170,7 +170,7 @@ def Chart.ofSpec (c : Spec.Chart) (service name : String) (order : Nat) (screen 
         exact c.shaped⟩ :
         { states : List ChartState // chartTree (states.map (·.shape)) c.initial ((c.on.map Transition.ofSpec).filterMap (·.target)) = true })
   let receives ← c.receives.mapM fun
-    | (key, some r) => pure (key, r.traceName service)
+    | (key, some r) => pure (key, r)
     | (key, none) => throw s!"the chart {name} receives {key}, which is no event"
   pure { name, order, initial := c.initial, on := c.on.map Transition.ofSpec, states, shaped, receives, screen, opened,
          offers := c.offers,

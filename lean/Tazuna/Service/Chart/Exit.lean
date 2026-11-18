@@ -38,7 +38,7 @@ def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Optio
   withMachine name fun i r => do
     match ← fs.assign (r.state.scopeOf i scope) r.state.records a extra r.state.nextKeys with
     | .error e =>
-      pure (r.report (.fault (issueViolation st (st.ref i.chart.name) e fun
+      pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun
         | .mapContext _ map => .copyContextSchema (st.ref i.chart.name) map
         | _ => .contextSchema (st.ref i.chart.name))))
     | .ok (context, copyContext, keys) =>

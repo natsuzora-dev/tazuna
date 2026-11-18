@@ -422,7 +422,7 @@ theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterM
   agree [refreshScreens_agrees h, checkHolds_agrees h, checkInvariants_agrees h, rearm_agrees h, publish_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem checkResults_agrees (s : State) : Agrees (checkResults st fsI s) (checkResults st fs s) := by
+theorem checkResults_agrees (s : State) : Agrees (checkResults fsI s) (checkResults fs s) := by
   unfold checkResults; agree [h.resultEnsures]
 
 omit [MonadNote (StateT C Id)] in
@@ -483,15 +483,15 @@ theorem finish_agrees (s : State) : Agrees (finish st fsI s) (finish st fs s) :=
 theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (message st fs s q) := by
   unfold message; agree [drain_agrees h, finish_agrees h]
 
-theorem send_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
+theorem send_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) :
     Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
   unfold send; agree [message_agrees h, processCommand_agrees h]
 
-theorem call_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
+theorem call_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) :
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
   unfold call; agree [resolveChecked_agrees h, message_agrees h]
 
-theorem subscribe_agrees (s : State) (name : String) (id : Option String) (raw : Value) :
+theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) :
     Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
   unfold subscribe; agree [message_agrees h]
 
@@ -499,16 +499,16 @@ theorem endSubscription_agrees (s : State) (id : String) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
 
-theorem deliver_agrees (s : State) (name : String) (id : Option String) (raw payload : Value)
+theorem deliver_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw payload : Value)
     (request : Option String) :
     Agrees (deliver st fsI s name id raw payload request) (deliver st fs s name id raw payload request) := by
   unfold deliver; exact message_agrees h _ _
 
-theorem redeliver_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :
+theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) (resultOf : Option String) :
     Agrees (redeliver st fsI s name id raw resultOf) (redeliver st fs s name id raw resultOf) := by
   unfold redeliver; agree [message_agrees h]
 
-theorem receive_agrees (s : State) (name : String) (id : Option String) (raw : Value) (resultOf : Option String) :
+theorem receive_agrees (s : State) (name : Spec.Ref) (id : Option String) (raw : Value) (resultOf : Option String) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
   unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
 

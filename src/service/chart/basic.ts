@@ -1,3 +1,4 @@
+import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Trigger } from "../../data/transitionRef.generated.ts";
 import { sameJson } from "../../data/values.ts";
@@ -7,7 +8,6 @@ import {
   type StateStructure,
   schemaProperties,
   type TransitionStructure,
-  traceNameOfRef,
 } from "../../spec/structure.ts";
 
 /**
@@ -60,8 +60,8 @@ export interface Chart {
   /** The states by name, in document order. */
   readonly states: ReadonlyMap<string, ChartState>;
   readonly tree: ChartStructure;
-  /** Each receives key and the trace name of its received event. */
-  readonly receives: readonly (readonly [string, string])[];
+  /** Each receives key and its received event. */
+  readonly receives: readonly (readonly [string, DefinitionRef])[];
   readonly screen: boolean;
   /** Whether another screen's opens opens the chart. */
   readonly opened: boolean;
@@ -97,8 +97,8 @@ function activityOf(a: ActivityStructure): Activity[] {
   ];
 }
 
-/** Returns the executable chart of the structure `c` of `service`, dropping each receives key that names no event. */
-export function executableChart(c: ChartStructure, service: string, order: number, opened: boolean): Chart {
+/** Returns the executable chart of the structure `c`, dropping each receives key that names no event. */
+export function executableChart(c: ChartStructure, order: number, opened: boolean): Chart {
   return {
     name: c.name,
     order,
@@ -119,9 +119,7 @@ export function executableChart(c: ChartStructure, service: string, order: numbe
       ]),
     ),
     tree: c,
-    receives: Object.entries(c.receives).flatMap(([key, r]) =>
-      r === null ? [] : [[key, traceNameOfRef(r, service)] as const],
-    ),
+    receives: Object.entries(c.receives).flatMap(([key, r]) => (r === null ? [] : [[key, r] as const])),
     screen: c.kind === "screen",
     opened,
     offers: c.offers,

@@ -123,11 +123,11 @@ schema whose refinement or codec threw. An unheld read, a call of `only()` on mo
 that fails its schema, name `owner`; a value that fails any other schema is the site's `mismatch`, an exception where
 the site checks no schema.
 -/
-def issueViolation (st : Service) (owner : Spec.Ref) (e : Issue)
+def issueViolation (owner : Spec.Ref) (e : Issue)
     (mismatch : Schema → Fault := fun _ => .exception (some owner)) : Fault :=
   match e with
   | .thrown none => .exception (some owner)
-  | .thrown (some s) => .exception (some (st.schemaOwner s))
+  | .thrown (some s) => .exception (some s.owner)
   | .unheld held => .unheld owner held
   | .notOnly => .notOnly owner
   | .schema (.held _ state name) => .heldSchema owner name state
@@ -190,11 +190,11 @@ structure Functions (m : Type → Type) where
   normalize : Schema → Value → m (Except Issue (Option Value))
   binding : String → String → Value → Records → Time → m (Except Issue Bool)
   requirement : String → String → Value → Records → Time → m (Except Issue Bool)
-  inputRequirement : String → String → Value → m (Except Issue Bool)
+  inputRequirement : Spec.Ref → String → Value → m (Except Issue Bool)
   decide : String → Value → Records → Time → m (Except Issue (List (List Emit)))
   ensures : String → Value → Records → Records → Time → m (Except Issue (Option String))
   queryEnsures : String → Value → Value → Records → m (Except Issue (Option String))
-  resultEnsures : String → Value → Option Value → List Emit → m (Except Issue (Option String))
+  resultEnsures : Spec.Ref → Value → Option Value → List Emit → m (Except Issue (Option String))
   invariant : String → Value → m (Except Issue (Option String))
   serviceInvariant : Records → m (Except (Option Schema) (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))

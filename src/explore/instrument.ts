@@ -6,11 +6,11 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Channel } from "../data/note.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
-import type { Answer, TraceLine } from "../data/trace.generated.ts";
+import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
-import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
+import { ref, type Schema, type Service } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -23,13 +23,13 @@ import {
   type Scope,
 } from "../service/functions.ts";
 import { chartOf, type InstanceId, within } from "../service/instance.ts";
-import type { Emit } from "../service/message.ts";
+import type { Emit, Line } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
 import type { RecordSource } from "../service/records.ts";
 import type { State, StepInfo } from "../service/state.ts";
 import { type Causes, channelOf, leadsTo, lineSteps } from "../sim/trace.ts";
-import { contractsListing, named } from "../spec/structure.ts";
+import { contractsListing } from "../spec/structure.ts";
 
 /**
  * The values that a step reads and writes, each by its valueName. `keyWrites` holds the key sets of entities that a
@@ -120,10 +120,8 @@ function commutes(a: StepAccess, b: StepAccess): boolean {
 }
 
 /** Lean's comparedEvent: whether the `out` line `l` is an event that a contract lists. */
-function comparedEvent(st: Service, l: TraceLine): boolean {
-  if (l.type !== "event") return false;
-  const d = named(st.structure, st.service, l.name, ["event"]);
-  return d !== undefined && contractsListing(st.structure, { service: d.service, name: d.name }).length > 0;
+function comparedEvent(st: Service, l: Line): boolean {
+  return l.type === "event" && contractsListing(st.structure, l.event).length > 0;
 }
 
 /** Lean's tiedDeadlines: whether steps `i` and `j` are deadlines of one tie. */
@@ -533,9 +531,9 @@ export class InstrumentedFunctions implements Functions {
     const call = (fs: Functions) => fs.requirement(command, condition, input, records, now);
     return this.audited(ref(this.st, command), "requirement", () => call(this.fs), call, String);
   }
-  inputRequirement(target: string, condition: string, input: Fields) {
+  inputRequirement(target: DefinitionRef, condition: string, input: Fields) {
     const call = (fs: Functions) => fs.inputRequirement(target, condition, input);
-    return this.audited(refOf(this.st, target), "inputRequirement", () => call(this.fs), call, String);
+    return this.audited(target, "inputRequirement", () => call(this.fs), call, String);
   }
   decide(command: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
     const call = (fs: Functions) => fs.decide(command, input, records, now);
@@ -553,9 +551,9 @@ export class InstrumentedFunctions implements Functions {
     const call = (fs: Functions) => fs.queryEnsures(query, input, output, records);
     return this.audited(ref(this.st, query), "queryEnsures", () => call(this.fs), call, String);
   }
-  resultEnsures(target: string, input: Fields, output: unknown, events: readonly Emit[]) {
+  resultEnsures(target: DefinitionRef, input: Fields, output: unknown, events: readonly Emit[]) {
     const call = (fs: Functions) => fs.resultEnsures(target, input, output, events);
-    return this.audited(refOf(this.st, target), "resultEnsures", () => call(this.fs), call, String);
+    return this.audited(target, "resultEnsures", () => call(this.fs), call, String);
   }
   invariant(entity: string, record: Fields) {
     const call = (fs: Functions) => fs.invariant(entity, record);

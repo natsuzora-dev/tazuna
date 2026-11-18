@@ -22,44 +22,44 @@ import type { At, Expected, Folder } from "../../src/verify/pairing.ts";
 export type Schema =
   | {
       readonly kind: "input";
-      readonly definition: string;
+      readonly definition: DefinitionRef;
     }
   | {
       readonly kind: "payload";
-      readonly event: string;
+      readonly event: DefinitionRef;
     }
   | {
       readonly kind: "output";
-      readonly definition: string;
+      readonly definition: DefinitionRef;
     }
   | {
       readonly kind: "control";
-      readonly screen: string;
+      readonly screen: DefinitionRef;
       readonly control: string;
     }
   | {
       readonly kind: "held";
-      readonly chart: string;
+      readonly chart: DefinitionRef;
       readonly state: string;
       readonly name: string;
     }
   | {
       readonly kind: "context";
-      readonly chart: string;
+      readonly chart: DefinitionRef;
     }
   | {
       readonly kind: "mapContext";
-      readonly chart: string;
+      readonly chart: DefinitionRef;
       readonly map: string;
     }
   | {
       readonly kind: "mapKey";
-      readonly chart: string;
+      readonly chart: DefinitionRef;
       readonly map: string;
     }
   | {
       readonly kind: "record";
-      readonly entity: string;
+      readonly entity: DefinitionRef;
     };
 
 /**
@@ -157,7 +157,7 @@ export type Extra =
     };
 
 export type Emit = {
-  readonly event: string;
+  readonly event: DefinitionRef;
   readonly payload: Json;
 };
 
@@ -349,7 +349,7 @@ export type Question =
     }
   | {
       readonly type: "inputRequirement";
-      readonly target: string;
+      readonly target: DefinitionRef;
       readonly condition: string;
       readonly input: Json;
     }
@@ -373,7 +373,7 @@ export type Question =
     }
   | {
       readonly type: "resultEnsures";
-      readonly target: string;
+      readonly target: DefinitionRef;
       readonly input: Json;
       readonly output?: Json;
       readonly events: readonly Emit[];

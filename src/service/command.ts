@@ -1,9 +1,10 @@
+import { sameRef } from "../data/definitionRef.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { byCodePoint, canonicalJson, type Fields, type Json } from "../data/values.ts";
 import { withExtra } from "../data/violation.ts";
-import { emitsOf, named, traceNameOfRef } from "../spec/structure.ts";
-import { ref, refOf, type Service } from "./basic.ts";
+import { emitsOf } from "../spec/structure.ts";
+import { ref, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
 import { Failed, issueViolation } from "./functions.ts";
 import { applyAll, type Encoded, integrityViolations, writtenRecord } from "./integrity.ts";
@@ -13,7 +14,7 @@ import { halt, type Run, report, reportAll, write } from "./state.ts";
 
 /** Returns whether the command `command` lists the event of `e` in its emits. */
 function lists(st: Service, command: string, e: Emit): boolean {
-  return emitsOf(st.structure, ref(st, command)).some((l) => l !== null && traceNameOfRef(l, st.service) === e.event);
+  return emitsOf(st.structure, ref(st, command)).some((l) => sameRef(l, e.event));
 }
 
 /** Lean's orderedGroups: the groups of `decided` with the events of `events`, each group in canonical JSON order. */
@@ -57,7 +58,7 @@ export function processCommand(
       write(s, {
         dir: "out",
         type: "event",
-        name: e.emit.event,
+        event: e.emit.event,
         payload: e.encoded,
         ...(id === undefined ? {} : { resultOf: id }),
       });
@@ -79,7 +80,7 @@ export function processCommand(
   if (decided instanceof Failed) return halt(issueViolation(definition, decided));
   const unlisted = decided.flat().find((e) => !lists(r.st, name, e));
   if (unlisted !== undefined) {
-    const event = named(r.st.structure, r.st.service, unlisted.event, ["event"]);
+    const event = r.st.structure.definitions.find((d) => d.kind === "event" && sameRef(d, unlisted.event));
     return report(s, {
       kind: "Fault.unlistedEmittedEvent",
       definition,
@@ -87,7 +88,7 @@ export function processCommand(
     });
   }
   const normalized = decided.flat().map((e): Encoded => {
-    const event = refOf(r.st, e.event);
+    const event = e.event;
     const payload = r.functions.normalize({ kind: "payload", event }, e.payload);
     if (payload instanceof Failed) return halt(issueViolation(definition, payload));
     if ("error" in payload)

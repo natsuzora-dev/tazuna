@@ -9,19 +9,19 @@ open Tazuna.Thm.Data.Basic
 variable {st : Service} {fs : Functions Id}
 
 theorem issueViolation_halts (owner : Spec.Ref) (e : Issue) (mismatch : Schema → Fault)
-    (hm : ∀ s, (mismatch s).halts = true) : (issueViolation st owner e mismatch).halts = true := by
+    (hm : ∀ s, (mismatch s).halts = true) : (issueViolation owner e mismatch).halts = true := by
   unfold issueViolation
   split
   all_goals first | rfl | exact hm _
 
 theorem issueViolation_halts_default (owner : Spec.Ref) (e : Issue) :
-    (issueViolation st owner e).halts = true :=
+    (issueViolation owner e).halts = true :=
   issueViolation_halts owner e _ fun _ => rfl
 
 theorem not_issue_of_not_halts {owner : Spec.Ref} {e : Issue} {mismatch : Schema → Fault}
     (hm : ∀ s, (mismatch s).halts = true) {f : Fault} (hr : f.halts = false)
-    (h : f = issueViolation st owner e mismatch) : False := by
-  have hh := issueViolation_halts (st := st) owner e mismatch hm
+    (h : f = issueViolation owner e mismatch) : False := by
+  have hh := issueViolation_halts owner e mismatch hm
   rw [← h, hr] at hh
   cases hh
 
@@ -34,9 +34,9 @@ theorem normalizeEmits_fold (name : String) (es : List Emit) (done out : List Em
         | .error r => pure (.error r)
         | .ok done =>
           match ← fs.normalize (.payload e.event) (st.sorted (.payload e.event) e.payload) with
-          | .error i => pure (.error (issueViolation st (st.ref name) i))
+          | .error i => pure (.error (issueViolation (st.ref name) i))
           | .ok (some payload) => pure (.ok (done ++ [{ e with payload }]))
-          | .ok none => pure (.error (.emittedPayloadSchema (st.ref name) (st.refOf e.event)))) =
+          | .ok none => pure (.error (.emittedPayloadSchema (st.ref name) e.event))) =
         .ok out) :
     ∃ os, out = done ++ os ∧ os.length = es.length ∧ ∀ p ∈ es.zip os, NormalizedEmit st fs p.1 p.2 := by
   induction es generalizing done with

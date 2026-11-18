@@ -1,21 +1,22 @@
-import type { DefinitionRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { Answer, TraceLine } from "../data/trace.generated.ts";
+import type { Answer } from "../data/trace.generated.ts";
 import { receivedId } from "../data/trace.ts";
 import { byCodePoint, canonicalJson } from "../data/values.ts";
-import { ref, refOf, type Schema, type Service } from "../service/basic.ts";
+import { ref, type Schema } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
 import { begin, call, checkResults, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { chartOf } from "../service/instance.ts";
+import type { LineBody } from "../service/message.ts";
 import { publish } from "../service/query.ts";
 import { fireDue } from "../service/queue.ts";
 import { restart } from "../service/restart.ts";
 import { accepting } from "../service/screen/operable.ts";
 import { Halt, write } from "../service/state.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-import { contractsListing, refOfTraceName, traceNameOfRef } from "../spec/structure.ts";
+import { contractsListing } from "../spec/structure.ts";
 import { given, writtenKey } from "./given.ts";
 import {
   act,
@@ -53,21 +54,21 @@ function comparedOr(r: Processing, schema: Schema, v: unknown): unknown {
   return c instanceof Failed ? v : c;
 }
 
-const inputSchema = (st: Service, name: string): Schema => ({ kind: "input", definition: refOf(st, name) });
-const outputSchema = (st: Service, name: string): Schema => ({ kind: "output", definition: refOf(st, name) });
-const payloadSchema = (st: Service, name: string): Schema => ({ kind: "payload", event: refOf(st, name) });
+const inputSchema = (definition: DefinitionRef): Schema => ({ kind: "input", definition });
+const payloadSchema = (event: DefinitionRef): Schema => ({ kind: "payload", event });
 
-/** Lean's comparedAnswer. */
-function comparedAnswer(r: Processing, target: string, a: Answer): unknown {
+/** Lean's comparedAnswer: as it is when no request names a target. */
+function comparedAnswer(r: Processing, target: DefinitionRef | undefined, a: Answer): unknown {
+  if (target === undefined) return a;
+  const schema: Schema = { kind: "output", definition: target };
   if (a.result === "accepted" && a.output !== undefined)
-    return { result: "accepted", output: comparedOr(r, outputSchema(r.st, target), a.output) };
-  if (a.result === "fulfilled")
-    return { result: "fulfilled", output: comparedOr(r, outputSchema(r.st, target), a.output) };
+    return { result: "accepted", output: comparedOr(r, schema, a.output) };
+  if (a.result === "fulfilled") return { result: "fulfilled", output: comparedOr(r, schema, a.output) };
   return a;
 }
 
 /** Lean's comparedAnswerValue. */
-function comparedAnswerValue(r: Processing, target: string, v: unknown): unknown {
+function comparedAnswerValue(r: Processing, target: DefinitionRef | undefined, v: unknown): unknown {
   const a = answerOfValue(v);
   return a === undefined ? v : comparedAnswer(r, target, a);
 }
@@ -228,12 +229,17 @@ function recordSent(w: World, i: number, service: string, before: number): void 
 }
 
 /** Lean's requestOf. */
-function requestOf(type: RequestType, name: string, id: string | undefined, v: unknown): (r: Processing) => void {
+function requestOf(
+  type: RequestType,
+  target: DefinitionRef,
+  id: string | undefined,
+  v: unknown,
+): (r: Processing) => void {
   const given = id === undefined ? {} : { id };
   return (r) => {
-    if (type === "command") send(r, name, v, given);
-    else if (type === "query") call(r, name, v, given);
-    else subscribe(r, name, v, given);
+    if (type === "command") send(r, target, v, given);
+    else if (type === "query") call(r, target, v, given);
+    else subscribe(r, target, v, given);
   };
 }
 
@@ -262,7 +268,7 @@ function clientRequest(
     id = s.id;
   }
   const before = p.state.lines.length;
-  act(w, { type: "line", index: i }, receiver, requestOf(type, target.name, id, v));
+  act(w, { type: "line", index: i }, receiver, requestOf(type, target, id, v));
   recordSent(w, i, receiver, before);
 }
 
@@ -295,8 +301,7 @@ function nextId(w: World, peer: string, name: string): string {
 }
 
 /** Lean's bodyOf. */
-const bodyOf = (type: RequestType, name: string, id: string, v: unknown): TraceLine =>
-  ({ time: "", dir: "out", type, id, name, input: v }) as TraceLine;
+const bodyOf = (type: RequestType, target: DefinitionRef, input: unknown): LineBody => ({ type, target, input });
 
 /** Lean's World.sameValue. */
 function sameValue(
@@ -339,7 +344,7 @@ function peerMessage(w: World, i: number, peer: string, fits: (m: Message) => bo
   });
 }
 
-const isRequest = (l: TraceLine): boolean => l.type === "command" || l.type === "query" || l.type === "subscribe";
+const isRequest = (l: LineBody): boolean => l.type === "command" || l.type === "query" || l.type === "subscribe";
 
 /** Lean's World.deliverCarried. */
 function deliverCarried(w: World, i: number, k: number): void {
@@ -456,7 +461,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           sender: peer,
           receiver: l.target.service,
           id,
-          body: bodyOf(l.kind, traceNameOfRef(l.target, peer), id, v),
+          body: bodyOf(l.kind, l.target, v),
           origin,
           channel: receivedId(peer, id),
           status: "inFlight",
@@ -464,12 +469,11 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       }
       if (role !== "run") return wrongRole(i, peer);
       const v = fill(w, i, l.input);
-      const name = traceNameOfRef(l.target, peer);
       const r = processingOf(w, peer) as Processing;
       const k = peerMessage(w, i, peer, (m) => {
         const b = m.body;
-        if (b.type !== l.kind || b.name !== name) return false;
-        return m.receiver === l.target.service && sameValue(w, r, inputSchema(r.st, name), peer, l.input, v, b.input);
+        if (b.type !== l.kind || !sameRef(b.target, l.target)) return false;
+        return m.receiver === l.target.service && sameValue(w, r, inputSchema(l.target), peer, l.input, v, b.input);
       });
       return carry(w, i, k);
     }
@@ -493,7 +497,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           sender: peer,
           receiver: sub.receiver,
           id,
-          body: { time: "", dir: "out", type: "unsubscribe", id, to: sub.id },
+          body: { type: "unsubscribe", to: sub.id },
           origin,
           channel: receivedId(peer, sub.id),
           status: "inFlight",
@@ -561,7 +565,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           sender: l.peer,
           receiver: m.sender,
           id,
-          body: { time: "", dir: "out", type: "answer", id, to, answer: a },
+          body: { type: "answer", to, answer: a },
           origin,
           channel: to,
           status: "inFlight",
@@ -587,10 +591,9 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         const reply = w.messages[j] as Message;
         const actual: Answer = reply.body.type === "answer" ? reply.body.answer : { result: "accepted" };
         const r = processingOf(w, l.peer) as Processing;
-        const t = targetOf(m);
-        const peerTarget = t === undefined ? "" : traceNameOfRef(t, l.peer);
-        const shown = comparedAnswerValue(r, peerTarget, maskCreated(w, l.peer, l.answer, v, actual));
-        const expected = comparedAnswerValue(r, peerTarget, markCreated(l.answer, v));
+        const target = targetOf(m);
+        const shown = comparedAnswerValue(r, target, maskCreated(w, l.peer, l.answer, v, actual));
+        const expected = comparedAnswerValue(r, target, markCreated(l.answer, v));
         if (canonicalJson(expected) !== canonicalJson(shown))
           reportTo(w, {
             kind: "InvalidScenario.differentPeerAnswer",
@@ -607,18 +610,13 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       const role = w.roles.get(l.peer);
       if (role === "external") {
         const id = nextId(w, l.peer, l.event.name);
-        const body: TraceLine = {
-          time: "",
-          dir: "out",
+        const body: LineBody = {
           type: "event",
-          id,
-          name: l.event.name,
+          event: l.event,
           payload: v,
           ...(resultId === undefined ? {} : { resultOf: resultId }),
         };
-        const receivers = [...w.services].filter(([r, p]) =>
-          p.processing.st.receives.includes(traceNameOfRef(l.event, r)),
-        );
+        const receivers = [...w.services].filter(([, p]) => p.processing.st.receives.some((e) => sameRef(e, l.event)));
         if (receivers.length === 0)
           return reportedHere({
             kind: "InvalidScenario.unreceivedEvent",
@@ -635,13 +633,11 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         const k = peerMessage(w, i, peer, (m) => {
           const b = m.body;
           if (b.type !== "event") return false;
-          const event = refOfTraceName(peer, b.name);
           return (
             m.receiver === own &&
-            event.service === l.event.service &&
-            event.name === l.event.name &&
+            sameRef(b.event, l.event) &&
             b.resultOf === resultId &&
-            sameValue(w, r, payloadSchema(r.st, b.name), peer, l.payload, v, b.payload)
+            sameValue(w, r, payloadSchema(b.event), peer, l.payload, v, b.payload)
           );
         });
         return carry(w, i, k);
@@ -700,7 +696,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
         sender: m.receiver,
         receiver: m.sender,
         id,
-        body: { time: "", dir: "out", type: "answer", id, to, answer: unavailable },
+        body: { type: "answer", to, answer: unavailable },
         origin,
         channel: to,
         status: "inFlight",
@@ -846,7 +842,9 @@ function compared(
         });
       const request = stateOf(w, s.receiver)?.lines[s.position];
       const target =
-        request?.type === "command" || request?.type === "query" || request?.type === "subscribe" ? request.name : "";
+        request?.type === "command" || request?.type === "query" || request?.type === "subscribe"
+          ? request.target
+          : undefined;
       const rr = processingOf(w, s.receiver) as Processing;
       const actual = answersOf(w, s).map((a) => comparedAnswer(rr, target, a));
       const expected = e.answers.map((t) => comparedAnswerValue(rr, target, fill(w, e.line, t)));
@@ -854,14 +852,14 @@ function compared(
     }
     case "emitted": {
       const actual = spanLines(w, { type: "line", index: e.line }, own).flatMap((l) =>
-        l.dir === "out" && l.type === "event" && contractsListing(st.structure, refOf(st, l.name)).length > 0
-          ? [{ event: refOf(st, l.name), payload: comparedOr(r, payloadSchema(st, l.name), l.payload) }]
+        l.dir === "out" && l.type === "event" && contractsListing(st.structure, l.event).length > 0
+          ? [{ event: l.event, payload: comparedOr(r, payloadSchema(l.event), l.payload) }]
           : [],
       );
       const filled = e.events.map((ev) => [ev.event, fill(w, e.line, ev.payload)] as const);
       const expected = filled.map(([event, v]) => ({
         event,
-        payload: comparedOr(r, payloadSchema(st, traceNameOfRef(event, own)), v),
+        payload: comparedOr(r, payloadSchema(event), v),
       }));
       return [bag(expected), bag(actual)];
     }
@@ -870,7 +868,7 @@ function compared(
       const actualEnds = span.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [l.to] : []));
       const actual = span.flatMap((l) =>
         l.dir === "out" && (l.type === "command" || l.type === "query" || l.type === "subscribe")
-          ? [{ kind: l.type, target: refOf(st, l.name), input: comparedOr(r, inputSchema(st, l.name), l.input) }]
+          ? [{ kind: l.type, target: l.target, input: comparedOr(r, inputSchema(l.target), l.input) }]
           : [],
       );
       const filled = e.requests.map((q) => [q, fill(w, e.line, q.input)] as const);
@@ -878,7 +876,7 @@ function compared(
       const expected = filled.map(([q, v]) => ({
         kind: q.kind,
         target: q.target,
-        input: comparedOr(r, inputSchema(st, traceNameOfRef(q.target, own)), v),
+        input: comparedOr(r, inputSchema(q.target), v),
       }));
       return [
         { requests: bag(expected), ends: bag(expectedEnds) },

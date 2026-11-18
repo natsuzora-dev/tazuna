@@ -54,7 +54,7 @@ def evolve (st : Service) (records : Records) (e : Emit) : Option Evolved :=
     { records := if records.any (isRow entity key) then records.map fun r => if isRow entity key r then { r with value := row } else r
                  else records ++ [{ entity, key, value := e.payload }],
       change := .update, entity, key }
-  match st.events.lookup e.event with
+  match st.changeOf e.event with
   | some (.create entity keyField _) =>
     let key := keyOf keyField
     some { records := records ++ [{ entity, key, value := e.payload }], change := .create, entity, key }

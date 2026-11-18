@@ -1,7 +1,7 @@
 import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
-import { ref, requirementsOf, traceNameOf } from "../basic.ts";
+import { ref, requirementsOf } from "../basic.ts";
 import { firstFalse } from "../contract.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { type InstanceId, ownerId, topId } from "../instance.ts";
@@ -79,7 +79,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
     return;
   }
   const type = a.keyword === "calls" ? "query" : "command";
-  awaitAnswer(r.state, { dir: "out", type, name: traceNameOf(r.st, a.target), input }, requester, a);
+  awaitAnswer(r.state, { dir: "out", type, target: a.target, input }, requester, a);
   r.note.reached({ kind: "request", definition: target, data: {} });
 }
 
@@ -98,7 +98,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
     halt(withExtra({ kind: "Fault.inputSchema", definition, data: { target: screen } }, { error: parsed.error }));
   const input = parsed.value;
   const condition = firstFalse(
-    (c) => r.functions.inputRequirement(child.name, c, input),
+    (c) => r.functions.inputRequirement(screen, c, input),
     requirementsOf(r.st, child.name).requires,
   );
   if (condition instanceof Failed) halt(issueViolation(screen, condition));

@@ -18,7 +18,7 @@ theorem endShowStep_fixed (wanted : List Wanted) (owner : InstanceId) (t : State
   · split <;> rfl
 
 theorem subscribeStep_fixed (opened : List Pending) (owner : InstanceId) (t : State)
-    (w : Wanted) : (t.subscribeStep service opened owner w).fixed = t.fixed := by
+    (w : Wanted) : (t.subscribeStep opened owner w).fixed = t.fixed := by
   obtain ⟨slot, a, input⟩ := w
   dsimp only [State.subscribeStep]
   split
@@ -26,7 +26,7 @@ theorem subscribeStep_fixed (opened : List Pending) (owner : InstanceId) (t : St
   · exact await_fixed ..
 
 theorem syncShows_fixed (owner : InstanceId) (wanted : List Wanted) :
-    (s.syncShows service owner wanted).fixed = s.fixed :=
+    (s.syncShows owner wanted).fixed = s.fixed :=
   (foldl_fixed _ (subscribeStep_fixed _ _) _ _).trans (foldl_fixed _ (endShowStep_fixed _ _) _ _)
 
 theorem refresh_fixed (owner : InstanceId) : (refresh st fs s owner).fixed = s.fixed := by
@@ -58,7 +58,7 @@ theorem endShowStep_grows (wanted : List Wanted) (owner : InstanceId) (t : State
     · exact endSubscription_grows _
 
 theorem subscribeStep_grows (opened : List Pending) (owner : InstanceId) (t : State)
-    (w : Wanted) : Grows t (t.subscribeStep service opened owner w) := by
+    (w : Wanted) : Grows t (t.subscribeStep opened owner w) := by
   obtain ⟨slot, a, input⟩ := w
   dsimp only [State.subscribeStep]
   split
@@ -66,7 +66,7 @@ theorem subscribeStep_grows (opened : List Pending) (owner : InstanceId) (t : St
   · exact (grows_write (s := t) Dir.out none _).trans rfl (Grows.of_lines rfl)
 
 theorem syncShows_grows (owner : InstanceId) (wanted : List Wanted) :
-    Grows s (s.syncShows service owner wanted) :=
+    Grows s (s.syncShows owner wanted) :=
   (foldl_grows _ (endShowStep_grows _ _) (fun t p => congrArg Fixed.now (endShowStep_fixed _ _ t p)) _ _).trans
     (congrArg Fixed.now (foldl_fixed _ (endShowStep_fixed _ _) _ _))
     (foldl_grows _ (subscribeStep_grows _ _) (fun t w => congrArg Fixed.now (subscribeStep_fixed _ _ t w)) _ _)

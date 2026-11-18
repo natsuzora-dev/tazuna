@@ -7,32 +7,32 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "command",
+          "id": "tags.register#1",
           "name": "tags.register",
           "input": {
             "noteId": "notes/Note-1"
-          },
-          "id": "tags.register#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "query",
+          "id": "guess#1",
           "name": "guess",
-          "input": {},
-          "id": "guess#1"
+          "input": {}
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "answer",
+          "id": "answer#1",
           "to": "guess#1",
           "answer": {
             "result": "fulfilled",
             "output": {
               "noteId": "notes/Note-9"
             }
-          },
-          "id": "answer#1"
+          }
         }
       ],
       "violations": [

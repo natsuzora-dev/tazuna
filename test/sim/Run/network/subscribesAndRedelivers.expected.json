@@ -7,104 +7,22 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "subscribe",
+          "id": "tasks#1",
           "name": "tasks",
-          "input": {},
-          "id": "tasks#1"
+          "input": {}
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "answer",
+          "id": "answer#1",
           "to": "tasks#1",
           "answer": {
             "result": "fulfilled",
             "output": {
               "tasks": []
             }
-          },
-          "id": "answer#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "in",
-          "type": "command",
-          "name": "addTask",
-          "input": {
-            "taskId": "task-1",
-            "title": "Buy milk"
-          },
-          "id": "addTask#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "answer",
-          "to": "addTask#1",
-          "answer": {
-            "result": "accepted"
-          },
-          "id": "answer#2"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "event",
-          "name": "taskAddedRecorded",
-          "payload": {
-            "id": "task-1",
-            "title": "Buy milk",
-            "seen": false
-          },
-          "resultOf": "addTask#1",
-          "id": "taskAddedRecorded#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "event",
-          "name": "taskAdded",
-          "payload": {
-            "taskId": "task-1"
-          },
-          "resultOf": "addTask#1",
-          "id": "taskAdded#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "event",
-          "name": "noted",
-          "payload": {},
-          "id": "noted#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "command",
-          "name": "calendar.book",
-          "input": {
-            "bookingId": "todo/Booking-1",
-            "taskId": "task-1"
-          },
-          "id": "calendar.book#1"
-        },
-        {
-          "time": "2026-10-25T01:00:00Z",
-          "dir": "out",
-          "type": "answer",
-          "to": "tasks#1",
-          "answer": {
-            "result": "fulfilled",
-            "output": {
-              "tasks": [
-                {
-                  "taskId": "task-1",
-                  "seen": false
-                }
-              ]
-            }
-          },
-          "id": "answer#3"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
@@ -121,18 +39,100 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "answer",
+          "id": "answer#2",
           "to": "addTask#1",
           "answer": {
             "result": "accepted"
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "taskAddedRecorded#1",
+          "name": "taskAddedRecorded",
+          "payload": {
+            "id": "task-1",
+            "title": "Buy milk",
+            "seen": false
           },
-          "id": "answer#4"
+          "resultOf": "addTask#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "taskAdded#1",
+          "name": "taskAdded",
+          "payload": {
+            "taskId": "task-1"
+          },
+          "resultOf": "addTask#1"
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "event",
+          "id": "noted#1",
+          "name": "noted",
+          "payload": {}
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "command",
+          "id": "calendar.book#1",
+          "name": "calendar.book",
+          "input": {
+            "bookingId": "todo/Booking-1",
+            "taskId": "task-1"
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "id": "answer#3",
+          "to": "tasks#1",
+          "answer": {
+            "result": "fulfilled",
+            "output": {
+              "tasks": [
+                {
+                  "taskId": "task-1",
+                  "seen": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "in",
+          "type": "command",
+          "id": "addTask#1",
+          "name": "addTask",
+          "input": {
+            "taskId": "task-1",
+            "title": "Buy milk"
+          }
+        },
+        {
+          "time": "2026-10-25T01:00:00Z",
+          "dir": "out",
+          "type": "answer",
+          "id": "answer#4",
+          "to": "addTask#1",
+          "answer": {
+            "result": "accepted"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "in",
           "type": "unsubscribe",
-          "to": "tasks#1",
-          "id": "unsubscribe#1"
+          "id": "unsubscribe#1",
+          "to": "tasks#1"
         }
       ],
       "violations": [],
@@ -155,19 +155,19 @@
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "command",
+          "id": "todo.markSeen#1",
           "name": "todo.markSeen",
           "input": {
             "taskId": "task-1"
-          },
-          "id": "todo.markSeen#1"
+          }
         },
         {
           "time": "2026-10-25T01:00:00Z",
           "dir": "out",
           "type": "command",
+          "id": "todo.ping#1",
           "name": "todo.ping",
-          "input": {},
-          "id": "todo.ping#1"
+          "input": {}
         },
         {
           "time": "2026-10-25T01:00:00Z",
