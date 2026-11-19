@@ -16,7 +16,6 @@ A scenario's own service and its running peers (`run`) are the *running services
 They share one clock.
 A message to or from a running service stays *in flight* until a line of `w.net` decides its fate.
 The simulation is deterministic.
-The scenario writes every choice that no service's code makes, such as which message arrives next and when the time advances.
 The trace of the own service in a scenario is the scenario's *snapshot*, and the trace of each running peer is a snapshot of its own.
 
 A *step* is one unit of work in a service's queue, such as a chart that receives one event, a deadline that fires, an automation that reacts to one event, or a command that runs.
@@ -38,7 +37,6 @@ Of two events `a` and `b` on one channel, the spec sends `b` after `a` only in t
 - `b` is sent at a later time than `a`, or while the service processes a later input.
 
 Steps that no cause chain links, such as the steps of two parallel regions, two copies, or two deadlines due at the same time, have no send order.
-Their events on one channel may arrive in either order.
 
 Machines and screens are statecharts, called *charts*.
 A running chart is an *instance*.
@@ -70,13 +68,10 @@ A command *passes* when it reports no violation.
   `test`, `verify`, and `view` run the checks of `check` first and stop at its violations, and `drive` and `verifyTraces` take only a spec that `checkSpec` returned as checked.
 - When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
   The scenario then states everything that happened between the running services.
-  Each `InvalidScenario` kind is one rule of that statement, and its doc comment states the rule.
+  Each `InvalidScenario` kind is one rule of that statement.
   No explored path reports a violation.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
   This holds for the own service and for each running peer that has an implementation.
-
-One theorem states each verdict: `check_eq_nil_iff` for the `Illegal` rules of `check`, `stepOrderSearch_same` for the orders that `test` searches, and `compare_matches` for `verify`.
-[Properties without a theorem](#properties-without-a-theorem) lists what they leave out.
 
 When the assumptions also hold, the implementation sends the messages that the spec defines for the lines of each scenario.
 tazuna guarantees nothing about lines that no scenario contains.
@@ -105,7 +100,6 @@ Two outcomes are the same when both halt with the same violation, or when neithe
   Lines that a service wrote for messages that one line delivered pair by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
 - The state that a later line reads is equal under one binding of created keys.
   That state is the records and each open instance and copy: the active states, the children that a history state returns to, the context, and the pending deadlines, whose times a later clock line reads.
-  `ChoiceDependent` reports a difference in it as one `state` difference.
   The binding maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position: in records, contexts, and map state item keys.
 
 Instances pair by their place.
@@ -113,8 +107,6 @@ A screen that another screen opens is named by its opener and by the state and k
 A screen that the same state opens again takes the name of the one it replaces, so neither the order that screens open in nor how many times a state opened its screen changes a name.
 
 ### When a trace matches a snapshot
-
-`drive` from `@natsuzora-dev/tazuna/verify` controls only the implementation's world: the start, the clock, the messages that the implementation receives, and restarts.
 
 A trace *matches* a snapshot when all of the following hold (`compare_matches`):
 
@@ -132,7 +124,7 @@ An implementation that uses a string of its input, such as an idempotency key, a
 `verify` keeps every binding that agrees with the lines compared so far.
 The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`.
 Keys that only a later line tells apart wait for that line.
-When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind, and its doc comment states the case.
+When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind.
 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
@@ -192,7 +184,6 @@ When it reports nothing, the violation can still exist.
 
 ## Assumptions
 
-The guarantees hold only under the following assumptions.
 tazuna detects a break of each assumption only partly or not at all.
 
 - **Runtime.** The TypeScript runtime returns the same traces and violations as the Lean definitions.
@@ -202,7 +193,6 @@ tazuna detects a break of each assumption only partly or not at all.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
-  `Restricted` and `BagOrderDependent` detect a break only partly.
 - **Types.** Each value in spec code has the type that the code declares.
 - **Adapter.** The `Adapter` that `drive` drives the implementation through controls the implementation's whole world.
   The implementation reads the time only from the clock that `advanceTo` moves, and receives messages only through the adapter.
@@ -223,7 +213,6 @@ tazuna detects a break of each assumption only partly or not at all.
 ## Properties without a theorem
 
 No theorem proves the following properties yet.
-Each holds by the Lean definition that it names, or only in the TypeScript runtime.
 
 | Property | Holds by |
 |---|---|
@@ -235,7 +224,7 @@ Each holds by the Lean definition that it names, or only in the TypeScript runti
 | A clock line publishes the subscription answers that the new time changes. | `fireTo` in `lean/Tazuna/Sim/Run.lean` |
 | Only a clock line moves the current time. | `fireTo` in `lean/Tazuna/Sim/Run.lean` |
 | A command is processed as one message. | `send` in `lean/Tazuna/Service/Input.lean` |
-| Several open instances of one screen are each operable, because an operation names its instance by the line that opened it. | `operate` in `lean/Tazuna/Service/Input.lean` |
+| Several open instances of one screen are each operable. | `operate` in `lean/Tazuna/Service/Input.lean` |
 | A message carries its value as the sender wrote it, and only the receiver parses it. A spec service's `invalid-input` answer to another spec service is the sender's `Fault`. | `checkAnswer` in `lean/Tazuna/Service/Input.lean` |
 | A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it. | `withoutRepeatedAnswers` in `lean/Tazuna/Verify/Compare.lean` |
 | The step-order search reaches every order of dependent steps that changes a message's outcome: steps whose reads and writes do not overlap commute, and `involved` covers every read and write. | `stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean` |

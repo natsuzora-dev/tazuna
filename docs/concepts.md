@@ -1,7 +1,5 @@
 # Concepts
 
-This page explains the ideas behind tazuna's specs and scenarios, and why tazuna works the way it does.
-What each function, actor, and violation kind does is in its doc comment.
 What a passing command guarantees is in [Guarantees](guarantees.md).
 
 ## The scenario writes the whole world
@@ -26,7 +24,7 @@ Every other service that the own service exchanges messages with is a peer, whic
 
 Apart from what the role decides, the own service and the peers follow one set of rules.
 A message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario.
-A running peer's lines state the messages that its run sent, and its trace is a snapshot of its own, which `verify` compares with the peer's implementation in the same way as the own service's.
+A running peer's lines state the messages that its run sent.
 
 The symmetry is what lets one scenario check both sides of an exchange.
 A rule that held only for the own service would let a peer's message arrive without a line, and the scenario would no longer state the whole world.
@@ -46,7 +44,6 @@ A position breaks silently when the spec changes: a command that sends one more 
 A handle that names content fails loudly instead.
 For the same reason, an operation names its screen instance by the handle of the line that opened it, so several open instances of one screen need no position.
 When tazuna compares two runs, it names a screen instance by its place, the screen that opened it and the state that opens it, as Akka names an actor by its path.
-The order in which screens open does not change a name.
 
 A scenario also never writes a key that a running service creates, such as `todo/Task-1`.
 The value of a created key is the run's decision, and the implementation makes it differently.
@@ -55,7 +52,6 @@ The scenario reads a created key through the handle of the line that returned it
 
 ## Messages travel on channels
 
-A message stays *in flight* from the moment its sender sends it until a line of `w.net` decides its fate.
 While a message is in flight, other lines can run, which is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
 
 Messages on one channel arrive in the order in which they were sent, as on one TCP connection or one Kafka partition, and nothing orders two channels.
@@ -68,10 +64,8 @@ Neither the snapshot nor `verify` records an order that a deployed system does n
 A message carries its value as the sender wrote it, and only the receiver parses it, as in a web API.
 A sender that checked or normalized the value first would make the simulation accept a message that the deployed receiver rejects.
 Turning a value back into JSON, for the sender's message or the receiver's record, runs only its codecs and no check, as Pydantic and serde serialize a parsed value.
-So a union that holds a codec must be a `z.discriminatedUnion`, whose tag names the option to encode.
 
 A subscription lives as long as the process that serves it, as a WebSocket does.
-A restart ends every subscription, and a subscription with the same id after the restart is a new one that gets its first answer again.
 
 ## No result depends on an uncontrolled order
 
@@ -99,7 +93,6 @@ Whether two orders give the same outcome depends on what each step changes:
 - Two events that move one machine to different states do not, even without a line, because the next event finds the machine in a different state.
 
 The same rule covers the messages that one line delivers to one service, since nothing outside tells which of them arrives first.
-The same search runs their orders and reports `ChoiceDependent.stepOrder`.
 Equal messages are searched too, since each has its own id.
 For example, two copies of a map state that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
 The requests then need content that tells them apart, such as the task's id in the input.
