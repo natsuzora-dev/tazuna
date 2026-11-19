@@ -47,8 +47,8 @@ Run the commands in [samples/todo](samples/todo).
        },
        then: ({ first, second }) => [
          answered(first, accepted),
-         emitted(first, [event(taskCompleted, { taskId: "task-1" })]),
-         answered(second, requires("notCompleted")),
+         emitted(first, [emission(taskCompleted, { taskId: "task-1" })]),
+         answered(second, rejected("requires", "notCompleted")),
          emitted(second, []),
        ],
      },
@@ -56,7 +56,7 @@ Run the commands in [samples/todo](samples/todo).
    ```
 
    Given is the start, When is the lines in order, and Then is what `todo` did on those lines.
-   `noTasks`, `accepted`, `requires`, and `addMilk` are plain constants and functions earlier in the same file.
+   `noTasks` and `addMilk` are a plain constant and function earlier in the same file.
    `addMilk` adds a task and delivers its request to the `calendar` service and the answer.
 
 2. Check the spec:
@@ -78,7 +78,7 @@ Run the commands in [samples/todo](samples/todo).
    Each line is one message that `todo` received (`"dir":"in"`) or sent (`"dir":"out"`).
    The last two lines are the second `completeTask` request and its rejection.
 
-4. In Then, change the expected answer of `first` from `accepted` to `requires("notCompleted")`, and run the test again:
+4. In Then, change the expected answer of `first` from `accepted` to `rejected("requires", "notCompleted")`, and run the test again:
 
    ```sh
    npx tazuna test spec --depth 1

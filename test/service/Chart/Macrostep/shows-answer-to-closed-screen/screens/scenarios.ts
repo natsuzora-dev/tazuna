@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, rejected } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 
@@ -10,12 +10,7 @@ export const answerToClosedScreen = scenario(
       const tasks = w.startup.subscription(todo.tasks);
       w.net.deliver(tasks);
       w.clock.at("2026-10-25T11:00:00+09:00");
-      const answered = w.net.deliver(
-        w.peer.todo.answer(tasks, {
-          result: "rejected",
-          rejection: { kind: "requires", reason: "isListed" },
-        }),
-      );
+      const answered = w.net.deliver(w.peer.todo.answer(tasks, rejected("requires", "isListed")));
       w.net.leaveInFlight(answered.end(tasks));
     },
     then: () => [],

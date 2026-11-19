@@ -1,4 +1,4 @@
-import { external, type When } from "@natsuzora-dev/tazuna";
+import { accepted, external, fulfilled, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { listScreen } from "./listScreen.ts";
@@ -9,7 +9,7 @@ type W = When<typeof given.peers>;
 const deliveredList = (w: W, ...taskIds: string[]) => {
   const tasks = w.startup.subscription(todo.tasks);
   w.net.deliver(tasks);
-  w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds } }));
+  w.net.deliver(w.peer.todo.answer(tasks, fulfilled({ taskIds })));
   return w.startup.screen(listScreen);
 };
 
@@ -23,9 +23,9 @@ export const routedByKey = scenario(
       w.user.operate(list, "complete", { taskId: "task-1" });
       const second = w.user.operate(list, "complete", { taskId: "task-2" }).request(todo.completeTask);
       w.net.deliver(second);
-      w.net.deliver(w.peer.todo.answer(second, { result: "accepted" }));
+      w.net.deliver(w.peer.todo.answer(second, accepted));
       w.net.deliver(first);
-      w.net.deliver(w.peer.todo.answer(first, { result: "accepted" }));
+      w.net.deliver(w.peer.todo.answer(first, accepted));
       const third = w.user.operate(list, "complete", { taskId: "task-1" }).request(todo.completeTask);
       w.net.deliver(third);
       w.peer.todo.leaveUnanswered(third);

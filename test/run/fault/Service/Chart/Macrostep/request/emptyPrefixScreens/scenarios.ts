@@ -1,4 +1,4 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { rejected, run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./screens.ts";
 
@@ -9,9 +9,7 @@ export const show = scenario(
     when: (w) => {
       const titled = w.startup.subscription(todo.titled);
       w.net.deliver(titled);
-      w.net.deliver(
-        w.peer.todo.answer(titled, { result: "rejected", rejection: { kind: "requires", reason: "notEmpty" } }),
-      );
+      w.net.deliver(w.peer.todo.answer(titled, rejected("requires", "notEmpty")));
     },
     then: () => [],
   },

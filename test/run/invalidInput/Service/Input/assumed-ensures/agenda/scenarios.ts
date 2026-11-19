@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./agenda.ts";
 
@@ -7,10 +7,7 @@ export const answer = scenario("Answer a day after from; no violation", {
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.nextDay));
     w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.nextDay), {
-        result: "fulfilled",
-        output: { day: "2026-10-25T15:00:00Z" },
-      }),
+      w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: "2026-10-25T15:00:00Z" })),
     );
   },
   then: () => [],
@@ -23,10 +20,7 @@ export const answerBeforeFrom = scenario(
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.nextDay));
       w.net.deliver(
-        w.peer.calendar.answer(w.startup.request(calendar.nextDay), {
-          result: "fulfilled",
-          output: { day: "2026-10-24T15:00:00Z" },
-        }),
+        w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: "2026-10-24T15:00:00Z" })),
       );
     },
     then: () => [],
@@ -43,7 +37,7 @@ export const answerBeforeFromAfterRestart = scenario(
       const second = w.host.restart().request(calendar.nextDay);
       w.net.deliver(second);
       w.peer.calendar.leaveUnanswered(second);
-      w.net.deliver(w.peer.calendar.answer(first, { result: "fulfilled", output: { day: "2026-10-24T15:00:00Z" } }));
+      w.net.deliver(w.peer.calendar.answer(first, fulfilled({ day: "2026-10-24T15:00:00Z" })));
     },
     then: () => [],
   },

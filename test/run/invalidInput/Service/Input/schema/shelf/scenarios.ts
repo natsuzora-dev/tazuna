@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { catalog } from "../catalog/contract.ts";
 import { scenario, shelfScreen } from "./shelf.ts";
 
@@ -7,15 +7,15 @@ export const answerUnsorted = scenario("Answer the items out of n order; test re
   when: (w) => {
     w.net.deliver(w.startup.request(catalog.numbers));
     w.net.deliver(
-      w.peer.catalog.answer(w.startup.request(catalog.numbers), {
-        result: "fulfilled",
-        output: {
+      w.peer.catalog.answer(
+        w.startup.request(catalog.numbers),
+        fulfilled({
           items: [
             { n: 2, name: "b" },
             { n: 1, name: "a" },
           ],
-        },
-      }),
+        }),
+      ),
     );
   },
   then: () => [],

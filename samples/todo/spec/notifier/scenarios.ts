@@ -1,9 +1,12 @@
 import {
+  type AnswerOf,
+  accepted,
   type Delivered,
   external,
   type OutRequest,
   type PeerEventLine,
   type ProcessingLine,
+  rejected,
   request,
   requested,
   run,
@@ -27,8 +30,6 @@ const fresh = {
   peers,
 } as const;
 
-const accepted = { result: "accepted" } as const;
-const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
 const show = (openTasks: number) => request(device.showNotification, { text: `You have ${openTasks} open tasks` });
 const askPermission = request(device.requestNotificationPermission, {});
 
@@ -72,7 +73,7 @@ function deviceGrants(w: W, asking: OutRequest<typeof device.requestNotification
 function deviceAnswers(
   w: W,
   asking: OutRequest<typeof device.requestNotificationPermission | typeof device.showNotification>,
-  answer: typeof accepted | typeof unavailable,
+  answer: AnswerOf<typeof device.requestNotificationPermission | typeof device.showNotification>,
 ): void {
   w.net.deliver(asking);
   w.net.deliver(w.peer.device.answer(asking, answer));
@@ -109,7 +110,7 @@ export const warnsAgainAfterNotificationAnswered = scenario(
       const tooMany = taskAddedReaches(w, 10);
       // task-0 to task-11 are 12 open tasks an hour later.
       taskAddedReaches(w, 11);
-      deviceAnswers(w, tooMany.request(device.showNotification), unavailable);
+      deviceAnswers(w, tooMany.request(device.showNotification), rejected("unavailable"));
       const hour = w.clock.at("2026-10-25T11:00:00+09:00");
       deviceAnswers(w, hour.request(device.showNotification), accepted);
       return { hour };
@@ -189,11 +190,11 @@ export const asksPermissionAgain = scenario(
   {
     given: fresh,
     when: (w) => {
-      deviceAnswers(w, asked(taskAddedReaches(w, 1)), unavailable);
+      deviceAnswers(w, asked(taskAddedReaches(w, 1)), rejected("unavailable"));
       const retry1 = w.clock.at("2026-10-25T10:01:00+09:00");
-      deviceAnswers(w, asked(retry1), unavailable);
+      deviceAnswers(w, asked(retry1), rejected("unavailable"));
       const retry2 = w.clock.at("2026-10-25T10:02:00+09:00");
-      deviceAnswers(w, asked(retry2), unavailable);
+      deviceAnswers(w, asked(retry2), rejected("unavailable"));
       const noRetry = w.clock.at("2026-10-25T10:03:00+09:00");
       const second = taskAddedReaches(w, 2);
       deviceGrants(w, asked(second));
@@ -229,7 +230,7 @@ export const stopsAskingWhenGrantedWhileRetrying = scenario(
   {
     given: fresh,
     when: (w) => {
-      deviceAnswers(w, asked(taskAddedReaches(w, 1)), unavailable);
+      deviceAnswers(w, asked(taskAddedReaches(w, 1)), rejected("unavailable"));
       deviceTells(w, device.notificationPermissionGranted, null);
       const minute = w.clock.at("2026-10-25T10:01:00+09:00");
       return { minute };

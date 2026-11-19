@@ -1,4 +1,17 @@
-import { answered, emitted, event, external, raw, request, requested, skip, type When } from "@natsuzora-dev/tazuna";
+import {
+  accepted,
+  answered,
+  emission,
+  emitted,
+  external,
+  fulfilled,
+  raw,
+  rejected,
+  request,
+  requested,
+  skip,
+  type When,
+} from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { device } from "../device/contract.ts";
 import { notifier } from "../notifier/contract.ts";
@@ -22,13 +35,6 @@ const noTasks = {
   peers,
 } as const;
 
-const accepted = { result: "accepted" } as const;
-const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
-const requires = <R extends string>(reason: R) =>
-  ({ result: "rejected", rejection: { kind: "requires", reason } }) as const;
-const day = (d: string) => ({ result: "fulfilled", output: { day: d } }) as const;
-const fulfilled = <O>(output: O) => ({ result: "fulfilled", output }) as const;
-
 const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: null, completedAt: null } as const;
 const milkDetail = {
   title: "Buy milk",
@@ -44,7 +50,7 @@ const addMilkUnanswered = (w: W) => w.client.send(addTask, { taskId: "task-1", t
 const addMilk = (w: W, nextBusinessDay: string) => {
   const add = addMilkUnanswered(w);
   w.net.deliver(add.request(calendar.nextBusinessDay));
-  w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), day(nextBusinessDay)));
+  w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), fulfilled({ day: nextBusinessDay })));
   return add;
 };
 
@@ -61,8 +67,8 @@ export const completeTwice = scenario(
     },
     then: ({ first, second }) => [
       answered(first, accepted),
-      emitted(first, [event(taskCompleted, { taskId: "task-1" })]),
-      answered(second, requires("notCompleted")),
+      emitted(first, [emission(taskCompleted, { taskId: "task-1" })]),
+      answered(second, rejected("requires", "notCompleted")),
       emitted(second, []),
     ],
   },
@@ -73,7 +79,7 @@ export const remindAtDue = scenario("Change the due date of a task; todo sets th
   when: (w) => {
     const add = addMilkUnanswered(w);
     w.net.deliver(add.request(calendar.nextBusinessDay));
-    w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), unavailable));
+    w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), rejected("unavailable")));
     w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-26T18:00:00+09:00" });
     const detail = w.client.call(taskDetail, { taskId: "task-1" });
     return { detail };
@@ -97,7 +103,7 @@ export const clearsDue = scenario(
       w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-27T18:00:00+09:00" });
       const clear = w.client.send(changeDue, { taskId: "task-1", dueAt: null });
       w.net.deliver(clear.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(clear.request(calendar.nextBusinessDay), day("2026-10-26")));
+      w.net.deliver(w.peer.calendar.answer(clear.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-26" })));
       const open = w.client.call(tasks, { filter: "open" });
       return { clear, open };
     },
@@ -117,7 +123,7 @@ export const filtersTasks = scenario(
       addMilk(w, "2026-10-26");
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
       w.net.deliver(eggs.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-26")));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-26" })));
       w.client.send(completeTask, { taskId: "task-1" });
       const open = w.client.call(tasks, { filter: "open" });
       const completed = w.client.call(tasks, { filter: "completed" });
@@ -148,7 +154,7 @@ export const reopenCompleted = scenario("Complete a task and reopen it; tasks wi
   },
   then: ({ reopen, open }) => [
     answered(reopen, accepted),
-    emitted(reopen, [event(taskReopened, { taskId: "task-1" })]),
+    emitted(reopen, [emission(taskReopened, { taskId: "task-1" })]),
     answered(open, fulfilled({ tasks: [milkRow] })),
   ],
 });
@@ -160,7 +166,7 @@ export const rejectsReopenOpen = scenario("Reopen an open task; todo rejects reo
     const reopen = w.client.send(reopenTask, { taskId: "task-1" });
     return { reopen };
   },
-  then: ({ reopen }) => [answered(reopen, requires("completed"))],
+  then: ({ reopen }) => [answered(reopen, rejected("requires", "completed"))],
 });
 
 export const skipsPassedReminderOnReopen = scenario(
@@ -210,7 +216,7 @@ export const deletesTask = scenario("Delete a task; tasks no longer returns the 
     return { del, all, detail };
   },
   then: ({ del, all, detail }) => [
-    emitted(del, [event(taskDeleted, { taskId: "task-1" })]),
+    emitted(del, [emission(taskDeleted, { taskId: "task-1" })]),
     answered(all, fulfilled({ tasks: [] })),
     answered(detail, fulfilled({ task: null })),
   ],
@@ -225,7 +231,7 @@ export const rejectsPastDue = scenario(
       const change = w.client.send(changeDue, { taskId: "task-1", dueAt: "2026-10-25T09:00:00+09:00" });
       return { change };
     },
-    then: ({ change }) => [answered(change, requires("notPast"))],
+    then: ({ change }) => [answered(change, rejected("requires", "notPast"))],
   },
 );
 
@@ -267,10 +273,10 @@ export const remindsAfterNotShown = scenario(
       addMilk(w, "2026-10-26");
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
       w.net.deliver(eggs.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-27")));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-27" })));
       const first = w.clock.at("2026-10-26T00:00:00+09:00");
       w.net.deliver(first.request(device.showNotification));
-      w.net.deliver(w.peer.device.answer(first.request(device.showNotification), unavailable));
+      w.net.deliver(w.peer.device.answer(first.request(device.showNotification), rejected("unavailable")));
       const second = w.clock.at("2026-10-27T00:00:00+09:00");
       w.net.deliver(second.request(device.showNotification));
       w.net.deliver(w.peer.device.answer(second.request(device.showNotification), accepted));
@@ -315,7 +321,7 @@ export const completeRedelivered = scenario(
     },
     then: ({ first, again }) => [
       answered(first, accepted),
-      emitted(first, [event(taskCompleted, { taskId: "task-1" })]),
+      emitted(first, [emission(taskCompleted, { taskId: "task-1" })]),
       answered(again, accepted),
       emitted(again, []),
     ],
@@ -330,9 +336,9 @@ export const remindAddedWhileAsking = scenario(
       const milk = addMilkUnanswered(w);
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
       w.net.deliver(milk.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), day("2026-10-26")));
+      w.net.deliver(w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-26" })));
       w.net.deliver(eggs.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-26")));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-26" })));
       return { eggs };
     },
     then: ({ eggs }) => [requested(eggs, [request(calendar.nextBusinessDay, { from: "2026-10-25" })])],
@@ -348,10 +354,10 @@ export const remindInAnswerOrder = scenario(
       w.clock.at("2026-10-26T10:05:00+09:00");
       const eggs = w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" });
       w.net.deliver(eggs.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), day("2026-10-27")));
+      w.net.deliver(w.peer.calendar.answer(eggs.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-27" })));
       const eggsDetail = w.client.call(taskDetail, { taskId: "task-2" });
       w.net.deliver(milk.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), unavailable));
+      w.net.deliver(w.peer.calendar.answer(milk.request(calendar.nextBusinessDay), rejected("unavailable")));
       const milkDetailAfter = w.client.call(taskDetail, { taskId: "task-1" });
       return { eggs, eggsDetail, milkDetailAfter };
     },
@@ -472,7 +478,9 @@ export const asksBusinessDayAgainOnStart = scenario(
       w.clock.at("2026-10-25T10:05:00+09:00");
       const restart = w.host.restart();
       w.net.deliver(restart.request(calendar.nextBusinessDay));
-      w.net.deliver(w.peer.calendar.answer(restart.request(calendar.nextBusinessDay), day("2026-10-26")));
+      w.net.deliver(
+        w.peer.calendar.answer(restart.request(calendar.nextBusinessDay), fulfilled({ day: "2026-10-26" })),
+      );
       const detail = w.client.call(taskDetail, { taskId: "task-1" });
       return { restart, detail };
     },

@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, rejected } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./agenda.ts";
 
@@ -7,15 +7,10 @@ export const answer = scenario("Answer the start of a day, then reject an hour l
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.holiday));
     const l0 = w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.holiday), { result: "fulfilled", output: { isHoliday: true } }),
+      w.peer.calendar.answer(w.startup.request(calendar.holiday), fulfilled({ isHoliday: true })),
     );
     w.net.deliver(l0.request(calendar.holiday));
-    w.net.deliver(
-      w.peer.calendar.answer(l0.request(calendar.holiday), {
-        result: "rejected",
-        rejection: { kind: "requires", reason: "startOfDay" },
-      }),
-    );
+    w.net.deliver(w.peer.calendar.answer(l0.request(calendar.holiday), rejected("requires", "startOfDay")));
   },
   then: () => [],
 });
@@ -27,15 +22,10 @@ export const rejectStartOfDay = scenario(
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.holiday));
       const l0 = w.net.deliver(
-        w.peer.calendar.answer(w.startup.request(calendar.holiday), {
-          result: "rejected",
-          rejection: { kind: "requires", reason: "startOfDay" },
-        }),
+        w.peer.calendar.answer(w.startup.request(calendar.holiday), rejected("requires", "startOfDay")),
       );
       w.net.deliver(l0.request(calendar.holiday));
-      w.net.deliver(
-        w.peer.calendar.answer(l0.request(calendar.holiday), { result: "fulfilled", output: { isHoliday: true } }),
-      );
+      w.net.deliver(w.peer.calendar.answer(l0.request(calendar.holiday), fulfilled({ isHoliday: true })));
     },
     then: () => [],
   },

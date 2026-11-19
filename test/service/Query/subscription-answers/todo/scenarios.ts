@@ -1,4 +1,4 @@
-import { answered } from "@natsuzora-dev/tazuna";
+import { answered, fulfilled } from "@natsuzora-dev/tazuna";
 import { addTask, hasTasks, isLate, scenario, taskCount, taskIds } from "./todo.ts";
 
 export const subscribed = scenario(
@@ -26,11 +26,6 @@ export const answerChangesWithTime = scenario(
       w.clock.at("2026-10-25T12:00:00+09:00");
       return { late };
     },
-    then: ({ late }) => [
-      answered(late, [
-        { result: "fulfilled", output: { late: false } },
-        { result: "fulfilled", output: { late: true } },
-      ]),
-    ],
+    then: ({ late }) => [answered(late, [fulfilled({ late: false }), fulfilled({ late: true })])],
   },
 );

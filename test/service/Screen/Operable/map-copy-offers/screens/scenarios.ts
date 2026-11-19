@@ -1,4 +1,4 @@
-import { external, notOffered, offered, type When } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, notOffered, offered, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { listScreen } from "./listScreen.ts";
@@ -9,7 +9,7 @@ type W = When<typeof given.peers>;
 const deliveredList = (w: W, ...taskIds: string[]) => {
   const tasks = w.startup.subscription(todo.tasks);
   w.net.deliver(tasks);
-  w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds } }));
+  w.net.deliver(w.peer.todo.answer(tasks, fulfilled({ taskIds })));
   return w.startup.screen(listScreen);
 };
 

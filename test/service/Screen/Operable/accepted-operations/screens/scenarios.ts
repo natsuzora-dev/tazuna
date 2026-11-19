@@ -1,4 +1,4 @@
-import { external, notOffered, type ProcessingLine, type When } from "@natsuzora-dev/tazuna";
+import { accepted, external, fulfilled, notOffered, type ProcessingLine, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { editScreen } from "./editScreen.ts";
@@ -9,9 +9,7 @@ type W = When<typeof given.peers>;
 
 const deliverTaskSubscription = (w: W) => w.net.deliver(w.startup.subscription(todo.task));
 const deliverShown = (w: W, isCompleted: boolean) =>
-  w.net.deliver(
-    w.peer.todo.answer(w.startup.subscription(todo.task), { result: "fulfilled", output: { isCompleted } }),
-  );
+  w.net.deliver(w.peer.todo.answer(w.startup.subscription(todo.task), fulfilled({ isCompleted })));
 const deliverNeverShown = (w: W) => {
   deliverTaskSubscription(w);
   w.peer.todo.leaveUnanswered(w.startup.subscription(todo.task));
@@ -19,7 +17,7 @@ const deliverNeverShown = (w: W) => {
 const deliverAccepted = (w: W, line: ProcessingLine) => {
   const complete = line.request(todo.completeTask);
   w.net.deliver(complete);
-  w.net.deliver(w.peer.todo.answer(complete, { result: "accepted" }));
+  w.net.deliver(w.peer.todo.answer(complete, accepted));
 };
 
 export const offersDecide = scenario(

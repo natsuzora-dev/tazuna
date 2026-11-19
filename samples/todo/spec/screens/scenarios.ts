@@ -1,7 +1,9 @@
 import {
   type AnswerOf,
+  accepted,
   endOf,
   external,
+  fulfilled,
   notOffered,
   offered,
   request,
@@ -49,9 +51,6 @@ const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsReco
 const milk = givenTasks([milkRecord]);
 const milkAndCompletedEggs = givenTasks([milkRecord, completedEggsRecord]);
 type W = When<typeof milk.peers>;
-
-const accepted = { result: "accepted" } as const;
-const fulfilled = <O>(output: O) => ({ result: "fulfilled", output }) as const;
 
 const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: "2026-10-26T18:00:00+09:00", completedAt: null } as const;
 const completedMilkRow = { ...milkRow, completedAt: "2026-10-25T10:00:00+09:00" } as const;

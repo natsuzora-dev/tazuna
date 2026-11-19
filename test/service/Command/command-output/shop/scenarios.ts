@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external } from "@natsuzora-dev/tazuna";
 import { payments } from "../payments/contract.ts";
 import { cancelOrder, placeOrder, scenario } from "./shop.ts";
 
@@ -14,7 +14,7 @@ export const refundCreatedCharge = scenario(
       const cancel = w.client.send(cancelOrder, {});
       const refund = cancel.request(payments.refundCharge);
       w.net.deliver(refund);
-      w.net.deliver(w.peer.payments.answer(refund, { result: "accepted" }));
+      w.net.deliver(w.peer.payments.answer(refund, accepted));
     },
     then: () => [],
   },

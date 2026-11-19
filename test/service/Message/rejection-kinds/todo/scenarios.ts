@@ -1,4 +1,4 @@
-import { type Caused, external, raw, type When } from "@natsuzora-dev/tazuna";
+import { accepted, type Caused, external, raw, rejected, type When } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { addTask, completeTask, scenario, swapTitles, titledCount } from "./todo.ts";
 
@@ -8,7 +8,7 @@ const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers
 const deliverAndAccept = (w: When<typeof peers>, line: Caused) => {
   const notification = line.request(device.showNotification);
   w.net.deliver(notification);
-  w.net.deliver(w.peer.device.answer(notification, { result: "accepted" }));
+  w.net.deliver(w.peer.device.answer(notification, accepted));
 };
 
 export const commandRejections = scenario(
@@ -49,7 +49,7 @@ export const unavailableAnswer = scenario(
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
       const notification = add.request(device.showNotification);
       w.net.deliver(notification);
-      w.net.deliver(w.peer.device.answer(notification, { result: "rejected", rejection: { kind: "unavailable" } }));
+      w.net.deliver(w.peer.device.answer(notification, rejected("unavailable")));
       deliverAndAccept(w, w.clock.at("2026-10-25T10:01:00+09:00"));
     },
     then: () => [],

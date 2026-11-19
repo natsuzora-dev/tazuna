@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { addTask, scenario } from "./todo.ts";
 
@@ -15,7 +15,7 @@ export const twoDays = scenario(
     when: (w) => {
       const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
       w.net.deliver(ask);
-      w.net.deliver(w.peer.calendar.answer(ask, { result: "fulfilled", output: { day: "2026-10-26T00:00:00Z" } }));
+      w.net.deliver(w.peer.calendar.answer(ask, fulfilled({ day: "2026-10-26T00:00:00Z" })));
     },
     then: () => [],
   },
@@ -28,7 +28,7 @@ export const twoDaysAlike = scenario(
     when: (w) => {
       const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
       w.net.deliver(ask);
-      w.net.deliver(w.peer.calendar.answer(ask, { result: "fulfilled", output: { day: "2026-10-26T00:00:00Z" } }));
+      w.net.deliver(w.peer.calendar.answer(ask, fulfilled({ day: "2026-10-26T00:00:00Z" })));
     },
     then: () => [],
   },

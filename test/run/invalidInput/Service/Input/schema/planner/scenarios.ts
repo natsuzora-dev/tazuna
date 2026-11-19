@@ -1,4 +1,4 @@
-import { external, type When } from "@natsuzora-dev/tazuna";
+import { external, rejected, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./planner.ts";
 
@@ -12,7 +12,7 @@ const answered = (w: When<typeof given.peers>, answer: Parameters<typeof w.peer.
 
 export const rejectAdd = scenario("Reject the task as already existing; no violation", {
   given,
-  when: (w) => answered(w, { result: "rejected", rejection: { kind: "already-exists" } }),
+  when: (w) => answered(w, rejected("already-exists")),
   then: () => [],
 });
 
@@ -20,7 +20,7 @@ export const rejectAddNotFound = scenario(
   "Reject the task as not-found although its input has no ref; addTask cannot answer with that kind, so test reports unlistedRejectionKind",
   {
     given,
-    when: (w) => answered(w, { result: "rejected", rejection: { kind: "not-found" } }),
+    when: (w) => answered(w, rejected("not-found")),
     then: () => [],
   },
 );
@@ -29,7 +29,7 @@ export const rejectMetRequires = scenario(
   "Reject the task for the requires short, which its title meets, so test reports rejectedAssumedRequires",
   {
     given,
-    when: (w) => answered(w, { result: "rejected", rejection: { kind: "requires", reason: "short" } }),
+    when: (w) => answered(w, rejected("requires", "short")),
     then: () => [],
   },
 );

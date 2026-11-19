@@ -27,6 +27,7 @@ import {
 } from "../samples/todo/spec/todo/events.ts";
 import { tasks } from "../samples/todo/spec/todo/queries.ts";
 import {
+  accepted,
   answered,
   any,
   type Bag,
@@ -34,18 +35,20 @@ import {
   constants,
   created,
   datetime,
+  emission,
   emit,
   emitted,
-  event as emittedEvent,
   endOf,
   entity,
   external,
   externalService,
+  fulfilled,
   type KindOf,
   type RecordsOf,
   type RowOf,
   raw,
   ref,
+  rejected,
   request,
   requested,
   run,
@@ -1434,9 +1437,10 @@ scenarioOfScreens("types", {
     w.client.send(todoPeer.completeTask, { taskId: listed.output.tasks[0].taskId });
     w.client.send(todoPeer.addTask, raw({ taskId: "task-3", title: 7 }));
     const completing = w.client.send(todoPeer.completeTask, { taskId: "task-1" });
-    return { look, watching, adding, completing };
+    const subscribed = w.client.subscribe(todoPeer.tasks, { filter: "all" });
+    return { look, watching, adding, completing, subscribed };
   },
-  then: ({ look, watching, adding, completing }) => [
+  then: ({ look, watching, adding, completing, subscribed }) => [
     // @ts-expect-error a look line's processing emits nothing
     emitted(look, []),
     // @ts-expect-error endOf takes a subscription, not a command
@@ -1445,11 +1449,25 @@ scenarioOfScreens("types", {
     // @ts-expect-error Then states requests only to the peers that Given lists
     requested(adding, [request(devicePeer.requestNotificationPermission, {})]),
     // @ts-expect-error Then states only the own service's events
-    emitted(adding, [emittedEvent(todoPeer.taskAdded, { taskId: "task-1" })]),
+    emitted(adding, [emission(todoPeer.taskAdded, { taskId: "task-1" })]),
     requested(adding, [endOf(watching)]),
-    answered(completing, { result: "rejected", rejection: { kind: "requires", reason: "notCompleted" } }),
+    answered(completing, rejected("requires", "notCompleted")),
+    answered(completing, rejected("requires")),
+    answered(completing, rejected("not-found")),
+    answered(completing, accepted),
     // @ts-expect-error a requires rejection names a requires condition of the command
-    answered(completing, { result: "rejected", rejection: { kind: "requires", reason: "notCompleteddd" } }),
+    answered(completing, rejected("requires", "notCompleteddd")),
+    // @ts-expect-error only a requires rejection has a reason
+    answered(completing, rejected("not-found", "notCompleted")),
+    // @ts-expect-error a rejection kind is one of RejectionKind
+    answered(completing, rejected("missing")),
+    // @ts-expect-error a command is accepted, not fulfilled
+    answered(completing, fulfilled({ taskId: "task-1" })),
+    answered(subscribed, [fulfilled({ tasks: [] })]),
+    // @ts-expect-error a subscription's answers are a list
+    answered(subscribed, fulfilled({ tasks: [] })),
+    // @ts-expect-error an output has the query's output shape
+    answered(subscribed, [fulfilled({ tasks: [{ taskId: 1 }] })]),
   ],
 });
 

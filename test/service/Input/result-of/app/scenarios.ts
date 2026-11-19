@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { scenario } from "./app.ts";
 
@@ -9,7 +9,7 @@ export const grant = scenario(
     when: (w) => {
       const request = w.startup.request(device.requestPermission);
       w.net.deliver(request);
-      w.net.deliver(w.peer.device.answer(request, { result: "accepted" }));
+      w.net.deliver(w.peer.device.answer(request, accepted));
       w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: request }));
     },
     then: () => [],

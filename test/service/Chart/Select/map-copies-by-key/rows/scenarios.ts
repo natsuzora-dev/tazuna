@@ -1,4 +1,4 @@
-import { external, notOffered } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, notOffered } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { rowScreen } from "./rowScreen.ts";
@@ -11,12 +11,7 @@ export const offersPerCopy = scenario(
       const rows = w.startup.screen(rowScreen);
       const openTasks = w.startup.subscription(todo.openTasks);
       w.net.deliver(openTasks);
-      w.net.deliver(
-        w.peer.todo.answer(openTasks, {
-          result: "fulfilled",
-          output: { taskIds: ["task-1", "task-2"] },
-        }),
-      );
+      w.net.deliver(w.peer.todo.answer(openTasks, fulfilled({ taskIds: ["task-1", "task-2"] })));
       const first = w.user.operate(rows, "complete", { taskId: "task-1" }).request(todo.completeTask);
       const look = w.user.look(rows);
       const second = w.user.operate(rows, "complete", { taskId: "task-2" }).request(todo.completeTask);

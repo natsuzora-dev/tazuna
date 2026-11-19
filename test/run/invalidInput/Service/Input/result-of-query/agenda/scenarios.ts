@@ -1,4 +1,4 @@
-import { external, unchecked } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, unchecked } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./agenda.ts";
 
@@ -9,10 +9,7 @@ export const changedByQuery = scenario(
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.nextDay));
       w.net.deliver(
-        w.peer.calendar.answer(w.startup.request(calendar.nextDay), {
-          result: "fulfilled",
-          output: { day: "2026-10-25T15:00:00Z" },
-        }),
+        w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: "2026-10-25T15:00:00Z" })),
       );
       w.net.deliver(
         w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.startup.request(calendar.nextDay)) }),

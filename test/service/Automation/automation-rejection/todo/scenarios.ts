@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external, rejected } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { addTask, scenario } from "./todo.ts";
 
@@ -16,7 +16,7 @@ export const notifiedAfterAdd = scenario(
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
       const notification = add.request(device.showNotification);
       w.net.deliver(notification);
-      w.net.deliver(w.peer.device.answer(notification, { result: "accepted" }));
+      w.net.deliver(w.peer.device.answer(notification, accepted));
     },
     then: () => [],
   },
@@ -30,12 +30,7 @@ export const ignoredUnavailable = scenario(
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
       const notification = add.request(device.showNotification);
       w.net.deliver(notification);
-      w.net.deliver(
-        w.peer.device.answer(notification, {
-          result: "rejected",
-          rejection: { kind: "unavailable" },
-        }),
-      );
+      w.net.deliver(w.peer.device.answer(notification, rejected("unavailable")));
     },
     then: () => [],
   },

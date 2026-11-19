@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { MarkOf } from "../data/bag.ts";
-import type { Rejection } from "../data/trace.generated.ts";
+import type { Rejection, RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { Contract, RecordsOf, ServiceOf } from "../dsl/contract.ts";
 import type {
@@ -526,15 +526,42 @@ export type Sent<O extends string = string> = OwnedValue<O> &
     | { readonly kind: "end"; readonly subscription: OutSubscription }
   );
 
-export function answered<T>(line: SingleRequestLine<T>, answer: Value<AnswerOf<T>>): Expectation;
-export function answered<T>(line: SubscribeLine<T>, answers: readonly Value<AnswerOf<T>>[]): Expectation;
-/**
- * Every answer that the receiver of the request of `line` gave to it: the one answer, or a subscription's answers in
- * order.
- */
-export function answered(line: RequestLine, answers: unknown): Expectation {
-  return { kind: "answered", line, answers: line.subscribes ? (answers as unknown[]) : [answers] };
-}
+/** The answers that Then's `answered` states for the request line `L`: one answer, or a subscription's answers in order. */
+type AnswersOf<L> =
+  L extends RequestLine<infer T>
+    ? L["subscribes"] extends true
+      ? readonly Value<AnswerOf<T>>[]
+      : Value<AnswerOf<T>>
+    : never;
+
+/** Every answer that the receiver of the request of `line` gave to it. */
+export const answered = <L extends RequestLine>(line: L, answers: AnswersOf<L>): Expectation => ({
+  kind: "answered",
+  line,
+  answers: line.subscribes ? (answers as readonly unknown[]) : [answers],
+});
+
+/** The answer that accepts a command without output. */
+export const accepted: { readonly result: "accepted" } = Object.freeze({ result: "accepted" });
+
+/** The answer that fulfills a query with `output`. */
+export const fulfilled = <const O>(output: O): { readonly result: "fulfilled"; readonly output: O } => ({
+  result: "fulfilled",
+  output,
+});
+
+/** The answer that rejects a request by the check `kind`, and for `requires` by the condition `reason`. */
+export const rejected = <const K extends RejectionKind, const A extends K extends "requires" ? [reason?: string] : []>(
+  kind: K,
+  ...reason: A
+): {
+  readonly result: "rejected";
+  readonly rejection: A extends [infer R] ? { readonly kind: K; readonly reason: R } : { readonly kind: K };
+} =>
+  ({
+    result: "rejected",
+    rejection: reason.length === 0 ? { kind } : { kind, reason: reason[0] },
+  }) as never;
 
 /** The events, listed by a contract, that the own service emitted while `line` was processed, as a bag. */
 export const emitted = <X extends Listed>(
@@ -560,7 +587,7 @@ export const requested = <X extends Listed>(
 });
 
 /** An event that the own service emitted, for Then's `emitted`. */
-export const event = <Ev extends AnyEvent>(event: Ev, payload: Value<EncodedPayload<Ev>>): Emitted<OwnerOf<Ev>> => ({
+export const emission = <Ev extends AnyEvent>(event: Ev, payload: Value<EncodedPayload<Ev>>): Emitted<OwnerOf<Ev>> => ({
   event,
   payload,
 });

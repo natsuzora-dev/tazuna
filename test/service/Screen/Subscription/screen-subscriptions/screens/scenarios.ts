@@ -1,4 +1,4 @@
-import { endOf, type OutSubscription, requested, run, subscription, type When } from "@natsuzora-dev/tazuna";
+import { endOf, fulfilled, type OutSubscription, requested, run, subscription, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { listScreen } from "./listScreen.ts";
@@ -18,9 +18,9 @@ const deliverBeginSubscriptions = (w: W) => {
   return { list: w.startup.screen(listScreen), tasksSub, countSub };
 };
 const deliverTasksShown = (w: W, sub: OutSubscription<typeof todo.tasks>) =>
-  w.net.deliver(w.peer.todo.answer(sub, { result: "fulfilled", output: { taskIds: [] } }));
+  w.net.deliver(w.peer.todo.answer(sub, fulfilled({ taskIds: [] })));
 const deliverCountShown = (w: W, sub: OutSubscription<typeof todo.taskCount>) =>
-  w.net.deliver(w.peer.todo.answer(sub, { result: "fulfilled", output: { count: 0 } }));
+  w.net.deliver(w.peer.todo.answer(sub, fulfilled({ count: 0 })));
 
 export const answersOneByOne = scenario(
   "Answer tasks, operate showAll, answer taskCount, and operate showAll; listScreen processes the answers to its subscriptions one at a time as inputs. With only the tasks answer, listScreen is still in loading and does not accept showAll. After the taskCount answer moves it to ready, showAll ends the subscription to tasks and subscribes to tasks again with the changed filter in its input",

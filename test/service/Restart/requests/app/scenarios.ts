@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { scenario } from "./app.ts";
 
@@ -32,7 +32,7 @@ export const requestsDiscarded = scenario(
       w.clock.at("2026-10-25T10:05:00+09:00");
       const second = w.host.restart().request(device.requestPermission);
       w.net.deliver(second);
-      w.net.deliver(w.peer.device.answer(second, { result: "accepted" }));
+      w.net.deliver(w.peer.device.answer(second, accepted));
     },
     then: () => [],
   },
@@ -47,7 +47,7 @@ export const resultAfterRestart = scenario(
       w.net.deliver(first);
       const restarting = w.host.restart();
       w.net.leaveInFlight(restarting.request(device.requestPermission));
-      w.net.deliver(w.peer.device.answer(first, { result: "accepted" }));
+      w.net.deliver(w.peer.device.answer(first, accepted));
       w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: first }));
     },
     then: () => [],

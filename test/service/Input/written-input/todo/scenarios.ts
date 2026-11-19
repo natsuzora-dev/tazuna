@@ -1,4 +1,4 @@
-import { emitted, event, raw } from "@natsuzora-dev/tazuna";
+import { emission, emitted, raw } from "@natsuzora-dev/tazuna";
 import { addItem, itemAdded, scenario } from "./todo.ts";
 
 const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} } as const;
@@ -8,6 +8,6 @@ export const writtenAsIs = scenario(
   {
     given,
     when: (w) => ({ adding: w.client.send(addItem, { note: "  MILK ", qty: raw("5") }) }),
-    then: ({ adding }) => [emitted(adding, [event(itemAdded, { note: "milk", qty: 5 })])],
+    then: ({ adding }) => [emitted(adding, [emission(itemAdded, { note: "milk", qty: 5 })])],
   },
 );

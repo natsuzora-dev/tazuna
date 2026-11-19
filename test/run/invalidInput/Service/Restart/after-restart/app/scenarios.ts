@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { ask, scenario, status } from "./app.ts";
 
@@ -10,7 +10,7 @@ export const answerAfterRestart = scenario(
       const asking = w.client.send(ask, {}).request(device.requestPermission);
       w.host.restart();
       w.net.deliver(asking);
-      w.net.deliver(w.peer.device.answer(asking, { result: "accepted" }));
+      w.net.deliver(w.peer.device.answer(asking, accepted));
     },
     then: () => [],
   },

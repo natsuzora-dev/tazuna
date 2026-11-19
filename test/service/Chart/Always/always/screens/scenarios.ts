@@ -1,4 +1,4 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { fulfilled, run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { listScreen } from "./listScreen.ts";
@@ -15,7 +15,7 @@ export const settlesAfterShownChange = scenario(
       const list = w.startup.screen(listScreen);
       const tasks = w.startup.subscription(todo.tasks);
       w.net.deliver(tasks);
-      w.net.deliver(w.peer.todo.answer(tasks, { result: "fulfilled", output: { taskIds: [] } }));
+      w.net.deliver(w.peer.todo.answer(tasks, fulfilled({ taskIds: [] })));
       const leaving = w.user.operate(list, "leave");
       w.net.leaveInFlight(leaving.end(tasks));
     },

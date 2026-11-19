@@ -1,9 +1,9 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { addDoneTask, addTask, completeTask, scenario } from "./todo.ts";
 
 const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { calendar: external(calendar) } } as const;
-const nextDay = { result: "fulfilled", output: { day: "2026-10-26T00:00:00+09:00" } } as const;
+const nextDay = fulfilled({ day: "2026-10-26T00:00:00+09:00" });
 
 export const answerAfterExit = scenario(
   "Add a task, complete it, answer, add another task, and answer; dayNoter sends calendar.nextDay each time it enters asking. The answer to the first request arrives after completeTask has made dayNoter exit asking, so it takes no transition. The answer to the second request moves dayNoter to noting, which records the next day",
