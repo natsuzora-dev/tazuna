@@ -88,11 +88,11 @@ derive_wire Assignment tag "kind"
 
 /--
 The edge that enters a state with parameters and fills them with its `with`: a transition that targets the state, or
-the initial edge of its parent (`none` for the chart's initial state, which no `with` fills).
+the initial edge of its parent. The chart's initial state has no parameters, since the chart enters it without an edge.
 -/
 inductive Edge where
   | transition (transition : Transition)
-  | initial (parent : Option String)
+  | initial (parent : String)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Edge tag "kind"
@@ -186,8 +186,8 @@ at load) always answer.
   and the rest to the owner, and assign returns both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
-- held: the parameters of the state that an edge enters, which its `with` computes, checked against the state's held
-  schema and encoded. A transition's `with` reads what its assign reads.
+- held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
+  of `n` and encoded. A transition's `with` reads what its assign reads.
 - deadlines: a state's `after` deadline names, in declaration order.
 - deadlineTime: the time of a state's `after` deadline on entering it: `now` plus a delay, or what `at` computes.
 -/
@@ -214,7 +214,7 @@ structure Functions (m : Type → Type) where
   assign : Scope → Records → Assignment → Extra → Keys →
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
-  held : Scope → Records → Edge → Extra → m (Except Issue Value)
+  held : Scope → Records → String → Edge → Extra → m (Except Issue Value)
   deadlines : String → String → m (List String)
   deadlineTime : Scope → Records → String → m (Except Issue Time)
   offers : Scope → Records → String → m (Except Issue (List Value))

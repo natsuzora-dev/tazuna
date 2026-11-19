@@ -79,7 +79,6 @@ function chartView(name: string, chart: ChartStructure): StateView {
     transitions,
     itemKeys: _itemKeys,
     contextKeys: _contextKeys,
-    held: _held,
     heldKeys: _heldKeys,
     ...state
   }: StateStructure): StateView => ({
@@ -101,7 +100,7 @@ function chartView(name: string, chart: ChartStructure): StateView {
     deadlines: [],
     itemKeys: [],
     contextKeys: [],
-    held: [],
+    hasParameters: false,
     heldKeys: [],
   });
 }

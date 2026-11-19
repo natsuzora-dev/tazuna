@@ -118,7 +118,6 @@ def offered (st : Service) (s : State) (top : Instance) (control : String) (payl
     | .ok done =>
       match o with
       | .any => pure (.ok (done ++ [(state, .any)]))
-      | .none => pure (.ok (done ++ [(state, .listed [])]))
       | .listed =>
         match ← fs.offers (s.scopeOf holder state) s.records control with
         | .error e =>

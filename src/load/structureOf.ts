@@ -8,7 +8,6 @@ import {
   type Contract,
   type Definition,
   type Named,
-  none,
   type Services,
   type StateSpec,
 } from "../dsl/definition.ts";
@@ -136,9 +135,7 @@ const keysOf = (shape: Shape, ref: RefOf) =>
   keyPositions(shape).map(({ path, entity }) => ({ path: [...path], entity: ref(entity) }));
 
 const offerKinds = (offers: StateSpec["offers"]): Record<string, StateStructure["offers"][string]> =>
-  Object.fromEntries(
-    Object.entries(offers ?? {}).map(([control, o]) => [control, o === any ? "any" : o === none ? "none" : "listed"]),
-  );
+  Object.fromEntries(Object.entries(offers ?? {}).map(([control, o]) => [control, o === any ? "any" : "listed"]));
 
 function structureOfChart(
   chart: ChartSpec,
@@ -193,8 +190,8 @@ function structureOfChart(
         deadlines: Object.keys(node.after ?? {}),
         itemKeys: keysOf(node.key ?? {}, ref),
         contextKeys: keysOf(node.context ?? {}, ref),
-        held: Object.keys(chart.held?.[name] ?? {}),
-        heldKeys: keysOf(chart.held?.[name] ?? {}, ref),
+        hasParameters: node.held !== undefined,
+        heldKeys: keysOf(node.held ?? {}, ref),
       };
       states.push(state);
       visit(node.states ?? {}, state);

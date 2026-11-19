@@ -269,7 +269,7 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   guard a b c d := f (fs.guard a b c d)
   assign a b c d e := f (fs.assign a b c d e)
   input a b c d := f (fs.input a b c d)
-  held a b c d := f (fs.held a b c d)
+  held a b c d e := f (fs.held a b c d e)
   deadlines a b := f (fs.deadlines a b)
   deadlineTime a b c := f (fs.deadlineTime a b c)
   offers a b c := f (fs.offers a b c)
@@ -444,8 +444,8 @@ def instrument : Functions (StateT Collect m) :=
         fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)
     input := fun scope records a keys =>
       auditBy (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
-    held := fun scope records edge extra =>
-      audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records edge extra) sameValue
+    held := fun scope records n edge extra =>
+      audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records n edge extra) sameValue
     items := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
         fun a b => textSet (a.map (·.2.canonical)) == textSet (b.map (·.2.canonical))

@@ -90,7 +90,6 @@ function offered(
   const definition = ref(r.st, chart.name);
   return applied.map(({ holder, state, offer }) => {
     if (offer === "any") return { state, offered: "any" };
-    if (offer === "none") return { state, offered: [] };
     const scope = scopeOf(r.state, holder, state);
     const payloads = r.functions.offers(
       scope,

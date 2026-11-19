@@ -2,16 +2,17 @@ import type { z } from "zod";
 import type { Bag, Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
 import type { Named } from "./conditions.ts";
-import type {
-  AnyOffer,
-  AnyScreen,
-  Control,
-  Events,
-  InputOf,
-  NoneOffer,
-  QueryOutput,
-  Screen,
-  ServiceDefinition,
+import {
+  type AnyOffer,
+  type AnyScreen,
+  type Control,
+  type Events,
+  type InputOf,
+  type NoneOffer,
+  none,
+  type QueryOutput,
+  type Screen,
+  type ServiceDefinition,
 } from "./definition.ts";
 import type { Entities, Immutable, MadeRow, Records, Row } from "./entity.ts";
 import type {
@@ -251,6 +252,10 @@ export type ScreenDefiner<Es extends Entities> = <
     ErrorIf<"duplicateContextFields", SharedContextFields<Flat<St>, Ctx>>,
 ) => ScreenSetup<I, O, Ctx, Rs, Sh, Cs, Ss, Es, Ps, Flat<St>>;
 
+/** `offers` with `none` written as the function that lists no payload, which is what it offers. */
+const listed = (offers: object) =>
+  Object.fromEntries(Object.entries(offers).map(([control, o]) => [control, o === none ? () => [] : o]));
+
 export function screenDefiner(owner: ServiceDefinition): ScreenDefiner<Entities> {
   return (setup) => ({
     chart: (definition) =>
@@ -268,8 +273,15 @@ export function screenDefiner(owner: ServiceDefinition): ScreenDefiner<Entities>
         screens: setup.screens ?? {},
         controls: setup.controls ?? {},
         initial: setup.initial,
-        ...assemble(setup.states, definition.states ?? {}),
-        ...(definition.offers === undefined ? {} : { offers: definition.offers }),
+        ...assemble(
+          setup.states,
+          Object.fromEntries(
+            Object.entries((definition.states ?? {}) as Readonly<Record<string, { readonly offers?: object }>>).map(
+              ([name, row]) => [name, row.offers === undefined ? row : { ...row, offers: listed(row.offers) }],
+            ),
+          ),
+        ),
+        ...(definition.offers === undefined ? {} : { offers: listed(definition.offers) }),
         on: definition.on ?? {},
         invariants: setup.invariants ?? {},
         requires: setup.requires ?? {},

@@ -112,11 +112,11 @@ export type Assignment =
 
 /**
  * Lean's Edge: the edge that enters a state with parameters and fills them with its `with`, a transition that targets
- * the state or the initial edge of its parent (null for the chart's initial state, which no `with` fills).
+ * the state or the initial edge of its parent.
  */
 export type Edge =
   | { readonly kind: "transition"; readonly transition: TransitionRef }
-  | { readonly kind: "initial"; readonly parent: string | null };
+  | { readonly kind: "initial"; readonly parent: string };
 
 /** What createKey returns next for an entity: `<entity>-<n>` for its `n`-th createKey value, after `count` so far. */
 export interface NextKeys {
@@ -255,10 +255,10 @@ export interface Functions {
     access: Access,
   ): { readonly written: Json; readonly created: readonly string[] } | Failed;
   /**
-   * Returns the parameters of the state that `edge` enters, which its `with` computes, checked against the state's held
-   * schema. A transition's `with` reads what its assign reads.
+   * Returns the parameters of `state`, which `edge` enters and its `with` computes, checked against the held schema of
+   * `state`. A transition's `with` reads what its assign reads.
    */
-  held(scope: Scope, records: RecordSource, edge: Edge, extra: Fields, access: Access): Fields | Failed;
+  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed;
   /** Returns the names of a state's `after` deadlines, in declaration order. */
   deadlines(machine: string, state: string): readonly string[];
   /** Lean's deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes. */

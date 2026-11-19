@@ -50,7 +50,7 @@ export type State = {
   readonly kind: "atomic" | "compound" | "parallel" | "final" | "history" | "map";
   readonly initial: string | null;
   readonly children: readonly string[];
-  readonly offers: Readonly<Record<string, "any" | "none" | "listed">>;
+  readonly offers: Readonly<Record<string, "any" | "listed">>;
   /** The activities, in the order calls, sends, shows, opens. */
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
@@ -60,8 +60,8 @@ export type State = {
   readonly itemKeys: readonly KeyPosition[];
   /** The key positions of a map state's own context, which each copy holds; empty for any other state. */
   readonly contextKeys: readonly KeyPosition[];
-  /** The names of the state's parameters (`held`), which the edge that enters the state fills. */
-  readonly held: readonly string[];
+  /** Whether the state has parameters (`held`), which the edge that enters the state fills. */
+  readonly hasParameters: boolean;
   /** The key positions of the state's parameters. */
   readonly heldKeys: readonly KeyPosition[];
 };
@@ -78,7 +78,7 @@ export type ChartFields = {
   readonly ensures: readonly string[];
   readonly on: readonly Transition[];
   /** The chart's own offers, which name every control. */
-  readonly offers: Readonly<Record<string, "any" | "none" | "listed">>;
+  readonly offers: Readonly<Record<string, "any" | "listed">>;
   /** The states, in document order. */
   readonly states: readonly State[];
   /** The payload schema of each control, or null for a control without a payload. */

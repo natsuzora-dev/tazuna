@@ -59,10 +59,7 @@ function regionPairs(instance: Instance, chosen: readonly Chosen[]): RegionPair[
   );
 }
 
-/**
- * Lean's fillHeld: the edge `edge` fills the parameters of state `n`, which it enters, with its `with`; `held` replaces
- * the parameters that the expressions read, as in runAssign.
- */
+/** Lean's fillHeld: the edge `edge` fills the parameters of state `n`, which it enters, with its `with`. */
 function fillHeld(
   r: Processing,
   instance: Instance,
@@ -72,41 +69,39 @@ function fillHeld(
   held: Fields | undefined,
   extra: Fields,
 ): void {
-  const scoped = scopeOf(r.state, instance, state);
-  const scope = held === undefined ? scoped : { ...scoped, held };
+  const scope = scopeOf(r.state, instance, state, held);
   const records = new LazyRecordSource(r.state.records, r.note);
-  const filled = r.functions.held(scope, records, edge, extra, new NoteAccess(r, scope));
+  const filled = r.functions.held(scope, records, n, edge, extra, new NoteAccess(r, scope));
   if (filled instanceof Failed) halt(issueViolation(ref(r.st, instance.chart.name), filled));
   instance.held.set(n, filled);
 }
 
 /**
- * Lean's fillByTransition: transition `c` fills the parameters of its target with its `with` when it enters a target
- * that has parameters. Two transitions of one microstep never enter one state, since their exit sets overlap and
- * removeConflicts keeps one; if they did, the first would fill it.
+ * Lean's fillByTransition: transition `c` fills the parameters of its target with its `with`, when `entered`, the states
+ * that `c` enters, holds a target that has parameters.
  */
-function fillByTransition(r: Processing, c: Chosen, held: Fields, extra: Fields): void {
+function fillByTransition(r: Processing, c: Chosen, entered: ReadonlySet<string>, held: Fields, extra: Fields): void {
   const target = c.t.target;
   if (target === null || machine(r.state, c.instance.id) === undefined) return;
-  if (!c.instance.chart.states.get(target)?.held || c.instance.held.has(target)) return;
-  if (!entriesOf(c).has(target)) return;
+  if (!c.instance.chart.states.get(target)?.hasParameters || !entered.has(target)) return;
   fillHeld(r, c.instance, target, { kind: "transition", transition: transitionRef(c.t) }, c.t.source, held, extra);
 }
 
-/** Lean's fillByInitial: the parent's initial edge fills the parameters of `n`, unless a transition filled them. */
-function fillByInitial(r: Processing, instance: Instance, n: string): void {
+/** Lean's fillByInitial: the parent's initial edge fills the parameters of `n`, unless a transition `filled` them. */
+function fillByInitial(r: Processing, instance: Instance, n: string, filled: boolean): void {
   const state = instance.chart.states.get(n);
-  if (state === undefined || !state.held || instance.held.has(n)) return;
+  if (state === undefined || state.parent === null || !state.hasParameters || filled) return;
   fillHeld(r, instance, n, { kind: "initial", parent: state.parent }, state.parent, undefined, {});
 }
 
-function enterOne(r: Processing, instance: Instance, name: string, step: number): void {
+/** Lean's enterOne; `filled` is as in fillByInitial. */
+function enterOne(r: Processing, instance: Instance, name: string, step: number, filled: boolean): void {
   const state = instance.chart.states.get(name);
   if (state === undefined) return;
   r.note.wroteState(instance.id, name);
   instance.entered.set(name, r.state.now);
   r.note.reached({ kind: "state", definition: ref(r.st, instance.chart.name), data: { state: name } });
-  fillByInitial(r, instance, name);
+  fillByInitial(r, instance, name, filled);
   runAssign(r, instance, { kind: "entry", state: name }, {}, name);
   if (state.kind === "final") {
     if (state.parent !== null) enterFinal(r, instance, state.parent, step);
@@ -120,7 +115,8 @@ function enterOne(r: Processing, instance: Instance, name: string, step: number)
 
 /** SCXML enterStates. */
 export function enter(r: Processing, instance: Instance, targets: readonly string[], step: number): void {
-  for (const name of entryOrder(instance.chart.tree, entering(instance, targets))) enterOne(r, instance, name, step);
+  for (const name of entryOrder(instance.chart.tree, entering(instance, targets)))
+    enterOne(r, instance, name, step, false);
 }
 
 function entering(instance: Instance, targets: readonly string[]): Set<string> {
@@ -165,16 +161,17 @@ export function microstep(
     r.note.transitionPart(e.k);
     exitOne(r, limits.exitDepth, e.holder, e.n);
   }
+  const entries = chosen.map(entriesOf);
   for (const [k, c] of chosen.entries()) {
     r.note.transitionPart(k);
     const held = sourceHeld[k] ?? {};
-    fillByTransition(r, c, held, extra);
+    fillByTransition(r, c, entries[k] ?? new Set(), held, extra);
     runAssign(r, c.instance, { kind: "transition", transition: transitionRef(c.t) }, extra, c.t.source, held);
   }
-  const entries = chosen.map(entriesOf);
   for (const e of inOrder(entries)) {
     r.note.transitionPart(e.k);
-    enterOne(r, e.holder, e.n, step);
+    const c = chosen[e.k];
+    enterOne(r, e.holder, e.n, step, c?.instance === e.holder && c.t.target === e.n);
   }
   r.note.microstepEnds({ chart: ref(r.st, instance.chart.name), pairs });
 }

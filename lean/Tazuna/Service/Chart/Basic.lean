@@ -85,7 +85,7 @@ structure ChartState where
   transitions : List Transition
   offers : List (String × Spec.Offer) := []
   /-- Whether the state has parameters (`held`), which the edge that enters it fills. -/
-  held : Bool := false
+  hasParameters : Bool := false
 deriving Repr, Inhabited
 
 def ChartState.shape (st : ChartState) : Shape :=
@@ -158,7 +158,7 @@ def Chart.ofSpec (c : Spec.Chart) (name : String) (order : Nat) (screen opened :
   let toState (st : Spec.State) : Except String ChartState := do
     pure { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
            children := st.children, activities := ← st.activities.mapM Activity.ofSpec,
-           transitions := st.transitions.map Transition.ofSpec, offers := st.offers, held := !st.held.isEmpty }
+           transitions := st.transitions.map Transition.ofSpec, offers := st.offers, hasParameters := st.hasParameters }
   let ⟨states, shaped⟩ ← match h : c.states.mapM toState with
     | .error e => (throw e : Except String _)
     | .ok states =>

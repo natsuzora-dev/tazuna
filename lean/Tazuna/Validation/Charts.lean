@@ -180,7 +180,7 @@ unless their parent is a map state, whose history enters its initial state.
 -/
 def restoredHeldOf (c : Chart) : List (String × String) :=
   c.states.flatMap fun st =>
-    if st.held.isEmpty then [] else
+    if !st.hasParameters then [] else
     match st.parent.bind fun p => c.states.find? (·.name == p) with
     | some p =>
       if p.kind == .map then [] else

@@ -264,7 +264,7 @@ export class SpecFunctions implements Functions {
       case "mapContext":
         return this.node(schema.chart.name, schema.map)?.context ?? {};
       case "held": {
-        const field = this.chartOf(schema.chart.name).named.definition.held?.[schema.state]?.[schema.name];
+        const field = this.node(schema.chart.name, schema.state)?.held?.[schema.name];
         return field === undefined ? {} : { [schema.name]: field };
       }
       default:
@@ -728,28 +728,21 @@ export class SpecFunctions implements Functions {
     return given instanceof Failed ? given : { written: given, created };
   }
 
-  /** Returns the parameters that `edge`'s `with` fills, each checked against its held schema. */
-  held(scope: Scope, records: RecordSource, edge: Edge, extra: Fields, access: Access): Fields | Failed {
-    const { named, ref, structure } = this.chartOf(chartOf(scope.id));
+  /** Returns the parameters of `state` that `edge`'s `with` fills, each checked against its held schema. */
+  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed {
     const machine = chartOf(scope.id);
-    let fills: Assignments | undefined;
-    let target: string;
-    if (edge.kind === "transition") {
-      const t = this.transition(machine, edge.transition);
-      fills = t.with as Assignments | undefined;
-      target = t.target ?? "";
-    } else if (edge.parent === null) {
-      target = structure.initial;
-    } else {
-      fills = this.node(machine, edge.parent)?.initialEdge?.with as Assignments | undefined;
-      target = stateNamed(structure, edge.parent)?.initial ?? "";
-    }
+    const fills = (
+      edge.kind === "transition"
+        ? this.transition(machine, edge.transition).with
+        : this.node(machine, edge.parent)?.initialWith
+    ) as Assignments | undefined;
+    const ref = this.chartOf(machine).ref;
     const args = this.args(scope, records, access, extra);
     const values: Record<string, unknown> = {};
-    for (const [name, schema] of Object.entries(named.definition.held?.[target] ?? {})) {
+    for (const [name, schema] of Object.entries(this.node(machine, state)?.held ?? {})) {
       const value = attempt(() => fills?.[name]?.(args));
       if (value instanceof Failed) return value;
-      const checked = matching({ kind: "held", chart: ref, state: target, name }, schema as z.ZodType, value);
+      const checked = matching({ kind: "held", chart: ref, state, name }, schema as z.ZodType, value);
       if (checked instanceof Failed) return checked;
       values[name] = checked.value;
     }

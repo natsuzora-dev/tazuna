@@ -204,7 +204,7 @@ interface DeadlineSpec {
   readonly onFired: readonly TransitionSpec[];
 }
 
-type AssignSpec = Readonly<Record<string, (args: unknown) => unknown>>;
+export type AssignSpec = Readonly<Record<string, (args: unknown) => unknown>>;
 
 interface RequestSpec {
   readonly input?: (args: unknown) => unknown;
@@ -225,16 +225,18 @@ export const any: AnyOffer = Object.freeze({}) as AnyOffer;
 /** The offers entry that offers no payload: the control is there but disabled. */
 export const none: NoneOffer = Object.freeze({}) as NoneOffer;
 
-type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer | NoneOffer>;
+type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer>;
 
 export interface StateSpec {
   readonly type?: "parallel" | "map" | "final" | "history";
   readonly key?: Shape;
   readonly context?: Shape;
   readonly items?: (args: unknown) => readonly unknown[];
+  /** The shapes of the state's parameters. */
+  readonly held?: Shape;
   readonly initial?: string;
   /** The `with` of the initial edge, which the behavior writes as `initial: { with }`. */
-  readonly initialEdge?: { readonly with: AssignSpec };
+  readonly initialWith?: AssignSpec;
   readonly states?: Readonly<Record<string, StateSpec>>;
   readonly offers?: Offers;
   readonly on?: Readonly<Record<string, readonly TransitionSpec[]>>;
@@ -265,8 +267,6 @@ export interface ChartSpec {
   readonly queries?: Readonly<Record<string, AnyQuery>>;
   readonly commands: Readonly<Record<string, AnyCommand>>;
   readonly screens?: Readonly<Record<string, AnyScreen>>;
-  /** The shapes of the parameters of each state that has them, per state name. */
-  readonly held?: Readonly<Record<string, Shape>>;
   readonly initial: string;
   readonly states: Readonly<Record<string, StateSpec>>;
   readonly offers?: Offers;

@@ -87,7 +87,7 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   guard : ∀ a b c d, Agrees (fsI.guard a b c d) (fs.guard a b c d)
   assign : ∀ a b c d e, Agrees (fsI.assign a b c d e) (fs.assign a b c d e)
   input : ∀ a b c d, Agrees (fsI.input a b c d) (fs.input a b c d)
-  held : ∀ a b c d, Agrees (fsI.held a b c d) (fs.held a b c d)
+  held : ∀ a b c d e, Agrees (fsI.held a b c d e) (fs.held a b c d e)
   deadlines : ∀ a b, Agrees (fsI.deadlines a b) (fs.deadlines a b)
   deadlineTime : ∀ a b c, Agrees (fsI.deadlineTime a b c) (fs.deadlineTime a b c)
   offers : ∀ a b c, Agrees (fsI.offers a b c) (fs.offers a b c)
@@ -214,23 +214,24 @@ theorem fillHeld_agrees (name : InstanceId) (n : String) (edge : Edge) (scope : 
   unfold fillHeld; refine withMachine_agrees (fun i r => ?_) r; agree [h.held]
 
 omit [MonadNote (StateT C Id)] in
-theorem fillByTransition_agrees (c : InstanceId × Transition) (held : Value) (extra : Extra) (r : Processing) :
-    Agrees (fillByTransition fsI st c held extra r) (fillByTransition fs st c held extra r) := by
+theorem fillByTransition_agrees (c : InstanceId × Transition) (entered : List (InstanceId × String)) (held : Value)
+    (extra : Extra) (r : Processing) :
+    Agrees (fillByTransition fsI st c entered held extra r) (fillByTransition fs st c entered held extra r) := by
   unfold fillByTransition; refine withMachine_agrees (fun i r => ?_) r; agree [fillHeld_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem fillByInitial_agrees (name : InstanceId) (n : String) (r : Processing) :
-    Agrees (fillByInitial fsI st name n r) (fillByInitial fs st name n r) := by
+theorem fillByInitial_agrees (filled : Bool) (name : InstanceId) (n : String) (r : Processing) :
+    Agrees (fillByInitial fsI st filled name n r) (fillByInitial fs st filled name n r) := by
   unfold fillByInitial; refine withMachine_agrees (fun i r => ?_) r; agree [fillHeld_agrees h]
 
-theorem transitionContent_agrees (extra : Extra) (sourceHeld : List Value) (r : Processing)
-    (ck : (InstanceId × Transition) × Nat) :
-    Agrees (transitionContent fsI st extra sourceHeld r ck) (transitionContent fs st extra sourceHeld r ck) := by
+theorem transitionContent_agrees (extra : Extra) (sourceHeld : List Value) (entries : List (List (InstanceId × String)))
+    (r : Processing) (ck : (InstanceId × Transition) × Nat) :
+    Agrees (transitionContent fsI st extra sourceHeld entries r ck) (transitionContent fs st extra sourceHeld entries r ck) := by
   unfold transitionContent
   agree [note_agrees, fillByTransition_agrees h, runAssign_agrees h, unlessHalted_agrees]
 
-theorem enterOne_agrees (step : Nat) (name : InstanceId) (n : String) (r : Processing) :
-    Agrees (enterOne fsI st step name n r) (enterOne fs st step name n r) := by
+theorem enterOne_agrees (step : Nat) (filled : Bool) (name : InstanceId) (n : String) (r : Processing) :
+    Agrees (enterOne fsI st step filled name n r) (enterOne fs st step filled name n r) := by
   unfold enterOne; refine withMachine_agrees (fun i r => ?_) r
   agree [fillByInitial_agrees h, runAssign_agrees h, closeFinal_agrees h, endWith_agrees (exitOne_agrees h _),
     h.deadlines, addDeadlines_agrees h]

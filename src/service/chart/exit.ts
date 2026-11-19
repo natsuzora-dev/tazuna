@@ -42,10 +42,7 @@ export function recordHistory(instance: Instance, name: string): void {
   if (recorded !== null) instance.lastChildren.set(name, recorded);
 }
 
-/**
- * Lean's runAssign. `held` replaces the parameters that the expressions read: a transition reads those of its source as
- * the microstep began, since the source has exited.
- */
+/** Lean's runAssign. `held` is as in scopeOf. */
 export function runAssign(
   r: Processing,
   instance: Instance,
@@ -55,8 +52,7 @@ export function runAssign(
   held?: Fields,
 ): void {
   const definition = ref(r.st, instance.chart.name);
-  const scoped = scopeOf(r.state, instance, state);
-  const scope = held === undefined ? scoped : { ...scoped, held };
+  const scope = scopeOf(r.state, instance, state, held);
   const records = new LazyRecordSource(r.state.records, r.note);
   const assigned = r.functions.assign(scope, records, assignment, extra, nextKeys(r.state), new NoteAccess(r, scope));
   if (assigned instanceof Failed)

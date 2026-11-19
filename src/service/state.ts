@@ -471,16 +471,17 @@ export function machine(s: State, id: InstanceId): Instance | undefined {
   return s.machines.get(id) ?? s.copies.get(id);
 }
 
-/**
- * Returns the scope of the expressions of `instance`. A copy's expressions also read the owner's context, shown, and
- * input.
- */
 /** Lean's Instance.heldAt: the parameters of `state` for its current visit, empty when it has none. */
 export function heldAt(instance: Instance, state: string | null): Fields {
   return (state === null ? undefined : instance.held.get(state)) ?? {};
 }
 
-export function scopeOf(s: State, instance: Instance, state: string | null): Scope {
+/**
+ * Returns the scope of the expressions of `instance` at `state`. A copy's expressions also read the owner's context,
+ * shown, and input. `held` replaces the parameters of `state`: a transition reads those of its source as the microstep
+ * began, since the source has exited.
+ */
+export function scopeOf(s: State, instance: Instance, state: string | null, held = heldAt(instance, state)): Scope {
   const owner = instance.id.kind === "copy" ? machine(s, ownerId(instance.id)) : undefined;
   if (owner !== undefined)
     return {
@@ -491,7 +492,7 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
       active: { has: (n) => instance.entered.has(n) || owner.entered.has(n) },
       shown: owner.shown,
       input: owner.input,
-      held: heldAt(instance, state),
+      held,
       now: s.now,
     };
   return {
@@ -502,7 +503,7 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
     active: instance.entered,
     shown: instance.shown,
     input: instance.input,
-    held: heldAt(instance, state),
+    held,
     now: s.now,
   };
 }

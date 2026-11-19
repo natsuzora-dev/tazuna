@@ -193,34 +193,36 @@ theorem keysBy_fillHeld (name : InstanceId) (n : String) (edge : Edge) (scope : 
   repeat' split
   all_goals keys_leaf
 
-theorem keysBy_fillByTransition (c : InstanceId × Transition) (held : Value) (extra : Extra) :
-    KeysBy (fillByTransition fs st c held extra) := by
+theorem keysBy_fillByTransition (c : InstanceId × Transition) (entered : List (InstanceId × String)) (held : Value)
+    (extra : Extra) : KeysBy (fillByTransition fs st c entered held extra) := by
   apply keysBy_withMachine
   intro i r
   repeat' (first | split | dsimp only)
   all_goals first | exact .refl _ | exact keysBy_fillHeld _ _ _ _ _ _ r
 
-theorem keysBy_fillByInitial (name : InstanceId) (n : String) : KeysBy (fillByInitial fs st name n) := by
+theorem keysBy_fillByInitial (filled : Bool) (name : InstanceId) (n : String) :
+    KeysBy (fillByInitial fs st filled name n) := by
   apply keysBy_withMachine
   intro i r
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_fillHeld _ _ _ _ _ _ r
 
-theorem keysBy_transitionContent (extra : Extra) (sourceHeld : List Value) (ck : (InstanceId × Transition) × Nat) :
-    KeysBy (fun r => transitionContent fs st extra sourceHeld r ck) := by
+theorem keysBy_transitionContent (extra : Extra) (sourceHeld : List Value) (entries : List (List (InstanceId × String)))
+    (ck : (InstanceId × Transition) × Nat) : KeysBy (fun r => transitionContent fs st extra sourceHeld entries r ck) := by
   intro r
   simp only [transitionContent, id_bind, note_id]
-  exact (keysBy_unlessHalted (keysBy_fillByTransition _ _ _) r).trans (keysBy_unlessHalted (keysBy_runAssign _ _ _ _ _) _)
+  exact (keysBy_unlessHalted (keysBy_fillByTransition _ _ _ _) r).trans (keysBy_unlessHalted (keysBy_runAssign _ _ _ _ _) _)
 
-theorem keysBy_enterOne (step : Nat) (name : InstanceId) (n : String) : KeysBy (enterOne fs st step name n) := by
+theorem keysBy_enterOne (step : Nat) (filled : Bool) (name : InstanceId) (n : String) :
+    KeysBy (enterOne fs st step filled name n) := by
   apply keysBy_withMachine
   intro i r
   simp only [id_bind, note_id]
   have h0 : KeepsKeys r.state (r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now })
     := by keys_leaf
-  have hF := h0.trans (keysBy_fillByInitial (fs := fs) (st := st) name n
+  have hF := h0.trans (keysBy_fillByInitial (fs := fs) (st := st) filled name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩)
-  generalize fillByInitial fs st name n
+  generalize fillByInitial fs st filled name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩ = F at hF ⊢
   have h := hF.trans (keysBy_runAssign (fs := fs) (st := st) name (.entry n) (some n) .none none F)
   repeat' split
@@ -235,7 +237,7 @@ theorem keysBy_enterOne (step : Nat) (name : InstanceId) (n : String) : KeysBy (
 theorem keysBy_enter (step : Nat) (name : InstanceId) (targets : List String) : KeysBy (enter fs st step name targets) := by
   apply keysBy_withMachine
   intro i r
-  exact keysBy_foldlM (fun n => keysBy_unlessHalted (keysBy_enterOne step name n)) _ r
+  exact keysBy_foldlM (fun n => keysBy_unlessHalted (keysBy_enterOne step false name n)) _ r
 
 theorem keysBy_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     KeysBy (microstep fs st step name chosen extra) := by
@@ -244,8 +246,8 @@ theorem keysBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Instan
   split
   · exact .refl _
   · simp only [id_bind, note_id, id_pure]
-    refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_unlessHalted (keysBy_enterOne step _ _)) _ _)
-    refine KeepsKeys.trans ?_ (keysBy_foldlM (fun c => keysBy_transitionContent extra _ c) _ _)
+    refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_unlessHalted (keysBy_enterOne step _ _ _)) _ _)
+    refine KeepsKeys.trans ?_ (keysBy_foldlM (fun c => keysBy_transitionContent extra _ _ c) _ _)
     refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_unlessHalted (keysBy_exitOne _ _ _)) _ _)
     exact keeps_foldl _ (fun t h => by keys_leaf) _ _
 

@@ -78,7 +78,7 @@ inductive Question where
   | guard (scope : Scope) (transition : Transition) (extra : Extra)
   | assign (scope : Scope) (assignment : Assignment) (extra : Extra) (keys : Keys)
   | input (scope : Scope) (activity : Activity) (keys : Keys)
-  | held (scope : Scope) (edge : Edge) (extra : Extra)
+  | held (scope : Scope) (state : String) (edge : Edge) (extra : Extra)
   | deadlines (machine state : String)
   | deadlineTime (scope : Scope) (name : String)
   | offers (scope : Scope) (control : String)

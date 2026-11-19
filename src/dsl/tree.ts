@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
-import type { ChartSpec, StateSpec } from "./definition.ts";
+import type { AssignSpec, ChartSpec, StateSpec } from "./definition.ts";
 import type { DefaultedShape, Immutable, Row } from "./entity.ts";
 
 type TreeNode =
@@ -240,27 +240,26 @@ type RuntimeNode = {
   readonly initial?: string;
   readonly states?: Readonly<Record<string, RuntimeNode>>;
 };
-type Assembled = Required<Pick<ChartSpec, "states" | "held">>;
+type Assembled = Required<Pick<ChartSpec, "states">>;
 
 export function assemble(tree: object, table: object): Assembled {
-  const held: Record<string, Shape> = {};
-  const behaviors = table as Readonly<Record<string, { readonly initial?: StateSpec["initialEdge"] }>>;
+  const behaviors = table as Readonly<Record<string, { readonly initial?: { readonly with: AssignSpec } }>>;
   const nest = (nodes: Readonly<Record<string, RuntimeNode>>): Record<string, StateSpec> =>
     Object.fromEntries(
       Object.entries(nodes).map(([name, node]) => {
-        const { initial: initialEdge, ...behavior } = behaviors[name] ?? {};
-        if (node.held !== undefined) held[name] = node.held;
+        const { initial, ...behavior } = behaviors[name] ?? {};
         const spec = {
           ...(node.type === undefined ? {} : { type: node.type }),
           ...(node.key === undefined ? {} : { key: node.key }),
           ...(node.context === undefined ? {} : { context: node.context }),
+          ...(node.held === undefined ? {} : { held: node.held }),
           ...(node.initial === undefined ? {} : { initial: node.initial }),
           ...(node.states === undefined ? {} : { states: nest(node.states) }),
-          ...(initialEdge === undefined ? {} : { initialEdge }),
+          ...(initial === undefined ? {} : { initialWith: initial.with }),
           ...behavior,
         };
         return [name, spec as StateSpec];
       }),
     );
-  return { states: nest(tree as Readonly<Record<string, RuntimeNode>>), held };
+  return { states: nest(tree as Readonly<Record<string, RuntimeNode>>) };
 }

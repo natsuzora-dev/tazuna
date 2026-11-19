@@ -140,7 +140,7 @@ export type Assignment =
 
 /**
  * The edge that enters a state with parameters and fills them with its `with`: a transition that targets the state, or
- * the initial edge of its parent (`none` for the chart's initial state, which no `with` fills).
+ * the initial edge of its parent. The chart's initial state has no parameters, since the chart enters it without an edge.
  */
 export type Edge =
   | {
@@ -149,7 +149,7 @@ export type Edge =
     }
   | {
       readonly kind: "initial";
-      readonly parent: string | null;
+      readonly parent: string;
     };
 
 /** What caused the transition, as passed to its expressions. */
@@ -439,6 +439,7 @@ export type Question =
   | {
       readonly type: "held";
       readonly scope: Scope;
+      readonly state: string;
       readonly edge: Edge;
       readonly extra: Extra;
     }

@@ -618,8 +618,8 @@ export class InstrumentedFunctions implements Functions {
       same: (x, y) => sameMade(keys, [x.written, x.created], [y.written, y.created]),
     });
   }
-  held(scope: Scope, records: RecordSource, edge: Edge, extra: Fields, access: Access) {
-    return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, edge, extra, a), text);
+  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access) {
+    return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, state, edge, extra, a), text);
   }
   deadlines(machine: string, state: string) {
     return this.fs.deadlines(machine, state);

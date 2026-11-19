@@ -34,8 +34,8 @@ theorem sameLines_fillHeld (name : InstanceId) (n : String) (edge : Edge) (scope
   · simp [Processing.report]
   · rfl
 
-theorem keeps_fillByTransition (c : InstanceId × Transition) (held : Value) (extra : Extra) :
-    Keeps (fillByTransition fs st c held extra) := by
+theorem keeps_fillByTransition (c : InstanceId × Transition) (entered : List (InstanceId × String)) (held : Value)
+    (extra : Extra) : Keeps (fillByTransition fs st c entered held extra) := by
   unfold fillByTransition
   apply keeps_withMachine
   intro i r
@@ -46,8 +46,8 @@ theorem keeps_fillByTransition (c : InstanceId × Transition) (held : Value) (ex
     · exact keeps_fillHeld _ _ _ _ _ _ r
     · rfl
 
-theorem sameLines_fillByTransition (c : InstanceId × Transition) (held : Value) (extra : Extra) :
-    SameLines (fillByTransition fs st c held extra) := by
+theorem sameLines_fillByTransition (c : InstanceId × Transition) (entered : List (InstanceId × String)) (held : Value)
+    (extra : Extra) : SameLines (fillByTransition fs st c entered held extra) := by
   unfold fillByTransition
   apply sameLines_withMachine
   intro i r
@@ -58,47 +58,55 @@ theorem sameLines_fillByTransition (c : InstanceId × Transition) (held : Value)
     · exact sameLines_fillHeld _ _ _ _ _ _ r
     · rfl
 
-theorem keeps_fillByInitial (name : InstanceId) (n : String) : Keeps (fillByInitial fs st name n) := by
+theorem keeps_fillByInitial (filled : Bool) (name : InstanceId) (n : String) :
+    Keeps (fillByInitial fs st filled name n) := by
   unfold fillByInitial
   apply keeps_withMachine
   intro i r
   split
   · split
-    · exact keeps_fillHeld _ _ _ _ _ _ r
+    · split
+      · exact keeps_fillHeld _ _ _ _ _ _ r
+      · rfl
     · rfl
   · rfl
 
-theorem sameLines_fillByInitial (name : InstanceId) (n : String) : SameLines (fillByInitial fs st name n) := by
+theorem sameLines_fillByInitial (filled : Bool) (name : InstanceId) (n : String) :
+    SameLines (fillByInitial fs st filled name n) := by
   unfold fillByInitial
   apply sameLines_withMachine
   intro i r
   split
   · split
-    · exact sameLines_fillHeld _ _ _ _ _ _ r
+    · split
+      · exact sameLines_fillHeld _ _ _ _ _ _ r
+      · rfl
     · rfl
   · rfl
 
-theorem keeps_transitionContent (extra : Extra) (sourceHeld : List Value) (ck : (InstanceId × Transition) × Nat) :
-    Keeps (fun r => transitionContent fs st extra sourceHeld r ck) := by
+theorem keeps_transitionContent (extra : Extra) (sourceHeld : List Value) (entries : List (List (InstanceId × String)))
+    (ck : (InstanceId × Transition) × Nat) : Keeps (fun r => transitionContent fs st extra sourceHeld entries r ck) := by
   intro r
   simp only [transitionContent, id_bind, note_id]
-  exact (keeps_unlessHalted (keeps_runAssign _ _ _ _ _) _).trans (keeps_unlessHalted (keeps_fillByTransition _ _ _) r)
+  exact (keeps_unlessHalted (keeps_runAssign _ _ _ _ _) _).trans (keeps_unlessHalted (keeps_fillByTransition _ _ _ _) r)
 
-theorem sameLines_transitionContent (extra : Extra) (sourceHeld : List Value) (ck : (InstanceId × Transition) × Nat) :
-    SameLines (fun r => transitionContent fs st extra sourceHeld r ck) := by
+theorem sameLines_transitionContent (extra : Extra) (sourceHeld : List Value)
+    (entries : List (List (InstanceId × String))) (ck : (InstanceId × Transition) × Nat) :
+    SameLines (fun r => transitionContent fs st extra sourceHeld entries r ck) := by
   intro r
   simp only [transitionContent, id_bind, note_id]
   exact (sameLines_unlessHalted (sameLines_runAssign _ _ _ _ _) _).trans
-    (sameLines_unlessHalted (sameLines_fillByTransition _ _ _) r)
+    (sameLines_unlessHalted (sameLines_fillByTransition _ _ _ _) r)
 
-theorem keeps_enterOne (step : Nat) (name : InstanceId) (n : String) : Keeps (enterOne fs st step name n) := by
+theorem keeps_enterOne (step : Nat) (filled : Bool) (name : InstanceId) (n : String) :
+    Keeps (enterOne fs st step filled name n) := by
   unfold enterOne
   apply keeps_withMachine
   intro i r
   try simp only [id_bind]
-  have hF := keeps_fillByInitial (st := st) (fs := fs) name n
+  have hF := keeps_fillByInitial (st := st) (fs := fs) filled name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
-  generalize fillByInitial fs st name n
+  generalize fillByInitial fs st filled name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩ = F at hF ⊢
   have ha := (keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none F).trans hF
   split
@@ -119,7 +127,7 @@ theorem keeps_enter (step : Nat) (name : InstanceId) (targets : List String) : K
   unfold enter
   apply keeps_withMachine
   intro i r
-  exact foldlM_keeps (fun n => keeps_unlessHalted (keeps_enterOne step name n)) _ r
+  exact foldlM_keeps (fun n => keeps_unlessHalted (keeps_enterOne step false name n)) _ r
 
 theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     Keeps (microstep fs st step name chosen extra) := by
@@ -129,8 +137,8 @@ theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (Instanc
   split
   · rfl
   · simp only [id_bind, note_id, id_pure]
-    refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_enterOne step e.1.1 e.1.2)) _ _).trans ?_
-    refine (foldlM_keeps (fun c => keeps_transitionContent extra _ c) _ _).trans ?_
+    refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_enterOne step _ e.1.1 e.1.2)) _ _).trans ?_
+    refine (foldlM_keeps (fun c => keeps_transitionContent extra _ _ c) _ _).trans ?_
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) =>
       keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2)) _ _).trans ?_
     have h0 : ∀ (hs : List InstanceId) (f : InstanceId → Instance → Instance) (t : State),
@@ -141,16 +149,17 @@ theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (Instanc
       | cons h hs ih => intro t; exact ih _
     exact h0 _ _ _
 
-theorem growsBy_enterOne (step : Nat) (name : InstanceId) (n : String) : GrowsBy (enterOne fs st step name n) := by
+theorem growsBy_enterOne (step : Nat) (filled : Bool) (name : InstanceId) (n : String) :
+    GrowsBy (enterOne fs st step filled name n) := by
   unfold enterOne
   apply growsBy_withMachine
   intro i r
   try simp only [id_bind]
-  have hFl := sameLines_fillByInitial (st := st) (fs := fs) name n
+  have hFl := sameLines_fillByInitial (st := st) (fs := fs) filled name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
-  have hFn := (keeps_fillByInitial (st := st) (fs := fs) name n).now
+  have hFn := (keeps_fillByInitial (st := st) (fs := fs) filled name n).now
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
-  generalize fillByInitial fs st name n
+  generalize fillByInitial fs st filled name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩ = F at hFl hFn ⊢
   have ha := (sameLines_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none F).trans hFl
   have hn := ((keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none).now F).trans hFn
@@ -173,8 +182,8 @@ theorem growsBy_enter (step : Nat) (name : InstanceId) (targets : List String) :
   unfold enter
   apply growsBy_withMachine
   intro i r
-  exact foldlM_grows (fun n => growsBy_unlessHalted (growsBy_enterOne step name n))
-    (fun n => keeps_unlessHalted (keeps_enterOne step name n)) _ r
+  exact foldlM_grows (fun n => growsBy_unlessHalted (growsBy_enterOne step false name n))
+    (fun n => keeps_unlessHalted (keeps_enterOne step false name n)) _ r
 
 theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     GrowsBy (microstep fs st step name chosen extra) := by
@@ -191,15 +200,16 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
         unlessHalted (exitOne fs st Limit.exitDepth.max e.1.1 e.1.2) r) r xs).1 :=
       foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_exitOne Limit.exitDepth.max e.1.1 e.1.2))
         (fun e => keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2))
-    have kA : ∀ sh xs (r : Processing),
-        (List.foldlM (m := Id) (transitionContent fs st extra sh) r xs).1.fixed = r.state.fixed :=
-      fun sh => foldlM_keeps (fun c => keeps_transitionContent extra sh c)
-    have hA : ∀ sh xs (r : Processing), Grows r.state (List.foldlM (m := Id) (transitionContent fs st extra sh) r xs).1 :=
-      fun sh xs r => Grows.of_lines (foldlM_sameLines (fun c => sameLines_transitionContent extra sh c) xs r)
+    have kA : ∀ sh es xs (r : Processing),
+        (List.foldlM (m := Id) (transitionContent fs st extra sh es) r xs).1.fixed = r.state.fixed :=
+      fun sh es => foldlM_keeps (fun c => keeps_transitionContent extra sh es c)
+    have hA : ∀ sh es xs (r : Processing),
+        Grows r.state (List.foldlM (m := Id) (transitionContent fs st extra sh es) r xs).1 :=
+      fun sh es xs r => Grows.of_lines (foldlM_sameLines (fun c => sameLines_transitionContent extra sh es c) xs r)
     have hN : ∀ xs (r : Processing), Grows r.state (List.foldlM (m := Id) (fun r (e : (InstanceId × String) × Nat) =>
-        unlessHalted (enterOne fs st step e.1.1 e.1.2) r) r xs).1 :=
-      foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_enterOne step e.1.1 e.1.2))
-        (fun e => keeps_unlessHalted (keeps_enterOne step e.1.1 e.1.2))
+        unlessHalted (enterOne fs st step (targetedBy chosen e.1 e.2) e.1.1 e.1.2) r) r xs).1 :=
+      foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_enterOne step _ e.1.1 e.1.2))
+        (fun e => keeps_unlessHalted (keeps_enterOne step _ e.1.1 e.1.2))
     have h0 : ∀ (hs : List InstanceId) (f : InstanceId → Instance → Instance) (t : State),
         (hs.foldl (fun s h => s.setMachine h (f h)) t).lines = t.lines ∧
           (hs.foldl (fun s h => s.setMachine h (f h)) t).now = t.now := by
@@ -209,7 +219,7 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
       | cons h hs ih => intro t; exact ih _
     obtain ⟨l0, n0⟩ := h0 (holdersOf chosen) _ r.state
     exact (Grows.of_lines l0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
-      ((hA _ _ _).trans (congrArg Fixed.now (kA _ _ _)) (hN _ _)))
+      ((hA _ _ _ _).trans (congrArg Fixed.now (kA _ _ _ _)) (hN _ _)))
 
 theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × String)) :
     (((i.documentOrder.filter (· ∈ pairs)).filter (·.1 == i.id)).map (·.2)) =
