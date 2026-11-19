@@ -126,6 +126,7 @@ export const factOf: unique symbol = Symbol("factOf");
 export const observedRef: unique symbol = Symbol("observedRef");
 export const createdMark: unique symbol = Symbol("created");
 export const rawMark: unique symbol = Symbol("raw");
+export const writtenAt: unique symbol = Symbol("writtenAt");
 declare const messageKind: unique symbol;
 declare const processing: unique symbol;
 declare const sentByClient: unique symbol;
@@ -511,8 +512,8 @@ export interface When<
   };
 }
 
-/** An expectation of Then: an externally observable fact about a line. */
-export type Expectation =
+/** An expectation of Then: an externally observable fact about a line, with the stack where Then wrote it. */
+export type Expectation = (
   | { readonly kind: "answered"; readonly line: Line; readonly answers: readonly unknown[] }
   | { readonly kind: "emitted"; readonly line: Line; readonly events: readonly Emitted[] }
   | { readonly kind: "requested"; readonly line: Line; readonly requests: readonly Sent[] }
@@ -522,7 +523,8 @@ export type Expectation =
       readonly control: string;
       readonly payload: unknown;
       readonly offered: boolean;
-    };
+    }
+) & { readonly [writtenAt]: string | undefined };
 
 declare const ownerBrand: unique symbol;
 /** A value of Then that names a definition of the service `O`, held as a type only. */
@@ -559,6 +561,7 @@ export const answered = <L extends RequestLine>(line: L, answers: AnswersOf<L>):
   kind: "answered",
   line,
   answers: line.subscribes ? (answers as readonly unknown[]) : [answers],
+  [writtenAt]: new Error().stack,
 });
 
 /** The answer that accepts a command: `accepted()` without output, `accepted(output)` with it. */
@@ -595,6 +598,7 @@ export const emitted = <X extends Listed>(
   kind: "emitted",
   line,
   events,
+  [writtenAt]: new Error().stack,
 });
 
 /**
@@ -608,6 +612,7 @@ export const requested = <X extends Listed>(
   kind: "requested",
   line,
   requests,
+  [writtenAt]: new Error().stack,
 });
 
 /** An event that the own service emitted, for Then's `emitted`. */
@@ -638,14 +643,28 @@ export const offered = <Cs extends Readonly<Record<string, Control>>, K extends 
   look: Look<{ readonly controls: Cs }>,
   control: K,
   ...payload: PayloadArgs<Cs, K>
-): Expectation => ({ kind: "offered", look, control, payload: payload[0] ?? {}, offered: true });
+): Expectation => ({
+  kind: "offered",
+  look,
+  control,
+  payload: payload[0] ?? {},
+  offered: true,
+  [writtenAt]: new Error().stack,
+});
 
 /** The screen that `look` looked at does not offer `control` with the payload at that point. */
 export const notOffered = <Cs extends Readonly<Record<string, Control>>, K extends keyof Cs & string>(
   look: Look<{ readonly controls: Cs }>,
   control: K,
   ...payload: PayloadArgs<Cs, K>
-): Expectation => ({ kind: "offered", look, control, payload: payload[0] ?? {}, offered: false });
+): Expectation => ({
+  kind: "offered",
+  look,
+  control,
+  payload: payload[0] ?? {},
+  offered: false,
+  [writtenAt]: new Error().stack,
+});
 
 const createdValue = Object.freeze({ [createdMark]: true });
 

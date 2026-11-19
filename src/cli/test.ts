@@ -142,17 +142,20 @@ function simulateScenarios(
   const violations: ReportedViolation[] = [];
   const snapshotted: Snapshotted[] = [];
   for (const named of scenarios) {
-    const { scenario, linePlaces } = named.definition;
+    const { scenario, linePlaces, expectationPlaces } = named.definition;
     const ref = { service: named.service, name: named.name };
     const simulated = simulateSpec(spec, scenario);
     const { world } = simulated;
     const snapshots = snapshotsOf(simulated);
-    const at = (line: number | null | undefined) =>
-      line === null || line === undefined ? undefined : linePlaces[line];
-    for (const violation of [...world.violations, ...(world.halted === undefined ? [] : [world.halted])]) {
-      const line = "scenarioLine" in violation.data ? violation.data.scenarioLine : undefined;
-      violations.push(toReported(violation, at(line) ?? named.place, { scenario: ref }));
-    }
+    // A violation that names an expectation is at the expectation, which is what the scenario wrote wrong.
+    const at = ({ data }: (typeof world.violations)[number]) =>
+      "expectation" in data
+        ? expectationPlaces[data.expectation]
+        : "scenarioLine" in data && data.scenarioLine !== null
+          ? linePlaces[data.scenarioLine]
+          : undefined;
+    for (const violation of [...world.violations, ...(world.halted === undefined ? [] : [world.halted])])
+      violations.push(toReported(violation, at(violation) ?? named.place, { scenario: ref }));
     const halted = world.halted !== undefined || [...world.services.values()].some((p) => p.halted !== undefined);
     for (const v of stepOrderChanges(spec, scenario, simulated, 0))
       violations.push(toReported(v, v.location ?? named.place, { scenario: ref }));

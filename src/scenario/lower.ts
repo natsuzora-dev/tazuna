@@ -36,6 +36,7 @@ import {
   type ScenarioDefinition,
   type ScreenRef,
   type When,
+  writtenAt,
 } from "./define.ts";
 
 /** How a scenario reads an observed value that exists only when the scenario runs. */
@@ -71,6 +72,7 @@ export interface Lowered {
   readonly lines: readonly DataLine[];
   readonly expectations: readonly DataExpectation[];
   readonly stacks: readonly (string | undefined)[];
+  readonly expectationStacks: readonly (string | undefined)[];
   readonly violations: readonly LoweringViolation[];
 }
 
@@ -424,6 +426,7 @@ export function lower(
   } satisfies When<Peers>;
 
   const expectations: DataExpectation[] = [];
+  const expectationStacks: (string | undefined)[] = [];
   const lowerExpectation = (e: Expectation, k: number): DataExpectation => {
     switch (e.kind) {
       case "answered":
@@ -463,6 +466,7 @@ export function lower(
     closed = true;
     (definition.expect as (lines: unknown) => readonly Expectation[])(returned).forEach((e, k) => {
       expectations.push(lowerExpectation(e, k));
+      expectationStacks.push(e[writtenAt]);
     });
   } catch (error) {
     if (error instanceof Unnamed) violations.push({ kind: "unnamed", path: error.path });
@@ -471,5 +475,5 @@ export function lower(
       violations.push({ kind: "misusedObserved", line: lines.length, use: error.use, path: error.path });
     else throw error;
   }
-  return { lines, expectations, stacks, violations };
+  return { lines, expectations, stacks, expectationStacks, violations };
 }

@@ -16,6 +16,7 @@ export interface LoadedScenario {
   readonly description: string;
   readonly scenario: Scenario;
   readonly linePlaces: readonly (Place | undefined)[];
+  readonly expectationPlaces: readonly (Place | undefined)[];
 }
 
 type Services = ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
@@ -153,6 +154,7 @@ export function loadScenarios(
           expectations: [...lowered.expectations],
         },
         linePlaces,
+        expectationPlaces: lowered.expectationStacks.map((s) => placeInStack(root, s)),
       },
     };
   });

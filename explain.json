@@ -957,10 +957,10 @@
           "file": "todo/scenarios.ts",
           "from": 4,
           "to": 9,
-          "line": 4,
+          "line": 8,
           "text": "export const addMilk = scenario({\n  description: \"Add a task, and state that todo rejects it, though todo accepts it\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: ({ add }) => [answered(add, rejected(\"already-exists\"))],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.unmetExpectation\",\"definition\":null,\"data\":{\"expectation\":0,\"expected\":[{\"result\":\"rejected\",\"rejection\":{\"kind\":\"already-exists\"}}],\"actual\":[{\"result\":\"accepted\"}]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addMilk\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.unmetExpectation\",\"definition\":null,\"data\":{\"expectation\":0,\"expected\":[{\"result\":\"rejected\",\"rejection\":{\"kind\":\"already-exists\"}}],\"actual\":[{\"result\":\"accepted\"}]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"addMilk\"}}"
       }
     },
     "InvalidScenario.unpairedPeerLine": {

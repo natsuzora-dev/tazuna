@@ -82,7 +82,7 @@ Run the commands in the folder of your `package.json`.
    The output is a violation line, followed by `65/65 scenarios, depth 1: 1 violation`:
 
    ```json
-   {"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}],"actual":[{"result":"accepted"}]},"location":{"file":"spec/todo/scenarios.ts","line":53},"scenario":{"service":"todo","name":"completeTwice"}}
+   {"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}],"actual":[{"result":"accepted"}]},"location":{"file":"spec/todo/scenarios.ts","line":64},"scenario":{"service":"todo","name":"completeTwice"}}
    ```
 
 6. Ask tazuna what the violation means:
