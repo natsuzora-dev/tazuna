@@ -1,8 +1,8 @@
-import { any, datetime } from "@natsuzora-dev/tazuna";
+import { any, datetime, none } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
-const awaitingCompletion = { complete: () => [], reopen: () => [], delete: () => [], close: () => [] };
+const awaitingCompletion = { complete: none, reopen: none, delete: none, close: none };
 
 // While a request waits for its answer, the screen neither deletes the task nor closes, so that todo cannot receive a
 // later request to the task first.
@@ -79,7 +79,7 @@ export const taskDetailScreen = screen({
       },
     },
     renaming: {
-      offers: { delete: () => [], close: () => [] },
+      offers: { delete: none, close: none },
       sends: {
         renameTask: {
           input: ({ input, context }) => ({ taskId: input.taskId, title: context.newTitle }),
@@ -109,7 +109,7 @@ export const taskDetailScreen = screen({
         },
       },
     },
-    collapsed: { offers: { dueChoose: () => [], dueClear: () => [] }, on: { dueToggle: [{ target: "expanded" }] } },
+    collapsed: { offers: { dueChoose: none, dueClear: none }, on: { dueToggle: [{ target: "expanded" }] } },
     expanded: {
       on: {
         dueToggle: [{ target: "collapsed" }],
@@ -140,7 +140,7 @@ export const taskDetailScreen = screen({
       },
     },
     changing: {
-      offers: { dueToggle: () => [], dueChoose: () => [], dueClear: () => [], delete: () => [], close: () => [] },
+      offers: { dueToggle: none, dueChoose: none, dueClear: none, delete: none, close: none },
       sends: {
         changeDue: {
           input: ({ input, context }) => ({ taskId: input.taskId, dueAt: context.dueAt }),
@@ -151,14 +151,14 @@ export const taskDetailScreen = screen({
     },
     deleting: {
       offers: {
-        rename: () => [],
-        complete: () => [],
-        reopen: () => [],
-        dueToggle: () => [],
-        dueChoose: () => [],
-        dueClear: () => [],
-        delete: () => [],
-        close: () => [],
+        rename: none,
+        complete: none,
+        reopen: none,
+        dueToggle: none,
+        dueChoose: none,
+        dueClear: none,
+        delete: none,
+        close: none,
       },
       sends: {
         deleteTask: {

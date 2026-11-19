@@ -56,7 +56,7 @@ type Transition<N extends string, Ctx, A> = {
   /**
    * The conditions of the transition. When a guard checks the same condition as a `requires` of a command that the
    * state sends: for another service's records, read that service's query answer (`shown` or a `calls` answer). For the
-   * own service's records, call the function that the `requires` calls. For values that only the sender holds
+   * own service's records, call the `condition` that the `requires` calls. For values that only the sender holds
    * (`context`, `payload`), write the same expression in the guard. An empty guard is `NonCanonical.emptyGuard` and not
    * a type error: TS rejects an empty object only through a type parameter inferred from its keys (SomeKey), and chart
    * infers only the written state keys.

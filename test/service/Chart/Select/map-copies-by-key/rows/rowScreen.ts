@@ -1,4 +1,4 @@
-import { any } from "@natsuzora-dev/tazuna";
+import { any, none } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -24,7 +24,7 @@ export const rowScreen = screen({
     rows: { items: ({ shown }) => (shown.openTasks?.taskIds ?? []).map((taskId) => ({ taskId })) },
     idle: { offers: { complete: ({ key }) => [key] }, on: { complete: [{ target: "completing" }] } },
     completing: {
-      offers: { complete: () => [] },
+      offers: { complete: none },
       sends: {
         completeTask: { input: ({ key }) => key, onAccepted: [{ target: "idle" }], onRejected: [{ target: "idle" }] },
       },

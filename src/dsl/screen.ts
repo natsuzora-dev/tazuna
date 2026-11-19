@@ -8,6 +8,7 @@ import type {
   Control,
   Events,
   InputOf,
+  NoneOffer,
   QueryOutput,
   Screen,
   ServiceDefinition,
@@ -169,10 +170,10 @@ type ScreenBehavior<
   CopyKey<F, K>
 >;
 /**
- * The payloads that the user can choose for a control: `[{}]` offers a control without payload fields, `[]` offers
- * nothing, and `any` offers every payload that matches the schema.
+ * The payloads that the user can choose for a control: `[{}]` offers a control without payload fields, `any` offers
+ * every payload that matches the schema, and `none` offers nothing.
  */
-type Offer<P, A> = ((args: A) => Bag<MadeRow<PayloadOf<P>>> | readonly MadeRow<PayloadOf<P>>[]) | AnyOffer;
+type Offer<P, A> = ((args: A) => Bag<MadeRow<PayloadOf<P>>> | readonly MadeRow<PayloadOf<P>>[]) | AnyOffer | NoneOffer;
 
 /** The offers of a state, which override the offers of its ancestors and of the chart for the controls they name. */
 type StateOffers<Ps extends Payloads, A> = {

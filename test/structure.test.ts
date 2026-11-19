@@ -86,7 +86,7 @@ test("A screen has the JSON Schema of each control payload, the controls that ea
   assert.deepEqual(taskScreen.offers, { complete: "listed", remind: "listed" });
   assert.deepEqual(
     taskScreen.states.flatMap((s) => Object.entries(s.offers).map(([control, o]) => `${s.name} ${control} ${o}`)),
-    ["completed complete listed"],
+    ["completed complete none"],
   );
   assert.deepEqual(homeScreen.screens, {
     taskList: { service: "screens", name: "taskListScreen" },

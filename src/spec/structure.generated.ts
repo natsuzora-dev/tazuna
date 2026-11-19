@@ -50,7 +50,7 @@ export type State = {
   readonly kind: "atomic" | "compound" | "parallel" | "final" | "history" | "map";
   readonly initial: string | null;
   readonly children: readonly string[];
-  readonly offers: Readonly<Record<string, "any" | "listed">>;
+  readonly offers: Readonly<Record<string, "any" | "none" | "listed">>;
   /** The activities, in the order calls, sends, shows, opens. */
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
@@ -74,7 +74,7 @@ export type ChartFields = {
   readonly ensures: readonly string[];
   readonly on: readonly Transition[];
   /** The chart's own offers, which name every control. */
-  readonly offers: Readonly<Record<string, "any" | "listed">>;
+  readonly offers: Readonly<Record<string, "any" | "none" | "listed">>;
   /** The states, in document order. */
   readonly states: readonly State[];
   /** The payload schema of each control, or null for a control without a payload. */

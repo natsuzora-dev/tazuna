@@ -38,7 +38,8 @@ export const addTask = command({
 export const completeTask = command({
   input: { taskId: ref(Task) },
   emits: [taskCompletedRecorded, taskCompleted],
-  requires: { notCompleted: ({ input, records }) => records.Task.get(input.taskId)?.completedAt === null },
+  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
+  requires: { notCompleted: ({ bound }) => bound.task.completedAt === null },
   ensures: {
     completed: ({ input, records }) => records.Task.get(input.taskId)?.completedAt !== null,
   },
@@ -50,10 +51,11 @@ export const completeTask = command({
 export const reopenTask = command({
   input: { taskId: ref(Task) },
   emits: [taskReopenedRecorded, taskReopened],
-  requires: { completed: ({ input, records }) => (records.Task.get(input.taskId)?.completedAt ?? null) !== null },
+  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
+  requires: { completed: ({ bound }) => bound.task.completedAt !== null },
   ensures: { reopened: ({ input, records }) => records.Task.get(input.taskId)?.completedAt === null },
-}).decide(({ input, records, now }) => {
-  const remindAt = records.Task.get(input.taskId)?.remindAt ?? null;
+}).decide(({ input, bound, now }) => {
+  const { remindAt } = bound.task;
   return [
     emit(taskReopenedRecorded, {
       id: input.taskId,

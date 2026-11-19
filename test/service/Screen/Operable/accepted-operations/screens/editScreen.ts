@@ -1,4 +1,4 @@
-import { any } from "@natsuzora-dev/tazuna";
+import { any, none } from "@natsuzora-dev/tazuna";
 import { screen } from "./data.ts";
 
 export const editScreen = screen({
@@ -18,7 +18,7 @@ export const editScreen = screen({
   offers: { save: any },
   states: {
     viewing: { on: { save: [{ target: "renaming" }] } },
-    renaming: { offers: { save: () => [] }, on: { save: [{ target: "viewing" }] } },
+    renaming: { offers: { save: none }, on: { save: [{ target: "viewing" }] } },
     ready: { on: { save: [{ target: "completing" }] } },
     completing: { offers: { save: () => [{}] }, on: { save: [{ target: "ready" }] } },
   },

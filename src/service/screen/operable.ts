@@ -1,5 +1,6 @@
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Fields, Json } from "../../data/values.ts";
+import type { StateStructure } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { reaches } from "../chart/select.ts";
@@ -81,11 +82,15 @@ function offered(
       ),
   );
   const own = chart.offers[key];
-  const applied: { readonly holder: Instance; readonly state: string | null; readonly offer: "any" | "listed" }[] =
-    innermost.length === 0 && own !== undefined ? [{ holder: top, state: null, offer: own }] : innermost;
+  const applied: {
+    readonly holder: Instance;
+    readonly state: string | null;
+    readonly offer: StateStructure["offers"][string];
+  }[] = innermost.length === 0 && own !== undefined ? [{ holder: top, state: null, offer: own }] : innermost;
   const definition = ref(r.st, chart.name);
   return applied.map(({ holder, state, offer }) => {
     if (offer === "any") return { state, offered: "any" };
+    if (offer === "none") return { state, offered: [] };
     const scope = scopeOf(r.state, holder, state);
     const payloads = r.functions.offers(
       scope,

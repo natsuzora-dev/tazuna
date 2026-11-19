@@ -2,14 +2,14 @@ import { bag, emit, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Door = singleEntity({ description: "Used", fields: { used: z.boolean().default(false) } });
-export const { command, machine, event, updateEvent, contract, scenario } = service({
+export const { command, machine, event, updateEvent, contract, scenario, condition } = service({
   name: "door",
   description: "Open and close a door, and remember who touched it last, from unordered events",
   entities: { Door },
 });
 export const used = updateEvent({ entity: Door, writes: ["used"] });
 
-const first = ({ records }: { readonly records: { readonly Door: { readonly used: boolean } } }) => !records.Door.used;
+const first = condition(({ records }) => !records.Door.used);
 
 export const opened = event({});
 export const closed = event({});

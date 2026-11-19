@@ -92,9 +92,13 @@ nor its descendant, the value does not change the domain.
 -/
 def Transition.reenters (t : Transition) : Bool := t.reenter == some true
 
-/-- What an offers entry gives its control: every payload that matches the schema (`any`), or what its function lists. -/
+/--
+What an offers entry gives its control: every payload that matches the schema (`any`), no payload (`none`), or what its
+function lists.
+-/
 inductive Offer where
   | any
+  | none
   | listed
 deriving DecidableEq, Repr, Inhabited
 

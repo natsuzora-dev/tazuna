@@ -1,4 +1,4 @@
-import { any } from "@natsuzora-dev/tazuna";
+import { any, none } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -9,11 +9,11 @@ const Filter = todo.tasks.input.filter;
 // While a request waits for its answer, the list accepts no operation: test pairs concurrent requests by definition,
 // not by task, so a request to another task would be compared as one to the same task.
 const awaitingList = {
-  openTask: () => [],
-  add: () => [],
-  remindersToggle: () => [],
-  complete: () => [],
-  reopen: () => [],
+  openTask: none,
+  add: none,
+  remindersToggle: none,
+  complete: none,
+  reopen: none,
 };
 
 // While a request waits for its answer, the screen takes no other operation that sends a request, so that todo

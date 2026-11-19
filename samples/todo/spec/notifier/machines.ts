@@ -1,8 +1,7 @@
-import type { Bag } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { device } from "../device/contract.ts";
 import { warn } from "./commands.ts";
-import { machine, notifierConstants } from "./data.ts";
+import { condition, machine, notifierConstants } from "./data.ts";
 import { openTaskRecorded, tooManyWarned } from "./events.ts";
 
 export const workload = machine({
@@ -36,14 +35,11 @@ export const workload = machine({
   },
 });
 
-type Permission = { readonly records: { readonly NotificationPermission: { readonly status: string } } };
+const undetermined = condition(({ records }) => records.NotificationPermission.status === "undetermined");
 
-const undetermined = ({ records }: Permission) => records.NotificationPermission.status === "undetermined";
+const decided = condition((args) => !undetermined(args));
 
-const decided = (args: Permission) => !undetermined(args);
-
-const hasOpenTasks = ({ records }: { readonly records: { readonly OpenTask: Bag<unknown> } }) =>
-  records.OpenTask.size > 0;
+const hasOpenTasks = condition(({ records }) => records.OpenTask.size > 0);
 
 const resetAttempts = { assign: { attempts: () => 0 } };
 

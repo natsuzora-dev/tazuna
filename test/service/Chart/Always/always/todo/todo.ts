@@ -4,11 +4,12 @@ import { z } from "zod";
 export const Task = entity({ description: "A task of the user", fields: { id: z.string() }, key: "id" });
 export const Signal = entity({ description: "A signal that the user sent", fields: { id: z.string() }, key: "id" });
 
-export const { command, machine, query, event, createEvent, deleteEvent, contract, given, scenario } = service({
-  name: "todo",
-  description: "Keep tasks",
-  entities: { Task, Signal },
-});
+export const { command, machine, query, event, createEvent, deleteEvent, contract, given, scenario, condition } =
+  service({
+    name: "todo",
+    description: "Keep tasks",
+    entities: { Task, Signal },
+  });
 
 export const taskAdded = createEvent({ entity: Task });
 export const taskCompleted = deleteEvent({ entity: Task });

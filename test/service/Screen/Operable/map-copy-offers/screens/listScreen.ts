@@ -1,4 +1,4 @@
-import { any } from "@natsuzora-dev/tazuna";
+import { any, none } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
@@ -26,12 +26,12 @@ export const listScreen = screen({
     },
   },
 }).chart({
-  offers: { mark: any, refresh: () => [] },
+  offers: { mark: any, refresh: none },
   states: {
     showing: { shows: { tasks: {} } },
     rows: { items: ({ shown }) => (shown.tasks?.taskIds ?? []).map((taskId) => ({ taskId })) },
     row: { offers: { refresh: () => [{}] } },
     plain: { on: { mark: [{ target: "marked" }] } },
-    marked: { offers: { refresh: () => [] } },
+    marked: { offers: { refresh: none } },
   },
 });

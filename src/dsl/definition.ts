@@ -213,13 +213,18 @@ interface RequestSpec {
 type Keyed<T> = Readonly<Record<string, T>>;
 
 declare const anyOffer: unique symbol;
+declare const noneOffer: unique symbol;
 
 export type AnyOffer = { readonly [anyOffer]: true };
+export type NoneOffer = { readonly [noneOffer]: true };
 
 /** The offers entry that offers every payload that matches the control's schema (`[{}]` without payload fields). */
 export const any: AnyOffer = Object.freeze({}) as AnyOffer;
 
-type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer>;
+/** The offers entry that offers no payload: the control is there but disabled. */
+export const none: NoneOffer = Object.freeze({}) as NoneOffer;
+
+type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer | NoneOffer>;
 
 export interface StateSpec {
   readonly type?: "parallel" | "map" | "final" | "history";

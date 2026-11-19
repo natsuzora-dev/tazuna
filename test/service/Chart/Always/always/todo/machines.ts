@@ -1,6 +1,5 @@
-import type { Bag } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
-import { count, list, machine, markRow, rowsOpened, signalled, taskAdded, warn } from "./todo.ts";
+import { condition, count, list, machine, markRow, rowsOpened, signalled, taskAdded, warn } from "./todo.ts";
 
 export const workload = machine({
   description: "Warn when there are more than two tasks, and stop warning when there are two or fewer again",
@@ -17,8 +16,8 @@ export const workload = machine({
   },
 });
 
-const fourOrMore = ({ records }: { records: { Task: Bag<unknown> } }) => records.Task.size >= 4;
-const fewerThanFour = ({ records }: { records: { Task: Bag<unknown> } }) => records.Task.size < 4;
+const fourOrMore = condition(({ records }) => records.Task.size >= 4);
+const fewerThanFour = condition(({ records }) => records.Task.size < 4);
 
 export const review = machine({
   description:

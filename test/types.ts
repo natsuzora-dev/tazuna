@@ -45,6 +45,7 @@ import {
   fulfilled,
   type InputOf,
   type KindOf,
+  none,
   type OutputOf,
   type RecordsOf,
   type RowOf,
@@ -923,7 +924,7 @@ screen({
   states: { open: {} },
 }).chart({
   // @ts-expect-error offers keys name controls
-  offers: { close: () => [] },
+  offers: { close: none },
 });
 
 // State offers read held and, in map copies, key like other state expressions; a final state has no offers.
@@ -942,7 +943,7 @@ screen({
     rows: { items: () => [] },
     idle: { offers: { pick: ({ key }) => [key] } },
     // @ts-expect-error a final state has only entry
-    closed: { offers: { pick: () => [] } },
+    closed: { offers: { pick: none } },
   },
 });
 screen({
@@ -1522,3 +1523,19 @@ const input: InputOf<typeof addTask> = { taskId: "task-1", title: "Buy milk" };
 // @ts-expect-error an output has the fields of the query's output
 const badRows: OutputOf<typeof tasks>["tasks"] = [{ taskId: "task-1" }];
 void [rows, input, badRows];
+
+// A shared condition reads the service's records, so it fits each guard and requires of the service.
+const { condition, command: permissionCommand } = service({
+  name: "permission",
+  description: "",
+  entities: {
+    Permission: singleEntity({
+      description: "",
+      fields: { status: z.enum(["undetermined", "granted"]).default("undetermined") },
+    }),
+  },
+});
+const undetermined = condition(({ records }) => records.Permission.status === "undetermined");
+permissionCommand({ emits: [], requires: { undetermined } }).decide(() => []);
+// @ts-expect-error a condition compares an enum field only with its values
+condition(({ records }) => records.Permission.status === "undeterminde");

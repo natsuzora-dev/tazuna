@@ -110,6 +110,13 @@ interface Definers<Es extends Entities, N extends string> {
   scenario: ScenarioDefiner<RecordsData<Es>, N>;
   /** Defines a Given that scenarios share (GivenDefiner). */
   given: GivenDefiner<RecordsData<Es>, N>;
+  /**
+   * Returns `condition` as is, typed with the service's records, so that guards and `requires` of the service share
+   * one function.
+   */
+  condition(
+    condition: (args: { records: Records<Es> } & Now) => boolean,
+  ): (args: { records: Records<Es> } & Now) => boolean;
 }
 
 interface CommandSetup<
@@ -171,7 +178,7 @@ interface AutomationSetup<Ev extends AnyEvent, Cs extends Readonly<Record<string
     definition: {
       /** The values that `guard` and `input` read as `bound`. */
       binds?: Binds<AutomationArgs<Ev, Es>, B> & Present<Bn>;
-      /** A condition that checks the same as one of the command's `requires` calls the same function. */
+      /** A condition that checks the same as one of the command's `requires` calls the same `condition`. */
       guard?: Named<G, AutomationArgs<Ev, Es> & { bound: Bound<B> }>;
     } & SendInput<Cs[keyof Cs], AutomationArgs<Ev, Es> & { bound: Bound<B> } & CreateKey> &
       SendRejected<Cs[keyof Cs]>,
@@ -381,7 +388,19 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
   const contract = contractDefiner(owner);
   const scenario = scenarioDefiner(owner);
   const given = givenDefiner();
-  register(owner, [command, query, automation, machine, screen, contract, scenario, given, ...Object.values(events)]);
+  const condition = <F>(f: F): F => f;
+  register(owner, [
+    command,
+    query,
+    automation,
+    machine,
+    screen,
+    contract,
+    scenario,
+    given,
+    condition,
+    ...Object.values(events),
+  ]);
   return {
     command,
     query,
@@ -391,6 +410,7 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
     contract,
     scenario,
     given,
+    condition,
     ...events,
   } as unknown as Definers<Entities, string>;
 }

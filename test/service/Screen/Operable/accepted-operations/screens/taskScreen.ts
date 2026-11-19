@@ -1,4 +1,4 @@
-import { datetime } from "@natsuzora-dev/tazuna";
+import { datetime, none } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -27,7 +27,7 @@ export const taskScreen = screen({
       },
     },
     completed: {
-      offers: { complete: () => [] },
+      offers: { complete: none },
       always: [{ guard: { isShownCompleted: ({ shown }) => shown.task?.isCompleted === true }, target: "idle" }],
     },
   },
