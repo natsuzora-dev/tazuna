@@ -165,6 +165,16 @@ function checkAnswer(spec: Spec, service: string, x: Exchange, at: number, answe
     : { kind: "Mismatch.answerResult", definition: null, line: at, data: { ...request, result: answer.result } };
 }
 
+/** Each answer of `x`, and whether it answers a send of `x` that no earlier answer answered (Lean's checkExchange). */
+function answeringSends(x: Exchange): (Exchange["answers"][number] & { readonly answersSend: boolean })[] {
+  let answered = 0;
+  return x.answers.map((a) => {
+    const answersSend = answered < 1 + x.resends.filter((r) => r < a.at).length;
+    if (answersSend) answered += 1;
+    return { ...a, answersSend };
+  });
+}
+
 /**
  * Lean's checkExchange: the violations of the request `x`, of each answer that answers a send of it that no earlier
  * answer answered, of each other answer as repeated, and of each result event against the target and all the answers
@@ -173,15 +183,12 @@ function checkAnswer(spec: Spec, service: string, x: Exchange, at: number, answe
 function checkExchange(spec: Spec, service: string, x: Exchange): Found[] {
   const target = refOfDefinition(spec, x.definition);
   const answers = x.answers.map((a) => a.answer);
-  let answered = 0;
   return [
-    ...x.answers.map(({ at, answer }): Found | undefined => {
-      if (answered < 1 + x.resends.filter((r) => r < at).length) {
-        answered += 1;
-        return checkAnswer(spec, service, x, at, answer);
-      }
-      return { kind: "Mismatch.repeatedAnswer", definition: null, line: at, data: { requestId: x.id, target } };
-    }),
+    ...answeringSends(x).map(({ at, answer, answersSend }): Found | undefined =>
+      answersSend
+        ? checkAnswer(spec, service, x, at, answer)
+        : { kind: "Mismatch.repeatedAnswer", definition: null, line: at, data: { requestId: x.id, target } },
+    ),
     ...x.events.map(({ at, event }): Found | undefined => {
       const mismatch = resultOfMismatch(spec.structure, target, answers, refOfDefinition(spec, event));
       return mismatch === undefined
@@ -229,8 +236,8 @@ const parseKnown = (schema: z.ZodType, value: unknown) => tolerant(schema).safeP
 
 /**
  * Runs checkExternal, and on the lines that it finds nothing on, the checks that need spec functions or Zod schemas:
- * each event's payload, and each request's first answer, a command's ensures with all its result events, which may come
- * before or after the answer.
+ * each event's payload, and each answer that answers a send of its request, a command's ensures with all its result
+ * events, which may come before or after the answer.
  */
 export function verifyExternal(spec: Spec, service: string, trace: readonly FileLine[]): Found[] {
   const { found, exchanges, events } = checkExternal(spec, service, trace);
@@ -251,31 +258,31 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
       } satisfies Found & Mismatch);
   }
   for (const x of exchanges) {
-    const [first] = x.answers;
-    if (first === undefined || flagged.has(first.at)) continue;
     const { definition } = x;
-    const { at: line, answer } = first;
     const ref = { requestId: x.id, target: refOfDefinition(spec, definition) };
     const input = z.object(definition.input as Record<string, z.ZodType>).safeParse(x.input);
-    const out =
-      answer.result === "rejected" || definition.output === undefined
-        ? undefined
-        : parseKnown(z.object(definition.output as Record<string, z.ZodType>), answer.output);
-    if (input.success) {
-      const decoded = { input: input.data, ...(out?.success === true ? { output: out.data } : {}) };
-      const failedRequires = assumedRequires(definition, input.data);
-      const checked = answer.result !== "rejected" && failedRequires === undefined && out?.success !== false;
-      const results = x.events.flatMap(({ at }) => emitted.get(at) ?? []);
-      const withEvents = definition.kind === "command" ? { events: results } : {};
-      const failedEnsures = checked ? assumedEnsures(definition, { ...decoded, ...withEvents }) : undefined;
-      const broken = assumptionMismatch(answer, failedRequires, failedEnsures);
-      if (broken !== undefined) violations.push(assumptionViolation("Mismatch", ref, broken, line));
+    for (const { at: line, answer, answersSend } of answeringSends(x)) {
+      if (!answersSend || flagged.has(line)) continue;
+      const out =
+        answer.result === "rejected" || definition.output === undefined
+          ? undefined
+          : parseKnown(z.object(definition.output as Record<string, z.ZodType>), answer.output);
+      if (input.success) {
+        const decoded = { input: input.data, ...(out?.success === true ? { output: out.data } : {}) };
+        const failedRequires = assumedRequires(definition, input.data);
+        const checked = answer.result !== "rejected" && failedRequires === undefined && out?.success !== false;
+        const results = x.events.flatMap(({ at }) => emitted.get(at) ?? []);
+        const withEvents = definition.kind === "command" ? { events: results } : {};
+        const failedEnsures = checked ? assumedEnsures(definition, { ...decoded, ...withEvents }) : undefined;
+        const broken = assumptionMismatch(answer, failedRequires, failedEnsures);
+        if (broken !== undefined) violations.push(assumptionViolation("Mismatch", ref, broken, line));
+      }
+      if (out?.success === false)
+        violations.push({
+          ...assumptionViolation("Mismatch", ref, { kind: "answerOutputSchema" }, line),
+          error: zodError(out.error.issues),
+        } satisfies Found & Mismatch);
     }
-    if (out?.success === false)
-      violations.push({
-        ...assumptionViolation("Mismatch", ref, { kind: "answerOutputSchema" }, line),
-        error: zodError(out.error.issues),
-      } satisfies Found & Mismatch);
   }
   return violations.sort(byLine);
 }

@@ -22,7 +22,7 @@ theorem send_keysDistinct (name : Spec.Ref) (id : Option LineId) (raw : Value) (
   · exact h
 theorem resent_command_gets_first_answer (name : Spec.Ref) (id : LineId) (raw : Value)
     (known : Request × Answer) (hs : name.service = st.service) (hc : name.name ∈ st.commands)
-    (hk : s.commandAnswers.find? id = some known) (hr : known.1 = { name := name.name, input := raw }) :
+    (hk : s.commandAnswers.find? id = some known) (hr : known.1.same { name := name.name, input := raw }) :
     send st fs s name (some id) raw =
       let s' := (sent s name id raw).1
       message st fs (s'.answer (some id) name known.2) {} := by
@@ -30,7 +30,7 @@ theorem resent_command_gets_first_answer (name : Spec.Ref) (id : LineId) (raw : 
 
 theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value)
     (known : Request × Answer) (hs : name.service = st.service) (hc : name.name ∈ st.commands)
-    (hk : s.commandAnswers.find? id = some known) (hr : known.1 ≠ { name := name.name, input := raw }) :
+    (hk : s.commandAnswers.find? id = some known) (hr : known.1.same { name := name.name, input := raw } = false) :
     send st fs s name (some id) raw =
       let s' := (sent s name id raw).1
       message st fs (s'.answer (some id) name (.rejected { kind := .reusedId })) {} := by

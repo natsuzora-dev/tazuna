@@ -20,7 +20,7 @@ theorem untilMalformed_lines (ls : List TraceLine) : untilMalformed (ls.map File
 A comparison of the search that finds no violation pairs every group of the expected lines with the actual group at its
 place through one pairing, `after` included (GroupsMatch with `relation`), under every binding that it returns, each one
 to one within each domain. The lines are those that verify reads: by the schema of their definitions, and the actual
-lines without repeated subscription answers.
+lines without resends and their answers (withoutResends) and without repeated subscription answers.
 -/
 theorem compareTraces_ok {spec : Spec.Structure} {service : String}
     {ask : Spec.Definition → Verify.Part → Value → Id CValue} {renamed : Values → Values}
@@ -28,13 +28,14 @@ theorem compareTraces_ok {spec : Spec.Structure} {service : String}
     (h : (Verify.compareTraces spec service ask renamed expected actual : Id _) = .ok set) :
     let read := Verify.readLines spec service ask (expected.map some) []
     let e := read.1
-    let a := Verify.withoutRepeatedAnswers (Verify.readLines spec service ask (actual.map some) read.2).1
+    let a := Verify.withoutRepeatedAnswers
+      (Verify.readLines spec service ask (Verify.withoutResends (actual.map some)) read.2).1
     set ≠ [] ∧ ∀ b ∈ set, OneToOne b.pairs ∧
       GroupsMatch (renamed { domain := Verify.valueDomains e, fresh := [], image := fun _ _ => true }).domain
         (Verify.internalEvent spec service) true b (Verify.groups e) (Verify.groups a) := by
   intro read e a
   rcases hr : Verify.readLines spec service ask (expected.map some) [] with ⟨E, out⟩
-  rcases hr' : Verify.readLines spec service ask (actual.map some) out with ⟨A, out'⟩
+  rcases hr' : Verify.readLines spec service ask (Verify.withoutResends (actual.map some)) out with ⟨A, out'⟩
   have he : e = E := by simp only [e, read, hr]
   have ha : a = Verify.withoutRepeatedAnswers A := by simp only [a, read, hr, hr']
   rw [he, ha]
@@ -46,7 +47,8 @@ theorem compareTraces_ok {spec : Spec.Structure} {service : String}
     split at h
     · cases h
     · rename_i hnil
-      rcases hr'' : Verify.readLines spec service ask ((actual.map some).take (i - 1)) out with ⟨A₂, out₂⟩
+      rcases hr'' : Verify.readLines spec service ask (Verify.withoutResends ((actual.map some).take (i - 1))) out with
+        ⟨A₂, out₂⟩
       simp only [hr''] at hnil
       have hf : (Verify.compare E (Verify.withoutRepeatedAnswers A₂) (some u) (Verify.internalEvent spec service)
           renamed true).findings = [] := by

@@ -39,7 +39,8 @@ values that the implementation chose in its own way are open.
   unexpected. Paired lines compare their time and the snapshot's `after` order. The set keeps the ways that leave the
   same trace lines unpaired and, when the first way compares, that compare too.
 - Verify reports the trace's first malformed line, and the first `out` request line that reuses an earlier one's id
-  with another input (duplicateId), and compares neither the group of the first of them nor anything later. Other
+  with another type, name or input (duplicateId), and compares neither the group of the first of them nor anything
+  later. A line with the same ones is a resend and stands for the request that it repeats (withoutResends). Other
   lines' ids name no line, so the ids that the harness gives the lines that the implementation gives no id never meet
   them.
 -/
@@ -602,29 +603,38 @@ def isRequestLine (dir : Dir) (l : TraceLine) : Bool :=
   | _ => false
 
 /--
-The number of the first request line of the direction `dir` that reuses an earlier one's id with another body, and its
-report. Answers in the other direction name those requests by id alone, so an id names one request: a line with an
-earlier line's id and the same type, name and input is that request sent again, as a client resends a request with its
-`Idempotency-Key`, and its answers answer that request. Compare checks `out` requests and the check of an external
-service's trace checks `in` requests (External). An `in` request of a spec service is not checked: the scenario may
-reuse an id with another input, and the snapshot fixes how the service answers it.
+The text by which two request lines with one id are the same request: the line's type, name and input, whatever the
+order of object fields, as snapshots compare values.
+-/
+def requestText (b : TraceLine.Body) : String := (ToValue.toValue b).canonical
+
+/--
+The number of the first request line of the direction `dir` that reuses an earlier one's id with another type, name or
+input, and its report. Answers in the other direction name those requests by id alone, so an id names one request: a
+line with an earlier line's id and the same type, name and input (requestText) is that request sent again, as a client
+resends a request with its `Idempotency-Key`, and its answers answer that request. Compare checks `out` requests and the
+check of an external service's trace checks `in` requests (External). An `in` request of a spec service is not
+checked: the scenario may reuse an id with another type, name or input, and the snapshot fixes how the service
+answers it.
 -/
 def firstDuplicate (dir : Dir) (lines : List (Option TraceLine)) : Option (Nat × Uncomparable) :=
   go lines 1 []
 where
-  go : List (Option TraceLine) → Nat → List (String × Nat × TraceLine.Body) → Option (Nat × Uncomparable)
+  go : List (Option TraceLine) → Nat → List (String × Nat × String) → Option (Nat × Uncomparable)
     | [], _, _ => none
     | none :: ls, i, seen => go ls (i + 1) seen
     | some l :: ls, i, seen =>
       if !isRequestLine dir l then go ls (i + 1) seen
       else
         match seen.lookup l.body.id with
-        | some (first, body) => if body == l.body then go ls (i + 1) seen else some (i, .duplicateId i l.body.id first)
-        | none => go ls (i + 1) (seen ++ [(l.body.id, i, l.body)])
+        | some (first, text) =>
+          if text == requestText l.body then go ls (i + 1) seen else some (i, .duplicateId i l.body.id first)
+        | none => go ls (i + 1) (seen ++ [(l.body.id, i, requestText l.body)])
 
 /--
 The trace lines that verify checks, and the report of the line that ends them, if any: the first malformed line, or the
-first request line of the direction `dir` that reuses an earlier one's id with another input (firstDuplicate).
+first request line of the direction `dir` that reuses an earlier one's id with another type, name or input
+(firstDuplicate).
 -/
 def comparedLines (dir : Dir) (trace : List (FileLine TraceLine)) : List (Option TraceLine) × Option Uncomparable :=
   let (lines, malformed) := untilMalformed trace
@@ -632,12 +642,45 @@ def comparedLines (dir : Dir) (trace : List (FileLine TraceLine)) : List (Option
   | some (i, u) => (lines.take (i - 1), some u)
   | none => (lines, malformed.map .lineSchema)
 
+/--
+The lines with each `out` request line that sends an earlier one again (firstDuplicate) set to `none`, and each `in`
+answer to a command or query that answers such a send: the first answer to an id answers the request, and a later one
+answers a resend sent before it while one is left unanswered. A resend stands for the request that it repeats, as an
+`Idempotency-Key` retry does, so pairing sees one request and its answer. `sent` holds each request's sends and
+answers, none for a subscription, whose answers are its updates.
+-/
+def withoutResends (lines : List (Option TraceLine)) : List (Option TraceLine) :=
+  go lines []
+where
+  go : List (Option TraceLine) → List (String × Option (Nat × Nat)) → List (Option TraceLine)
+    | [], _ => []
+    | none :: ls, sent => none :: go ls sent
+    | some l :: ls, sent =>
+      if isRequestLine .out l then
+        match sent.lookup l.body.id with
+        | some counts => none :: go ls (setAt sent l.body.id (counts.map fun (n, a) => (n + 1, a)))
+        | none =>
+          let counts := match l.body with
+            | .subscribe .. => none
+            | _ => some (1, 0)
+          some l :: go ls (sent ++ [(l.body.id, counts)])
+      else
+        match l.body with
+        | .answer .in _ to _ =>
+          match sent.lookup to with
+          | some (some (n, a)) =>
+            if a == 0 then some l :: go ls (setAt sent to (some (n, 1)))
+            else if a < n then none :: go ls (setAt sent to (some (n, a + 1)))
+            else some l :: go ls sent
+          | _ => some l :: go ls sent
+        | _ => some l :: go ls sent
+
 def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
     (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) (renamed : Values → Values)
     (relation : Bool := false) : m Compared := do
   let (lines, cut) := comparedLines .out trace
   let (expected, outputByRequestId) ← readLines s service ask snapshot []
-  let (actual, _) ← readLines s service ask lines outputByRequestId
+  let (actual, _) ← readLines s service ask (withoutResends lines) outputByRequestId
   pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service) renamed relation)
 
 /--

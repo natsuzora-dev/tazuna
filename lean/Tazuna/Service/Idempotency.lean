@@ -16,8 +16,14 @@ abbrev CommandAnswers := List (LineId × Request × Answer)
 def CommandAnswers.find? (table : CommandAnswers) (id : LineId) : Option (Request × Answer) :=
   (List.find? (·.1 == id) table).map (·.2)
 
+/--
+Whether two commands with one id are the same request: the same name and input, whatever the order of object
+fields.
+-/
+def Request.same (a b : Request) : Bool := a.name == b.name && a.input.canonical == b.input.canonical
+
 def answerAgain (known : Request × Answer) (request : Request) : Answer :=
-  if known.1 = request then known.2 else .rejected { kind := .reusedId }
+  if known.1.same request then known.2 else .rejected { kind := .reusedId }
 
 /--
 Whether the answer is kept for its id. An invalid-input rejection is not kept, so the caller may correct the input and

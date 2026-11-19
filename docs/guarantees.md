@@ -172,8 +172,10 @@ tazuna detects a break of each assumption only partly or not at all.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `verify` checks this only on the traces of external services in the traces folder.
   An id names one request in such a trace, as a Stripe `Idempotency-Key` does, since the answers and result events name requests by id.
-  A request line with an earlier line's id and the same type, name, and input sends that request again, and each send gets at most one answer.
-  `verify` reports a line that reuses an id with another input as `Uncomparable.duplicateId` and checks no later line, as it does for the requests that a spec service sends.
+  A request line with an earlier line's id and the same type, name and input, whatever the order of object fields, sends that request again, and each send gets at most one answer.
+  `verify` checks each answer that answers a send against the target's contract.
+  `verify` reports a line that reuses an id with another type, name or input as `Uncomparable.duplicateId` and checks no later line, as it does for the requests that a spec service sends.
+  A spec service's own resend stands for the request that it repeats, and an answer to the resend for an answer to that request, so the trace pairs with a snapshot that sent the request once.
   It does not check that a resent request gets the first answer.
   Every exchange with an external service is recorded and checked once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
   `test` checks the input that the service sent against the external target's input schema, also when no answer came, each answer against the target's contract, also one that came after a restart, a command's `ensures`, once an answer accepted the command, with all its result events, and each result event against its request's answer, which may come before or after it.
@@ -280,7 +282,7 @@ Request ids follow the `Idempotency-Key` HTTP header (IETF).
 - Each input keeps the keys of a keyed entity distinct (`send_keysDistinct`, `message_keysDistinct`).
 - A reference that does not resolve is a `Fault` (`dangling_ref_reported_iff`).
 - When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again (`resent_command_gets_first_answer`).
-- The service rejects a command that reuses an id with an input written differently (`reused_id_rejected`).
+- The service rejects a command that reuses an id with another input, whatever the order of object fields (`reused_id_rejected`).
 - When an event or an answer arrives again with the same id, the service does not process it again (`redelivered_event_not_processed`, `redelivered_answer_not_processed`).
 - Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering (`matchValue_renamed`, `samePart_renamed`). For a binding that pairs no value of domain "", this is a renaming in the sense of the theorems that follow (`matchValue_strRenamed`). The renaming is an equivalence: every value renames to itself (`renamed_refl`), a renaming read backward is the inverse binding (`renamed_symm`), and two renamings in a row are their composition, which is again one to one (`renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup`). Symmetry and transitivity assume that each binding keeps a key in its entity's domain. No theorem shows that the bindings that `test` and `verify` end with pair no value of domain "" or keep keys in their domains.
 

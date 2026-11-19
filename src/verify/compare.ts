@@ -683,6 +683,10 @@ function compare(
   );
 }
 
+/** Lean's requestText. */
+const requestText = (l: TraceLine & { readonly name: string; readonly input: unknown }): string =>
+  canonicalJson([l.type, l.name, l.input]);
+
 /**
  * Lean's firstDuplicate: the first request line of the direction `dir` that reuses an earlier one's id with another type,
  * name or input. A line with the same ones sends that request again.
@@ -691,7 +695,7 @@ function firstDuplicate(dir: TraceLine["dir"], lines: readonly (TraceLine | unde
   const seen = new Map<string, { readonly line: number; readonly request: string }>();
   for (const [i, l] of lines.entries()) {
     if (l === undefined || !isRequestOf(dir, l)) continue;
-    const request = JSON.stringify([l.type, l.name, l.input]);
+    const request = requestText(l);
     const first = seen.get(l.id);
     if (first === undefined) seen.set(l.id, { line: i + 1, request });
     else if (first.request !== request)
@@ -719,6 +723,33 @@ export function comparedLines(
   return { lines, cut: malformed === undefined ? undefined : lineSchema(malformed) };
 }
 
+/** Lean's withoutResends. `sent` holds each request's sends and answers, null for a subscription. */
+function withoutResends(lines: readonly (TraceLine | undefined)[]): (TraceLine | undefined)[] {
+  const sent = new Map<string, { sends: number; answers: number } | null>();
+  return lines.map((l) => {
+    if (l === undefined) return l;
+    if (isRequestOf("out", l)) {
+      const counts = sent.get(l.id);
+      if (counts === undefined) {
+        sent.set(l.id, l.type === "subscribe" ? null : { sends: 1, answers: 0 });
+        return l;
+      }
+      if (counts !== null) counts.sends += 1;
+      return undefined;
+    }
+    if (l.dir !== "in" || l.type !== "answer") return l;
+    const counts = sent.get(l.to);
+    if (counts === undefined || counts === null) return l;
+    if (counts.answers === 0) {
+      counts.answers = 1;
+      return l;
+    }
+    if (counts.answers >= counts.sends) return l;
+    counts.answers += 1;
+    return undefined;
+  });
+}
+
 /**
  * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
  * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Settled.renaming, or
@@ -735,7 +766,7 @@ export function verifyLines(
   const { lines, cut } = comparedLines("out", trace);
   const read = readLine(spec, service);
   const expected = snapshot.map((l) => l && read(l));
-  const actual = withoutRepeatedAnswers(lines.map((l) => l && read(l)));
+  const actual = withoutRepeatedAnswers(withoutResends(lines).map((l) => l && read(l)));
   const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed, relation);
   const [first] = set;
   return {

@@ -34,7 +34,7 @@ export const addOneOwnAnswer = scenario(
 );
 
 export const addOneResent = scenario(
-  "Add a task and get the next day for it; the implementation trace of this scenario sends the calendar.nextDay request again with its id and input, so verify takes it as a resend, not as a duplicate id, and reports the second line as Mismatch.unexpectedLine",
+  "Add a task and get the next day for it; the implementation trace of this scenario sends the calendar.nextDay request again with its id and input, and gets an answer to each send, so verify takes the second request as a resend of the first and its answer as an answer to the resend; no violation",
   {
     given,
     when: (w) => {

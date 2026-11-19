@@ -1,2 +1,1 @@
 {"kind":"Mismatch.request","definition":null,"data":{"subject":{"type":"query","name":"calendar.nextDay","id":"addTask#1"},"snapshot":{"from":"2026-10-25T00:00:00Z"},"trace":{"from":"2026-10-25T00:00:00Z"}},"location":{"file":"traces/todo/addOneOwnAnswer.jsonl","line":4},"scenario":{"service":"todo","name":"addOneOwnAnswer"}}
-{"kind":"Mismatch.unexpectedLine","definition":null,"data":{"subject":{"type":"query","name":"calendar.nextDay","id":"n1"}},"location":{"file":"traces/todo/addOneResent.jsonl","line":5},"scenario":{"service":"todo","name":"addOneResent"}}

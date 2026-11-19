@@ -36,3 +36,9 @@ export const reserve = command({
   emits: [],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
 });
+
+export const move = command({
+  input: { from: datetime, to: datetime },
+  emits: [],
+  rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
+});
