@@ -800,6 +800,34 @@ held2.chart({
 });
 // @ts-expect-error a targetless transition has no with
 held2.chart({ states: { b: { on: { taskAddedRecorded: [{ with: { x: () => 1, y: () => 2 } }] } } } });
+// A held state targets itself with `with` only when it exits and enters again; otherwise it keeps its parameters.
+held2.chart({
+  states: {
+    b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => 1, y: () => 2 } }] } },
+    a: {
+      on: {
+        taskAddedRecorded: [
+          { guard: { once: () => true }, target: "a", reenter: true, with: { x: () => 3, y: () => 4 } },
+          { target: "a", reenter: false },
+        ],
+      },
+    },
+  },
+});
+held2.chart({
+  states: {
+    b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => 1, y: () => 2 } }] } },
+    // @ts-expect-error without reenter the state is not entered again, so no with fills it
+    a: { on: { taskAddedRecorded: [{ target: "a", reenter: false, with: { x: () => 3, y: () => 4 } }] } },
+  },
+});
+held2.chart({
+  states: {
+    b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => 1, y: () => 2 } }] } },
+    // @ts-expect-error reenter enters the state again, so with fills it
+    a: { on: { taskAddedRecorded: [{ target: "a", reenter: true }] } },
+  },
+});
 
 // A parent whose initial child has held fills it with `initial: { with }`; a map state's `with` reads the copy's key.
 machine({

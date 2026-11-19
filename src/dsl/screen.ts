@@ -29,11 +29,8 @@ import type {
 import {
   assemble,
   type CheckTree,
-  type CopyKey,
   type ErrorIf,
   type Flat,
-  type InitialHeldIn,
-  type KindOf,
   type MapOf,
   type OuterNames,
   type RowsWritten,
@@ -68,29 +65,29 @@ type OperatedControls<Ps extends Payloads> = { readonly [K in keyof Ps]: { reado
  */
 type Shows<B, Qs extends Queries> = { readonly [K in keyof Qs]?: InputOf<Qs[K], B> };
 
-type StateOpens<N, Ctx, B, Ss extends Screens> = {
+type StateOpens<Targets, Ctx, B, Ss extends Screens> = {
   readonly [K in keyof Ss]?: {
     /** Whether the child opens as with HTML `showModal()` (true) or as with HTML `show()` (false). */
     readonly modal: boolean;
-    readonly onDone: Transitions<N, Ctx, B & { readonly output: ScreenOutput<Ss[K]> }>;
+    readonly onDone: Transitions<Targets, Ctx, B & { readonly output: ScreenOutput<Ss[K]> }>;
   } & InputOf<Ss[K], B>;
 };
 
-type ScreenEntry<N, Ctx, B, Cs extends Commands, Ss extends Screens> = {
-  readonly sends?: StateSends<N, Ctx, B, Cs>;
-  readonly opens?: StateOpens<N, Ctx, B, Ss>;
+type ScreenEntry<Targets, Ctx, B, Cs extends Commands, Ss extends Screens> = {
+  readonly sends?: StateSends<Targets, Ctx, B, Cs>;
+  readonly opens?: StateOpens<Targets, Ctx, B, Ss>;
 };
 
-type ScreenRequest<N, Ctx, B, Sh extends Queries, Cs extends Commands, Ss extends Screens> = {
+type ScreenRequest<Targets, Ctx, B, Sh extends Queries, Cs extends Commands, Ss extends Screens> = {
   readonly shows?: Shows<B, Sh>;
-} & ScreenEntry<N, Ctx, B, Cs, Ss>;
-type CopyRequest<N, Ctx, B, Cs extends Commands> = Pick<ScreenEntry<N, Ctx, B, Cs, never>, "sends"> & {
+} & ScreenEntry<Targets, Ctx, B, Cs, Ss>;
+type CopyRequest<Targets, Ctx, B, Cs extends Commands> = Pick<ScreenEntry<Targets, Ctx, B, Cs, never>, "sends"> & {
   readonly shows?: never;
   readonly opens?: never;
 };
 
-type Ons<N, Ctx, B, Ps extends Payloads, Rs extends Events> = KeyedTransitions<
-  N,
+type Ons<Targets, Ctx, B, Ps extends Payloads, Rs extends Events> = KeyedTransitions<
+  Targets,
   Ctx,
   B,
   OperatedControls<Ps> & ReceivedEvents<Rs>
@@ -157,20 +154,19 @@ type ScreenBehavior<
   Cs extends Commands,
   Ss extends Screens,
   Ps extends Payloads,
-  S extends { readonly names: keyof F; readonly context: unknown },
+  S extends { readonly targets: unknown; readonly context: unknown },
   B,
 > = StateBehavior<
-  KindOf<F, K>,
-  TargetsOf<F, S["names"]>,
+  F,
+  K,
+  S["targets"],
   S["context"],
   B,
-  Ons<TargetsOf<F, S["names"]>, S["context"], B, Ps, Rs>,
+  Ons<S["targets"], S["context"], B, Ps, Rs>,
   ([MapOf<F, K>] extends [never]
-    ? ScreenRequest<TargetsOf<F, S["names"]>, S["context"], B, Sh, Cs, Ss>
-    : CopyRequest<TargetsOf<F, S["names"]>, S["context"], B, Cs>) &
-    StateOffers<Ps, B>,
-  CopyKey<F, K>,
-  InitialHeldIn<F, K>
+    ? ScreenRequest<S["targets"], S["context"], B, Sh, Cs, Ss>
+    : CopyRequest<S["targets"], S["context"], B, Cs>) &
+    StateOffers<Ps, B>
 >;
 /**
  * The payloads that the user can choose for a control: `any` offers every payload that matches the schema, `none`
