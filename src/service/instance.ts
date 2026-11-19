@@ -26,13 +26,17 @@ function intern(id: InstanceId): InstanceId {
 /** The JSON of an id, for the one string form of a ValueKey. */
 export const instanceName = (id: InstanceId): string => names.get(id) as string;
 
-export const topId = (chart: string, serial = 0): InstanceId => intern({ kind: "top", chart, serial });
+export const topId = (chart: string): InstanceId => intern({ kind: "top", chart });
+
+/** The `nth` opening of the screen `chart` by the `opens` of `opener` at state `state` and key `key`. */
+export const openedId = (chart: string, opener: InstanceId, state: string, key: string, nth: number): InstanceId =>
+  intern({ kind: "opened", chart, opener, state, key, nth });
 
 /** The copy of `owner`'s map state `map` for the item key whose canonical JSON is `canonicalKey`. */
 export const copyId = (owner: InstanceId, map: string, canonicalKey: string): InstanceId =>
   intern({ kind: "copy", owner, map, key: JSON.parse(canonicalKey) as Json });
 
-export const chartOf = (id: InstanceId): string => (id.kind === "top" ? id.chart : chartOf(id.owner));
+export const chartOf = (id: InstanceId): string => (id.kind === "copy" ? chartOf(id.owner) : id.chart);
 
 /** The instance itself, or the owner of a copy. */
 export const ownerId = (id: InstanceId): InstanceId => (id.kind === "copy" ? id.owner : id);

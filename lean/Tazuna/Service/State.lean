@@ -8,14 +8,6 @@ namespace Tazuna.Service
 
 open Tazuna.Data
 
-/-- The opener of a screen: the instance `parent` that opened it. -/
-structure Opener where
-  parent : InstanceId
-  state : String
-  key : String
-  modal : Bool
-deriving DecidableEq, Repr, Inhabited
-
 /--
 An instance of a machine or screen. A machine, or a screen that no other screen opens, has one instance per definition;
 `opens` creates an instance each time it opens.
@@ -35,7 +27,8 @@ structure Instance where
   awaitingOnDone : Option (List String) := none
   /-- The output of the last fulfilled answer of each shows slot, or null before any. -/
   shown : List (String × Value) := []
-  opener : Option Opener := none
+  /-- Whether a modal `opens` opened the screen. -/
+  modal : Bool := false
   /-- The decoded item key of a copy; the map state and the canonical key are in `id`. -/
   itemKey : Option Value := none
   copyKeys : List (String × List Value) := []

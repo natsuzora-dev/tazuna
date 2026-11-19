@@ -31,10 +31,10 @@ def closeFinal (st : Service) (step : Nat) (name : InstanceId) : Processing → 
       let ensures := failed.toList.map (st.failedEnsures i.chart.name)
       let r ← endWith (exitOne fs st Limit.exitDepth.max) name ⟨r.state.reportAll ensures, r.queue⟩
       if r.halted then pure r else
-      match i.opener with
-      | some o =>
-        let (s, serial) := r.state.startQueued o.parent o.state
-        pure ⟨s, { r.queue with tasks := r.queue.tasks ++ [.opensDone o.parent o.state o.key output serial step] }⟩
+      match i.id.opener? with
+      | some (parent, state, key) =>
+        let (s, serial) := r.state.startQueued parent state
+        pure ⟨s, { r.queue with tasks := r.queue.tasks ++ [.opensDone parent state key output serial step] }⟩
       | none => pure r
 
 end

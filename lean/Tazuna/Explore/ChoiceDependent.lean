@@ -126,9 +126,15 @@ def chartNamed (st : Service) (name : String) : Option Spec.Chart :=
 def mapNamed (st : Service) (name map : String) : Option Spec.State :=
   (chartNamed st name).bind fun c => c.states.find? (·.name == map)
 
-/-- The instance id `i` as the relation compares it: a copy's item key at its map state's key positions renames. -/
+/--
+The instance id `i` as the relation compares it: a copy's item key at its map state's key positions renames, also in
+the opener of a screen.
+-/
 def idValue (st : Service) : InstanceId → CValue
-  | .top c n => CValue.ofValue (ToValue.toValue (InstanceId.top c n))
+  | .top c => CValue.ofValue (ToValue.toValue (InstanceId.top c))
+  | .opened c o state key nth =>
+    .obj [("kind", .leaf (.str "opened")), ("chart", .leaf (.str c)), ("opener", idValue st o),
+      ("state", .leaf (.str state)), ("key", .leaf (.str key)), ("nth", .leaf (ToValue.toValue nth))]
   | .copy o m k =>
     .obj [("kind", .leaf (.str "copy")), ("owner", idValue st o), ("map", .leaf (.str m)),
       ("key", keyed (refsAt ((mapNamed st o.chart m).map (·.itemKeys) |>.getD [])) [] k)]

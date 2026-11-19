@@ -25,6 +25,7 @@ function startCopy(r: Processing, owner: Instance, map: string, key: unknown, en
     closed: false,
     awaitingOnDone: undefined,
     shown: new Map(),
+    modal: false,
     itemKey: key,
     copyKeys: new Map(),
   };

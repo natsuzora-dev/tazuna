@@ -125,13 +125,8 @@ export interface Instance {
   awaitingOnDone: readonly string[] | undefined;
   /** For each shows slot, the output of the last fulfilled answer, or null before any. */
   readonly shown: Map<string, unknown>;
-  /** The instance that opened this screen. */
-  readonly opener?: {
-    readonly parent: InstanceId;
-    readonly state: string;
-    readonly key: string;
-    readonly modal: boolean;
-  };
+  /** Whether a modal `opens` opened the screen. */
+  readonly modal: boolean;
   /** The decoded item key of a copy; the map state and the canonical key are in the id. */
   readonly itemKey?: unknown;
   /** For each map state, the encoded keys of its copies, in item order. */

@@ -35,9 +35,7 @@ function acceptingInstance(
     const instance = machine(s, r);
     if (instance === undefined) continue;
     if (r === resource) return { kind: "ok", instance };
-    const opener = instance.opener;
-    if (opener === undefined) continue;
-    if (opener.modal) return { kind: "covered", child: instance };
+    if (instance.modal) return { kind: "covered", child: instance };
   }
   return { kind: "notOpen" };
 }

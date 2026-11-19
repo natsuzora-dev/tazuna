@@ -3,16 +3,25 @@ import type { DefinitionRef } from "./definitionRef.ts";
 import type { Json } from "./values.ts";
 
 /**
- * An instance of a machine or screen, or a copy of a map state. `serial` numbers the instances of `chart` in creation
- * order from 0: a machine, or a screen that no other screen opens, has only serial 0. A copy is the copy of `owner`'s map
- * state `map` for the item whose key is `key`, a canonical value (its fields in canonical order), so equal keys are
- * equal values.
+ * An instance of a machine or screen, or a copy of a map state, named by where it sits in the tree of instances, as an
+ * Akka actor path or a React element's position names it. A machine, or a screen that no other screen opens, has one
+ * instance, named by its chart. A screen that `opens` opened is named by the instance `opener` that opened it, the state
+ * `state` and key `key` of that `opens`, and `nth`, which of that `opens`'s openings it is, from 0: each entry of the
+ * state opens it again. A copy is the copy of `owner`'s map state `map` for the item whose key is `key`, a canonical value
+ * (its fields in canonical order), so equal keys are equal values.
  */
 export type InstanceId =
   | {
       readonly kind: "top";
       readonly chart: string;
-      readonly serial: number;
+    }
+  | {
+      readonly kind: "opened";
+      readonly chart: string;
+      readonly opener: InstanceId;
+      readonly state: string;
+      readonly key: string;
+      readonly nth: number;
     }
   | {
       readonly kind: "copy";

@@ -28,15 +28,15 @@ export function closeFinal(r: Processing, instance: Instance, step: number): voi
   const { output, failed } = closed;
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
   endWith(r, instance.id, limits.exitDepth);
-  const opener = instance.opener;
-  if (opener === undefined) return;
+  const { id } = instance;
+  if (id.kind !== "opened") return;
   r.queue.tasks.push({
     kind: "opensDone",
-    machine: opener.parent,
-    state: opener.state,
-    key: opener.key,
+    machine: id.opener,
+    state: id.state,
+    key: id.key,
     output,
-    serial: startQueued(r.state, opener.parent, opener.state),
+    serial: startQueued(r.state, id.opener, id.state),
     cause: step,
   });
 }

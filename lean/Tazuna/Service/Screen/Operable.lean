@@ -47,9 +47,7 @@ where
       match s.machine? r with
       | some i =>
         if r == resource then .ok i else
-        match i.opener with
-        | some o => if o.modal then .error (.covered i.chart.name) else go rest
-        | none => go rest
+        if i.modal then .error (.covered i.chart.name) else go rest
       | none => go rest
 
 def offeringStates (st : Service) (s : State) (top : Instance) (control : String) (payload : Value) :

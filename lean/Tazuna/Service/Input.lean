@@ -266,9 +266,9 @@ def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : C
   match ← initialContextOf fs st c.name (.obj []) with
   | .error fault => pure (s.report (.fault fault))
   | .ok context =>
-    pure { s with machines := s.machines ++ [{ chart := c, id := .top c.name 0, context, input := .obj [],
+    pure { s with machines := s.machines ++ [{ chart := c, id := .top c.name, context, input := .obj [],
                                                 shown := c.slots.map (·, .null) }],
-                  stack := if c.screen then s.stack ++ [.top c.name 0] else s.stack }
+                  stack := if c.screen then s.stack ++ [.top c.name] else s.stack }
 
 /-- The charts that start when the service begins. A screen that another screen opens does not. -/
 def starting (st : Service) : List Chart := st.charts.filter (!·.opened)
@@ -285,7 +285,7 @@ def startRecords [Monad m] (st : Service) (fs : Functions m) (s : State) : m Sta
 def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
   if s.started then pure s else
   let s ← startInstances st fs (← startRecords st fs { s with started := true }.newMessage)
-  message st fs s { tasks := st.starting.map (fun c => .start (.top c.name 0) none) }
+  message st fs s { tasks := st.starting.map (fun c => .start (.top c.name) none) }
 
 /--
 Which of the open instances of the screen of `resource`, in opening order, it is, when more than one is open: an

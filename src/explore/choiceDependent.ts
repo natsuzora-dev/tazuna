@@ -88,15 +88,21 @@ const mapNamed = (st: Service, chart: string, map: string) => {
 };
 
 /** Lean's idValue. */
-const idValue = (st: Service, id: InstanceId): unknown =>
-  id.kind === "top"
-    ? id
-    : {
+const idValue = (st: Service, id: InstanceId): unknown => {
+  switch (id.kind) {
+    case "top":
+      return id;
+    case "opened":
+      return { ...id, opener: idValue(st, id.opener) };
+    case "copy":
+      return {
         kind: "copy",
         owner: idValue(st, id.owner),
         map: id.map,
         key: keyed(refsAt(mapNamed(st, chartOf(id.owner), id.map)?.itemKeys), [], id.key),
       };
+  }
+};
 
 const canonicalOrder = <T>(values: readonly T[]): T[] =>
   values.toSorted((a, b) => byCodePoint(canonicalJson(plain(a)), canonicalJson(plain(b))));

@@ -4,7 +4,7 @@ import { withExtra } from "../../data/violation.ts";
 import { ref, requirementsOf } from "../basic.ts";
 import { firstFalse } from "../contract.ts";
 import { Failed, issueViolation } from "../functions.ts";
-import { type InstanceId, ownerId, topId } from "../instance.ts";
+import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
   awaitAnswer,
@@ -40,7 +40,7 @@ export function newInstance(
   chart: Chart,
   id: InstanceId,
   { input, context }: { readonly input: Fields; readonly context: Fields },
-  opener: Instance["opener"],
+  modal = false,
 ): Instance {
   return {
     chart,
@@ -52,7 +52,7 @@ export function newInstance(
     closed: false,
     awaitingOnDone: undefined,
     shown: new Map(slots(chart).map((slot) => [slot, null])),
-    ...(opener === undefined ? {} : { opener }),
+    modal,
     copyKeys: new Map(),
   };
 }
@@ -106,9 +106,11 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
     report(r.state, { kind: "Fault.failedRequires", definition, data: { screen, condition } });
   const context = initialContextOf(r, child.name, input);
   const s = r.state;
-  const opener = { parent: instance.id, state, key: a.key, modal: a.keyword === "opens" && a.modal };
-  const serial = [...s.machines.values()].filter((i) => i.chart.name === child.name).length;
-  const created = newInstance(child, topId(child.name, serial), { input, context }, opener);
+  const nth = [...s.machines.values()].filter(
+    ({ id }) => id.kind === "opened" && id.opener === instance.id && id.state === state && id.key === a.key,
+  ).length;
+  const id = openedId(child.name, instance.id, state, a.key, nth);
+  const created = newInstance(child, id, { input, context }, a.keyword === "opens" && a.modal);
   s.machines.set(created.id, created);
   s.stack.push(created.id);
   r.queue.tasks.push({ kind: "start", machine: created.id, cause: step });

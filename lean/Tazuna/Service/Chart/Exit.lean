@@ -72,7 +72,7 @@ def State.leaveState (s : State) (name : InstanceId) (n : String) : State :=
     queued := s.queued.map (fun q => if q.machine == name && q.state == n then { q with stale := true } else q) }
 
 def State.childrenOf (s : State) (name : InstanceId) (n : String) : List InstanceId :=
-  (s.machines.filter fun (c : Instance) => !c.closed && c.opener.any fun o => o.parent == name && o.state == n).map
+  (s.machines.filter fun (c : Instance) => !c.closed && c.id.opener?.any fun (p, state, _) => p == name && state == n).map
     (·.id)
 
 def leaveWith (st : Service) (exit : InstanceId → String → Processing → m Processing) (name : InstanceId) (n : String)

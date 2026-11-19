@@ -10,7 +10,6 @@ import { type Instance, keyCounts, machine } from "../../service/state.ts";
 const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) => (a < b ? -1 : 1);
 
 function instanceFingerprint(instance: Instance): unknown {
-  const { opener } = instance;
   return {
     id: instance.id,
     entered: [...instance.entered].map(([state, at]) => [state, at.toString()]),
@@ -19,7 +18,6 @@ function instanceFingerprint(instance: Instance): unknown {
     lastChildren: [...instance.lastChildren],
     shown: [...instance.shown],
     closed: instance.closed,
-    opener: opener === undefined ? null : [opener.parent, opener.state, opener.key],
   };
 }
 

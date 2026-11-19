@@ -98,7 +98,7 @@ function leaveState(s: State, instance: Instance, n: string): void {
 
 function childrenOf(s: State, name: InstanceId, n: string): InstanceId[] {
   return [...s.machines.values()]
-    .filter((child) => !child.closed && child.opener?.parent === name && child.opener.state === n)
+    .filter(({ id, closed }) => !closed && id.kind === "opened" && id.opener === name && id.state === n)
     .map((child) => child.id);
 }
 

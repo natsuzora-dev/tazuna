@@ -110,12 +110,12 @@ theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : Strin
     (hr : firstFalse (fs.inputRequirement (st.ref c.name) · given) (st.requirementsOf c.name).requires = .ok none)
     (hx : fs.initialContext c.name given = .ok context) :
     ∃ child : Instance, (openScreen fs st step name state a r).1.machines = r.state.machines ++ [child] ∧
-      child.chart = c ∧ child.opener = some { parent := name, state, key := a.key, modal := a.isModal } ∧
+      child.chart = c ∧ child.id.opener? = some (name, state, a.key) ∧ child.modal = a.isModal ∧
       (openScreen fs st step name state a r).1.stack = r.state.stack ++ [child.id] ∧
       (openScreen fs st step name state a r).2.tasks = r.queue.tasks ++ [.start child.id (some step)] := by
   simp only [openScreen, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
     hc, hp, hq, hr, initialContextOf, hx]
-  exact ⟨_, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨_, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 def EnteredFrom (s s' : State) : Prop :=
   ∀ n i', s'.machine? n = some i' → i'.entered = [] ∨ ∃ i, s.machine? n = some i ∧ i.closed = i'.closed ∧ i.entered = i'.entered

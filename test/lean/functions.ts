@@ -29,7 +29,7 @@ import {
   type NextKeys,
   type Scope,
 } from "../../src/service/functions.ts";
-import { chartOf, copyId, type InstanceId, mapOf, topId } from "../../src/service/instance.ts";
+import { chartOf, copyId, type InstanceId, mapOf, openedId, topId } from "../../src/service/instance.ts";
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
@@ -58,8 +58,16 @@ const keysOf = ({ owner, next }: LeanKeys): Keys => ({
 });
 
 /** The interned id of an id that Lean sent. */
-const idOf = (id: InstanceId): InstanceId =>
-  id.kind === "top" ? topId(id.chart, id.serial) : copyId(idOf(id.owner), id.map, canonicalJson(id.key));
+const idOf = (id: InstanceId): InstanceId => {
+  switch (id.kind) {
+    case "top":
+      return topId(id.chart);
+    case "opened":
+      return openedId(id.chart, idOf(id.opener), id.state, id.key, id.nth);
+    case "copy":
+      return copyId(idOf(id.owner), id.map, canonicalJson(id.key));
+  }
+};
 
 /** Returns a value of Lean's, which TS wrote of a checked value, as spec code receives it. */
 const decodeValue = (schema: z.ZodType, value: unknown): unknown => bagged(schema, fromJson(schema, value));
