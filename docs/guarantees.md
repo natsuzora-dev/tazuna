@@ -1,6 +1,6 @@
 # Guarantees
 
-Lean definitions in [`lean/Tazuna`](../lean/Tazuna) state what a spec means, and Lean theorems prove properties of that meaning.
+Lean definitions in [`lean/Tazuna`](https://github.com/natsuzora-dev/tazuna/tree/main/lean/Tazuna) of the tazuna repository state what a spec means, and Lean theorems prove properties of that meaning.
 tazuna guarantees only what the theorems prove, under the [assumptions](#assumptions).
 [Concepts](concepts.md) explains why the rules are what they are.
 
@@ -71,7 +71,7 @@ The lines after the halt never took place, so those checks would read a cut-off 
 A command *passes* when it reports no violation.
 
 - When `check` passes, every spec file type-checks under the nearest `tsconfig.json`, and the spec has no violation of the groups that `check` reports.
-- When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, each running service's trace equals its snapshot, and no explored path reports a violation.
+- When `test` without `--only` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, each running service's trace equals its snapshot, and no explored path reports a violation.
   The scenario then states everything that happened between the running services, and each `InvalidScenario` kind is one rule of that statement.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
   This holds for the own service and for each running peer that has an implementation.

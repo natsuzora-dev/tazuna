@@ -9,7 +9,7 @@ A message that no line delivers, loses, refuses, or leaves in flight is `Invalid
 
 Two things depend on that.
 The simulation is deterministic, so a snapshot depends only on what the scenario wrote, and `test` can compare a run with it line by line.
-And `drive` puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
+`drive`, which runs an implementation through a scenario from `@natsuzora-dev/tazuna/verify`, puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
 If tazuna picked a delivery order or a default record, the implementation would face a world that nobody wrote down, and a difference between the two runs would be nobody's fault.
 
 That world is the only control tazuna has over an implementation.
@@ -105,8 +105,7 @@ A value derived from records is a plain function that reads `records` where it i
 
 Then lists the facts that the scenario exists to check, and it does not have to list everything.
 The snapshot records every message of the run, and `test` compares the run with it exactly, so a change in a message that Then leaves out still fails `test`.
-The two have different readers.
-A reviewer reads Then to see what the scenario is about, and `test` and `verify` compare the snapshot.
+Then is for a reviewer, who reads it to see what the scenario is about, and the snapshot is for `test` and `verify`, which compare runs with it.
 
 ## Each tool reports one kind of mistake
 
@@ -114,7 +113,7 @@ The TypeScript type checker reports a value of the wrong shape or meaning, such 
 `check` reports the rules that need the whole spec, such as whether the target of a request may reject, and every form that has a canonical alternative, as Clippy does next to the Rust compiler.
 `test` and `verify` report what only a run shows.
 
-Each rule lives in one tool.
+Each rule lives in one tool: the type checker, `check`, or `test` and `verify`.
 A type sees one definition and the types it names, so a rule that also depended on the rest of the spec would be split between a type that covers some cases and `check`, which covers the others.
 The earlier tools report a mistake closer to the line that causes it, and they need no implementation.
 

@@ -45,6 +45,7 @@
     "docs/*.md",
     "explain.json",
     "samples/todo/spec",
+    "!samples/todo/spec/package.json",
     "!samples/todo/spec/tsconfig.json",
     "skills",
     "tsconfig.base.json"

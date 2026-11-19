@@ -42,7 +42,7 @@ Run the commands in the folder of your `package.json`.
 
    The output ends with `27 files: no violations`.
 
-3. Open [spec/todo/scenarios.ts](samples/todo/spec/todo/scenarios.ts) and find the scenario `completeTwice`.
+3. Open `spec/todo/scenarios.ts`, your copy of the sample's [todo/scenarios.ts](samples/todo/spec/todo/scenarios.ts), and find the scenario `completeTwice`.
    The user adds a task and completes it twice, and the `todo` service rejects the second completion:
 
    ```ts
@@ -65,7 +65,7 @@ Run the commands in the folder of your `package.json`.
    });
    ```
 
-   Given is where the scenario starts, When is its lines in order, and Then is what `todo` did on those lines.
+   `given` sets where the scenario starts, `when` lists its lines in order, and `then` states what `todo` did on those lines.
    `noTasks` and `addMilk` are defined earlier in the same file.
 
 4. Run the scenarios:
@@ -108,5 +108,5 @@ Run the commands in the folder of your `package.json`.
 - To learn why a spec is written the way it is, read [Concepts](docs/concepts.md).
 - To look up what a passing command guarantees and who fixes each violation, read [Guarantees](docs/guarantees.md).
 - To drive tazuna from a coding agent, give it the skill in [skills/tazuna](skills/tazuna/SKILL.md).
-- To compare an implementation with the snapshots, see how the ToDo sample's server drives itself through the scenarios in [web/test/todo.test.ts](samples/todo/web/test/todo.test.ts).
+- To compare an implementation with the snapshots, see how the ToDo sample's server drives itself through the scenarios in [web/test/todo.test.ts](https://github.com/natsuzora-dev/tazuna/blob/main/samples/todo/web/test/todo.test.ts) in the tazuna repository.
 - To list the commands and options, run `npx tazuna --help`. Each exported function documents itself in its doc comment.

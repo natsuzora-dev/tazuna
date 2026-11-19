@@ -1,14 +1,32 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, posix } from "node:path";
 import { test } from "node:test";
+import { explain } from "../src/cli/explain.ts";
+import { main } from "../src/cli/main.ts";
 import { groups as groupInfos } from "../src/data/groups.ts";
 import { groupNames, parseKind } from "../src/data/kinds.ts";
-import { leanRoot } from "./examples.ts";
+import { leanRoot, typeChecked } from "./examples.ts";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const docs = ["README.md", "docs/guarantees.md", "docs/concepts.md"].map((path) => ({ path, text: read(path) }));
+
+/** The paths of the files that npm packs, relative to the package root. */
+const packed: readonly string[] = (
+  JSON.parse(
+    execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" }),
+  ) as readonly { readonly files: readonly { readonly path: string }[] }[]
+).flatMap((p) => p.files.map((f) => f.path));
+const isPacked = (path: string) => packed.some((p) => p === path || p.startsWith(`${path}/`));
+
+/** The markdown files that the package ships, which readers read in node_modules. */
+const shipped = packed
+  .filter((path) => path.endsWith(".md"))
+  .toSorted()
+  .map((path) => ({ path, text: read(path) }));
+/** The shipped markdown for people: every shipped file but the agent skills. */
+const docs = shipped.filter(({ path }) => !path.startsWith("skills/"));
 const guarantees = read("docs/guarantees.md");
 
 /** The declarations of lean/Tazuna outside comments: each name as written, its keyword, and its file. */
@@ -80,10 +98,10 @@ const unknownKinds = (path: string, text: string, pattern: RegExp) =>
     .filter((kind) => parseKind(kind) === undefined)
     .map((kind) => `${path} ${kind}`);
 
-test("Each violation kind that a doc names is a kind of its group", () => {
+test("Each violation kind that a shipped markdown file names is a kind of its group", () => {
   assert.deepEqual(unknownKinds("x", "`Fault.data` and `Fault.failedEnsures`", /`(\w+)\.(\w+)`/g), ["x Fault.data"]);
   assert.deepEqual(
-    docs.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g)),
+    shipped.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g)),
     [],
   );
 });
@@ -111,6 +129,83 @@ const headings = (text: string) =>
     return marks === "" ? [] : [{ number, level: marks.length, title }];
   });
 const withoutCode = (line: string) => line.replace(/`[^`]*`/g, "");
+const withoutTicks = (line: string) => line.replace(/`/g, "");
+
+/** The anchor of a heading, as GitHub writes it. */
+const slug = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+
+test("The package ships the docs, the skills, and the ToDo sample spec, without the sample's tsconfig.json and package.json", () => {
+  for (const path of [
+    "README.md",
+    "docs/concepts.md",
+    "docs/guarantees.md",
+    "skills/tazuna/SKILL.md",
+    "samples/todo/spec/todo/scenarios.ts",
+  ])
+    assert.ok(isPacked(path), path);
+  for (const path of ["samples/todo/spec/tsconfig.json", "samples/todo/spec/package.json", "samples/todo/web"])
+    assert.ok(!isPacked(path), path);
+});
+
+test("Each shipped skill has the frontmatter name of its folder and a description", () => {
+  const skills = shipped.filter(({ path }) => path.startsWith("skills/"));
+  assert.ok(skills.length > 0);
+  for (const { path, text } of skills)
+    assert.match(text, new RegExp(`^---\\nname: ${posix.basename(posix.dirname(path))}\\ndescription: \\S`), path);
+});
+
+test("Each relative link in a shipped markdown file resolves to a packed file or folder, and each anchor to a heading of its target", () => {
+  const links = shipped.flatMap(({ path, text }) =>
+    [...text.matchAll(/\]\(([^)\s]+)\)/g)]
+      .map((m) => m[1] ?? "")
+      .filter((link) => !/^https?:/.test(link))
+      .map((link) => ({ path, link })),
+  );
+  assert.ok(links.some(({ link }) => link.includes("#")));
+  const broken = links.filter(({ path, link }) => {
+    const [file = "", anchor] = link.split("#");
+    const target = file === "" ? path : posix.join(posix.dirname(path), file).replace(/\/$/, "");
+    if (!isPacked(target)) return true;
+    return anchor !== undefined && !headings(read(target)).some((h) => slug(withoutTicks(h.title)) === anchor);
+  });
+  assert.deepEqual(broken, []);
+});
+
+test("Each package path that a shipped markdown file names in code font is packed", () => {
+  const paths = shipped.flatMap(({ path, text }) =>
+    [...text.matchAll(/`node_modules\/@natsuzora-dev\/tazuna\/([^`]*)`/g)].map((m) => ({
+      path,
+      target: (m[1] ?? "").replace(/\/$/, ""),
+    })),
+  );
+  assert.ok(paths.length > 0);
+  assert.deepEqual(
+    paths.filter(({ target }) => target !== "" && !isPacked(target)),
+    [],
+  );
+});
+
+test("Each command and option that a shipped markdown file names exists", async () => {
+  const out: string[] = [];
+  await main(["--help"], { cwd: root, log: (line) => out.push(line), error: () => {} });
+  const usage = out.join("\n");
+  const unknown = shipped.flatMap(({ path, text }) => [
+    ...[...text.matchAll(/`npx tazuna (\w+)/g)]
+      .map((m) => m[1] ?? "")
+      .filter((command) => !new RegExp(`^ {2}${command} `, "m").test(usage))
+      .map((command) => `${path} ${command}`),
+    ...[...text.matchAll(/(?<![\w-])(--[a-z]+)\b/g)]
+      .map((m) => m[1] ?? "")
+      .filter((option) => option !== "--help" && !new RegExp(`^ {4}${option}\\b`, "m").test(usage))
+      .map((option) => `${path} ${option}`),
+  ]);
+  assert.deepEqual(unknown, []);
+});
 
 /** The structure rules of pstack technical-writing that a script can check. Each returns the lines that break it. */
 const proseRules: readonly {
@@ -237,23 +332,55 @@ test("Each TypeScript block of README.md appears verbatim in the sample file tha
   }
 });
 
-test("The scenario counts and the violation line in README.md match the ToDo sample", () => {
-  const scenarioFiles = readdirSync(join(root, sample), { recursive: true, encoding: "utf8" }).filter(
-    (f) => f.endsWith(".ts") && !f.includes("node_modules"),
-  );
-  const total = scenarioFiles
-    .map((f) => [...read(`${sample}/${f}`).matchAll(/^export const \w+ = scenario\(/gm)].length)
-    .reduce((a, b) => a + b, 0);
-  const counts = [...readme.matchAll(/`(\d+)\/(\d+) scenarios/g)].map((m) => Number(m[2]));
+const sampleFiles = readdirSync(join(root, sample), { recursive: true, encoding: "utf8" }).filter(
+  (f) => f.endsWith(".ts") && !f.includes("node_modules"),
+);
+const scenarioCount = sampleFiles
+  .map((f) => [...read(`${sample}/${f}`).matchAll(/^export const \w+ = scenario\(/gm)].length)
+  .reduce((a, b) => a + b, 0);
+
+test("The file and scenario counts in README.md are the ToDo sample's: every scenario for a full run, one for --only", () => {
+  assert.match(readme, new RegExp(`\`${sampleFiles.length} files: no violations\``));
+  const counts = [...readme.matchAll(/`(\d+)\/(\d+) scenarios( \(--only\))?/g)];
   assert.ok(counts.length > 0);
-  assert.deepEqual(new Set(counts), new Set([total]));
-  const violations = readmeBlocks
-    .filter((b) => b.language === "json")
-    .map((b) => JSON.parse(b.code))
-    .filter((json) => "kind" in json);
-  assert.ok(violations.length > 0);
-  for (const { location, scenario } of violations) {
-    const lines = read(location.file.replace(/^spec\//, `${sample}/`)).split("\n");
-    assert.equal(lines[location.line - 1], `export const ${scenario.name} = scenario({`);
+  for (const [line, ran, all, only] of counts)
+    assert.deepEqual([Number(ran), Number(all)], [only === undefined ? scenarioCount : 1, scenarioCount], line);
+});
+
+test("The README tutorial's broken scenario gives the violation line and summary that README.md shows, and explain names the scenario as the side at fault", async () => {
+  const [, name = "", from = "", to = ""] =
+    /change the expected answer of `(\w+)` from `([^`]+)` to `([^`]+)`/.exec(readme) ?? [];
+  const summary = /followed by `([^`]+)`/.exec(readme)?.[1];
+  const [shown] = readmeBlocks.filter((b) => b.language === "json" && b.code.startsWith('{"kind"'));
+  assert.ok(shown !== undefined && summary !== undefined);
+  const violation = JSON.parse(shown.code) as { readonly kind: string; readonly scenario: { readonly name: string } };
+  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
+  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "readme-"));
+  try {
+    cpSync(join(root, sample), join(project, "spec"), {
+      recursive: true,
+      filter: (src) => !src.includes("node_modules"),
+    });
+    const scenarios = join(project, "spec/todo/scenarios.ts");
+    const text = readFileSync(scenarios, "utf8");
+    const edited = text.replace(`answered(${name}, ${from})`, `answered(${name}, ${to})`);
+    assert.notEqual(edited, text);
+    writeFileSync(scenarios, edited);
+    const out: string[] = [];
+    const err: string[] = [];
+    const only = `todo/${violation.scenario.name}`;
+    await main(["test", "spec", "--depth", "1", "--only", only], {
+      cwd: project,
+      log: (line) => out.push(line),
+      error: (line) => err.push(line),
+      typeCheck: () => typeChecked,
+    });
+    assert.deepEqual(out, [shown.code.trim()]);
+    assert.equal(err.at(-1)?.replace(/^1\/(\d+) scenarios \(--only\)/, "$1/$1 scenarios"), summary);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
+  const explained = explain(violation.kind);
+  assert.ok("markdown" in explained && explained.markdown.includes("\n- Side at fault: The scenario"));
+  assert.match(readme, /says what the violation means and that the scenario is the side at fault/);
 });
