@@ -59,11 +59,9 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
       match ← initialContextOf fs st c.name input with
       | .error fault => pure (r.report (.fault fault))
       | .ok context =>
-        let nth := (r.state.machines.filter (·.id.opener? == some (name, state, a.key))).length
-        let id := InstanceId.opened c.name name state a.key nth
-        let child : Instance :=
-          { chart := c, id, context, input, shown := c.slots.map (·, .null), modal := a.isModal }
-        pure ⟨{ r.state with machines := r.state.machines ++ [child], stack := r.state.stack ++ [id] },
+        let id := InstanceId.opened c.name name state a.key
+        let child : Instance := { chart := c, id, context, input, shown := c.slots.map (·, .null) }
+        pure ⟨{ r.state with machines := r.state.machines.filter (·.id != id) ++ [child], stack := r.state.stack ++ [id] },
           { r.queue with tasks := r.queue.tasks ++ [.start id (some step)] }⟩
 
 /--

@@ -453,7 +453,9 @@ theorem keysBy_startWork (step : Nat) (name : InstanceId) : KeysBy (startWork fs
   apply keysBy_withMachine
   intro i r
   simp only [id_bind]
-  exact (keysBy_enter step name _ r).trans (keysBy_unlessHalted (keysBy_settle step name) _)
+  let r' : Processing := ⟨r.state.setMachine name ({ · with startStep := some step }), r.queue⟩
+  exact (KeepsKeys.refl r.state : KeepsKeys r.state r'.state).trans
+    ((keysBy_enter step name _ r').trans (keysBy_unlessHalted (keysBy_settle step name) _))
 
 theorem keysBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requester : Requester) :
     KeysBy (answerTo fs st step a answer requester) := by

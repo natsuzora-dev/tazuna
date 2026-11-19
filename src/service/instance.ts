@@ -28,9 +28,9 @@ export const instanceName = (id: InstanceId): string => names.get(id) as string;
 
 export const topId = (chart: string): InstanceId => intern({ kind: "top", chart });
 
-/** The `nth` opening of the screen `chart` by the `opens` of `opener` at state `state` and key `key`. */
-export const openedId = (chart: string, opener: InstanceId, state: string, key: string, nth: number): InstanceId =>
-  intern({ kind: "opened", chart, opener, state, key, nth });
+/** The screen `chart` that the `opens` of `opener` at state `state` and key `key` opened. */
+export const openedId = (chart: string, opener: InstanceId, state: string, key: string): InstanceId =>
+  intern({ kind: "opened", chart, opener, state, key });
 
 /** The copy of `owner`'s map state `map` for the item key whose canonical JSON is `canonicalKey`. */
 export const copyId = (owner: InstanceId, map: string, canonicalKey: string): InstanceId =>

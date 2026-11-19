@@ -81,7 +81,7 @@ Two outcomes are the same when both halt with the same violation, or when neithe
 That state is the records and each open instance and map state copy, which `ChoiceDependent` reports as one `state` difference: the active states, the children that a history state returns to, the context, and the pending deadlines, whose times a later clock line reads.
 The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position: in records, contexts, and map state item keys.
 Lines that a service wrote for messages that one line delivered compare by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
-Instances pair by their place, as Akka names an actor by its path: a screen that another screen opens by its opener, the state and key of that `opens`, and which opening of that `opens` it is, so the order that two screens open in does not change their names.
+Instances pair by their place, as Akka names an actor by its path: a screen that another screen opens by its opener and the state and key of that `opens`. A screen that the same state opens again takes the name of the one it replaces, so neither the order that screens open in nor how many times a state opened its screen changes a name.
 
 ### When a trace matches a snapshot
 

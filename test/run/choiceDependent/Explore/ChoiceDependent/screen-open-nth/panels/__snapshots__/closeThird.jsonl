@@ -1,0 +1,7 @@
+{"time":"2026-10-25T09:00:00Z","dir":"in","type":"command","id":"announce#1","name":"announce","input":{}}
+{"time":"2026-10-25T09:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"announce#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T09:00:00Z","dir":"out","type":"event","id":"ready#1","name":"ready","payload":{},"resultOf":"announce#1"}
+{"time":"2026-10-25T09:00:00Z","dir":"out","type":"event","id":"claimed#1","name":"claimed","payload":{"used":true}}
+{"time":"2026-10-25T09:00:00Z","dir":"out","type":"event","id":"claimed#2","name":"claimed","payload":{"used":true}}
+{"time":"2026-10-25T09:00:00Z","dir":"in","type":"operation","id":"thirdPanel.show#1","name":"thirdPanel.show"}
+{"time":"2026-10-25T09:00:00Z","dir":"in","type":"operation","id":"detailScreen.close#1","name":"detailScreen.close","nth":2}

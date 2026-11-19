@@ -34,6 +34,14 @@ def Refusal.finding (st : Service) (screen control : String) (payload : Value) :
   | .covered child => .invalidInput (.coveredByModal (st.ref screen) control (st.ref child))
   | .notOffered => .invalidInput (.unofferedPayload (st.ref screen) control payload)
 
+/-- Whether a modal `opens` opened the screen `i`: the one of its opener's chart that its id names. -/
+def State.modal (s : State) (i : Instance) : Bool :=
+  match i.id.opener? with
+  | some (o, state, key) =>
+    (s.machine? o).any fun oi =>
+      (((oi.chart.state? state).map (·.activities)).getD []).any fun a => a.key == key && a.isModal
+  | none => false
+
 /--
 The open screen instance `resource` when it accepts operations, or the refusal. As with HTML `dialog.showModal()`, a
 modal opened after it blocks it; several instances of one screen are each operable.
@@ -47,7 +55,7 @@ where
       match s.machine? r with
       | some i =>
         if r == resource then .ok i else
-        if i.modal then .error (.covered i.chart.name) else go rest
+        if s.modal i then .error (.covered i.chart.name) else go rest
       | none => go rest
 
 def offeringStates (st : Service) (s : State) (top : Instance) (control : String) (payload : Value) :

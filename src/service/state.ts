@@ -125,8 +125,8 @@ export interface Instance {
   awaitingOnDone: readonly string[] | undefined;
   /** For each shows slot, the output of the last fulfilled answer, or null before any. */
   readonly shown: Map<string, unknown>;
-  /** Whether a modal `opens` opened the screen. */
-  readonly modal: boolean;
+  /** The step that started the instance; Lean's World.act reads it to find the screens that a processing opened. */
+  startStep?: number;
   /** The decoded item key of a copy; the map state and the canonical key are in the id. */
   readonly itemKey?: unknown;
   /** For each map state, the encoded keys of its copies, in item order. */

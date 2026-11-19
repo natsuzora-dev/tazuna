@@ -238,8 +238,8 @@ theorem keeps_route {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Orig
        split <;> first | exact hu | exact keeps_post hu _ _ _ _ _)
 
 theorem keeps_act {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Origin) (service : String)
-    (f : Service → Functions Id → State → Id State) (reopen : Bool) :
-    KeepsInFlight e w (w'.act fsOf o service f reopen) := by
+    (f : Service → Functions Id → State → Id State) :
+    KeepsInFlight e w (w'.act fsOf o service f) := by
   unfold World.act
   split
   · exact h
@@ -256,7 +256,7 @@ theorem keeps_deliver {w w' : World} (h : KeepsInFlight e w w') (o : Scenario.Or
     KeepsInFlight e w (w'.deliver fsOf o receiver ks) := by
   unfold World.deliver
   dsimp only
-  split <;> exact keeps_act (keeps_setStatuses h ks _ hk) _ _ _ _
+  split <;> exact keeps_act (keeps_setStatuses h ks _ hk) _ _ _
 
 theorem keeps_carry {w w' : World} (h : KeepsInFlight e w w') (i k : Nat) : KeepsInFlight e w (w'.carry i k) :=
   keeps_messages h rfl

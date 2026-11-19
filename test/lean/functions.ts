@@ -63,7 +63,7 @@ const idOf = (id: InstanceId): InstanceId => {
     case "top":
       return topId(id.chart);
     case "opened":
-      return openedId(id.chart, idOf(id.opener), id.state, id.key, id.nth);
+      return openedId(id.chart, idOf(id.opener), id.state, id.key);
     case "copy":
       return copyId(idOf(id.owner), id.map, canonicalJson(id.key));
   }

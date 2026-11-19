@@ -301,8 +301,8 @@ include hact
 omit h [MonadNote (StateT C Id)] in
 theorem act_agrees (w : World) (o : Scenario.Origin) (service : String)
     {f : Service → Functions (StateT C Id) → State → StateT C Id State} {g : Service → Functions Id → State → Id State}
-    (hf : ∀ st s, Agrees (f st (fsOfI service) s) (g st (fsOf service) s)) (reopen : Bool) :
-    Agrees (w.act fsOfI o service f reopen) (w.act fsOf o service g reopen) := by
+    (hf : ∀ st s, Agrees (f st (fsOfI service) s) (g st (fsOf service) s)) :
+    Agrees (w.act fsOfI o service f) (w.act fsOf o service g) := by
   unfold World.act
   split
   · exact Agrees.pure _
@@ -313,8 +313,8 @@ theorem deliver_agrees (w : World) (o : Scenario.Origin) (receiver : String) (ks
   unfold World.deliver
   dsimp only
   split
-  · exact act_agrees hact _ _ _ (fun _ _ => arriveFrom_agrees h _ _ _ _ _ _) _
-  · exact act_agrees hact _ _ _ (fun _ _ => by unfold arriveAll; exact arriveAll_go_agrees h _ _ _ _ _) _
+  · exact act_agrees hact _ _ _ (fun _ _ => arriveFrom_agrees h _ _ _ _ _ _)
+  · exact act_agrees hact _ _ _ (fun _ _ => by unfold arriveAll; exact arriveAll_go_agrees h _ _ _ _ _)
 
 theorem clientRequest_agrees (w : World) (i : Nat) (type : Scenario.RequestType) (target : Spec.Ref)
     (input : Template) (sameIdAs : Option Nat) :

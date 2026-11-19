@@ -108,7 +108,7 @@ theorem keeps_checkStepOrder (x : State) : KeepsKeys x (checkStepOrder x) := by
 
 theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
     (f : Service → Functions Id → State → Id State) (hf : ∀ st s, KeepsKeys s (f st (fsOf service) s))
-    (reopen : Bool) : KeepsWorld w (w'.act fsOf o service f reopen) := by
+    : KeepsWorld w (w'.act fsOf o service f) := by
   unfold World.act
   split
   · exact h
@@ -231,8 +231,8 @@ theorem keepsWorld_deliver {w w' : World} (h : KeepsWorld w w') (o : Scenario.Or
   unfold World.deliver
   dsimp only
   split
-  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveFrom _ _ _ _ _ _) _
-  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveAll _ _ _ _) _
+  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveFrom _ _ _ _ _ _)
+  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveAll _ _ _ _)
 
 theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i : Nat) (ks : List Nat) :
     KeepsWorld w (w'.deliverCarried fsOf i ks) := by
@@ -262,7 +262,7 @@ theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) 
     repeat' split
     all_goals first
       | exact keepsWorld_report h _
-      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => keeps_requestOf _ _ _ _ _ _ _) _) _ _ _ _
+      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => keeps_requestOf _ _ _ _ _ _ _)) _ _ _ _
 
 theorem keepsWorld_now_iff {w w' : World} (now : Time) : KeepsWorld w { w' with now } ↔ KeepsWorld w w' := Iff.rfl
 
@@ -285,7 +285,7 @@ macro "kw_tac" : tactic => `(tactic| repeat' (first
   | with_reducible apply keepsWorld_setStatus
   | with_reducible apply keepsWorld_deliverCarried
   | with_reducible apply keepsWorld_clientRequest
-  | (with_reducible refine keepsWorld_act ?_ _ _ _ (fun st s => ?_) _)
+  | (with_reducible refine keepsWorld_act ?_ _ _ _ (fun st s => ?_))
   | simp only [keepsWorld_now_iff, keepsWorld_inFlight_iff, keepsWorld_messages_iff]
   | with_reducible refine keepsWorld_resolving ?_ _ _ fun _ => ?_
   | with_reducible refine keepsWorld_attempt ?_ _ _ fun _ => ?_
@@ -326,7 +326,7 @@ theorem keepsWorld_beginAll (w : World) : KeepsWorld w (w.beginAll fsOf) := by
   dsimp only
   split
   · exact hv
-  · exact keepsWorld_act hv _ _ _ (fun st s => keeps_begin _) _
+  · exact keepsWorld_act hv _ _ _ (fun st s => keeps_begin _)
 
 theorem keeps_lookup_map (l : List (String × State)) (g : String × State → String × State)
     (h : ∀ a, (g a).1 = a.1 ∧ KeepsKeys a.2 (g a).2) (p : String) :

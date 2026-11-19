@@ -27,8 +27,8 @@ structure Instance where
   awaitingOnDone : Option (List String) := none
   /-- The output of the last fulfilled answer of each shows slot, or null before any. -/
   shown : List (String × Value) := []
-  /-- Whether a modal `opens` opened the screen. -/
-  modal : Bool := false
+  /-- The step that started the instance; World.act reads it to find the screens that a processing opened. -/
+  startStep : Option Nat := none
   /-- The decoded item key of a copy; the map state and the canonical key are in `id`. -/
   itemKey : Option Value := none
   copyKeys : List (String × List Value) := []

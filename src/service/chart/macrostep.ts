@@ -174,6 +174,7 @@ function doneWork(r: Processing, name: InstanceId, step: number): void {
 function startWork(r: Processing, name: InstanceId, step: number): void {
   const instance = machine(r.state, name);
   if (instance === undefined) return;
+  instance.startStep = step;
   enter(r, instance, [instance.chart.initial], step);
   settle(r, name, step);
 }

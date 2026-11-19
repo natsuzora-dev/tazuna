@@ -79,3 +79,17 @@ export const closeEarlierPanel = scenario(
     then: ({ looked }) => [offered(looked, "close")],
   },
 );
+
+export const cancelReopened = scenario(
+  "Open the dialog, cancel it, and open it again; the reopened dialog takes the closed one's name, and the second cancel operates it; no violation",
+  {
+    given,
+    when: (w) => {
+      const list = w.startup.screen(listScreen);
+      w.user.operate(w.user.operate(list, "clear").screen(confirmDialog), "cancel");
+      w.user.operate(w.user.operate(list, "clear").screen(confirmDialog), "cancel");
+      w.user.operate(list, "pick", { taskId: "task-1" });
+    },
+    then: () => [],
+  },
+);

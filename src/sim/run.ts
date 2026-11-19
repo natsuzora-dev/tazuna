@@ -720,7 +720,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       return;
     }
     case "restart":
-      return act(w, origin, own, restart, true);
+      return act(w, origin, own, restart);
   }
 }
 

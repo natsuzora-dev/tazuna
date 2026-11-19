@@ -132,9 +132,9 @@ the opener of a screen.
 -/
 def idValue (st : Service) : InstanceId → CValue
   | .top c => CValue.ofValue (ToValue.toValue (InstanceId.top c))
-  | .opened c o state key nth =>
+  | .opened c o state key =>
     .obj [("kind", .leaf (.str "opened")), ("chart", .leaf (.str c)), ("opener", idValue st o),
-      ("state", .leaf (.str state)), ("key", .leaf (.str key)), ("nth", .leaf (ToValue.toValue nth))]
+      ("state", .leaf (.str state)), ("key", .leaf (.str key))]
   | .copy o m k =>
     .obj [("kind", .leaf (.str "copy")), ("owner", idValue st o), ("map", .leaf (.str m)),
       ("key", keyed (refsAt ((mapNamed st o.chart m).map (·.itemKeys) |>.getD [])) [] k)]

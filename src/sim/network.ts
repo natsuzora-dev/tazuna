@@ -137,9 +137,6 @@ export function noteTo(w: World, r: InvalidScenario): void {
   w.violations.push(r);
 }
 
-/** Lean's screensOf. */
-const screensOf = (s: State): InstanceId[] => [...s.machines.values()].filter((i) => i.chart.screen).map((i) => i.id);
-
 /** Lean's World.post. */
 function post(w: World, o: Origin, sender: string, receiver: string, l: Line, definition: DefinitionRef): void {
   const role = w.roles.get(receiver);
@@ -202,14 +199,13 @@ export function keyEntity(w: World, x: string): DefinitionRef | undefined {
 }
 
 /** Lean's World.act. */
-export function act(w: World, o: Origin, service: string, f: (r: Processing) => void, reopen = false): void {
+export function act(w: World, o: Origin, service: string, f: (r: Processing) => void): void {
   const p = w.services.get(service);
   if (p === undefined) return;
   const r = p.processing;
   const s = r.state;
   const before = s.lines.length;
   const stepsFrom = s.steps.length;
-  const screens = screensOf(s);
   const entry = w.stepOrders.find((e) => sameOrigin(e.origin, o) && e.service === service);
   s.stepOrder = entry?.order ?? [];
   if (entry !== undefined) w.stepOrders = w.stepOrders.filter((e) => e !== entry);
@@ -224,8 +220,8 @@ export function act(w: World, o: Origin, service: string, f: (r: Processing) => 
     s.stepOrder = [];
     p.halted = error.violation;
   }
-  for (const id of screensOf(s).filter((k) => reopen || !screens.includes(k)))
-    w.opened.push({ origin: o, service, id });
+  for (const { chart, startStep, id } of s.machines.values())
+    if (chart.screen && startStep !== undefined && startStep >= stepsFrom) w.opened.push({ origin: o, service, id });
   w.spans.push({ origin: o, service, from: before, to: s.lines.length, stepsFrom, stepsTo: s.steps.length });
   const sent = s.lines.slice(before);
   route(w, o, service, sent);

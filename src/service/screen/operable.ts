@@ -20,6 +20,15 @@ export interface Operation {
   readonly payloads: readonly unknown[] | undefined;
 }
 
+/** Lean's State.modal: whether a modal `opens` opened the screen, the one of its opener's chart that its id names. */
+function modal(s: State, { id }: Instance): boolean {
+  if (id.kind !== "opened") return false;
+  const opener = machine(s, id.opener);
+  return (opener?.chart.states.get(id.state)?.activities ?? []).some(
+    (a) => a.key === id.key && a.keyword === "opens" && a.modal,
+  );
+}
+
 /**
  * Returns the open screen instance `resource` when it takes operations, or the reason that it does not: a modal opened
  * after it covers it. Several open instances of one screen are each operable.
@@ -35,7 +44,7 @@ function acceptingInstance(
     const instance = machine(s, r);
     if (instance === undefined) continue;
     if (r === resource) return { kind: "ok", instance };
-    if (instance.modal) return { kind: "covered", child: instance };
+    if (modal(s, instance)) return { kind: "covered", child: instance };
   }
   return { kind: "notOpen" };
 }

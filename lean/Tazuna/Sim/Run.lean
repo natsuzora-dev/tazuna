@@ -377,7 +377,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       if w.stopped then pure w else
       w.act fsOf (.line i) service (fireTo time.time)
     pure { w with now := time.time }
-  | .restart => w.act fsOf (.line i) own restart (reopen := true)
+  | .restart => w.act fsOf (.line i) own restart
 
 /--
 The world after line `i`, unless the values it writes report: a running peer's request, answer and event may write

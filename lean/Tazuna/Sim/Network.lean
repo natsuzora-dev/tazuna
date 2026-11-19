@@ -148,8 +148,6 @@ def World.note (w : World) (r : InvalidScenario) : World := { w with violations 
 def World.setStatus (w : World) (k : Nat) (status : Status) : World :=
   { w with messages := w.messages.modify k fun m => { m with status } }
 
-def screensOf (s : State) : List InstanceId := (s.machines.filter (·.chart.screen)).map (·.id)
-
 /--
 The world with a message from `sender` to `receiver` that carries `definition`, kept in flight, discarded, or reported
 as unlisted.
@@ -204,22 +202,22 @@ def World.keyEntity? (w : World) (x : String) : Option Spec.Ref :=
 /--
 The world after `service` processes what `f` gives it while `o` is processed, taking first the steps of its entry of `stepOrders`,
 which the processing uses up: its state, the span of lines and steps it wrote, the screens that opened, and the messages
-it sent. Under `reopen`, as after a restart, every screen open after it opened anew.
+it sent. A screen opened when its start step is one of the steps of the processing, so a screen that took the id of a
+closed one opened too.
 -/
 def World.act {m : Type → Type} [Monad m] [MonadActing m] (w : World) (fsOf : String → Functions m) (o : Origin)
-    (service : String) (f : Service → Functions m → State → m State) (reopen : Bool := false) : m World := do
+    (service : String) (f : Service → Functions m → State → m State) : m World := do
   match w.services.lookup service with
   | none => pure w
   | some st =>
     let s := w.state service
     let before := s.lines.size
     let stepsFrom := s.steps.size
-    let screens := screensOf s
     let order := (w.stepOrders.find? fun (t, q, _) => t == o && q == service).map (·.2.2)
     let t ← MonadActing.acting service (f st (fsOf service) { s with stepOrder := order.getD [] })
     let t := if order.isSome then checkStepOrder t else t
-    let opened := ((screensOf t).filter fun x => reopen || !screens.contains x).map fun id =>
-      { origin := o, service, id : Opened }
+    let opened := (t.machines.filter fun i => i.chart.screen && i.startStep.any (stepsFrom ≤ ·)).map fun i =>
+      { origin := o, service, id := i.id : Opened }
     let span : Span := { origin := o, service, «from» := before, to := t.lines.size, stepsFrom, stepsTo := t.steps.size }
     let w := { w with states := w.states.map fun (q, x) => if q == service then (q, t) else (q, x),
                       spans := w.spans ++ [span], opened := w.opened ++ opened,

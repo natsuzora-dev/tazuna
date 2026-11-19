@@ -9,7 +9,7 @@ open Tazuna.Thm.Data.Basic
 variable {st : Service} {fs : Functions Id} {s : State}
 
 theorem accepting_skips (resource : InstanceId) (pre rest : List InstanceId)
-    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → i.modal = false) :
+    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → s.modal i = false) :
     State.accepting.go s resource (pre ++ rest) = State.accepting.go s resource rest := by
   induction pre with
   | nil => rfl
@@ -26,8 +26,8 @@ theorem accepting_skips (resource : InstanceId) (pre rest : List InstanceId)
 
 /-- An instance that a modal `opens` opened after the operated instance `resource` covers it. -/
 theorem modal_child_covers (resource : InstanceId) (pre rest : List InstanceId) (c : InstanceId) (ci : Instance)
-    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → i.modal = false)
-    (hc : s.machine? c = some ci) (hn : c ≠ resource) (hm : ci.modal = true) :
+    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → s.modal i = false)
+    (hc : s.machine? c = some ci) (hn : c ≠ resource) (hm : s.modal ci = true) :
     State.accepting.go s resource (pre ++ c :: rest) = .error (.covered ci.chart.name) := by
   rw [accepting_skips resource pre (c :: rest) hp, State.accepting.go]
   have hn' : (c == resource) = false := by simpa using hn
@@ -38,7 +38,7 @@ The operated instance `resource` accepts when only non-modal instances were open
 several open instances of one screen are each operable (B13).
 -/
 theorem nonmodal_child_lets_parent (resource : InstanceId) (pre rest : List InstanceId) (pi : Instance)
-    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → i.modal = false)
+    (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → s.modal i = false)
     (hpi : s.machine? resource = some pi) :
     State.accepting.go s resource (pre ++ resource :: rest) = .ok pi := by
   rw [accepting_skips resource pre (resource :: rest) hp, State.accepting.go]
