@@ -2,7 +2,6 @@ import type { z } from "zod";
 import type { Made } from "../data/bag.ts";
 import { bagged, sorted } from "../data/collections.ts";
 import { objectOf, type Shape } from "../data/values.ts";
-import type { SomeKey } from "./conditions.ts";
 import type {
   AnyEvent,
   CreateEvent,
@@ -15,6 +14,7 @@ import type {
   UpdateEvent,
 } from "./definition.ts";
 import type { AnyEntity, AnyKeyedEntity, Entities, KeyedEntity, SingleEntity } from "./entity.ts";
+import { withWritten } from "./written.ts";
 
 type WritableField<E extends AnyEntity> =
   E extends KeyedEntity<infer S, infer K>
@@ -43,7 +43,7 @@ export type DeleteEventDefiner<Es extends Entities, N extends string> = <const E
 }) => DeleteEvent<E> & Owned<N>;
 
 export type EventDefiner<N extends string> = <const S extends Shape = Record<never, never>>(definition: {
-  payload?: S & SomeKey<keyof S>;
+  payload?: S;
 }) => FieldsEvent<S> & Owned<N>;
 
 type EventOptions = {
@@ -56,14 +56,17 @@ export function eventDefiners(owner: ServiceDefinition) {
   const of =
     (change: AnyEvent["change"]) =>
     (d: EventOptions): AnyEvent =>
-      ({
-        kind: "event",
-        change,
-        service: owner,
-        ...(change === "none" ? {} : { entity: d.entity }),
-        ...(change === "update" ? { writes: d.writes } : {}),
-        payload: payloadOf(change, d),
-      }) as AnyEvent;
+      withWritten(
+        {
+          kind: "event",
+          change,
+          service: owner,
+          ...(change === "none" ? {} : { entity: d.entity }),
+          ...(change === "update" ? { writes: d.writes } : {}),
+          payload: payloadOf(change, d),
+        } as AnyEvent,
+        d,
+      );
   return { createEvent: of("create"), updateEvent: of("update"), deleteEvent: of("delete"), event: of("none") };
 }
 

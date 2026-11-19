@@ -12,6 +12,7 @@ import * as binds from "./nonCanonical/binds.ts";
 import * as charts from "./nonCanonical/charts.ts";
 import * as constants from "./nonCanonical/constants.ts";
 import * as descriptions from "./nonCanonical/descriptions.ts";
+import * as keywords from "./nonCanonical/keywords.ts";
 import * as rejections from "./nonCanonical/rejections.ts";
 import * as sources from "./restricted/sources.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
@@ -37,6 +38,7 @@ const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<No
   charts,
   constants,
   descriptions,
+  keywords,
   rejections,
   sources,
 ];

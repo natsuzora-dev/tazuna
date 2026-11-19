@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { type GivenDefiner, givenDefiner, type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
-import type { Conditions, Named, Present, SomeKey } from "./conditions.ts";
+import type { Conditions, Named, Present } from "./conditions.ts";
 import type { ConstantsGroup } from "./constants.ts";
 import type { Contract, RecordsData } from "./contract.ts";
 import type {
@@ -33,6 +33,7 @@ import {
 import { type MachineDefiner, machineDefiner } from "./machine.ts";
 import { type ScreenDefiner, screenDefiner } from "./screen.ts";
 import type { ErrorIf, IsUnion } from "./tree.ts";
+import { withWritten } from "./written.ts";
 
 type Input<I extends Shape> = Row<I>;
 type Bound<B> = { readonly [K in keyof B]: NonNullable<B[K]> };
@@ -47,7 +48,7 @@ interface Definers<Es extends Entities, N extends string> {
     const En extends string = never,
     const Bn extends string = never,
   >(definition: {
-    input?: I & SomeKey<keyof I>;
+    input?: I;
     /** The events that the command emits, of this service only (`Illegal.foreignEvent`). */
     emits: readonly Ev[];
     /** The values that `requires`, `decide`, and `ensures` read as `bound`. */
@@ -67,7 +68,7 @@ interface Definers<Es extends Entities, N extends string> {
     const Rq extends string = never,
     const En extends string = never,
   >(definition: {
-    input?: I & SomeKey<keyof I>;
+    input?: I;
     /** A lookup that can miss uses a nullable field. */
     output: O;
     /** Checked as a command's `requires`. */
@@ -189,8 +190,8 @@ interface ExternalDefiners<N extends string> {
     const En extends string = never,
     const Rj extends readonly RejectionKind[] = never,
   >(definition: {
-    input?: I & SomeKey<keyof I>;
-    output?: O & SomeKey<keyof O>;
+    input?: I;
+    output?: O;
     emits: readonly Ev[];
     /**
      * The kinds that the external implementation may reject with. `test` explores only these, and `verify` reports
@@ -210,7 +211,7 @@ interface ExternalDefiners<N extends string> {
     const En extends string = never,
     const Rj extends readonly RejectionKind[] = never,
   >(definition: {
-    input?: I & SomeKey<keyof I>;
+    input?: I;
     output: O;
     /**
      * The kinds that the external implementation may reject with. `test` explores only these, and `verify` reports
@@ -268,15 +269,18 @@ export function service<
     /** The service's name, which names it in contracts, scenarios, constants and traces. */
     name: N;
     description: string;
-    entities?: Es & SomeKey<keyof Es>;
+    entities?: Es;
     /** The conditions over all records (`Fault.failedServiceInvariant`). */
     invariants?: Named<Iv, { records: Records<Es> }>;
   } & ReservedIn<N>,
 ): Definers<Es, N> {
   return definers(
-    serviceDefinition(
-      definition as { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },
-      false,
+    withWritten(
+      serviceDefinition(
+        definition as { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },
+        false,
+      ),
+      definition,
     ),
   ) as unknown as Definers<Es, N>;
 }
@@ -316,33 +320,41 @@ const commandOf = (
   owner: ServiceDefinition,
   d: CommandOptions,
   decide: ((args: never) => Emits) | undefined,
-): AnyCommand => ({
-  kind: "command",
-  service: owner,
-  input: d.input ?? {},
-  output: d.output,
-  emits: d.emits,
-  binds: d.binds ?? {},
-  requires: d.requires ?? {},
-  ensures: d.ensures ?? {},
-  decide,
-  rejects: d.rejects,
-});
+): AnyCommand =>
+  withWritten(
+    {
+      kind: "command",
+      service: owner,
+      input: d.input ?? {},
+      output: d.output,
+      emits: d.emits,
+      binds: d.binds ?? {},
+      requires: d.requires ?? {},
+      ensures: d.ensures ?? {},
+      decide,
+      rejects: d.rejects,
+    },
+    d,
+  );
 
 const queryOf = (
   owner: ServiceDefinition,
   d: QueryOptions,
   resolve: ((args: never) => unknown) | undefined,
-): AnyQuery => ({
-  kind: "query",
-  service: owner,
-  input: d.input ?? {},
-  output: d.output,
-  requires: d.requires ?? {},
-  ensures: d.ensures ?? {},
-  resolve,
-  rejects: d.rejects,
-});
+): AnyQuery =>
+  withWritten(
+    {
+      kind: "query",
+      service: owner,
+      input: d.input ?? {},
+      output: d.output,
+      requires: d.requires ?? {},
+      ensures: d.ensures ?? {},
+      resolve,
+      rejects: d.rejects,
+    },
+    d,
+  );
 
 function register(owner: ServiceDefinition, definers: readonly object[]): void {
   for (const definer of definers) definerOwners.set(definer, owner);
@@ -362,16 +374,21 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
       guard?: Conditions<never>;
       input?: (args: never) => unknown;
       onRejected?: readonly [];
-    }): Automation => ({
-      kind: "automation",
-      service: owner,
-      receives: setup.receives,
-      commands: setup.commands,
-      binds: d.binds ?? {},
-      guard: d.guard ?? {},
-      input: d.input,
-      onRejected: d.onRejected,
-    }),
+    }): Automation =>
+      withWritten(
+        {
+          kind: "automation",
+          service: owner,
+          receives: setup.receives,
+          commands: setup.commands,
+          binds: d.binds ?? {},
+          guard: d.guard ?? {},
+          input: d.input,
+          onRejected: d.onRejected,
+        },
+        setup,
+        d,
+      ),
   });
   const machine = machineDefiner(owner);
   const screen = screenDefiner(owner);

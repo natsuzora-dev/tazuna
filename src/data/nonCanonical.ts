@@ -15,8 +15,13 @@ type OnRejectedAt = { readonly state: string; readonly trigger: Trigger };
  * `unreachableOnRejected` name an automation with no data, or the `onRejected` of a state of a machine or screen.
  */
 export type NonCanonical =
-  | Of<"emptyGuard", DefinitionRef, { readonly transition: TransitionRef }>
-  | Of<"emptyAfter", DefinitionRef, { readonly state: string }>
+  /**
+   * A keyword written as `{}`, which means what leaving it out means. `path` leads through the keys of the objects
+   * written to the definer, and then to `chart()` or `send()`, with array positions as numbers. The definer's `states`
+   * holds the states' tree, and `chart()`'s holds their behaviors.
+   */
+  | Of<"emptyKeyword", DefinitionRef, { readonly path: readonly (string | number)[] }>
+  | Of<"emptyKeyword", null, { readonly service: string; readonly path: readonly (string | number)[] }>
   /** A transition to its source state or a descendant of it has no `reenter`. */
   | Of<"missingReenter", DefinitionRef, { readonly transition: TransitionRef }>
   /** A transition of the chart's own `on` has a `reenter`. */

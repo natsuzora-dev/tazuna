@@ -138,11 +138,6 @@ type Nullable<F> = {
       }[keyof F[K]["own"] & string]
     : never;
 }[keyof F & string];
-type EmptyHeld<T> = {
-  [K in keyof T & string]:
-    | (T[K] extends { readonly held: infer H } ? ([keyof H] extends [never] ? `${K}.held` : never) : never)
-    | (T[K] extends { readonly states: infer C } ? EmptyHeld<C> : never);
-}[keyof T & string];
 type InMap<F, Kinds> = {
   [K in keyof F]: F[K] extends AnyEntry
     ? [F[K]["map"]] extends [never]
@@ -156,7 +151,6 @@ export type ErrorIf<Name extends string, V> = [V] extends [never] ? unknown : { 
 export type TreeErrors<T> = ErrorIf<"duplicateStateNames", Duplicates<T>> &
   ErrorIf<"shadowedHeld", Shadowed<Flat<T>>> &
   ErrorIf<"nullableHeld", Nullable<Flat<T>>> &
-  ErrorIf<"emptyKeyword", EmptyHeld<T>> &
   ErrorIf<"nestedMap", `${InMap<Flat<T>, "map"> & string}: a copy would read two keys as key`> &
   ErrorIf<"finalInMap", `${InMap<Flat<T>, "final"> & string}: a copy ends only when its key leaves items`>;
 
@@ -196,20 +190,18 @@ type HasHeld<F, K extends keyof F> = keyof OwnOf<F, K> extends never ? false : t
 
 export type TableKeys<F> = { [K in keyof F]: KindOf<F, K> extends "history" ? never : K }[keyof F];
 type HeldKeys<F> = { [K in keyof F]: HasHeld<F, K> extends true ? K : never }[keyof F];
-/** A value of a type with known optional keys has at least one of the keys. `{}` is a type error. */
-export type SomeKnownKey<T> = { [k in keyof T]-?: { readonly [q in k]-?: unknown } }[keyof T];
 type TableRow<F, K extends keyof F, A, B> =
   HasHeld<F, K> extends true
     ? B & {
         /** The expressions of the held values, which do not read `held`. */
         readonly holds: Holds<A, OwnOf<F, K>>;
       }
-    : SomeKnownKey<B> & B & { readonly holds?: never };
+    : B & { readonly holds?: never };
 type Holds<A, Own extends Shape> = {
   readonly [h in keyof Own]: (args: A) => Made<Immutable<z.output<Own[h]>>> | null | undefined;
 };
 /**
- * The behaviors of the states. A state without behavior is left out. A state with held values needs `holds`
+ * The behaviors of the states. A state without behavior is left out (`NonCanonical.emptyKeyword`). A state with held values needs `holds`
  * (`missingHolds`), and a map state needs `items` (`missingItems`).
  */
 export type Table<

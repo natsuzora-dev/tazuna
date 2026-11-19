@@ -2,7 +2,7 @@ import type { Bag, Made } from "../data/bag.ts";
 import type { Delay } from "../data/datetime.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
-import type { Conditions, Named, SomeKey } from "./conditions.ts";
+import type { Conditions, Named } from "./conditions.ts";
 import type {
   AcceptedOutput,
   AnyCommand,
@@ -33,12 +33,12 @@ import {
   type OutsideRegionOrMap,
   type RowsWritten,
   type SharedContextFields,
-  type SomeKnownKey,
   type Table,
   type TableKeys,
   type Tree,
   type TreeErrors,
 } from "./tree.ts";
+import { withWritten } from "./written.ts";
 
 export interface BaseArgs<Ctx, N extends string, D> extends Now {
   readonly context: Ctx;
@@ -50,16 +50,14 @@ export interface BaseArgs<Ctx, N extends string, D> extends Now {
   readonly active: { readonly [S in N]: boolean };
 }
 
-type Assign<Ctx, A> = SomeKnownKey<Ctx> & { readonly [K in keyof Ctx]?: (args: A & CreateKey) => Made<Ctx[K]> };
+type Assign<Ctx, A> = { readonly [K in keyof Ctx]?: (args: A & CreateKey) => Made<Ctx[K]> };
 
 type Transition<N extends string, Ctx, A> = {
   /**
    * The conditions of the transition. When a guard checks the same condition as a `requires` of a command that the
    * state sends: for another service's records, read that service's query answer (`shown` or a `calls` answer). For the
    * own service's records, call the `condition` that the `requires` calls. For values that only the sender holds
-   * (`context`, `payload`), write the same expression in the guard. An empty guard is `NonCanonical.emptyGuard` and not
-   * a type error: TS rejects an empty object only through a type parameter inferred from its keys (SomeKey), and chart
-   * infers only the written state keys.
+   * (`context`, `payload`), write the same expression in the guard.
    */
   readonly guard?: Conditions<A>;
   readonly assign?: Assign<Ctx, A>;
@@ -93,9 +91,7 @@ export type KeyedTransitions<
   Ctx,
   B,
   ArgsByKey extends Readonly<Record<string, object>>,
-> = keyof ArgsByKey extends never
-  ? never
-  : SomeKnownKey<ArgsByKey> & { readonly [K in keyof ArgsByKey]?: Transitions<N, Ctx, B & ArgsByKey[K]> };
+> = keyof ArgsByKey extends never ? never : { readonly [K in keyof ArgsByKey]?: Transitions<N, Ctx, B & ArgsByKey[K]> };
 
 export type ReceivedEvents<Rs extends Events> = { readonly [K in keyof Rs]: { readonly payload: Payload<Rs[K]> } };
 
@@ -115,7 +111,7 @@ type OnRejected<N extends string, Ctx, B> = {
 };
 
 /** The queries that a state calls. A state that does nothing on an answer writes `[]`. */
-type StateCalls<N extends string, Ctx, B, Qs extends Queries> = SomeKnownKey<Qs> & {
+type StateCalls<N extends string, Ctx, B, Qs extends Queries> = {
   readonly [K in keyof Qs]?: {
     readonly onFulfilled: Transitions<N, Ctx, B & { readonly output: QueryOutput<Qs[K]> }>;
   } & OnRejected<N, Ctx, B> &
@@ -123,7 +119,7 @@ type StateCalls<N extends string, Ctx, B, Qs extends Queries> = SomeKnownKey<Qs>
 };
 
 /** The commands that a state sends. A state that does nothing on an answer writes `[]`. */
-export type StateSends<N extends string, Ctx, B, Cs extends Commands> = SomeKnownKey<Cs> & {
+export type StateSends<N extends string, Ctx, B, Cs extends Commands> = {
   readonly [K in keyof Cs]?: {
     readonly onAccepted: Transitions<N, Ctx, B & AcceptedOutput<Cs[K]>>;
   } & OnRejected<N, Ctx, B> &
@@ -133,9 +129,7 @@ export type StateSends<N extends string, Ctx, B, Cs extends Commands> = SomeKnow
 interface NodeBase<N extends string, Ctx, B, Ons> {
   /** The transitions per received event, and in screens also per control name. */
   readonly on?: Ons;
-  /**
-   * The deadlines by name. An empty `after` is `NonCanonical.emptyAfter` and not a type error, as an empty `guard` is.
-   */
+  /** The deadlines by name. */
   readonly after?: { readonly [deadline: string]: Deadline<N, Ctx, B> };
   readonly always?: Transitions<N, Ctx, B>;
   readonly entry?: { readonly assign: Assign<Ctx, B> };
@@ -245,7 +239,7 @@ interface MachineSetup<
     definition: {
       /** The transitions that apply in every state. */
       on?: Ons<Row<Ctx>, OuterNames<F>, Rs, OuterArguments<Ctx, Es>>;
-      states?: Table<F, K, ScopeArgs<F, Ctx, Es>, MachineBehaviors<F, Ctx, Rs, Qs, Cs, Es>> & SomeKey<K>;
+      states?: Table<F, K, ScopeArgs<F, Ctx, Es>, MachineBehaviors<F, Ctx, Rs, Qs, Cs, Es>>;
     } & NoInfer<RowsWritten<F, K>>,
   ): Machine;
 }
@@ -261,11 +255,11 @@ export type MachineDefiner<Es extends Entities> = <
 >(
   setup: {
     description: string;
-    context?: Ctx & SomeKey<keyof Ctx>;
-    receives?: Rs & SomeKey<keyof Rs>;
+    context?: Ctx;
+    receives?: Rs;
     /** The queries of other services (`Illegal.ownQuery`). */
-    queries?: Qs & SomeKey<keyof Qs>;
-    commands?: Cs & SomeKey<keyof Cs>;
+    queries?: Qs;
+    commands?: Cs;
     initial: NoInfer<keyof St & string>;
     states: St & CheckTree<NoInfer<St>>;
     /**
@@ -278,18 +272,23 @@ export type MachineDefiner<Es extends Entities> = <
 
 export function machineDefiner(owner: ServiceDefinition): MachineDefiner<Entities> {
   return (setup) => ({
-    chart: (definition) => ({
-      kind: "machine",
-      service: owner,
-      description: setup.description,
-      context: setup.context ?? {},
-      receives: setup.receives ?? {},
-      queries: setup.queries ?? {},
-      commands: setup.commands ?? {},
-      initial: setup.initial,
-      ...assemble(setup.states, definition.states ?? {}),
-      on: (definition.on ?? {}) as unknown as Readonly<Record<string, readonly TransitionSpec[]>>,
-      invariants: (setup.invariants ?? {}) as Conditions<unknown>,
-    }),
+    chart: (definition) =>
+      withWritten(
+        {
+          kind: "machine",
+          service: owner,
+          description: setup.description,
+          context: setup.context ?? {},
+          receives: setup.receives ?? {},
+          queries: setup.queries ?? {},
+          commands: setup.commands ?? {},
+          initial: setup.initial,
+          ...assemble(setup.states, definition.states ?? {}),
+          on: (definition.on ?? {}) as unknown as Readonly<Record<string, readonly TransitionSpec[]>>,
+          invariants: (setup.invariants ?? {}) as Conditions<unknown>,
+        },
+        setup,
+        definition,
+      ),
   });
 }

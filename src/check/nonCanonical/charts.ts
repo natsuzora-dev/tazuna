@@ -1,7 +1,5 @@
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
-import { stateAt, transitionAt } from "../../dsl/chart.ts";
-import type { ChartSpec } from "../../dsl/definition.ts";
 import type { Found } from "../../load/found.ts";
 import { charts, type Spec } from "../../load/load.ts";
 import {
@@ -11,24 +9,6 @@ import {
   transitionRef,
 } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
-
-const isEmpty = (value: object | undefined) => value !== undefined && Object.keys(value).length === 0;
-
-function emptyKeywords(chart: ChartSpec, structure: ChartStructure, definition: DefinitionRef): NonCanonical[] {
-  const guards = (transitions: readonly TransitionStructure[]): NonCanonical[] =>
-    transitions
-      .filter((t) => isEmpty(transitionAt(chart, structure, transitionRef(t)).guard))
-      .map((t) => ({ kind: "NonCanonical.emptyGuard", definition, data: { transition: transitionRef(t) } }));
-  return [
-    ...guards(structure.on),
-    ...structure.states.flatMap((state) => {
-      const after: NonCanonical[] = isEmpty(stateAt(chart, state.path).after)
-        ? [{ kind: "NonCanonical.emptyAfter", definition, data: { state: state.name } }]
-        : [];
-      return [...after, ...guards(state.transitions)];
-    }),
-  ];
-}
 
 // Like ESLint's prefer-const, this reports a definition that does not need its more general form.
 function statelessMachine(chart: ChartStructure, definition: DefinitionRef): NonCanonical[] {
@@ -68,11 +48,10 @@ function reenters(chart: ChartStructure, definition: DefinitionRef): NonCanonica
 }
 
 export const check = (spec: Spec): Found<NonCanonical>[] =>
-  charts(spec).flatMap(({ named, chart, structure }) => {
+  charts(spec).flatMap(({ named, structure }) => {
     const definition = { service: named.service, name: named.name };
-    return [
-      ...emptyKeywords(chart, structure, definition),
-      ...statelessMachine(structure, definition),
-      ...reenters(structure, definition),
-    ].map((violation) => ({ violation, place: named.place }));
+    return [...statelessMachine(structure, definition), ...reenters(structure, definition)].map((violation) => ({
+      violation,
+      place: named.place,
+    }));
   });

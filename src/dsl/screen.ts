@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { Bag, Made } from "../data/bag.ts";
 import type { Shape } from "../data/values.ts";
-import type { Named, SomeKey } from "./conditions.ts";
+import type { Named } from "./conditions.ts";
 import type {
   AnyOffer,
   AnyScreen,
@@ -37,12 +37,12 @@ import {
   type OuterNames,
   type RowsWritten,
   type SharedContextFields,
-  type SomeKnownKey,
   type Table,
   type TableKeys,
   type Tree,
   type TreeErrors,
 } from "./tree.ts";
+import { withWritten } from "./written.ts";
 
 type Screens = Readonly<Record<string, AnyScreen>>;
 
@@ -64,9 +64,9 @@ type OperatedControls<Ps extends Payloads> = { readonly [K in keyof Ps]: { reado
 /**
  * The queries that a state shows. A rejection other than unavailable is a fault of the screen (`Fault.rejectedShows`).
  */
-type Shows<B, Qs extends Queries> = SomeKnownKey<Qs> & { readonly [K in keyof Qs]?: InputOf<Qs[K], B> };
+type Shows<B, Qs extends Queries> = { readonly [K in keyof Qs]?: InputOf<Qs[K], B> };
 
-type StateOpens<N extends string, Ctx, B, Ss extends Screens> = SomeKnownKey<Ss> & {
+type StateOpens<N extends string, Ctx, B, Ss extends Screens> = {
   readonly [K in keyof Ss]?: {
     /** Whether the child opens as with HTML `showModal()` (true) or as with HTML `show()` (false). */
     readonly modal: boolean;
@@ -177,9 +177,7 @@ type Offer<P, A> = ((args: A) => Bag<MadeRow<PayloadOf<P>>> | readonly MadeRow<P
 
 /** The offers of a state, which override the offers of its ancestors and of the chart for the controls they name. */
 type StateOffers<Ps extends Payloads, A> = {
-  readonly offers?: [keyof Ps] extends [never]
-    ? never
-    : SomeKnownKey<{ readonly [K in keyof Ps]: unknown }> & { readonly [K in keyof Ps]?: Offer<Ps[K], A> };
+  readonly offers?: [keyof Ps] extends [never] ? never : { readonly [K in keyof Ps]?: Offer<Ps[K], A> };
 };
 
 /** The chart's own offers, which name every control, so that no control is offered without a written entry. */
@@ -210,8 +208,7 @@ interface ScreenSetup<
           K,
           { readonly [P in keyof F]: ScreenScope<F, P, I, Ctx, Sh, Es>["args"] },
           ScreenBehaviors<F, I, Ctx, Rs, Sh, Cs, Ss, Es, Ps>
-        > &
-          SomeKey<K>;
+        >;
       } & NoInfer<RowsWritten<F, K>>,
   ): Screen<I, O, ScreenControls<Ps>>;
 }
@@ -237,17 +234,17 @@ export type ScreenDefiner<Es extends Entities> = <
      * The input of a screen that another screen opens. Only such a screen has `input`, `output`, `requires`, and
      * `ensures` (`Illegal.missingParent`).
      */
-    input?: I & SomeKey<keyof I>;
-    output?: O & SomeKey<keyof O>;
+    input?: I;
+    output?: O;
     /** A field without a default starts from `initialContext`. */
-    context?: Ctx & SomeKey<keyof Ctx>;
-    receives?: Rs & SomeKey<keyof Rs>;
-    queries?: Sh & SomeKey<keyof Sh>;
-    commands?: Cs & SomeKey<keyof Cs>;
-    screens?: Ss & SomeKey<keyof Ss>;
+    context?: Ctx;
+    receives?: Rs;
+    queries?: Sh;
+    commands?: Cs;
+    screens?: Ss;
     controls?: {
-      readonly [K in keyof Ps]: { readonly label: string; readonly payload?: Ps[K] & Shape & SomeKey<keyof Ps[K]> };
-    } & { readonly [K in keyof NoInfer<Rs>]?: never } & SomeKey<keyof Ps>;
+      readonly [K in keyof Ps]: { readonly label: string; readonly payload?: Ps[K] & Shape };
+    } & { readonly [K in keyof NoInfer<Rs>]?: never };
     initial: NoInfer<keyof St & string>;
     states: St & CheckTree<NoInfer<St>>;
     requires?: Named<Rq, { input: Row<I> }>;
@@ -263,27 +260,31 @@ export type ScreenDefiner<Es extends Entities> = <
 export function screenDefiner(owner: ServiceDefinition): ScreenDefiner<Entities> {
   return (setup) => ({
     chart: (definition) =>
-      ({
-        kind: "screen",
-        service: owner,
-        description: setup.description,
-        input: setup.input ?? {},
-        output: setup.output ?? {},
-        context: setup.context ?? {},
-        ...(definition.initialContext === undefined ? {} : { initialContext: definition.initialContext }),
-        receives: setup.receives ?? {},
-        queries: setup.queries ?? {},
-        commands: setup.commands ?? {},
-        screens: setup.screens ?? {},
-        controls: setup.controls ?? {},
-        initial: setup.initial,
-        ...assemble(setup.states, definition.states ?? {}),
-        ...(definition.offers === undefined ? {} : { offers: definition.offers }),
-        on: definition.on ?? {},
-        invariants: setup.invariants ?? {},
-        requires: setup.requires ?? {},
-        ensures: setup.ensures ?? {},
-        ...(definition.resolve === undefined ? {} : { resolve: definition.resolve }),
-      }) as never,
+      withWritten(
+        {
+          kind: "screen",
+          service: owner,
+          description: setup.description,
+          input: setup.input ?? {},
+          output: setup.output ?? {},
+          context: setup.context ?? {},
+          ...(definition.initialContext === undefined ? {} : { initialContext: definition.initialContext }),
+          receives: setup.receives ?? {},
+          queries: setup.queries ?? {},
+          commands: setup.commands ?? {},
+          screens: setup.screens ?? {},
+          controls: setup.controls ?? {},
+          initial: setup.initial,
+          ...assemble(setup.states, definition.states ?? {}),
+          ...(definition.offers === undefined ? {} : { offers: definition.offers }),
+          on: definition.on ?? {},
+          invariants: setup.invariants ?? {},
+          requires: setup.requires ?? {},
+          ensures: setup.ensures ?? {},
+          ...(definition.resolve === undefined ? {} : { resolve: definition.resolve }),
+        },
+        setup,
+        definition,
+      ) as never,
   });
 }

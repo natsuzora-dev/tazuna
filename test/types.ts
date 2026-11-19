@@ -62,7 +62,7 @@ import {
   sortedBy,
 } from "../src/index.ts";
 
-const { machine, screen, createEvent, updateEvent, deleteEvent, event, contract } = service({
+const { machine, screen, createEvent, updateEvent, deleteEvent, contract } = service({
   name: "test",
   description: "",
   entities: { Task, Settings },
@@ -243,9 +243,6 @@ const charge = externalCommand({
 
 // @ts-expect-error ensures of an external command without output cannot read output
 externalCommand({ emits: [], rejects: [], ensures: { hasId: ({ output }) => output } });
-
-// @ts-expect-error a command without output omits output instead of {}
-externalCommand({ output: {}, emits: [], rejects: [] });
 
 // @ts-expect-error a spec service's command has no output (CQRS)
 command({ output: { id: z.string() }, emits: [] });
@@ -855,10 +852,6 @@ machine({
   states: { back: { always: [] } },
 });
 machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
-  // @ts-expect-error a state without behavior is omitted, not {}
-  states: { a: {}, b: { always: [] } },
-});
-machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
   // @ts-expect-error a state without children has no onDone
   states: { a: { onDone: [{ target: "b" }] } },
 });
@@ -967,93 +960,15 @@ machine({
   },
 });
 
-// An empty keyword is omitted, not {}.
-// @ts-expect-error event fields
-event({ payload: {} });
-// @ts-expect-error service entities
-service({ name: "test", description: "", entities: {} });
-// @ts-expect-error entity invariants
-entity({ description: "", fields: { id: z.string() }, key: "id", invariants: {} });
-// @ts-expect-error single entity invariants
-singleEntity({ description: "", fields: { on: z.boolean().default(true) }, invariants: {} });
-// @ts-expect-error command input
-command({ input: {}, emits: [taskDeletedRecorded] }).decide(() => []);
-// @ts-expect-error command binds
-command({ emits: [taskDeletedRecorded], binds: {} }).decide(() => []);
-// @ts-expect-error command requires
-command({ emits: [taskDeletedRecorded], requires: {} }).decide(() => []);
-// @ts-expect-error command ensures
-command({ emits: [taskDeletedRecorded], ensures: {} }).decide(() => []);
-// @ts-expect-error query input
-query({ input: {}, output: { n: z.number() } }).resolve(() => ({ n: 0 }));
-// @ts-expect-error query requires
-query({ output: { n: z.number() }, requires: {} }).resolve(() => ({ n: 0 }));
-// @ts-expect-error query ensures
-query({ output: { n: z.number() }, ensures: {} }).resolve(() => ({ n: 0 }));
-// @ts-expect-error external query requires
-externalQuery({ output: { n: z.number() }, rejects: [], requires: {} });
-// @ts-expect-error automation binds
-automation({ receives: { taskAddedRecorded }, commands: { setReminder } }).send({ binds: {} });
-// @ts-expect-error automation guard
-automation({ receives: { taskAddedRecorded }, commands: { setReminder } }).send({ guard: {} });
-// @ts-expect-error machine context
-machine({ description: "", context: {}, initial: "a", states: { a: {} } });
-// @ts-expect-error machine receives
-machine({ description: "", receives: {}, initial: "a", states: { a: {} } });
-// @ts-expect-error machine invariants
-machine({ description: "", initial: "a", states: { a: {} }, invariants: {} });
-// @ts-expect-error state held
-machine({ description: "", initial: "a", states: { a: { held: {} } } });
-// @ts-expect-error screen input
-screen({ description: "", input: {}, initial: "a", states: { a: {} } });
-// @ts-expect-error screen controls
-screen({ description: "", controls: {}, initial: "a", states: { a: {} } });
-// @ts-expect-error control payload
-screen({ description: "", controls: { pick: { label: "Pick", payload: {} } }, initial: "a", states: { a: {} } });
-// @ts-expect-error screen requires
-screen({ description: "", initial: "a", states: { a: {} }, requires: {} });
-// @ts-expect-error body states
-machine({ description: "", initial: "a", states: { a: {} } }).chart({ states: {} });
-machine({ description: "", initial: "a", states: { a: {} } }).chart({});
-machine({
-  description: "",
-  context: { n: z.number().default(0) },
-  receives: { taskAddedRecorded },
-  commands: { addTask },
-  initial: "a",
-  states: { a: {}, b: {} },
-}).chart({
-  // @ts-expect-error body on
-  on: {},
-  states: {
-    // @ts-expect-error state on
-    a: { on: {} },
-    b: {
-      // @ts-expect-error state sends
-      sends: {},
-      // @ts-expect-error state entry assign
-      entry: { assign: {} },
-      // @ts-expect-error transition assign
-      always: [{ target: "a", assign: {} }],
-    },
-  },
-});
+// The chart's offers name every control.
 screen({
   description: "",
-  queries: { tasks },
-  screens: { taskDetail: taskDetailScreen },
   controls: { pick: { label: "Pick", payload: { title: z.string() } } },
   initial: "a",
-  states: { a: {}, b: {} },
+  states: { a: {} },
 }).chart({
-  // @ts-expect-error offers
+  // @ts-expect-error offers lacks pick
   offers: {},
-  states: {
-    // @ts-expect-error state shows
-    a: { shows: {} },
-    // @ts-expect-error state opens
-    b: { opens: {} },
-  },
 });
 
 // @ts-expect-error constants values have the schema's input type
