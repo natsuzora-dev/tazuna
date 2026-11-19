@@ -211,7 +211,9 @@ def focus {α : Type} (service : String) (x : StateT Collect IO α) : ActingIO �
   pure (r, { a with collects := (service, c) :: a.collects.filter (·.1 != service) })
 
 instance : MonadNote ActingIO where
-  note n := do focus (← get).current (MonadNote.note n : StateT Collect IO Unit)
+  note
+    | .bug message => throw (IO.userError message)
+    | n => do focus (← get).current (MonadNote.note n : StateT Collect IO Unit)
 
 instance : Sim.MonadActing ActingIO where
   acting service x := do

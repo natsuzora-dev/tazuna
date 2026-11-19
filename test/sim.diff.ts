@@ -44,6 +44,17 @@ for (const { root, spec } of rootSpecs) {
     });
 }
 
+test("Lean and TS both stop with an internal error when exits nest deeper than exitFuel, which only a screen that opens itself past the types (`any`) reaches", async () => {
+  const spec = (await loadSpec(join(import.meta.dirname, "bug/exitFuel"))).spec;
+  const [loaded] = spec.scenarios;
+  assert.ok(loaded);
+  const sc = loaded.definition.scenario;
+  assert.throws(() => simulateSpec(spec, sc), { message: "exits nest deeper than exitFuel" });
+  assert.throws(() => lean.simulate(spec, sc, new SimFunctions(spec, (part) => lean.read(part))), {
+    message: "tazuna-lean: exits nest deeper than exitFuel",
+  });
+});
+
 const refusedRoots = [...runGroupExamples("choiceDependent"), join(serviceRoot, "Chart/Deadline/deadlines")];
 
 test("Lean and TS refuse a step order that names a step no processing takes, as unreadyStep where the processing takes a queue step and as unusedStepOrder where it takes none, clock lines included", async () => {

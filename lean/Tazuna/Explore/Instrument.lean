@@ -247,6 +247,7 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
     | .microstepEnds check => c.checkRegions check
     | .afterMessageBegins message => { c with afterMessage := some message }
     | .afterMessageEnds => { c with afterMessage := none }
+    | .bug _ => c
 
 /-- The functions that ask `fs` and carry each answer into `n` by `f`. -/
 def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where

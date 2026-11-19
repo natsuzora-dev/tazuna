@@ -59,11 +59,16 @@ inductive Note where
   /-- The start of the checks and subscription answers after message `message` (afterMessage), which no step runs. -/
   | afterMessageBegins (message : Nat)
   | afterMessageEnds
+  /--
+  A tazuna bug: the run reached a state that the semantics never reaches for a spec that its types accept, and goes on
+  as if it had not. A listener that runs tazuna stops the run, as rustc stops on an internal compiler error.
+  -/
+  | bug (message : String)
 deriving DecidableEq, Repr, Inhabited
 
 /--
 A monad that receives the notes of a run. `note` returns nothing, so the semantic result does not depend on who
-listens.
+listens; a listener can only stop the run, on a bug.
 -/
 class MonadNote (m : Type → Type) where
   note : Note → m Unit

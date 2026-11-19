@@ -165,7 +165,7 @@ theorem leaveWith_agrees {e : InstanceId → String → Processing → StateT C 
 theorem exitOne_agrees (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (exitOne fsI st fuel name n r) (exitOne fs st fuel name n r) := by
   induction fuel generalizing name n r with
-  | zero => exact Agrees.pure _
+  | zero => exact Agrees.unit fun _ => Agrees.pure _
   | succ fuel ih =>
     unfold exitOne; refine withMachine_agrees (fun i r => ?_) r
     agree [unlessHalted_agrees, endWith_agrees ih, leaveWith_agrees h ih]

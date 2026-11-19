@@ -97,10 +97,10 @@ def leaveWith (st : Service) (exit : InstanceId → String → Processing → m 
 
 /--
 The processing after instance `name` exits state `n`, after the copies of `n`. The fuel is the remaining nesting depth
-of exits, and exitFuel never runs out, so running out changes nothing.
+of exits. exitFuel never runs out, so running out is a bug.
 -/
 def exitOne (st : Service) : Nat → InstanceId → String → Processing → m Processing
-  | 0, _, _, r => pure r
+  | 0, _, _, r => do MonadNote.note (.bug "exits nest deeper than exitFuel"); pure r
   | fuel + 1, name, n, r =>
     withMachine name (fun i r => do
       let r : Processing ←
