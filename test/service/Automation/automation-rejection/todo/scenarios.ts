@@ -16,7 +16,7 @@ export const notifiedAfterAdd = scenario({
     const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
     const notification = add.request(device.showNotification);
     w.net.deliver(notification);
-    w.net.deliver(w.peer.device.answer(notification, accepted));
+    w.net.deliver(w.peer.device.answer(notification, accepted()));
   },
   then: () => [],
 });

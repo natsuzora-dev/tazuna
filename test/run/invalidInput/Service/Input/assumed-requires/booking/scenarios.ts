@@ -8,7 +8,7 @@ export const acceptBookingLater = scenario({
   given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.book));
-    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted));
+    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted()));
     w.net.deliver(
       w.peer.calendar.emit(
         calendar.booked,

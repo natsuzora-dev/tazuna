@@ -4,7 +4,7 @@ import { z } from "zod";
 export const { screen, contract } = service({ name: "screens", description: "Show the tasks" });
 
 export const pickScreen = screen({
-  description: "Pick a title, writing constant offers as functions",
+  description: "Pick a title, writing constant offers as functions, methods, and parenthesized arrays",
   controls: { close: { label: "Close" }, pick: { label: "Pick", payload: { title: z.string() } } },
   initial: "open",
   states: { open: {}, picked: {}, done: {} },
@@ -19,6 +19,14 @@ export const pickScreen = screen({
       offers: {
         close: () => [],
         pick: ({ shown }) => (Object.keys(shown).length === 0 ? [{ title: "Buy bread" }] : []),
+      },
+    },
+    done: {
+      offers: {
+        close() {
+          return [];
+        },
+        pick: () => [],
       },
     },
   },

@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./alarm.ts";
 
@@ -7,12 +7,7 @@ export const addOnce = scenario({
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.addReminder));
-    w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.addReminder), {
-        result: "accepted",
-        output: { reminderId: "r-1" },
-      }),
-    );
+    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.addReminder), accepted({ reminderId: "r-1" })));
     w.net.deliver(
       w.peer.calendar.emit(
         calendar.reminderAdded,
@@ -30,12 +25,7 @@ export const addTwice = scenario({
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.addReminder));
-    w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.addReminder), {
-        result: "accepted",
-        output: { reminderId: "r-1" },
-      }),
-    );
+    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.addReminder), accepted({ reminderId: "r-1" })));
     w.net.deliver(
       w.peer.calendar.emit(
         calendar.reminderAdded,
@@ -60,12 +50,7 @@ export const addOther = scenario({
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.addReminder));
-    w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.addReminder), {
-        result: "accepted",
-        output: { reminderId: "r-1" },
-      }),
-    );
+    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.addReminder), accepted({ reminderId: "r-1" })));
     w.net.deliver(
       w.peer.calendar.emit(
         calendar.reminderAdded,

@@ -3,7 +3,6 @@ import type { Bag, Made, MarkOf, Runs } from "../data/bag.ts";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
 import type { Shape } from "../data/values.ts";
 import type { Conditions, Named } from "./conditions.ts";
-import { withWritten } from "./written.ts";
 
 export type DefaultedShape = Readonly<Record<string, z.ZodDefault<z.ZodType>>>;
 /** The type T with every nested object and array readonly, each bag and set a Bag, and each sortedBy array Runs. */
@@ -123,7 +122,7 @@ export function entity<
   keyFieldOwners.set(key, keyed);
   for (const field of Object.values(definition.fields) as z.ZodType[])
     for (const self of unclaimedSelfRefs(field)) refTargets.set(self, keyed);
-  return withWritten(keyed, definition);
+  return keyed;
 }
 
 /** Defines an entity with exactly one record. `records.Settings` is that record. */
@@ -133,16 +132,13 @@ export function singleEntity<const S extends DefaultedShape, const Iv extends st
   /** The conditions that the record meets (`Fault.failedSingleInvariant`). */
   invariants?: Named<Iv, { record: Row<S> }>;
 }): SingleEntity<S> {
-  return withWritten(
-    {
-      kind: "entity",
-      single: true,
-      description: definition.description,
-      fields: definition.fields,
-      invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> }>,
-    },
-    definition,
-  );
+  return {
+    kind: "entity",
+    single: true,
+    description: definition.description,
+    fields: definition.fields,
+    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> }>,
+  };
 }
 
 declare const refEntity: unique symbol;

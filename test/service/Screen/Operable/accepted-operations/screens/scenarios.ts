@@ -17,7 +17,7 @@ const deliverNeverShown = arranged.step((w) => {
 const deliverAccepted = arranged.step((w, line: ProcessingLine) => {
   const complete = line.request(todo.completeTask);
   w.net.deliver(complete);
-  w.net.deliver(w.peer.todo.answer(complete, accepted));
+  w.net.deliver(w.peer.todo.answer(complete, accepted()));
 });
 
 export const offersDecide = scenario({

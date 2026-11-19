@@ -20,7 +20,7 @@ export const denyUnlisted = scenario({
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(device)] },
   when: (w) => {
     w.net.deliver(w.startup.request(device.requestPermission));
-    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted));
+    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));
     w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: w.startup.request(device.requestPermission) }));
   },
   then: () => [],
@@ -33,7 +33,7 @@ export const grantBeforeAnswer = scenario({
   when: (w) => {
     const request = w.startup.request(device.requestPermission);
     w.net.deliver(request);
-    const answer = w.peer.device.answer(request, accepted);
+    const answer = w.peer.device.answer(request, accepted());
     w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: request }));
     w.net.deliver(answer);
   },
@@ -47,7 +47,7 @@ export const grantAfterAnswer = scenario({
   when: (w) => {
     const request = w.startup.request(device.requestPermission);
     w.net.deliver(request);
-    w.net.deliver(w.peer.device.answer(request, accepted));
+    w.net.deliver(w.peer.device.answer(request, accepted()));
     w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: request }));
   },
   then: () => [],

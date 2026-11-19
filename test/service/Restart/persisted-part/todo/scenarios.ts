@@ -17,7 +17,7 @@ export const recordsStay = scenario({
   },
   then: ({ counting, resent }) => [
     answered(counting, fulfilled({ count: 1 })),
-    answered(resent, accepted),
+    answered(resent, accepted()),
     emitted(resent, []),
   ],
 });

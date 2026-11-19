@@ -45,7 +45,6 @@ import {
   type TreeErrors,
   type UnheldTop,
 } from "./tree.ts";
-import { withWritten } from "./written.ts";
 
 type Screens = Readonly<Record<string, AnyScreen>>;
 
@@ -259,31 +258,27 @@ export type ScreenDefiner<Es extends Entities> = <
 export function screenDefiner(owner: ServiceDefinition): ScreenDefiner<Entities> {
   return (setup) => ({
     chart: (definition) =>
-      withWritten(
-        {
-          kind: "screen",
-          service: owner,
-          description: setup.description,
-          input: setup.input ?? {},
-          output: setup.output ?? {},
-          context: setup.context ?? {},
-          ...(definition.initialContext === undefined ? {} : { initialContext: definition.initialContext }),
-          receives: setup.receives ?? {},
-          queries: setup.queries ?? {},
-          commands: setup.commands ?? {},
-          screens: setup.screens ?? {},
-          controls: setup.controls ?? {},
-          initial: setup.initial,
-          ...assemble(setup.states, definition.states ?? {}),
-          ...(definition.offers === undefined ? {} : { offers: definition.offers }),
-          on: definition.on ?? {},
-          invariants: setup.invariants ?? {},
-          requires: setup.requires ?? {},
-          ensures: setup.ensures ?? {},
-          ...(definition.resolve === undefined ? {} : { resolve: definition.resolve }),
-        },
-        setup,
-        definition,
-      ) as never,
+      ({
+        kind: "screen",
+        service: owner,
+        description: setup.description,
+        input: setup.input ?? {},
+        output: setup.output ?? {},
+        context: setup.context ?? {},
+        ...(definition.initialContext === undefined ? {} : { initialContext: definition.initialContext }),
+        receives: setup.receives ?? {},
+        queries: setup.queries ?? {},
+        commands: setup.commands ?? {},
+        screens: setup.screens ?? {},
+        controls: setup.controls ?? {},
+        initial: setup.initial,
+        ...assemble(setup.states, definition.states ?? {}),
+        ...(definition.offers === undefined ? {} : { offers: definition.offers }),
+        on: definition.on ?? {},
+        invariants: setup.invariants ?? {},
+        requires: setup.requires ?? {},
+        ensures: setup.ensures ?? {},
+        ...(definition.resolve === undefined ? {} : { resolve: definition.resolve }),
+      }) as never,
   });
 }

@@ -33,7 +33,6 @@ import {
 import { type MachineDefiner, machineDefiner } from "./machine.ts";
 import { type ScreenDefiner, screenDefiner } from "./screen.ts";
 import type { ErrorIf, IsUnion } from "./tree.ts";
-import { withWritten } from "./written.ts";
 
 type Input<I extends Shape> = Row<I>;
 type Bound<B> = { readonly [K in keyof B]: NonNullable<B[K]> };
@@ -275,12 +274,9 @@ export function service<
   } & ReservedIn<N>,
 ): Definers<Es, N> {
   return definers(
-    withWritten(
-      serviceDefinition(
-        definition as { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },
-        false,
-      ),
-      definition,
+    serviceDefinition(
+      definition as { name: string; description: string; entities?: Entities; invariants?: Conditions<never> },
+      false,
     ),
   ) as unknown as Definers<Es, N>;
 }
@@ -320,41 +316,33 @@ const commandOf = (
   owner: ServiceDefinition,
   d: CommandOptions,
   decide: ((args: never) => Emits) | undefined,
-): AnyCommand =>
-  withWritten(
-    {
-      kind: "command",
-      service: owner,
-      input: d.input ?? {},
-      output: d.output,
-      emits: d.emits,
-      binds: d.binds ?? {},
-      requires: d.requires ?? {},
-      ensures: d.ensures ?? {},
-      decide,
-      rejects: d.rejects,
-    },
-    d,
-  );
+): AnyCommand => ({
+  kind: "command",
+  service: owner,
+  input: d.input ?? {},
+  output: d.output,
+  emits: d.emits,
+  binds: d.binds ?? {},
+  requires: d.requires ?? {},
+  ensures: d.ensures ?? {},
+  decide,
+  rejects: d.rejects,
+});
 
 const queryOf = (
   owner: ServiceDefinition,
   d: QueryOptions,
   resolve: ((args: never) => unknown) | undefined,
-): AnyQuery =>
-  withWritten(
-    {
-      kind: "query",
-      service: owner,
-      input: d.input ?? {},
-      output: d.output,
-      requires: d.requires ?? {},
-      ensures: d.ensures ?? {},
-      resolve,
-      rejects: d.rejects,
-    },
-    d,
-  );
+): AnyQuery => ({
+  kind: "query",
+  service: owner,
+  input: d.input ?? {},
+  output: d.output,
+  requires: d.requires ?? {},
+  ensures: d.ensures ?? {},
+  resolve,
+  rejects: d.rejects,
+});
 
 function register(owner: ServiceDefinition, definers: readonly object[]): void {
   for (const definer of definers) definerOwners.set(definer, owner);
@@ -374,21 +362,16 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
       guard?: Conditions<never>;
       input?: (args: never) => unknown;
       onRejected?: readonly [];
-    }): Automation =>
-      withWritten(
-        {
-          kind: "automation",
-          service: owner,
-          receives: setup.receives,
-          commands: setup.commands,
-          binds: d.binds ?? {},
-          guard: d.guard ?? {},
-          input: d.input,
-          onRejected: d.onRejected,
-        },
-        setup,
-        d,
-      ),
+    }): Automation => ({
+      kind: "automation",
+      service: owner,
+      receives: setup.receives,
+      commands: setup.commands,
+      binds: d.binds ?? {},
+      guard: d.guard ?? {},
+      input: d.input,
+      onRejected: d.onRejected,
+    }),
   });
   const machine = machineDefiner(owner);
   const screen = screenDefiner(owner);

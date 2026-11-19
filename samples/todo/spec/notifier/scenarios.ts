@@ -54,7 +54,7 @@ const deviceTells = fresh.step(
 
 const deviceGrants = fresh.step((w, asking: OutRequest<typeof device.requestNotificationPermission>) => {
   w.net.deliver(asking);
-  w.net.deliver(w.peer.device.answer(asking, accepted));
+  w.net.deliver(w.peer.device.answer(asking, accepted()));
   deviceTells(w, device.notificationPermissionGranted, asking);
 });
 
@@ -100,7 +100,7 @@ export const warnsAgainAfterNotificationAnswered = scenario({
     taskAddedReaches(w, 11);
     deviceAnswers(w, tooMany.request(device.showNotification), rejected("unavailable"));
     const hour = w.clock.at("2026-10-25T11:00:00+09:00");
-    deviceAnswers(w, hour.request(device.showNotification), accepted);
+    deviceAnswers(w, hour.request(device.showNotification), accepted());
     return { hour };
   },
   then: ({ hour }) => [requested(hour, [show(12)])],
@@ -117,7 +117,7 @@ export const warnsWithoutNotificationWhileAsking = scenario({
     for (let n = 1; n <= 9; n += 1) taskAddedReaches(w, n);
     const tooMany = taskAddedReaches(w, 10);
     taskAddedReaches(w, 11);
-    deviceAnswers(w, asking, accepted);
+    deviceAnswers(w, asking, accepted());
     return { tooMany };
   },
   then: ({ tooMany }) => [requested(tooMany, [])],
@@ -147,7 +147,7 @@ export const warnsWithoutNotificationWhenDenied = scenario({
   given: fresh,
   when: (w) => {
     const asking = asked(taskAddedReaches(w, 0));
-    deviceAnswers(w, asking, accepted);
+    deviceAnswers(w, asking, accepted());
     deviceTells(w, device.notificationPermissionDenied, asking);
     for (let n = 1; n <= 9; n += 1) taskAddedReaches(w, n);
     const tooMany = taskAddedReaches(w, 10);
@@ -245,7 +245,7 @@ export const asksPermissionAgainOnStart = scenario({
     "Restart the server while a task is open and before the user chooses permission; notifier requests permission again",
   given: fresh,
   when: (w) => {
-    deviceAnswers(w, asked(taskAddedReaches(w, 1)), accepted);
+    deviceAnswers(w, asked(taskAddedReaches(w, 1)), accepted());
     w.clock.at("2026-10-25T10:05:00+09:00");
     const restart = w.host.restart();
     deviceGrants(w, asked(restart));
@@ -287,7 +287,7 @@ export const asksNoPermissionOnStartWithoutOpenTasks = scenario({
     "Complete the only open task before the user chooses permission, and restart the server; notifier does not request permission again",
   given: fresh,
   when: (w) => {
-    deviceAnswers(w, asked(taskAddedReaches(w, 1)), accepted);
+    deviceAnswers(w, asked(taskAddedReaches(w, 1)), accepted());
     taskCompletedReaches(w, 1);
     w.clock.at("2026-10-25T10:05:00+09:00");
     const restart = w.host.restart();

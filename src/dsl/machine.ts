@@ -43,7 +43,6 @@ import {
   type UnheldTop,
   type With,
 } from "./tree.ts";
-import { withWritten } from "./written.ts";
 
 export interface BaseArgs<Ctx, N extends string, D> extends Now {
   readonly context: Ctx;
@@ -291,23 +290,18 @@ export type MachineDefiner<Es extends Entities> = <
 
 export function machineDefiner(owner: ServiceDefinition): MachineDefiner<Entities> {
   return (setup) => ({
-    chart: (definition) =>
-      withWritten(
-        {
-          kind: "machine",
-          service: owner,
-          description: setup.description,
-          context: setup.context ?? {},
-          receives: setup.receives ?? {},
-          queries: setup.queries ?? {},
-          commands: setup.commands ?? {},
-          initial: setup.initial,
-          ...assemble(setup.states, definition.states ?? {}),
-          on: (definition.on ?? {}) as unknown as Readonly<Record<string, readonly TransitionSpec[]>>,
-          invariants: (setup.invariants ?? {}) as Conditions<unknown>,
-        },
-        setup,
-        definition,
-      ),
+    chart: (definition) => ({
+      kind: "machine",
+      service: owner,
+      description: setup.description,
+      context: setup.context ?? {},
+      receives: setup.receives ?? {},
+      queries: setup.queries ?? {},
+      commands: setup.commands ?? {},
+      initial: setup.initial,
+      ...assemble(setup.states, definition.states ?? {}),
+      on: (definition.on ?? {}) as unknown as Readonly<Record<string, readonly TransitionSpec[]>>,
+      invariants: (setup.invariants ?? {}) as Conditions<unknown>,
+    }),
   });
 }

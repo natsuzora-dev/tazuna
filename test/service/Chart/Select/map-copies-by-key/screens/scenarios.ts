@@ -22,9 +22,9 @@ export const routedByKey = scenario({
     w.user.operate(list, "complete", { taskId: "task-1" });
     const second = w.user.operate(list, "complete", { taskId: "task-2" }).request(todo.completeTask);
     w.net.deliver(second);
-    w.net.deliver(w.peer.todo.answer(second, accepted));
+    w.net.deliver(w.peer.todo.answer(second, accepted()));
     w.net.deliver(first);
-    w.net.deliver(w.peer.todo.answer(first, accepted));
+    w.net.deliver(w.peer.todo.answer(first, accepted()));
     const third = w.user.operate(list, "complete", { taskId: "task-1" }).request(todo.completeTask);
     w.net.deliver(third);
     w.peer.todo.leaveUnanswered(third);

@@ -45,7 +45,7 @@ Run the commands in [samples/todo](samples/todo).
        return { first, second };
      },
      then: ({ first, second }) => [
-       answered(first, accepted),
+       answered(first, accepted()),
        emitted(first, [eventOf(taskCompleted, { taskId: "task-1" })]),
        answered(second, rejected("requires", "notCompleted")),
        emitted(second, []),
@@ -76,14 +76,14 @@ Run the commands in [samples/todo](samples/todo).
    Each line is one message that `todo` received (`"dir":"in"`) or sent (`"dir":"out"`).
    The last two lines are the second `completeTask` request and its rejection.
 
-4. In Then, change the expected answer of `first` from `accepted` to `rejected("requires", "notCompleted")`, and run the test again:
+4. In Then, change the expected answer of `first` from `accepted()` to `rejected("requires", "notCompleted")`, and run the test again:
 
    ```sh
    npx tazuna test spec --depth 1
    ```
 
    The output is a JSON line whose `kind` is `InvalidScenario.unmetExpectation`.
-   Change the answer back to `accepted`, and run the test again.
+   Change the answer back to `accepted()`, and run the test again.
    The output ends with `No violations found.`
 
 5. To compare an implementation with the snapshots, an implementation test first checks the spec with `checkSpec` from `@natsuzora-dev/tazuna/verify`.

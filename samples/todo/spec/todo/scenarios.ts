@@ -61,7 +61,7 @@ export const completeTwice = scenario({
     return { first, second };
   },
   then: ({ first, second }) => [
-    answered(first, accepted),
+    answered(first, accepted()),
     emitted(first, [eventOf(taskCompleted, { taskId: "task-1" })]),
     answered(second, rejected("requires", "notCompleted")),
     emitted(second, []),
@@ -103,7 +103,7 @@ export const clearsDue = scenario({
     return { clear, open };
   },
   then: ({ clear, open }) => [
-    answered(clear, accepted),
+    answered(clear, accepted()),
     requested(clear, [requestOf(calendar.nextBusinessDay, { from: "2026-10-25" })]),
     answered(open, fulfilled({ tasks: [milkRow] })),
   ],
@@ -147,7 +147,7 @@ export const reopenCompleted = scenario({
     return { reopen, open };
   },
   then: ({ reopen, open }) => [
-    answered(reopen, accepted),
+    answered(reopen, accepted()),
     emitted(reopen, [eventOf(taskReopened, { taskId: "task-1" })]),
     answered(open, fulfilled({ tasks: [milkRow] })),
   ],
@@ -271,7 +271,7 @@ export const remindsAfterNotShown = scenario({
     w.net.deliver(w.peer.device.answer(first.request(device.showNotification), rejected("unavailable")));
     const second = w.clock.at("2026-10-27T00:00:00+09:00");
     w.net.deliver(second.request(device.showNotification));
-    w.net.deliver(w.peer.device.answer(second.request(device.showNotification), accepted));
+    w.net.deliver(w.peer.device.answer(second.request(device.showNotification), accepted()));
     return { first, second };
   },
   then: ({ first, second }) => [
@@ -310,9 +310,9 @@ export const completeRedelivered = scenario({
     return { first, again };
   },
   then: ({ first, again }) => [
-    answered(first, accepted),
+    answered(first, accepted()),
     emitted(first, [eventOf(taskCompleted, { taskId: "task-1" })]),
-    answered(again, accepted),
+    answered(again, accepted()),
     emitted(again, []),
   ],
 });

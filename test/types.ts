@@ -27,6 +27,7 @@ import {
 } from "../samples/todo/spec/todo/events.ts";
 import { tasks } from "../samples/todo/spec/todo/queries.ts";
 import {
+  type AnswerOf,
   accepted,
   answered,
   any,
@@ -48,6 +49,7 @@ import {
   none,
   type OutputOf,
   type RecordsOf,
+  type RequestLine,
   type RowOf,
   raw,
   ref,
@@ -240,6 +242,14 @@ const charge = externalCommand({
   rejects: [],
   ensures: { hasId: ({ output }) => output.chargeId !== "" },
 });
+
+// accepted(output) answers a command with output, typed like fulfilled(output).
+const chargeAccepted: AnswerOf<typeof charge> = accepted({ chargeId: "ch_1" });
+// @ts-expect-error a command with output is accepted with it
+const chargeAcceptedBare: AnswerOf<typeof charge> = accepted();
+// @ts-expect-error the output has the command's output shape
+const chargeAcceptedWrong: AnswerOf<typeof charge> = accepted({ chargeId: 1 });
+void [chargeAccepted, chargeAcceptedBare, chargeAcceptedWrong];
 
 // @ts-expect-error ensures of an external command without output cannot read output
 externalCommand({ emits: [], rejects: [], ensures: { hasId: ({ output }) => output } });
@@ -1395,7 +1405,9 @@ scenarioOfScreens({
     answered(completing, rejected("requires", "notCompleted")),
     answered(completing, rejected("requires")),
     answered(completing, rejected("not-found")),
-    answered(completing, accepted),
+    answered(completing, accepted()),
+    // @ts-expect-error a command without output is accepted without one
+    answered(completing, accepted({ taskId: "task-1" })),
     // @ts-expect-error a requires rejection names a requires condition of the command
     answered(completing, rejected("requires", "notCompleteddd")),
     // @ts-expect-error only a requires rejection has a reason
@@ -1443,6 +1455,12 @@ const withTodo = givenOfScreens({
 givenOfScreens({ start: "yesterday", records: {}, peers: [] });
 // @ts-expect-error the own service is no peer (unknownPeer)
 givenOfScreens({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [skip(screensPeer, "the own service")] });
+givenOfScreens({
+  start: "2026-10-25T10:00:00+09:00",
+  records: {},
+  // @ts-expect-error a service is a peer once, in one role
+  peers: [external(calendarPeer), skip(calendarPeer, "listed twice")],
+});
 const addMilk = withTodo.step((w, title: string) => w.client.send(todoPeer.addTask, { taskId: "task-1", title }));
 withTodo.step((w) => {
   // @ts-expect-error a step's lines reach only the own service and the running peers of its Given
@@ -1455,13 +1473,22 @@ scenarioOfScreens({
   description: "types",
   given: withTodo,
   when: (w) => ({ adding: addMilk(w, "Buy milk") }),
-  then: ({ adding }) => [answered(adding, accepted)],
+  then: ({ adding }) => [answered(adding, accepted())],
 });
 const rows: OutputOf<typeof tasks>["tasks"] = [{ taskId: "task-1", title: "Buy milk", dueAt: null, completedAt: null }];
 const input: InputOf<typeof addTask> = { taskId: "task-1", title: "Buy milk" };
 // @ts-expect-error an output has the fields of the query's output
 const badRows: OutputOf<typeof tasks>["tasks"] = [{ taskId: "task-1" }];
 void [rows, input, badRows];
+
+// A line that may subscribe or not takes neither one answer nor a list, since answered wraps by what the line is.
+const answerAny = (line: RequestLine<typeof addTask>) => [
+  // @ts-expect-error a plain RequestLine may be a subscription
+  answered(line, accepted()),
+  // @ts-expect-error a plain RequestLine may be a single request
+  answered(line, [accepted()]),
+];
+void answerAny;
 
 // A shared condition reads the service's records, so it fits each guard and requires of the service.
 const { condition, command: permissionCommand } = service({

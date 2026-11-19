@@ -10,11 +10,11 @@ export const refundCreatedCharge = scenario({
     const place = w.client.send(placeOrder, { amount: 1200 });
     const charge = place.request(payments.createCharge);
     w.net.deliver(charge);
-    w.net.deliver(w.peer.payments.answer(charge, { result: "accepted", output: { chargeId: "ch_1" } }));
+    w.net.deliver(w.peer.payments.answer(charge, accepted({ chargeId: "ch_1" })));
     const cancel = w.client.send(cancelOrder, {});
     const refund = cancel.request(payments.refundCharge);
     w.net.deliver(refund);
-    w.net.deliver(w.peer.payments.answer(refund, accepted));
+    w.net.deliver(w.peer.payments.answer(refund, accepted()));
   },
   then: () => [],
 });

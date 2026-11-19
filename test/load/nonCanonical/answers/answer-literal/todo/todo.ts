@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Task = entity({
   description: "A task",
-  fields: { id: z.string(), title: z.string().min(1) },
+  fields: { id: z.string(), title: z.string().min(1), review: z.object({ result: z.string() }) },
   key: "id",
 });
 
@@ -21,7 +21,7 @@ export const addTask = command({
   input: { taskId: z.string(), title: z.string() },
   emits: [taskRecorded, taskAdded],
 }).decide(({ input }) => [
-  emit(taskRecorded, { id: input.taskId, title: input.title }),
+  emit(taskRecorded, { id: input.taskId, title: input.title, review: { result: "open" } }),
   emit(taskAdded, { taskId: input.taskId }),
 ]);
 

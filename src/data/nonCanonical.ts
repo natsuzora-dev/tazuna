@@ -45,7 +45,10 @@ export type NonCanonical =
       DefinitionRef,
       { readonly state: string | null; readonly control: string; readonly marker: "none" | "any" }
     >
-  /** An answer written as an object literal, which `accepted`, `fulfilled(output)`, or `rejected(kind, reason)` writes. */
+  /**
+   * An answer to `answered` or to a peer's `answer` written as an object literal, which `accepted()`, `accepted(output)`,
+   * `fulfilled(output)`, or `rejected(kind, reason)` writes.
+   */
   | Of<"answerLiteral", null, { readonly result: "accepted" | "fulfilled" | "rejected" }>
   /** No function of the command or automation reads the binding of its `binds`. */
   | Of<"unreadBinding", DefinitionRef, { readonly binding: string }>

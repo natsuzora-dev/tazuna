@@ -1,39 +1,31 @@
+import type { Expression } from "oxc-parser";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { Found } from "../../load/found.ts";
 import { placeIn, type Spec } from "../../load/load.ts";
+import { keyName, unwrap } from "./ast.ts";
 
 const DURATION_UNITS = new Set(["years", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds"]);
 
-interface Node {
-  readonly type: string;
-  readonly value?: unknown;
-  readonly operator?: string;
-  readonly argument?: Node;
-  readonly expression?: Node;
-  readonly expressions?: readonly Node[];
-  readonly elements?: readonly (Node | null)[];
-  readonly properties?: readonly (Node & { readonly key?: Node & { readonly name?: string } })[];
-}
-
-function isConstantLiteral(node: Node | null | undefined): boolean {
-  if (node === null || node === undefined) return false;
-  switch (node.type) {
-    case "TSAsExpression":
-    case "TSSatisfiesExpression":
-      return isConstantLiteral(node.expression);
+function isConstantLiteral(node: Expression | null): boolean {
+  if (node === null) return false;
+  const e = unwrap(node);
+  switch (e.type) {
     case "Literal":
-      return ["number", "string", "boolean", "bigint"].includes(typeof node.value);
+      return ["number", "string", "boolean", "bigint"].includes(typeof e.value);
     case "UnaryExpression":
-      return node.operator === "-" && isConstantLiteral(node.argument);
+      return e.operator === "-" && isConstantLiteral(e.argument);
     case "TemplateLiteral":
-      return node.expressions?.length === 0;
+      return e.expressions.length === 0;
     case "ArrayExpression":
-      return (node.elements ?? []).length > 0 && (node.elements ?? []).every(isConstantLiteral);
+      return (
+        e.elements.length > 0 &&
+        e.elements.every((x) => x !== null && x.type !== "SpreadElement" && isConstantLiteral(x))
+      );
     case "ObjectExpression":
       return (
-        (node.properties ?? []).length > 0 &&
-        (node.properties ?? []).every(
-          (p) => p.type === "Property" && DURATION_UNITS.has(p.key?.name ?? "") && isConstantLiteral(p.value as Node),
+        e.properties.length > 0 &&
+        e.properties.every(
+          (p) => p.type === "Property" && DURATION_UNITS.has(keyName(p) ?? "") && isConstantLiteral(p.value),
         )
       );
     default:
@@ -47,7 +39,7 @@ export const check = (spec: Spec): Found<NonCanonical>[] =>
       if (statement.type !== "ExportNamedDeclaration" || statement.declaration?.type !== "VariableDeclaration")
         return [];
       return statement.declaration.declarations.flatMap((d): Found<NonCanonical>[] =>
-        d.id.type === "Identifier" && isConstantLiteral(d.init as Node | null)
+        d.id.type === "Identifier" && isConstantLiteral(d.init)
           ? [
               {
                 violation: { kind: "NonCanonical.ungroupedConstant", definition: null, data: { name: d.id.name } },

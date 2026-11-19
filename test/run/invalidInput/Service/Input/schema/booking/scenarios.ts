@@ -1,4 +1,4 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { accepted, external } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./booking.ts";
 
@@ -7,12 +7,7 @@ export const answerBooking = scenario({
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.book));
-    w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.book), {
-        result: "accepted",
-        output: { bookingId: "booking-1" },
-      }),
-    );
+    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted({ bookingId: "booking-1" })));
   },
   then: () => [],
 });
@@ -23,9 +18,7 @@ export const answerBookingEmptyId = scenario({
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.book));
-    w.net.deliver(
-      w.peer.calendar.answer(w.startup.request(calendar.book), { result: "accepted", output: { bookingId: "" } }),
-    );
+    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted({ bookingId: "" })));
   },
   then: () => [],
 });

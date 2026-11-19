@@ -7,7 +7,7 @@ const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: []
 const deliverAndAccept = arranged.step((w, line: Caused) => {
   const notification = line.request(device.showNotification);
   w.net.deliver(notification);
-  w.net.deliver(w.peer.device.answer(notification, accepted));
+  w.net.deliver(w.peer.device.answer(notification, accepted()));
 });
 
 export const commandRejections = scenario({

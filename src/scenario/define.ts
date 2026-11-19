@@ -41,7 +41,7 @@ export type AnswerOf<T> =
     : T extends Command<Shape, AnyEvent, string, infer Rq, infer O>
       ?
           | ([O] extends [undefined]
-              ? { readonly result: "accepted" }
+              ? { readonly result: "accepted"; readonly output?: never }
               : O extends Shape
                 ? { readonly result: "accepted"; readonly output: Encoded<O> }
                 : never)
@@ -337,16 +337,27 @@ export const skip = <C extends Contract<unknown, unknown, "spec" | "external">>(
   because: string,
 ): Skip<C> => ({ role: "skip", contract, because });
 
-/** Each peer of `P`, unless it is the own service `Own` (`Malformed.unknownPeer`). */
-type NotOwn<P extends Peers, Own extends string> = string extends Own
+/** The other positions of `P` than `I`. A tuple indexed by `never` gives every element, not none. */
+type OthersOf<P extends Peers, I> = Exclude<keyof P & `${number}`, I>;
+/** Unless another peer of `P` has the service of the peer at `I`: a service takes one role. */
+type Once<P extends Peers, I extends keyof P> = [OthersOf<P, I>] extends [never]
   ? unknown
-  : {
-      readonly [I in keyof P]: [NameOf<P[I]>] extends [never]
-        ? unknown
+  : [NameOf<P[I]>] extends [NameOf<P[OthersOf<P, I> & keyof P]>]
+    ? "a service is a peer once"
+    : unknown;
+
+/** Each peer of `P`, unless it is the own service `Own` (`Malformed.unknownPeer`) or another peer's service. */
+type CheckedPeers<P extends Peers, Own extends string> = {
+  readonly [I in keyof P]: [NameOf<P[I]>] extends [never]
+    ? unknown
+    : string extends NameOf<P[I]>
+      ? unknown
+      : string extends Own
+        ? Once<P, I>
         : NameOf<P[I]> extends Own
           ? "the own service is no peer"
-          : unknown;
-    };
+          : Once<P, I>;
+};
 
 /** The arrangement: every running service begins at `start`, the own service `Own` from `records`. */
 export interface Given<R, P extends Peers, Own extends string = string> {
@@ -354,7 +365,7 @@ export interface Given<R, P extends Peers, Own extends string = string> {
   /** Every record of the own service. Nothing defaults, so a single entity's record is written too. */
   readonly records: R;
   /** Every service that exchanges messages with the own service. */
-  readonly peers: P & NoInfer<NotOwn<P, Own>>;
+  readonly peers: P & NoInfer<CheckedPeers<P, Own>>;
 }
 
 type Members<C> = C[keyof C];
@@ -530,12 +541,17 @@ export type Sent<O extends string = string> = OwnedValue<O> &
     | { readonly kind: "end"; readonly subscription: OutSubscription }
   );
 
-/** The answers that Then's `answered` states for the request line `L`: one answer, or a subscription's answers in order. */
+/**
+ * The answers that Then's `answered` states for the request line `L`: one answer, or a subscription's answers in order.
+ * A line that may be either, such as a plain `RequestLine`, takes neither.
+ */
 type AnswersOf<L> =
   L extends RequestLine<infer T>
-    ? L["subscribes"] extends true
-      ? readonly Value<AnswerOf<T>>[]
-      : Value<AnswerOf<T>>
+    ? boolean extends L["subscribes"]
+      ? never
+      : L["subscribes"] extends true
+        ? readonly Value<AnswerOf<T>>[]
+        : Value<AnswerOf<T>>
     : never;
 
 /** Every answer that the receiver of the request of `line` gave to it. */
@@ -545,8 +561,12 @@ export const answered = <L extends RequestLine>(line: L, answers: AnswersOf<L>):
   answers: line.subscribes ? (answers as readonly unknown[]) : [answers],
 });
 
-/** The answer that accepts a command without output. */
-export const accepted: { readonly result: "accepted" } = Object.freeze({ result: "accepted" });
+/** The answer that accepts a command: `accepted()` without output, `accepted(output)` with it. */
+export function accepted(): { readonly result: "accepted" };
+export function accepted<const O>(output: O): { readonly result: "accepted"; readonly output: O };
+export function accepted(...output: readonly unknown[]): { readonly result: "accepted"; readonly output?: unknown } {
+  return output.length === 0 ? { result: "accepted" } : { result: "accepted", output: output[0] };
+}
 
 /** The answer that fulfills a query with `output`. */
 export const fulfilled = <const O>(output: O): { readonly result: "fulfilled"; readonly output: O } => ({

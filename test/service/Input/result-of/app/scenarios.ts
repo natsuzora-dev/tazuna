@@ -9,7 +9,7 @@ export const grant = scenario({
   when: (w) => {
     const request = w.startup.request(device.requestPermission);
     w.net.deliver(request);
-    w.net.deliver(w.peer.device.answer(request, accepted));
+    w.net.deliver(w.peer.device.answer(request, accepted()));
     w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: request }));
   },
   then: () => [],

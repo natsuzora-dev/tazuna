@@ -14,7 +14,6 @@ import type {
   UpdateEvent,
 } from "./definition.ts";
 import type { AnyEntity, AnyKeyedEntity, Entities, KeyedEntity, SingleEntity } from "./entity.ts";
-import { withWritten } from "./written.ts";
 
 type WritableField<E extends AnyEntity> =
   E extends KeyedEntity<infer S, infer K>
@@ -56,17 +55,14 @@ export function eventDefiners(owner: ServiceDefinition) {
   const of =
     (change: AnyEvent["change"]) =>
     (d: EventOptions): AnyEvent =>
-      withWritten(
-        {
-          kind: "event",
-          change,
-          service: owner,
-          ...(change === "none" ? {} : { entity: d.entity }),
-          ...(change === "update" ? { writes: d.writes } : {}),
-          payload: payloadOf(change, d),
-        } as AnyEvent,
-        d,
-      );
+      ({
+        kind: "event",
+        change,
+        service: owner,
+        ...(change === "none" ? {} : { entity: d.entity }),
+        ...(change === "update" ? { writes: d.writes } : {}),
+        payload: payloadOf(change, d),
+      }) as AnyEvent;
   return { createEvent: of("create"), updateEvent: of("update"), deleteEvent: of("delete"), event: of("none") };
 }
 
