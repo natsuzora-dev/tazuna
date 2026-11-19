@@ -19,12 +19,14 @@ export const addTask = command({
 export const watcher = machine({
   description: "Watch the first task",
   receives: { taskAdded },
-  initial: "watching",
-  states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } },
+  initial: "running",
+  states: {
+    running: { initial: "watching", states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } } },
+  },
 }).chart({
   states: {
-    idle: { on: { taskAdded: [{ target: "watching" }] } },
-    watching: { holds: { task: ({ records }) => records.Task.only() }, on: { taskAdded: [{ target: "idle" }] } },
+    running: { initial: { with: { task: ({ records }) => records.Task.only() } } },
+    watching: { on: { taskAdded: [{ target: "idle" }] } },
   },
 });
 

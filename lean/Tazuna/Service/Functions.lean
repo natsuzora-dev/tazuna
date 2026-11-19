@@ -57,10 +57,10 @@ local instance : FromValue Time := ⟨Time.fromValue⟩
 /--
 The values passed to machine and screen expressions; TS builds the expressions' arguments from them and the records.
 `id` is the evaluating instance or copy. `state` is the state that declares the expression (`none` for the chart's own
-`on`); `held` is looked up in the holds of that state and its ancestors, so it depends on where the expression is
-written, not on the active states, and a transition can read the holds of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is the
-context of the instance (the owner's for a copy). `shown` holds the answer of each shows slot (null if none). `input` is
-the screen's input.
+`on`); `held` holds the parameters of that state for its current visit (empty when it has none), so a transition reads
+the parameters of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is
+the context of the instance (the owner's for a copy). `shown` holds the answer of each shows slot (null if none).
+`input` is the screen's input.
 -/
 structure Scope where
   id : InstanceId
@@ -70,6 +70,7 @@ structure Scope where
   active : List String
   shown : List (String × Value) := []
   input : Value := .obj []
+  held : Value := .obj []
   now : Time
 deriving DecidableEq, Repr, Inhabited
 
@@ -85,6 +86,17 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Assignment tag "kind"
 
+/--
+The edge that enters a state with parameters and fills them with its `with`: a transition that targets the state, or
+the initial edge of its parent (`none` for the chart's initial state, which no `with` fills).
+-/
+inductive Edge where
+  | transition (transition : Transition)
+  | initial (parent : Option String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Edge tag "kind"
+
 /-- What caused the transition, as passed to its expressions. -/
 inductive Extra where
   | none
@@ -98,7 +110,7 @@ derive_wire Extra tag "kind"
 
 /--
 The reason that a question has no answer: its author code threw (with `schema`, inside that schema's refinement or
-codec), a value does not match `schema`, an expression read a `held` name that no enclosing state holds, or it called
+codec), a value does not match `schema`, an expression read a `held` name that its state does not have, or it called
 `only()` on a bag with more than one element.
 -/
 inductive Issue where
@@ -174,7 +186,8 @@ at load) always answer.
   and the rest to the owner, and assign returns both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
-- holds: the check of a state's holds values against their held schemas.
+- held: the parameters of the state that an edge enters, which its `with` computes, checked against the state's held
+  schema and encoded. A transition's `with` reads what its assign reads.
 - deadlines: a state's `after` deadline names, in declaration order.
 - deadlineTime: the time of a state's `after` deadline on entering it: `now` plus a delay, or what `at` computes.
 -/
@@ -201,7 +214,7 @@ structure Functions (m : Type → Type) where
   assign : Scope → Records → Assignment → Extra → Keys →
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
-  holds : Scope → Records → m (Except Issue Unit)
+  held : Scope → Records → Edge → Extra → m (Except Issue Value)
   deadlines : String → String → m (List String)
   deadlineTime : Scope → Records → String → m (Except Issue Time)
   offers : Scope → Records → String → m (Except Issue (List Value))

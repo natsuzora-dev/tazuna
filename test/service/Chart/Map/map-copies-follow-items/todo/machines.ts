@@ -11,7 +11,6 @@ export const dayNoter = machine({
     noting: {
       type: "map",
       key: { taskId: ref(Task) },
-      context: { day: datetime.nullable().default(null) },
       initial: "asking",
       states: { asking: {}, writing: { held: { day: datetime } }, done: {} },
     },
@@ -25,13 +24,12 @@ export const dayNoter = machine({
       calls: {
         nextDay: {
           input: ({ now, key }) => ({ from: now, taskId: key.taskId }),
-          onFulfilled: [{ target: "writing", assign: { day: ({ output }) => output.day } }],
+          onFulfilled: [{ target: "writing", with: { day: ({ output }) => output.day } }],
           onRejected: [{ target: "done" }],
         },
       },
     },
     writing: {
-      holds: { day: ({ context }) => context.day },
       sends: {
         note: {
           input: ({ key, held }) => ({ taskId: key.taskId, text: held.day.toString() }),

@@ -32,6 +32,7 @@ import {
   type CopyKey,
   type ErrorIf,
   type Flat,
+  type InitialHeldIn,
   type KindOf,
   type MapOf,
   type OuterNames,
@@ -39,8 +40,10 @@ import {
   type SharedContextFields,
   type Table,
   type TableKeys,
+  type TargetsOf,
   type Tree,
   type TreeErrors,
+  type UnheldTop,
 } from "./tree.ts";
 import { withWritten } from "./written.ts";
 
@@ -66,7 +69,7 @@ type OperatedControls<Ps extends Payloads> = { readonly [K in keyof Ps]: { reado
  */
 type Shows<B, Qs extends Queries> = { readonly [K in keyof Qs]?: InputOf<Qs[K], B> };
 
-type StateOpens<N extends string, Ctx, B, Ss extends Screens> = {
+type StateOpens<N, Ctx, B, Ss extends Screens> = {
   readonly [K in keyof Ss]?: {
     /** Whether the child opens as with HTML `showModal()` (true) or as with HTML `show()` (false). */
     readonly modal: boolean;
@@ -74,20 +77,20 @@ type StateOpens<N extends string, Ctx, B, Ss extends Screens> = {
   } & InputOf<Ss[K], B>;
 };
 
-type ScreenEntry<N extends string, Ctx, B, Cs extends Commands, Ss extends Screens> = {
+type ScreenEntry<N, Ctx, B, Cs extends Commands, Ss extends Screens> = {
   readonly sends?: StateSends<N, Ctx, B, Cs>;
   readonly opens?: StateOpens<N, Ctx, B, Ss>;
 };
 
-type ScreenRequest<N extends string, Ctx, B, Sh extends Queries, Cs extends Commands, Ss extends Screens> = {
+type ScreenRequest<N, Ctx, B, Sh extends Queries, Cs extends Commands, Ss extends Screens> = {
   readonly shows?: Shows<B, Sh>;
 } & ScreenEntry<N, Ctx, B, Cs, Ss>;
-type CopyRequest<N extends string, Ctx, B, Cs extends Commands> = Pick<ScreenEntry<N, Ctx, B, Cs, never>, "sends"> & {
+type CopyRequest<N, Ctx, B, Cs extends Commands> = Pick<ScreenEntry<N, Ctx, B, Cs, never>, "sends"> & {
   readonly shows?: never;
   readonly opens?: never;
 };
 
-type Ons<N extends string, Ctx, B, Ps extends Payloads, Rs extends Events> = KeyedTransitions<
+type Ons<N, Ctx, B, Ps extends Payloads, Rs extends Events> = KeyedTransitions<
   N,
   Ctx,
   B,
@@ -155,19 +158,20 @@ type ScreenBehavior<
   Cs extends Commands,
   Ss extends Screens,
   Ps extends Payloads,
-  S extends { readonly names: string; readonly context: unknown },
+  S extends { readonly names: keyof F; readonly context: unknown },
   B,
 > = StateBehavior<
   KindOf<F, K>,
-  S["names"],
+  TargetsOf<F, S["names"]>,
   S["context"],
   B,
-  Ons<S["names"], S["context"], B, Ps, Rs>,
+  Ons<TargetsOf<F, S["names"]>, S["context"], B, Ps, Rs>,
   ([MapOf<F, K>] extends [never]
-    ? ScreenRequest<S["names"], S["context"], B, Sh, Cs, Ss>
-    : CopyRequest<S["names"], S["context"], B, Cs>) &
+    ? ScreenRequest<TargetsOf<F, S["names"]>, S["context"], B, Sh, Cs, Ss>
+    : CopyRequest<TargetsOf<F, S["names"]>, S["context"], B, Cs>) &
     StateOffers<Ps, B>,
-  CopyKey<F, K>
+  CopyKey<F, K>,
+  InitialHeldIn<F, K>
 >;
 /**
  * The payloads that the user can choose for a control: `any` offers every payload that matches the schema, `none`
@@ -202,20 +206,15 @@ interface ScreenSetup<
       InitialContextSetup<I, Ctx, R> &
       ScreenResolve<O, OuterArguments<I, Ctx, Sh, Es>> & {
         /** The transitions that apply in every state. */
-        on?: NoInfer<Ons<OuterNames<F>, Row<Ctx>, OuterArguments<I, Ctx, Sh, Es>, Ps, Rs>>;
-        states?: Table<
-          F,
-          K,
-          { readonly [P in keyof F]: ScreenScope<F, P, I, Ctx, Sh, Es>["args"] },
-          ScreenBehaviors<F, I, Ctx, Rs, Sh, Cs, Ss, Es, Ps>
-        >;
+        on?: NoInfer<Ons<TargetsOf<F, OuterNames<F>>, Row<Ctx>, OuterArguments<I, Ctx, Sh, Es>, Ps, Rs>>;
+        states?: Table<F, K, ScreenBehaviors<F, I, Ctx, Rs, Sh, Cs, Ss, Es, Ps>>;
       } & NoInfer<RowsWritten<F, K>>,
   ): Screen<I, O, ScreenControls<Ps>>;
 }
 
 export type ScreenDefiner<Es extends Entities> = <
-  // St is not const: a const St keeps a nested initial as a literal, and its check against the children becomes never.
-  St extends Tree,
+  // St is const so that a nested initial stays a literal, which names the child that the initial edge fills.
+  const St extends Tree,
   const I extends Shape = Record<never, never>,
   const O extends Shape = Record<never, never>,
   const Ctx extends Shape = Record<never, never>,
@@ -245,7 +244,7 @@ export type ScreenDefiner<Es extends Entities> = <
     controls?: {
       readonly [K in keyof Ps]: { readonly label: string; readonly payload?: Ps[K] & Shape };
     } & { readonly [K in keyof NoInfer<Rs>]?: never };
-    initial: NoInfer<keyof St & string>;
+    initial: NoInfer<UnheldTop<St>>;
     states: St & CheckTree<NoInfer<St>>;
     requires?: Named<Rq, { input: Row<I> }>;
     ensures?: Named<En, { input: Row<I>; output: Row<O> }>;

@@ -24,6 +24,7 @@ inductive Fault where
   | inputSchema (definition : Spec.Ref) (target : Spec.Ref)
   /-- The input that the chart gives the screen it opens fails the screen's requires `condition`. -/
   | failedRequires (definition : Spec.Ref) (screen : Spec.Ref) (condition : String)
+  /-- The edge that enters `state` fills its parameter `held` with null or a value off its schema. -/
   | heldSchema (definition : Spec.Ref) (held state : String)
   /-- `state` is null for the offers of the chart's own `on`. -/
   | offersSchema (definition : Spec.Ref) (control : String) (state : Option String)
@@ -32,7 +33,7 @@ inductive Fault where
   | copyContextSchema (definition : Spec.Ref) (map : String)
   | contextSchema (definition : Spec.Ref)
   | itemsSchema (definition : Spec.Ref) (map : String)
-  /-- A function reads the held value `held` while its state does not hold it. -/
+  /-- A function reads `held` (its state's parameter) under a name that the state does not have. -/
   | unheld (definition : Spec.Ref) (held : String)
   /-- A function calls `only()` on a bag with more than one element. -/
   | notOnly (definition : Spec.Ref)

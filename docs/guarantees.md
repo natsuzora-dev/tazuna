@@ -99,8 +99,8 @@ Two outcomes are the same when both halt with the same violation, or when neithe
 - Their lines pair one to one with equal contents and the same `after` through the pairing.
   Lines that a service wrote for messages that one line delivered pair by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
 - The state that a later line reads is equal under one binding of created keys.
-  That state is the records and each open instance and copy: the active states, the children that a history state returns to, the context, and the pending deadlines, whose times a later clock line reads.
-  The binding maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position: in records, contexts, and map state item keys.
+  That state is the records and each open instance and copy: the active states, the children that a history state returns to, the context, the parameters (`held`) of each active state, and the pending deadlines, whose times a later clock line reads.
+  The binding maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position: in records, contexts, parameters, and map state item keys.
 
 Instances pair by their place.
 A screen that another screen opens is named by its opener and by the state and key of that `opens`.

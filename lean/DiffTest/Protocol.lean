@@ -78,7 +78,7 @@ inductive Question where
   | guard (scope : Scope) (transition : Transition) (extra : Extra)
   | assign (scope : Scope) (assignment : Assignment) (extra : Extra) (keys : Keys)
   | input (scope : Scope) (activity : Activity) (keys : Keys)
-  | holds (scope : Scope)
+  | held (scope : Scope) (edge : Edge) (extra : Extra)
   | deadlines (machine state : String)
   | deadlineTime (scope : Scope) (name : String)
   | offers (scope : Scope) (control : String)
@@ -135,7 +135,7 @@ inductive Reply where
   | guard (passes : Bool)
   | assign (context : Value) (copy : Option Value) (created : List String)
   | input (input : Value) (created : List String)
-  | holds
+  | held (held : Value)
   | deadlines (names : List String)
   | deadlineTime (time : Time)
   | offers (payloads : List Value)

@@ -12,8 +12,8 @@ import type { RecordSource, Row } from "./records.ts";
 
 /**
  * The reason that a Functions question has no answer: its author code threw (with `schema`, inside that schema's
- * refinement or codec), a value does not match `schema`, an expression read a `held` name that no enclosing state
- * holds, or it called `only()` on a bag with more than one element.
+ * refinement or codec), a value does not match `schema`, an expression read a `held` name that its state does not
+ * have, or it called `only()` on a bag with more than one element.
  */
 export type Issue =
   | { readonly kind: "thrown"; readonly schema?: Schema }
@@ -71,9 +71,10 @@ export interface CopyScope {
 
 /**
  * The values passed to machine and screen expressions. `id` is the evaluating instance or copy. `state` is the state
- * that declares the expression (null for the chart's own `on`). `active` holds the active state names (a copy's and its
- * owner's), looked up when an expression reads them. `context` is the instance's (the owner's for a copy). `shown`
- * holds the answer's output for each shows slot (null if none). `input` is the screen's input.
+ * that declares the expression (null for the chart's own `on`). `held` holds the parameters of that state for its
+ * current visit (empty when it has none). `active` holds the active state names (a copy's and its owner's), looked up
+ * when an expression reads them. `context` is the instance's (the owner's for a copy). `shown` holds the answer's
+ * output for each shows slot (null if none). `input` is the screen's input.
  */
 export interface Scope {
   readonly id: InstanceId;
@@ -83,6 +84,7 @@ export interface Scope {
   readonly active: Pick<ReadonlySet<string>, "has">;
   readonly shown: ReadonlyMap<string, unknown>;
   readonly input: Fields;
+  readonly held: Fields;
   readonly now: Temporal.Instant;
 }
 
@@ -107,6 +109,14 @@ export interface Access {
 export type Assignment =
   | { readonly kind: "transition"; readonly transition: TransitionRef }
   | { readonly kind: "entry" | "exit"; readonly state: string };
+
+/**
+ * Lean's Edge: the edge that enters a state with parameters and fills them with its `with`, a transition that targets
+ * the state or the initial edge of its parent (null for the chart's initial state, which no `with` fills).
+ */
+export type Edge =
+  | { readonly kind: "transition"; readonly transition: TransitionRef }
+  | { readonly kind: "initial"; readonly parent: string | null };
 
 /** What createKey returns next for an entity: `<entity>-<n>` for its `n`-th createKey value, after `count` so far. */
 export interface NextKeys {
@@ -244,7 +254,11 @@ export interface Functions {
     keys: Keys,
     access: Access,
   ): { readonly written: Json; readonly created: readonly string[] } | Failed;
-  holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed;
+  /**
+   * Returns the parameters of the state that `edge` enters, which its `with` computes, checked against the state's held
+   * schema. A transition's `with` reads what its assign reads.
+   */
+  held(scope: Scope, records: RecordSource, edge: Edge, extra: Fields, access: Access): Fields | Failed;
   /** Returns the names of a state's `after` deadlines, in declaration order. */
   deadlines(machine: string, state: string): readonly string[];
   /** Lean's deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes. */

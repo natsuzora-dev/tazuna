@@ -131,6 +131,11 @@ export interface Instance {
   readonly itemKey?: unknown;
   /** For each map state, the encoded keys of its copies, in item order. */
   readonly copyKeys: Map<string, readonly string[]>;
+  /**
+   * The parameters of each active state that has them, as the edge that entered it filled them; they stay fixed until
+   * the state exits.
+   */
+  readonly held: Map<string, Fields>;
 }
 
 /** The instance or copy that takes the transition, and the transition. */
@@ -470,6 +475,11 @@ export function machine(s: State, id: InstanceId): Instance | undefined {
  * Returns the scope of the expressions of `instance`. A copy's expressions also read the owner's context, shown, and
  * input.
  */
+/** Lean's Instance.heldAt: the parameters of `state` for its current visit, empty when it has none. */
+export function heldAt(instance: Instance, state: string | null): Fields {
+  return (state === null ? undefined : instance.held.get(state)) ?? {};
+}
+
 export function scopeOf(s: State, instance: Instance, state: string | null): Scope {
   const owner = instance.id.kind === "copy" ? machine(s, ownerId(instance.id)) : undefined;
   if (owner !== undefined)
@@ -481,6 +491,7 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
       active: { has: (n) => instance.entered.has(n) || owner.entered.has(n) },
       shown: owner.shown,
       input: owner.input,
+      held: heldAt(instance, state),
       now: s.now,
     };
   return {
@@ -491,6 +502,7 @@ export function scopeOf(s: State, instance: Instance, state: string | null): Sco
     active: instance.entered,
     shown: instance.shown,
     input: instance.input,
+    held: heldAt(instance, state),
     now: s.now,
   };
 }
@@ -567,10 +579,6 @@ export function documentOrder(s: State, instance: Instance): { holder: Instance;
       return holder === undefined ? [] : descendants(tree, n).map((d) => ({ holder, n: d }));
     }),
   ]);
-}
-
-export function* running(s: State): Generator<Instance> {
-  for (const instance of s.machines.values()) yield* [instance, ...copiesOf(s, instance)];
 }
 
 export function removeFromStack(s: State, id: InstanceId): void {

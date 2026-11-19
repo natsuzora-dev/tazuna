@@ -33,10 +33,15 @@ section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
-def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
-    Processing → m Processing :=
+/--
+The processing after the assign `a` of instance `name`, written in the state `scope`. `held` replaces the parameters
+that the expressions read: a transition reads those of its source as the microstep began, since the source has exited.
+-/
+def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) : Processing → m Processing :=
   withMachine name fun i r => do
-    match ← fs.assign (r.state.scopeOf i scope) r.state.records a extra r.state.nextKeys with
+    let sc := r.state.scopeOf i scope
+    match ← fs.assign { sc with held := held.getD sc.held } r.state.records a extra r.state.nextKeys with
     | .error e =>
       pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun
         | .mapContext _ map => .copyContextSchema (st.ref i.chart.name) map
@@ -65,7 +70,7 @@ def leaveMark (name : InstanceId) (n : String) (p : Pending) : Pending :=
   if p.requester = .state name n then { p with stale := true } else p
 
 def State.leaveState (s : State) (name : InstanceId) (n : String) : State :=
-  let s := s.setMachine name fun i => { i with entered := i.entered.filter (·.1 != n) }
+  let s := s.setMachine name fun i => { i with entered := i.entered.filter (·.1 != n), held := i.held.filter (·.1 != n) }
   { s with
     deadlines := s.deadlines.filter (fun t => !(t.machine == name && t.state == n)),
     pending := s.pending.map (leaveMark name n),
@@ -77,7 +82,7 @@ def State.childrenOf (s : State) (name : InstanceId) (n : String) : List Instanc
 
 def leaveWith (st : Service) (exit : InstanceId → String → Processing → m Processing) (name : InstanceId) (n : String)
     (r : Processing) : m Processing := do
-  let r ← runAssign fs st name (.exit n) (some n) .none r
+  let r ← runAssign fs st name (.exit n) (some n) .none none r
   if r.halted then pure r else
   MonadNote.note (.wroteState name n)
   let s := r.state.leaveState name n

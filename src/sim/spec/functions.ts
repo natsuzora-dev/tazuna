@@ -31,6 +31,7 @@ import {
   type Access,
   type Assignment,
   type Checked,
+  type Edge,
   Failed,
   type Functions,
   givenKeys,
@@ -43,7 +44,7 @@ import type { Emit } from "../../service/message.ts";
 import type { Note } from "../../service/note.ts";
 import type { RecordSource, Row } from "../../service/records.ts";
 import { type ChartStructure, chartStructure, stateNamed } from "../../spec/structure.ts";
-import { isDescendant, pathOf } from "../../spec/tree.ts";
+import { isDescendant } from "../../spec/tree.ts";
 import { assumedEnsures } from "./contract.ts";
 import { recordsView } from "./records.ts";
 
@@ -152,34 +153,19 @@ function lazy(make: () => unknown): PropertyDescriptor {
   };
 }
 
-/** Returns the value that `state` holds as `name`, checked against its held schema. */
-function heldValue(definition: DefinitionRef, chart: ChartSpec, state: string, name: string, args: unknown): unknown {
-  const value = attempt(() => chart.holds?.[state]?.[name]?.(args));
-  if (value instanceof Failed) return value;
-  const schema = chart.held?.[state]?.[name] as z.ZodType;
-  const checked = matching({ kind: "held", chart: definition, state, name }, schema, value);
-  return checked instanceof Failed ? checked : checked.value;
-}
-
 /**
- * Returns `held` of the expressions written at `path` (the state names from a child of root down to the state where the
- * expression is written), whose holds read `base`. Reading a name throws its Issue when no enclosing state holds the
- * name or the value fails its schema.
+ * Returns `held` of an expression whose state has the parameters `values`. Reading a name tells `read`; reading a name
+ * that the state does not have throws an unheld Issue.
  */
-function heldOf(definition: DefinitionRef, chart: ChartSpec, path: readonly string[], base: Fields): object {
-  return new Proxy(
-    {},
-    {
-      get: (_, name) => {
-        if (typeof name !== "string") return undefined;
-        const state = path.findLast((n) => chart.holds?.[n]?.[name] !== undefined);
-        if (state === undefined) throw new Failed({ kind: "unheld", held: name });
-        const value = heldValue(definition, chart, state, name, base);
-        if (value instanceof Failed) throw value;
-        return value;
-      },
+function heldOf(values: Fields, read: () => void): object {
+  return new Proxy(values, {
+    get: (target, name) => {
+      if (typeof name !== "string") return undefined;
+      if (!Object.hasOwn(target, name)) throw new Failed({ kind: "unheld", held: name });
+      read();
+      return target[name];
     },
-  );
+  });
 }
 
 type Assignments = Readonly<Record<string, (args: unknown) => unknown>>;
@@ -277,6 +263,10 @@ export class SpecFunctions implements Functions {
         return this.chartOf(schema.chart.name).named.definition.context;
       case "mapContext":
         return this.node(schema.chart.name, schema.map)?.context ?? {};
+      case "held": {
+        const field = this.chartOf(schema.chart.name).named.definition.held?.[schema.state]?.[schema.name];
+        return field === undefined ? {} : { [schema.name]: field };
+      }
       default:
         throw new Error(`no question checks a value of the ${schema.kind} schema`);
     }
@@ -392,12 +382,17 @@ export class SpecFunctions implements Functions {
     );
   }
 
-  /** Returns the arguments of the expressions written in `scope.state`: the base arguments, `held` and `extra`. */
+  /**
+   * Returns the arguments of the expressions written in `scope.state`: the base arguments, `held` and `extra`. Reading
+   * `held` reads the state's visit, which only entering the state writes.
+   */
   private args(scope: Scope, records: RecordSource, access: Access, extra: Fields = {}): Fields {
-    const { named, ref, structure } = this.chartOf(chartOf(scope.id));
     const base = this.baseArgs(scope, records, access);
-    const path = scope.state === null ? [] : pathOf(structure, scope.state);
-    return extended(base, { held: heldOf(ref, named.definition, path, base), ...extra });
+    const { state } = scope;
+    const read = () => {
+      if (state !== null) access.active(scope.copy === undefined ? "owner" : "copy", state);
+    };
+    return extended(base, { held: heldOf(scope.held, read), ...extra });
   }
 
   /** Returns the input that `f` gives a request or screen of the input shape `shape`, as the sender writes it. */
@@ -733,18 +728,32 @@ export class SpecFunctions implements Functions {
     return given instanceof Failed ? given : { written: given, created };
   }
 
-  /** Checks the held values of a state, whose holds read the base arguments. */
-  holds(scope: Scope, records: RecordSource, access: Access): undefined | Failed {
-    const { named, ref } = this.chartOf(chartOf(scope.id));
-    const state = this.stateOf(scope);
-    const holds = named.definition.holds?.[state];
-    if (holds === undefined) return undefined;
-    const base = this.baseArgs(scope, records, access);
-    for (const name of Object.keys(holds)) {
-      const value = heldValue(ref, named.definition, state, name, base);
-      if (value instanceof Failed) return value;
+  /** Returns the parameters that `edge`'s `with` fills, each checked against its held schema. */
+  held(scope: Scope, records: RecordSource, edge: Edge, extra: Fields, access: Access): Fields | Failed {
+    const { named, ref, structure } = this.chartOf(chartOf(scope.id));
+    const machine = chartOf(scope.id);
+    let fills: Assignments | undefined;
+    let target: string;
+    if (edge.kind === "transition") {
+      const t = this.transition(machine, edge.transition);
+      fills = t.with as Assignments | undefined;
+      target = t.target ?? "";
+    } else if (edge.parent === null) {
+      target = structure.initial;
+    } else {
+      fills = this.node(machine, edge.parent)?.initialEdge?.with as Assignments | undefined;
+      target = stateNamed(structure, edge.parent)?.initial ?? "";
     }
-    return undefined;
+    const args = this.args(scope, records, access, extra);
+    const values: Record<string, unknown> = {};
+    for (const [name, schema] of Object.entries(named.definition.held?.[target] ?? {})) {
+      const value = attempt(() => fills?.[name]?.(args));
+      if (value instanceof Failed) return value;
+      const checked = matching({ kind: "held", chart: ref, state: target, name }, schema as z.ZodType, value);
+      if (checked instanceof Failed) return checked;
+      values[name] = checked.value;
+    }
+    return values;
   }
 
   deadlines(machine: string, state: string): readonly string[] {

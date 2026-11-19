@@ -145,8 +145,9 @@ def canonicalOrder (vs : List Value) : List Value := vs.mergeSort fun a b => dec
 /--
 An open instance as the relation compares it: its id, its active states and the children that each parent last left
 (history), each in name order, since a later input reads which states are active and not the order they were entered
-in; its context at the key positions of its chart or map state; and its pending deadlines, each with its state, name
-and time, which a later clock line reads.
+in; its context at the key positions of its chart or map state; the parameters of each active state that has them, at
+the state's key positions; and its pending deadlines, each with its state, name and time, which a later clock line
+reads.
 -/
 def instanceValue (st : Service) (deadlines : List Deadline) (i : Instance) : CValue :=
   let contextKeys : Option (List Spec.KeyPosition) := match i.id.map? with
@@ -157,6 +158,9 @@ def instanceValue (st : Service) (deadlines : List Deadline) (i : Instance) : CV
     ("history", .leaf (.arr ((i.lastChildren.mergeSort fun a b => decide (a.1 ≤ b.1)).map fun (p, cs) =>
       .arr [.str p, names cs]))),
     ("context", keyed (refsAt (contextKeys.getD [])) [] i.context),
+    ("held", .obj ((i.held.mergeSort fun a b => decide (a.1 ≤ b.1)).map fun (n, v) =>
+      (n, keyed (refsAt (((chartNamed st i.id.chart).bind fun c => c.states.find? (·.name == n)).map (·.heldKeys)
+        |>.getD [])) [] v))),
     ("deadlines", .leaf (.arr (canonicalOrder ((deadlines.filter (·.machine == i.id)).map fun d =>
       .obj [("state", .str d.state), ("name", .str d.name), ("time", Time.toValue d.time)]))))]
 

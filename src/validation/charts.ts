@@ -155,11 +155,38 @@ function alwaysCycles(structure: Structure): Illegal[] {
   });
 }
 
+/** Lean's restoredHeldOf: each state with parameters that a history state may restore, with that history state. */
+function restoredHeldOf(chart: ChartStructure): [string, string][] {
+  return chart.states.flatMap((st): [string, string][] => {
+    if (st.held.length === 0 || st.parent === null) return [];
+    const parent = stateNamed(chart, st.parent);
+    if (parent === undefined || parent.kind === "map") return [];
+    return parent.children
+      .filter((h) => chart.states.some((x) => x.name === h && x.kind === "history"))
+      .map((h) => [st.name, h]);
+  });
+}
+
+function restoredHeld(structure: Structure): Illegal[] {
+  return structure.definitions.flatMap((d) =>
+    d.kind !== "machine" && d.kind !== "screen"
+      ? []
+      : restoredHeldOf(d).map(
+          ([state, history]): Illegal => ({
+            kind: "Illegal.restoredHeld",
+            definition: { service: d.service, name: d.name },
+            data: { state, history },
+          }),
+        ),
+  );
+}
+
 export function check(structure: Structure): Illegal[] {
   return [
     ...missingParents(structure),
     ...ownQueries(structure),
     ...unlistedControls(structure),
     ...alwaysCycles(structure),
+    ...restoredHeld(structure),
   ];
 }

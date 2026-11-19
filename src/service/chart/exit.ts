@@ -42,15 +42,21 @@ export function recordHistory(instance: Instance, name: string): void {
   if (recorded !== null) instance.lastChildren.set(name, recorded);
 }
 
+/**
+ * Lean's runAssign. `held` replaces the parameters that the expressions read: a transition reads those of its source as
+ * the microstep began, since the source has exited.
+ */
 export function runAssign(
   r: Processing,
   instance: Instance,
   assignment: Assignment,
   extra: Fields,
   state: string | null,
+  held?: Fields,
 ): void {
   const definition = ref(r.st, instance.chart.name);
-  const scope = scopeOf(r.state, instance, state);
+  const scoped = scopeOf(r.state, instance, state);
+  const scope = held === undefined ? scoped : { ...scoped, held };
   const records = new LazyRecordSource(r.state.records, r.note);
   const assigned = r.functions.assign(scope, records, assignment, extra, nextKeys(r.state), new NoteAccess(r, scope));
   if (assigned instanceof Failed)
@@ -87,6 +93,7 @@ export function endWith(r: Processing, name: InstanceId, fuel: number): void {
 function leaveState(s: State, instance: Instance, n: string): void {
   const name = instance.id;
   instance.entered.delete(n);
+  instance.held.delete(n);
   for (let i = s.deadlines.length - 1; i >= 0; i -= 1) {
     const t = s.deadlines[i];
     if (t && t.machine === name && t.state === n) s.deadlines.splice(i, 1);

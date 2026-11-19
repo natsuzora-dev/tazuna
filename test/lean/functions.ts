@@ -23,6 +23,7 @@ import {
   type Access,
   type Assignment,
   type CopyScope,
+  type Edge,
   Failed,
   type Issue,
   type Keys,
@@ -33,7 +34,7 @@ import { chartOf, copyId, type InstanceId, mapOf, openedId, topId } from "../../
 import type { Emit } from "../../src/service/message.ts";
 import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
-import { transitionRef } from "../../src/spec/structure.ts";
+import { stateNamed, transitionRef } from "../../src/spec/structure.ts";
 import { keyPositionsOf } from "../../src/verify/compare.ts";
 import type {
   Asked,
@@ -238,6 +239,7 @@ export class RunFunctions implements Answering {
       shown.set(slot, value === null ? null : decode(query.output ?? {}, value));
     }
     const input = chart.kind === "screen" ? decode(chart.input ?? {}, lean.input) : {};
+    const held = lean.state === null ? {} : decode(chart.held?.[lean.state] ?? {}, lean.held);
     return {
       id,
       state: lean.state,
@@ -246,6 +248,7 @@ export class RunFunctions implements Answering {
       active: new Set(lean.active),
       shown,
       input,
+      held,
       now: Temporal.Instant.from(lean.now),
     };
   }
@@ -484,10 +487,26 @@ export class RunFunctions implements Answering {
             ({ written, created }) => ({ type: "input", input: written, created: [...created] }),
           ),
         );
-      case "holds":
-        return this.scoped(q.scope, (scope, access) =>
-          this.replied(this.functions.holds(scope, this.records, access), () => ({ type: "holds" })),
-        );
+      case "held": {
+        const at = q.edge;
+        const edge: Edge =
+          at.kind === "transition" ? { kind: "transition", transition: transitionRef(at.transition) } : at;
+        const trigger = at.kind === "transition" ? at.transition.trigger : undefined;
+        return this.scoped(q.scope, (scope, access) => {
+          const machine = chartOf(scope.id);
+          const { named, structure } = this.functions.chartOf(machine);
+          const target =
+            at.kind === "transition"
+              ? (at.transition.target ?? "")
+              : at.parent === null
+                ? structure.initial
+                : (stateNamed(structure, at.parent)?.initial ?? "");
+          return this.replied(
+            this.functions.held(scope, this.records, edge, this.extraOf(machine, trigger, q.extra), access),
+            (fields) => ({ type: "held", held: encode(named.definition.held?.[target] ?? {}, fields) }),
+          );
+        });
+      }
       case "deadlines":
         return { type: "deadlines", names: [...this.functions.deadlines(q.machine, q.state)] };
       case "deadlineTime":

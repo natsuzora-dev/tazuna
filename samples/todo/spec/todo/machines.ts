@@ -23,12 +23,17 @@ export const reminder = machine({
     reminding: {
       items: ({ records }) =>
         records.Task.filter((t) => t.completedAt === null && t.remindAt !== null).map((t) => ({ taskId: t.id })),
+      initial: { with: { remindAt: ({ key, records }) => records.Task.get(key.taskId)?.remindAt ?? null } },
     },
     waiting: {
-      holds: { remindAt: ({ key, records }) => records.Task.get(key.taskId)?.remindAt ?? null },
       on: {
         dueChanged: [
-          { guard: { sameTask: ({ key, payload }) => payload.id === key.taskId }, target: "waiting", reenter: true },
+          {
+            guard: { sameTask: ({ key, payload }) => payload.id === key.taskId },
+            target: "waiting",
+            reenter: true,
+            with: { remindAt: ({ key, records }) => records.Task.get(key.taskId)?.remindAt ?? null },
+          },
         ],
       },
       after: { reminderTime: { at: ({ held }) => held.remindAt, onFired: [{ target: "recording" }] } },
@@ -49,7 +54,6 @@ export const businessDayReminder = machine({
     deciding: {
       type: "map",
       key: { taskId: ref(Task) },
-      context: { day: date.nullable().default(null) },
       initial: "asking",
       states: { asking: {}, scheduling: { held: { day: date } }, failing: {} },
     },
@@ -64,13 +68,12 @@ export const businessDayReminder = machine({
       calls: {
         nextBusinessDay: {
           input: ({ now }) => ({ from: now.toZonedDateTimeISO(todoConstants.timeZone).toPlainDate() }),
-          onFulfilled: [{ target: "scheduling", assign: { day: ({ output }) => output.day } }],
+          onFulfilled: [{ target: "scheduling", with: { day: ({ output }) => output.day } }],
           onRejected: [{ target: "failing" }],
         },
       },
     },
     scheduling: {
-      holds: { day: ({ context }) => context.day },
       sends: {
         setReminder: {
           input: ({ key, held }) => ({

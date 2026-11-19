@@ -30,9 +30,8 @@ export const firstTaskWatcher = machine({
   states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } },
 }).chart({
   states: {
-    idle: { on: { taskAdded: [{ target: "watching" }] } },
+    idle: { on: { taskAdded: [{ target: "watching", with: { task: ({ records }) => records.Task.only() } }] } },
     watching: {
-      holds: { task: ({ records }) => records.Task.only() },
       entry: { assign: { title } },
       on: { taskAdded: [{ target: "idle" }] },
     },
@@ -40,16 +39,15 @@ export const firstTaskWatcher = machine({
 });
 
 export const watcher = machine({
-  description: "Watch the first task, reading a held value that no state holds",
+  description: "Watch the first task, reading a held value that its state does not have",
   context: { title: z.string().default("") },
   receives: { taskAdded },
   initial: "idle",
   states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } },
 }).chart({
   states: {
-    idle: { on: { taskAdded: [{ target: "watching" }] } },
+    idle: { on: { taskAdded: [{ target: "watching", with: { task: ({ records }) => records.Task.only() } }] } },
     watching: {
-      holds: { task: ({ records }) => records.Task.only() },
       entry: { assign: { title: latestTitle } },
       on: { taskAdded: [{ target: "idle" }] },
     },

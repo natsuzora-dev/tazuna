@@ -13,6 +13,7 @@ import { ref, type Schema, type Service } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
+  type Edge,
   Failed,
   type Functions,
   givenKeys,
@@ -178,7 +179,7 @@ export class Collect
   private afterMessage: number | undefined;
   /** The access of the step in which a message of a tie arrives, while it is processed (arrivalBegins). */
   private arrival: StepAccess | undefined;
-  /** For each message, the values that its afterMessage read: subscription answers, holds and invariants. */
+  /** For each message, the values that its afterMessage read: subscription answers and invariants. */
   private readonly afters = new Map<number, Footprint>();
   readonly violations: (BagOrderDependent & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */
@@ -617,14 +618,8 @@ export class InstrumentedFunctions implements Functions {
       same: (x, y) => sameMade(keys, [x.written, x.created], [y.written, y.created]),
     });
   }
-  holds(scope: Scope, records: RecordSource, access: Access) {
-    return this.audited(
-      ref(this.st, chartOf(scope.id)),
-      "holds",
-      () => this.fs.holds(scope, records, access),
-      (fs) => fs.holds(scope, records, silent),
-      () => "",
-    );
+  held(scope: Scope, records: RecordSource, edge: Edge, extra: Fields, access: Access) {
+    return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, edge, extra, a), text);
   }
   deadlines(machine: string, state: string) {
     return this.fs.deadlines(machine, state);

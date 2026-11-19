@@ -136,6 +136,10 @@ structure State where
   itemKeys : List KeyPosition
   /-- The key positions of a map state's own context, which each copy holds; empty for any other state. -/
   contextKeys : List KeyPosition
+  /-- The names of the state's parameters (`held`), which the edge that enters the state fills. -/
+  held : List String
+  /-- The key positions of the state's parameters. -/
+  heldKeys : List KeyPosition
 deriving Repr, Inhabited
 
 derive_wire State

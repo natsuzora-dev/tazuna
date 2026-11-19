@@ -22,10 +22,6 @@ export const taskListScreen = screen({
   description: "The task list screen",
   context: {
     filter: Filter.default("open"),
-    selected: Selected.nullable().default(null),
-    title: todo.TaskTitle.nullable().default(null),
-    shouldRemind: todo.changeReminders.input.shouldRemind.nullable().default(null),
-    taskId: todo.TaskId.nullable().default(null),
   },
   queries: { tasks: todo.tasks, reminderSettings: todo.reminderSettings },
   commands: {
@@ -79,17 +75,16 @@ export const taskListScreen = screen({
     },
     listing: {
       on: {
-        openTask: [{ target: "detail", assign: { selected: ({ payload }) => payload } }],
-        add: [{ target: "adding", assign: { title: ({ payload }) => payload.title } }],
+        openTask: [{ target: "detail", with: { selected: ({ payload }) => payload } }],
+        add: [{ target: "adding", with: { title: ({ payload }) => payload.title } }],
         remindersToggle: [
-          { target: "changingReminders", assign: { shouldRemind: ({ payload }) => payload.shouldRemind } },
+          { target: "changingReminders", with: { shouldRemind: ({ payload }) => payload.shouldRemind } },
         ],
-        complete: [{ target: "completing", assign: { taskId: ({ payload }) => payload.taskId } }],
-        reopen: [{ target: "reopening", assign: { taskId: ({ payload }) => payload.taskId } }],
+        complete: [{ target: "completing", with: { taskId: ({ payload }) => payload.taskId } }],
+        reopen: [{ target: "reopening", with: { taskId: ({ payload }) => payload.taskId } }],
       },
     },
     adding: {
-      holds: { title: ({ context }) => context.title },
       offers: awaitingList,
       sends: {
         addTask: {
@@ -100,7 +95,6 @@ export const taskListScreen = screen({
       },
     },
     changingReminders: {
-      holds: { shouldRemind: ({ context }) => context.shouldRemind },
       offers: awaitingList,
       sends: {
         changeReminders: {
@@ -111,7 +105,6 @@ export const taskListScreen = screen({
       },
     },
     completing: {
-      holds: { taskId: ({ context }) => context.taskId },
       offers: awaitingList,
       sends: {
         completeTask: {
@@ -122,7 +115,6 @@ export const taskListScreen = screen({
       },
     },
     reopening: {
-      holds: { taskId: ({ context }) => context.taskId },
       offers: awaitingList,
       sends: {
         reopenTask: {
@@ -133,7 +125,6 @@ export const taskListScreen = screen({
       },
     },
     detail: {
-      holds: { selected: ({ context }) => context.selected },
       opens: {
         taskDetail: {
           modal: true,

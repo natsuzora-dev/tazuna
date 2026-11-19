@@ -2,20 +2,40 @@ import { z } from "zod";
 import { labelsOpened, machine, notify, remindPressed, Task, taskSelected } from "./todo.ts";
 
 export const watcher = machine({
-  description: "Notify the current title of the selected task each time remind is pressed",
-  context: { taskId: z.string().nullable().default(null) },
+  description: "Notify the title of the selected task, and notify it again on remind when the task was renamed since",
   receives: { taskSelected, remindPressed },
   commands: { notify },
   initial: "idle",
-  states: { idle: {}, watching: { held: { title: Task.fields.title } } },
+  states: { idle: {}, watching: { held: { taskId: z.string(), title: Task.fields.title } } },
 }).chart({
   states: {
-    idle: { on: { taskSelected: [{ target: "watching", assign: { taskId: ({ payload }) => payload.taskId } }] } },
-    watching: {
-      holds: {
-        title: ({ context, records }) => (context.taskId === null ? null : records.Task.get(context.taskId)?.title),
+    idle: {
+      on: {
+        taskSelected: [
+          {
+            target: "watching",
+            with: {
+              taskId: ({ payload }) => payload.taskId,
+              title: ({ payload, records }) => records.Task.get(payload.taskId)?.title,
+            },
+          },
+        ],
       },
-      on: { remindPressed: [{ target: "watching", reenter: true }] },
+    },
+    watching: {
+      on: {
+        remindPressed: [
+          {
+            guard: { renamed: ({ held, records }) => records.Task.get(held.taskId)?.title !== held.title },
+            target: "watching",
+            reenter: true,
+            with: {
+              taskId: ({ held }) => held.taskId,
+              title: ({ held, records }) => records.Task.get(held.taskId)?.title,
+            },
+          },
+        ],
+      },
       sends: { notify: { input: ({ held }) => ({ text: held.title }), onAccepted: [] } },
     },
   },
@@ -44,8 +64,9 @@ export const labels = machine({
   states: {
     idle: { on: { labelsOpened: [{ target: "open" }] } },
     open: { on: { labelsOpened: [{ target: "idle" }] } },
+    left: { initial: { with: { label: () => "left" } } },
+    right: { initial: { with: { label: () => "right" } } },
     leftShowing: {
-      holds: { label: () => "left" },
       sends: {
         notify: {
           input: ({ held }) => ({ text: held.label }),
@@ -57,7 +78,6 @@ export const labels = machine({
       sends: { notify: { input: ({ context }) => ({ text: context.last }), onAccepted: [] } },
     },
     rightShowing: {
-      holds: { label: () => "right" },
       sends: { notify: { input: ({ held }) => ({ text: held.label }), onAccepted: [] } },
     },
   },

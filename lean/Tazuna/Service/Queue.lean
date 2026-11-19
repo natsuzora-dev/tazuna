@@ -13,16 +13,6 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def checkHolds [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
-  s.running.foldlM (fun s i =>
-    if s.halted.isSome || i.closed then pure s else
-    i.entered.foldlM (fun s (n, _) => do
-      if s.halted.isSome then pure s else
-      match ← fs.holds (s.scopeOf i (some n)) s.records with
-      | .error e =>
-        pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
-      | .ok () => pure s) s) s
-
 def invariantViolations [Monad m] (st : Service) (fs : Functions m) (s : State) :
     m (List Fault) := do
   let found ← (s.machines.filter (!·.closed)).mapM fun i => do
@@ -39,8 +29,6 @@ def checkInvariants [Monad m] (st : Service) (fs : Functions m) (s : State) : m 
   pure (s.reportAll (← invariantViolations st fs s))
 
 def afterMessage [Monad m] (st : Service) (fs : Functions m) (s : State) : m State := do
-  let s ← checkHolds st fs s
-  if s.halted.isSome then pure s else
   let s ← checkInvariants st fs s
   if s.halted.isSome then pure s else
   publish st fs s

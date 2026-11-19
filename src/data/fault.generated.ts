@@ -57,6 +57,7 @@ export type Fault =
         readonly condition: string;
       };
     }
+  /** The edge that enters `state` fills its parameter `held` with null or a value off its schema. */
   | {
       readonly kind: "Fault.heldSchema";
       readonly definition: DefinitionRef;
@@ -103,7 +104,7 @@ export type Fault =
         readonly map: string;
       };
     }
-  /** A function reads the held value `held` while its state does not hold it. */
+  /** A function reads `held` (its state's parameter) under a name that the state does not have. */
   | {
       readonly kind: "Fault.unheld";
       readonly definition: DefinitionRef;

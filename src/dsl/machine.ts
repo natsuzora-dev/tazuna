@@ -27,6 +27,8 @@ import {
   type ErrorIf,
   type Flat,
   type HeldIn,
+  type InitialEdge,
+  type InitialHeldIn,
   type KindOf,
   type MapOf,
   type OuterNames,
@@ -35,8 +37,11 @@ import {
   type SharedContextFields,
   type Table,
   type TableKeys,
+  type TargetsOf,
   type Tree,
   type TreeErrors,
+  type UnheldTop,
+  type With,
 } from "./tree.ts";
 import { withWritten } from "./written.ts";
 
@@ -52,7 +57,16 @@ export interface BaseArgs<Ctx, N extends string, D> extends Now {
 
 type Assign<Ctx, A> = { readonly [K in keyof Ctx]?: (args: A & CreateKey) => Made<Ctx[K]> };
 
-type Transition<N extends string, Ctx, A> = {
+/**
+ * `with` when the target `H` has parameters, written exactly then: the edge that enters a state fills its parameters,
+ * which stay fixed until it exits.
+ */
+type WithFor<H, A> = [keyof H] extends [never] ? { readonly with?: never } : { readonly with: With<H, A> };
+
+/**
+ * A transition. `N` maps each state that it may target to the parameters of that state (`TargetsOf`).
+ */
+type Transition<N, Ctx, A> = {
   /**
    * The conditions of the transition. When a guard checks the same condition as a `requires` of a command that the
    * state sends: for another service's records, read that service's query answer (`shown` or a `calls` answer). For the
@@ -63,31 +77,33 @@ type Transition<N extends string, Ctx, A> = {
   readonly assign?: Assign<Ctx, A>;
 } & (
   | {
-      readonly target: NoInfer<N>;
-      /**
-       * Whether the transition exits and re-enters its source state. Written exactly when `target` is the state that
-       * writes the transition or a descendant of that state (`NonCanonical.missingReenter`,
-       * `NonCanonical.reenterOnRoot`, `NonCanonical.reenterOutsideSource`).
-       */
-      readonly reenter?: boolean;
-    }
-  | { readonly target?: never; readonly reenter?: never }
+      [S in keyof N & string]: {
+        readonly target: S;
+        /**
+         * Whether the transition exits and re-enters its source state. Written exactly when `target` is the state that
+         * writes the transition or a descendant of that state (`NonCanonical.missingReenter`,
+         * `NonCanonical.reenterOnRoot`, `NonCanonical.reenterOutsideSource`).
+         */
+        readonly reenter?: boolean;
+      } & WithFor<N[S], A>;
+    }[keyof N & string]
+  | { readonly target?: never; readonly reenter?: never; readonly with?: never }
 );
-export type Transitions<N extends string, Ctx, A> = readonly Transition<N, Ctx, A>[];
+export type Transitions<N, Ctx, A> = readonly Transition<N, Ctx, A>[];
 type NoAt = { readonly at?: never };
 type NoDelay = { readonly delay?: never };
 /**
  * A deadline, its time fixed when the state is entered. `at` does not read `now`, because a fixed length from now is a
  * `delay`. To move a deadline, enter its state again (`reenter: true`).
  */
-type Deadline<N extends string, Ctx, A> = {
+type Deadline<N, Ctx, A> = {
   readonly onFired: Transitions<N, Ctx, A>;
 } & (({ readonly delay: Delay } & NoAt) | ({ readonly at: (args: Omit<A, "now">) => Temporal.Instant } & NoDelay));
 export type Queries = Readonly<Record<string, AnyQuery>>;
 export type Commands = Readonly<Record<string, AnyCommand>>;
 
 export type KeyedTransitions<
-  N extends string,
+  N,
   Ctx,
   B,
   ArgsByKey extends Readonly<Record<string, object>>,
@@ -97,7 +113,7 @@ export type ReceivedEvents<Rs extends Events> = { readonly [K in keyof Rs]: { re
 
 type RejectionBinding = { readonly kind: RejectionKind };
 
-type Handled<N extends string, Ctx, A> =
+type Handled<N, Ctx, A> =
   | readonly []
   | readonly [...Transitions<N, Ctx, A>, Transition<N, Ctx, A> & { readonly guard?: never }];
 
@@ -106,12 +122,12 @@ type Handled<N extends string, Ctx, A> =
  * `NonCanonical.unreachableOnRejected`). They are empty, which ignores every rejection, or end with a transition without
  * a guard, which takes every rejection that no earlier guard takes (`{}` does nothing), so no rejection goes unhandled.
  */
-type OnRejected<N extends string, Ctx, B> = {
+type OnRejected<N, Ctx, B> = {
   readonly onRejected?: Handled<N, Ctx, B & { readonly rejection: RejectionBinding }>;
 };
 
 /** The queries that a state calls. A state that does nothing on an answer writes `[]`. */
-type StateCalls<N extends string, Ctx, B, Qs extends Queries> = {
+type StateCalls<N, Ctx, B, Qs extends Queries> = {
   readonly [K in keyof Qs]?: {
     readonly onFulfilled: Transitions<N, Ctx, B & { readonly output: QueryOutput<Qs[K]> }>;
   } & OnRejected<N, Ctx, B> &
@@ -119,14 +135,14 @@ type StateCalls<N extends string, Ctx, B, Qs extends Queries> = {
 };
 
 /** The commands that a state sends. A state that does nothing on an answer writes `[]`. */
-export type StateSends<N extends string, Ctx, B, Cs extends Commands> = {
+export type StateSends<N, Ctx, B, Cs extends Commands> = {
   readonly [K in keyof Cs]?: {
     readonly onAccepted: Transitions<N, Ctx, B & AcceptedOutput<Cs[K]>>;
   } & OnRejected<N, Ctx, B> &
     InputOf<Cs[K], B & CreateKey>;
 };
 
-interface NodeBase<N extends string, Ctx, B, Ons> {
+interface NodeBase<N, Ctx, B, Ons> {
   /** The transitions per received event, and in screens also per control name. */
   readonly on?: Ons;
   /** The deadlines by name. */
@@ -136,7 +152,7 @@ interface NodeBase<N extends string, Ctx, B, Ons> {
   readonly exit?: { readonly assign: Assign<Ctx, B> };
 }
 
-interface ParentNode<N extends string, Ctx, B> {
+interface ParentNode<N, Ctx, B> {
   readonly onDone?: Transitions<N, Ctx, B>;
 }
 
@@ -148,20 +164,25 @@ interface MapNode<B, Key> {
   readonly items: (args: B) => Bag<Key> | readonly Key[];
 }
 
-type MachineRequest<N extends string, Ctx, B, Qs extends Queries, Cs extends Commands> = {
+type MachineRequest<N, Ctx, B, Qs extends Queries, Cs extends Commands> = {
   readonly calls?: StateCalls<N, Ctx, B, Qs>;
   readonly sends?: StateSends<N, Ctx, B, Cs>;
 };
 
-export type StateBehavior<Kd, N extends string, Ctx, B, Ons, Rq, Key = never> = Kd extends "final"
+/**
+ * The behavior of a state of kind `Kd`. `IH` is the row of the parameters of a parent's initial child, which its
+ * initial edge fills; a map state's initial edge starts each copy, so its `with` reads the copy's `key`.
+ */
+export type StateBehavior<Kd, N, Ctx, B, Ons, Rq, Key = never, IH = Record<never, never>> = Kd extends "final"
   ? Pick<NodeBase<N, Ctx, B, never>, "entry">
   : NodeBase<N, Ctx, B, Ons> &
       Rq &
       (Kd extends "parent" ? ParentNode<N, Ctx, B> : { readonly onDone?: never }) &
-      (Kd extends "map" ? MapNode<B, Key> : { readonly items?: never });
+      (Kd extends "map" ? MapNode<B, Key> : { readonly items?: never }) &
+      InitialEdge<IH, Kd extends "map" ? B & { readonly key: Key } : B>;
 
 type OuterArguments<Ctx extends DefaultedShape, Es extends Entities> = BaseArgs<Row<Ctx>, never, Records<Es>>;
-type Ons<Ctx, N extends string, Rs extends Events, B> = KeyedTransitions<N, Ctx, B, ReceivedEvents<Rs>>;
+type Ons<Ctx, N, Rs extends Events, B> = KeyedTransitions<N, Ctx, B, ReceivedEvents<Rs>>;
 /** The names, context, and arguments in scope of the state `K`. `KindArgs` are the arguments that only a screen has. */
 export type Scope<F, K extends keyof F, Ctx extends Shape, D, KindArgs> = [MapOf<F, K>] extends [never]
   ? {
@@ -187,9 +208,6 @@ type MachineScope<F, K extends keyof F, Ctx extends DefaultedShape, Es extends E
   Records<Es>,
   unknown
 >;
-type ScopeArgs<F, Ctx extends DefaultedShape, Es extends Entities> = {
-  readonly [K in keyof F]: MachineScope<F, K, Ctx, Es>["args"];
-};
 type MachineBehaviors<
   F,
   Ctx extends DefaultedShape,
@@ -211,19 +229,20 @@ type MachineBehaviors<
 type MachineBehavior<
   F,
   K extends keyof F,
-  S extends { readonly names: string; readonly context: unknown },
+  S extends { readonly names: keyof F; readonly context: unknown },
   Rs extends Events,
   Qs extends Queries,
   Cs extends Commands,
   B,
 > = StateBehavior<
   KindOf<F, K>,
-  S["names"],
+  TargetsOf<F, S["names"]>,
   S["context"],
   B,
-  Ons<S["context"], S["names"], Rs, B>,
-  MachineRequest<S["names"], S["context"], B, Qs, Cs>,
-  CopyKey<F, K>
+  Ons<S["context"], TargetsOf<F, S["names"]>, Rs, B>,
+  MachineRequest<TargetsOf<F, S["names"]>, S["context"], B, Qs, Cs>,
+  CopyKey<F, K>,
+  InitialHeldIn<F, K>
 >;
 export type HeldArgs<B, F, K extends keyof F> = B & { readonly held: HeldIn<F, K> };
 
@@ -238,15 +257,15 @@ interface MachineSetup<
   chart<const K extends TableKeys<F> = never>(
     definition: {
       /** The transitions that apply in every state. */
-      on?: Ons<Row<Ctx>, OuterNames<F>, Rs, OuterArguments<Ctx, Es>>;
-      states?: Table<F, K, ScopeArgs<F, Ctx, Es>, MachineBehaviors<F, Ctx, Rs, Qs, Cs, Es>>;
+      on?: Ons<Row<Ctx>, TargetsOf<F, OuterNames<F>>, Rs, OuterArguments<Ctx, Es>>;
+      states?: Table<F, K, MachineBehaviors<F, Ctx, Rs, Qs, Cs, Es>>;
     } & NoInfer<RowsWritten<F, K>>,
   ): Machine;
 }
 
 export type MachineDefiner<Es extends Entities> = <
-  // St is not const: a const St keeps a nested initial as a literal, and its check against the children becomes never.
-  St extends Tree,
+  // St is const so that a nested initial stays a literal, which names the child that the initial edge fills.
+  const St extends Tree,
   const Ctx extends DefaultedShape = Record<never, never>,
   const Rs extends Events = Record<never, never>,
   const Qs extends Queries = Record<never, never>,
@@ -260,7 +279,7 @@ export type MachineDefiner<Es extends Entities> = <
     /** The queries of other services (`Illegal.ownQuery`). */
     queries?: Qs;
     commands?: Cs;
-    initial: NoInfer<keyof St & string>;
+    initial: NoInfer<UnheldTop<St>>;
     states: St & CheckTree<NoInfer<St>>;
     /**
      * The conditions on the context and on the states outside the copies of map states (`Fault.failedChartInvariant`).

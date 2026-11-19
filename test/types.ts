@@ -716,84 +716,113 @@ machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
   },
 });
 
-// A state and its descendants read held typed by its schema; siblings cannot.
+// A state reads its own parameters as held, typed by their schemas; other states cannot.
 machine({
   description: "",
-  context: { last: z.string().nullable().default(null) },
+  context: { last: z.string().default("") },
   receives: { taskAddedRecorded },
   initial: "idle",
-  states: { idle: {}, tracking: { held: { last: z.string() }, initial: "inner", states: { inner: {} } } },
+  states: { idle: {}, tracking: { held: { last: z.string() } } },
 }).chart({
   states: {
     idle: {
-      // @ts-expect-error a sibling's held is not readable
+      // @ts-expect-error another state's held is not readable
       entry: { assign: { last: ({ held }) => held.last } },
-      on: { taskAddedRecorded: [{ target: "tracking" }] },
+      on: { taskAddedRecorded: [{ target: "tracking", with: { last: ({ context }) => context.last } }] },
     },
-    tracking: { holds: { last: ({ context }) => context.last } },
-    inner: { entry: { assign: { last: ({ held }) => held.last.toUpperCase() } } },
+    tracking: { entry: { assign: { last: ({ held }) => held.last.toUpperCase() } } },
   },
 });
 // @ts-expect-error a held schema does not accept null
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number().nullable() } } } });
+machine({ description: "", initial: "b", states: { a: { held: { x: z.number().nullable() } }, b: {} } });
 // @ts-expect-error a held schema does not accept undefined
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number().optional() } } } });
-// @ts-expect-error a state and its ancestors do not share a held name
+machine({ description: "", initial: "b", states: { a: { held: { x: z.number().optional() } }, b: {} } });
 machine({
   description: "",
   initial: "p",
-  states: { p: { held: { x: z.number() }, initial: "c", states: { c: { held: { x: z.number() } } } } },
+  // @ts-expect-error only an atomic state has held, since only it is the target of one edge
+  states: { p: { held: { x: z.number() }, initial: "c", states: { c: {} } } },
 });
+machine({
+  description: "",
+  initial: "p",
+  // @ts-expect-error a region has no held, since entering the parallel state enters it without an edge
+  states: { p: { type: "parallel", states: { r: { held: { x: z.number() } }, s: {} } } },
+});
+// @ts-expect-error the chart's initial state has no held, since the chart enters it without an edge
+machine({ description: "", initial: "a", states: { a: { held: { x: z.number() } }, b: {} } });
 // @ts-expect-error a final state has no held
-machine({ description: "", initial: "p", states: { p: { type: "final", held: { x: z.number() } } } });
+machine({ description: "", initial: "b", states: { p: { type: "final", held: { x: z.number() } }, b: {} } });
 machine({
   description: "",
   initial: "p",
   // @ts-expect-error a history state has no held
   states: { p: { initial: "a", states: { a: {}, back: { type: "history", held: { x: z.number() } } } } },
 });
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number() } }, b: {} } })
-  // @ts-expect-error a state with held has holds in the body
-  .chart({ states: { b: { always: [] } } });
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number() } } } }).chart({
-  // @ts-expect-error a state with held has holds in the body
-  states: { a: { always: [] } },
+
+// The transition that enters a state with held fills every parameter with `with`, of the schema's type.
+const held2 = machine({
+  description: "",
+  receives: { taskAddedRecorded },
+  initial: "b",
+  states: { a: { held: { x: z.number(), y: z.number() } }, b: {} },
 });
-machine({ description: "", initial: "a", states: { a: {} } }).chart({
-  // @ts-expect-error a state without held has no holds
-  states: { a: { holds: { x: () => 1 } } },
+held2.chart({ states: { b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => 1, y: () => 2 } }] } } } });
+held2.chart({
+  // @ts-expect-error a target with held needs with
+  states: { b: { on: { taskAddedRecorded: [{ target: "a" }] } } },
 });
+held2.chart({
+  // @ts-expect-error with covers every held name
+  states: { b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => 1 } }] } } },
+});
+held2.chart({
+  // @ts-expect-error with has no names outside held
+  states: { b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => 1, y: () => 2, z: () => 3 } }] } } },
+});
+held2.chart({
+  // @ts-expect-error with returns values of the held schema's type
+  states: { b: { on: { taskAddedRecorded: [{ target: "a", with: { x: () => "1", y: () => 2 } }] } } },
+});
+held2.chart({
+  // @ts-expect-error a target without held has no with
+  states: { a: { on: { taskAddedRecorded: [{ target: "b", with: { x: () => 1 } }] } } },
+});
+// @ts-expect-error a targetless transition has no with
+held2.chart({ states: { b: { on: { taskAddedRecorded: [{ with: { x: () => 1, y: () => 2 } }] } } } });
+
+// A parent whose initial child has held fills it with `initial: { with }`; a map state's `with` reads the copy's key.
 machine({
   description: "",
-  initial: "a",
-  states: { a: { held: { x: z.number(), y: z.number() } } },
+  initial: "p",
+  states: {
+    p: { initial: "a", states: { a: { held: { x: z.number() } } } },
+    m: { type: "map", key: { rowId: z.string() }, initial: "w", states: { w: { held: { id: z.string() } } } },
+  },
 }).chart({
-  // @ts-expect-error holds covers every held name
-  states: { a: { holds: { x: () => 1 } } },
+  states: {
+    p: { initial: { with: { x: () => 1 } } },
+    m: { items: () => [], initial: { with: { id: ({ key }) => key.rowId } } },
+  },
 });
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number() } } } }).chart({
-  // @ts-expect-error holds has no names outside held
-  states: { a: { holds: { x: () => 1, y: () => 1 } } },
-});
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number() } } } }).chart({
-  // @ts-expect-error holds returns values of the held schema's type
-  states: { a: { holds: { x: () => "1" } } },
-});
-machine({ description: "", initial: "a", states: { a: { held: { x: z.number() } } } }).chart({
-  // @ts-expect-error holds does not read held
-  states: { a: { holds: { x: ({ held }) => held.x } } },
+machine({ description: "", initial: "p", states: { p: { initial: "a", states: { a: { held: { x: z.number() } } } } } })
+  // @ts-expect-error the parent of a held initial child writes its initial edge
+  .chart({ states: { a: { always: [] } } });
+machine({ description: "", initial: "p", states: { p: { initial: "a", states: { a: {} } } } }).chart({
+  // @ts-expect-error a parent whose initial child has no held has no initial edge
+  states: { p: { initial: { with: { x: () => 1 } } } },
 });
 
-// held has the schema's type; holds may still return null or undefined (Fault.heldSchema reports it).
+// held has the schema's type; with may still return null or undefined (Fault.heldSchema reports it).
 machine({
   description: "",
   context: { mode: z.enum(["normal", "slowed"]).nullable().default(null) },
-  initial: "a",
+  receives: { taskAddedRecorded },
+  initial: "b",
   states: { a: { held: { mode: z.literal("slowed") } }, b: {} },
 }).chart({
   states: {
     a: {
-      holds: { mode: ({ context }) => (context.mode === "slowed" ? context.mode : null) },
       always: [
         {
           guard: {
@@ -805,6 +834,13 @@ machine({
           target: "b",
         },
       ],
+    },
+    b: {
+      on: {
+        taskAddedRecorded: [
+          { target: "a", with: { mode: ({ context }) => (context.mode === "slowed" ? context.mode : null) } },
+        ],
+      },
     },
   },
 });
@@ -906,7 +942,7 @@ screen({
 screen({
   description: "",
   controls: { pick: { label: "Pick", payload: { rowId: z.string() } } },
-  initial: "open",
+  initial: "rows",
   states: {
     open: { held: { title: z.string() } },
     rows: { type: "map", key: { rowId: z.string() }, initial: "idle", states: { idle: {} } },
@@ -914,7 +950,7 @@ screen({
   },
 }).chart({
   states: {
-    open: { holds: { title: () => "x" }, offers: { pick: ({ held }) => (held.title === "" ? [] : [{ rowId: "a" }]) } },
+    open: { offers: { pick: ({ held }) => (held.title === "" ? [] : [{ rowId: "a" }]) } },
     rows: { items: () => [] },
     idle: { offers: { pick: ({ key }) => [key] } },
     // @ts-expect-error a final state has only entry

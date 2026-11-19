@@ -61,6 +61,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.alwaysCycle":
     case "Illegal.foreignEvent":
     case "Illegal.indexReason":
+    case "Illegal.restoredHeld":
       return placeOf(spec, illegal.definition);
   }
 }

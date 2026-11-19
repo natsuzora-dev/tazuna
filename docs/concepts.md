@@ -108,6 +108,12 @@ The same reasoning makes the spec write a choice to do nothing.
 A state whose request can be rejected writes `onRejected`, and `onRejected: []` ignores the rejection on purpose.
 An omitted handler would read the same whether the author decided to ignore the rejection or forgot it.
 
+Data in a chart has one form per lifetime.
+`context` holds what spans states, and `assign` changes it.
+`held` holds what belongs to one visit of a state: the edge that enters the state fills it with `with`, and it stays fixed until the state exits, as a state carries its data in Erlang's gen_statem and in an Elm variant.
+A deadline's time and a guard of the state therefore read the same value, and entering the state again is the one way to refresh it.
+A value derived from records is a plain function that reads `records` where it is needed.
+
 ## Then states what you want checked
 
 Then lists the facts that the scenario exists to check, and it does not have to list everything.

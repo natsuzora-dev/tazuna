@@ -126,6 +126,20 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
     states: names(i.entered.keys()),
     history: [...i.lastChildren].toSorted(([a], [b]) => byCodePoint(a, b)).map(([p, cs]) => [p, names(cs)]),
     context: keyed(refsAt(contextKeys), [], context),
+    held: Object.fromEntries(
+      [...i.held]
+        .toSorted(([a], [b]) => byCodePoint(a, b))
+        .map(([state, fields]) => {
+          const encoded = Object.fromEntries(
+            Object.entries(fields).map(([name, v]) => [
+              name,
+              (encode({ kind: "held", chart, state, name }, { [name]: v }) as Fields)[name],
+            ]),
+          );
+          const c = chartStructure(st.structure, st.service, chart.name);
+          return [state, keyed(refsAt(c === undefined ? undefined : stateNamed(c, state)?.heldKeys), [], encoded)];
+        }),
+    ),
     deadlines: canonicalOrder(
       deadlines
         .filter((d) => d.machine === i.id)

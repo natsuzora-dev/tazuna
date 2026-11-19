@@ -52,6 +52,7 @@ export function newInstance(
     awaitingOnDone: undefined,
     shown: new Map(slots(chart).map((slot) => [slot, null])),
     copyKeys: new Map(),
+    held: new Map(),
   };
 }
 

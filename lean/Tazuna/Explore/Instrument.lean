@@ -148,7 +148,7 @@ structure Collect where
   afterMessage : Option Nat := none
   /-- The place in `steps` of the step in which a message of a tie arrives, while it is processed (arrivalBegins). -/
   arrival : Option Nat := none
-  /-- For each message, the values that its afterMessage read: subscription answers, holds and invariants. -/
+  /-- For each message, the values that its afterMessage read: subscription answers and invariants. -/
   afters : List (Nat × Footprint) := []
   violations : List Violation := []
 deriving Repr, Inhabited
@@ -269,7 +269,7 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   guard a b c d := f (fs.guard a b c d)
   assign a b c d e := f (fs.assign a b c d e)
   input a b c d := f (fs.input a b c d)
-  holds a b := f (fs.holds a b)
+  held a b c d := f (fs.held a b c d)
   deadlines a b := f (fs.deadlines a b)
   deadlineTime a b c := f (fs.deadlineTime a b c)
   offers a b c := f (fs.offers a b c)
@@ -444,8 +444,8 @@ def instrument : Functions (StateT Collect m) :=
         fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)
     input := fun scope records a keys =>
       auditBy (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
-    holds := fun scope records =>
-      audit (collect (some scope)) (st.ref scope.machine) "holds" (·.holds scope records) fun _ _ => true
+    held := fun scope records edge extra =>
+      audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records edge extra) sameValue
     items := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
         fun a b => textSet (a.map (·.2.canonical)) == textSet (b.map (·.2.canonical))

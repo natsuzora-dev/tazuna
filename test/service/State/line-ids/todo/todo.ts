@@ -47,7 +47,7 @@ export const addTag = command({
 export const tagger = machine({
   description:
     "When a task whose id starts with pin is added, reserve one card id and then attach a card with another id",
-  context: { kept: z.string().nullable().default(null), taskId: Task.fields.id.nullable().default(null) },
+  context: { kept: z.string().nullable().default(null) },
   receives: { taskAdded },
   commands: { addTag },
   initial: "idle",
@@ -60,13 +60,13 @@ export const tagger = machine({
           {
             guard: { pinned: ({ payload }) => payload.id.startsWith("pin") },
             target: "tagging",
-            assign: { kept: ({ createKey }) => createKey(ref(Tag)), taskId: ({ payload }) => payload.id },
+            assign: { kept: ({ createKey }) => createKey(ref(Tag)) },
+            with: { taskId: ({ payload }) => payload.id },
           },
         ],
       },
     },
     tagging: {
-      holds: { taskId: ({ context }) => context.taskId },
       sends: {
         addTag: {
           input: ({ held, createKey }) => ({ tagId: createKey(ref(Tag)), taskId: held.taskId }),

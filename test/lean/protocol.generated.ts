@@ -64,7 +64,7 @@ export type Schema =
 
 /**
  * The reason that a question has no answer: its author code threw (with `schema`, inside that schema's refinement or
- * codec), a value does not match `schema`, an expression read a `held` name that no enclosing state holds, or it called
+ * codec), a value does not match `schema`, an expression read a `held` name that its state does not have, or it called
  * `only()` on a bag with more than one element.
  */
 export type Issue =
@@ -93,10 +93,10 @@ export type CopyScope = {
 /**
  * The values passed to machine and screen expressions; TS builds the expressions' arguments from them and the records.
  * `id` is the evaluating instance or copy. `state` is the state that declares the expression (`none` for the chart's own
- * `on`); `held` is looked up in the holds of that state and its ancestors, so it depends on where the expression is
- * written, not on the active states, and a transition can read the holds of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is the
- * context of the instance (the owner's for a copy). `shown` holds the answer of each shows slot (null if none). `input` is
- * the screen's input.
+ * `on`); `held` holds the parameters of that state for its current visit (empty when it has none), so a transition reads
+ * the parameters of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is
+ * the context of the instance (the owner's for a copy). `shown` holds the answer of each shows slot (null if none).
+ * `input` is the screen's input.
  */
 export type Scope = {
   readonly id: InstanceId;
@@ -106,6 +106,7 @@ export type Scope = {
   readonly active: readonly string[];
   readonly shown: Readonly<Record<string, Json>>;
   readonly input: Json;
+  readonly held: Json;
   readonly now: string;
 };
 
@@ -135,6 +136,20 @@ export type Assignment =
   | {
       readonly kind: "exit";
       readonly state: string;
+    };
+
+/**
+ * The edge that enters a state with parameters and fills them with its `with`: a transition that targets the state, or
+ * the initial edge of its parent (`none` for the chart's initial state, which no `with` fills).
+ */
+export type Edge =
+  | {
+      readonly kind: "transition";
+      readonly transition: Transition;
+    }
+  | {
+      readonly kind: "initial";
+      readonly parent: string | null;
     };
 
 /** What caused the transition, as passed to its expressions. */
@@ -422,8 +437,10 @@ export type Question =
       readonly keys: Keys;
     }
   | {
-      readonly type: "holds";
+      readonly type: "held";
       readonly scope: Scope;
+      readonly edge: Edge;
+      readonly extra: Extra;
     }
   | {
       readonly type: "deadlines";
@@ -594,7 +611,8 @@ export type Reply =
       readonly created: readonly string[];
     }
   | {
-      readonly type: "holds";
+      readonly type: "held";
+      readonly held: Json;
     }
   | {
       readonly type: "deadlines";

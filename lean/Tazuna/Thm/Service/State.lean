@@ -166,26 +166,6 @@ theorem emitAll_clock (t : State) (r : Option LineId) (es : List (Emit × Emitte
   have h := emitAll_fixed (s := t) r es
   exact Prod.ext (congrArg Fixed.commandAnswers h) (congrArg Fixed.now h)
 
-theorem holdsFold_fixed (i : Instance) (es : List (String × Time)) :
-    (es.foldl (fun s x =>
-      if s.halted.isSome = true then pure s
-      else do
-        match ← fs.holds (s.scopeOf i (some x.fst)) s.records with
-        | .error e =>
-          pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
-        | .ok () => pure s) s : Id State).fixed = s.fixed := by
-  induction es generalizing s with
-  | nil => rfl
-  | cons e es ih =>
-    simp only [List.foldl_cons]
-    rw [ih]
-    split
-    · rfl
-    · try simp only [id_bind]
-      split
-      · exact report_fixed ..
-      · rfl
-
 def Grows (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now
 
 theorem Grows.refl (s : State) : Grows s s := ⟨#[], by simp, by simp⟩
@@ -224,26 +204,6 @@ theorem answer_grows (t : State) (to : Option LineId) (d : Spec.Ref) (a : Answer
   cases to
   · exact Grows.refl _
   · exact grows_write _ _ _ _ _ _
-
-theorem holdsFold_lines (i : Instance) (es : List (String × Time)) :
-    (es.foldl (fun s x =>
-      if s.halted.isSome = true then pure s
-      else do
-        match ← fs.holds (s.scopeOf i (some x.fst)) s.records with
-        | .error e =>
-          pure (s.report (.fault (issueViolation (st.ref i.chart.name) e)))
-        | .ok () => pure s) s : Id State).lines = s.lines := by
-  induction es generalizing s with
-  | nil => rfl
-  | cons e es ih =>
-    simp only [List.foldl_cons]
-    rw [ih]
-    split
-    · rfl
-    · try simp only [id_bind]
-      split
-      · exact report_lines ..
-      · rfl
 
 theorem answer_records (t : State) (to : Option LineId) (d : Spec.Ref) (a : Answer) : (t.answer to d a).records = t.records := by
   cases to <;> rfl

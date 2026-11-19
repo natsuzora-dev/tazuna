@@ -174,6 +174,26 @@ def cyclePath (c : Chart) : Option (List String) :=
 def alwaysCycles (s : Structure) : List Illegal :=
   s.definitions.filterMap fun d => d.chart?.bind fun c => (cyclePath c).map (.alwaysCycle d.ref)
 
-def check (s : Structure) : List Illegal := missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s
+/--
+Each state with parameters that a history state may restore, with that history state: the history state's siblings,
+unless their parent is a map state, whose history enters its initial state.
+-/
+def restoredHeldOf (c : Chart) : List (String × String) :=
+  c.states.flatMap fun st =>
+    if st.held.isEmpty then [] else
+    match st.parent.bind fun p => c.states.find? (·.name == p) with
+    | some p =>
+      if p.kind == .map then [] else
+      (p.children.filter fun h => c.states.any fun x => x.name == h && x.kind == .history).map (st.name, ·)
+    | none => []
+
+def restoredHeld (s : Structure) : List Illegal :=
+  s.definitions.flatMap fun d =>
+    match d.chart? with
+    | some c => (restoredHeldOf c).map fun (st, h) => .restoredHeld d.ref st h
+    | none => []
+
+def check (s : Structure) : List Illegal :=
+  missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s ++ restoredHeld s
 
 end Tazuna.Validation.Charts

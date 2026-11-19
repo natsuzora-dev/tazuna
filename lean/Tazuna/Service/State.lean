@@ -32,6 +32,11 @@ structure Instance where
   /-- The decoded item key of a copy; the map state and the canonical key are in `id`. -/
   itemKey : Option Value := none
   copyKeys : List (String × List Value) := []
+  /--
+  The parameters of each active state that has them, as the edge that entered it filled them; they stay fixed until the
+  state exits.
+  -/
+  held : List (String × Value) := []
 deriving Repr, Inhabited
 
 /--
@@ -311,16 +316,17 @@ def Instance.documentOrder (i : Instance) : List (InstanceId × String) :=
     (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (.copy i.id cs.name k, ·)
 
 /-- The scope of instance `i` at `state`. A copy's expressions also read the owner's context, shown, and input. -/
+def Instance.heldAt (i : Instance) (state : Option String) : Value :=
+  (state.bind fun n => i.held.lookup n).getD (.obj [])
+
 def State.scopeOf (s : State) (i : Instance) (state : Option String) : Scope :=
   match i.itemKey.bind fun k => (s.machine? i.id.owner).map (k, ·) with
   | some (key, o) =>
     { id := i.id, state, context := o.context, copy := some { key, context := i.context },
-      active := i.active ++ o.active, shown := o.shown, input := o.input, now := s.now }
+      active := i.active ++ o.active, shown := o.shown, input := o.input, held := i.heldAt state, now := s.now }
   | none =>
-    { id := i.id, state, context := i.context, active := i.active, shown := i.shown, input := i.input, now := s.now }
-
-def State.running (s : State) : List Instance :=
-  s.machines.flatMap fun i => i :: i.copyIds.filterMap fun c => s.copies.find? (·.id == c)
+    { id := i.id, state, context := i.context, active := i.active, shown := i.shown, input := i.input,
+      held := i.heldAt state, now := s.now }
 
 /--
 The state with slot `slot` of `owner` shown as `value`. Copies read the owner's `shown`, so it is written to the owner.

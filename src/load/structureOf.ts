@@ -193,6 +193,8 @@ function structureOfChart(
         deadlines: Object.keys(node.after ?? {}),
         itemKeys: keysOf(node.key ?? {}, ref),
         contextKeys: keysOf(node.context ?? {}, ref),
+        held: Object.keys(chart.held?.[name] ?? {}),
+        heldKeys: keysOf(chart.held?.[name] ?? {}, ref),
       };
       states.push(state);
       visit(node.states ?? {}, state);

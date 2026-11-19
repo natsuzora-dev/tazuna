@@ -27,6 +27,7 @@ function startCopy(r: Processing, owner: Instance, map: string, key: unknown, en
     shown: new Map(),
     itemKey: key,
     copyKeys: new Map(),
+    held: new Map(),
   };
   r.state.copies.delete(id);
   r.state.copies.set(id, copy);

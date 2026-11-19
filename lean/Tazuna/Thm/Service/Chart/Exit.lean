@@ -9,8 +9,8 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Chart.Queue Tazuna.Thm.Service.Sta
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem keeps_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
-    Keeps (runAssign fs st name a scope extra) := by
+theorem keeps_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) : Keeps (runAssign fs st name a scope extra held) := by
   unfold runAssign
   apply keeps_withMachine
   intro i r
@@ -37,8 +37,8 @@ theorem keeps_leaveWith {exit : InstanceId → String → Processing → Id Proc
   simp only [id_bind]
   have hc := foldlM_keeps (fun c => keeps_unlessHalted (keeps_endWith h c))
   split
-  · exact keeps_runAssign name _ _ _ r
-  · exact (hc _ _).trans (keeps_runAssign name _ _ _ r)
+  · exact keeps_runAssign name _ _ _ _ r
+  · exact (hc _ _).trans (keeps_runAssign name _ _ _ _ r)
 
 theorem keeps_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Keeps (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with
@@ -54,8 +54,8 @@ theorem keeps_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Keeps (exi
     · exact h1
     · exact (keeps_leaveWith (fun c n => ih c n) name n _).trans h1
 
-theorem sameLines_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
-    SameLines (runAssign fs st name a scope extra) := by
+theorem sameLines_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) : SameLines (runAssign fs st name a scope extra held) := by
   unfold runAssign
   apply sameLines_withMachine
   intro i r
@@ -88,8 +88,8 @@ theorem growsBy_leaveWith {exit : InstanceId → String → Processing → Id Pr
   simp only [id_bind]
   have gc := foldlM_grows (fun c => growsBy_unlessHalted (growsBy_endWith h hk c))
     (fun c => keeps_unlessHalted (keeps_endWith hk c))
-  have ga := sameLines_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none r
-  have na := (keeps_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none).now r
+  have ga := sameLines_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none r
+  have na := (keeps_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none).now r
   split
   · exact Grows.of_lines ga
   · exact (Grows.of_lines ga).trans na ((gc _ _).bridge (by rfl) (by rfl))
@@ -150,8 +150,8 @@ theorem endWith_exits_then_closes (exit : InstanceId → String → Processing �
   simp only [endWith, withMachine, Processing.halted, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, hi, id_bind]
   rfl
 
-theorem runAssign_deadlines (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
-    (runAssign fs st name a scope extra r).1.deadlines = r.state.deadlines := by
+theorem runAssign_deadlines (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) (r : Processing) : (runAssign fs st name a scope extra held r).1.deadlines = r.state.deadlines := by
   unfold runAssign withMachine
   split
   · rfl
@@ -248,8 +248,8 @@ theorem exit_cancels_deadlines (name : InstanceId) (n : String) (r : Processing)
       simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
       exact leave_removes_deadlines (fun c n => deadlinesShrink_exitOne 99 c n) name n _ hh
 
-theorem runAssign_pending (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) (r : Processing) :
-    (runAssign fs st name a scope extra r).1.pending = r.state.pending := by
+theorem runAssign_pending (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) (r : Processing) : (runAssign fs st name a scope extra held r).1.pending = r.state.pending := by
   unfold runAssign withMachine
   split
   · rfl
@@ -274,9 +274,9 @@ theorem foldl_endSubscription_mapped (ps : List Pending) (s : State) :
   · exact ⟨rfl, rfl, fun _ => rfl⟩
   · exact Marked.refl q
 
-theorem pendingMapped_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
-    PendingMapped (runAssign fs st name a scope extra) :=
-  PendingMapped.of_eq (runAssign_pending name a scope extra)
+theorem pendingMapped_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) : PendingMapped (runAssign fs st name a scope extra held) :=
+  PendingMapped.of_eq (runAssign_pending name a scope extra held)
 
 theorem pendingMapped_endWith {exit : InstanceId → String → Processing → Id Processing}
     (h : ∀ c n, PendingMapped (exit c n)) (c : InstanceId) : PendingMapped (endWith exit c) := by
@@ -297,11 +297,11 @@ theorem pendingMapped_leaveWith {exit : InstanceId → String → Processing →
   intro r
   unfold leaveWith
   simp only [id_bind]
-  obtain ⟨a, ha, ea⟩ := pendingMapped_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none r
+  obtain ⟨a, ha, ea⟩ := pendingMapped_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none r
   split
   · exact ⟨a, ha, ea⟩
   · obtain ⟨b, hb, eb⟩ := foldlM_pendingMapped (fun c => pendingMapped_unlessHalted (pendingMapped_endWith h c)) _
-      ⟨(runAssign fs st name (.exit n) (some n) .none r).state.leaveState name n, (runAssign fs st name (.exit n) (some n) .none r).queue⟩
+      ⟨(runAssign fs st name (.exit n) (some n) .none none r).state.leaveState name n, (runAssign fs st name (.exit n) (some n) .none none r).queue⟩
     refine ⟨b ∘ leaveMark name n ∘ a, fun p => (ha p).trans ((leaveMark_marked name n (a p)).trans (hb _)), ?_⟩
     rw [eb]
     simp only [State.leaveState, State.setMachine, ea, List.map_map]
@@ -328,7 +328,7 @@ theorem pendingMapped_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Pe
 
 theorem leave_makes_requests_stale (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) (p : Pending)
     (hp : p ∈ r.state.pending) (hr : p.requester = .state name n)
-    (ha : (runAssign fs st name (.exit n) (some n) .none r).1.halted = none) :
+    (ha : (runAssign fs st name (.exit n) (some n) .none none r).1.halted = none) :
     ∃ p' ∈ (leaveWith fs st (exitOne fs st fuel) name n r).1.pending, p'.id = p.id ∧ p'.stale = true := by
   have hc := foldlM_pendingMapped (fun c => pendingMapped_unlessHalted
     (pendingMapped_endWith (fun c n => pendingMapped_exitOne (st := st) (fs := fs) fuel c n) c))
@@ -336,9 +336,9 @@ theorem leave_makes_requests_stale (fuel : Nat) (name : InstanceId) (n : String)
   unfold leaveWith
   simp only [id_bind]
   simp only [Processing.halted, ha, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-  have ha' : p ∈ (runAssign fs st name (.exit n) (some n) .none r).state.pending := by rw [runAssign_pending]; exact hp
-  obtain ⟨p₂, h₂, m₂⟩ := (hc _).kept ⟨(runAssign fs st name (.exit n) (some n) .none r).state.leaveState name n,
-    (runAssign fs st name (.exit n) (some n) .none r).queue⟩ (leaveMark name n p) (List.mem_map_of_mem ha')
+  have ha' : p ∈ (runAssign fs st name (.exit n) (some n) .none none r).state.pending := by rw [runAssign_pending]; exact hp
+  obtain ⟨p₂, h₂, m₂⟩ := (hc _).kept ⟨(runAssign fs st name (.exit n) (some n) .none none r).state.leaveState name n,
+    (runAssign fs st name (.exit n) (some n) .none none r).queue⟩ (leaveMark name n p) (List.mem_map_of_mem ha')
   exact ⟨p₂, h₂, m₂.1.trans (leaveMark_marked name n p).1, m₂.2.2 hmark⟩
 
 @[simp] theorem endSubscription_fixed (p : Pending) : (s.endSubscription p).fixed = s.fixed := rfl
@@ -349,8 +349,8 @@ theorem leave_makes_requests_stale (fuel : Nat) (name : InstanceId) (n : String)
   | nil => rfl
   | cons p ps ih => exact ih _
 
-theorem machinesKept_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra) :
-    MachinesKept (runAssign fs st name a scope extra) := by
+theorem machinesKept_runAssign (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
+    (held : Option Value) : MachinesKept (runAssign fs st name a scope extra held) := by
   unfold runAssign
   apply machinesKept_withMachine
   intro i r
@@ -383,7 +383,7 @@ theorem machinesKept_leaveWith {exit : InstanceId → String → Processing → 
   unfold leaveWith
   simp only [id_bind]
   have hc := foldlM_machinesKept (fun c => machinesKept_unlessHalted (machinesKept_endWith h c))
-  have ha := machinesKept_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none r
+  have ha := machinesKept_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none r
   split
   · exact ha
   · refine (hc _ _).trans ?_

@@ -43,7 +43,6 @@ export const dueSetter = machine({
     rows: {
       type: "map",
       key: { taskId: ref(Task) },
-      context: { day: datetime.nullable().default(null) },
       initial: "asking",
       states: { asking: {}, setting: { held: { day: datetime } }, done: {} },
     },
@@ -55,12 +54,11 @@ export const dueSetter = machine({
       calls: {
         nextBusinessDay: {
           input: ({ now }) => ({ from: now }),
-          onFulfilled: [{ target: "setting", assign: { day: ({ output }) => output.day } }],
+          onFulfilled: [{ target: "setting", with: { day: ({ output }) => output.day } }],
         },
       },
     },
     setting: {
-      holds: { day: ({ context }) => context.day },
       sends: {
         setDue: {
           input: ({ key, held }) => ({ taskId: key.taskId, due: held.day }),

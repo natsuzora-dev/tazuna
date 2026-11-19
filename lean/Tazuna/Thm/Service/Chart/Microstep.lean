@@ -14,24 +14,106 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Data.List Tazuna.Thm.Service.Note Tazuna.T
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
+theorem keeps_fillHeld (name : InstanceId) (n : String) (edge : Edge) (scope : Option String) (held : Option Value)
+    (extra : Extra) : Keeps (fillHeld fs st name n edge scope held extra) := by
+  unfold fillHeld
+  apply keeps_withMachine
+  intro i r
+  try simp only [id_bind]
+  split
+  · simp [Processing.report, report_eq, State.fixed]
+  · rfl
+
+theorem sameLines_fillHeld (name : InstanceId) (n : String) (edge : Edge) (scope : Option String)
+    (held : Option Value) (extra : Extra) : SameLines (fillHeld fs st name n edge scope held extra) := by
+  unfold fillHeld
+  apply sameLines_withMachine
+  intro i r
+  try simp only [id_bind]
+  split
+  · simp [Processing.report]
+  · rfl
+
+theorem keeps_fillByTransition (c : InstanceId × Transition) (held : Value) (extra : Extra) :
+    Keeps (fillByTransition fs st c held extra) := by
+  unfold fillByTransition
+  apply keeps_withMachine
+  intro i r
+  split
+  · rfl
+  · dsimp only
+    split
+    · exact keeps_fillHeld _ _ _ _ _ _ r
+    · rfl
+
+theorem sameLines_fillByTransition (c : InstanceId × Transition) (held : Value) (extra : Extra) :
+    SameLines (fillByTransition fs st c held extra) := by
+  unfold fillByTransition
+  apply sameLines_withMachine
+  intro i r
+  split
+  · rfl
+  · dsimp only
+    split
+    · exact sameLines_fillHeld _ _ _ _ _ _ r
+    · rfl
+
+theorem keeps_fillByInitial (name : InstanceId) (n : String) : Keeps (fillByInitial fs st name n) := by
+  unfold fillByInitial
+  apply keeps_withMachine
+  intro i r
+  split
+  · split
+    · exact keeps_fillHeld _ _ _ _ _ _ r
+    · rfl
+  · rfl
+
+theorem sameLines_fillByInitial (name : InstanceId) (n : String) : SameLines (fillByInitial fs st name n) := by
+  unfold fillByInitial
+  apply sameLines_withMachine
+  intro i r
+  split
+  · split
+    · exact sameLines_fillHeld _ _ _ _ _ _ r
+    · rfl
+  · rfl
+
+theorem keeps_transitionContent (extra : Extra) (sourceHeld : List Value) (ck : (InstanceId × Transition) × Nat) :
+    Keeps (fun r => transitionContent fs st extra sourceHeld r ck) := by
+  intro r
+  simp only [transitionContent, id_bind, note_id]
+  exact (keeps_unlessHalted (keeps_runAssign _ _ _ _ _) _).trans (keeps_unlessHalted (keeps_fillByTransition _ _ _) r)
+
+theorem sameLines_transitionContent (extra : Extra) (sourceHeld : List Value) (ck : (InstanceId × Transition) × Nat) :
+    SameLines (fun r => transitionContent fs st extra sourceHeld r ck) := by
+  intro r
+  simp only [transitionContent, id_bind, note_id]
+  exact (sameLines_unlessHalted (sameLines_runAssign _ _ _ _ _) _).trans
+    (sameLines_unlessHalted (sameLines_fillByTransition _ _ _) r)
+
 theorem keeps_enterOne (step : Nat) (name : InstanceId) (n : String) : Keeps (enterOne fs st step name n) := by
   unfold enterOne
   apply keeps_withMachine
   intro i r
   try simp only [id_bind]
-  have ha := keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none
+  have hF := keeps_fillByInitial (st := st) (fs := fs) name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
+  generalize fillByInitial fs st name n
+    ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩ = F at hF ⊢
+  have ha := (keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none F).trans hF
   split
-  · exact ha
+  · exact hF
   · split
     · exact ha
     · split
+      · exact ha
       · split
         · split
-          · exact (keeps_closeFinal st step name _).trans ha
-          · exact (keeps_endWith (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _).trans ha
-        · simp only [id_pure, enterFinal_fixed]; exact ha
-      · exact (addDeadlines_fixed _ _ _ _).trans ha
+          · split
+            · exact (keeps_closeFinal st step name _).trans ha
+            · exact (keeps_endWith (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _).trans ha
+          · simp only [id_pure, enterFinal_fixed]; exact ha
+        · exact (addDeadlines_fixed _ _ _ _).trans ha
 
 theorem keeps_enter (step : Nat) (name : InstanceId) (targets : List String) : Keeps (enter fs st step name targets) := by
   unfold enter
@@ -48,7 +130,7 @@ theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (Instanc
   · rfl
   · simp only [id_bind, note_id, id_pure]
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_enterOne step e.1.1 e.1.2)) _ _).trans ?_
-    refine (foldlM_keeps (fun (c : (InstanceId × Transition) × Nat) => keeps_unlessHalted (keeps_runAssign c.1.1 _ _ _)) _ _).trans ?_
+    refine (foldlM_keeps (fun c => keeps_transitionContent extra _ c) _ _).trans ?_
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) =>
       keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2)) _ _).trans ?_
     have h0 : ∀ (hs : List InstanceId) (f : InstanceId → Instance → Instance) (t : State),
@@ -64,22 +146,28 @@ theorem growsBy_enterOne (step : Nat) (name : InstanceId) (n : String) : GrowsBy
   apply growsBy_withMachine
   intro i r
   try simp only [id_bind]
-  have ha := sameLines_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none
+  have hFl := sameLines_fillByInitial (st := st) (fs := fs) name n
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
-  have hn := (keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none).now
+  have hFn := (keeps_fillByInitial (st := st) (fs := fs) name n).now
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
+  generalize fillByInitial fs st name n
+    ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩ = F at hFl hFn ⊢
+  have ha := (sameLines_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none F).trans hFl
+  have hn := ((keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none).now F).trans hFn
   split
-  · exact Grows.of_lines ha
+  · exact Grows.of_lines hFl
   · split
     · exact Grows.of_lines ha
     · split
+      · exact Grows.of_lines ha
       · split
         · split
-          · exact (Grows.of_lines ha).trans hn (growsBy_closeFinal st step name _)
-          · exact (Grows.of_lines ha).trans hn (growsBy_endWith (fun c n => growsBy_exitOne Limit.exitDepth.max c n)
-              (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _)
-        · simp only [id_pure]; exact Grows.of_lines ((enterFinal_lines _ _ _ _).trans ha)
-      · exact Grows.of_lines ((addDeadlines_lines _ _ _ _).trans ha)
+          · split
+            · exact (Grows.of_lines ha).trans hn (growsBy_closeFinal st step name _)
+            · exact (Grows.of_lines ha).trans hn (growsBy_endWith (fun c n => growsBy_exitOne Limit.exitDepth.max c n)
+                (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _)
+          · simp only [id_pure]; exact Grows.of_lines ((enterFinal_lines _ _ _ _).trans ha)
+        · exact Grows.of_lines ((addDeadlines_lines _ _ _ _).trans ha)
 
 theorem growsBy_enter (step : Nat) (name : InstanceId) (targets : List String) : GrowsBy (enter fs st step name targets) := by
   unfold enter
@@ -103,13 +191,11 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
         unlessHalted (exitOne fs st Limit.exitDepth.max e.1.1 e.1.2) r) r xs).1 :=
       foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_exitOne Limit.exitDepth.max e.1.1 e.1.2))
         (fun e => keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2))
-    have kA : ∀ xs (r : Processing), (List.foldlM (m := Id) (fun r (c : (InstanceId × Transition) × Nat) =>
-        unlessHalted (runAssign fs st c.1.1 (.transition c.1.2) c.1.2.source extra) r) r xs).1.fixed = r.state.fixed :=
-      foldlM_keeps (fun (c : (InstanceId × Transition) × Nat) => keeps_unlessHalted (keeps_runAssign c.1.1 _ _ _))
-    have hA : ∀ xs (r : Processing), Grows r.state (List.foldlM (m := Id) (fun r (c : (InstanceId × Transition) × Nat) =>
-        unlessHalted (runAssign fs st c.1.1 (.transition c.1.2) c.1.2.source extra) r) r xs).1 := fun xs r =>
-      Grows.of_lines (foldlM_sameLines (fun (c : (InstanceId × Transition) × Nat) =>
-        sameLines_unlessHalted (sameLines_runAssign c.1.1 _ _ _)) xs r)
+    have kA : ∀ sh xs (r : Processing),
+        (List.foldlM (m := Id) (transitionContent fs st extra sh) r xs).1.fixed = r.state.fixed :=
+      fun sh => foldlM_keeps (fun c => keeps_transitionContent extra sh c)
+    have hA : ∀ sh xs (r : Processing), Grows r.state (List.foldlM (m := Id) (transitionContent fs st extra sh) r xs).1 :=
+      fun sh xs r => Grows.of_lines (foldlM_sameLines (fun c => sameLines_transitionContent extra sh c) xs r)
     have hN : ∀ xs (r : Processing), Grows r.state (List.foldlM (m := Id) (fun r (e : (InstanceId × String) × Nat) =>
         unlessHalted (enterOne fs st step e.1.1 e.1.2) r) r xs).1 :=
       foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_enterOne step e.1.1 e.1.2))
@@ -123,7 +209,7 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
       | cons h hs ih => intro t; exact ih _
     obtain ⟨l0, n0⟩ := h0 (holdersOf chosen) _ r.state
     exact (Grows.of_lines l0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
-      ((hA _ _).trans (congrArg Fixed.now (kA _ _)) (hN _ _)))
+      ((hA _ _ _).trans (congrArg Fixed.now (kA _ _ _)) (hN _ _)))
 
 theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × String)) :
     (((i.documentOrder.filter (· ∈ pairs)).filter (·.1 == i.id)).map (·.2)) =

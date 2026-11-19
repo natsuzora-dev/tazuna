@@ -7,19 +7,7 @@ import { chooseDeadline, deadlineStep, earliestDeadline, fire } from "./clock.ts
 import { Failed, issueViolation } from "./functions.ts";
 import { publish } from "./query.ts";
 import { LazyRecordSource } from "./records.ts";
-import { halt, inStep, NoteAccess, newMessage, newStep, report, running, scopeOf } from "./state.ts";
-
-function checkHolds(r: Processing): void {
-  for (const instance of running(r.state)) {
-    if (instance.closed) continue;
-    for (const state of instance.entered.keys()) {
-      const scope = scopeOf(r.state, instance, state);
-      const records = new LazyRecordSource(r.state.records, r.note);
-      const failed = r.functions.holds(scope, records, new NoteAccess(r, scope));
-      if (failed !== undefined) halt(issueViolation(ref(r.st, instance.chart.name), failed));
-    }
-  }
-}
+import { halt, inStep, NoteAccess, newMessage, newStep, report, scopeOf } from "./state.ts";
 
 function checkInvariants(r: Processing): void {
   for (const instance of r.state.machines.values()) {
@@ -34,7 +22,6 @@ function checkInvariants(r: Processing): void {
 }
 
 function afterMessage(r: Processing): void {
-  checkHolds(r);
   checkInvariants(r);
   publish(r);
 }

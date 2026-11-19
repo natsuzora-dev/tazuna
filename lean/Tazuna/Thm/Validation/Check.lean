@@ -35,6 +35,8 @@ structure Checked (s : Structure) : Prop where
     d.body = .command rj i o em rf b rq → ∀ e, some e ∈ em → e.service = d.service
   /-- No rejection reason is an array index, which a JavaScript object would reorder. -/
   reasonsNotIndices : ∀ d ∈ s.definitions, ∀ r ∈ s.rejectionReasons d.ref, Commands.isArrayIndex r = false
+  /-- No history state restores a state with parameters, which a restore would enter without filling them. -/
+  heldNotRestored : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → Charts.restoredHeldOf c = []
   /-- A contract lists only members of its own service. -/
   ownMembers : ∀ c ∈ s.contracts, ∀ key m, (key, some m) ∈ c.members → m.service = c.service
 
@@ -85,9 +87,24 @@ theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s
     constructor
     · intro h d hd r hr; simpa using h d hd r hr
     · intro h d hd r hr; simpa using h d hd r hr
-  rw [parents, controls, reasons]
+  have restored : Charts.restoredHeld s = [] ↔ ∀ d ∈ s.definitions, ∀ c, d.chart? = some c →
+      Charts.restoredHeldOf c = [] := by
+    simp only [Charts.restoredHeld, List.flatMap_eq_nil_iff]
+    constructor
+    · intro h d hd c hc
+      have := h d hd
+      simpa [hc] using this
+    · intro h d hd
+      split
+      · rename_i c hc
+        simp [h d hd c hc]
+      · rfl
+  rw [parents, controls, reasons, restored]
   simp only [and_assoc]
-  exact ⟨fun ⟨a, p, q, c, al, e, r, m⟩ => ⟨a, p, q, c, al, e, r, m⟩,
-    fun h => ⟨h.1, h.2, h.3, h.4, h.5, h.6, h.7, h.8⟩⟩
+  constructor
+  · intro ⟨a, p, q, c, al, hr, e, r, m⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m⟩
+  · intro h
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.6, h.7, h.9⟩
 
 end Tazuna.Thm.Validation.Check

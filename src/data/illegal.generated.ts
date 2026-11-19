@@ -94,6 +94,19 @@ export type Illegal =
         readonly contract: string;
         readonly key: string;
       };
+    }
+  /**
+   * The chart's history state `history` may restore `state`, which has parameters (`held`). A restore enters `state`
+   * without an edge whose `with` fills them. `check` reports none exactly when no history state restores a state with
+   * parameters (`Checked.heldNotRestored`).
+   */
+  | {
+      readonly kind: "Illegal.restoredHeld";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly state: string;
+        readonly history: string;
+      };
     };
 
 export const illegalKinds = [
@@ -105,4 +118,5 @@ export const illegalKinds = [
   "Illegal.foreignEvent",
   "Illegal.indexReason",
   "Illegal.foreignMember",
+  "Illegal.restoredHeld",
 ] as const;

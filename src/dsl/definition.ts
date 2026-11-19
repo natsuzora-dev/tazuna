@@ -195,6 +195,7 @@ export interface TransitionSpec {
   readonly guard?: Conditions<unknown>;
   readonly assign?: AssignSpec;
   readonly reenter?: boolean;
+  readonly with?: AssignSpec;
 }
 
 interface DeadlineSpec {
@@ -232,6 +233,8 @@ export interface StateSpec {
   readonly context?: Shape;
   readonly items?: (args: unknown) => readonly unknown[];
   readonly initial?: string;
+  /** The `with` of the initial edge, which the behavior writes as `initial: { with }`. */
+  readonly initialEdge?: { readonly with: AssignSpec };
   readonly states?: Readonly<Record<string, StateSpec>>;
   readonly offers?: Offers;
   readonly on?: Readonly<Record<string, readonly TransitionSpec[]>>;
@@ -262,10 +265,8 @@ export interface ChartSpec {
   readonly queries?: Readonly<Record<string, AnyQuery>>;
   readonly commands: Readonly<Record<string, AnyCommand>>;
   readonly screens?: Readonly<Record<string, AnyScreen>>;
-  /** The shapes of the values that each state holds, per state name. */
+  /** The shapes of the parameters of each state that has them, per state name. */
   readonly held?: Readonly<Record<string, Shape>>;
-  /** The expressions of the values that each state holds, per state name. */
-  readonly holds?: Readonly<Record<string, Readonly<Record<string, (args: unknown) => unknown>>>>;
   readonly initial: string;
   readonly states: Readonly<Record<string, StateSpec>>;
   readonly offers?: Offers;

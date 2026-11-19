@@ -8,19 +8,21 @@ export const { machine, scenario } = service({ name: "todo", description: "Watch
 export const watcher = machine({
   description: "Copy the title of the first task",
   context: { title: z.string().default("") },
-  initial: "watching",
-  states: { watching: { held: { task: z.object(Task.fields) } } },
+  initial: "running",
+  states: { running: { initial: "watching", states: { watching: { held: { task: z.object(Task.fields) } } } } },
 }).chart({
   states: {
-    watching: {
-      holds: {
-        task: ({ records }) => {
-          const task = records.Task.only();
-          if (task === undefined) throw new Error("there is no task to watch");
-          return task;
+    running: {
+      initial: {
+        with: {
+          task: ({ records }) => {
+            const task = records.Task.only();
+            if (task === undefined) throw new Error("there is no task to watch");
+            return task;
+          },
         },
       },
-      entry: { assign: { title: ({ held }) => held.task.title } },
     },
+    watching: { entry: { assign: { title: ({ held }) => held.task.title } } },
   },
 });

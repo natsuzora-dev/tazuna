@@ -161,7 +161,8 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     input := fun scope records a keys =>
       answered (.input scope a keys) (records := records) fun
         | .input input created => some (input, created) | _ => none
-    holds := fun scope records => answered (.holds scope) (records := records) fun | .holds => some () | _ => none
+    held := fun scope records edge extra =>
+      answered (.held scope edge extra) (records := records) fun | .held v => some v | _ => none
     deadlines := fun machine state => always (.deadlines machine state) fun | .deadlines names => some names | _ => none
     deadlineTime := fun scope records name =>
       answered (.deadlineTime scope name) (records := records) fun | .deadlineTime time => some time | _ => none

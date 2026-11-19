@@ -14,6 +14,7 @@ function instanceFingerprint(instance: Instance): unknown {
     id: instance.id,
     entered: [...instance.entered].map(([state, at]) => [state, at.toString()]),
     context: instance.context,
+    held: [...instance.held],
     input: instance.input,
     lastChildren: [...instance.lastChildren],
     shown: [...instance.shown],

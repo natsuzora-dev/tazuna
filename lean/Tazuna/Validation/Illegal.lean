@@ -50,6 +50,12 @@ inductive Illegal where
   when every contract lists only definitions of its own service (`members_of_own_service`).
   -/
   | foreignMember (contract key : String)
+  /--
+  The chart's history state `history` may restore `state`, which has parameters (`held`). A restore enters `state`
+  without an edge whose `with` fills them. `check` reports none exactly when no history state restores a state with
+  parameters (`Checked.heldNotRestored`).
+  -/
+  | restoredHeld (definition : Spec.Ref) (state history : String)
 
 derive_group Illegal
 

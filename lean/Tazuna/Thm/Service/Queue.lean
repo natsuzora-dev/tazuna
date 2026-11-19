@@ -12,20 +12,6 @@ variable {st : Service} {fs : Functions Id} {s : State}
 
 @[simp] theorem endMessage_id : endMessage st fs s = afterMessage st fs s := rfl
 
-theorem checkHolds_fixed : (checkHolds st fs s).fixed = s.fixed := by
-  unfold checkHolds
-  rw [foldlM_id]
-  generalize s.running = is
-  induction is generalizing s with
-  | nil => rfl
-  | cons i is ih =>
-    simp only [List.foldl_cons]
-    rw [ih]
-    split
-    · rfl
-    · rw [foldlM_id]
-      exact holdsFold_fixed i _
-
 theorem checkInvariants_fixed : (checkInvariants st fs s).fixed = s.fixed := reportAll_fixed _
 
 theorem checkInvariants_lines : (checkInvariants st fs s).lines = s.lines := reportAll_lines _
@@ -33,33 +19,14 @@ theorem checkInvariants_lines : (checkInvariants st fs s).lines = s.lines := rep
 theorem afterMessage_fixed : (afterMessage st fs s).fixed = s.fixed := by
   simp only [afterMessage, id_bind]
   split
-  · exact checkHolds_fixed
-  · split
-    · exact checkInvariants_fixed.trans checkHolds_fixed
-    · exact publish_fixed.trans (checkInvariants_fixed.trans checkHolds_fixed)
-
-theorem checkHolds_lines : (checkHolds st fs s).lines = s.lines := by
-  unfold checkHolds
-  rw [foldlM_id]
-  generalize s.running = is
-  induction is generalizing s with
-  | nil => rfl
-  | cons i is ih =>
-    simp only [List.foldl_cons]
-    rw [ih]
-    split
-    · rfl
-    · rw [foldlM_id]
-      exact holdsFold_lines i _
+  · exact checkInvariants_fixed
+  · exact publish_fixed.trans checkInvariants_fixed
 
 theorem afterMessage_grows : Grows s (afterMessage st fs s) := by
   simp only [afterMessage, id_bind]
   split
-  · exact Grows.of_lines checkHolds_lines
-  · split
-    · exact Grows.of_lines (checkInvariants_lines.trans checkHolds_lines)
-    · exact (Grows.of_lines (checkInvariants_lines.trans checkHolds_lines)).trans
-        (congrArg Fixed.now (checkInvariants_fixed.trans checkHolds_fixed)) publish_grows
+  · exact Grows.of_lines checkInvariants_lines
+  · exact (Grows.of_lines checkInvariants_lines).trans (congrArg Fixed.now checkInvariants_fixed) publish_grows
 
 theorem afterMessage_records : (afterMessage st fs s).records = s.records := congrArg Fixed.records afterMessage_fixed
 

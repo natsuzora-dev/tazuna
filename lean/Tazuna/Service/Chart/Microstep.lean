@@ -69,11 +69,53 @@ section
 
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
+/--
+The processing after the edge `edge` of instance `name` fills the parameters of state `n`, which it enters, with its
+`with`; `held` replaces the parameters that the expressions read, as in runAssign.
+-/
+def fillHeld (st : Service) (name : InstanceId) (n : String) (edge : Edge) (scope : Option String) (held : Option Value)
+    (extra : Extra) : Processing → m Processing :=
+  withMachine name fun i r => do
+    let sc := r.state.scopeOf i scope
+    match ← fs.held { sc with held := held.getD sc.held } r.state.records edge extra with
+    | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
+    | .ok v => pure ⟨r.state.setMachine name fun i => { i with held := i.held ++ [(n, v)] }, r.queue⟩
+
+/--
+The processing after transition `c` fills the parameters of its target with its `with`, when it enters a target that
+has parameters. The microstep runs it after the exits, so `held` holds the source's parameters as the microstep began.
+Two transitions of one microstep never enter one state, since their exit sets overlap and removeConflicts keeps one
+(SCXML); if they did, the first would fill it, as the first transition's entry set claims a state in transitionIndexOf.
+-/
+def fillByTransition (st : Service) (c : InstanceId × Transition) (held : Value) (extra : Extra) :
+    Processing → m Processing :=
+  withMachine c.1 fun i r =>
+    match c.2.target with
+    | none => pure r
+    | some n =>
+      if (i.chart.state? n).any (·.held) && (r.state.entryPairsOf c).contains (c.1, n) && (i.held.lookup n).isNone then
+        fillHeld fs st c.1 n (.transition c.2) c.2.source (some held) extra r
+      else pure r
+
+/--
+The processing after the parent's initial edge fills the parameters of state `n`, which it enters, unless a transition
+filled them.
+-/
+def fillByInitial (st : Service) (name : InstanceId) (n : String) : Processing → m Processing :=
+  withMachine name fun i r =>
+    match i.chart.state? n with
+    | some cs =>
+      if cs.held && (i.held.lookup n).isNone then fillHeld fs st name n (.initial cs.parent) cs.parent none .none r
+      else pure r
+    | none => pure r
+
 def enterOne (st : Service) (step : Nat) (name : InstanceId) (n : String) : Processing → m Processing :=
   withMachine name fun i r => do
     MonadNote.note (.wroteState name n)
     let r := ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
-    let r ← runAssign fs st name (.entry n) (some n) .none r
+    let r ← fillByInitial fs st name n r
+    if r.halted then pure r else
+    let r ← runAssign fs st name (.entry n) (some n) .none none r
     if r.halted then pure r else
     match i.chart.state? n with
     | none => pure r
@@ -88,6 +130,17 @@ def enterOne (st : Service) (step : Nat) (name : InstanceId) (n : String) : Proc
       let deadlines ← fs.deadlines i.chart.name n
       let s ← addDeadlines st fs step name n deadlines r.state
       pure ⟨s, if cs.activities.isEmpty then r.queue else r.queue.enter name n step⟩
+
+/--
+The processing after the content of the `k`-th chosen transition `c`: its `with` fills the parameters of its target,
+then its assign runs. Both read `sourceHeld`, the parameters of each chosen transition's source as the microstep began.
+-/
+def transitionContent (st : Service) (extra : Extra) (sourceHeld : List Value) (r : Processing)
+    (ck : (InstanceId × Transition) × Nat) : m Processing := do
+  MonadNote.note (.transitionPart ck.2)
+  let held := sourceHeld.getD ck.2 (.obj [])
+  let r ← unlessHalted (fillByTransition fs st ck.1 held extra) r
+  unlessHalted (runAssign fs st ck.1.1 (.transition ck.1.2) ck.1.2.source extra (some held)) r
 
 /-- The processing after instance `name` enters `targets` (SCXML enterStates). -/
 def enter (st : Service) (step : Nat) (name : InstanceId) (targets : List String) : Processing → m Processing :=
@@ -106,15 +159,14 @@ def microstep (st : Service) (step : Nat) (name : InstanceId) (chosen : List (In
     if i.closed then pure r else
     let holders := holdersOf chosen
     let pairs := regionPairs i.chart chosen
+    let sourceHeld := chosen.map fun c => ((r.state.machine? c.1).map (·.heldAt c.2.source)).getD (.obj [])
     let exiting :=
       (indexedInOrder i.documentOrder (transitionIndexOf (chosen.map r.state.exitPairsOf))).reverse
     let s := holders.foldl (fun s h => s.setMachine h (recordHistory ((exiting.filter (·.1.1 == h)).map (·.1.2)))) r.state
     let r ← exiting.foldlM (fun r (e, k) => do
       MonadNote.note (.transitionPart k)
       unlessHalted (exitOne fs st Limit.exitDepth.max e.1 e.2) r) ⟨s, r.queue⟩
-    let r ← chosen.zipIdx.foldlM (fun r (c, k) => do
-      MonadNote.note (.transitionPart k)
-      unlessHalted (runAssign fs st c.1 (.transition c.2) c.2.source extra) r) r
+    let r ← chosen.zipIdx.foldlM (transitionContent fs st extra sourceHeld) r
     let entering := indexedInOrder i.documentOrder (transitionIndexOf (chosen.map r.state.entryPairsOf))
     let r ← entering.foldlM (fun r (e, k) => do
       MonadNote.note (.transitionPart k)

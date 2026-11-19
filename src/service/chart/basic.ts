@@ -48,6 +48,8 @@ interface ChartState {
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
   readonly offers: StateStructure["offers"];
+  /** Whether the state has parameters (`held`), which the edge that enters it fills. */
+  readonly held: boolean;
 }
 
 /** An executable chart. `tree` is the chart's structure, which the syntax tree functions read. */
@@ -115,6 +117,7 @@ export function executableChart(c: ChartStructure, order: number, opened: boolea
           activities: st.activities.flatMap(activityOf),
           transitions: st.transitions.map(transitionOf),
           offers: st.offers,
+          held: st.held.length > 0,
         },
       ]),
     ),

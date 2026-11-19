@@ -60,6 +60,10 @@ export type State = {
   readonly itemKeys: readonly KeyPosition[];
   /** The key positions of a map state's own context, which each copy holds; empty for any other state. */
   readonly contextKeys: readonly KeyPosition[];
+  /** The names of the state's parameters (`held`), which the edge that enters the state fills. */
+  readonly held: readonly string[];
+  /** The key positions of the state's parameters. */
+  readonly heldKeys: readonly KeyPosition[];
 };
 
 export type ChartFields = {
