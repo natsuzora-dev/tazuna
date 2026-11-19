@@ -1,9 +1,9 @@
-import { bag, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { bag, emit, entity, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
   description: "A task, or a subtask of the task parentId",
-  fields: { id: z.string(), parentId: z.string().nullable() },
+  fields: { id: z.string(), parentId: ref.self().nullable() },
   key: "id",
 });
 

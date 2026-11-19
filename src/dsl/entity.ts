@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Bag, Made, MarkOf, Runs } from "../data/bag.ts";
+import { childrenOf, schemaNode } from "../data/schemaNode.ts";
 import type { Shape } from "../data/values.ts";
 import type { Conditions, Named } from "./conditions.ts";
 
@@ -53,6 +54,33 @@ export type RowOf<E extends AnyEntity> =
 
 const refTargets = new WeakMap<z.ZodType, AnyKeyedEntity>();
 const keyFieldOwners = new WeakMap<z.ZodType, AnyKeyedEntity>();
+/** Each `ref.self()` placeholder, with the key schema that it reads once `entity()` has claimed it. */
+const selfRefs = new WeakMap<z.ZodType, { key?: z.ZodType }>();
+
+declare const selfMark: unique symbol;
+type SelfRef = z.ZodType<unknown, unknown> & { readonly [selfMark]: true };
+/** `T` with each `ref.self()` in it, alone or under nullable, optional, default or array, as the key schema `Key`. */
+type Resolved<T, Key extends z.ZodType> = T extends SelfRef
+  ? Key
+  : T extends z.ZodNullable<infer I extends z.ZodType>
+    ? z.ZodNullable<Resolved<I, Key>>
+    : T extends z.ZodOptional<infer I extends z.ZodType>
+      ? z.ZodOptional<Resolved<I, Key>>
+      : T extends z.ZodDefault<infer I extends z.ZodType>
+        ? z.ZodDefault<Resolved<I, Key>>
+        : T extends z.ZodArray<infer I extends z.ZodType>
+          ? z.ZodArray<Resolved<I, Key>>
+          : T;
+type SelfResolved<S extends Shape, K extends keyof S> = { [F in keyof S]: Resolved<S[F], S[K]> };
+
+/** Returns the unclaimed `ref.self()` placeholders in `schema`. */
+function unclaimedSelfRefs(schema: z.ZodType, seen = new Set<z.ZodType>()): z.ZodType[] {
+  if (seen.has(schema)) return [];
+  seen.add(schema);
+  const self = selfRefs.get(schema);
+  if (self !== undefined) return self.key === undefined ? [schema] : [];
+  return childrenOf(schemaNode(schema)).flatMap((child) => unclaimedSelfRefs(child, seen));
+}
 
 /**
  * Defines the shape of records identified by `key`. Other definitions reuse a field's schema as `Task.fields.title`.
@@ -63,30 +91,36 @@ export function entity<
   const Iv extends string = never,
 >(definition: {
   description: string;
-  /** A field that can be null is `.nullable()`. */
+  /** A field that can be null is `.nullable()`. A field that holds the key of a record of this entity is `ref.self()`. */
   fields: S;
   /** The key field, whose value never changes after the record is created. */
   key: K;
   /** The fields whose combined values no two records share; a record with null in any of them is not checked. */
   unique?: readonly (keyof S & string)[];
   /** The conditions that every record meets (Fault.failedEntityInvariant). */
-  invariants?: Named<Iv, { record: Row<S> }>;
-}): KeyedEntity<S, K> {
+  invariants?: Named<Iv, { record: Row<SelfResolved<S, K>> }>;
+}): KeyedEntity<SelfResolved<S, K>, K> {
   // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
   const shared = definition.fields[definition.key] as z.ZodType;
+  if (selfRefs.has(shared)) throw new TypeError("The key field of an entity cannot be ref.self()");
   const key = shared.clone();
   const target = refTargets.get(shared);
   if (target !== undefined) refTargets.set(key, target);
-  const keyed: KeyedEntity<S, K> = {
+  const keyed: KeyedEntity<SelfResolved<S, K>, K> = {
     kind: "entity",
     single: false,
     description: definition.description,
-    fields: { ...definition.fields, [definition.key]: key },
+    fields: { ...definition.fields, [definition.key]: key } as unknown as SelfResolved<S, K>,
     key: definition.key,
     unique: definition.unique ?? [],
-    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> }>,
+    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<SelfResolved<S, K>> }>,
   };
   keyFieldOwners.set(key, keyed);
+  for (const field of Object.values(definition.fields) as z.ZodType[])
+    for (const self of unclaimedSelfRefs(field)) {
+      selfRefs.set(self, { key });
+      refTargets.set(self, keyed);
+    }
   return keyed;
 }
 
@@ -112,14 +146,28 @@ export type Ref<E extends AnyKeyedEntity> = z.ZodType<KeyValue<E>, KeyValue<E>> 
 
 /**
  * Returns the schema of a field whose value is the key of a `target` record. `test` and `verify` compare a created key
- * up to renaming only where its schema is `ref(target)` or `target`'s key field; anywhere else, such as in a plain
- * `z.string()`, they compare it as text.
+ * up to renaming only where its schema is `ref(target)`, `ref.self()`, or `target`'s key field; anywhere else, such as
+ * in a plain `z.string()`, they compare it as text.
  */
 export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
   const schema = (target.fields[target.key] as z.ZodType).clone();
   refTargets.set(schema, target);
   return schema as Ref<E>;
 }
+
+/**
+ * Returns the schema of a field of an entity's own `fields` whose value is the key of a record of that entity,
+ * like SQL's REFERENCES to the same table: `ref(Note)` where `Note` is the entity being defined.
+ */
+ref.self = (): SelfRef => {
+  const schema: z.ZodType = z.lazy(() => {
+    const key = selfRefs.get(schema)?.key;
+    if (key === undefined) throw new TypeError("ref.self() is only for the fields of entity()");
+    return key;
+  });
+  selfRefs.set(schema, {});
+  return schema as SelfRef;
+};
 
 export function refTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
   const direct = refTargets.get(schema);

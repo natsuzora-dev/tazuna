@@ -3,11 +3,14 @@ import { z } from "zod";
 
 export const Note = entity({
   description: "A note, or a reply to the note replyTo names",
-  fields: { id: z.string(), text: z.string(), replyTo: z.string() },
+  fields: { id: z.string(), text: z.string(), replyTo: ref.self().nullable() },
   key: "id",
 });
 
-export const Last = singleEntity({ description: "The note posted last", fields: { id: z.string().default("") } });
+export const Last = singleEntity({
+  description: "The note posted last",
+  fields: { id: ref(Note).nullable().default(null) },
+});
 
 export const { command, machine, event, createEvent, updateEvent, contract, scenario } = service({
   name: "replies",

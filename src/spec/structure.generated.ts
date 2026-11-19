@@ -91,7 +91,7 @@ export type Reference = {
 };
 
 /**
- * A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose schema is `ref(entity)` or `entity`'s key field
+ * A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field
  * (its own key field included), with `entity` null when it is no definition. Array elements and union options do not
  * extend the path. Lines, records, and instances rename created keys at these positions.
  */

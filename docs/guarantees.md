@@ -106,8 +106,7 @@ When the bindings cannot decide what the implementation gets, or a trace cannot 
 
 `test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
-A key position is a value whose schema is `ref(E)` or `E`'s key field, such as `Task.fields.id`, at any depth of a message or a record.
-An entity cannot name itself with `ref()`, so a self-reference such as a reply's `replyTo` compares as text.
+A key position is a value whose schema is `ref(E)`, `ref.self()` inside `E`'s own fields, or `E`'s key field, such as `Task.fields.id`, at any depth of a message or a record.
 Both commands rename a string only at a key position. Any other string, such as a key held in a plain `z.string()`, compares as text.
 
 ## Who fixes a violation
