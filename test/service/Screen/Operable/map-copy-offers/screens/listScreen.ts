@@ -30,7 +30,7 @@ export const listScreen = screen({
   states: {
     showing: { shows: { tasks: {} } },
     rows: { items: ({ shown }) => (shown.tasks?.taskIds ?? []).map((taskId) => ({ taskId })) },
-    row: { offers: { refresh: () => [{}] } },
+    row: { offers: { refresh: any } },
     plain: { on: { mark: [{ target: "marked" }] } },
     marked: { offers: { refresh: none } },
   },

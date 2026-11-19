@@ -40,6 +40,8 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "NonCanonical.statelessMachine": true,
   "NonCanonical.missingOnRejected": true,
   "NonCanonical.unreachableOnRejected": true,
+  "NonCanonical.constantOffer": true,
+  "NonCanonical.answerLiteral": true,
   "NonCanonical.unreadBinding": true,
   "NonCanonical.undescribedService": true,
   "NonCanonical.undescribedDefinition": true,

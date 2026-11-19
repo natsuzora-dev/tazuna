@@ -170,8 +170,8 @@ type ScreenBehavior<
   CopyKey<F, K>
 >;
 /**
- * The payloads that the user can choose for a control: `[{}]` offers a control without payload fields, `any` offers
- * every payload that matches the schema, and `none` offers nothing.
+ * The payloads that the user can choose for a control: `any` offers every payload that matches the schema, `none`
+ * offers nothing, and a function returns the payloads that it offers at that point (`NonCanonical.constantOffer`).
  */
 type Offer<P, A> = ((args: A) => Bag<MadeRow<PayloadOf<P>>> | readonly MadeRow<PayloadOf<P>>[]) | AnyOffer | NoneOffer;
 

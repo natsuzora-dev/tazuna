@@ -36,6 +36,17 @@ export type NonCanonical =
   | Of<"missingOnRejected", DefinitionRef, Readonly<Record<string, never>> | OnRejectedAt>
   /** The request has an `onRejected`, but no answer can be rejected. */
   | Of<"unreachableOnRejected", DefinitionRef, Readonly<Record<string, never>> | OnRejectedAt>
+  /**
+   * An offers entry that returns the same payloads whatever it reads, which a marker writes: `[]` is `none`, and `[{}]`
+   * of a control without payload fields is `any`. `state` is null for the chart's own offers.
+   */
+  | Of<
+      "constantOffer",
+      DefinitionRef,
+      { readonly state: string | null; readonly control: string; readonly marker: "none" | "any" }
+    >
+  /** An answer written as an object literal, which `accepted`, `fulfilled(output)`, or `rejected(kind, reason)` writes. */
+  | Of<"answerLiteral", null, { readonly result: "accepted" | "fulfilled" | "rejected" }>
   /** No function of the command or automation reads the binding of its `binds`. */
   | Of<"unreadBinding", DefinitionRef, { readonly binding: string }>
   | Of<"undescribedService", null, { readonly service: string }>

@@ -20,6 +20,6 @@ export const editScreen = screen({
     viewing: { on: { save: [{ target: "renaming" }] } },
     renaming: { offers: { save: none }, on: { save: [{ target: "viewing" }] } },
     ready: { on: { save: [{ target: "completing" }] } },
-    completing: { offers: { save: () => [{}] }, on: { save: [{ target: "ready" }] } },
+    completing: { offers: { save: any }, on: { save: [{ target: "ready" }] } },
   },
 });

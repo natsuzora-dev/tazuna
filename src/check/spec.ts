@@ -8,11 +8,13 @@ import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
 import { loadSpec, type Spec } from "../load/load.ts";
 import { check as validate } from "../validation/check.ts";
+import * as answers from "./nonCanonical/answers.ts";
 import * as binds from "./nonCanonical/binds.ts";
 import * as charts from "./nonCanonical/charts.ts";
 import * as constants from "./nonCanonical/constants.ts";
 import * as descriptions from "./nonCanonical/descriptions.ts";
 import * as keywords from "./nonCanonical/keywords.ts";
+import * as offers from "./nonCanonical/offers.ts";
 import * as rejections from "./nonCanonical/rejections.ts";
 import * as sources from "./restricted/sources.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
@@ -34,11 +36,13 @@ export type SpecFailure =
 export type SpecCheck = SpecFailure | { readonly kind: "checked"; readonly spec: CheckedSpec };
 
 const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<NonCanonical | Restricted>[] }[] = [
+  answers,
   binds,
   charts,
   constants,
   descriptions,
   keywords,
+  offers,
   rejections,
   sources,
 ];

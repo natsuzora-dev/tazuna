@@ -1,0 +1,3 @@
+{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"accepted"},"location":{"file":"todo/scenarios.ts","line":13}}
+{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"rejected"},"location":{"file":"todo/scenarios.ts","line":14}}
+{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"fulfilled"},"location":{"file":"todo/scenarios.ts","line":15}}

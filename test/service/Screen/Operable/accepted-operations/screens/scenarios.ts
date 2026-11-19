@@ -71,7 +71,7 @@ export const acceptedWithoutTransition = scenario({
 
 export const unionOfRegionOffers = scenario({
   description:
-    "Operate save on editScreen twice; while editScreen is in both renaming and completing, the offers of save of completing return [{}], so editScreen accepts save even though the offers of save of renaming return []",
+    "Operate save on editScreen twice; while editScreen is in both renaming and completing, the offers of save of completing are any, so editScreen accepts save even though the offers of save of renaming are none",
   given: arranged,
   when: (w) => {
     const edit = w.startup.screen(editScreen);

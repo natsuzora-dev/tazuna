@@ -1,4 +1,4 @@
-import { emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { any, emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
@@ -88,7 +88,7 @@ export const listScreen = screen({
   ensures: {},
   invariants: {},
 }).chart({
-  offers: { refresh: () => [{}] },
+  offers: { refresh: any },
   states: { showing: { shows: {}, opens: {}, on: { refresh: [{ target: "showing", reenter: true }] } } },
 });
 

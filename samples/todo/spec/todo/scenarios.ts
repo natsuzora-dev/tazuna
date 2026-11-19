@@ -417,7 +417,7 @@ export const rejectsMalformedTitle = scenario({
     const add = w.client.send(addTask, raw({ taskId: "task-1", title: 7 }));
     return { add };
   },
-  then: ({ add }) => [answered(add, { result: "rejected", rejection: { kind: "invalid-input" } })],
+  then: ({ add }) => [answered(add, rejected("invalid-input"))],
 });
 
 export const rejectsMissingTask = scenario({
@@ -428,10 +428,7 @@ export const rejectsMissingTask = scenario({
     const reopen = w.client.send(reopenTask, { taskId: "task-9" });
     return { complete, reopen };
   },
-  then: ({ complete, reopen }) => [
-    answered(complete, { result: "rejected", rejection: { kind: "not-found" } }),
-    answered(reopen, { result: "rejected", rejection: { kind: "not-found" } }),
-  ],
+  then: ({ complete, reopen }) => [answered(complete, rejected("not-found")), answered(reopen, rejected("not-found"))],
 });
 
 export const renamesTask = scenario({
