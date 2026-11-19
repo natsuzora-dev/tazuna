@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { groups as groupInfos } from "../src/data/groups.ts";
+import { groupNames, parseKind } from "../src/data/kinds.ts";
 import { leanRoot } from "./examples.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -25,8 +26,6 @@ const declarations = readdirSync(leanRoot, { recursive: true, encoding: "utf8" }
   });
 const isTheorem = (name: string) =>
   declarations.some((d) => d.keyword === "theorem" && d.name === name && d.file.startsWith("lean/Tazuna/Thm/"));
-
-const groups = [...read("src/data/violation.ts").matchAll(/^ {2}\| "(\w+)"/gm)].map((m) => m[1] ?? "");
 
 const proven = guarantees.slice(guarantees.indexOf("## Proven properties"));
 const namesIn = (list: string) => [...list.matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? "");
@@ -73,19 +72,16 @@ test("Each Lean name that a doc cites with its files is declared in each of them
   );
 });
 
-const groupSource = (group: string) => {
-  const base = join(root, "src/data", group.charAt(0).toLowerCase() + group.slice(1));
-  return existsSync(`${base}.generated.ts`)
-    ? readFileSync(`${base}.generated.ts`, "utf8")
-    : readFileSync(`${base}.ts`, "utf8");
-};
+/** The words `<Group>.<name>` of `text` whose group is a violation group and that name no kind of it. */
 const unknownKinds = (path: string, text: string, pattern: RegExp) =>
   [...text.matchAll(pattern)]
-    .filter(([, group = ""]) => groups.includes(group))
-    .filter(([, group = "", kind = ""]) => !new RegExp(`\\b${kind}\\b`).test(groupSource(group)))
-    .map(([kind]) => `${path} ${kind}`);
+    .filter(([, group = ""]) => groupNames.some((g) => g === group))
+    .map(([, group, name]) => `${group}.${name}`)
+    .filter((kind) => parseKind(kind) === undefined)
+    .map((kind) => `${path} ${kind}`);
 
 test("Each violation kind that a doc names is a kind of its group", () => {
+  assert.deepEqual(unknownKinds("x", "`Fault.data` and `Fault.failedEnsures`", /`(\w+)\.(\w+)`/g), ["x Fault.data"]);
   assert.deepEqual(
     docs.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g)),
     [],

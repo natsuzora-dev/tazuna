@@ -1,0 +1,1 @@
+{"kind":"InvalidScenario.brokenGivenInvariant","definition":null,"data":{"service":"todo","entity":"Task","key":"task-1","invariant":"titled"},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"untitled"}}

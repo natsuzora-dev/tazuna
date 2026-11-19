@@ -19,8 +19,6 @@ import {
 const tests = import.meta.dirname;
 const examples = simExamples();
 
-const unexemplified: Readonly<Record<string, string>> = {};
-
 test("Every folder under test/sim is a Lean Sim module path or an example directly under one, and each example holds only service folders and pairs of <name>.scenario.json and <name>.expected.json", () => {
   const modules = leanModulePaths("Sim");
   const examplePaths = new Set(examples.map(({ root }) => relative(simRoot, root)));
@@ -64,7 +62,7 @@ for (const { root, scenarios } of examples) {
     });
 }
 
-test("Each InvalidScenario kind except the unexemplified ones is in the expected outcome of some scenario under test/sim, and no unexemplified kind is", () => {
+test("Each InvalidScenario kind is in the expected outcome of some scenario under test/sim", () => {
   const reported = new Set(
     examples.flatMap(({ root, scenarios }) =>
       scenarios.flatMap((name) => {
@@ -77,11 +75,7 @@ test("Each InvalidScenario kind except the unexemplified ones is in the expected
     ),
   );
   assert.deepEqual(
-    invalidScenarioKinds.filter((kind) => !(kind in unexemplified) && !reported.has(kind)),
-    [],
-  );
-  assert.deepEqual(
-    Object.keys(unexemplified).filter((kind) => reported.has(kind)),
+    invalidScenarioKinds.filter((kind) => !reported.has(kind)),
     [],
   );
 });

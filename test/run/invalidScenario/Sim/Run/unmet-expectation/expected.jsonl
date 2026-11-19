@@ -1,0 +1,1 @@
+{"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"already-exists"}}],"actual":[{"result":"accepted"}]},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"addMilk"}}

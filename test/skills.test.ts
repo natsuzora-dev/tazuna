@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { test } from "node:test";
 import { main } from "../src/cli/main.ts";
-import { allKinds } from "./kinds.ts";
+import { groupNames, parseKind } from "../src/data/kinds.ts";
 
 const root = join(import.meta.dirname, "..");
 const files: readonly string[] = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).files;
@@ -70,7 +70,6 @@ test("Each command, option, and violation kind that a skill names exists", async
     assert.ok(commands.length > 0 && options.length > 0 && kinds.length > 0);
     for (const command of commands) assert.match(usage, new RegExp(`^ {2}${command} `, "m"), command);
     for (const option of options) assert.match(usage, new RegExp(`^ {4}${option}\\b`, "m"), option);
-    for (const kind of kinds)
-      assert.ok(allKinds.includes(kind) || allKinds.some((k) => k.startsWith(`${kind}.`)), kind);
+    for (const kind of kinds) assert.ok(parseKind(kind) !== undefined || groupNames.some((g) => g === kind), kind);
   }
 });

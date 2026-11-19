@@ -11,7 +11,6 @@
   "workspaces": [
     "samples/todo",
     "samples/todo/spec",
-    "!samples/todo/spec/tsconfig.json",
     "samples/todo/web"
   ],
   "imports": {
@@ -58,7 +57,8 @@
     "lean:write": "(cd lean && PATH=\"$HOME/.elan/bin:$PATH\" lake build) && lean/.lake/build/bin/tazuna-generate --write .",
     "lint": "biome check . && depcruise src -T err-long && knip --no-progress",
     "lint:write": "biome check --write .",
-    "prepack": "rm -rf dist && tsc -p tsconfig.build.json && vite build viewer",
+    "explain:write": "node scripts/explain.ts --write",
+    "prepack": "node scripts/explain.ts && rm -rf dist && tsc -p tsconfig.build.json && vite build viewer",
     "samples:check": "npm run check --workspace todo",
     "test": "node --test --test-randomize 'test/*.test.ts'",
     "test:write": "node --test --test-randomize --test-update-snapshots 'test/*.test.ts'",

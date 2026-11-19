@@ -15,5 +15,5 @@
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["src", "test", "samples/todo/spec", "viewer/vite.config.ts"]
+  "include": ["src", "scripts", "test", "samples/todo/spec", "viewer/vite.config.ts"]
 }

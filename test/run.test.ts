@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { test } from "node:test";
-import { bagOrderDependentKinds } from "../src/data/bagOrderDependent.generated.ts";
-import { choiceDependentKinds } from "../src/data/choiceDependent.generated.ts";
-import { faultKinds } from "../src/data/fault.generated.ts";
-import { invalidInputKinds } from "../src/data/invalidInput.generated.ts";
+import { type Kind, kindsOf } from "../src/data/kinds.ts";
 import {
   folders,
   isServiceFolder,
@@ -24,15 +21,16 @@ const tests = import.meta.dirname;
 /**
  * The kinds of each group. Its examples are in test/run/<group with a lowercase first letter>/<path>/<example>, where
  * <path> is the path, relative to lean/Tazuna, of the one Lean file that reports the violations of the example's
- * scenarios: the Service file that calls State.report, Processing.report or State.reportAll, or the Explore file
+ * scenarios: the Sim file that reports the InvalidScenario violations, the Service file that calls State.report, Processing.report or State.reportAll, or the Explore file
  * that builds the BagOrderDependent or ChoiceDependent violations. An example without violations is in the
  * same folder as the example that it counters.
  */
-const groups: Readonly<Record<string, readonly string[]>> = {
-  InvalidInput: invalidInputKinds,
-  Fault: faultKinds,
-  BagOrderDependent: bagOrderDependentKinds,
-  ChoiceDependent: choiceDependentKinds,
+const groups: Readonly<Record<string, readonly Kind[]>> = {
+  InvalidScenario: kindsOf.InvalidScenario,
+  InvalidInput: kindsOf.InvalidInput,
+  Fault: kindsOf.Fault,
+  BagOrderDependent: kindsOf.BagOrderDependent,
+  ChoiceDependent: kindsOf.ChoiceDependent,
 };
 
 /** The kinds of another group that an example reports besides those of its own, each example with the reason. */

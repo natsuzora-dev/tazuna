@@ -132,11 +132,11 @@ const commands: { readonly [N in Name]: Command<N> } = {
   explain: {
     positionals: ["kind"],
     description:
-      "Print in markdown what the violation kind <kind>, such as Fault.failedEnsures, means, who reports it, the side at fault, and an example from tazuna's tests: an excerpt of a spec and the violation line that tazuna reports on it.",
+      "Print in markdown what the violation kind <kind>, such as Fault.failedEnsures, means, who reports it, and the side at fault, and, when tazuna's tests have one, an example: the top-level statement of a spec that holds the reported line, with that line marked, and the violation line that tazuna reports on it.",
     options: {},
     parse: ({ positionals: [kind = ""] }) => {
-      const markdown = explain(kind);
-      return markdown === undefined ? { misuse: `unknown kind ${kind}` } : { command: "explain", markdown };
+      const explained = explain(kind);
+      return "misuse" in explained ? explained : { command: "explain", markdown: explained.markdown };
     },
   },
 };

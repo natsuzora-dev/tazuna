@@ -21,6 +21,7 @@
           "file": "closer/closer.ts",
           "from": 13,
           "to": 38,
+          "line": 13,
           "text": "export const copyReadsRegion = machine({\n  description:\n    \"Note the closing in state x in one region, and the copy k of map m saves the notes into seen in the other region\",\n  context: { notes: z.array(z.string()).default([]), seen: z.array(z.string()).default([]) },\n  receives: { tasksClosed },\n  initial: \"open\",\n  states: {\n    open: {\n      type: \"parallel\",\n      states: {\n        left: {\n          initial: \"m\",\n          states: { m: { type: \"map\", key: { name: z.string() }, initial: \"c1\", states: { c1: {} } } },\n        },\n        right: { initial: \"x\", states: { x: {}, y: {} } },\n      },\n    },\n  },\n}).chart({\n  states: {\n    m: { items: () => [{ name: \"k\" }] },\n    c1: { on: { tasksClosed: [{ assign: { seen: ({ context }) => [...context.notes] } }] } },\n    x: { on: { tasksClosed: [{ target: \"y\", assign: { notes: ({ context }) => [...context.notes, \"x\"] } }] } },\n    y: { on: { tasksClosed: [{ target: \"x\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"BagOrderDependent.assignRead\",\"definition\":{\"service\":\"closer\",\"name\":\"copyReadsRegion\"},\"data\":{\"state\":\"open\",\"writer\":{\"state\":\"x\",\"trigger\":{\"type\":\"on\",\"key\":\"tasksClosed\"},\"index\":0},\"reader\":{\"state\":\"c1\",\"trigger\":{\"type\":\"on\",\"key\":\"tasksClosed\"},\"index\":0},\"field\":\"notes\"},\"location\":{\"file\":\"closer/closer.ts\",\"line\":13},\"scenario\":{\"service\":\"closer\",\"name\":\"closeOnce\"}}"
@@ -33,6 +34,7 @@
           "file": "todo/todo.ts",
           "from": 16,
           "to": 38,
+          "line": 16,
           "text": "export const tracker = machine({\n  description: \"Mark that a task was added, once in each region\",\n  context: { status: z.enum([\"empty\", \"added\"]).default(\"empty\") },\n  receives: { taskAdded, tasksCleared },\n  initial: \"tracking\",\n  states: {\n    tracking: {\n      type: \"parallel\",\n      states: {\n        counting: { initial: \"countIdle\", states: { countIdle: {}, countMarking: {}, counted: {} } },\n        remembering: { initial: \"rememberIdle\", states: { rememberIdle: {}, rememberMarking: {}, remembered: {} } },\n      },\n    },\n  },\n}).chart({\n  on: { tasksCleared: [{ target: \"tracking\" }] },\n  states: {\n    countIdle: { on: { taskAdded: [{ target: \"countMarking\" }] } },\n    countMarking: { always: [{ target: \"counted\", assign: { status: () => \"added\" } }] },\n    rememberIdle: { on: { taskAdded: [{ target: \"rememberMarking\" }] } },\n    rememberMarking: { always: [{ target: \"remembered\", assign: { status: () => \"added\" } }] },\n  },\n});"
         },
         "violation": "{\"kind\":\"BagOrderDependent.bothAssign\",\"definition\":{\"service\":\"todo\",\"name\":\"tracker\"},\"data\":{\"state\":\"tracking\",\"firstTransition\":{\"state\":\"countMarking\",\"trigger\":{\"type\":\"always\"},\"index\":0},\"secondTransition\":{\"state\":\"rememberMarking\",\"trigger\":{\"type\":\"always\"},\"index\":0},\"field\":\"status\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":16},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
@@ -43,9 +45,10 @@
       "example": {
         "excerpt": {
           "file": "ordered/ordered.ts",
-          "from": 1,
-          "to": 27,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string() }, key: \"id\" });\n\nexport const { command, query, createEvent, contract, scenario } = service({\n  name: \"ordered\",\n  description: \"Keep the tasks\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);\n\nexport const firstTask = query({\n  output: { id: z.string().endsWith(\"1\") },\n}).resolve(({ records }) => {\n  let first: string | undefined;\n  records.Task.map((t) => (first ??= t.id));\n  return { id: first ?? \"\" };\n});\n\nexport const ordered = contract({ addTask, firstTask });"
+          "from": 19,
+          "to": 25,
+          "line": 19,
+          "text": "export const firstTask = query({\n  output: { id: z.string().endsWith(\"1\") },\n}).resolve(({ records }) => {\n  let first: string | undefined;\n  records.Task.map((t) => (first ??= t.id));\n  return { id: first ?? \"\" };\n});"
         },
         "violation": "{\"kind\":\"BagOrderDependent.reversedException\",\"definition\":{\"service\":\"ordered\",\"name\":\"firstTask\"},\"data\":{\"function\":\"resolve\"},\"location\":{\"file\":\"ordered/ordered.ts\",\"line\":19},\"scenario\":{\"service\":\"ordered\",\"name\":\"addTwo\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"invalid_format\",\"format\":\"ends_with\",\"suffix\":\"1\",\"path\":[\"id\"],\"message\":\"Invalid string: must end with \\\"1\\\"\"}]}}"
       }
@@ -55,9 +58,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
+          "from": 23,
           "to": 29,
-          "text": "import { bag, emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, query, createEvent, contract, scenario } = service({\n  name: \"todo\",\n  description: \"Keep the tasks\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);\n\nexport const titles = query({\n  output: { titles: bag(z.string()) },\n}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));\n\nexport const titlesInArray = query({\n  output: { titles: z.array(z.string()) },\n}).resolve(({ records }) => {\n  const titles: string[] = [];\n  records.Task.map((t) => titles.push(t.title));\n  return { titles };\n});"
+          "line": 23,
+          "text": "export const titlesInArray = query({\n  output: { titles: z.array(z.string()) },\n}).resolve(({ records }) => {\n  const titles: string[] = [];\n  records.Task.map((t) => titles.push(t.title));\n  return { titles };\n});"
         },
         "violation": "{\"kind\":\"BagOrderDependent.reversedResult\",\"definition\":{\"service\":\"todo\",\"name\":\"titlesInArray\"},\"data\":{\"function\":\"resolve\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":23},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwoAndReadArray\"}}"
       }
@@ -67,9 +71,10 @@
       "example": {
         "excerpt": {
           "file": "marks/marks.ts",
-          "from": 1,
-          "to": 26,
-          "text": "import { bag, emit, entity, ref, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string() }, key: \"id\" });\n\nexport const Mark = entity({ description: \"A mark\", fields: { id: z.string() }, key: \"id\" });\n\nexport const { automation, command, createEvent, contract, scenario } = service({\n  name: \"marks\",\n  description: \"Create a mark key for every task whenever a task is added\",\n  entities: { Task, Mark },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input }) => [\n  emit(taskAdded, { id: input.taskId }),\n]);\n\nexport const takeMarks = command({ input: { markIds: bag(Mark.fields.id) }, emits: [] }).decide(() => []);\n\nexport const markEveryTask = automation({ receives: { taskAdded }, commands: { takeMarks } }).send({\n  input: ({ createKey, records }) => ({ markIds: records.Task.map(() => createKey(ref(Mark))) }),\n});\n\nexport const marks = contract({ addTask });"
+          "from": 22,
+          "to": 24,
+          "line": 22,
+          "text": "export const markEveryTask = automation({ receives: { taskAdded }, commands: { takeMarks } }).send({\n  input: ({ createKey, records }) => ({ markIds: records.Task.map(() => createKey(ref(Mark))) }),\n});"
         },
         "violation": "{\"kind\":\"BagOrderDependent.uncomparable\",\"definition\":{\"service\":\"marks\",\"name\":\"markEveryTask\"},\"data\":{\"function\":\"react\",\"limit\":256},\"location\":{\"file\":\"marks/marks.ts\",\"line\":22},\"scenario\":{\"service\":\"marks\",\"name\":\"addSeventh\"}}"
       }
@@ -81,6 +86,7 @@
           "file": "counter/counter.ts",
           "from": 29,
           "to": 29,
+          "line": 29,
           "text": "export const bumpWithA = automation({ receives: { ticked }, commands: { bumpA } }).send({});"
         },
         "violation": "{\"kind\":\"ChoiceDependent.searchLimit\",\"definition\":{\"service\":\"counter\",\"name\":\"bumpWithA\"},\"data\":{\"limit\":64},\"location\":{\"file\":\"counter/counter.ts\",\"line\":29},\"scenario\":{\"service\":\"counter\",\"name\":\"tickOnce\"}}"
@@ -93,6 +99,7 @@
           "file": "waiter/waiter.ts",
           "from": 22,
           "to": 43,
+          "line": 22,
           "text": "export const m = machine({\n  description: \"e1 enters waiting, whose at reads due; e2 moves due\",\n  context: { due: datetime.nullable().default(null) },\n  receives: { e1, e2 },\n  commands: { ping },\n  initial: \"idle\",\n  states: { idle: {}, waiting: {}, pinging: {}, done: {} },\n}).chart({\n  on: { e2: [{ assign: { due: () => Temporal.Instant.from(\"2026-10-25T06:00:00Z\") } }] },\n  states: {\n    idle: { on: { e1: [{ target: \"waiting\" }] } },\n    waiting: {\n      after: {\n        due: {\n          at: ({ context }) => context.due ?? Temporal.Instant.from(\"2026-10-25T05:00:00Z\"),\n          onFired: [{ target: \"pinging\" }],\n        },\n      },\n    },\n    pinging: { sends: { ping: { input: () => ({}), onAccepted: [{ target: \"done\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"ChoiceDependent.stepOrder\",\"definition\":{\"service\":\"waiter\",\"name\":\"m\"},\"data\":{\"firstStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"secondStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"originalOrder\":[],\"alternativeOrder\":[{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]}],\"difference\":{\"aspect\":\"state\",\"original\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T05:00:00Z\"}]}]},\"alternative\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T06:00:00Z\"}]}]}}},\"location\":{\"file\":\"waiter/waiter.ts\",\"line\":22},\"scenario\":{\"service\":\"waiter\",\"name\":\"once\"}}"
@@ -106,9 +113,10 @@
       "example": {
         "excerpt": {
           "file": "picks/picks.ts",
-          "from": 1,
+          "from": 6,
           "to": 11,
-          "text": "import { service, set } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { machine, scenario } = service({ name: \"picks\", description: \"Keep the picked tags\" });\n\nexport const picker = machine({\n  description: \"Pick tags when the service starts\",\n  context: { picked: set(z.string()).default([]) },\n  initial: \"picking\",\n  states: { picking: {} },\n}).chart({ states: { picking: { entry: { assign: { picked: () => [\"a\", \"a\"] } } } } });"
+          "line": 6,
+          "text": "export const picker = machine({\n  description: \"Pick tags when the service starts\",\n  context: { picked: set(z.string()).default([]) },\n  initial: \"picking\",\n  states: { picking: {} },\n}).chart({ states: { picking: { entry: { assign: { picked: () => [\"a\", \"a\"] } } } } });"
         },
         "violation": "{\"kind\":\"Fault.contextSchema\",\"definition\":{\"service\":\"picks\",\"name\":\"picker\"},\"data\":{},\"location\":{\"file\":\"picks/picks.ts\",\"line\":6},\"scenario\":{\"service\":\"picks\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"custom\",\"message\":\"duplicate element \\\"a\\\"\",\"path\":[\"picked\",1]}]}}"
       }
@@ -118,9 +126,10 @@
       "example": {
         "excerpt": {
           "file": "counters/counters.ts",
-          "from": 1,
+          "from": 6,
           "to": 20,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { machine, scenario } = service({ name: \"counters\", description: \"Count per tag\" });\n\nexport const tagCounter = machine({\n  description: \"Count the visits of each tag, and set the count below the minimum when a copy starts\",\n  initial: \"counting\",\n  states: {\n    counting: {\n      type: \"map\",\n      key: { tag: z.string() },\n      context: { visits: z.number().min(1).default(1) },\n      initial: \"idle\",\n      states: { idle: {} },\n    },\n  },\n}).chart({\n  states: { counting: { items: () => [{ tag: \"home\" }] }, idle: { entry: { assign: { visits: () => 0 } } } },\n});"
+          "line": 6,
+          "text": "export const tagCounter = machine({\n  description: \"Count the visits of each tag, and set the count below the minimum when a copy starts\",\n  initial: \"counting\",\n  states: {\n    counting: {\n      type: \"map\",\n      key: { tag: z.string() },\n      context: { visits: z.number().min(1).default(1) },\n      initial: \"idle\",\n      states: { idle: {} },\n    },\n  },\n}).chart({\n  states: { counting: { items: () => [{ tag: \"home\" }] }, idle: { entry: { assign: { visits: () => 0 } } } },\n});"
         },
         "violation": "{\"kind\":\"Fault.copyContextSchema\",\"definition\":{\"service\":\"counters\",\"name\":\"tagCounter\"},\"data\":{\"map\":\"counting\"},\"location\":{\"file\":\"counters/counters.ts\",\"line\":6},\"scenario\":{\"service\":\"counters\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"visits\"],\"message\":\"Too small: expected number to be >=1\"}]}}"
       }
@@ -130,9 +139,10 @@
       "example": {
         "excerpt": {
           "file": "notes/notes.ts",
-          "from": 1,
-          "to": 29,
-          "text": "import { emit, entity, ref, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Note = entity({\n  description: \"A note, or a reply to the note replyTo names\",\n  fields: { id: z.string(), replyTo: ref.self().nullable() },\n  key: \"id\",\n});\n\nexport const { command, createEvent, deleteEvent, contract, scenario } = service({\n  name: \"notes\",\n  description: \"Keep notes and their replies\",\n  entities: { Note },\n});\n\nexport const posted = createEvent({ entity: Note });\nexport const deleted = deleteEvent({ entity: Note });\n\nexport const post = command({\n  input: { noteId: Note.fields.id, replyTo: Note.fields.replyTo },\n  emits: [posted],\n}).decide(({ input }) => [emit(posted, { id: input.noteId, replyTo: input.replyTo })]);\n\nexport const deleteNote = command({\n  input: { noteId: ref(Note) },\n  emits: [deleted],\n}).decide(({ input }) => [emit(deleted, { id: input.noteId })]);\n\nexport const notes = contract({ post, deleteNote });"
+          "from": 4,
+          "to": 8,
+          "line": 4,
+          "text": "export const Note = entity({\n  description: \"A note, or a reply to the note replyTo names\",\n  fields: { id: z.string(), replyTo: ref.self().nullable() },\n  key: \"id\",\n});"
         },
         "violation": "{\"kind\":\"Fault.danglingRef\",\"definition\":{\"service\":\"notes\",\"name\":\"Note\"},\"data\":{\"recordKey\":\"note-2\",\"field\":\"replyTo\",\"targetKey\":\"note-1\",\"command\":{\"service\":\"notes\",\"name\":\"deleteNote\"}},\"location\":{\"file\":\"notes/notes.ts\",\"line\":4},\"scenario\":{\"service\":\"notes\",\"name\":\"deleteRepliedNote\"}}"
       }
@@ -144,6 +154,7 @@
           "file": "todo/todo.ts",
           "from": 12,
           "to": 15,
+          "line": 12,
           "text": "export const Pin = singleEntity({\n  description: \"The pinned task\",\n  fields: { taskId: ref(Task).nullable().default(null) },\n});"
         },
         "violation": "{\"kind\":\"Fault.danglingSingleRef\",\"definition\":{\"service\":\"todo\",\"name\":\"Pin\"},\"data\":{\"field\":\"taskId\",\"targetKey\":\"task-1\",\"command\":{\"service\":\"todo\",\"name\":\"deleteTask\"}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":12},\"scenario\":{\"service\":\"todo\",\"name\":\"deletePinned\"}}"
@@ -156,6 +167,7 @@
           "file": "todo/todo.ts",
           "from": 23,
           "to": 29,
+          "line": 23,
           "text": "export const tagWatcher = machine({\n  description: \"Watch each tag of the tasks\",\n  initial: \"watching\",\n  states: { watching: { type: \"map\", key: { tag: Task.fields.tag }, initial: \"idle\", states: { idle: {} } } },\n}).chart({\n  states: { watching: { items: ({ records }) => records.Task.map((t) => ({ tag: t.tag })) } },\n});"
         },
         "violation": "{\"kind\":\"Fault.duplicateItemKey\",\"definition\":{\"service\":\"todo\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\",\"itemKey\":{\"tag\":\"home\"}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":23},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwoWithOneTag\"}}"
@@ -166,9 +178,10 @@
       "example": {
         "excerpt": {
           "file": "emptyTitleTodo/todo.ts",
-          "from": 1,
-          "to": 19,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string(), title: z.string().min(1) }, key: \"id\" });\n\nexport const { command, createEvent, contract, scenario } = service({\n  name: \"emptyTitleTodo\",\n  description: \"Keep the tasks with an empty title\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: \"\" })]);\n\nexport const emptyTitleTodo = contract({ addTask });"
+          "from": 14,
+          "to": 17,
+          "line": 14,
+          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: \"\" })]);"
         },
         "violation": "{\"kind\":\"Fault.emittedPayloadSchema\",\"definition\":{\"service\":\"emptyTitleTodo\",\"name\":\"addTask\"},\"data\":{\"event\":{\"service\":\"emptyTitleTodo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"emptyTitleTodo/todo.ts\",\"line\":14},\"scenario\":{\"service\":\"emptyTitleTodo\",\"name\":\"addOne\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"title\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
@@ -180,6 +193,7 @@
           "file": "todo/todo.ts",
           "from": 19,
           "to": 29,
+          "line": 19,
           "text": "export const flow = machine({\n  description: \"Alternate through always transitions while no task exists\",\n  receives: { taskAdded },\n  initial: \"a\",\n  states: { a: {}, b: {} },\n}).chart({\n  states: {\n    a: { always: [{ guard: { open: ({ records }) => records.Task.size === 0 }, target: \"b\" }] },\n    b: { always: [{ guard: { open: ({ records }) => records.Task.size === 0 }, target: \"a\" }] },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.exceededAlwaysRounds\",\"definition\":{\"service\":\"todo\",\"name\":\"flow\"},\"data\":{\"limit\":100},\"location\":{\"file\":\"todo/todo.ts\",\"line\":19},\"scenario\":{\"service\":\"todo\",\"name\":\"start\"}}"
@@ -190,9 +204,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
+          "from": 18,
           "to": 29,
-          "text": "import { emit, service, singleEntity } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Counter = singleEntity({ description: \"A counter\", fields: { value: z.number().default(0) } });\n\nexport const { command, machine, updateEvent, scenario } = service({\n  name: \"todo\",\n  description: \"Keep the tasks\",\n  entities: { Counter },\n});\n\nexport const counted = updateEvent({ entity: Counter, writes: [\"value\"] });\n\nexport const count = command({\n  emits: [counted],\n}).decide(({ records }) => [emit(counted, { value: records.Counter.value + 1 })]);\n\nexport const counter = machine({\n  description: \"Count on every count, going back and forth between two states\",\n  receives: { counted },\n  commands: { count },\n  initial: \"ping\",\n  states: { ping: {}, pong: {} },\n}).chart({\n  states: {\n    ping: { on: { counted: [{ target: \"pong\" }] }, sends: { count: { onAccepted: [], onRejected: [] } } },\n    pong: { on: { counted: [{ target: \"ping\" }] }, sends: { count: { onAccepted: [], onRejected: [] } } },\n  },\n});"
+          "line": 18,
+          "text": "export const counter = machine({\n  description: \"Count on every count, going back and forth between two states\",\n  receives: { counted },\n  commands: { count },\n  initial: \"ping\",\n  states: { ping: {}, pong: {} },\n}).chart({\n  states: {\n    ping: { on: { counted: [{ target: \"pong\" }] }, sends: { count: { onAccepted: [], onRejected: [] } } },\n    pong: { on: { counted: [{ target: \"ping\" }] }, sends: { count: { onAccepted: [], onRejected: [] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.exceededCommandDepth\",\"definition\":{\"service\":\"todo\",\"name\":\"counter\"},\"data\":{\"limit\":100},\"location\":{\"file\":\"todo/todo.ts\",\"line\":18},\"scenario\":{\"service\":\"todo\",\"name\":\"start\"}}"
       }
@@ -202,9 +217,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 3,
           "to": 11,
-          "text": "import { scenario } from \"./todo.ts\";\n\nexport const weekLater = scenario({\n  description:\n    \"Start the service and come back a week later; more than 10000 minutes have passed, so test reports exceededDueDeadlines\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-11-01T09:00:00+09:00\");\n  },\n  then: () => [],\n});"
+          "line": 3,
+          "text": "export const weekLater = scenario({\n  description:\n    \"Start the service and come back a week later; more than 10000 minutes have passed, so test reports exceededDueDeadlines\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-11-01T09:00:00+09:00\");\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Fault.exceededDueDeadlines\",\"definition\":null,\"data\":{\"limit\":10000},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"weekLater\"}}"
       }
@@ -218,8 +234,9 @@
         "excerpt": {
           "file": "chains/chains.ts",
           "from": 8,
-          "to": 8,
-          "text": "export const pinger = machine({"
+          "to": 39,
+          "line": 8,
+          "text": "export const pinger = machine({\n  description: \"Run 101 chains of 100 pings at the start, each ping sent when the one before is accepted\",\n  commands: { ping },\n  initial: \"chains\",\n  states: {\n    chains: {\n      type: \"map\",\n      key: { chain: z.number() },\n      context: { pings: z.number().default(1) },\n      initial: \"pinging\",\n      states: { pinging: {} },\n    },\n  },\n}).chart({\n  states: {\n    chains: { items: () => Array.from({ length: 101 }, (_, chain) => ({ chain })) },\n    pinging: {\n      sends: {\n        ping: {\n          onAccepted: [\n            {\n              guard: { hasMore: ({ context }) => context.pings < 100 },\n              target: \"pinging\",\n              reenter: true,\n              assign: { pings: ({ context }) => context.pings + 1 },\n            },\n          ],\n        },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.exceededMessageCommands\",\"definition\":{\"service\":\"chains\",\"name\":\"pinger\"},\"data\":{\"limit\":10000},\"location\":{\"file\":\"chains/chains.ts\",\"line\":8},\"scenario\":{\"service\":\"chains\",\"name\":\"start\"}}"
       }
@@ -232,9 +249,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
+          "from": 5,
           "to": 11,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\n\nexport const { machine, scenario } = service({ name: \"todo\", description: \"Keep the tasks\" });\n\nexport const rounds = machine({\n  description: \"Start a round again as soon as it is done\",\n  initial: \"round\",\n  states: { round: { initial: \"finished\", states: { finished: { type: \"final\" } } } },\n}).chart({\n  states: { round: { onDone: [{ target: \"round\", reenter: true }] } },\n});"
+          "line": 5,
+          "text": "export const rounds = machine({\n  description: \"Start a round again as soon as it is done\",\n  initial: \"round\",\n  states: { round: { initial: \"finished\", states: { finished: { type: \"final\" } } } },\n}).chart({\n  states: { round: { onDone: [{ target: \"round\", reenter: true }] } },\n});"
         },
         "violation": "{\"kind\":\"Fault.exceededOnDoneSelections\",\"definition\":{\"service\":\"todo\",\"name\":\"rounds\"},\"data\":{\"limit\":10000},\"location\":{\"file\":\"todo/todo.ts\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"start\"}}"
       }
@@ -244,9 +262,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
-          "to": 19,
-          "text": "import { emit, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { command, event, contract, scenario } = service({ name: \"todo\", description: \"Log the titles of tasks\" });\n\nexport const titleLogged = event({\n  payload: {\n    title: z.string().refine((title) => {\n      if (title === \"\") throw new Error(\"a logged title needs text\");\n      return true;\n    }),\n  },\n});\n\nexport const logTitle = command({ input: { title: z.string() }, emits: [titleLogged] }).decide(({ input }) => [\n  emit(titleLogged, { title: input.title }),\n]);\n\nexport const todo = contract({ logTitle });"
+          "from": 6,
+          "to": 13,
+          "line": 6,
+          "text": "export const titleLogged = event({\n  payload: {\n    title: z.string().refine((title) => {\n      if (title === \"\") throw new Error(\"a logged title needs text\");\n      return true;\n    }),\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.exception\",\"definition\":{\"service\":\"todo\",\"name\":\"titleLogged\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":6},\"scenario\":{\"service\":\"todo\",\"name\":\"logEmpty\"},\"error\":{\"type\":\"thrownError\",\"name\":\"Error\",\"message\":\"a logged title needs text\",\"stack\":\"<stack>\"}}"
       }
@@ -256,9 +275,10 @@
       "example": {
         "excerpt": {
           "file": "invariantsBreakingCounter/todo.ts",
-          "from": 1,
-          "to": 28,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, machine, createEvent, contract, scenario } = service({\n  name: \"invariantsBreakingCounter\",\n  description: \"Keep the tasks while breaking the invariant of counter\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);\n\nexport const counter = machine({\n  description: \"Count added tasks up to one\",\n  context: { count: z.number().default(0) },\n  receives: { taskAdded },\n  initial: \"counting\",\n  states: { counting: {} },\n  invariants: { atMostOne: ({ context }) => context.count <= 1 },\n}).chart({ states: { counting: { on: { taskAdded: [{ assign: { count: ({ context }) => context.count + 1 } }] } } } });\n\nexport const invariantsBreakingCounter = contract({ addTask });"
+          "from": 19,
+          "to": 26,
+          "line": 19,
+          "text": "export const counter = machine({\n  description: \"Count added tasks up to one\",\n  context: { count: z.number().default(0) },\n  receives: { taskAdded },\n  initial: \"counting\",\n  states: { counting: {} },\n  invariants: { atMostOne: ({ context }) => context.count <= 1 },\n}).chart({ states: { counting: { on: { taskAdded: [{ assign: { count: ({ context }) => context.count + 1 } }] } } } });"
         },
         "violation": "{\"kind\":\"Fault.failedChartInvariant\",\"definition\":{\"service\":\"invariantsBreakingCounter\",\"name\":\"counter\"},\"data\":{\"condition\":\"atMostOne\"},\"location\":{\"file\":\"invariantsBreakingCounter/todo.ts\",\"line\":19},\"scenario\":{\"service\":\"invariantsBreakingCounter\",\"name\":\"addTwo\"}}"
       }
@@ -268,9 +288,10 @@
       "example": {
         "excerpt": {
           "file": "ensuresBreakingTodo/todo.ts",
-          "from": 1,
-          "to": 20,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, createEvent, contract, scenario } = service({\n  name: \"ensuresBreakingTodo\",\n  description: \"Keep the tasks while breaking the ensures of addTask\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n  ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title.toUpperCase() })]);\n\nexport const ensuresBreakingTodo = contract({ addTask });"
+          "from": 14,
+          "to": 18,
+          "line": 14,
+          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n  ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title.toUpperCase() })]);"
         },
         "violation": "{\"kind\":\"Fault.failedEnsures\",\"definition\":{\"service\":\"ensuresBreakingTodo\",\"name\":\"addTask\"},\"data\":{\"condition\":\"keepsTitle\"},\"location\":{\"file\":\"ensuresBreakingTodo/todo.ts\",\"line\":14},\"scenario\":{\"service\":\"ensuresBreakingTodo\",\"name\":\"addTwo\"}}"
       }
@@ -282,6 +303,7 @@
           "file": "invariantsBreakingTodo/todo.ts",
           "from": 4,
           "to": 9,
+          "line": 4,
           "text": "export const Task = entity({\n  description: \"A task\",\n  fields: { id: z.string(), title: z.string() },\n  key: \"id\",\n  invariants: { titleNotBlank: ({ record }) => record.title.trim() !== \"\" },\n});"
         },
         "violation": "{\"kind\":\"Fault.failedEntityInvariant\",\"definition\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"Task\"},\"data\":{\"recordKey\":\"task-1\",\"condition\":\"titleNotBlank\",\"command\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addTask\"}},\"location\":{\"file\":\"invariantsBreakingTodo/todo.ts\",\"line\":4},\"scenario\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addBlank\"}}"
@@ -292,9 +314,10 @@
       "example": {
         "excerpt": {
           "file": "zeroCountOpener/opener.ts",
-          "from": 1,
+          "from": 17,
           "to": 26,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { screen, scenario } = service({\n  name: \"zeroCountOpener\",\n  description: \"Pick a number, opening the picker with count 0\",\n});\n\nexport const pickScreen = screen({\n  description: \"Pick a number below a positive count\",\n  input: { count: z.number() },\n  initial: \"picking\",\n  states: { picking: {} },\n  requires: { positive: ({ input }) => input.count > 0 },\n}).chart({});\n\nexport const homeScreen = screen({\n  description: \"Open the picker\",\n  screens: { pickScreen },\n  initial: \"picking\",\n  states: { picking: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    picking: { opens: { pickScreen: { modal: true, input: () => ({ count: 0 }), onDone: [{ target: \"done\" }] } } },\n  },\n});"
+          "line": 17,
+          "text": "export const homeScreen = screen({\n  description: \"Open the picker\",\n  screens: { pickScreen },\n  initial: \"picking\",\n  states: { picking: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    picking: { opens: { pickScreen: { modal: true, input: () => ({ count: 0 }), onDone: [{ target: \"done\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.failedRequires\",\"definition\":{\"service\":\"zeroCountOpener\",\"name\":\"homeScreen\"},\"data\":{\"screen\":{\"service\":\"zeroCountOpener\",\"name\":\"pickScreen\"},\"condition\":\"positive\"},\"location\":{\"file\":\"zeroCountOpener/opener.ts\",\"line\":17},\"scenario\":{\"service\":\"zeroCountOpener\",\"name\":\"start\"}}"
       }
@@ -306,6 +329,7 @@
           "file": "invariantsBreakingTodo/todo.ts",
           "from": 17,
           "to": 25,
+          "line": 17,
           "text": "export const { command, createEvent, updateEvent, contract, scenario } = service({\n  name: \"invariantsBreakingTodo\",\n  description: \"Keep the tasks while breaking the invariants of Task, Tally, and the service\",\n  entities: { Task, Tally },\n  invariants: {\n    uniqueTitles: ({ records }) =>\n      records.Task.every((t) => records.Task.filter((u) => u.title === t.title).size === 1),\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.failedServiceInvariant\",\"definition\":null,\"data\":{\"condition\":\"uniqueTitles\",\"command\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addTask\"}},\"location\":{\"file\":\"invariantsBreakingTodo/todo.ts\",\"line\":17},\"scenario\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addSameTitle\"}}"
@@ -318,6 +342,7 @@
           "file": "invariantsBreakingTodo/todo.ts",
           "from": 11,
           "to": 15,
+          "line": 11,
           "text": "export const Tally = singleEntity({\n  description: \"The number of added tasks\",\n  fields: { added: z.number().default(0) },\n  invariants: { belowTwo: ({ record }) => record.added < 2 },\n});"
         },
         "violation": "{\"kind\":\"Fault.failedSingleInvariant\",\"definition\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"Tally\"},\"data\":{\"condition\":\"belowTwo\",\"command\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addTask\"}},\"location\":{\"file\":\"invariantsBreakingTodo/todo.ts\",\"line\":11},\"scenario\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addSameTitle\"}}"
@@ -330,6 +355,7 @@
           "file": "noTaskWatcher/watcher.ts",
           "from": 19,
           "to": 31,
+          "line": 19,
           "text": "export const watcher = machine({\n  description: \"Watch the first task\",\n  receives: { taskAdded },\n  initial: \"running\",\n  states: {\n    running: { initial: \"watching\", states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } } },\n  },\n}).chart({\n  states: {\n    running: { initial: { with: { task: ({ records }) => records.Task.only() } } },\n    watching: { on: { taskAdded: [{ target: \"idle\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.heldSchema\",\"definition\":{\"service\":\"noTaskWatcher\",\"name\":\"watcher\"},\"data\":{\"held\":\"task\",\"state\":\"watching\"},\"location\":{\"file\":\"noTaskWatcher/watcher.ts\",\"line\":19},\"scenario\":{\"service\":\"noTaskWatcher\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[],\"message\":\"Invalid input: expected object, received undefined\"}]}}"
@@ -340,9 +366,10 @@
       "example": {
         "excerpt": {
           "file": "zeroLimits/limits.ts",
-          "from": 1,
+          "from": 9,
           "to": 14,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { machine, scenario } = service({\n  name: \"zeroLimits\",\n  description: \"Hold the limit, starting below its minimum\",\n});\n\nexport const limits = machine({\n  description: \"Hold the limit\",\n  context: { limit: z.number().min(1).default(0) },\n  initial: \"holding\",\n  states: { holding: {} },\n}).chart({});"
+          "line": 9,
+          "text": "export const limits = machine({\n  description: \"Hold the limit\",\n  context: { limit: z.number().min(1).default(0) },\n  initial: \"holding\",\n  states: { holding: {} },\n}).chart({});"
         },
         "violation": "{\"kind\":\"Fault.initialContextSchema\",\"definition\":{\"service\":\"zeroLimits\",\"name\":\"limits\"},\"data\":{},\"location\":{\"file\":\"zeroLimits/limits.ts\",\"line\":9},\"scenario\":{\"service\":\"zeroLimits\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"limit\"],\"message\":\"Too small: expected number to be >=1\"}]}}"
       }
@@ -352,9 +379,10 @@
       "example": {
         "excerpt": {
           "file": "app/app.ts",
-          "from": 1,
+          "from": 6,
           "to": 23,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { mailer } from \"../mailer/contract.ts\";\n\nexport const { machine, scenario } = service({ name: \"app\", description: \"Mail the user\" });\n\nexport const notifier = machine({\n  description: \"Mail the user, whose address is not known yet\",\n  commands: { sendMail: mailer.sendMail },\n  initial: \"sending\",\n  states: { sending: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    sending: {\n      sends: {\n        sendMail: {\n          input: () => ({ to: \"\" }),\n          onAccepted: [{ target: \"done\" }],\n          onRejected: [{ target: \"done\" }],\n        },\n      },\n    },\n  },\n});"
+          "line": 6,
+          "text": "export const notifier = machine({\n  description: \"Mail the user, whose address is not known yet\",\n  commands: { sendMail: mailer.sendMail },\n  initial: \"sending\",\n  states: { sending: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    sending: {\n      sends: {\n        sendMail: {\n          input: () => ({ to: \"\" }),\n          onAccepted: [{ target: \"done\" }],\n          onRejected: [{ target: \"done\" }],\n        },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.inputSchema\",\"definition\":{\"service\":\"app\",\"name\":\"notifier\"},\"data\":{\"target\":{\"service\":\"mailer\",\"name\":\"sendMail\"}},\"location\":{\"file\":\"app/app.ts\",\"line\":6},\"scenario\":{\"service\":\"app\",\"name\":\"unanswered\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"to\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
@@ -364,9 +392,10 @@
       "example": {
         "excerpt": {
           "file": "tags/tags.ts",
-          "from": 1,
+          "from": 6,
           "to": 10,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { machine, scenario } = service({ name: \"tags\", description: \"Watch the tags\" });\n\nexport const tagWatcher = machine({\n  description: \"Watch each tag, one of which is empty\",\n  initial: \"watching\",\n  states: { watching: { type: \"map\", key: { tag: z.string().min(1) }, initial: \"idle\", states: { idle: {} } } },\n}).chart({ states: { watching: { items: () => [{ tag: \"home\" }, { tag: \"\" }] } } });"
+          "line": 6,
+          "text": "export const tagWatcher = machine({\n  description: \"Watch each tag, one of which is empty\",\n  initial: \"watching\",\n  states: { watching: { type: \"map\", key: { tag: z.string().min(1) }, initial: \"idle\", states: { idle: {} } } },\n}).chart({ states: { watching: { items: () => [{ tag: \"home\" }, { tag: \"\" }] } } });"
         },
         "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[0,\"tag\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
@@ -376,9 +405,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
-          "to": 26,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, query, createEvent, contract, scenario } = service({\n  name: \"todo\",\n  description: \"Keep the tasks\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);\n\nexport const taskNamed = query({\n  input: { title: Task.fields.title },\n  output: { taskId: Task.fields.id.nullable() },\n}).resolve(({ input, records }) => ({\n  taskId: records.Task.filter((t) => t.title === input.title).only()?.id ?? null,\n}));\n\nexport const todo = contract({ addTask, taskNamed });"
+          "from": 19,
+          "to": 24,
+          "line": 19,
+          "text": "export const taskNamed = query({\n  input: { title: Task.fields.title },\n  output: { taskId: Task.fields.id.nullable() },\n}).resolve(({ input, records }) => ({\n  taskId: records.Task.filter((t) => t.title === input.title).only()?.id ?? null,\n}));"
         },
         "violation": "{\"kind\":\"Fault.notOnly\",\"definition\":{\"service\":\"todo\",\"name\":\"taskNamed\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":19},\"scenario\":{\"service\":\"todo\",\"name\":\"askShared\"}}"
       }
@@ -388,9 +418,10 @@
       "example": {
         "excerpt": {
           "file": "picker/picker.ts",
-          "from": 1,
-          "to": 18,
-          "text": "import { any, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { screen, scenario } = service({ name: \"picker\", description: \"Pick a task\" });\n\nexport const listScreen = screen({\n  description: \"A list that offers a task with an empty id\",\n  controls: { pick: { label: \"Pick\", payload: { taskId: z.string().min(1) } } },\n  initial: \"listing\",\n  states: { listing: {} },\n}).chart({ offers: { pick: () => [{ taskId: \"\" }] } });\n\nexport const filteredScreen = screen({\n  description: \"A filtered list that offers a task with an empty id\",\n  controls: { pick: { label: \"Pick\", payload: { taskId: z.string().min(1) } } },\n  initial: \"filtered\",\n  states: { filtered: {} },\n}).chart({ offers: { pick: any }, states: { filtered: { offers: { pick: () => [{ taskId: \"\" }] } } } });"
+          "from": 6,
+          "to": 11,
+          "line": 6,
+          "text": "export const listScreen = screen({\n  description: \"A list that offers a task with an empty id\",\n  controls: { pick: { label: \"Pick\", payload: { taskId: z.string().min(1) } } },\n  initial: \"listing\",\n  states: { listing: {} },\n}).chart({ offers: { pick: () => [{ taskId: \"\" }] } });"
         },
         "violation": "{\"kind\":\"Fault.offersSchema\",\"definition\":{\"service\":\"picker\",\"name\":\"listScreen\"},\"data\":{\"control\":\"pick\",\"state\":null},\"location\":{\"file\":\"picker/picker.ts\",\"line\":6},\"scenario\":{\"service\":\"picker\",\"name\":\"pickListed\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"taskId\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
@@ -400,9 +431,10 @@
       "example": {
         "excerpt": {
           "file": "items/items.ts",
-          "from": 1,
-          "to": 17,
-          "text": "import { entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Item = entity({ description: \"An item\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { query, contract, scenario } = service({\n  name: \"items\",\n  description: \"Look up items\",\n  entities: { Item },\n});\n\nexport const item = query({\n  input: { itemId: z.string() },\n  output: Item.fields,\n}).resolve(({ input, records }) => Reflect.get(records.Item, input.itemId));\n\nexport const items = contract({ item });"
+          "from": 12,
+          "to": 15,
+          "line": 12,
+          "text": "export const item = query({\n  input: { itemId: z.string() },\n  output: Item.fields,\n}).resolve(({ input, records }) => Reflect.get(records.Item, input.itemId));"
         },
         "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[],\"message\":\"Invalid input: expected object, received undefined\"}]}}"
       }
@@ -414,6 +446,7 @@
           "file": "uncheckedTodo/todo.ts",
           "from": 28,
           "to": 31,
+          "line": 28,
           "text": "export const countAddedTask = automation({\n  receives: { taskAdded },\n  commands: { countAdded },\n}).send({ input: ({ payload }) => ({ title: payload.title }) });"
         },
         "violation": "{\"kind\":\"Fault.rejectedAutomationCommand\",\"definition\":{\"service\":\"uncheckedTodo\",\"name\":\"countAddedTask\"},\"data\":{\"rejection\":{\"kind\":\"requires\",\"reason\":\"short\"}},\"location\":{\"file\":\"uncheckedTodo/todo.ts\",\"line\":28},\"scenario\":{\"service\":\"uncheckedTodo\",\"name\":\"addLong\"}}"
@@ -424,9 +457,10 @@
       "example": {
         "excerpt": {
           "file": "emptyPrefixScreens/screens.ts",
-          "from": 1,
+          "from": 9,
           "to": 16,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { todo } from \"../todo/contract.ts\";\n\nexport const { screen, scenario } = service({\n  name: \"emptyPrefixScreens\",\n  description: \"Show the tasks whose title starts with an empty prefix\",\n});\n\nexport const titledScreen = screen({\n  description: \"The tasks whose title starts with a prefix\",\n  queries: { titled: todo.titled },\n  initial: \"showing\",\n  states: { showing: {} },\n}).chart({\n  states: { showing: { shows: { titled: { input: () => ({ prefix: \"\" }) } } } },\n});"
+          "line": 9,
+          "text": "export const titledScreen = screen({\n  description: \"The tasks whose title starts with a prefix\",\n  queries: { titled: todo.titled },\n  initial: \"showing\",\n  states: { showing: {} },\n}).chart({\n  states: { showing: { shows: { titled: { input: () => ({ prefix: \"\" }) } } } },\n});"
         },
         "violation": "{\"kind\":\"Fault.rejectedShows\",\"definition\":{\"service\":\"emptyPrefixScreens\",\"name\":\"titledScreen\"},\"data\":{\"slot\":\"titled\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"notEmpty\"}},\"location\":{\"file\":\"emptyPrefixScreens/screens.ts\",\"line\":9},\"scenario\":{\"service\":\"emptyPrefixScreens\",\"name\":\"show\"}}"
       }
@@ -438,6 +472,7 @@
           "file": "todo/todo.ts",
           "from": 27,
           "to": 32,
+          "line": 27,
           "text": "export const archiveTitle = command({\n  input: { title: Archive.fields.title },\n  emits: [titleArchived],\n}).decide(({ input, records }) => [\n  records.Task.filter((t) => t.title === input.title).map(() => emit(titleArchived, { title: input.title })),\n]);"
         },
         "violation": "{\"kind\":\"Fault.sameRecordInBag\",\"definition\":{\"service\":\"todo\",\"name\":\"archiveTitle\"},\"data\":{\"entity\":{\"service\":\"todo\",\"name\":\"Archive\"},\"recordKey\":\"Buy milk\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":27},\"scenario\":{\"service\":\"todo\",\"name\":\"archiveShared\"}}"
@@ -448,9 +483,10 @@
       "example": {
         "excerpt": {
           "file": "closer/closer.ts",
-          "from": 1,
-          "to": 23,
-          "text": "import { any, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { screen, scenario } = service({ name: \"closer\", description: \"Close a screen\" });\n\nexport const doneScreen = screen({\n  description: \"A screen that closes with a negative count\",\n  output: { count: z.number().nonnegative() },\n  controls: { close: { label: \"Close\" } },\n  initial: \"open\",\n  states: { open: {}, closed: { type: \"final\" } },\n}).chart({\n  offers: { close: any },\n  resolve: () => ({ count: -1 }),\n  states: { open: { on: { close: [{ target: \"closed\" }] } } },\n});\n\nexport const homeScreen = screen({\n  description: \"Open the done screen, then show the count\",\n  screens: { doneScreen },\n  initial: \"opening\",\n  states: { opening: {}, shown: { type: \"final\" } },\n}).chart({ states: { opening: { opens: { doneScreen: { modal: true, onDone: [{ target: \"shown\" }] } } } } });"
+          "from": 6,
+          "to": 16,
+          "line": 6,
+          "text": "export const doneScreen = screen({\n  description: \"A screen that closes with a negative count\",\n  output: { count: z.number().nonnegative() },\n  controls: { close: { label: \"Close\" } },\n  initial: \"open\",\n  states: { open: {}, closed: { type: \"final\" } },\n}).chart({\n  offers: { close: any },\n  resolve: () => ({ count: -1 }),\n  states: { open: { on: { close: [{ target: \"closed\" }] } } },\n});"
         },
         "violation": "{\"kind\":\"Fault.screenOutputSchema\",\"definition\":{\"service\":\"closer\",\"name\":\"doneScreen\"},\"data\":{},\"location\":{\"file\":\"closer/closer.ts\",\"line\":6},\"scenario\":{\"service\":\"closer\",\"name\":\"closeDone\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":0,\"inclusive\":true,\"path\":[\"count\"],\"message\":\"Too small: expected number to be >=0\"}]}}"
       }
@@ -462,6 +498,7 @@
           "file": "todo/todo.ts",
           "from": 41,
           "to": 55,
+          "line": 41,
           "text": "export const watcher = machine({\n  description: \"Watch the first task, reading a held value that its state does not have\",\n  context: { title: z.string().default(\"\") },\n  receives: { taskAdded },\n  initial: \"idle\",\n  states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } },\n}).chart({\n  states: {\n    idle: { on: { taskAdded: [{ target: \"watching\", with: { task: ({ records }) => records.Task.only() } }] } },\n    watching: {\n      entry: { assign: { title: latestTitle } },\n      on: { taskAdded: [{ target: \"idle\" }] },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.unheld\",\"definition\":{\"service\":\"todo\",\"name\":\"watcher\"},\"data\":{\"held\":\"latest\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":41},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
@@ -472,9 +509,10 @@
       "example": {
         "excerpt": {
           "file": "notes/notes.ts",
-          "from": 1,
+          "from": 9,
           "to": 12,
-          "text": "import { emit, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { command, event, scenario } = service({ name: \"notes\", description: \"Keep the notes\" });\n\nexport const noteAdded = event({ payload: { noteId: z.string() } });\nconst noteDrafted = event({ payload: { noteId: z.string() } });\n\nexport const addNote = command({\n  input: { noteId: z.string() },\n  emits: [noteAdded],\n}).decide(({ input }) => [emit(noteDrafted, { noteId: input.noteId })]);"
+          "line": 9,
+          "text": "export const addNote = command({\n  input: { noteId: z.string() },\n  emits: [noteAdded],\n}).decide(({ input }) => [emit(noteDrafted, { noteId: input.noteId })]);"
         },
         "violation": "{\"kind\":\"Fault.unlistedEmittedEvent\",\"definition\":{\"service\":\"notes\",\"name\":\"addNote\"},\"data\":{\"event\":null},\"location\":{\"file\":\"notes/notes.ts\",\"line\":9},\"scenario\":{\"service\":\"notes\",\"name\":\"addOne\"}}"
       }
@@ -486,6 +524,7 @@
           "file": "todo/todo.ts",
           "from": 47,
           "to": 52,
+          "line": 47,
           "text": "export const flow = machine({\n  description: \"Alternate between two states\",\n  receives: { taskAdded },\n  initial: \"a\",\n  states: { a: {}, b: {} },\n}).chart({ states: { a: { always: [{ target: \"b\" }] }, b: { always: [{ target: \"a\" }] } } });"
         },
         "violation": "{\"kind\":\"Illegal.alwaysCycle\",\"definition\":{\"service\":\"todo\",\"name\":\"flow\"},\"data\":{\"statePath\":[\"a\",\"b\",\"a\"]},\"location\":{\"file\":\"todo/todo.ts\",\"line\":47}}"
@@ -496,9 +535,10 @@
       "example": {
         "excerpt": {
           "file": "notifier/notifier.ts",
-          "from": 1,
+          "from": 8,
           "to": 11,
-          "text": "import { emit } from \"@natsuzora-dev/tazuna\";\nimport { todo } from \"../todo/contract.ts\";\nimport { automation, command } from \"./data.ts\";\nimport { noticed } from \"./events.ts\";\n\nexport const notice = command({ emits: [noticed] }).decide(() => [emit(noticed, {})]);\n\nexport const noticeAdded = automation({\n  receives: { added: todo.added },\n  commands: { notice },\n}).send({});"
+          "line": 8,
+          "text": "export const noticeAdded = automation({\n  receives: { added: todo.added },\n  commands: { notice },\n}).send({});"
         },
         "violation": "{\"kind\":\"Illegal.automationCycle\",\"definition\":{\"service\":\"notifier\",\"name\":\"noticeAdded\"},\"data\":{\"chain\":[{\"service\":\"todo\",\"name\":\"readd\"}]},\"location\":{\"file\":\"notifier/notifier.ts\",\"line\":8}}"
       }
@@ -508,9 +548,10 @@
       "example": {
         "excerpt": {
           "file": "notifier/notifier.ts",
-          "from": 1,
-          "to": 18,
-          "text": "import { emit, service } from \"@natsuzora-dev/tazuna\";\nimport { todo } from \"../todo/contract.ts\";\n\nexport const { command, event, contract } = service({ name: \"notifier\", description: \"Notify about tasks\" });\n\nexport const announced = event({});\n\nexport const announceWithOwnEvent = command({\n  input: { taskId: todo.TaskId },\n  emits: [announced],\n}).decide(() => [emit(announced, {})]);\n\nexport const announce = command({\n  input: { taskId: todo.TaskId },\n  emits: [todo.taskAdded],\n}).decide(({ input }) => [emit(todo.taskAdded, { taskId: input.taskId, title: \"\" })]);\n\nexport const notifier = contract({ announceWithOwnEvent, announce });"
+          "from": 13,
+          "to": 16,
+          "line": 13,
+          "text": "export const announce = command({\n  input: { taskId: todo.TaskId },\n  emits: [todo.taskAdded],\n}).decide(({ input }) => [emit(todo.taskAdded, { taskId: input.taskId, title: \"\" })]);"
         },
         "violation": "{\"kind\":\"Illegal.foreignEvent\",\"definition\":{\"service\":\"notifier\",\"name\":\"announce\"},\"data\":{\"event\":{\"service\":\"todo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"notifier/notifier.ts\",\"line\":13}}"
       }
@@ -520,9 +561,10 @@
       "example": {
         "excerpt": {
           "file": "notifier/notifier.ts",
-          "from": 1,
+          "from": 16,
           "to": 16,
-          "text": "import { emit, service } from \"@natsuzora-dev/tazuna\";\nimport { todo } from \"../todo/contract.ts\";\n\nexport const { command, event, contract } = service({\n  name: \"notifier\",\n  description: \"Notify about tasks, and lists the todo event taskAdded in its own contract\",\n});\n\nexport const announced = event({ payload: { taskId: todo.TaskId } });\n\nexport const announce = command({\n  input: { taskId: todo.TaskId },\n  emits: [announced],\n}).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);\n\nexport const notifier = contract({ announce, announced, taskAdded: todo.taskAdded });"
+          "line": 16,
+          "text": "export const notifier = contract({ announce, announced, taskAdded: todo.taskAdded });"
         },
         "violation": "{\"kind\":\"Illegal.foreignMember\",\"definition\":null,\"data\":{\"contract\":\"notifier\",\"key\":\"taskAdded\"},\"location\":{\"file\":\"notifier/notifier.ts\",\"line\":16}}"
       }
@@ -532,9 +574,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
+          "from": 20,
           "to": 28,
-          "text": "import { emit, entity, ref, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, createEvent, updateEvent } = service({\n  name: \"todo\",\n  description: \"Keep the tasks\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\nexport const taskRenamed = updateEvent({ entity: Task, writes: [\"title\"] });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);\n\nexport const renameTask = command({\n  input: { taskId: ref(Task), title: Task.fields.title },\n  emits: [taskRenamed],\n  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },\n  requires: {\n    changesTitle: ({ input, bound }) => bound.task.title !== input.title,\n    1: ({ input }) => input.title !== \"\",\n  },\n}).decide(({ input }) => [emit(taskRenamed, { id: input.taskId, title: input.title })]);"
+          "line": 20,
+          "text": "export const renameTask = command({\n  input: { taskId: ref(Task), title: Task.fields.title },\n  emits: [taskRenamed],\n  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },\n  requires: {\n    changesTitle: ({ input, bound }) => bound.task.title !== input.title,\n    1: ({ input }) => input.title !== \"\",\n  },\n}).decide(({ input }) => [emit(taskRenamed, { id: input.taskId, title: input.title })]);"
         },
         "violation": "{\"kind\":\"Illegal.indexReason\",\"definition\":{\"service\":\"todo\",\"name\":\"renameTask\"},\"data\":{\"reason\":\"1\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":20}}"
       }
@@ -544,9 +587,10 @@
       "example": {
         "excerpt": {
           "file": "home/home.ts",
-          "from": 1,
+          "from": 5,
           "to": 10,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\n\nexport const { screen } = service({ name: \"home\", description: \"Show the home screen only after signing in\" });\n\nexport const homeScreen = screen({\n  description: \"The home screen, which no screen opens, so nothing gives the input that requires would read\",\n  initial: \"showing\",\n  states: { showing: {} },\n  requires: { signedIn: () => false },\n}).chart({});"
+          "line": 5,
+          "text": "export const homeScreen = screen({\n  description: \"The home screen, which no screen opens, so nothing gives the input that requires would read\",\n  initial: \"showing\",\n  states: { showing: {} },\n  requires: { signedIn: () => false },\n}).chart({});"
         },
         "violation": "{\"kind\":\"Illegal.missingParent\",\"definition\":{\"service\":\"home\",\"name\":\"homeScreen\"},\"data\":{\"keys\":[\"requires\"]},\"location\":{\"file\":\"home/home.ts\",\"line\":5}}"
       }
@@ -558,6 +602,7 @@
           "file": "todo/todo.ts",
           "from": 43,
           "to": 54,
+          "line": 43,
           "text": "export const counter = machine({\n  description: \"Ask for the number of tasks after each added task\",\n  receives: { taskAdded },\n  queries: { taskCount },\n  initial: \"idle\",\n  states: { idle: {}, asking: {} },\n}).chart({\n  states: {\n    idle: { on: { taskAdded: [{ target: \"asking\" }] } },\n    asking: { calls: { taskCount: { onFulfilled: [{ target: \"idle\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Illegal.ownQuery\",\"definition\":{\"service\":\"todo\",\"name\":\"counter\"},\"data\":{\"key\":\"taskCount\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":43}}"
@@ -570,6 +615,7 @@
           "file": "player/player.ts",
           "from": 39,
           "to": 56,
+          "line": 39,
           "text": "export const player = machine({\n  description: \"Play a track, and return to what was playing after a pause\",\n  receives: { paused },\n  initial: \"on\",\n  states: {\n    on: {\n      initial: \"idle\",\n      states: { idle: {}, playing: { held: { trackId: z.string() } }, back: { type: \"history\" } },\n    },\n    pausedNow: {},\n  },\n}).chart({\n  states: {\n    idle: { on: { paused: [{ target: \"playing\", with: { trackId: () => \"track-1\" } }] } },\n    playing: { on: { paused: [{ target: \"pausedNow\" }] } },\n    pausedNow: { on: { paused: [{ target: \"back\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Illegal.restoredHeld\",\"definition\":{\"service\":\"player\",\"name\":\"player\"},\"data\":{\"state\":\"playing\",\"history\":\"back\"},\"location\":{\"file\":\"player/player.ts\",\"line\":39}}"
@@ -580,9 +626,10 @@
       "example": {
         "excerpt": {
           "file": "screens/screens.ts",
-          "from": 1,
+          "from": 5,
           "to": 13,
-          "text": "import { any, service, unchecked } from \"@natsuzora-dev/tazuna\";\n\nexport const { screen, contract } = service({ name: \"screens\", description: \"Show a list\" });\n\nexport const listScreen = screen({\n  description: \"A list whose own offers leave out the control close\",\n  controls: { refresh: { label: \"Refresh\" }, close: { label: \"Close\" } },\n  initial: \"shown\",\n  states: { shown: {}, closed: { type: \"final\" } },\n}).chart({\n  offers: unchecked({ refresh: any }),\n  states: { shown: { on: { refresh: [], close: [{ target: \"closed\" }] } } },\n});"
+          "line": 5,
+          "text": "export const listScreen = screen({\n  description: \"A list whose own offers leave out the control close\",\n  controls: { refresh: { label: \"Refresh\" }, close: { label: \"Close\" } },\n  initial: \"shown\",\n  states: { shown: {}, closed: { type: \"final\" } },\n}).chart({\n  offers: unchecked({ refresh: any }),\n  states: { shown: { on: { refresh: [], close: [{ target: \"closed\" }] } } },\n});"
         },
         "violation": "{\"kind\":\"Illegal.unlistedControl\",\"definition\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"data\":{\"control\":\"close\"},\"location\":{\"file\":\"screens/screens.ts\",\"line\":5}}"
       }
@@ -594,6 +641,7 @@
           "file": "agenda/scenarios.ts",
           "from": 27,
           "to": 36,
+          "line": 27,
           "text": "export const answerMalformedNextDay = scenario({\n  description:\n    \"Answer the next day with a day that is not a datetime; the output schema of nextDay rejects it, so test reports answerOutputSchema\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"tomorrow\" })));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":27},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerMalformedNextDay\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"invalid_format\",\"format\":\"datetime\",\"pattern\":\"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\"path\":[\"day\"],\"message\":\"Invalid ISO datetime\"}]}}"
@@ -606,6 +654,7 @@
           "file": "shelf/scenarios.ts",
           "from": 25,
           "to": 32,
+          "line": 25,
           "text": "export const pickTwice = scenario({\n  description: \"Pick the name a twice; test reports controlPayloadSchema\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(catalog)] },\n  when: (w) => {\n    w.user.operate(w.startup.screen(shelfScreen), \"pick\", { names: [\"a\", \"a\"] });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.controlPayloadSchema\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"shelf\",\"name\":\"shelfScreen\"},\"control\":\"pick\"},\"location\":{\"file\":\"shelf/scenarios.ts\",\"line\":25},\"scenario\":{\"service\":\"shelf\",\"name\":\"pickTwice\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"custom\",\"message\":\"duplicate element \\\"a\\\"\",\"path\":[\"names\",1]}]}}"
@@ -618,6 +667,7 @@
           "file": "screens/scenarios.ts",
           "from": 48,
           "to": 57,
+          "line": 48,
           "text": "export const pickUnderDialog = scenario({\n  description: \"Pick a task while the dialog covers the list; test reports coveredByModal\",\n  given: arranged,\n  when: (w) => {\n    const list = w.startup.screen(listScreen);\n    w.user.operate(list, \"clear\");\n    w.user.operate(list, \"pick\", { taskId: \"task-1\" });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.coveredByModal\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"control\":\"pick\",\"child\":{\"service\":\"screens\",\"name\":\"confirmDialog\"}},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":48},\"scenario\":{\"service\":\"screens\",\"name\":\"pickUnderDialog\"}}"
@@ -628,9 +678,10 @@
       "example": {
         "excerpt": {
           "file": "notifier/scenarios.ts",
-          "from": 1,
+          "from": 16,
           "to": 24,
-          "text": "import { external } from \"@natsuzora-dev/tazuna\";\nimport { todo } from \"../todo/contract.ts\";\nimport { given, scenario } from \"./notifier.ts\";\n\nconst arranged = given({ start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(todo)] });\n\nexport const receiveAdded = scenario({\n  description: \"Receive an added task; no violation\",\n  given: arranged,\n  when: (w) => {\n    w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: \"task-1\", title: \"Buy milk\" }, { resultOf: null }));\n  },\n  then: () => [],\n});\n\nexport const receiveAddedEmptyTitle = scenario({\n  description:\n    \"Receive an added task with an empty title; the payload schema of taskAdded rejects it, so test reports eventPayloadSchema\",\n  given: arranged,\n  when: (w) => {\n    w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: \"task-1\", title: \"\" }, { resultOf: null }));\n  },\n  then: () => [],\n});"
+          "line": 16,
+          "text": "export const receiveAddedEmptyTitle = scenario({\n  description:\n    \"Receive an added task with an empty title; the payload schema of taskAdded rejects it, so test reports eventPayloadSchema\",\n  given: arranged,\n  when: (w) => {\n    w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: \"task-1\", title: \"\" }, { resultOf: null }));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"todo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"notifier/scenarios.ts\",\"line\":16},\"scenario\":{\"service\":\"notifier\",\"name\":\"receiveAddedEmptyTitle\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"title\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
@@ -642,6 +693,7 @@
           "file": "agenda/scenarios.ts",
           "from": 17,
           "to": 28,
+          "line": 17,
           "text": "export const answerBeforeFrom = scenario({\n  description:\n    \"Answer a day before from; the answer breaks the assumed ensures afterFrom, so test reports failedAssumedEnsures when the run ends\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"2026-10-24T15:00:00Z\" })),\n    );\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.failedAssumedEnsures\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"afterFrom\"},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":17},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerBeforeFrom\"}}"
@@ -654,6 +706,7 @@
           "file": "agenda/scenarios.ts",
           "from": 19,
           "to": 32,
+          "line": 19,
           "text": "export const rejectStartOfDay = scenario({\n  description:\n    \"Reject the start of a day with requires, then answer an hour later; startOfDay holds for the first and fails for the second, so test reports rejectedAssumedRequires and failedAssumedRequires\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.holiday));\n    const l0 = w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.holiday), rejected(\"requires\", \"startOfDay\")),\n    );\n    w.net.deliver(l0.request(calendar.holiday));\n    w.net.deliver(w.peer.calendar.answer(l0.request(calendar.holiday), fulfilled({ isHoliday: true })));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.failedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"calendar.holiday#2\",\"target\":{\"service\":\"calendar\",\"name\":\"holiday\"},\"condition\":\"startOfDay\"},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":19},\"scenario\":{\"service\":\"agenda\",\"name\":\"rejectStartOfDay\"}}"
@@ -666,6 +719,7 @@
           "file": "agenda/scenarios.ts",
           "from": 19,
           "to": 32,
+          "line": 19,
           "text": "export const rejectStartOfDay = scenario({\n  description:\n    \"Reject the start of a day with requires, then answer an hour later; startOfDay holds for the first and fails for the second, so test reports rejectedAssumedRequires and failedAssumedRequires\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.holiday));\n    const l0 = w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.holiday), rejected(\"requires\", \"startOfDay\")),\n    );\n    w.net.deliver(l0.request(calendar.holiday));\n    w.net.deliver(w.peer.calendar.answer(l0.request(calendar.holiday), fulfilled({ isHoliday: true })));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.rejectedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"calendar.holiday#1\",\"target\":{\"service\":\"calendar\",\"name\":\"holiday\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":19},\"scenario\":{\"service\":\"agenda\",\"name\":\"rejectStartOfDay\"}}"
@@ -676,9 +730,10 @@
       "example": {
         "excerpt": {
           "file": "agenda/scenarios.ts",
-          "from": 1,
+          "from": 5,
           "to": 19,
-          "text": "import { external, fulfilled, unchecked } from \"@natsuzora-dev/tazuna\";\nimport { calendar } from \"../calendar/contract.ts\";\nimport { scenario } from \"./agenda.ts\";\n\nexport const changedByQuery = scenario({\n  description:\n    \"Link dayChanged to the query nextDay, which the types reject; test reports resultOfNonCommand when the run ends, since only a command's request has result events\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"2026-10-25T15:00:00Z\" })),\n    );\n    w.net.deliver(\n      w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.startup.request(calendar.nextDay)) }),\n    );\n  },\n  then: () => [],\n});"
+          "line": 5,
+          "text": "export const changedByQuery = scenario({\n  description:\n    \"Link dayChanged to the query nextDay, which the types reject; test reports resultOfNonCommand when the run ends, since only a command's request has result events\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"2026-10-25T15:00:00Z\" })),\n    );\n    w.net.deliver(\n      w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.startup.request(calendar.nextDay)) }),\n    );\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.resultOfNonCommand\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"dayChanged\"},\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"changedByQuery\"}}"
       }
@@ -690,6 +745,7 @@
           "file": "app/scenarios.ts",
           "from": 5,
           "to": 15,
+          "line": 5,
           "text": "export const grantRejected = scenario({\n  description:\n    \"Link granted to a request that the device rejected; test reports resultOfUnacceptedRequest when the run ends, since the event cannot be that request's result\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), rejected(\"unavailable\")));\n    w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: w.startup.request(device.requestPermission) }));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.resultOfUnacceptedRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"device\",\"name\":\"granted\"},\"requestId\":\"device.requestPermission#1\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"grantRejected\"}}"
@@ -702,6 +758,7 @@
           "file": "app/scenarios.ts",
           "from": 17,
           "to": 27,
+          "line": 17,
           "text": "export const denyUnlisted = scenario({\n  description:\n    \"Link denied to the accepted request, whose command does not emit denied; test reports resultOfUnlistedEvent when the run ends\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));\n    w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: w.startup.request(device.requestPermission) }));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.resultOfUnlistedEvent\",\"definition\":null,\"data\":{\"event\":{\"service\":\"device\",\"name\":\"denied\"},\"requestId\":\"device.requestPermission#1\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":17},\"scenario\":{\"service\":\"app\",\"name\":\"denyUnlisted\"}}"
@@ -712,9 +769,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 14,
           "to": 25,
-          "text": "import { scenario, taskTitles } from \"./todo.ts\";\n\nexport const endUnopened = scenario({\n  description: \"Subscribe, unsubscribe from the open subscription, then subscribe again; no violation\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const titles = w.client.subscribe(taskTitles, {});\n    w.client.unsubscribe(titles);\n    w.client.subscribe(taskTitles, {});\n  },\n  then: () => [],\n});\n\nexport const endUnopenedAndSubscribeTwice = scenario({\n  description:\n    \"Unsubscribe from a subscription twice, then subscribe and send that subscribe again with its id; the second unsubscribe ends no open subscription and the resent subscribe reuses the id of the open one, so test reports unopenedSubscription and reusedSubscriptionId\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const titles = w.client.subscribe(taskTitles, {});\n    w.client.unsubscribe(titles);\n    w.client.unsubscribe(titles);\n    w.client.resend(w.client.subscribe(taskTitles, {}));\n  },\n  then: () => [],\n});"
+          "line": 14,
+          "text": "export const endUnopenedAndSubscribeTwice = scenario({\n  description:\n    \"Unsubscribe from a subscription twice, then subscribe and send that subscribe again with its id; the second unsubscribe ends no open subscription and the resent subscribe reuses the id of the open one, so test reports unopenedSubscription and reusedSubscriptionId\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const titles = w.client.subscribe(taskTitles, {});\n    w.client.unsubscribe(titles);\n    w.client.unsubscribe(titles);\n    w.client.resend(w.client.subscribe(taskTitles, {}));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.reusedSubscriptionId\",\"definition\":null,\"data\":{\"subscriptionId\":\"taskTitles#2\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":14},\"scenario\":{\"service\":\"todo\",\"name\":\"endUnopenedAndSubscribeTwice\"}}"
       }
@@ -729,6 +787,7 @@
           "file": "agenda/scenarios.ts",
           "from": 38,
           "to": 47,
+          "line": 38,
           "text": "export const rejectNextDayNotFound = scenario({\n  description:\n    \"Reject the next day as not-found; nextDay cannot answer with that kind, so test reports unlistedRejectionKind\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), rejected(\"not-found\")));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.unlistedRejectionKind\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"rejection\":{\"kind\":\"not-found\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":38},\"scenario\":{\"service\":\"agenda\",\"name\":\"rejectNextDayNotFound\"}}"
@@ -744,6 +803,7 @@
           "file": "screens/scenarios.ts",
           "from": 59,
           "to": 66,
+          "line": 59,
           "text": "export const pickUnoffered = scenario({\n  description: \"Pick a task that the list does not show; test reports unofferedPayload\",\n  given: arranged,\n  when: (w) => {\n    w.user.operate(w.startup.screen(listScreen), \"pick\", { taskId: \"task-3\" });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.unofferedPayload\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"control\":\"pick\",\"payload\":{\"taskId\":\"task-3\"}},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":59},\"scenario\":{\"service\":\"screens\",\"name\":\"pickUnoffered\"}}"
@@ -756,6 +816,7 @@
           "file": "screens/scenarios.ts",
           "from": 36,
           "to": 46,
+          "line": 36,
           "text": "export const cancelUnopened = scenario({\n  description:\n    \"Cancel the dialog twice; the first cancel closes it, so the second operates a screen that is not open, and test reports unopenedScreen\",\n  given: arranged,\n  when: (w) => {\n    const dialog = w.user.operate(w.startup.screen(listScreen), \"clear\").screen(confirmDialog);\n    w.user.operate(dialog, \"cancel\");\n    w.user.operate(dialog, \"cancel\");\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.unopenedScreen\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"confirmDialog\"},\"control\":\"cancel\"},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":36},\"scenario\":{\"service\":\"screens\",\"name\":\"cancelUnopened\"}}"
@@ -766,9 +827,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 14,
           "to": 25,
-          "text": "import { scenario, taskTitles } from \"./todo.ts\";\n\nexport const endUnopened = scenario({\n  description: \"Subscribe, unsubscribe from the open subscription, then subscribe again; no violation\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const titles = w.client.subscribe(taskTitles, {});\n    w.client.unsubscribe(titles);\n    w.client.subscribe(taskTitles, {});\n  },\n  then: () => [],\n});\n\nexport const endUnopenedAndSubscribeTwice = scenario({\n  description:\n    \"Unsubscribe from a subscription twice, then subscribe and send that subscribe again with its id; the second unsubscribe ends no open subscription and the resent subscribe reuses the id of the open one, so test reports unopenedSubscription and reusedSubscriptionId\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const titles = w.client.subscribe(taskTitles, {});\n    w.client.unsubscribe(titles);\n    w.client.unsubscribe(titles);\n    w.client.resend(w.client.subscribe(taskTitles, {}));\n  },\n  then: () => [],\n});"
+          "line": 14,
+          "text": "export const endUnopenedAndSubscribeTwice = scenario({\n  description:\n    \"Unsubscribe from a subscription twice, then subscribe and send that subscribe again with its id; the second unsubscribe ends no open subscription and the resent subscribe reuses the id of the open one, so test reports unopenedSubscription and reusedSubscriptionId\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const titles = w.client.subscribe(taskTitles, {});\n    w.client.unsubscribe(titles);\n    w.client.unsubscribe(titles);\n    w.client.resend(w.client.subscribe(taskTitles, {}));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.unopenedSubscription\",\"definition\":null,\"data\":{\"subscriptionId\":\"taskTitles#1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":14},\"scenario\":{\"service\":\"todo\",\"name\":\"endUnopenedAndSubscribeTwice\"}}"
       }
@@ -789,19 +851,49 @@
       "meaning": "The external peer received the request `message`, and no line answers it or leaves it unanswered."
     },
     "InvalidScenario.brokenGivenInvariant": {
-      "meaning": "The invariant `invariant` of the record of `entity` with `key`, or of the service when `entity` is none, fails on Given's records of `service`. `invariant` is none when the invariant throws."
+      "meaning": "The invariant `invariant` of the record of `entity` with `key`, or of the service when `entity` is none, fails on Given's records of `service`. `invariant` is none when the invariant throws.",
+      "example": {
+        "excerpt": {
+          "file": "todo/scenarios.ts",
+          "from": 3,
+          "to": 8,
+          "line": 3,
+          "text": "export const untitled = scenario({\n  description: \"Given writes a task without a title, which the invariant titled of Task forbids\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [{ id: \"task-1\", title: \"\" }] }, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
+        },
+        "violation": "{\"kind\":\"InvalidScenario.brokenGivenInvariant\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\",\"invariant\":\"titled\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"untitled\"}}"
+      }
     },
     "InvalidScenario.differentPeerAnswer": {
       "meaning": "The running peer's answer `actual`, which the line delivers, is not the line's `expected`."
     },
     "InvalidScenario.duplicateRecord": {
-      "meaning": "The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values."
+      "meaning": "The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values.",
+      "example": {
+        "excerpt": {
+          "file": "todo/scenarios.ts",
+          "from": 3,
+          "to": 17,
+          "line": 3,
+          "text": "export const twoMilks = scenario({\n  description: \"Given writes two tasks with the key task-1\",\n  given: {\n    start: \"2026-10-25T09:00:00+09:00\",\n    records: {\n      Task: [\n        { id: \"task-1\", title: \"Buy milk\" },\n        { id: \"task-1\", title: \"Buy eggs\" },\n      ],\n    },\n    peers: [],\n  },\n  when: () => {},\n  then: () => [],\n});"
+        },
+        "violation": "{\"kind\":\"InvalidScenario.duplicateRecord\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"twoMilks\"}}"
+      }
     },
     "InvalidScenario.invalidRecord": {
       "meaning": "Given writes a record of `entity` of the running service `service` that is no entity of it, that has a key for a single entity or none for a keyed one, or that does not match the entity's schema."
     },
     "InvalidScenario.leftInFlight": {
-      "meaning": "The message `message` is undelivered at the end, and no leaveInFlight line names it."
+      "meaning": "The message `message` is undelivered at the end, and no leaveInFlight line names it.",
+      "example": {
+        "excerpt": {
+          "file": "app/scenarios.ts",
+          "from": 5,
+          "to": 10,
+          "line": 5,
+          "text": "export const undelivered = scenario({\n  description: \"notifier sends sendMail at the start, and no line delivers it or leaves it in flight\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(mailer)] },\n  when: () => {},\n  then: () => [],\n});"
+        },
+        "violation": "{\"kind\":\"InvalidScenario.leftInFlight\",\"definition\":null,\"data\":{\"message\":{\"sender\":\"app\",\"receiver\":\"mailer\",\"id\":\"mailer.sendMail#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"undelivered\"}}"
+      }
     },
     "InvalidScenario.malformedValue": {
       "meaning": "The written value `value` is not of the form that the line needs."
@@ -843,13 +935,33 @@
       "meaning": "Given lists `service` as a peer more than once, or lists the own service as a peer."
     },
     "InvalidScenario.unlistedPeer": {
-      "meaning": "The own service exchanges messages with `service` (its definitions name the other's, or `service` is a spec service whose definitions name the own service's), and Given does not list it as run, external or skip."
+      "meaning": "The own service exchanges messages with `service` (its definitions name the other's, or `service` is a spec service whose definitions name the own service's), and Given does not list it as run, external or skip.",
+      "example": {
+        "excerpt": {
+          "file": "app/scenarios.ts",
+          "from": 3,
+          "to": 8,
+          "line": 3,
+          "text": "export const noPeers = scenario({\n  description: \"notifier sends sendMail to mailer, and Given lists no peer\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
+        },
+        "violation": "{\"kind\":\"InvalidScenario.unlistedPeer\",\"definition\":null,\"data\":{\"service\":\"mailer\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"app\",\"name\":\"noPeers\"}}"
+      }
     },
     "InvalidScenario.unlistedService": {
       "meaning": "A running service sent a message to `service`, which Given does not list."
     },
     "InvalidScenario.unmetExpectation": {
-      "meaning": "The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`."
+      "meaning": "The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`.",
+      "example": {
+        "excerpt": {
+          "file": "todo/scenarios.ts",
+          "from": 4,
+          "to": 9,
+          "line": 4,
+          "text": "export const addMilk = scenario({\n  description: \"Add a task, and state that todo rejects it, though todo accepts it\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: ({ add }) => [answered(add, rejected(\"already-exists\"))],\n});"
+        },
+        "violation": "{\"kind\":\"InvalidScenario.unmetExpectation\",\"definition\":null,\"data\":{\"expectation\":0,\"expected\":[{\"result\":\"rejected\",\"rejection\":{\"kind\":\"already-exists\"}}],\"actual\":[{\"result\":\"accepted\"}]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addMilk\"}}"
+      }
     },
     "InvalidScenario.unpairedPeerLine": {
       "meaning": "No message in flight from the running peer `peer` to the own service is the line's."
@@ -883,9 +995,10 @@
       "example": {
         "excerpt": {
           "file": "todo/screens.ts",
-          "from": 1,
+          "from": 3,
           "to": 3,
-          "text": "import { taskAdded } from \"./events.ts\";\n\nexport const added = taskAdded;"
+          "line": 3,
+          "text": "export const added = taskAdded;"
         },
         "violation": "{\"kind\":\"Malformed.alias\",\"definition\":null,\"data\":{\"name\":\"taskAdded\",\"alias\":\"added\"},\"location\":{\"file\":\"todo/screens.ts\",\"line\":3}}"
       }
@@ -895,9 +1008,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 10,
           "to": 15,
-          "text": "import { scenario } from \"./todo.ts\";\n\nexport const startsDay = scenario({\n  description: \"Start in the morning\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});\n\nexport const StartsDay = scenario({\n  description: \"Start at noon\",\n  given: { start: \"2026-10-25T12:00:00+09:00\", records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
+          "line": 10,
+          "text": "export const StartsDay = scenario({\n  description: \"Start at noon\",\n  given: { start: \"2026-10-25T12:00:00+09:00\", records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.caseCollision\",\"definition\":null,\"data\":{\"name\":\"StartsDay\",\"collidesWith\":\"startsDay\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10}}"
       }
@@ -907,9 +1021,10 @@
       "example": {
         "excerpt": {
           "file": "stats/stats.ts",
-          "from": 1,
-          "to": 9,
-          "text": "import { service, singleEntity } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Stats = singleEntity({\n  description: \"Statistics of tasks, starting below the minimum\",\n  fields: { completed: z.number().min(1).default(0) },\n});\n\nexport const { command } = service({ name: \"stats\", description: \"Keep the statistics\", entities: { Stats } });"
+          "from": 4,
+          "to": 7,
+          "line": 4,
+          "text": "export const Stats = singleEntity({\n  description: \"Statistics of tasks, starting below the minimum\",\n  fields: { completed: z.number().min(1).default(0) },\n});"
         },
         "violation": "{\"kind\":\"Malformed.defaultSchema\",\"definition\":{\"service\":\"stats\",\"name\":\"Stats\"},\"data\":{},\"location\":{\"file\":\"stats/stats.ts\",\"line\":4},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"completed\"],\"message\":\"Too small: expected number to be >=1\"}]}}"
       }
@@ -919,9 +1034,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
+          "from": 5,
           "to": 5,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\n\nexport const { event } = service({ name: \"todo\", description: \"Keep the tasks\" });\n\nexport const taskAdded = event({});"
+          "line": 5,
+          "text": "export const taskAdded = event({});"
         },
         "violation": "{\"kind\":\"Malformed.duplicateName\",\"definition\":null,\"data\":{\"name\":\"taskAdded\",\"elsewhere\":\"todo/notes.ts\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":5}}"
       }
@@ -931,9 +1047,10 @@
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
-          "from": 1,
-          "to": 10,
-          "text": "import { entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Note = entity({ description: \"A note\", fields: { id: z.string() }, key: \"id\" });\n\nexport const { event } = service({ name: \"todo\", description: \"Keep the tasks\" });\nexport const { command, query } = service({ name: \"todo\", description: \"Keep the notes\", entities: { Note } });\n\nexport const taskAdded = event({});\nexport const writeNote = command({ emits: [] }).decide(() => []);"
+          "from": 7,
+          "to": 7,
+          "line": 7,
+          "text": "export const { command, query } = service({ name: \"todo\", description: \"Keep the notes\", entities: { Note } });"
         },
         "violation": "{\"kind\":\"Malformed.duplicateService\",\"definition\":null,\"data\":{\"name\":\"todo\",\"elsewhere\":\"todo/data.ts\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":7}}"
       }
@@ -943,9 +1060,10 @@
       "example": {
         "excerpt": {
           "file": "reminder/reminder.ts",
-          "from": 1,
+          "from": 15,
           "to": 24,
-          "text": "import { constants, duration, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { machine } = service({ name: \"reminder\", description: \"Remind after a while\" });\n\nexport const reminderConstants = constants({\n  service: \"reminder\",\n  schema: z.object({ remindAfter: duration, nudgeAfter: duration }),\n  values: {\n    remindAfter: \"P1D\",\n    nudgeAfter: \"PT0.0005S\",\n  },\n});\n\nexport const reminder = machine({\n  description: \"Remind a day after it starts, and nudge half a millisecond after that\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {}, done: {} },\n}).chart({\n  states: {\n    waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: \"reminding\" }] } } },\n    reminding: { after: { nudge: { delay: reminderConstants.nudgeAfter, onFired: [{ target: \"done\" }] } } },\n  },\n});"
+          "line": 15,
+          "text": "export const reminder = machine({\n  description: \"Remind a day after it starts, and nudge half a millisecond after that\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {}, done: {} },\n}).chart({\n  states: {\n    waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: \"reminding\" }] } } },\n    reminding: { after: { nudge: { delay: reminderConstants.nudgeAfter, onFired: [{ target: \"done\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.inexactDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"day\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":15}}"
       }
@@ -955,9 +1073,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
-          "to": 22,
-          "text": "import { addTask, scenario, taskCount } from \"./todo.ts\";\n\nexport const placesLineInThen = scenario({\n  description: \"Keep the actors of When and place a line from Then; check reports lineAfterWhen\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ w }),\n  then: ({ w }) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n    return [];\n  },\n});\n\nexport const convertsObserved = scenario({\n  description:\n    \"Write the count that a query line observes into a title as a string; check reports misusedObserved for the line\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const counting = w.client.call(taskCount, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: String(counting.output.count) });\n  },\n  then: () => [],\n});"
+          "from": 3,
+          "to": 11,
+          "line": 3,
+          "text": "export const placesLineInThen = scenario({\n  description: \"Keep the actors of When and place a line from Then; check reports lineAfterWhen\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ w }),\n  then: ({ w }) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n    return [];\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.lineAfterWhen\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"placesLineInThen\"}}"
       }
@@ -967,9 +1086,10 @@
       "example": {
         "excerpt": {
           "file": "todo/contract.ts",
-          "from": 1,
+          "from": 4,
           "to": 4,
-          "text": "import { entity } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"A task\", fields: { id: z.string() }, key: \"id\" });"
+          "line": 4,
+          "text": "export const Task = entity({ description: \"A task\", fields: { id: z.string() }, key: \"id\" });"
         },
         "violation": "{\"kind\":\"Malformed.listedTwice\",\"definition\":null,\"data\":{\"name\":\"Task\",\"services\":[\"notes\",\"todo\"]},\"location\":{\"file\":\"todo/contract.ts\",\"line\":4}}"
       }
@@ -979,9 +1099,10 @@
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
-          "from": 1,
+          "from": 10,
           "to": 14,
-          "text": "import { entity, service, singleEntity } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Settings = singleEntity({\n  description: \"The user's settings\",\n  fields: { theme: z.string().default(\"light\") },\n});\nexport const Task = entity({ description: \"A task\", fields: { id: z.string() }, key: \"id\" });\n\nexport const { command } = service({\n  name: \"todo\",\n  description: \"Keep the tasks\",\n  entities: { settings: Settings, Task },\n});"
+          "line": 10,
+          "text": "export const { command } = service({\n  name: \"todo\",\n  description: \"Keep the tasks\",\n  entities: { settings: Settings, Task },\n});"
         },
         "violation": "{\"kind\":\"Malformed.listedUnderOtherName\",\"definition\":{\"service\":\"todo\",\"name\":\"Settings\"},\"data\":{\"key\":\"settings\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":10}}"
       }
@@ -991,9 +1112,10 @@
       "example": {
         "excerpt": {
           "file": "notes/notes.ts",
-          "from": 1,
-          "to": 23,
-          "text": "import { emit, entity, ref, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Note = entity({\n  description: \"A note, or a reply to the note replyTo names\",\n  fields: { id: z.string(), replyTo: ref.self().nullable() },\n  key: \"id\",\n});\n\nexport const { command, createEvent, contract } = service({\n  name: \"notes\",\n  description: \"Keep notes and their replies\",\n  entities: { Note },\n});\n\nexport const posted = createEvent({ entity: Note });\n\nexport const post = command({\n  input: { noteId: Note.fields.id, replyTo: Note.fields.replyTo, quoted: z.object({ note: ref.self() }) },\n  emits: [posted],\n}).decide(({ input }) => [emit(posted, { id: input.noteId, replyTo: input.replyTo })]);\n\nexport const notes = contract({ post });"
+          "from": 18,
+          "to": 21,
+          "line": 18,
+          "text": "export const post = command({\n  input: { noteId: Note.fields.id, replyTo: Note.fields.replyTo, quoted: z.object({ note: ref.self() }) },\n  emits: [posted],\n}).decide(({ input }) => [emit(posted, { id: input.noteId, replyTo: input.replyTo })]);"
         },
         "violation": "{\"kind\":\"Malformed.misplacedSelfRef\",\"definition\":{\"service\":\"notes\",\"name\":\"post\"},\"data\":{\"path\":[\"input\",\"quoted\",\"note\"]},\"location\":{\"file\":\"notes/notes.ts\",\"line\":18}}"
       }
@@ -1003,9 +1125,10 @@
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
-          "from": 1,
+          "from": 10,
           "to": 10,
-          "text": "import { entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\nimport { Task } from \"./contract.ts\";\n\nexport const Note = entity({ description: \"A note\", fields: { id: z.string() }, key: \"id\" });\n\nexport const { command } = service({ name: \"todo\", description: \"Keep the tasks\", entities: { Task } });\nconst { event } = service({ name: \"todo\", description: \"Keep the notes\" });\n\nexport const noted = event({});"
+          "line": 10,
+          "text": "export const noted = event({});"
         },
         "violation": "{\"kind\":\"Malformed.missingDefiner\",\"definition\":null,\"data\":{\"name\":\"noted\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":10}}"
       }
@@ -1015,9 +1138,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 13,
           "to": 22,
-          "text": "import { addTask, scenario, taskCount } from \"./todo.ts\";\n\nexport const placesLineInThen = scenario({\n  description: \"Keep the actors of When and place a line from Then; check reports lineAfterWhen\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ w }),\n  then: ({ w }) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n    return [];\n  },\n});\n\nexport const convertsObserved = scenario({\n  description:\n    \"Write the count that a query line observes into a title as a string; check reports misusedObserved for the line\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const counting = w.client.call(taskCount, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: String(counting.output.count) });\n  },\n  then: () => [],\n});"
+          "line": 13,
+          "text": "export const convertsObserved = scenario({\n  description:\n    \"Write the count that a query line observes into a title as a string; check reports misusedObserved for the line\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const counting = w.client.call(taskCount, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: String(counting.output.count) });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.misusedObserved\",\"definition\":null,\"data\":{\"use\":\"conversion\",\"path\":[\"count\"]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":13},\"scenario\":{\"service\":\"todo\",\"name\":\"convertsObserved\"}}"
       }
@@ -1027,9 +1151,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
-          "to": 28,
-          "text": "import { bag, constants, service, set, sortedBy } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { query, contract } = service({ name: \"todo\", description: \"Answer the marks\" });\n\nexport const marksWithVisibleCollections = query({\n  output: {\n    tags: bag(z.string()).default([]),\n    days: z.array(sortedBy(z.strictObject({ n: z.int() }), \"n\")).optional(),\n    ids: z.union([set(z.string()), z.null()]),\n  },\n}).resolve(() => ({ tags: [], days: [], ids: null }));\n\nexport const marks = query({\n  output: {\n    tags: z.record(z.string(), bag(z.string())),\n    days: z.tuple([sortedBy(z.strictObject({ n: z.int() }), \"n\")]),\n    ids: set(z.string()).readonly(),\n  },\n}).resolve(() => ({ tags: {}, days: [[{ n: 1 }]], ids: [] }));\n\nexport const todo = contract({ marksWithVisibleCollections, marks });\n\nexport const defaults = constants({\n  service: \"todo\",\n  schema: z.strictObject({ days: z.tuple([set(z.string())]) }),\n  values: { days: [[]] },\n});"
+          "from": 14,
+          "to": 20,
+          "line": 14,
+          "text": "export const marks = query({\n  output: {\n    tags: z.record(z.string(), bag(z.string())),\n    days: z.tuple([sortedBy(z.strictObject({ n: z.int() }), \"n\")]),\n    ids: set(z.string()).readonly(),\n  },\n}).resolve(() => ({ tags: {}, days: [[{ n: 1 }]], ids: [] }));"
         },
         "violation": "{\"kind\":\"Malformed.opaqueCollection\",\"definition\":{\"service\":\"todo\",\"name\":\"marks\"},\"data\":{\"path\":[\"output\",\"tags\"],\"collection\":\"bag\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
       }
@@ -1039,9 +1164,10 @@
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
-          "from": 1,
-          "to": 5,
-          "text": "import { service, unchecked } from \"@natsuzora-dev/tazuna\";\n\nexport const { event } = service(unchecked({ name: \"todo.tasks\", description: \"Keep the tasks\" }));\n\nexport const taskAdded = event({});"
+          "from": 3,
+          "to": 3,
+          "line": 3,
+          "text": "export const { event } = service(unchecked({ name: \"todo.tasks\", description: \"Keep the tasks\" }));"
         },
         "violation": "{\"kind\":\"Malformed.reservedNameCharacter\",\"definition\":null,\"data\":{\"name\":\"todo.tasks\",\"character\":\".\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":3}}"
       }
@@ -1051,9 +1177,10 @@
       "example": {
         "excerpt": {
           "file": "app/app.ts",
-          "from": 1,
+          "from": 6,
           "to": 16,
-          "text": "import { service } from \"@natsuzora-dev/tazuna\";\nimport { device } from \"../device/contract.ts\";\n\nexport const { machine } = service({ name: \"app\", description: \"Play a sound, then mute the device\" });\n\nexport const player = machine({\n  description: \"Play a sound, then mute the device\",\n  commands: { playSound: device.playSound, mute: device.mute },\n  initial: \"playing\",\n  states: { playing: {}, muting: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    playing: { sends: { playSound: { onAccepted: [{ target: \"muting\" }], onRejected: [{ target: \"done\" }] } } },\n    muting: { sends: { mute: { onAccepted: [{ target: \"done\" }], onRejected: [{ target: \"done\" }] } } },\n  },\n});"
+          "line": 6,
+          "text": "export const player = machine({\n  description: \"Play a sound, then mute the device\",\n  commands: { playSound: device.playSound, mute: device.mute },\n  initial: \"playing\",\n  states: { playing: {}, muting: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    playing: { sends: { playSound: { onAccepted: [{ target: \"muting\" }], onRejected: [{ target: \"done\" }] } } },\n    muting: { sends: { mute: { onAccepted: [{ target: \"done\" }], onRejected: [{ target: \"done\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.unexportedDefinition\",\"definition\":{\"service\":\"app\",\"name\":\"player\"},\"data\":{\"path\":[\"commands\",\"mute\"]},\"location\":{\"file\":\"app/app.ts\",\"line\":6}}"
       }
@@ -1063,9 +1190,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 7,
           "to": 22,
-          "text": "import { external, skip, unchecked } from \"@natsuzora-dev/tazuna\";\nimport { calendar } from \"../calendar/contract.ts\";\nimport { notifier } from \"../notifier/contract.ts\";\nimport { todo } from \"./contract.ts\";\nimport { addTask, scenario } from \"./todo.ts\";\n\nexport const listsUnknownPeers = scenario({\n  description:\n    \"List todo itself and an object that is no contract as peers; check reports unknownPeer for each, the latter with a null service\",\n  given: {\n    start: \"2026-10-25T10:00:00+09:00\",\n    records: { Task: [] },\n    peers: [\n      external(calendar),\n      skip(notifier, \"notifier's reactions are its own scenarios\"),\n      unchecked(skip(todo, \"todo is the own service\")),\n      skip(unchecked({}), \"no service\"),\n    ],\n  },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: () => [],\n});"
+          "line": 7,
+          "text": "export const listsUnknownPeers = scenario({\n  description:\n    \"List todo itself and an object that is no contract as peers; check reports unknownPeer for each, the latter with a null service\",\n  given: {\n    start: \"2026-10-25T10:00:00+09:00\",\n    records: { Task: [] },\n    peers: [\n      external(calendar),\n      skip(notifier, \"notifier's reactions are its own scenarios\"),\n      unchecked(skip(todo, \"todo is the own service\")),\n      skip(unchecked({}), \"no service\"),\n    ],\n  },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.unknownPeer\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":7},\"scenario\":{\"service\":\"todo\",\"name\":\"listsUnknownPeers\"}}"
       }
@@ -1075,9 +1203,10 @@
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
-          "from": 1,
-          "to": 12,
-          "text": "import { constants, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const { event } = service({ name: \"todo\", description: \"Keep the tasks\" });\n\nexport const todoConstants = constants({\n  service: \"tasks\",\n  schema: z.object({ limit: z.int() }),\n  values: { limit: 10 },\n});\n\nexport const taskAdded = event({});"
+          "from": 6,
+          "to": 10,
+          "line": 6,
+          "text": "export const todoConstants = constants({\n  service: \"tasks\",\n  schema: z.object({ limit: z.int() }),\n  values: { limit: 10 },\n});"
         },
         "violation": "{\"kind\":\"Malformed.unknownService\",\"definition\":null,\"data\":{\"name\":\"tasks\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":6}}"
       }
@@ -1087,9 +1216,10 @@
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
-          "from": 1,
-          "to": 10,
-          "text": "import { entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\nimport { Task } from \"./contract.ts\";\n\nexport const Note = entity({ description: \"A note\", fields: { id: z.string() }, key: \"id\" });\n\nexport const { command } = service({ name: \"todo\", description: \"Keep the tasks\", entities: { Task } });\nconst { event } = service({ name: \"todo\", description: \"Keep the notes\" });\n\nexport const noted = event({});"
+          "from": 5,
+          "to": 5,
+          "line": 5,
+          "text": "export const Note = entity({ description: \"A note\", fields: { id: z.string() }, key: \"id\" });"
         },
         "violation": "{\"kind\":\"Malformed.unlistedEntity\",\"definition\":null,\"data\":{\"name\":\"Note\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":5}}"
       }
@@ -1102,9 +1232,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 3,
           "to": 16,
-          "text": "import { scenario, taskCount } from \"./todo.ts\";\n\nexport const countAtEachTime = scenario({\n  description:\n    \"Count at a time with ten fraction digits, at a time with a part below a millisecond, and at a time with zeros below a millisecond; the first two are unparsable\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-10-25T09:02:00.1234567891+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:03:00.0009+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:04:00.001000+09:00\");\n    w.client.call(taskCount, {});\n  },\n  then: () => [],\n});"
+          "line": 8,
+          "text": "export const countAtEachTime = scenario({\n  description:\n    \"Count at a time with ten fraction digits, at a time with a part below a millisecond, and at a time with zeros below a millisecond; the first two are unparsable\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-10-25T09:02:00.1234567891+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:03:00.0009+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:04:00.001000+09:00\");\n    w.client.call(taskCount, {});\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.unparsableTime\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"countAtEachTime\"}}"
       }
@@ -1116,6 +1247,7 @@
           "file": "todo/todo.ts",
           "from": 8,
           "to": 23,
+          "line": 8,
           "text": "export const taskAdded = event({\n  payload: {\n    at: datetime,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    length: z.string().transform((s) => s.length),\n    trimmed: z.string().pipe(z.string().trim()),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.unrepresentableSchema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"count\"],\"type\":\"bigint\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8}}"
@@ -1126,9 +1258,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
-          "to": 23,
-          "text": "import { addTask, scenario } from \"./todo.ts\";\n\nexport const givenCreatedKey = scenario({\n  description:\n    \"Given holds a task under todo/Task-1, the form of the first key that todo creates for Task, so loading reports writtenCreatedKey at the scenario\",\n  given: {\n    start: \"2026-10-25T10:00:00+09:00\",\n    records: { Task: [{ id: \"todo/Task-1\", title: \"Buy milk\" }] },\n    peers: [],\n  },\n  when: () => ({}),\n  then: () => [],\n});\n\nexport const sentCreatedKey = scenario({\n  description:\n    \"The client sends todo/Task-2 as a task id, the form of a key that todo creates, so loading reports writtenCreatedKey at the line\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"todo/Task-2\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
+          "from": 3,
+          "to": 13,
+          "line": 3,
+          "text": "export const givenCreatedKey = scenario({\n  description:\n    \"Given holds a task under todo/Task-1, the form of the first key that todo creates for Task, so loading reports writtenCreatedKey at the scenario\",\n  given: {\n    start: \"2026-10-25T10:00:00+09:00\",\n    records: { Task: [{ id: \"todo/Task-1\", title: \"Buy milk\" }] },\n    peers: [],\n  },\n  when: () => ({}),\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.writtenCreatedKey\",\"definition\":null,\"data\":{\"key\":\"todo/Task-1\",\"entity\":{\"service\":\"todo\",\"name\":\"Task\"}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"givenCreatedKey\"}}"
       }
@@ -1140,9 +1273,11 @@
           "file": "grouper/grouper.ts",
           "from": 34,
           "to": 48,
+          "line": 34,
           "text": "export const marker = machine({\n  description: \"Send mark at 10:00 once armed\",\n  receives: { armed },\n  commands: { mark },\n  initial: \"idle\",\n  states: { idle: {}, waiting: {}, sending: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    idle: { on: { armed: [{ target: \"waiting\" }] } },\n    waiting,\n    sending: {\n      sends: { mark: { input: () => ({}), onAccepted: [{ target: \"done\" }], onRejected: [{ target: \"done\" }] } },\n    },\n  },\n});"
         },
-        "violation": "{\"kind\":\"ChoiceDependent.stepOrder\",\"definition\":{\"service\":\"grouper\",\"name\":\"marker\"},\"data\":{\"firstStep\":{\"kind\":\"deadline\",\"id\":{\"kind\":\"top\",\"chart\":\"marker\"},\"state\":\"waiting\",\"name\":\"due\"},\"secondStep\":{\"kind\":\"deadline\",\"id\":{\"kind\":\"top\",\"chart\":\"pairer\"},\"state\":\"waiting\",\"name\":\"due\"},\"originalOrder\":[],\"alternativeOrder\":[{\"kind\":\"deadline\",\"id\":{\"kind\":\"top\",\"chart\":\"pairer\"},\"state\":\"waiting\",\"name\":\"due\"},{\"kind\":\"deadline\",\"id\":{\"kind\":\"top\",\"chart\":\"marker\"},\"state\":\"waiting\",\"name\":\"due\"}],\"difference\":{\"aspect\":\"outputs\",\"mismatch\":{\"kind\":\"Mismatch.after\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"paired\",\"id\":\"paired#2\"},\"snapshot\":[],\"trace\":[\"paired#1\"]}}}},\"location\":{\"file\":\"grouper/grouper.ts\",\"line\":34},\"scenario\":{\"service\":\"grouper\",\"name\":\"pairAtTen\"}}"
+        "violation": "{\"kind\":\"Mismatch.after\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"paired\",\"id\":\"paired#2\"},\"snapshot\":[],\"trace\":[\"paired#1\"]}}",
+        "within": "ChoiceDependent.stepOrder"
       }
     },
     "Mismatch.answerOutputSchema": {
@@ -1152,6 +1287,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 2,
           "to": 2,
+          "line": 2,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"invalid_format\",\"format\":\"datetime\",\"pattern\":\"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\"path\":[\"day\"],\"message\":\"Invalid ISO datetime\"}]}}"
@@ -1164,6 +1300,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 2,
           "to": 2,
+          "line": 2,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"c1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{}}}"
         },
         "violation": "{\"kind\":\"Mismatch.answerResult\",\"definition\":null,\"data\":{\"requestId\":\"c1\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"},\"result\":\"fulfilled\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
@@ -1176,6 +1313,7 @@
           "file": "traces/todo/addThreeWrongEvents.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e2\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"}"
         },
         "violation": "{\"kind\":\"Mismatch.event\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e2\"},\"snapshot\":{\"taskId\":\"task-1\",\"title\":\"Buy milk\"},\"trace\":{\"taskId\":\"task-1\",\"title\":\"Buy eggs\"}},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
@@ -1188,6 +1326,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 7,
           "to": 7,
+          "line": 7,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e7\",\"name\":\"booked\",\"resultOf\":\"c3\",\"payload\":{\"day\":1}}"
         },
         "violation": "{\"kind\":\"Mismatch.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":7},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"string\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected string, received number\"}]}}"
@@ -1200,6 +1339,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 2,
           "to": 2,
+          "line": 2,
           "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-25T00:00:00Z\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.failedAssumedEnsures\",\"definition\":null,\"data\":{\"requestId\":\"q1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"afterFrom\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
@@ -1212,6 +1352,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 10,
           "to": 10,
+          "line": 10,
           "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#4\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-24T00:00:00Z\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.failedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"isWeekday\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":10}}"
@@ -1224,6 +1365,7 @@
           "file": "todo/__snapshots__/addOneEdited.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"}"
         },
         "violation": "{\"kind\":\"Mismatch.line\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"},\"trace\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy milk\"},\"resultOf\":\"addTask#1\"}},\"location\":{\"file\":\"todo/__snapshots__/addOneEdited.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneEdited\"}}"
@@ -1236,6 +1378,7 @@
           "file": "traces/todo/addTwice.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"scheduled#1\",\"name\":\"scheduled\",\"payload\":{\"taskId\":\"task-1\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.lineOrder\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"scheduled\",\"id\":\"scheduled#1\"},\"before\":{\"type\":\"event\",\"name\":\"logged\",\"id\":\"logged#1\"}},\"location\":{\"file\":\"traces/todo/addTwice.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwice\"}}"
@@ -1248,6 +1391,7 @@
           "file": "traces/todo/addOneUnanswered.jsonl",
           "from": 1,
           "to": 1,
+          "line": 1,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#1\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\",\"title\":\"Buy milk\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.missingAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#1\"},\"snapshotLine\":3},\"location\":{\"file\":\"traces/todo/addOneUnanswered.jsonl\",\"line\":1},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnanswered\"}}"
@@ -1260,6 +1404,7 @@
           "file": "traces/screens/filterAndCloseWrongSubscriptions.jsonl",
           "from": 2,
           "to": 2,
+          "line": 2,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"operation\",\"id\":\"taskListScreen.filter#1\",\"name\":\"taskListScreen.filter\",\"payload\":{\"prefix\":\"Buy\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"unsubscribe\",\"to\":\"todo.tasksNamed#1\"},\"content\":null,\"snapshotLine\":3},\"location\":{\"file\":\"traces/screens/filterAndCloseWrongSubscriptions.jsonl\",\"line\":2},\"scenario\":{\"service\":\"screens\",\"name\":\"filterAndCloseWrongSubscriptions\"}}"
@@ -1272,6 +1417,7 @@
           "file": "traces/todo/addOneOperated.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"operation\",\"id\":\"taskScreen.open#1\",\"name\":\"taskScreen.open\",\"payload\":{\"taskId\":\"task-2\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.operation\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"operation\",\"name\":\"taskScreen.open\",\"id\":\"taskScreen.open#1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/todo/addOneOperated.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneOperated\"}}"
@@ -1284,6 +1430,7 @@
           "file": "traces/todo/addOneFulfilled.jsonl",
           "from": 2,
           "to": 2,
+          "line": 2,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"addTask#1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"count\":2}}}"
         },
         "violation": "{\"kind\":\"Mismatch.output\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#1\"},\"snapshot\":{\"result\":\"fulfilled\",\"output\":{\"count\":1}},\"trace\":{\"result\":\"fulfilled\",\"output\":{\"count\":2}}},\"location\":{\"file\":\"traces/todo/addOneFulfilled.jsonl\",\"line\":2},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneFulfilled\"}}"
@@ -1296,6 +1443,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"q2\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"isWeekday\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.rejectedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"q2\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":4}}"
@@ -1308,6 +1456,7 @@
           "file": "traces/todo/answersWrongResults.jsonl",
           "from": 7,
           "to": 7,
+          "line": 7,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"completeTask#1\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"notDone\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.rejection\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#1\"},\"snapshot\":\"not-found\",\"trace\":\"requires\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":7},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
@@ -1320,6 +1469,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 17,
           "to": 17,
+          "line": 17,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#6\",\"to\":\"c5\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"unavailable\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.repeatedAnswer\",\"definition\":null,\"data\":{\"requestId\":\"c5\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":17}}"
@@ -1332,6 +1482,7 @@
           "file": "traces/screens/filterAndCloseWrongSubscriptions.jsonl",
           "from": 1,
           "to": 1,
+          "line": 1,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s1\",\"name\":\"todo.tasksNamed\",\"input\":{\"prefix\":\"x\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.request\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.tasksNamed\",\"id\":\"s1\"},\"snapshot\":{\"prefix\":\"\"},\"trace\":{\"prefix\":\"x\"}},\"location\":{\"file\":\"traces/screens/filterAndCloseWrongSubscriptions.jsonl\",\"line\":1},\"scenario\":{\"service\":\"screens\",\"name\":\"filterAndCloseWrongSubscriptions\"}}"
@@ -1344,6 +1495,7 @@
           "file": "traces/todo/addOneEdited.jsonl",
           "from": 3,
           "to": 3,
+          "line": 3,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"addTask#1\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"already-exists\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.result\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#1\"},\"snapshot\":\"accepted\",\"trace\":\"rejected\"},\"location\":{\"file\":\"traces/todo/addOneEdited.jsonl\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneEdited\"}}"
@@ -1356,6 +1508,7 @@
           "file": "traces/todo/addThreeWrongEvents.jsonl",
           "from": 8,
           "to": 8,
+          "line": 8,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#2\"}"
         },
         "violation": "{\"kind\":\"Mismatch.resultOf\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e4\"},\"snapshot\":null,\"trace\":\"addTask#2\"},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
@@ -1368,6 +1521,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e5\",\"name\":\"booked\",\"resultOf\":\"c1\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.resultOfUnacceptedRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"c1\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":4}}"
@@ -1380,6 +1534,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 7,
           "to": 7,
+          "line": 7,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e6\",\"name\":\"cancelled\",\"resultOf\":\"c2\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.resultOfUnlistedEvent\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"cancelled\"},\"requestId\":\"c2\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":7}}"
@@ -1392,6 +1547,7 @@
           "file": "traces/todo/addOneReordered.jsonl",
           "from": 5,
           "to": 5,
+          "line": 5,
           "text": "{\"time\":\"2026-10-25T00:00:05Z\",\"dir\":\"out\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":\"2026-10-25T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"snapshot\":\"2026-10-25T00:00:00Z\",\"trace\":\"2026-10-25T00:00:05Z\"},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneReordered\"}}"
@@ -1404,6 +1560,7 @@
           "file": "traces/todo/addThreeWrongEvents.jsonl",
           "from": 11,
           "to": 11,
+          "line": 11,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e9\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\",\"title\":\"Buy tea\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.unexpectedLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e9\"}},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
@@ -1416,6 +1573,7 @@
           "file": "traces/screens/filterAndCloseWrongSubscriptions.jsonl",
           "from": 6,
           "to": 6,
+          "line": 6,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s9\",\"name\":\"todo.tasksNamed\",\"input\":{\"prefix\":\"\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.unexpectedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.tasksNamed\",\"id\":\"s9\"},\"content\":{\"prefix\":\"\"}},\"location\":{\"file\":\"traces/screens/filterAndCloseWrongSubscriptions.jsonl\",\"line\":6},\"scenario\":{\"service\":\"screens\",\"name\":\"filterAndCloseWrongSubscriptions\"}}"
@@ -1428,6 +1586,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 1,
           "to": 1,
+          "line": 1,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e2\",\"name\":\"audited\",\"payload\":{\"count\":0}}"
         },
         "violation": "{\"kind\":\"Mismatch.unlistedEvent\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"audited\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
@@ -1440,6 +1599,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"q4\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"not-found\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.unlistedRejectionKind\",\"definition\":null,\"data\":{\"requestId\":\"q4\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"rejection\":{\"kind\":\"not-found\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":4}}"
@@ -1452,6 +1612,7 @@
           "file": "traces/screens/draftAndOpenWrongKeys.jsonl",
           "from": 1,
           "to": 1,
+          "line": 1,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s1\",\"name\":\"todo.notesIn\",\"input\":{\"ids\":[\"\",\"\"]}}"
         },
         "violation": "{\"kind\":\"Mismatch.unopenedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.notesNamed\",\"id\":\"todo.notesNamed#1\"},\"content\":{\"prefix\":\"\"},\"snapshotLine\":2},\"location\":{\"file\":\"traces/screens/draftAndOpenWrongKeys.jsonl\",\"line\":1},\"scenario\":{\"service\":\"screens\",\"name\":\"draftAndOpenWrongKeys\"}}"
@@ -1464,6 +1625,7 @@
           "file": "todo/scenarios.ts",
           "from": 5,
           "to": 26,
+          "line": 10,
           "text": "export const writesAnswerLiterals = scenario({\n  description: \"Write each answer as an object literal; check reports answerLiteral for each\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [external(payments)] },\n  when: (w) => {\n    w.net.deliver(\n      w.peer.payments.answer(w.startup.request(payments.createCharge), {\n        result: \"accepted\",\n        output: { chargeId: \"ch_1\" },\n      }),\n    );\n    return {\n      adding: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }),\n      rejectedAdding: w.client.send(addTask, { taskId: \"task-2\", title: \"\" }),\n      counting: w.client.call(taskCount, {}),\n    };\n  },\n  then: ({ adding, rejectedAdding, counting }) => [\n    answered(adding, { result: \"accepted\" }),\n    answered(rejectedAdding, { result: \"rejected\" as const, rejection: { kind: \"invalid-input\" } }),\n    answered(counting, { result: \"fulfilled\", output: { count: 0 } }),\n  ],\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.answerLiteral\",\"definition\":null,\"data\":{\"result\":\"accepted\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10}}"
@@ -1476,6 +1638,7 @@
           "file": "screens/screens.ts",
           "from": 6,
           "to": 33,
+          "line": 12,
           "text": "export const pickScreen = screen({\n  description: \"Pick a title, writing constant offers as functions, methods, and parenthesized arrays\",\n  controls: { close: { label: \"Close\" }, pick: { label: \"Pick\", payload: { title: z.string() } } },\n  initial: \"open\",\n  states: { open: {}, picked: {}, done: {} },\n}).chart({\n  offers: { close: () => [{}], pick: () => [] },\n  states: {\n    open: {\n      offers: { close: any, pick: () => [{ title: \"Buy milk\" }] },\n      on: { pick: [{ target: \"picked\" }], close: [{ target: \"done\" }] },\n    },\n    picked: {\n      offers: {\n        close: () => [],\n        pick: ({ shown }) => (Object.keys(shown).length === 0 ? [{ title: \"Buy bread\" }] : []),\n      },\n    },\n    done: {\n      offers: {\n        close() {\n          return [];\n        },\n        pick: () => [],\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.constantOffer\",\"definition\":{\"service\":\"screens\",\"name\":\"pickScreen\"},\"data\":{\"state\":null,\"control\":\"close\",\"marker\":\"any\"},\"location\":{\"file\":\"screens/screens.ts\",\"line\":12}}"
@@ -1488,6 +1651,7 @@
           "file": "todo/todo.ts",
           "from": 4,
           "to": 9,
+          "line": 8,
           "text": "export const Task = entity({\n  description: \"A task\",\n  fields: { id: z.string(), title: z.string() },\n  key: \"id\",\n  invariants: {},\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.emptyKeyword\",\"definition\":{\"service\":\"todo\",\"name\":\"Task\"},\"data\":{\"path\":[\"invariants\"]},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8}}"
@@ -1498,9 +1662,10 @@
       "example": {
         "excerpt": {
           "file": "notifier/notifier.ts",
-          "from": 1,
+          "from": 14,
           "to": 17,
-          "text": "import { emit, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\nimport { todo } from \"../todo/contract.ts\";\n\nexport const { automation, command, event } = service({ name: \"notifier\", description: \"Notify about tasks\" });\n\nexport const followUpAdded = event({ payload: { taskId: z.string() } });\n\nexport const addFollowUp = command({\n  input: { taskId: z.string() },\n  emits: [followUpAdded],\n}).decide(({ input }) => [emit(followUpAdded, { taskId: input.taskId })]);\n\nexport const addTaskForFollowUp = automation({\n  receives: { followUpAdded },\n  commands: { addTask: todo.addTask },\n}).send({ input: ({ payload }) => ({ taskId: `${payload.taskId}-follow-up` }) });"
+          "line": 14,
+          "text": "export const addTaskForFollowUp = automation({\n  receives: { followUpAdded },\n  commands: { addTask: todo.addTask },\n}).send({ input: ({ payload }) => ({ taskId: `${payload.taskId}-follow-up` }) });"
         },
         "violation": "{\"kind\":\"NonCanonical.missingOnRejected\",\"definition\":{\"service\":\"notifier\",\"name\":\"addTaskForFollowUp\"},\"data\":{},\"location\":{\"file\":\"notifier/notifier.ts\",\"line\":14}}"
       }
@@ -1512,6 +1677,7 @@
           "file": "todo/todo.ts",
           "from": 33,
           "to": 45,
+          "line": 33,
           "text": "export const flow = machine({\n  description: \"Count the added tasks in turn, writing reenter where it must not and leaving it out where it must\",\n  receives: { taskAdded },\n  initial: \"idle\",\n  states: { idle: {}, busy: { initial: \"first\", states: { first: {} } } },\n}).chart({\n  on: { taskAdded: [{ target: \"idle\", reenter: true }] },\n  states: {\n    idle: { on: { taskAdded: [{ target: \"busy\", reenter: true }] } },\n    busy: { on: { taskAdded: [{ target: \"busy\" }] } },\n    first: { on: { taskAdded: [{ target: \"busy\", reenter: false }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.missingReenter\",\"definition\":{\"service\":\"todo\",\"name\":\"flow\"},\"data\":{\"transition\":{\"state\":\"busy\",\"trigger\":{\"type\":\"on\",\"key\":\"taskAdded\"},\"index\":0}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":33}}"
@@ -1524,6 +1690,7 @@
           "file": "todo/todo.ts",
           "from": 33,
           "to": 45,
+          "line": 33,
           "text": "export const flow = machine({\n  description: \"Count the added tasks in turn, writing reenter where it must not and leaving it out where it must\",\n  receives: { taskAdded },\n  initial: \"idle\",\n  states: { idle: {}, busy: { initial: \"first\", states: { first: {} } } },\n}).chart({\n  on: { taskAdded: [{ target: \"idle\", reenter: true }] },\n  states: {\n    idle: { on: { taskAdded: [{ target: \"busy\", reenter: true }] } },\n    busy: { on: { taskAdded: [{ target: \"busy\" }] } },\n    first: { on: { taskAdded: [{ target: \"busy\", reenter: false }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.reenterOnRoot\",\"definition\":{\"service\":\"todo\",\"name\":\"flow\"},\"data\":{\"transition\":{\"state\":null,\"trigger\":{\"type\":\"on\",\"key\":\"taskAdded\"},\"index\":0}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":33}}"
@@ -1536,6 +1703,7 @@
           "file": "todo/todo.ts",
           "from": 33,
           "to": 45,
+          "line": 33,
           "text": "export const flow = machine({\n  description: \"Count the added tasks in turn, writing reenter where it must not and leaving it out where it must\",\n  receives: { taskAdded },\n  initial: \"idle\",\n  states: { idle: {}, busy: { initial: \"first\", states: { first: {} } } },\n}).chart({\n  on: { taskAdded: [{ target: \"idle\", reenter: true }] },\n  states: {\n    idle: { on: { taskAdded: [{ target: \"busy\", reenter: true }] } },\n    busy: { on: { taskAdded: [{ target: \"busy\" }] } },\n    first: { on: { taskAdded: [{ target: \"busy\", reenter: false }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.reenterOutsideSource\",\"definition\":{\"service\":\"todo\",\"name\":\"flow\"},\"data\":{\"transition\":{\"state\":\"idle\",\"trigger\":{\"type\":\"on\",\"key\":\"taskAdded\"},\"index\":0}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":33}}"
@@ -1548,6 +1716,7 @@
           "file": "todo/todo.ts",
           "from": 48,
           "to": 63,
+          "line": 48,
           "text": "export const announcer = machine({\n  description: \"Show a notification for each added task\",\n  receives: { taskAdded },\n  commands: { showNotification: device.showNotification },\n  initial: \"announcing\",\n  states: { announcing: {} },\n}).chart({\n  states: {\n    announcing: {\n      on: { taskAdded: [{ target: \"announcing\", reenter: true }] },\n      sends: {\n        showNotification: { input: () => ({ text: \"A task was added\" }), onAccepted: [], onRejected: [] },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.statelessMachine\",\"definition\":{\"service\":\"todo\",\"name\":\"announcer\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":48}}"
@@ -1558,9 +1727,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
-          "to": 21,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, createEvent, machine, contract } = service({\n  name: \"todo\",\n  description: \"\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);\n\nexport const tracker = machine({ description: \"\", initial: \"idle\", states: { idle: {} } }).chart({});\n\nexport const todo = contract({ addTask });"
+          "from": 4,
+          "to": 4,
+          "line": 4,
+          "text": "export const Task = entity({ description: \"\", fields: { id: z.string(), title: z.string() }, key: \"id\" });"
         },
         "violation": "{\"kind\":\"NonCanonical.undescribedDefinition\",\"definition\":{\"service\":\"todo\",\"name\":\"Task\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":4}}"
       }
@@ -1570,9 +1740,10 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 1,
-          "to": 21,
-          "text": "import { emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const Task = entity({ description: \"\", fields: { id: z.string(), title: z.string() }, key: \"id\" });\n\nexport const { command, createEvent, machine, contract } = service({\n  name: \"todo\",\n  description: \"\",\n  entities: { Task },\n});\n\nexport const taskAdded = createEvent({ entity: Task });\n\nexport const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);\n\nexport const tracker = machine({ description: \"\", initial: \"idle\", states: { idle: {} } }).chart({});\n\nexport const todo = contract({ addTask });"
+          "from": 6,
+          "to": 10,
+          "line": 6,
+          "text": "export const { command, createEvent, machine, contract } = service({\n  name: \"todo\",\n  description: \"\",\n  entities: { Task },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.undescribedService\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":6}}"
       }
@@ -1584,6 +1755,7 @@
           "file": "todo/todo.ts",
           "from": 31,
           "to": 31,
+          "line": 31,
           "text": "export const titleLengthMax = 80;"
         },
         "violation": "{\"kind\":\"NonCanonical.ungroupedConstant\",\"definition\":null,\"data\":{\"name\":\"titleLengthMax\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":31}}"
@@ -1596,6 +1768,7 @@
           "file": "todo/todo.ts",
           "from": 20,
           "to": 23,
+          "line": 20,
           "text": "export const countAdded = automation({\n  receives: { taskAdded },\n  commands: { countTask },\n}).send({ input: ({ payload }) => ({ taskId: payload.taskId }), onRejected: [] });"
         },
         "violation": "{\"kind\":\"NonCanonical.unreachableOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"countAdded\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":20}}"
@@ -1608,6 +1781,7 @@
           "file": "todo/todo.ts",
           "from": 26,
           "to": 30,
+          "line": 26,
           "text": "export const deleteTask = command({\n  input: { taskId: ref(Task) },\n  emits: [taskDeleted],\n  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },\n}).decide(({ input }) => [emit(taskDeleted, { id: input.taskId })]);"
         },
         "violation": "{\"kind\":\"NonCanonical.unreadBinding\",\"definition\":{\"service\":\"todo\",\"name\":\"deleteTask\"},\"data\":{\"binding\":\"task\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":26}}"
@@ -1618,9 +1792,10 @@
       "example": {
         "excerpt": {
           "file": "todo/environment.ts",
-          "from": 1,
-          "to": 25,
-          "text": "let added = 0;\nvar last = \"\";\nconst T = Temporal;\nconst M = Math;\n\nexport const record = (title: string) => {\n  added += 1;\n  const previous = last;\n  last = title;\n  return { added, previous };\n};\n\nexport const sorted = (titles: readonly string[]) => titles.toSorted((a, b) => a.localeCompare(b));\n\nexport const formatted = (n: number) => new Intl.NumberFormat(\"ja-JP\").format(n);\n\nexport const clocks = () => [T.Now.instant(), M.random(), Temporal.Instant.from(\"2026-10-25T00:00:00Z\")];\n\nexport const shown = (count: number, at: Date, title: string) => [\n  count.toLocaleString(),\n  at.toLocaleDateString(),\n  at.toLocaleTimeString(),\n  title.toLocaleUpperCase(),\n  title.toLocaleLowerCase(),\n];"
+          "from": 3,
+          "to": 3,
+          "line": 3,
+          "text": "const T = Temporal;"
         },
         "violation": "{\"kind\":\"Restricted.alias\",\"definition\":null,\"data\":{\"object\":\"Temporal\"},\"location\":{\"file\":\"todo/environment.ts\",\"line\":3}}"
       }
@@ -1632,6 +1807,7 @@
           "file": "todo/todo.ts",
           "from": 32,
           "to": 35,
+          "line": 35,
           "text": "export const addTaskAsString = command({\n  input: { taskId: Task.fields.id, title: z.enum(titles) },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title as string, note: null })]);"
         },
         "violation": "{\"kind\":\"Restricted.as\",\"definition\":null,\"data\":{\"type\":\"string\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":35}}"
@@ -1642,9 +1818,10 @@
       "example": {
         "excerpt": {
           "file": "announcer/announcer.ts",
-          "from": 1,
-          "to": 16,
-          "text": "import { emit, service } from \"@natsuzora-dev/tazuna\";\nimport { Task } from \"../todo/todo.ts\";\n\nexport const { command, event, contract } = service({\n  name: \"announcer\",\n  description: \"Announce tasks, importing the todo entity from a file of todo\",\n});\n\nexport const announced = event({ payload: { taskId: Task.fields.id } });\n\nexport const announce = command({\n  input: { taskId: Task.fields.id },\n  emits: [announced],\n}).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);\n\nexport const announcer = contract({ announce, announced });"
+          "from": 2,
+          "to": 2,
+          "line": 2,
+          "text": "import { Task } from \"../todo/todo.ts\";"
         },
         "violation": "{\"kind\":\"Restricted.crossServiceImport\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"announcer/announcer.ts\",\"line\":2}}"
       }
@@ -1654,9 +1831,10 @@
       "example": {
         "excerpt": {
           "file": "todo/stamps.ts",
-          "from": 1,
+          "from": 16,
           "to": 16,
-          "text": "const { random } = Math;\nconst { Now } = Temporal;\n\nexport const stamps = () => [\n  Date.now(),\n  new Date(),\n  performance.now(),\n  process.argv,\n  globalThis.Date,\n  Math[\"random\"](),\n  random(),\n  Now.instant(),\n  crypto.randomUUID(),\n];\n\nexport const loadCrypto = () => import(\"node:crypto\");"
+          "line": 16,
+          "text": "export const loadCrypto = () => import(\"node:crypto\");"
         },
         "violation": "{\"kind\":\"Restricted.cryptoImport\",\"definition\":null,\"data\":{\"module\":\"node:crypto\"},\"location\":{\"file\":\"todo/stamps.ts\",\"line\":16}}"
       }
@@ -1666,9 +1844,10 @@
       "example": {
         "excerpt": {
           "file": "todo/environment.ts",
-          "from": 1,
-          "to": 25,
-          "text": "let added = 0;\nvar last = \"\";\nconst T = Temporal;\nconst M = Math;\n\nexport const record = (title: string) => {\n  added += 1;\n  const previous = last;\n  last = title;\n  return { added, previous };\n};\n\nexport const sorted = (titles: readonly string[]) => titles.toSorted((a, b) => a.localeCompare(b));\n\nexport const formatted = (n: number) => new Intl.NumberFormat(\"ja-JP\").format(n);\n\nexport const clocks = () => [T.Now.instant(), M.random(), Temporal.Instant.from(\"2026-10-25T00:00:00Z\")];\n\nexport const shown = (count: number, at: Date, title: string) => [\n  count.toLocaleString(),\n  at.toLocaleDateString(),\n  at.toLocaleTimeString(),\n  title.toLocaleUpperCase(),\n  title.toLocaleLowerCase(),\n];"
+          "from": 15,
+          "to": 15,
+          "line": 15,
+          "text": "export const formatted = (n: number) => new Intl.NumberFormat(\"ja-JP\").format(n);"
         },
         "violation": "{\"kind\":\"Restricted.global\",\"definition\":null,\"data\":{\"global\":\"Intl\"},\"location\":{\"file\":\"todo/environment.ts\",\"line\":15}}"
       }
@@ -1678,9 +1857,10 @@
       "example": {
         "excerpt": {
           "file": "todo/environment.ts",
-          "from": 1,
-          "to": 25,
-          "text": "let added = 0;\nvar last = \"\";\nconst T = Temporal;\nconst M = Math;\n\nexport const record = (title: string) => {\n  added += 1;\n  const previous = last;\n  last = title;\n  return { added, previous };\n};\n\nexport const sorted = (titles: readonly string[]) => titles.toSorted((a, b) => a.localeCompare(b));\n\nexport const formatted = (n: number) => new Intl.NumberFormat(\"ja-JP\").format(n);\n\nexport const clocks = () => [T.Now.instant(), M.random(), Temporal.Instant.from(\"2026-10-25T00:00:00Z\")];\n\nexport const shown = (count: number, at: Date, title: string) => [\n  count.toLocaleString(),\n  at.toLocaleDateString(),\n  at.toLocaleTimeString(),\n  title.toLocaleUpperCase(),\n  title.toLocaleLowerCase(),\n];"
+          "from": 13,
+          "to": 13,
+          "line": 13,
+          "text": "export const sorted = (titles: readonly string[]) => titles.toSorted((a, b) => a.localeCompare(b));"
         },
         "violation": "{\"kind\":\"Restricted.localeMethod\",\"definition\":null,\"data\":{\"method\":\"localeCompare\"},\"location\":{\"file\":\"todo/environment.ts\",\"line\":13}}"
       }
@@ -1691,8 +1871,9 @@
         "excerpt": {
           "file": "todo/stamps.ts",
           "from": 1,
-          "to": 16,
-          "text": "const { random } = Math;\nconst { Now } = Temporal;\n\nexport const stamps = () => [\n  Date.now(),\n  new Date(),\n  performance.now(),\n  process.argv,\n  globalThis.Date,\n  Math[\"random\"](),\n  random(),\n  Now.instant(),\n  crypto.randomUUID(),\n];\n\nexport const loadCrypto = () => import(\"node:crypto\");"
+          "to": 1,
+          "line": 1,
+          "text": "const { random } = Math;"
         },
         "violation": "{\"kind\":\"Restricted.member\",\"definition\":null,\"data\":{\"object\":\"Math\",\"property\":\"random\"},\"location\":{\"file\":\"todo/stamps.ts\",\"line\":1}}"
       }
@@ -1703,8 +1884,9 @@
         "excerpt": {
           "file": "todo/environment.ts",
           "from": 1,
-          "to": 25,
-          "text": "let added = 0;\nvar last = \"\";\nconst T = Temporal;\nconst M = Math;\n\nexport const record = (title: string) => {\n  added += 1;\n  const previous = last;\n  last = title;\n  return { added, previous };\n};\n\nexport const sorted = (titles: readonly string[]) => titles.toSorted((a, b) => a.localeCompare(b));\n\nexport const formatted = (n: number) => new Intl.NumberFormat(\"ja-JP\").format(n);\n\nexport const clocks = () => [T.Now.instant(), M.random(), Temporal.Instant.from(\"2026-10-25T00:00:00Z\")];\n\nexport const shown = (count: number, at: Date, title: string) => [\n  count.toLocaleString(),\n  at.toLocaleDateString(),\n  at.toLocaleTimeString(),\n  title.toLocaleUpperCase(),\n  title.toLocaleLowerCase(),\n];"
+          "to": 1,
+          "line": 1,
+          "text": "let added = 0;"
         },
         "violation": "{\"kind\":\"Restricted.mutableModule\",\"definition\":null,\"data\":{\"declaration\":\"let\"},\"location\":{\"file\":\"todo/environment.ts\",\"line\":1}}"
       }
@@ -1716,6 +1898,7 @@
           "file": "todo/todo.ts",
           "from": 37,
           "to": 44,
+          "line": 43,
           "text": "export const copyNoteAsserted = command({\n  input: { taskId: Task.fields.id },\n  emits: [noteCopied],\n}).decide(({ input, records }) => {\n  const task = records.Task.get(input.taskId) as { note: string | null };\n  // biome-ignore lint/style/noNonNullAssertion: the task has a note\n  return [emit(noteCopied, { id: input.taskId, title: task.note! })];\n});"
         },
         "violation": "{\"kind\":\"Restricted.nonNull\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":43}}"
@@ -1728,6 +1911,7 @@
           "file": "todo/todo.ts",
           "from": 37,
           "to": 44,
+          "line": 42,
           "text": "export const copyNoteAsserted = command({\n  input: { taskId: Task.fields.id },\n  emits: [noteCopied],\n}).decide(({ input, records }) => {\n  const task = records.Task.get(input.taskId) as { note: string | null };\n  // biome-ignore lint/style/noNonNullAssertion: the task has a note\n  return [emit(noteCopied, { id: input.taskId, title: task.note! })];\n});"
         },
         "violation": "{\"kind\":\"Restricted.suppression\",\"definition\":null,\"data\":{\"mark\":\"biome-ignore\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":42}}"
@@ -1740,6 +1924,7 @@
           "file": "traces/todo/twoDays.jsonl",
           "from": 8,
           "to": 8,
+          "line": 8,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"answer\",\"id\":\"calendar/answer#1\",\"to\":\"r1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26T00:00:00Z\"}}}"
         },
         "violation": "{\"kind\":\"Uncomparable.ambiguous\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"calendar.nextDay#1\"},\"snapshotLine\":8,\"candidates\":[6,7]},\"location\":{\"file\":\"traces/todo/twoDays.jsonl\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"twoDays\"}}"
@@ -1752,6 +1937,7 @@
           "file": "traces/todo/seenSeven.jsonl",
           "from": 29,
           "to": 29,
+          "line": 29,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"query\",\"id\":\"seenTwice#1\",\"name\":\"seenTwice\",\"input\":{}}"
         },
         "violation": "{\"kind\":\"Uncomparable.bindingLimit\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"seenTwice#1\"},\"snapshotLine\":30,\"limit\":256},\"location\":{\"file\":\"traces/todo/seenSeven.jsonl\",\"line\":29},\"scenario\":{\"service\":\"todo\",\"name\":\"seenSeven\"}}"
@@ -1764,6 +1950,7 @@
           "file": "traces/todo/resend.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"snapshotLine\":4,\"snapshot\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#1\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}},\"trace\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}},\"location\":{\"file\":\"traces/todo/resend.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"resend\"}}"
@@ -1776,6 +1963,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"c1\",\"name\":\"book\",\"input\":{\"day\":\"2026-10-27T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.duplicateId\",\"definition\":null,\"data\":{\"id\":\"c1\",\"firstLine\":1},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":4}}"
@@ -1788,6 +1976,7 @@
           "file": "todo/__snapshots__/addOneCut.jsonl",
           "from": 2,
           "to": 2,
+          "line": 2,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"addTask#1\",\"answer\":{\"result\":"
         },
         "violation": "{\"kind\":\"Uncomparable.lineSchema\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/__snapshots__/addOneCut.jsonl\",\"line\":2},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneCut\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"invalid_type\",\"expected\":\"object\",\"path\":[],\"message\":\"Invalid input: expected object, received string\"}]}}"
@@ -1800,6 +1989,7 @@
           "file": "traces/todo/addTwo.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"query\",\"id\":\"qc1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":\"2026-10-25T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.missingInput\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}},\"snapshotLine\":5},\"location\":{\"file\":\"traces/todo/addTwo.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwo\"}}"
@@ -1810,9 +2000,10 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 1,
+          "from": 12,
           "to": 19,
-          "text": "import { addTask, scenario } from \"./todo.ts\";\n\nexport const addOne = scenario({\n  description: \"Add a task; the run matches the snapshot; no violation\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});\n\nexport const addOneUnsnapshotted = scenario({\n  description: \"Add a task; the scenario has no snapshot, so test reports missingSnapshot\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
+          "line": 12,
+          "text": "export const addOneUnsnapshotted = scenario({\n  description: \"Add a task; the scenario has no snapshot, so test reports missingSnapshot\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Uncomparable.missingSnapshot\",\"definition\":null,\"data\":{\"runner\":\"todo\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":12},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnsnapshotted\"}}"
       }
@@ -1836,6 +2027,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 7,
           "to": 7,
+          "line": 7,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"booked\",\"resultOf\":\"q2\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.resultOfNonCommand\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"q2\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":7}}"
@@ -1848,6 +2040,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e3\",\"name\":\"booked\",\"resultOf\":\"c9\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.resultOfUnknownRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"c9\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":4}}"
@@ -1860,6 +2053,7 @@
           "file": "traces/todo/addOne.jsonl",
           "from": 5,
           "to": 5,
+          "line": 5,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unexpectedInput\",\"definition\":null,\"data\":{\"trace\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}},\"location\":{\"file\":\"traces/todo/addOne.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
@@ -1872,6 +2066,7 @@
           "file": "todo/__snapshots__/addOneUnknownAfter.jsonl",
           "from": 4,
           "to": 4,
+          "line": 4,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\"},\"resultOf\":\"addTask#1\",\"after\":[\"taskAddedRecorded#1\",\"taskCountChanged#1\"]}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownAfter\",\"definition\":null,\"data\":{\"lineId\":\"taskCountChanged#1\"},\"location\":{\"file\":\"todo/__snapshots__/addOneUnknownAfter.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnknownAfter\"}}"
@@ -1884,6 +2079,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 8,
           "to": 8,
+          "line": 8,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"q9\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26T00:00:00Z\"}}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"q9\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":8}}"
@@ -1896,6 +2092,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 3,
           "to": 3,
+          "line": 3,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"moved\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownEvent\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"moved\",\"id\":\"e1\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3}}"
@@ -1908,6 +2105,7 @@
           "file": "traces/calendar/requests.jsonl",
           "from": 1,
           "to": 1,
+          "line": 1,
           "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"nextWeek\",\"input\":{\"from\":\"2026-10-25T00:00:00Z\"}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownRequest\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"nextWeek\",\"id\":\"q1\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
@@ -1944,6 +2142,7 @@
           "file": "backlog/backlog.ts",
           "from": 35,
           "to": 40,
+          "line": 35,
           "text": "export const remindChores = automation({\n  receives: { choreAdded },\n  commands: { remind },\n}).send({\n  input: ({ payload }) => ({ taskId: payload.taskId }),\n});"
         },
         "violation": "{\"kind\":\"Uncovered.automation\",\"definition\":{\"service\":\"backlog\",\"name\":\"remindChores\"},\"data\":{},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":35}}"
@@ -1956,6 +2155,7 @@
           "file": "backlog/backlog.ts",
           "from": 32,
           "to": 39,
+          "line": 32,
           "text": "export const completeChores = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: { added: ({ payload, records }) => records.Task.get(payload.id) },\n  guard: { chore: ({ bound }) => bound.added.title.startsWith(\"Chore\") },\n  input: ({ bound }) => ({ title: bound.added.title }),\n});"
         },
         "violation": "{\"kind\":\"Uncovered.automationBindingNull\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeChores\"},\"data\":{\"binding\":\"added\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
@@ -1968,6 +2168,7 @@
           "file": "backlog/backlog.ts",
           "from": 41,
           "to": 50,
+          "line": 41,
           "text": "export const completeDuplicates = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: {\n    earlier: ({ payload, records }) =>\n      records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),\n  },\n  input: ({ bound }) => ({ title: bound.earlier.title }),\n});"
         },
         "violation": "{\"kind\":\"Uncovered.automationBindingValue\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeDuplicates\"},\"data\":{\"binding\":\"earlier\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":41}}"
@@ -1980,6 +2181,7 @@
           "file": "backlog/backlog.ts",
           "from": 32,
           "to": 39,
+          "line": 32,
           "text": "export const completeChores = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: { added: ({ payload, records }) => records.Task.get(payload.id) },\n  guard: { chore: ({ bound }) => bound.added.title.startsWith(\"Chore\") },\n  input: ({ bound }) => ({ title: bound.added.title }),\n});"
         },
         "violation": "{\"kind\":\"Uncovered.automationGuard\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeChores\"},\"data\":{\"condition\":\"chore\",\"met\":true},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
@@ -1992,6 +2194,7 @@
           "file": "backlog/backlog.ts",
           "from": 34,
           "to": 39,
+          "line": 34,
           "text": "export const renameTask = command({\n  input: { taskId: ref(Task), title: Task.fields.title },\n  emits: [taskRenamed],\n  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },\n  requires: { chore: ({ input }) => input.title.startsWith(\"Chore\") },\n}).decide(({ bound, input }) => [emit(taskRenamed, { id: bound.task.id, title: input.title })]);"
         },
         "violation": "{\"kind\":\"Uncovered.bindsRejection\",\"definition\":{\"service\":\"backlog\",\"name\":\"renameTask\"},\"data\":{\"binding\":\"task\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":34}}"
@@ -2004,6 +2207,7 @@
           "file": "backlog/backlog.ts",
           "from": 32,
           "to": 47,
+          "line": 32,
           "text": "export const progress = machine({\n  description: \"Follow the progress of tasks\",\n  receives: { taskAdded, taskCompleted },\n  initial: \"empty\",\n  states: { empty: {}, busy: {}, done: {}, archived: {} },\n}).chart({\n  states: {\n    empty: { on: { taskAdded: [{ target: \"busy\" }] } },\n    busy: {\n      on: {\n        taskCompleted: [{ guard: { allDone: ({ records }) => records.Task.every((t) => t.isDone) }, target: \"done\" }],\n      },\n    },\n    done: { on: { taskAdded: [{ target: \"busy\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Uncovered.guardFalse\",\"definition\":{\"service\":\"backlog\",\"name\":\"progress\"},\"data\":{\"transition\":{\"state\":\"busy\",\"trigger\":{\"type\":\"on\",\"key\":\"taskCompleted\"},\"index\":0},\"condition\":\"allDone\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
@@ -2014,9 +2218,10 @@
       "example": {
         "excerpt": {
           "file": "archive/archive.ts",
-          "from": 1,
-          "to": 27,
-          "text": "import { bag, emit, entity, service } from \"@natsuzora-dev/tazuna\";\nimport { z } from \"zod\";\n\nexport const ArchivedTask = entity({\n  description: \"A task taken out of the backlog\",\n  fields: { id: z.string(), title: z.string() },\n  key: \"id\",\n});\n\nexport const { command, query, createEvent, contract } = service({\n  name: \"archive\",\n  description: \"Keep the archived tasks\",\n  entities: { ArchivedTask },\n});\n\nexport const taskArchived = createEvent({ entity: ArchivedTask });\n\nexport const archiveTask = command({\n  input: { taskId: ArchivedTask.fields.id, title: ArchivedTask.fields.title },\n  emits: [taskArchived],\n}).decide(({ input }) => [emit(taskArchived, { id: input.taskId, title: input.title })]);\n\nexport const archivedTitles = query({\n  output: { titles: bag(ArchivedTask.fields.title) },\n}).resolve(({ records }) => ({ titles: records.ArchivedTask.map((t) => t.title) }));\n\nexport const archive = contract({ archiveTask, archivedTitles });"
+          "from": 18,
+          "to": 21,
+          "line": 18,
+          "text": "export const archiveTask = command({\n  input: { taskId: ArchivedTask.fields.id, title: ArchivedTask.fields.title },\n  emits: [taskArchived],\n}).decide(({ input }) => [emit(taskArchived, { id: input.taskId, title: input.title })]);"
         },
         "violation": "{\"kind\":\"Uncovered.request\",\"definition\":{\"service\":\"archive\",\"name\":\"archiveTask\"},\"data\":{},\"location\":{\"file\":\"archive/archive.ts\",\"line\":18}}"
       }
@@ -2028,6 +2233,7 @@
           "file": "backlog/backlog.ts",
           "from": 41,
           "to": 50,
+          "line": 41,
           "text": "export const taskTitles = query({\n  input: { prefix: z.string() },\n  output: { titles: bag(Task.fields.title) },\n  requires: {\n    notEmpty: ({ input }) => input.prefix !== \"\",\n    chore: ({ input }) => input.prefix.startsWith(\"Chore\"),\n  },\n}).resolve(({ input, records }) => ({\n  titles: records.Task.filter((t) => t.title.startsWith(input.prefix)).map((t) => t.title),\n}));"
         },
         "violation": "{\"kind\":\"Uncovered.requiresRejection\",\"definition\":{\"service\":\"backlog\",\"name\":\"taskTitles\"},\"data\":{\"condition\":\"notEmpty\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":41}}"
@@ -2040,6 +2246,7 @@
           "file": "backlog/backlog.ts",
           "from": 32,
           "to": 47,
+          "line": 32,
           "text": "export const progress = machine({\n  description: \"Follow the progress of tasks\",\n  receives: { taskAdded, taskCompleted },\n  initial: \"empty\",\n  states: { empty: {}, busy: {}, done: {}, archived: {} },\n}).chart({\n  states: {\n    empty: { on: { taskAdded: [{ target: \"busy\" }] } },\n    busy: {\n      on: {\n        taskCompleted: [{ guard: { allDone: ({ records }) => records.Task.every((t) => t.isDone) }, target: \"done\" }],\n      },\n    },\n    done: { on: { taskAdded: [{ target: \"busy\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Uncovered.state\",\"definition\":{\"service\":\"backlog\",\"name\":\"progress\"},\"data\":{\"state\":\"archived\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
@@ -2052,6 +2259,7 @@
           "file": "backlog/backlog.ts",
           "from": 34,
           "to": 39,
+          "line": 34,
           "text": "export const renameTask = command({\n  input: { taskId: ref(Task), title: Task.fields.title },\n  emits: [taskRenamed],\n  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },\n  requires: { chore: ({ input }) => input.title.startsWith(\"Chore\") },\n}).decide(({ bound, input }) => [emit(taskRenamed, { id: bound.task.id, title: input.title })]);"
         },
         "violation": "{\"kind\":\"Uncovered.successAnswer\",\"definition\":{\"service\":\"backlog\",\"name\":\"renameTask\"},\"data\":{},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":34}}"
@@ -2064,6 +2272,7 @@
           "file": "backlog/backlog.ts",
           "from": 32,
           "to": 47,
+          "line": 32,
           "text": "export const progress = machine({\n  description: \"Follow the progress of tasks\",\n  receives: { taskAdded, taskCompleted },\n  initial: \"empty\",\n  states: { empty: {}, busy: {}, done: {}, archived: {} },\n}).chart({\n  states: {\n    empty: { on: { taskAdded: [{ target: \"busy\" }] } },\n    busy: {\n      on: {\n        taskCompleted: [{ guard: { allDone: ({ records }) => records.Task.every((t) => t.isDone) }, target: \"done\" }],\n      },\n    },\n    done: { on: { taskAdded: [{ target: \"busy\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Uncovered.transition\",\"definition\":{\"service\":\"backlog\",\"name\":\"progress\"},\"data\":{\"transition\":{\"state\":\"done\",\"trigger\":{\"type\":\"on\",\"key\":\"taskAdded\"},\"index\":0}},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"

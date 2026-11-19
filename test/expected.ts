@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { type TestContext, test } from "node:test";
 import { main } from "../src/cli/main.ts";
+import type { Kind } from "../src/data/kinds.ts";
 import type { Group, ReportedViolation } from "../src/data/violation.ts";
 import { depth, maskedStack, typeChecked } from "./examples.ts";
 import { unexemplified } from "./kinds.ts";
@@ -82,13 +83,13 @@ function commonFolder(examples: readonly string[]): string {
  * Tests that each of `kinds` appears in the expected.jsonl of some example, as a violation or as the mismatch of a
  * ChoiceDependent difference, except the unexemplified ones (kinds.ts).
  */
-export function testEveryKind(examples: readonly string[], kinds: readonly string[]): void {
+export function testEveryKind(examples: readonly string[], kinds: readonly Kind[]): void {
   const groups = [...new Set(kinds.map((kind) => kind.split(".")[0]))].join(" and ");
-  const skipped = Object.keys(unexemplified).filter((kind) => kinds.includes(kind));
+  const skipped = kinds.filter((kind) => unexemplified[kind] !== undefined);
   test(`Each kind of ${groups} except the unexemplified ones appears in the expected.jsonl of some example under test/${commonFolder(examples)}, and no unexemplified kind does`, () => {
     const reported = new Set(examples.flatMap(expectedOf).flatMap(kindsOfLine));
     assert.deepEqual(
-      kinds.filter((kind) => !(kind in unexemplified) && !reported.has(kind)),
+      kinds.filter((kind) => unexemplified[kind] === undefined && !reported.has(kind)),
       [],
     );
     assert.deepEqual(
