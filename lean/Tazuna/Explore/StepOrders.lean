@@ -143,9 +143,17 @@ variable {m : Type → Type} [Monad m]
 
 /--
 The search after the pair `(i, j)` of the execution `parent`, whose step order is `parentOrder`: unless the search
-found a violation, the pair's order (pairOrder) is run unless it ran before, compared with `parent` unless refused, and
-queued when it reaches a new sequence of taken steps. At stepOrderLimit orders the search stops with searchLimit at the
-first step it swapped.
+found a violation, the pair's order (pairOrder) is run unless it ran before or undoes the swap that made `parent` (its
+order ends with `a` then `b`), compared with `parent` unless refused, and queued when it reaches a new sequence of taken
+steps. At stepOrderLimit orders the search stops with searchLimit at the first step it swapped.
+
+The undo is skipped to save its execution and its share of stepOrderLimit. Running it would find nothing: `parent` was
+queued only because its outcome equals that of the execution `g` that it came from, and the undo runs `g`'s order of
+the pair again. Skipping it misses no order either. If `a` conflicts with a step between, `g` reverses that pair itself.
+If a step between conflicts with `b`, `g` reverses that pair, and its order is the skipped one. Otherwise the skipped
+order commutes to the order of `g`. This rests on the premises of the search (steps whose reads and writes do not
+overlap commute, and each race is reversed at the execution where it occurs), not on sleep sets, which carry a set down
+every branch.
 -/
 def searchPair (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin) (st : Service)
     (parent : Execution) (parentOrder : List StepName) (parentOutcome : Explore.Outcome) (taken : List (Nat × StepName))
@@ -153,6 +161,7 @@ def searchPair (compare : Compare m) (executeWith : List StepName → m Executio
   let (i, j) := pair
   if r.search.found.isSome then return r
   let (some a, some b) := (taken.lookup i, taken.lookup j) | return r
+  if parentOrder.drop (parentOrder.length - 2) == [a, b] then return r
   let order := pairOrder (parent.world.state st.service) taken i j a b
   if r.search.tried.any (·.order == order) then return r
   let first := r.first.getD a

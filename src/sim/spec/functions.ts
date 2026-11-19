@@ -254,7 +254,7 @@ export class SpecFunctions implements Functions {
     return this.definition(kinds, { service: this.service, name });
   }
 
-  /** Returns the shape of the values that `schema` checks: an input, output, payload or control payload. */
+  /** Returns the shape of the values that `schema` checks: an input, output, payload, control payload, or context. */
   shape(schema: Schema): Shape {
     switch (schema.kind) {
       case "input":
@@ -273,6 +273,10 @@ export class SpecFunctions implements Functions {
         );
       case "record":
         return this.definition<AnyEntity>(["entity"], schema.entity).definition.fields as Shape;
+      case "context":
+        return this.chartOf(schema.chart.name).named.definition.context;
+      case "mapContext":
+        return this.node(schema.chart.name, schema.map)?.context ?? {};
       default:
         throw new Error(`no question checks a value of the ${schema.kind} schema`);
     }
@@ -414,6 +418,11 @@ export class SpecFunctions implements Functions {
     if (parsed instanceof Failed) return parsed;
     if (!parsed.success) return { error: zodError(parsed.error.issues) };
     return { value: bagged(object, parsed.data) as Fields, encoded: toJson(object, parsed.data) };
+  }
+
+  /** Returns a decoded value of `schema` as JSON holds it, as Lean holds it (ChoiceDependent's Encode). */
+  encode(schema: Schema, value: unknown): Json {
+    return written(objectOf(this.shape(schema)), value);
   }
 
   unordered(schema: Schema, value: unknown): unknown {

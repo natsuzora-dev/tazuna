@@ -101,9 +101,10 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Offer
 
 /--
-A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field
-(its own key field included), with `entity` null when it is no definition. Array elements and union options do not
-extend the path. Lines, records, and instances rename created keys at these positions.
+A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose
+schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field (its own key field included), with
+`entity` null when it is no definition. Array elements and union options do not extend the path. Lines, records, and
+instances rename created keys at these positions.
 -/
 structure KeyPosition where
   path : List String
@@ -127,8 +128,9 @@ structure State where
   transitions : List Transition
   /-- The names of the deadlines that the body writes under `after`. -/
   deadlines : List String
-  /-- The key positions of a map state's item key, and of its own context; empty for any other state. -/
+  /-- The key positions of a map state's item key; empty for any other state. -/
   itemKeys : List KeyPosition
+  /-- The key positions of a map state's own context, which each copy holds; empty for any other state. -/
   contextKeys : List KeyPosition
 deriving Repr, Inhabited
 

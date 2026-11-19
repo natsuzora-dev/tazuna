@@ -79,10 +79,11 @@ To order records, the spec sorts them by a key with `sortedBy`, and records with
 A function can still depend on the order through a variable outside its callbacks, which `test` detects only partly as `BagOrderDependent`.
 
 Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one group that `decide` returns.
-One search runs all of these orders, and `test` reports `ChoiceDependent.stepOrder` for the first two orders that give different outcomes.
+One search runs all of these orders. `test` reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, and stops searching that processing.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
-Two outcomes are the same when their lines have the same contents and each line follows the same earlier lines, which the snapshot records as `after`, and when they leave the same state for later lines: the same records and the same active states, contexts, and pending deadlines of each machine and screen.
+Two outcomes are the same when their lines have the same contents and each line follows the same earlier lines, which the snapshot records as `after`.
+They must also leave the same state for later lines: the same records, and the same active states, contexts, and pending deadlines of each open machine, screen, and map state copy.
 Whether two orders give the same outcome depends on what each step changes:
 
 - Two tied deadlines that each send one request give the same outcome, because the requests keep no order between them.

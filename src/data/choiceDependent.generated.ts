@@ -8,7 +8,7 @@ import type { ViolationValue } from "./violation.ts";
  * A difference between the results of two executions. `original` is the result of the execution that takes the step that the
  * violation names first before the second, and `alternative` is the result of the execution that takes the second first.
  * `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
- * snapshot. `records` and `instances` are the parts of the state (Settled.state) that differ.
+ * snapshot. `state` is the state that a later input reads, the records and the open instances, when it differs.
  */
 export type Difference =
   | {
@@ -21,12 +21,7 @@ export type Difference =
       readonly mismatch: ViolationValue;
     }
   | {
-      readonly aspect: "records";
-      readonly original: Json;
-      readonly alternative: Json;
-    }
-  | {
-      readonly aspect: "instances";
+      readonly aspect: "state";
       readonly original: Json;
       readonly alternative: Json;
     };

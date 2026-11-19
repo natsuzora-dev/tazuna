@@ -662,6 +662,8 @@ export type SimulatedService = {
   readonly candidates: readonly (readonly [number, number])[];
   readonly enabled?: Enabled;
   readonly fault?: ViolationValue;
+  /** The state that ChoiceDependent compares (Explore.stateValue), given with `enabled`. */
+  readonly state?: Json;
 };
 
 /** A step order that a search ran, refused or with the violation found, if any. */

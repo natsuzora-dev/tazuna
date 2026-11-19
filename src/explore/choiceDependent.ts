@@ -14,7 +14,7 @@ import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, type Json, plain } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
-import type { Service } from "../service/basic.ts";
+import type { Schema, Service } from "../service/basic.ts";
 import { chartOf, type InstanceId, mapOf } from "../service/instance.ts";
 import { stepNameDefinition } from "../service/note.ts";
 import type { Records } from "../service/records.ts";
@@ -22,17 +22,23 @@ import type { Deadline, Instance, State } from "../service/state.ts";
 import type { KeyPosition } from "../spec/structure.generated.ts";
 import { chartStructure, stateNamed } from "../spec/structure.ts";
 
-/** Lean's Settled: the outcome of a run that did not halt. */
-export interface Settled {
+/** Lean's Finished: the outcome of a run that did not halt. */
+export interface Finished {
   readonly lines: readonly TraceLine[];
-  readonly records: unknown;
-  readonly instances: Bag;
+  readonly state: unknown;
   readonly created: ReadonlyMap<string, string>;
 }
 
-/** Lean's Outcome: the violation that halted a run, or what it settled to. */
-export type Outcome = { readonly halted: ViolationValue } | { readonly settled: Settled };
+/** Lean's Outcome: the violation that halted a run, or how it finished. */
+export type Outcome = { readonly halted: ViolationValue } | { readonly finished: Finished };
 
+/**
+ * Encodes a value of `schema` as JSON, as Lean holds it. TS holds an instance's context decoded, so the view encodes it
+ * where Lean reads it as it is.
+ */
+export type Encode = (schema: Schema, value: unknown) => Json;
+
+/** Lean's Outcome.halted?. */
 const haltedOf = (o: Outcome): ViolationValue | null => ("halted" in o ? o.halted : null);
 
 /** Lean's refsAt: each key position that names a definition, its path as JSON text, with that definition's domain. */
@@ -97,13 +103,18 @@ const canonicalOrder = <T>(values: readonly T[]): T[] =>
 
 const names = (ns: Iterable<string>): string[] => [...ns].toSorted(byCodePoint);
 
-/** Lean's instanceValue; `context` is the instance's context as JSON, as Lean holds it. */
-function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance, context: Json): unknown {
+/** Lean's instanceValue. */
+function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance, encode: Encode): unknown {
   const map = mapOf(i.id);
+  const chart = { service: st.service, name: chartOf(i.id) };
   const contextKeys =
     map === undefined
-      ? chartStructure(st.structure, st.service, chartOf(i.id))?.contextKeys
-      : mapNamed(st, chartOf(i.id), map)?.contextKeys;
+      ? chartStructure(st.structure, st.service, chart.name)?.contextKeys
+      : mapNamed(st, chart.name, map)?.contextKeys;
+  const context = encode(
+    map === undefined ? { kind: "context", chart } : { kind: "mapContext", chart, map },
+    i.context,
+  );
   return {
     id: idValue(st, i.id),
     states: names(i.entered.keys()),
@@ -118,29 +129,30 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
 }
 
 /** Lean's instancesValue. */
-const instancesValue = (st: Service, s: State, contextOf: (i: Instance) => Json): Bag =>
+const instancesValue = (st: Service, s: State, encode: Encode): Bag =>
   new Bag(
     canonicalOrder(
       [...s.machines.values(), ...s.copies.values()]
         .filter((i) => !i.closed)
-        .map((i) => instanceValue(st, s.deadlines, i, contextOf(i))),
+        .map((i) => instanceValue(st, s.deadlines, i, encode)),
     ),
   );
 
-/** Lean's Outcome.of. `contextOf` encodes an instance's context, which Lean holds as JSON. */
+/** Lean's stateValue. */
+export const stateValue = (st: Service, s: State, encode: Encode): unknown => ({
+  records: recordsValue(st, s.records),
+  instances: instancesValue(st, s, encode),
+});
+
+/** Lean's Outcome.of. */
 export const outcomeOf = (
   st: Service,
   halted: ViolationValue | null,
   lines: readonly TraceLine[],
   s: State,
   created: ReadonlyMap<string, string>,
-  contextOf: (i: Instance) => Json,
-): Outcome =>
-  halted !== null
-    ? { halted }
-    : {
-        settled: { lines, records: recordsValue(st, s.records), instances: instancesValue(st, s, contextOf), created },
-      };
+  encode: Encode,
+): Outcome => (halted !== null ? { halted } : { finished: { lines, state: stateValue(st, s, encode), created } });
 
 /**
  * Lean's Compare: the first violation that verify finds in `actual`, with `expected` as the snapshot, or else the set of
@@ -152,9 +164,9 @@ export type Compare = (
   actual: readonly TraceLine[],
 ) => { readonly mismatch: ViolationValue } | { readonly set: readonly Binding[] };
 
-/** Lean's Settled.renaming. */
+/** Lean's Finished.renaming. */
 const renaming =
-  (original: Settled, alternative: Settled) =>
+  (original: Finished, alternative: Finished) =>
   (v: Values): Values => ({
     ...v,
     domain: (s) => original.created.get(s) ?? v.domain(s),
@@ -164,21 +176,13 @@ const renaming =
     },
   });
 
-/** Lean's Settled.state. */
-const stateOf = (s: Settled): unknown => ({ records: s.records, instances: s.instances });
-
-/** Lean's samePart. */
-function samePart(
-  part: (s: Settled) => unknown,
-  set: readonly Binding[],
-  original: Settled,
-  alternative: Settled,
-): Sameness {
+/** Lean's sameState. */
+function sameState(set: readonly Binding[], original: Finished, alternative: Finished): Sameness {
   const values = renaming(
     original,
     alternative,
   )({ domain: () => "", fresh: new Set(original.created.keys()), image: () => true });
-  return anySameness(set.map((b) => matchesSameness(matchValue(values, b, part(original), part(alternative)))));
+  return anySameness(set.map((b) => matchesSameness(matchValue(values, b, original.state, alternative.state))));
 }
 
 type Of<K extends ChoiceDependent["kind"]> = Extract<ChoiceDependent, { readonly kind: K }>;
@@ -190,22 +194,20 @@ const haltIdentity = (v: ViolationValue | null): string | null => (v === null ? 
 type Comparison = Difference | "uncomparable" | undefined;
 
 /** Lean's compareStates. */
-function compareStates(set: readonly Binding[], original: Settled, alternative: Settled): Comparison {
-  const same = samePart(stateOf, set, original, alternative);
+function compareStates(set: readonly Binding[], original: Finished, alternative: Finished): Comparison {
+  const same = sameState(set, original, alternative);
   if (same === "same") return undefined;
   if (same === "uncomparable") return same;
-  return samePart((s) => s.records, set, original, alternative) === "same"
-    ? { aspect: "instances", original: plain(original.instances), alternative: plain(alternative.instances) }
-    : { aspect: "records", original: plain(original.records), alternative: plain(alternative.records) };
+  return { aspect: "state", original: plain(original.state), alternative: plain(alternative.state) };
 }
 
 /** Lean's difference. */
 function difference(compare: Compare, original: Outcome, alternative: Outcome): Comparison {
-  if (!("settled" in original) || !("settled" in alternative)) {
+  if (!("finished" in original) || !("finished" in alternative)) {
     const [o, a] = [haltedOf(original), haltedOf(alternative)];
     return haltIdentity(o) === haltIdentity(a) ? undefined : { aspect: "halt", original: o, alternative: a };
   }
-  const [o, a] = [original.settled, alternative.settled];
+  const [o, a] = [original.finished, alternative.finished];
   const compared = compare(renaming(o, a), o.lines, a.lines);
   if (!("mismatch" in compared)) return compareStates(compared.set, o, a);
   return "mismatch" in compare(renaming(o, o), o.lines, o.lines)

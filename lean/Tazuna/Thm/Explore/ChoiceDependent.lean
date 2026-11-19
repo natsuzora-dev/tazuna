@@ -8,17 +8,17 @@ open Tazuna.Thm.Data.Binding
 open Tazuna.Thm.Data.Renaming (Renamed)
 
 /--
-Parts that samePart finds the same, such as the states (sameState: records and instances together), are renamed into
-each other under a binding that extends one of the output bindings: each created key of `original` stands for one
-created key of `alternative`, one to one.
+States that sameState finds the same (records and instances together) are renamed into each other under a binding
+that extends one of the output bindings: each created key of `original` stands for one created key of `alternative`,
+one to one.
 -/
-theorem samePart_renamed {part : Settled → CValue} {set : List Binding} {original alternative : Settled}
-    (hx : Distinct (part original)) (hy : Distinct (part alternative))
-    (h : samePart part set original alternative = .same) :
+theorem sameState_renamed {set : List Binding} {original alternative : Finished}
+    (hx : Distinct original.state) (hy : Distinct alternative.state)
+    (h : sameState set original alternative = .same) :
     ∃ b ∈ set, ∃ c : Binding, b.Extends c ∧ OneToOne c.pairs ∧
       Renamed (BoundBy (fun s => (original.created.lookup s).getD "") c)
-        (part original) (part alternative) := by
-  unfold samePart Sameness.any at h
+        original.state alternative.state := by
+  unfold sameState Sameness.any at h
   dsimp only at h
   split at h
   · rename_i hc

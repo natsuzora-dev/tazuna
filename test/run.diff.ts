@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import type { Line, Scenario } from "../src/data/scenario.generated.ts";
-import { canonicalJson, type Json } from "../src/data/values.ts";
+import { canonicalJson, type Json, plain } from "../src/data/values.ts";
 import type { Violation } from "../src/data/violation.ts";
+import { stateValue } from "../src/explore/choiceDependent.ts";
 import { enabled } from "../src/explore/enabled.ts";
 import {
   type Executed,
@@ -18,6 +19,7 @@ import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
 import type { RunningService } from "../src/sim/network.ts";
+import { SpecFunctions } from "../src/sim/spec/functions.ts";
 import { outcomeOf } from "../src/sim/spec/simulate.ts";
 import { checkedRoot, depth, runExamples } from "./examples.ts";
 import { SimFunctions } from "./lean/functions.ts";
@@ -35,18 +37,20 @@ const specs = await Promise.all(
 );
 
 /** What an execution shows, as Lean's reply to `simulate` with `execute` gives it. */
-function executedOutcome(executed: Executed) {
+function executedOutcome(spec: Spec, executed: Executed) {
   const { world } = executed;
   return {
     ...outcomeOf(executed),
     services: outcomeOf(executed).services.map((p) => {
       const { processing, halted } = world.services.get(p.service) as RunningService;
       if (halted !== undefined) return p;
+      const functions = new SpecFunctions(spec, p.service);
+      const state = plain(stateValue(processing.st, processing.state, (schema, v) => functions.encode(schema, v)));
       try {
-        return { ...p, enabled: enabled(processing) };
+        return { ...p, enabled: enabled(processing), state };
       } catch (error) {
         if (!(error instanceof Halt)) throw error;
-        return { ...p, fault: violationValue(error.violation) };
+        return { ...p, fault: violationValue(error.violation), state };
       }
     }),
   };
@@ -103,7 +107,7 @@ for (const { name, spec } of specs) {
         const fromLean = lean.simulate(spec, { ...sc, lines: [...sc.lines, ...appended] }, functions(), true);
         assert.equal(
           canonicalJson(fromLean as Json),
-          canonicalJson(executedOutcome(executed) as unknown as Json),
+          canonicalJson(executedOutcome(spec, executed) as unknown as Json),
           `the executions differ after appending ${JSON.stringify(appended)}`,
         );
         return executed;

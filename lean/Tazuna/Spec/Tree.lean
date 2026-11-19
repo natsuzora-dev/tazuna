@@ -226,9 +226,14 @@ def Tree.historyTargets (t : Tree) (initial : String) (lastChildren : List (Stri
     else [target]
   | none => [target]
 
+/--
+The children of `n` that its history state returns to, when `n` is exited with `entered` active, or none when `n` has
+no history child: as in SCXML exitStates, only a state with a history child records them.
+-/
 def Tree.recordedChildren (t : Tree) (entered : List String) (n : String) : Option (List String) :=
   match t.state? n with
-  | some st => if st.children.isEmpty then none else some ((t.enterable n).filter (· ∈ entered))
+  | some st =>
+    if st.children.any (t.kindOf · == some .history) then some ((t.enterable n).filter (· ∈ entered)) else none
   | none => none
 
 def Tree.isDone (t : Tree) (entered : List String) (name : String) : Bool :=

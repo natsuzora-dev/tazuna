@@ -179,6 +179,8 @@ structure SimulatedService where
   candidates : List (Nat × Nat)
   enabled : Option Explore.Enabled
   fault : Option Violation
+  /-- The state that ChoiceDependent compares (Explore.stateValue), given with `enabled`. -/
+  state : Option Value
 
 derive_wire SimulatedService serialize_only skip_serializing_none
 

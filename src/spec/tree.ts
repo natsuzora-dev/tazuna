@@ -153,9 +153,10 @@ export function historyTargets(
   return parent.initial === null ? [] : [parent.initial];
 }
 
+/** Lean's recordedChildren: only a state with a history child records its children, as in SCXML exitStates. */
 export function recordedChildren(chart: ChartStructure, entered: Names, name: string): string[] | null {
   const state = stateNamed(chart, name);
-  if (state === undefined || state.children.length === 0) return null;
+  if (state?.children.some((c) => stateNamed(chart, c)?.kind === "history") !== true) return null;
   return enterable(chart, name).filter((n) => entered.has(n));
 }
 

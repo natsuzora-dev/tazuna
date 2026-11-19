@@ -68,13 +68,13 @@ theorem compareTraces_ok {spec : Spec.Structure} {service : String}
       exact ⟨hne, hall⟩
 
 /--
-Two outcomes that difference finds the same halt alike, and when both settle, either the outputs compare under bindings
+Two outcomes that difference finds the same halt alike, and when both finish, either the outputs compare under bindings
 of which one makes the states equal (sameState: records and open instances, deadlines included), or the original
 outputs do not compare even with themselves, and the states are equal (sameState under the empty binding).
 -/
 theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (difference compare o a : Id _) = .same) :
     haltIdentity o.halted? = haltIdentity a.halted? ∧
-    ∀ x y, o = .settled x → a = .settled y →
+    ∀ x y, o = .finished x → a = .finished y →
       (∃ set, compare (x.renaming y) x.lines y.lines = .ok set ∧ sameState set x y = .same) ∨
       ((∃ v, compare (x.renaming y) x.lines y.lines = .error v) ∧
         (∃ v, compare (x.renaming x) x.lines x.lines = .error v) ∧ sameState [.empty] x y = .same) := by
@@ -84,11 +84,11 @@ theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (dif
     split at hc
     · assumption
     · cases hc
-    · split at hc <;> cases hc
+    · cases hc
   cases o with
-  | settled x =>
+  | finished x =>
     cases a with
-    | settled y =>
+    | finished y =>
       refine ⟨rfl, fun x' y' hx hy => ?_⟩
       cases hx; cases hy
       simp only [difference, bind, pure] at h

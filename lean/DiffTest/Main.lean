@@ -248,7 +248,7 @@ def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder
 The reply to request `simulate`, which takes a structure, a scenario, and step orders, and returns each running
 service's trace lines, violations (its own, then those Instrument collected, then its halt), and candidates, and the
 simulation's violations and halting violation. With `execute` true, the lines take place as explore runs them (Sim.execute), and
-each running service that did not halt also returns what it enables next.
+each running service that did not halt also returns what it enables next and its state as ChoiceDependent compares it.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) (executing : Bool)
     (stepOrders : List StepOrder) : IO Response := do
@@ -259,9 +259,12 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
   let (w, acting) ← ran.run {}
   let (services, _) ← (w.states.mapM fun ((service, s) : String × State) => do
     let c := acting.collect service
-    let next ← match executing, s.halted, w.services.lookup service with
-      | true, none, some st => do pure (some (← Explore.enabled st (fsOf service) s))
-      | _, _, _ => pure none
+    let running := match executing, s.halted, w.services.lookup service with
+      | true, none, some st => some st
+      | _, _, _ => none
+    let next ← match running with
+      | some st => do pure (some (← Explore.enabled st (fsOf service) s))
+      | none => pure none
     pure ({ service
             lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
             violations := reportedViolations s c none
@@ -269,7 +272,8 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
             enabled := next.bind (·.toOption)
             fault := next.bind fun
               | .error f => some (Finding.fault f).toViolation
-              | .ok _ => none } : SimulatedService)).run acting
+              | .ok _ => none
+            state := running.map fun st => (Explore.stateValue st s).flatten } : SimulatedService)).run acting
   pure (.simulated services w.violations w.halted)
 
 /-- A search, as TS writes it. -/
