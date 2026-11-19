@@ -4,12 +4,12 @@ import type { Json } from "./values.ts";
 
 /**
  * What the simulation of a scenario reports about the scenario. `scenarioLine` is the line of When, from 0. A message is
- * named by its sender, its receiver, the sender's id of it, and its origin: the line, or the startup, whose processing sent
- * it.
+ * named by its sender, its receiver, the sender's id of it, and its origin: the line, or the startup, whose processing
+ * sent it.
  *
- * Given is checked first, and each of its violations is given; after any of them, nothing begins. A violation of a line of When
- * stops the simulation, unless `halts` says otherwise, since later lines may depend on what the line did. An expectation
- * of Then never stops the others: each is evaluated, and what it reports belongs to it alone.
+ * Given is checked first, and each of its violations is given. After any of them, nothing begins. A violation of a line of
+ * When stops the simulation, unless `halts` says otherwise, since later lines may depend on what the line did. An
+ * expectation of Then never stops the others: each is evaluated, and what it reports belongs to it alone.
  */
 export type InvalidScenario =
   /** Given lists `service` as a peer more than once, or lists the own service as a peer. */
@@ -71,7 +71,7 @@ export type InvalidScenario =
     }
   /**
    * The invariant `invariant` of the record of `entity` with `key`, or of the service when `entity` is none, fails on
-   * Given's records of `service`; `invariant` is none when the invariant throws.
+   * Given's records of `service`. `invariant` is none when the invariant throws.
    */
   | {
       readonly kind: "InvalidScenario.brokenGivenInvariant";
@@ -93,7 +93,7 @@ export type InvalidScenario =
       };
     }
   /**
-   * The facts `candidates` that match the handle `fact` differ, so the line cannot act on each alike; the handle must name
+   * The facts `candidates` that match the handle `fact` differ, so the line cannot act on each alike. The handle must name
    * content that tells them apart. Equal messages are not ambiguous: a line acts on each of them.
    */
   | {
@@ -200,7 +200,7 @@ export type InvalidScenario =
       };
     }
   /**
-   * The external peer answers the request `message` again, or leaves it unanswered after answering it; it is no
+   * The external peer answers the request `message` again, or leaves it unanswered after answering it. It is no
    * subscription and has its answer.
    */
   | {

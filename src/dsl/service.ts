@@ -48,16 +48,16 @@ interface Definers<Es extends Entities, N extends string> {
     const Bn extends string = never,
   >(definition: {
     input?: I & SomeKey<keyof I>;
-    /** The events that the command emits, of this service only (Illegal.foreignEvent). */
+    /** The events that the command emits, of this service only (`Illegal.foreignEvent`). */
     emits: readonly Ev[];
     /** The values that `requires`, `decide`, and `ensures` read as `bound`. */
     binds?: Binds<{ input: Input<I>; records: Records<Es> } & Now, B> & Present<Bn>;
     /**
-     * Checked after `binds`, each in written order; the first that fails names the rejection reason. No key of either
-     * may be an array index such as `1`, which JavaScript lists before the other keys (Illegal.indexReason).
+     * Checked after `binds`, each in written order. The first that fails names the rejection reason. No key of either
+     * may be an array index such as `1`, which JavaScript lists before the other keys (`Illegal.indexReason`).
      */
     requires?: Named<Rq, { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now>;
-    /** `records` holds the records after the events; `bound` holds the values from before them. */
+    /** `records` holds the records after the events. `bound` holds the values from before them. */
     ensures?: Named<En, { input: Input<I>; records: Records<Es>; bound: Bound<B> }>;
   }): CommandSetup<I, Ev, B, Rq, Es, N>;
   /** Defines a query: a request to read records. */
@@ -76,7 +76,7 @@ interface Definers<Es extends Entities, N extends string> {
   }): QuerySetup<I, O, Rq, Es, N>;
   /**
    * Defines an automation: on each received event it sends one command and keeps no context. Waiting for an answer or a
-   * deadline, or reacting to a rejection, needs a machine (NonCanonical.statelessMachine).
+   * deadline, or reacting to a rejection, needs a machine (`NonCanonical.statelessMachine`).
    */
   automation<
     const Rs extends Readonly<Record<string, AnyEvent>>,
@@ -93,14 +93,14 @@ interface Definers<Es extends Entities, N extends string> {
   machine: MachineDefiner<Es>;
   /** Defines a machine driven by user operations that shows query answers. */
   screen: ScreenDefiner<Es>;
-  /** Defines an event that creates a record; the payload is the whole record. */
+  /** Defines an event that creates a record. The payload is the whole record. */
   createEvent: CreateEventDefiner<Es, N>;
   /**
-   * Defines an event that updates the `writes` fields; the payload is the key (none for a single entity) and those
+   * Defines an event that updates the `writes` fields. The payload is the key (none for a single entity) and those
    * fields.
    */
   updateEvent: UpdateEventDefiner<Es, N>;
-  /** Defines an event that deletes a record; the payload is the key. */
+  /** Defines an event that deletes a record. The payload is the key. */
   deleteEvent: DeleteEventDefiner<Es, N>;
   /** Defines an event that changes no record, with the fields of `payload`. */
   event: EventDefiner<N>;
@@ -150,9 +150,10 @@ type SendInput<C, Args> =
 
 /**
  * `onRejected: []` ignores an unavailable rejection, the only kind that is not a fault of the automation
- * (Fault.rejectedAutomationCommand). It is written exactly when one can arrive: the command is of another service and
- * may reject with unavailable (NonCanonical.missingOnRejected, NonCanonical.unreachableOnRejected; the type cannot tell
- * the own service from another spec service, since a service has no type of its own). The precedent is Swift's `try?`.
+ * (`Fault.rejectedAutomationCommand`). It is written exactly when one can arrive: the command is of another service and
+ * may reject with unavailable (`NonCanonical.missingOnRejected`, `NonCanonical.unreachableOnRejected`; the type cannot
+ * tell the own service from another spec service, since a service has no type of its own). The precedent is Swift's
+ * `try?`.
  */
 type SendRejected<C> = C extends { readonly rejects: infer Rj }
   ? Rj extends readonly RejectionKind[]
@@ -192,7 +193,8 @@ interface ExternalDefiners<N extends string> {
     output?: O & SomeKey<keyof O>;
     emits: readonly Ev[];
     /**
-     * The kinds that the external implementation may reject with; test explores only these, and verify reports others.
+     * The kinds that the external implementation may reject with. `test` explores only these, and `verify` reports
+     * others.
      */
     rejects: Rj;
     /** The external implementation rejects with `requires` when one fails. */
@@ -211,7 +213,8 @@ interface ExternalDefiners<N extends string> {
     input?: I & SomeKey<keyof I>;
     output: O;
     /**
-     * The kinds that the external implementation may reject with; test explores only these, and verify reports others.
+     * The kinds that the external implementation may reject with. `test` explores only these, and `verify` reports
+     * others.
      */
     rejects: Rj;
     /** The external implementation rejects with `requires` when one fails. */
@@ -226,7 +229,8 @@ interface ExternalDefiners<N extends string> {
 
 /**
  * The characters that tazuna's generated names put between parts (`<service>.<name>`, `<service>/<Entity>-<n>`,
- * `<sender>/<id>`, `<name>#<n>`), which a service or scenario name does not contain (Malformed.reservedNameCharacter).
+ * `<sender>/<id>`, `<name>#<n>`), which a service or scenario name does not contain
+ * (`Malformed.reservedNameCharacter`).
  */
 export const reservedNameCharacters = [".", "/", "#"] as const;
 type ReservedIn<N extends string> = ErrorIf<
@@ -265,7 +269,7 @@ export function service<
     name: N;
     description: string;
     entities?: Es & SomeKey<keyof Es>;
-    /** The conditions over all records (Fault.failedServiceInvariant). */
+    /** The conditions over all records (`Fault.failedServiceInvariant`). */
     invariants?: Named<Iv, { records: Records<Es> }>;
   } & ReservedIn<N>,
 ): Definers<Es, N> {
@@ -399,7 +403,7 @@ export function definerService(value: unknown): ServiceDefinition | undefined {
 type Members<M> = { readonly [K in keyof M]: Member };
 
 /**
- * Marks the members that other services may refer to (Restricted.crossServiceImport), possibly none.
+ * Marks the members that other services may refer to (`Restricted.crossServiceImport`), possibly none.
  */
 type ContractDefiner<R, K extends "spec" | "external", N extends string> = <const M extends Members<M>>(
   members: M,

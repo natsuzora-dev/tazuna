@@ -10,15 +10,15 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
 
 /**
  * A spec that the loader cannot read faithfully, or whose declared defaults fail their own schemas or throw. When the
- * loader finds one, check skips the structure checks (Illegal).
+ * loader finds one, check skips the structure checks (`Illegal`).
  *
  * - `unlistedFile`: the program of `tsconfig`, the nearest tsconfig.json, does not include the spec file, so tsc did
  *   not check it (TypeScript's TS6307).
  * - `missingDefiner`: the definer that the definition names is not exported.
  * - `listedUnderOtherName`: a service definer lists the entity under `key`, not under its export name, which also names
  *   its records.
- * - `duplicateService`: another service definer, exported in the file `elsewhere`, has the name `name` too; a
- *   service's name, which contracts and scenarios carry as a type, names one service.
+ * - `duplicateService`: another service definer, exported in the file `elsewhere`, has the name `name` too. A service's
+ *   name, which contracts and scenarios carry as a type, names one service.
  * - `unknownService`: the `constants()` call names `name`, which no service definer has.
  * - `reservedNameCharacter`: the service or scenario name `name` contains `character`, one of the characters that
  *   separate the parts of tazuna's generated names (trace names, created keys, line ids, copy names, snapshot names).
@@ -28,26 +28,26 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  *   `elsewhere`.
  * - `alias`: the definition, scenario, or `constants()` call is already exported as `name`.
  * - `misplacedSelfRef`: a `ref.self()` outside the fields of `entity()`, where no entity's key gives it a schema.
- * - `unexportedDefinition`, `opaqueCollection`, `unrepresentableSchema`, and `misplacedSelfRef`: `path` leads from the definition, service
- *   definer, or `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema has the path of the field that holds it, and a chart holds each state's
- *   `held` under `held` by the state's name.
- * - `unrepresentableSchema`: the schema has a value that tazuna cannot write back as JSON, of the Zod type `type`:
- *   one that JSON cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), or a
- *   `union` that holds a codec at some depth. Writing a value as JSON runs its codecs and no check, so it picks the
- *   option by the tag of a `z.discriminatedUnion` and cannot guess one in a `z.union`. A codec or null is written
- *   `.nullable()`.
- * - `unparsableTime`: a time of the scenario, Given's start or a clock line's time, is not an ISO datetime with
- *   seconds and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds.
- *   The report is at the clock line, or at the scenario for Given's start.
+ * - `unexportedDefinition`, `opaqueCollection`, `unrepresentableSchema`, and `misplacedSelfRef`: `path` leads from the
+ *   definition, service definer, or `constants()` call through the keys of its object, with array positions as numbers.
+ *   A schema inside another schema has the path of the field that holds it, and a chart holds each state's `held` under
+ *   `held` by the state's name.
+ * - `unrepresentableSchema`: the schema has a value that tazuna cannot write back as JSON, of the Zod type `type`: one
+ *   that JSON cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), or a `union`
+ *   that holds a codec at some depth. Writing a value as JSON runs its codecs and no check, so it picks the option by
+ *   the tag of a `z.discriminatedUnion` and cannot guess one in a `z.union`. A codec or null is written `.nullable()`.
+ * - `unparsableTime`: a time of the scenario, Given's start or a clock line's time, is not an ISO datetime with seconds
+ *   and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds. The
+ *   report is at the clock line, or at the scenario for Given's start.
  * - `unknownPeer`: Given lists as a peer the own service's contract or no contract (null).
- * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`; a peer is keyed by its
+ * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`. A peer is keyed by its
  *   service name.
  * - `writtenCreatedKey`: the scenario writes, in Given or on a line, `key`, a value in the form of a key that a spec
- *   service creates of `entity` (`<service>/<Entity>-<n>`); a scenario reads a created key through a handle, and a
+ *   service creates of `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a
  *   running peer's answer writes `created()`. The report is at the line, or at the scenario for Given.
  * - `lineAfterWhen`: a line of the scenario was placed after its When returned, through a handle kept for later.
  * - `misusedObserved`: the line `input` of the scenario uses the observed value at the field `path` of a handle in the
- *   way `use` (LoweringViolation's ObservedUse) instead of placing it whole in a value; the value exists only when the
+ *   way `use` (LoweringViolation's ObservedUse) instead of placing it whole in a value. The value exists only when the
  *   scenario runs.
  * - `inexactDelay`: the delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a
  *   value that Temporal does not read, so the run cannot add it to an instant in milliseconds.

@@ -1,4 +1,4 @@
-/** Named conditions; a name appears in rejection reasons and violation data. */
+/** Named conditions. A name appears in rejection reasons and violation data. */
 export type Conditions<Args> = Readonly<Record<string, (args: Args) => boolean>>;
 export type Named<N extends string, Args> = { readonly [K in N]: (args: Args) => boolean } & SomeKey<N>;
 /**

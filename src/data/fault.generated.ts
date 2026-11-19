@@ -15,7 +15,7 @@ export type Fault =
         readonly event: DefinitionRef;
       };
     }
-  /** The command emits an event that its emits do not list; `event` is null when the event is no definition. */
+  /** The command emits an event that its emits do not list. `event` is null when the event is no definition. */
   | {
       readonly kind: "Fault.unlistedEmittedEvent";
       readonly definition: DefinitionRef;
@@ -25,7 +25,7 @@ export type Fault =
     }
   /**
    * Two events of one Bag that the command's decide returns write one record of `entity`, so the record would depend on
-   * their order; `recordKey` is null for a single entity.
+   * their order. `recordKey` is null for a single entity.
    */
   | {
       readonly kind: "Fault.sameRecordInBag";

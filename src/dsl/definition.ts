@@ -127,7 +127,7 @@ export interface Now {
   readonly now: Temporal.Instant;
 }
 
-/** The function that creates a new key; the implementation decides the key's form. */
+/** The function that creates a new key. The implementation decides the key's form. */
 export type CreateKey = { readonly createKey: <E extends AnyKeyedEntity>(key: Ref<E>) => KeyValue<E> };
 
 export interface CreateEvent<E extends AnyKeyedEntity = AnyKeyedEntity> {
@@ -275,7 +275,7 @@ export type Events = Readonly<Record<string, AnyEvent>>;
 
 declare const ownerOf: unique symbol;
 
-/** A definition of the service `N`, which it holds as a type only; see `OwnerOf`. */
+/** A definition of the service `N`, which it holds as a type only. See `OwnerOf`. */
 export type Owned<N extends string> = { readonly [ownerOf]?: N };
 
 /** The name of the service that owns the definition `D`, or never when `D` does not hold it. */

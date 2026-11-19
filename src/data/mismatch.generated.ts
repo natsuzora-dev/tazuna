@@ -19,7 +19,7 @@ export type Subject =
     };
 
 /**
- * A difference between compared lines. `line` is 1-based in the trace; a line missing from the trace is at the trace's
+ * A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
  * `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
  * failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
  * or Zod schemas.
@@ -179,7 +179,7 @@ export type Mismatch =
         readonly trace: string | null;
       };
     }
-  /** The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. */
+  /** The run of test, not a trace, differs from the snapshot at its line `line`. A missing line is null. */
   | {
       readonly kind: "Mismatch.line";
       readonly definition: null;

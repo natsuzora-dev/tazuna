@@ -12,11 +12,11 @@ An exception has no `definition` when a service invariant throws, since the subj
 -/
 inductive Fault where
   | emittedPayloadSchema (definition : Spec.Ref) (event : Spec.Ref)
-  /-- The command emits an event that its emits do not list; `event` is null when the event is no definition. -/
+  /-- The command emits an event that its emits do not list. `event` is null when the event is no definition. -/
   | unlistedEmittedEvent (definition : Spec.Ref) (event : Option Spec.Ref)
   /--
   Two events of one Bag that the command's decide returns write one record of `entity`, so the record would depend on
-  their order; `recordKey` is null for a single entity.
+  their order. `recordKey` is null for a single entity.
   -/
   | sameRecordInBag (definition : Spec.Ref) (entity : Spec.Ref) (recordKey : Option String)
   | outputSchema (definition : Spec.Ref)

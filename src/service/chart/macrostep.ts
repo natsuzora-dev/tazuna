@@ -38,7 +38,7 @@ import { choose, leavesOf, reaches, select } from "./select.ts";
 /** The event that a reaction step takes. `reactions` builds a reaction work only with events. */
 function firstEvent(work: Extract<Work, { readonly kind: "reaction" }>): Emitted {
   const e = work.groups[0]?.[0];
-  if (e === undefined) throw new Error("A reaction work has no event");
+  if (e === undefined) throw new Error("a reaction work has no event");
   return e;
 }
 

@@ -6,7 +6,7 @@ export type Illegal =
   /**
    * The automations after `definition` in the cycle, empty when `definition` receives an event of its own command.
    * `check` reports none exactly when no automation that commands its own service leads back to itself
-   * (no_automation_returns).
+   * (`no_automation_returns`).
    */
   | {
       readonly kind: "Illegal.automationCycle";
@@ -16,7 +16,7 @@ export type Illegal =
       };
     }
   /**
-   * A screen that no screen opens has the `keys` of input, requires, output, and ensures, in this order; only a screen
+   * A screen that no screen opens has the `keys` of input, requires, output, and ensures, in this order. Only a screen
    * that opens it gives the input and reads the output.
    */
   | {
@@ -28,7 +28,7 @@ export type Illegal =
     }
   /**
    * The chart reads under `key` a query of its own service. `check` reports none exactly when every chart reads only
-   * queries of other services (queries_of_other_services).
+   * queries of other services (`queries_of_other_services`).
    */
   | {
       readonly kind: "Illegal.ownQuery";
@@ -50,7 +50,7 @@ export type Illegal =
     }
   /**
    * `statePath` leads from the state of an unguarded always transition back to that state. `check` reports none exactly
-   * when no unguarded always transition can reach its source again (unguarded_always_does_not_return).
+   * when no unguarded always transition can reach its source again (`unguarded_always_does_not_return`).
    */
   | {
       readonly kind: "Illegal.alwaysCycle";
@@ -61,8 +61,8 @@ export type Illegal =
     }
   /**
    * The command lists in its emits `event`, an event of another service. `check` reports none exactly when every command
-   * lists only events of its own service (commands_emit_own_events), and then an accepted command emits only those
-   * (accepted_command_emits_own_events).
+   * lists only events of its own service (`commands_emit_own_events`), and then an accepted command emits only those
+   * (`accepted_command_emits_own_events`).
    */
   | {
       readonly kind: "Illegal.foreignEvent";
@@ -85,7 +85,7 @@ export type Illegal =
     }
   /**
    * The contract of service `contract` lists under `key` a definition of another service. `check` reports none exactly
-   * when every contract lists only definitions of its own service (members_of_own_service).
+   * when every contract lists only definitions of its own service (`members_of_own_service`).
    */
   | {
       readonly kind: "Illegal.foreignMember";

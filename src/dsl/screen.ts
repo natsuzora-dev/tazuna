@@ -61,7 +61,7 @@ type ScreenControls<Ps extends Payloads> = { readonly [K in keyof Ps]: Control<P
 type OperatedControls<Ps extends Payloads> = { readonly [K in keyof Ps]: { readonly payload: Row<PayloadOf<Ps[K]>> } };
 
 /**
- * The queries that a state shows. A rejection other than unavailable is a fault of the screen (Fault.rejectedShows).
+ * The queries that a state shows. A rejection other than unavailable is a fault of the screen (`Fault.rejectedShows`).
  */
 type Shows<B, Qs extends Queries> = SomeKnownKey<Qs> & { readonly [K in keyof Qs]?: InputOf<Qs[K], B> };
 
@@ -234,7 +234,7 @@ export type ScreenDefiner<Es extends Entities> = <
     description: string;
     /**
      * The input of a screen that another screen opens. Only such a screen has `input`, `output`, `requires`, and
-     * `ensures` (Illegal.missingParent).
+     * `ensures` (`Illegal.missingParent`).
      */
     input?: I & SomeKey<keyof I>;
     output?: O & SomeKey<keyof O>;
@@ -252,7 +252,7 @@ export type ScreenDefiner<Es extends Entities> = <
     requires?: Named<Rq, { input: Row<I> }>;
     ensures?: Named<En, { input: Row<I>; output: Row<O> }>;
     /**
-     * The conditions on the context and on the states outside the copies of map states (Fault.failedChartInvariant).
+     * The conditions on the context and on the states outside the copies of map states (`Fault.failedChartInvariant`).
      */
     invariants?: Named<Iv, { context: Row<Ctx>; active: { readonly [S in OuterNames<Flat<St>>]: boolean } }>;
   } & TreeErrors<St> &

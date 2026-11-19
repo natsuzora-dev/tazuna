@@ -6,7 +6,7 @@ declare const grouped: unique symbol;
 
 export type ConstantsGroup<T = unknown> = T & { readonly [grouped]: true };
 
-/** The type T with every nested object and array readonly; a bag stays an array, since implementations read it too. */
+/** The type T with every nested object and array readonly. A bag stays an array, since implementations read it too. */
 type Frozen<T> = T extends Temporal.Instant | Temporal.PlainDate | Temporal.Duration
   ? T
   : T extends readonly (infer E)[]

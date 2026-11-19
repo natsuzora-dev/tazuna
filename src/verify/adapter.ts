@@ -7,7 +7,8 @@ import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
 
 /**
  * A message that the harness gives the implementation. `name` is the name in the spec. An operation names its screen
- * instance by `nth`, its index among the open instances of the screen in opening order, only when more than one is open.
+ * instance by `nth`, its index among the open instances of the screen in opening order, only when more than one is
+ * open.
  */
 export interface InputMessage {
   readonly id: string;
@@ -102,7 +103,7 @@ export const queryRequest = <Q extends AnyQuery>(
 
 /** A place in the trace where the implementation's outputs are written. */
 export interface OutputSlot {
-  /** `id` is the implementation's id; the harness gives one when the implementation has none. */
+  /** `id` is the implementation's id. The harness gives one when the implementation has none. */
   readonly request: (request: ForeignRequest & { readonly id?: string }) => void;
   /** Returns the id that the harness gave the subscription. */
   readonly subscribe: (request: ForeignRequest) => string;

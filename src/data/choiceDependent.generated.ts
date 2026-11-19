@@ -5,9 +5,9 @@ import type { Json } from "./values.ts";
 import type { ViolationValue } from "./violation.ts";
 
 /**
- * A difference between the results of two executions. `original` is the result of the execution that takes the step that the
- * violation names first before the second, and `alternative` is the result of the execution that takes the second first.
- * `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
+ * A difference between the results of two executions. `original` is the result of the execution that takes the step that
+ * the violation names first before the second, and `alternative` is the result of the execution that takes the second
+ * first. `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
  * snapshot. `state` is the state that a later input reads, the records and the open instances, when it differs.
  */
 export type Difference =
@@ -27,16 +27,16 @@ export type Difference =
     };
 
 /**
- * A result that depends on a choice nobody controls: the order of two steps of one processing that no cause orders, of two
- * deadlines of one service due at one time, or of two messages that one line delivers to one service. Every other order of
- * a simulation is a written line. stepOrder writes the pair in canonical order.
+ * A result that depends on a choice nobody controls: the order of two steps of one processing that no cause chain links,
+ * of two deadlines of one service due at one time, or of two messages that one line delivers to one service. Every other
+ * order of a simulation is a written line. `stepOrder` writes the pair in canonical order.
  */
 export type ChoiceDependent =
   /**
    * The execution with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the execution with
-   * `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the execution without one.
-   * One order comes from the other (stepOrderSearch), so the pair is the steps whose order they swap. `definition` is the
-   * definition of the first step.
+   * `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the execution without
+   * one. One order comes from the other (`stepOrderSearch`), so the pair is the steps whose order they swap. `definition`
+   * is the definition of the first step.
    */
   | {
       readonly kind: "ChoiceDependent.stepOrder";
@@ -50,7 +50,7 @@ export type ChoiceDependent =
       };
     }
   /**
-   * The search of the step orders of one processing ran `limit` (stepOrderLimit) orders and stopped with orders left, so
+   * The search of the step orders of one processing ran `limit` (`stepOrderLimit`) orders and stopped with orders left, so
    * a result that only those change is not reported. `definition` is the definition of the first step of the first pair
    * that the search swapped.
    */
@@ -62,9 +62,9 @@ export type ChoiceDependent =
       };
     }
   /**
-   * Comparing the states of two executions that a stepOrder violation at `definition` would name held more
-   * than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
-   * the choice changes the state is not known.
+   * Comparing the states of two executions that a `stepOrder` violation at `definition` would name held more
+   * than `limit` (`bindingLimit`) bindings of created keys at one step, so whether the choice changes the state is not
+   * known.
    */
   | {
       readonly kind: "ChoiceDependent.uncomparable";

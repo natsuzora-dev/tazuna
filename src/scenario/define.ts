@@ -85,10 +85,10 @@ export type ObservedShape<S> = S extends Shape
   ? Observed<Encoded<S>> & (string extends keyof S ? unknown : ObservedFields<S>)
   : never;
 
-/** A key that a running peer creates, which a running peer's message holds; see `created`. */
+/** A key that a running peer creates, which a running peer's message holds. See `created`. */
 export type Created = { readonly [createdBrand]: true };
 
-/** A value written as is, which no schema checks; see `raw`. */
+/** A value written as is, which no schema checks. See `raw`. */
 export type Raw = { readonly [rawBrand]: true };
 
 /** A written value of type `T`: each part is the value itself or an observed value of that type. */
@@ -127,7 +127,7 @@ declare const messageKind: unique symbol;
 declare const processing: unique symbol;
 declare const sentByClient: unique symbol;
 
-/** A placed line of When; Then and later lines name it by this handle. */
+/** A placed line of When. Then and later lines name it by this handle. */
 export interface Line {
   readonly [lineIndex]: number;
 }
@@ -180,16 +180,16 @@ type OwnedBy<D, S extends string> = OwnerOf<D> extends S ? unknown : never;
 /**
  * What a line's processing, or the startup, caused, named by content: a handle names every message whose content has
  * the fields of `pick`. None matching is reported, and so are matches that differ. A line that names a handle acts on
- * each of its messages in sending order, and test runs every other order and reports ChoiceDependent when one changes
- * the result. A message travels between services of `S`: the own service and the peers that Given lists as running or
- * external.
+ * each of its messages in sending order, and `test` runs every other order and reports `ChoiceDependent` when one
+ * changes the result. A message travels between services of `S`: the own service and the peers that Given lists as
+ * running or external.
  */
 export interface Caused<S extends string = string> {
   request<T extends Request>(target: T & OwnedBy<T, S>, pick?: SomeFields<InputOf<T>>): OutRequest<T>;
   subscription<Q extends AnyQuery>(query: Q & OwnedBy<Q, S>, pick?: SomeFields<InputOf<Q>>): OutSubscription<Q>;
   /**
-   * The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. Of equal events
-   * on one channel, a line acts on the oldest in flight.
+   * The event `event`, as it travels to the service of contract `to` when given, or to its only receiver. Of equal
+   * events on one channel, a line acts on the oldest in flight.
    */
   event<Ev extends AnyEvent>(
     event: Ev & OwnedBy<Ev, S>,
@@ -326,7 +326,7 @@ export const external = <C extends Contract<unknown, unknown, "external">>(contr
   contract,
 });
 
-/** The peer exists but does not run, and messages to it are not delivered; `because` says why. */
+/** The peer exists but does not run, and messages to it are not delivered. `because` says why. */
 export const skip = <C extends Contract<unknown, unknown, "spec" | "external">>(
   contract: C,
   because: string,
@@ -334,7 +334,7 @@ export const skip = <C extends Contract<unknown, unknown, "spec" | "external">>(
 
 /**
  * Each peer of `P` keyed by the name of its contract's service, which is not the own service `Own`
- * (Malformed.misnamedPeer, Malformed.unknownPeer).
+ * (`Malformed.misnamedPeer`, `Malformed.unknownPeer`).
  */
 type PeerKeys<P extends Peers, Own extends string> = {
   readonly [K in keyof P]: K extends Own
@@ -347,7 +347,7 @@ type PeerKeys<P extends Peers, Own extends string> = {
 /** The arrangement: every running service begins at `start`, the own service `Own` from `records`. */
 export interface Given<R, P extends Peers, Own extends string = string> {
   readonly start: Instant;
-  /** Every record of the own service; nothing defaults, so a single entity's record is written too. */
+  /** Every record of the own service. Nothing defaults, so a single entity's record is written too. */
   readonly records: R;
   /** Every service that exchanges messages with the own service, keyed by its service name. */
   readonly peers: P & NoInfer<PeerKeys<P, Own>>;
@@ -367,7 +367,7 @@ type Running<P extends Peers> = { readonly [K in keyof P]: P[K] extends Run ? K 
 /** The names of the peers of `P` that take part in the simulation: running and external ones. */
 type Taking<P extends Peers> = { readonly [K in keyof P]: P[K] extends Skip ? never : K }[keyof P] & string;
 
-/** The client, which reaches the services of `R` directly; its lines' messages travel between services of `S`. */
+/** The client, which reaches the services of `R` directly. Its lines' messages travel between services of `S`. */
 interface Client<R extends string, S extends string, X extends Listed> {
   /** A command to the own service or to a running peer, the owner of the definition. */
   send<C extends AnyCommand>(
@@ -392,14 +392,14 @@ interface User<S extends string, X extends Listed> {
     control: K,
     ...payload: PayloadArgs<Cs, K>
   ): ProcessingLine<S, X>;
-  /** The user looks at the screen instance; Then states what it offers at this point. */
+  /** The user looks at the screen instance. Then states what it offers at this point. */
   look<Sc extends AnyScreen>(screen: ScreenRef<Sc>): Look<Sc>;
 }
 
 type PeerAnswerOf<T> = PeerValue<AnswerOf<T>>;
 
 /**
- * What a peer sends; each line states one message in flight, which a line of the network delivers to a service of `S`.
+ * What a peer sends. Each line states one message in flight, which a line of the network delivers to a service of `S`.
  */
 interface PeerActor<C, W extends "run" | "external", S extends string> {
   /** The peer answers `request`, which it received. */
@@ -409,7 +409,7 @@ interface PeerActor<C, W extends "run" | "external", S extends string> {
   ): PeerAnswerLine<T>;
   /**
    * The peer emits `event`. `resultOf` names the command request whose result the event is, and the event travels on
-   * its own channel, so it may arrive before or after the request's answer; null names none.
+   * its own channel, so it may arrive before or after the request's answer. `null` names none.
    */
   emit<Ev extends Extract<Members<C>, AnyEvent>>(
     event: Ev,
@@ -468,7 +468,7 @@ export interface When<
   readonly net: {
     /**
      * The network delivers the message in flight to its receiver. A message never overtakes an earlier one on its
-     * channel, except an event of a step that no cause chain links to the earlier one's (InvalidScenario.overtaking).
+     * channel, except an event of a step that no cause chain links to the earlier one's (`InvalidScenario.overtaking`).
      */
     deliver<M extends Message>(message: M): Delivered<M, S, X>;
     /** The network delivers the delivered message again, with the same id. */
@@ -485,8 +485,8 @@ export interface When<
   };
   readonly clock: {
     /**
-     * The clock advances to `time`, and every running service fires its deadlines due by then; deadlines of one service
-     * due at one time fire in every order that test searches.
+     * The clock advances to `time`, and every running service fires its deadlines due by then. Deadlines of one service
+     * due at one time fire in every order that `test` searches.
      */
     at(time: Instant): ProcessingLine<S, X>;
   };

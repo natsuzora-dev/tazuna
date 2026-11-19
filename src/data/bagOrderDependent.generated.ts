@@ -3,14 +3,18 @@ import type { DefinitionRef } from "./definitionRef.ts";
 import type { TransitionRef } from "./transitionRef.generated.ts";
 
 /**
- * A result, found while the run evaluates, that depends on an order the spec does not fix. No BagOrderDependent violation
- * halts the run. In reversedException and reversedResult, orderAudit asked the question `function` of Functions again,
- * with every Bag visiting its values in reverse order, and `definition` is the definition whose code answers it: the
- * command, query, automation, entity, or chart; so too in uncomparable. In bothAssign and assignRead, it is the chart of the conflicting
- * transitions.
+ * A result, found while the run evaluates, that depends on an order the spec does not fix. No `BagOrderDependent`
+ * violation halts the run. In `reversedException`, `reversedResult`, and `uncomparable`, `test` ran the spec function
+ * `function` again with every `Bag` visiting its values in reverse order. `definition` is the definition whose code holds
+ * the function: the command, query, automation, entity, or chart. In `bothAssign` and `assignRead`, `definition` is the
+ * chart of the conflicting transitions.
  */
 export type BagOrderDependent =
-  /** An Issue stopped the second answer, or the check of a query's output or its comparable value. */
+  /**
+   * The second run of the function, or the check of a query's output or of its comparable value after it, failed. It
+   * threw, gave a value that does not match its schema, read a held value that its state does not hold, or called
+   * `only()` on more than one value.
+   */
   | {
       readonly kind: "BagOrderDependent.reversedException";
       readonly definition: DefinitionRef;
@@ -18,7 +22,7 @@ export type BagOrderDependent =
         readonly function: string;
       };
     }
-  /** The second answer differs from the first. */
+  /** The result of the second run differs from the first. */
   | {
       readonly kind: "BagOrderDependent.reversedResult";
       readonly definition: DefinitionRef;
@@ -27,8 +31,8 @@ export type BagOrderDependent =
       };
     }
   /**
-   * Comparing the second answer with the first held more than `limit` (bindingLimit) renamings of the keys that the
-   * answers created: too many renaming candidates to compare, so whether they differ is not known.
+   * Comparing the second result with the first held more than `limit` (`bindingLimit`) bindings of the keys that the
+   * results created, so whether they differ is not known.
    */
   | {
       readonly kind: "BagOrderDependent.uncomparable";

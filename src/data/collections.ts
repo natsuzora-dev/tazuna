@@ -49,7 +49,7 @@ const setCheck = z.check<readonly unknown[]>((ctx) => {
   }
 });
 
-/** Returns an array schema whose element order means nothing, like OCL's Bag; `z.array` stays a sequence. */
+/** Returns an array schema whose element order means nothing, like OCL's Bag. `z.array` stays a sequence. */
 export const bag = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag"> =>
   marked(element, bagCheck as never, { kind: "bag" });
 
@@ -69,7 +69,7 @@ const byKey = (key: string) => (a: unknown, b: unknown) =>
 
 /**
  * Returns an array schema sorted ascending by `key`, like Kotlin's `sortedBy`. tazuna sorts the values that the spec
- * produces, so `resolve` and `decide` do not sort; reading a value out of key order is an error.
+ * produces, so `resolve` and `decide` do not sort. Reading a value out of key order is an error.
  */
 export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(
   element: E,
@@ -137,7 +137,7 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
   }
 }
 
-/** Whether `sorted` and `bagged` walk into the node; a collection under any other node is opaque. */
+/** Whether `sorted` and `bagged` walk into the node. A collection under any other node is opaque. */
 export const sortsInside = (node: SchemaNode): boolean =>
   ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
@@ -160,8 +160,8 @@ export const written = (schema: z.ZodType, value: unknown): Json => plain(toJson
 
 /**
  * Returns a value of `schema` as JSON holds it: each codec at any depth encodes its part, and no check or other
- * transform runs. A part that its codec cannot encode stays as it is. Check reports a plain union that holds a codec, so
- * a union picks the option that the discriminator names and needs no other choice.
+ * transform runs. A part that its codec cannot encode stays as it is. Check reports a plain union that holds a codec,
+ * so a union picks the option that the discriminator names and needs no other choice.
  */
 export function toJson(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
@@ -207,8 +207,8 @@ export function toJson(schema: z.ZodType, value: unknown): unknown {
 }
 
 /**
- * Returns a value of `schema` from the JSON that toJson wrote of it: the mirror of toJson, which runs only the decode of
- * each codec. The value was checked when it was parsed, so no check runs again.
+ * Returns a value of `schema` from the JSON that toJson wrote of it: the mirror of toJson, which runs only the decode
+ * of each codec. The value was checked when it was parsed, so no check runs again.
  */
 export function fromJson(schema: z.ZodType, json: unknown): unknown {
   const node = schemaNode(schema);
@@ -257,8 +257,8 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 /**
- * Returns a value as `sorted` returns it, as spec code receives it: each bag and set as a Bag, and each sortedBy array as
- * Runs.
+ * Returns a value as `sorted` returns it, as spec code receives it: each bag and set as a Bag, and each sortedBy array
+ * as Runs.
  */
 export function bagged(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
@@ -305,7 +305,7 @@ export const normalizedRow = (
   value: unknown,
 ): { readonly value: Fields } | { readonly error: z.ZodError } => normalized(strictObjectOf(shape), value as Fields);
 
-/** Returns the row of the shape's defaults with every collection sorted; load checks it against the shape. */
+/** Returns the row of the shape's defaults with every collection sorted. Load checks it against the shape. */
 export function defaultRow(shape: Shape): Fields {
   const object = objectOf(shape);
   return sorted(object, object.parse({})) as Fields;

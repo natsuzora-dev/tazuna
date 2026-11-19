@@ -26,14 +26,14 @@ function namedZone(name: string): string | undefined {
   }
 }
 
-/** An IANA time zone name ("Asia/Tokyo"), in the spelling Temporal gives it; an offset ("+09:00") is not a name. */
+/** An IANA time zone name ("Asia/Tokyo"), in the spelling Temporal gives it. An offset ("+09:00") is not a name. */
 export const timeZone = z.string().refine((name) => !/^[+-]/.test(name) && namedZone(name) === name, {
   error: "not an IANA time zone name",
 });
 
 /**
  * A deadline's delay: hours, minutes, seconds and milliseconds, the units that Instant.add takes, down to the
- * millisecond that the run counts; or a Temporal.Duration, such as a `duration` constant.
+ * millisecond that the run counts. It can also be a `Temporal.Duration`, such as a `duration` constant.
  */
 export type Delay =
   | {

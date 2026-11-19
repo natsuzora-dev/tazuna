@@ -18,7 +18,7 @@ export type Immutable<T> = T extends Temporal.Instant | Temporal.PlainDate | Tem
       ? { readonly [K in keyof T]: Immutable<T[K]> }
       : T;
 
-/** A record's values as expressions receive them; changing one is a type error. */
+/** A record's values as expressions receive them. Changing one is a type error. */
 export type Row<S extends Shape> = Immutable<z.output<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>>;
 /** Values of shape `S` as expressions return them: a bag, set or sortedBy field also takes a Bag. */
 export type MadeRow<S extends Shape> = Made<Row<S>>;
@@ -99,14 +99,14 @@ export function entity<
   fields: S;
   /** The key field, whose value never changes after the record is created. */
   key: K;
-  /** The fields whose combined values no two records share; a record with null in any of them is not checked. */
+  /** The fields whose combined values no two records share. A record with null in any of them is not checked. */
   unique?: readonly (keyof S & string)[];
-  /** The conditions that every record meets (Fault.failedEntityInvariant). */
+  /** The conditions that every record meets (`Fault.failedEntityInvariant`). */
   invariants?: Named<Iv, { record: Row<SelfResolved<S, K>> }>;
 }): KeyedEntity<SelfResolved<S, K>, K> {
   // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
   const shared = definition.fields[definition.key] as z.ZodType;
-  if (selfRefs.has(shared)) throw new TypeError("The key field of an entity cannot be ref.self()");
+  if (selfRefs.has(shared)) throw new TypeError("the key field of an entity cannot be ref.self()");
   const key = shared.clone();
   const target = refTargets.get(shared);
   if (target !== undefined) refTargets.set(key, target);
@@ -125,11 +125,11 @@ export function entity<
   return keyed;
 }
 
-/** Defines an entity with exactly one record; `records.Settings` is that record. */
+/** Defines an entity with exactly one record. `records.Settings` is that record. */
 export function singleEntity<const S extends DefaultedShape, const Iv extends string = never>(definition: {
   description: string;
   fields: S;
-  /** The conditions that the record meets (Fault.failedSingleInvariant). */
+  /** The conditions that the record meets (`Fault.failedSingleInvariant`). */
   invariants?: Named<Iv, { record: Row<S> }>;
 }): SingleEntity<S> {
   return {
@@ -147,8 +147,8 @@ export type Ref<E extends AnyKeyedEntity> = z.ZodType<KeyValue<E>, KeyValue<E>> 
 
 /**
  * Returns the schema of a field whose value is the key of a `target` record. `test` and `verify` compare a created key
- * up to renaming only where its schema is `ref(target)`, `ref.self()` in `target`'s own fields, or `target`'s key field;
- * anywhere else, such as in a plain `z.string()`, they compare it as text.
+ * through the binding only where its schema is `ref(target)`, `ref.self()` in `target`'s own fields, or `target`'s key
+ * field. Anywhere else, such as in a plain `z.string()`, they compare it as text.
  */
 export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
   const schema = (target.fields[target.key] as z.ZodType).clone();
@@ -195,7 +195,7 @@ interface Table<E extends AnyKeyedEntity> extends Bag<RowOf<E>> {
   get(key: KeyValue<E>): RowOf<E> | undefined;
 }
 
-/** A table per keyed entity; the record itself per single entity. */
+/** A table per keyed entity. The record itself per single entity. */
 export type Records<Es extends Entities> = {
   readonly [N in keyof Es]: Es[N] extends AnyKeyedEntity
     ? Table<Es[N]>

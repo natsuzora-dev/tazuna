@@ -1,7 +1,7 @@
 /** A value that orders others: a number or a point in time, not a string, whose order differs across languages. */
 export type SortKey = number | Temporal.Instant | Temporal.PlainDate;
 
-/** Compares two keys; NaN throws, as it is neither less than, equal to nor greater than another number. */
+/** Compares two keys. NaN throws, as it is neither less than, equal to nor greater than another number. */
 export function compareKeys(a: unknown, b: unknown): number {
   if (Number.isNaN(a) || Number.isNaN(b)) throw new RangeError("NaN is not a sort key");
   if (a instanceof Temporal.Instant && b instanceof Temporal.Instant) return Temporal.Instant.compare(a, b);
@@ -10,7 +10,7 @@ export function compareKeys(a: unknown, b: unknown): number {
 }
 
 declare const collectionMark: unique symbol;
-/** An array type that a bag, set or sortedBy schema outputs, and Runs; implementations still see a plain array. */
+/** An array type that a bag, set or sortedBy schema outputs, and Runs. Implementations still see a plain array. */
 export type Marked<T, M extends "bag" | "sortedBy"> = T & { readonly [collectionMark]?: M };
 
 /** The mark of an array type that a bag, set or sortedBy schema outputs, or never for another type. */
@@ -81,7 +81,7 @@ export function runsOf<T>(items: readonly T[], f: (value: T) => SortKey): T[][] 
 /**
  * Values without order, like OCL's Bag, as spec functions receive records. It has no index and no iterator, and each
  * callback receives only the value, so no result depends on an order. A callback that changes a variable outside it
- * makes the result depend on the order again (BagOrderDependent).
+ * makes the result depend on the order again (`BagOrderDependent`).
  */
 export interface Bag<T> {
   readonly size: number;
@@ -92,20 +92,20 @@ export interface Bag<T> {
   some(predicate: (value: T) => boolean): boolean;
   every<S extends T>(predicate: (value: T) => value is S): this is Bag<S>;
   every(predicate: (value: T) => boolean): boolean;
-  /** The sum of `f` over the values; a value or sum that is not a safe integer throws. */
+  /** The sum of `f` over the values. A value or sum that is not a safe integer throws. */
   sum(f: (value: T) => number): number;
   /** The least key, or undefined for no values. */
   min<K extends SortKey>(f: (value: T) => K): K | undefined;
   /** The greatest key, or undefined for no values. */
   max<K extends SortKey>(f: (value: T) => K): K | undefined;
-  /** The one value, or undefined for no values; more than one value is Fault.notOnly. */
+  /** The one value, or undefined for no values. More than one value is `Fault.notOnly`. */
   only(): T | undefined;
   /** The values in groups of equal key, in ascending key order. */
   sortedBy(f: (value: T) => SortKey): Runs<T>;
   concat(other: Bag<T>): Bag<T>;
 }
 
-/** Groups of values in ascending key order; the values of one group have equal keys and no order. */
+/** Groups of values in ascending key order. The values of one group have equal keys and no order. */
 export type Runs<T> = Marked<readonly Bag<T>[], "sortedBy">;
 
 /** The error of `only()` on more than one value. */

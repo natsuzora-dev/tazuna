@@ -96,7 +96,7 @@ export type EncodedPayload<Ev extends AnyEvent> = z.input<
   z.ZodObject<{ -readonly [K in keyof PayloadShape<Ev>]: PayloadShape<Ev>[K] }>
 >;
 
-/** Returns one event for the result of a command's `decide`; its payload holds each bag and set as a Bag. */
+/** Returns one event for the result of a command's `decide`. Its payload holds each bag and set as a Bag. */
 export function emit<const Ev extends AnyEvent>(ev: Ev, payload: Made<Payload<Ev>>): Emit<Ev> {
   const object = objectOf(ev.payload);
   return { kind: "emit", event: ev, payload: bagged(object, sorted(object, payload)) as Payload<Ev> };

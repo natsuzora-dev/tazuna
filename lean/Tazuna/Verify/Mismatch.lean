@@ -23,7 +23,7 @@ def Subject.of (l : TraceLine) : Subject :=
   | _ => .named l.body.type l.body.name? l.body.id
 
 /--
-A difference between compared lines. `line` is 1-based in the trace; a line missing from the trace is at the trace's
+A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
 `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
 failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
 or Zod schemas.
@@ -53,7 +53,7 @@ inductive Mismatch where
   | time (line : Nat) (subject : Subject) (snapshot trace : String)
   /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/
   | resultOf (line : Nat) (subject : Subject) (snapshot trace : Option String)
-  /-- The run of test, not a trace, differs from the snapshot at its line `line`; a missing line is null. -/
+  /-- The run of test, not a trace, differs from the snapshot at its line `line`. A missing line is null. -/
   | line (line : Nat) (snapshot trace : Option Value)
   /-- No contract of another service lists the event that the external service emits. -/
   | unlistedEvent (line : Nat) (event : Spec.Ref)

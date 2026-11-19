@@ -55,10 +55,10 @@ type Assign<Ctx, A> = SomeKnownKey<Ctx> & { readonly [K in keyof Ctx]?: (args: A
 type Transition<N extends string, Ctx, A> = {
   /**
    * The conditions of the transition. When a guard checks the same condition as a `requires` of a command that the
-   * state sends: for another service's records, read that service's query answer (`shown` or a `calls` answer); for the
-   * own service's records, call the function that the `requires` calls; for values that only the sender holds
-   * (`context`, `payload`), write the same expression in the guard. An empty guard is NonCanonical.emptyGuard and not a
-   * type error: TS rejects an empty object only through a type parameter inferred from its keys (SomeKey), and chart
+   * state sends: for another service's records, read that service's query answer (`shown` or a `calls` answer). For the
+   * own service's records, call the function that the `requires` calls. For values that only the sender holds
+   * (`context`, `payload`), write the same expression in the guard. An empty guard is `NonCanonical.emptyGuard` and not
+   * a type error: TS rejects an empty object only through a type parameter inferred from its keys (SomeKey), and chart
    * infers only the written state keys.
    */
   readonly guard?: Conditions<A>;
@@ -67,9 +67,9 @@ type Transition<N extends string, Ctx, A> = {
   | {
       readonly target: NoInfer<N>;
       /**
-       * Whether the transition exits and re-enters its source state; written exactly when `target` is the state that
-       * writes the transition or a descendant of that state (NonCanonical.missingReenter, NonCanonical.reenterOnRoot,
-       * NonCanonical.reenterOutsideSource).
+       * Whether the transition exits and re-enters its source state. Written exactly when `target` is the state that
+       * writes the transition or a descendant of that state (`NonCanonical.missingReenter`,
+       * `NonCanonical.reenterOnRoot`, `NonCanonical.reenterOutsideSource`).
        */
       readonly reenter?: boolean;
     }
@@ -108,10 +108,10 @@ type Handled<N extends string, Ctx, A> =
 /**
  * The `onRejected` transitions, written exactly when an answer may be rejected: never for an external target that
  * declares `rejects: []`, always for another external target, and for a target of a spec service when its definition or
- * the sender's service allows a rejection (NonCanonical.missingOnRejected, NonCanonical.unreachableOnRejected; the type
- * cannot tell the sender's own service from another spec service, since a service has no type of its own). They are
- * empty, which ignores every rejection, or end with a transition without a guard, which takes every rejection that no
- * earlier guard takes (`{}` does nothing), so no rejection goes unhandled.
+ * the sender's service allows a rejection (`NonCanonical.missingOnRejected`, `NonCanonical.unreachableOnRejected`; the
+ * type cannot tell the sender's own service from another spec service, since a service has no type of its own). They
+ * are empty, which ignores every rejection, or end with a transition without a guard, which takes every rejection that
+ * no earlier guard takes (`{}` does nothing), so no rejection goes unhandled.
  */
 type OnRejected<N extends string, Ctx, B, D> = D extends { readonly rejects: readonly [] }
   ? { readonly onRejected?: never }
@@ -119,7 +119,7 @@ type OnRejected<N extends string, Ctx, B, D> = D extends { readonly rejects: rea
     ? { readonly onRejected: Handled<N, Ctx, B & { readonly rejection: RejectionBinding }> }
     : { readonly onRejected?: Handled<N, Ctx, B & { readonly rejection: RejectionBinding }> };
 
-/** The queries that a state calls; a state that does nothing on an answer writes `[]`. */
+/** The queries that a state calls. A state that does nothing on an answer writes `[]`. */
 type StateCalls<N extends string, Ctx, B, Qs extends Queries> = SomeKnownKey<Qs> & {
   readonly [K in keyof Qs]?: {
     readonly onFulfilled: Transitions<N, Ctx, B & { readonly output: QueryOutput<Qs[K]> }>;
@@ -127,7 +127,7 @@ type StateCalls<N extends string, Ctx, B, Qs extends Queries> = SomeKnownKey<Qs>
     InputOf<Qs[K], B>;
 };
 
-/** The commands that a state sends; a state that does nothing on an answer writes `[]`. */
+/** The commands that a state sends. A state that does nothing on an answer writes `[]`. */
 export type StateSends<N extends string, Ctx, B, Cs extends Commands> = SomeKnownKey<Cs> & {
   readonly [K in keyof Cs]?: {
     readonly onAccepted: Transitions<N, Ctx, B & AcceptedOutput<Cs[K]>>;
@@ -139,7 +139,7 @@ interface NodeBase<N extends string, Ctx, B, Ons> {
   /** The transitions per received event, and in screens also per control name. */
   readonly on?: Ons;
   /**
-   * The deadlines by name. An empty `after` is NonCanonical.emptyAfter and not a type error, as an empty `guard` is.
+   * The deadlines by name. An empty `after` is `NonCanonical.emptyAfter` and not a type error, as an empty `guard` is.
    */
   readonly after?: { readonly [deadline: string]: Deadline<N, Ctx, B> };
   readonly always?: Transitions<N, Ctx, B>;
@@ -153,7 +153,7 @@ interface ParentNode<N extends string, Ctx, B> {
 
 interface MapNode<B, Key> {
   /**
-   * A function that returns the rows of the map state's key fields; each key appears once, and their order does not
+   * A function that returns the rows of the map state's key fields. Each key appears once, and their order does not
    * matter.
    */
   readonly items: (args: B) => Bag<Key> | readonly Key[];
@@ -182,7 +182,7 @@ export type Scope<F, K extends keyof F, Ctx extends Shape, D, KindArgs> = [MapOf
     }
   : CopyScope<F, K, MapOf<F, K>, FieldsOf<Ctx> & FieldsOf<CopyContext<F, MapOf<F, K>>>, D, KindArgs>;
 /**
- * The row of a shape; for a shape without fields, an object without fields rather than Zod's `Record<string, never>`.
+ * The row of a shape. For a shape without fields, an object without fields rather than Zod's `Record<string, never>`.
  */
 type FieldsOf<S extends Shape> = [keyof S] extends [never] ? Record<never, never> : Row<S>;
 type CopyScope<F, K extends keyof F, M, Ctx, D, KindArgs> = {
@@ -268,13 +268,13 @@ export type MachineDefiner<Es extends Entities> = <
     description: string;
     context?: Ctx & SomeKey<keyof Ctx>;
     receives?: Rs & SomeKey<keyof Rs>;
-    /** The queries of other services (Illegal.ownQuery). */
+    /** The queries of other services (`Illegal.ownQuery`). */
     queries?: Qs & SomeKey<keyof Qs>;
     commands?: Cs & SomeKey<keyof Cs>;
     initial: NoInfer<keyof St & string>;
     states: St & CheckTree<NoInfer<St>>;
     /**
-     * The conditions on the context and on the states outside the copies of map states (Fault.failedChartInvariant).
+     * The conditions on the context and on the states outside the copies of map states (`Fault.failedChartInvariant`).
      */
     invariants?: Named<Iv, { context: Row<Ctx>; active: { readonly [S in OuterNames<Flat<St>>]: boolean } }>;
   } & TreeErrors<St> &

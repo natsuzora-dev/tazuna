@@ -8,7 +8,7 @@ type TreeNode =
   | {
       /**
        * The kind of the state, none for an atomic or compound state. Children are separate states when they react to
-       * messages differently (`on`, `after`, `always`, or the requests sent on entry); when only a value differs, the
+       * messages differently (`on`, `after`, `always`, or the requests sent on entry). When only a value differs, the
        * value is in context.
        */
       readonly type?: never;
@@ -31,7 +31,7 @@ type TreeNode =
       readonly key: Shape;
       /**
        * The context fields of each copy. In a copy, `context` has these fields and the instance's fields, whose names
-       * differ (`duplicateContextFields`); `assign` writes each field where it is kept.
+       * differ (`duplicateContextFields`). `assign` writes each field where it is kept.
        */
       readonly context?: DefaultedShape;
       readonly held?: never;
@@ -196,7 +196,7 @@ type HasHeld<F, K extends keyof F> = keyof OwnOf<F, K> extends never ? false : t
 
 export type TableKeys<F> = { [K in keyof F]: KindOf<F, K> extends "history" ? never : K }[keyof F];
 type HeldKeys<F> = { [K in keyof F]: HasHeld<F, K> extends true ? K : never }[keyof F];
-/** A value of a type with known optional keys has at least one of the keys; `{}` is a type error. */
+/** A value of a type with known optional keys has at least one of the keys. `{}` is a type error. */
 export type SomeKnownKey<T> = { [k in keyof T]-?: { readonly [q in k]-?: unknown } }[keyof T];
 type TableRow<F, K extends keyof F, A, B> =
   HasHeld<F, K> extends true
@@ -209,7 +209,7 @@ type Holds<A, Own extends Shape> = {
   readonly [h in keyof Own]: (args: A) => Made<Immutable<z.output<Own[h]>>> | null | undefined;
 };
 /**
- * The behaviors of the states. A state without behavior is left out; a state with held values needs `holds`
+ * The behaviors of the states. A state without behavior is left out. A state with held values needs `holds`
  * (`missingHolds`), and a map state needs `items` (`missingItems`).
  */
 export type Table<
