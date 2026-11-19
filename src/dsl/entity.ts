@@ -54,12 +54,15 @@ export type RowOf<E extends AnyEntity> =
 
 const refTargets = new WeakMap<z.ZodType, AnyKeyedEntity>();
 const keyFieldOwners = new WeakMap<z.ZodType, AnyKeyedEntity>();
-/** Each `ref.self()` placeholder, with the key schema that it reads once `entity()` has claimed it. */
-const selfRefs = new WeakMap<z.ZodType, { key?: z.ZodType }>();
+/** The `ref.self()` placeholders. `entity()` claims one by setting its refTargets entry to the entity. */
+const selfRefs = new WeakSet<z.ZodType>();
 
 declare const selfMark: unique symbol;
 type SelfRef = z.ZodType<unknown, unknown> & { readonly [selfMark]: true };
-/** `T` with each `ref.self()` in it, alone or under nullable, optional, default or array, as the key schema `Key`. */
+/**
+ * `T` with each `ref.self()` in it, alone or under nullable, optional, default, array or object, as the key schema
+ * `Key`. Under a union it types as `unknown`, though its value is still a key at runtime.
+ */
 type Resolved<T, Key extends z.ZodType> = T extends SelfRef
   ? Key
   : T extends z.ZodNullable<infer I extends z.ZodType>
@@ -70,15 +73,16 @@ type Resolved<T, Key extends z.ZodType> = T extends SelfRef
         ? z.ZodDefault<Resolved<I, Key>>
         : T extends z.ZodArray<infer I extends z.ZodType>
           ? z.ZodArray<Resolved<I, Key>>
-          : T;
+          : T extends z.ZodObject<infer O extends Shape, infer C>
+            ? z.ZodObject<{ -readonly [F in keyof O]: Resolved<O[F], Key> }, C>
+            : T;
 type SelfResolved<S extends Shape, K extends keyof S> = { [F in keyof S]: Resolved<S[F], S[K]> };
 
 /** Returns the unclaimed `ref.self()` placeholders in `schema`. */
 function unclaimedSelfRefs(schema: z.ZodType, seen = new Set<z.ZodType>()): z.ZodType[] {
   if (seen.has(schema)) return [];
   seen.add(schema);
-  const self = selfRefs.get(schema);
-  if (self !== undefined) return self.key === undefined ? [schema] : [];
+  if (selfRefs.has(schema)) return refTargets.has(schema) ? [] : [schema];
   return childrenOf(schemaNode(schema)).flatMap((child) => unclaimedSelfRefs(child, seen));
 }
 
@@ -117,10 +121,7 @@ export function entity<
   };
   keyFieldOwners.set(key, keyed);
   for (const field of Object.values(definition.fields) as z.ZodType[])
-    for (const self of unclaimedSelfRefs(field)) {
-      selfRefs.set(self, { key });
-      refTargets.set(self, keyed);
-    }
+    for (const self of unclaimedSelfRefs(field)) refTargets.set(self, keyed);
   return keyed;
 }
 
@@ -146,8 +147,8 @@ export type Ref<E extends AnyKeyedEntity> = z.ZodType<KeyValue<E>, KeyValue<E>> 
 
 /**
  * Returns the schema of a field whose value is the key of a `target` record. `test` and `verify` compare a created key
- * up to renaming only where its schema is `ref(target)`, `ref.self()`, or `target`'s key field; anywhere else, such as
- * in a plain `z.string()`, they compare it as text.
+ * up to renaming only where its schema is `ref(target)`, `ref.self()` in `target`'s own fields, or `target`'s key field;
+ * anywhere else, such as in a plain `z.string()`, they compare it as text.
  */
 export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
   const schema = (target.fields[target.key] as z.ZodType).clone();
@@ -160,14 +161,17 @@ export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
  * like SQL's REFERENCES to the same table: `ref(Note)` where `Note` is the entity being defined.
  */
 ref.self = (): SelfRef => {
+  // One outside the fields of entity() reads no value until load reports it (Malformed.misplacedSelfRef).
   const schema: z.ZodType = z.lazy(() => {
-    const key = selfRefs.get(schema)?.key;
-    if (key === undefined) throw new TypeError("ref.self() is only for the fields of entity()");
-    return key;
+    const owner = refTargets.get(schema);
+    return owner === undefined ? z.never() : (owner.fields[owner.key] as z.ZodType);
   });
-  selfRefs.set(schema, {});
+  selfRefs.add(schema);
   return schema as SelfRef;
 };
+
+/** Whether `schema` is a `ref.self()` that no `entity()` claimed, as one outside the fields of an entity is. */
+export const misplacedSelfRef = (schema: z.ZodType): boolean => selfRefs.has(schema) && !refTargets.has(schema);
 
 export function refTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
   const direct = refTargets.get(schema);

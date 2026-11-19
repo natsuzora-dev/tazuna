@@ -76,15 +76,23 @@ entity({ description: "", fields: { id: z.string() }, key: "name" });
 // ref.self() holds the entity's own key type, in its invariants and in the rows that it reads.
 const Reply = entity({
   description: "",
-  fields: { id: z.string(), replyTo: ref.self().nullable(), quotes: z.array(ref.self()) },
+  fields: {
+    id: z.string(),
+    replyTo: ref.self().nullable(),
+    quotes: z.array(ref.self()),
+    thread: z.object({ root: ref.self() }),
+  },
   key: "id",
   invariants: { notToItself: ({ record }) => record.replyTo !== record.id },
 });
 const replyTo: string | null = null as unknown as RowOf<typeof Reply>["replyTo"];
 const quotes: readonly string[] = [] as unknown as RowOf<typeof Reply>["quotes"];
+const root: string = "" as unknown as RowOf<typeof Reply>["thread"]["root"];
 // @ts-expect-error a ref.self() value has the key's type
 const notKey: RowOf<typeof Reply>["replyTo"] = 1;
-void [replyTo, quotes, notKey];
+// @ts-expect-error a ref.self() value in an object has the key's type
+const notNestedKey: RowOf<typeof Reply>["thread"]["root"] = 1;
+void [replyTo, quotes, root, notKey, notNestedKey];
 
 // @ts-expect-error a single entity's fields have defaults
 singleEntity({ description: "", fields: { remindersEnabled: z.boolean() } });

@@ -25,6 +25,7 @@ import { caseCollisions, duplicateNames, type NamedExport, reservedNames } from 
 import { type DefinerExport, owners } from "./owners.ts";
 import { unexportedDefinitions } from "./references.ts";
 import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
+import { misplacedSelfRefs } from "./selfRefs.ts";
 import { structureOf } from "./structureOf.ts";
 import { inexactDelays } from "./times.ts";
 import { unrepresentableSchemas } from "./unrepresentable.ts";
@@ -288,6 +289,7 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     ...inexactDelays(charts({ definitions, structure })),
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
+    ...misplacedSelfRefs(definitions, constants),
     ...defaultSchemas(definitions, structure, opaque, thrownDefaults),
     ...loaded.malformed,
   ];

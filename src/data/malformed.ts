@@ -27,7 +27,8 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  * - `duplicateName`: `name` also names another definition, scenario, or `constants()` call of the service in the file
  *   `elsewhere`.
  * - `alias`: the definition, scenario, or `constants()` call is already exported as `name`.
- * - `unexportedDefinition`, `opaqueCollection`, and `unrepresentableSchema`: `path` leads from the definition, service
+ * - `misplacedSelfRef`: a `ref.self()` outside the fields of `entity()`, where no entity's key gives it a schema.
+ * - `unexportedDefinition`, `opaqueCollection`, `unrepresentableSchema`, and `misplacedSelfRef`: `path` leads from the definition, service
  *   definer, or `constants()` call through the keys of its object, with array positions as numbers. A schema inside another schema has the path of the field that holds it, and a chart holds each state's
  *   `held` under `held` by the state's name.
  * - `unrepresentableSchema`: the schema has a value that tazuna cannot write back as JSON, of the Zod type `type`:
@@ -75,6 +76,8 @@ export type Malformed =
       null,
       { readonly name: string; readonly path: readonly string[]; readonly type: UnrepresentableType }
     >
+  | Of<"misplacedSelfRef", DefinitionRef, { readonly path: readonly string[] }>
+  | Of<"misplacedSelfRef", null, { readonly name: string; readonly path: readonly string[] }>
   | Of<"defaultSchema", DefinitionRef, Readonly<Record<string, never>>>
   | Of<"defaultSchema", DefinitionRef, { readonly map: string }>
   | Of<"unexportedDefinition", DefinitionRef, { readonly path: readonly (string | number)[] }>
