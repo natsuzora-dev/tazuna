@@ -15,7 +15,13 @@ Read the docs and samples of the version you installed, in `node_modules/@natsuz
    npm install -D @natsuzora-dev/tazuna typescript zod @types/node
    ```
 
-2. Create a `tsconfig.json` that extends tazuna's:
+2. Make your package an ES module package, since tazuna ships only ES modules:
+
+   ```sh
+   npm pkg set type=module
+   ```
+
+3. Create a `tsconfig.json` that extends tazuna's:
 
    ```json
    { "extends": "@natsuzora-dev/tazuna/tsconfig.base.json" }
@@ -71,7 +77,7 @@ Run the commands in the folder of your `package.json`.
 4. Run the scenarios:
 
    ```sh
-   npx tazuna test spec --depth 1
+   npx tazuna test spec
    ```
 
    The output ends with `65/65 scenarios, depth 1: no violations`.
@@ -96,7 +102,7 @@ Run the commands in the folder of your `package.json`.
 7. Change the answer back to `accepted()`, and run only the scenario that failed:
 
    ```sh
-   npx tazuna test spec --depth 1 --only todo/completeTwice
+   npx tazuna test spec --only todo/completeTwice
    ```
 
    The output ends with `1/65 scenarios (--only), depth 1: no violations`.

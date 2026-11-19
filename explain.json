@@ -1996,7 +1996,7 @@
       }
     },
     "Uncomparable.missingSnapshot": {
-      "meaning": "The run of `scenario` by `runner` did not halt and has no snapshot.",
+      "meaning": "The run of `scenario` by `runner` did not halt and has no snapshot, such as the run of a new scenario. `tazuna test --update` writes the snapshot.",
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",

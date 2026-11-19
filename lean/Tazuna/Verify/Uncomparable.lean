@@ -65,7 +65,10 @@ inductive Uncomparable where
   trace.
   -/
   | unknownTraceEntry
-  /-- The run of `scenario` by `runner` did not halt and has no snapshot. -/
+  /--
+  The run of `scenario` by `runner` did not halt and has no snapshot, such as the run of a new scenario.
+  `tazuna test --update` writes the snapshot.
+  -/
   | missingSnapshot (scenario : Spec.Ref) (runner : String)
   /-- A snapshot is named for no scenario of the service. -/
   | obsoleteSnapshot

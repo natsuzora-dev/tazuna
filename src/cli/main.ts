@@ -45,7 +45,7 @@ interface Misuse {
 /** An option: a flag, an option with one `value`, or a `repeatable` one that collects every value. */
 type Option =
   | { readonly kind: "flag"; readonly description: string }
-  | { readonly kind: "single"; readonly value: string; readonly required?: true; readonly description: string }
+  | { readonly kind: "single"; readonly value: string; readonly description: string }
   | { readonly kind: "repeatable"; readonly value: string; readonly description: string };
 
 /** The parsed value of each option of `O`: whether a flag was given, the value, or every value in order. */
@@ -54,9 +54,7 @@ type Parsed<O extends Readonly<Record<string, Option>>> = {
     ? boolean
     : O[K] extends { readonly kind: "repeatable" }
       ? readonly string[]
-      : O[K] extends { readonly required: true }
-        ? string
-        : string | undefined;
+      : string | undefined;
 };
 
 interface Command<O extends Readonly<Record<string, Option>>> {
@@ -111,8 +109,7 @@ const commands = {
       "--depth": {
         kind: "single",
         value: "n",
-        required: true,
-        description: "Explore paths of up to n moves after each scenario.",
+        description: "Explore paths of up to n moves after each scenario instead of 1.",
       },
       "--update": {
         kind: "flag",
@@ -132,7 +129,7 @@ const commands = {
       },
     },
     parse: ({ root, options }) => {
-      const depth = options["--depth"];
+      const depth = options["--depth"] ?? "1";
       if (!/^\d+$/.test(depth)) return { misuse: `invalid depth ${depth} (expected a non-negative integer)` };
       const { "--coverage": coverage, "--update": update, "--only": only } = options;
       if (coverage && only.length > 0) return { misuse: "--coverage cannot be given with --only" };
@@ -203,7 +200,7 @@ const usageOf = (o: Option) => {
     case "flag":
       return "";
     case "single":
-      return ` <${o.value}>${o.required === true ? " (required)" : ""}`;
+      return ` <${o.value}>`;
     case "repeatable":
       return ` <${o.value}> (repeatable)`;
   }
@@ -291,10 +288,6 @@ function parse(args: readonly string[], io: Io): Invocation | Misuse {
   }
   const arity = known.positionals.length + (known.spec ? 1 : 0);
   if (positionals.length !== arity) return { misuse: `wrong number of arguments for ${name}`, help: true };
-  const missing = Object.entries(known.options).find(
-    ([o, spec]) => spec.kind === "single" && spec.required === true && !given.has(o),
-  );
-  if (missing !== undefined) return { misuse: `missing option ${missing[0]} for ${name}`, help: true };
   const [root = "", ...after] = known.spec ? positionals : ["", ...positionals];
   if (known.spec && !isFolder(resolve(io.cwd, root))) return { misuse: `no such folder ${root}` };
   return known.parse({ root, positionals: after, options }, io);

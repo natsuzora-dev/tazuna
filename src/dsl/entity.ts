@@ -149,6 +149,9 @@ export type Ref<E extends AnyKeyedEntity> = z.ZodType<KeyValue<E>, KeyValue<E>> 
  * Returns the schema of a field whose value is the key of a `target` record. `test` and `verify` compare a created key
  * through the binding only where its schema is `ref(target)`, `ref.self()` in `target`'s own fields, or `target`'s key
  * field. Anywhere else, such as in a plain `z.string()`, they compare it as text.
+ *
+ * A command of `target`'s service rejects an input with `not-found`, before it checks binds and requires, when a
+ * top-level `ref(target)` field of the input names a key that no `target` record has.
  */
 export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
   const schema = (target.fields[target.key] as z.ZodType).clone();

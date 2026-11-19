@@ -372,7 +372,7 @@ test("The README tutorial's broken scenario gives the violation line and summary
     const out: string[] = [];
     const err: string[] = [];
     const only = `todo/${violation.scenario.name}`;
-    await main(["test", "spec", "--depth", "1", "--only", only], {
+    await main(["test", "spec", "--only", only], {
       cwd: project,
       log: (line) => out.push(line),
       error: (line) => err.push(line),

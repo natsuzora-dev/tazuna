@@ -55,7 +55,6 @@ test("tazuna writes an error and exits with 2 for an unknown command, a wrong nu
     [["verify", "samples/todo/spec"], "wrong number of arguments for verify"],
     [["test", "samples/todo/spec", "--updte"], "unknown option --updte for test"],
     [["check", "samples/todo/spec", "--update"], "unknown option --update for check"],
-    [["test", "samples/todo/spec"], "missing option --depth for test"],
     [["view"], "wrong number of arguments for view"],
     [["view", "samples/todo/spec", "--port"], "missing value for --port"],
     [["test", "samples/todo/spec", "--depth", "1", "--depth", "2"], "--depth given twice"],
@@ -196,7 +195,7 @@ test("check writes one JSON line per violation to stdout and the count, or that 
   assert.deepEqual(clean.err, [`${sourcesOf(cleanFolder).length} files: no violations`]);
 });
 
-test("test writes how many scenarios it ran out of all and the depth to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
+test("test writes how many scenarios it ran out of all and the depth, 1 unless --depth gives it, to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-"));
   cpSync(join(import.meta.dirname, "verify/uncomparable/snapshot/unpaired"), project, { recursive: true });
   const folder = relative(root, project);
@@ -228,16 +227,7 @@ test("test writes how many scenarios it ran out of all and the depth to stderr, 
       ["Uncomparable.unknownSnapshotEntry", "Uncomparable.unknownSnapshotEntry"],
     );
     assert.ok(one.err.includes(`Removed 1 snapshot: ${snapshot("addOne.peer.jsonl")}`), one.err.join("\n"));
-    const both = await run(
-      "test",
-      folder,
-      "--depth",
-      "1",
-      "--only",
-      "todo/addOneUnsnapshotted",
-      "--only",
-      "todo/addOne",
-    );
+    const both = await run("test", folder, "--only", "todo/addOneUnsnapshotted", "--only", "todo/addOne");
     assert.deepEqual(both.err.at(-1), "2/2 scenarios (--only), depth 1: 2 violations");
   } finally {
     rmSync(project, { recursive: true, force: true });

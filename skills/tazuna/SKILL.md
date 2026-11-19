@@ -25,18 +25,21 @@ Read the docs and the sample that ship with the installed package, in `node_modu
 Run `npx tazuna check <spec>` after each edit, until it reports no violation.
 Then repeat these steps until `test` passes:
 
-1. Run `npx tazuna test <spec> --depth <n>`, with the depth of the project's test script.
+1. Run `npx tazuna test <spec>`.
 2. For the first violation line, run `npx tazuna explain <kind>` with its `kind`.
    The output names the side at fault.
 3. Fix that side: the spec, the scenario, or the implementation.
 4. Re-run only that scenario with `--only <service>/<name>`, from the violation's `scenario`.
 5. Run `test` without `--only` to see that the fix broke no other scenario.
 
+A new scenario has no snapshot until `test --update` writes its first one.
+
 When `test` passes, run `npx tazuna verify <spec> <traces>` on the implementation's traces, and fix its violations the same way.
+Skip `verify` until the implementation writes traces.
 
 ## Never do these
 
 - Never weaken a scenario's Then, and never delete a scenario, to silence a violation.
   If the scenario is wrong, say why before you change it.
 - Never run `test --update` before you read every `Mismatch` line that `test` reported.
-  Run it only when each difference is one that your spec change intends, and then read the `git diff` of `__snapshots__`.
+  Update only when the new behavior is intended.

@@ -184,7 +184,10 @@ export type Uncomparable =
       readonly definition: null;
       readonly data: Readonly<Record<string, never>>;
     }
-  /** The run of `scenario` by `runner` did not halt and has no snapshot. */
+  /**
+   * The run of `scenario` by `runner` did not halt and has no snapshot, such as the run of a new scenario.
+   * `tazuna test --update` writes the snapshot.
+   */
   | {
       readonly kind: "Uncomparable.missingSnapshot";
       readonly definition: null;
