@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { groups as groupInfos } from "../src/data/groups.ts";
 import { leanRoot } from "./examples.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -99,8 +100,14 @@ test("Each violation kind that a doc comment in src names is a kind of its group
   assert.deepEqual(unknown, []);
 });
 
-test("The table of who fixes a violation in docs/guarantees.md has one row per group", () => {
+test("The table of who fixes a violation in docs/guarantees.md has one row per group of src/data/groups.ts, in its order and with its reportedBy and fixedIn", () => {
   const table = guarantees.slice(guarantees.indexOf("## Who fixes a violation"), guarantees.indexOf("## Detections"));
-  const rows = [...table.matchAll(/^\| `(\w+)` \|/gm)].map((m) => m[1]);
-  assert.deepEqual(rows.toSorted(), groups.toSorted());
+  const rows = table.split("\n").filter((line) => line.startsWith("| `"));
+  assert.deepEqual(
+    rows,
+    Object.entries(groupInfos).map(
+      ([group, { reportedBy, fixedIn }]) =>
+        `| \`${group}\` | ${reportedBy.map((c) => `\`${c}\``).join(", ")} | ${fixedIn} |`,
+    ),
+  );
 });

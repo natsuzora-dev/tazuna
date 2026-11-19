@@ -189,10 +189,12 @@ export type ResultOfMismatch = "resultOfNonCommand" | "resultOfUnacceptedRequest
 
 /** What an answer to a request, or its result events, break of the target's contract. */
 export type AssumptionMismatch =
+  /** The answer rejects the request with a kind that the target does not list. */
   | {
       readonly kind: "unlistedRejectionKind";
       readonly rejection: Rejection;
     }
+  /** The answer has an output that does not match the target's output schema. */
   | {
       readonly kind: "answerOutputSchema";
     }

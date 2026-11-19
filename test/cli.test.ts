@@ -243,6 +243,31 @@ test("test writes an error and exits with 2 when --only names no scenario of the
   }
 });
 
+test("explain writes the markdown of a violation kind: its meaning, its group, who reports it, the side at fault, and an example", async () => {
+  const { code, out, err } = await run("explain", "Fault.failedEnsures");
+  assert.equal(code, 0);
+  assert.deepEqual(err, []);
+  const markdown = out.join("\n");
+  assert.match(
+    markdown,
+    /^# Fault\.failedEnsures\n\nThe answer of the command or query, or the output of the screen, fails its ensures `condition`\./,
+  );
+  assert.match(markdown, /\n- Reported by: `test`\n- Side at fault: The spec\.\n/);
+  assert.match(
+    markdown,
+    /\n## Example\n\n`[^`]+\.ts`, lines? \d+[^\n]*:\n\n```ts\n[\s\S]*\nThe violation:\n\n```json\n\{"kind":"Fault\.failedEnsures"/,
+  );
+});
+
+test("explain writes an error and exits with 2 for a name that is no violation kind", async () => {
+  for (const kind of ["Fault.nope", "Fault", "fault.failedEnsures", "constructor"]) {
+    const { code, out, err } = await run("explain", kind);
+    assert.equal(code, 2);
+    assert.deepEqual(out, []);
+    assert.deepEqual(err, [`tazuna: unknown kind ${kind}.`]);
+  }
+});
+
 test("test, verify, and view write the same violation lines and count as check and do nothing else when check reports violations", async () => {
   const folder = "test/load/malformed/times/at";
   const checked = await run("check", folder);

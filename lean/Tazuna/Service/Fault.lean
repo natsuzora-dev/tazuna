@@ -11,6 +11,7 @@ A definition that breaks the meaning while the run evaluates it. `definition` is
 An exception has no `definition` when a service invariant throws, since the subject is then the service.
 -/
 inductive Fault where
+  /-- The command emits `event` with a payload that does not match the event's payload schema. -/
   | emittedPayloadSchema (definition : Spec.Ref) (event : Spec.Ref)
   /-- The command emits an event that its emits do not list. `event` is null when the event is no definition. -/
   | unlistedEmittedEvent (definition : Spec.Ref) (event : Option Spec.Ref)
@@ -19,6 +20,7 @@ inductive Fault where
   their order. `recordKey` is null for a single entity.
   -/
   | sameRecordInBag (definition : Spec.Ref) (entity : Spec.Ref) (recordKey : Option String)
+  /-- The query answers with an output that does not match its output schema. -/
   | outputSchema (definition : Spec.Ref)
   /-- The input that the chart or automation `definition` gives `target` does not match the input schema of `target`. -/
   | inputSchema (definition : Spec.Ref) (target : Spec.Ref)
@@ -26,42 +28,85 @@ inductive Fault where
   | failedRequires (definition : Spec.Ref) (screen : Spec.Ref) (condition : String)
   /-- The edge that enters `state` fills its parameter `held` with null or a value off its schema. -/
   | heldSchema (definition : Spec.Ref) (held state : String)
-  /-- `state` is null for the offers of the chart's own `on`. -/
+  /--
+  An offers entry of the control `control` returns a payload that does not match the control's payload schema. `state`
+  is null for the offers of the chart's own `on`.
+  -/
   | offersSchema (definition : Spec.Ref) (control : String) (state : Option String)
+  /-- The initial context that the chart computes from its input does not match its context schema. -/
   | initialContextSchema (definition : Spec.Ref)
+  /-- The output that the screen gives its opener when it is done does not match its output schema. -/
   | screenOutputSchema (definition : Spec.Ref)
+  /--
+  An assign of the chart writes a context of a copy of the map `map` that does not match the copy's context schema.
+  -/
   | copyContextSchema (definition : Spec.Ref) (map : String)
+  /-- An assign of the chart writes a context that does not match its context schema. -/
   | contextSchema (definition : Spec.Ref)
+  /-- The items that the chart computes for the map `map` do not match their schema. -/
   | itemsSchema (definition : Spec.Ref) (map : String)
   /-- A function reads `held` (its state's parameter) under a name that the state does not have. -/
   | unheld (definition : Spec.Ref) (held : String)
   /-- A function calls `only()` on a bag with more than one element. -/
   | notOnly (definition : Spec.Ref)
+  /--
+  A spec function threw. `definition` is the definition whose function threw, or null when a service invariant throws.
+  -/
   | exception (definition : Option Spec.Ref)
   /-- The record `recordKey` of entity `definition` refers in `field` to the missing record `targetKey`. -/
   | danglingRef (definition : Spec.Ref) (recordKey field targetKey : String) (command : Spec.Ref)
   /-- The record of the single entity `definition` refers in `field` to the missing record `targetKey`. -/
   | danglingSingleRef (definition : Spec.Ref) (field targetKey : String) (command : Spec.Ref)
+  /-- The answer of the command or query, or the output of the screen, fails its ensures `condition`. -/
   | failedEnsures (definition : Spec.Ref) (condition : String)
+  /-- The record `recordKey` of the entity fails its invariant `condition` after the command `command`. -/
   | failedEntityInvariant (definition : Spec.Ref) (recordKey condition : String) (command : Spec.Ref)
+  /-- The record of the single entity fails its invariant `condition` after the command `command`. -/
   | failedSingleInvariant (definition : Spec.Ref) (condition : String) (command : Spec.Ref)
+  /-- The records of the service fail its invariant `condition` after the command `command`. -/
   | failedServiceInvariant (condition : String) (command : Spec.Ref)
+  /-- The chart fails its invariant `condition`. -/
   | failedChartInvariant (definition : Spec.Ref) (condition : String)
+  /-- Two items that the chart computes for the map `map` have the key `itemKey`. -/
   | duplicateItemKey (definition : Spec.Ref) (map : String) (itemKey : Value)
+  /--
+  A chain of commands that automations send to their own service, each on an event of the one before, is deeper than
+  `limit`. `definition` sent the command past the limit.
+  -/
   | exceededCommandDepth (definition : Spec.Ref) (limit : Nat)
+  /--
+  Automations send more than `limit` commands to their own service on one message. `definition` sent the command past
+  the limit.
+  -/
   | exceededMessageCommands (definition : Spec.Ref) (limit : Nat)
+  /-- The chart's always transitions keep firing for more than `limit` rounds without the chart settling. -/
   | exceededAlwaysRounds (definition : Spec.Ref) (limit : Nat)
+  /-- The chart's onDone transitions select states that finish again more than `limit` times in one work. -/
   | exceededOnDoneSelections (definition : Spec.Ref) (limit : Nat)
   /--
-  The work items and commands of one message come from every definition that the message runs, none of which alone
-  exceeds the limit, so the fault names no definition.
+  One message runs more than `limit` work items and commands. They come from every definition that the message runs,
+  none of which alone exceeds the limit, so the fault names no definition.
   -/
   | exceededMessageWork (limit : Nat)
-  /-- The deadlines of one clock advance belong to any charts, so the fault names no definition. -/
+  /--
+  More than `limit` deadlines fall due in one clock advance. They belong to any charts, so the fault names no
+  definition.
+  -/
   | exceededDueDeadlines (limit : Nat)
-  /-- The nested exits run through the copies and screens of several definitions, so the fault names no definition. -/
+  /--
+  Exits nest deeper than `limit`, through copies and screens that their parent's exit closes. They run through several
+  definitions, so the fault names no definition.
+  -/
   | exceededExitDepth (limit : Nat)
+  /--
+  The automation's command is rejected for a reason that blames the caller, such as `requires` or `not-found`, so the
+  automation sent a command that it must not send.
+  -/
   | rejectedAutomationCommand (definition : Spec.Ref) (rejection : Rejection)
+  /--
+  The query of the screen's shows slot `slot` rejects for a reason that blames the caller, so the screen asked for a
+  value that it must not ask for.
+  -/
   | rejectedShows (definition : Spec.Ref) (slot : String) (rejection : Rejection)
 deriving Repr
 

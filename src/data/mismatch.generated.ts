@@ -25,6 +25,7 @@ export type Subject =
  * or Zod schemas.
  */
 export type Mismatch =
+  /** The request line has another input than the snapshot's. */
   | {
       readonly kind: "Mismatch.request";
       readonly definition: null;
@@ -35,6 +36,7 @@ export type Mismatch =
         readonly trace: Json;
       };
     }
+  /** The event line has another payload than the snapshot's. */
   | {
       readonly kind: "Mismatch.event";
       readonly definition: null;
@@ -45,6 +47,7 @@ export type Mismatch =
         readonly trace: Json;
       };
     }
+  /** The operation line has another payload than the snapshot's. */
   | {
       readonly kind: "Mismatch.operation";
       readonly definition: null;
@@ -55,7 +58,7 @@ export type Mismatch =
         readonly trace: Json;
       };
     }
-  /** The output of an accepted or fulfilled answer, or the answer to a query. */
+  /** The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's. */
   | {
       readonly kind: "Mismatch.output";
       readonly definition: null;
@@ -66,6 +69,7 @@ export type Mismatch =
         readonly trace: Json;
       };
     }
+  /** The answer has another result, accepted, fulfilled, or rejected, than the snapshot's. */
   | {
       readonly kind: "Mismatch.result";
       readonly definition: null;
@@ -76,6 +80,7 @@ export type Mismatch =
         readonly trace: string;
       };
     }
+  /** The answer rejects with another kind than the snapshot's. */
   | {
       readonly kind: "Mismatch.rejection";
       readonly definition: null;
@@ -86,6 +91,7 @@ export type Mismatch =
         readonly trace: RejectionKind;
       };
     }
+  /** The trace does not answer the request that the snapshot answers at `snapshotLine`. */
   | {
       readonly kind: "Mismatch.missingAnswer";
       readonly definition: null;
@@ -95,6 +101,7 @@ export type Mismatch =
         readonly snapshotLine: number;
       };
     }
+  /** The trace lacks the snapshot's line `snapshotLine`. */
   | {
       readonly kind: "Mismatch.missingLine";
       readonly definition: null;
@@ -126,6 +133,7 @@ export type Mismatch =
         readonly content: Json;
       };
     }
+  /** The trace has a line that the snapshot does not. */
   | {
       readonly kind: "Mismatch.unexpectedLine";
       readonly definition: null;
@@ -158,6 +166,7 @@ export type Mismatch =
         readonly trace: readonly string[];
       };
     }
+  /** The line has another time than the snapshot's. */
   | {
       readonly kind: "Mismatch.time";
       readonly definition: null;
@@ -198,6 +207,7 @@ export type Mismatch =
         readonly event: DefinitionRef;
       };
     }
+  /** The external service emits `event` as a result of the request `requestId`, which it did not accept. */
   | {
       readonly kind: "Mismatch.resultOfUnacceptedRequest";
       readonly definition: null;
@@ -208,6 +218,10 @@ export type Mismatch =
         readonly target: DefinitionRef;
       };
     }
+  /**
+   * The external service emits `event` as a result of the request `requestId`, whose target `target` does not list the
+   * event as a result.
+   */
   | {
       readonly kind: "Mismatch.resultOfUnlistedEvent";
       readonly definition: null;
@@ -218,6 +232,7 @@ export type Mismatch =
         readonly target: DefinitionRef;
       };
     }
+  /** The answer rejects the request with a kind that the target does not list. */
   | {
       readonly kind: "Mismatch.unlistedRejectionKind";
       readonly definition: null;
@@ -228,6 +243,7 @@ export type Mismatch =
         readonly rejection: Rejection;
       };
     }
+  /** The answer has an output that does not match the target's output schema. */
   | {
       readonly kind: "Mismatch.answerOutputSchema";
       readonly definition: null;
@@ -290,6 +306,7 @@ export type Mismatch =
         readonly target: DefinitionRef;
       };
     }
+  /** The external service emits `event` with a payload that does not match the event's payload schema. */
   | {
       readonly kind: "Mismatch.eventPayloadSchema";
       readonly definition: null;

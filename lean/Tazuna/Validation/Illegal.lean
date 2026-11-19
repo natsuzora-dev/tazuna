@@ -8,8 +8,8 @@ open Tazuna.Data
 /-- A form that the spec must not have, which `check` finds from the structure without running the spec. -/
 inductive Illegal where
   /--
-  The automations after `definition` in the cycle, empty when `definition` receives an event of its own command.
-  `check` reports none exactly when no automation that commands its own service leads back to itself
+  The automation `definition` commands its own service and leads back to itself through the automations `chain`, empty
+  when `definition` receives an event of its own command. `check` reports none exactly when no automation that commands its own service leads back to itself
   (`no_automation_returns`).
   -/
   | automationCycle (definition : Spec.Ref) (chain : List Spec.Ref)

@@ -18,6 +18,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** The event input has a payload that does not match the payload schema of `event`. */
   | {
       readonly kind: "InvalidInput.eventPayloadSchema";
       readonly definition: null;
@@ -25,6 +26,7 @@ export type InvalidInput =
         readonly event: DefinitionRef;
       };
     }
+  /** The operation input has a payload that does not match the payload schema of the control `control` of `screen`. */
   | {
       readonly kind: "InvalidInput.controlPayloadSchema";
       readonly definition: null;
@@ -49,6 +51,7 @@ export type InvalidInput =
         readonly subscriptionId: string;
       };
     }
+  /** The answer rejects the request with a kind that the target does not list. */
   | {
       readonly kind: "InvalidInput.unlistedRejectionKind";
       readonly definition: null;
@@ -58,6 +61,7 @@ export type InvalidInput =
         readonly rejection: Rejection;
       };
     }
+  /** The answer has an output that does not match the target's output schema. */
   | {
       readonly kind: "InvalidInput.answerOutputSchema";
       readonly definition: null;
@@ -135,6 +139,7 @@ export type InvalidInput =
         readonly target: DefinitionRef;
       };
     }
+  /** The operation input names the control `control`, which `screen` does not have. */
   | {
       readonly kind: "InvalidInput.unknownControl";
       readonly definition: null;

@@ -5,6 +5,7 @@ import { type TestContext, test } from "node:test";
 import { main } from "../src/cli/main.ts";
 import type { Group, ReportedViolation } from "../src/data/violation.ts";
 import { depth, maskedStack, typeChecked } from "./examples.ts";
+import { unexemplified } from "./kinds.ts";
 
 export const expected = "expected.jsonl";
 
@@ -79,15 +80,11 @@ function commonFolder(examples: readonly string[]): string {
 
 /**
  * Tests that each of `kinds` appears in the expected.jsonl of some example, as a violation or as the mismatch of a
- * ChoiceDependent difference, except `unexemplified`: the kinds that no example reports, each with the reason.
+ * ChoiceDependent difference, except the unexemplified ones (kinds.ts).
  */
-export function testEveryKind(
-  examples: readonly string[],
-  kinds: readonly string[],
-  unexemplified: Readonly<Record<string, string>> = {},
-): void {
+export function testEveryKind(examples: readonly string[], kinds: readonly string[]): void {
   const groups = [...new Set(kinds.map((kind) => kind.split(".")[0]))].join(" and ");
-  const skipped = Object.keys(unexemplified);
+  const skipped = Object.keys(unexemplified).filter((kind) => kinds.includes(kind));
   test(`Each kind of ${groups} except the unexemplified ones appears in the expected.jsonl of some example under test/${commonFolder(examples)}, and no unexemplified kind does`, () => {
     const reported = new Set(examples.flatMap(expectedOf).flatMap(kindsOfLine));
     assert.deepEqual(
@@ -95,7 +92,7 @@ export function testEveryKind(
       [],
     );
     assert.deepEqual(
-      skipped.filter((kind) => !kinds.includes(kind) || reported.has(kind)),
+      skipped.filter((kind) => reported.has(kind)),
       [],
     );
   });

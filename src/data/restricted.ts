@@ -36,17 +36,26 @@ type Of<Name extends string, Data> = {
 
 /**
  * TypeScript code in a spec file that uses a restricted feature, because the feature breaks what the meaning assumes of
- * spec functions: determinism, sound types, and service boundaries. `crossServiceImport` is a file of one service that
- * imports from the service `service` anything other than its contract.
+ * spec functions: determinism, sound types, and service boundaries.
  */
 export type Restricted =
+  /** The file reads the global `global`, whose value depends on the environment, such as the clock or the process. */
   | Of<"global", { readonly global: (typeof nondeterministicGlobals)[number] }>
+  /** The file reads `object.property`, such as `Math.random` or `Temporal.Now`, whose value changes between runs. */
   | Of<"member", (typeof nondeterministicMembers)[number]>
+  /** The file reads `object` whole, so it could reach a restricted member under another name. */
   | Of<"alias", { readonly object: (typeof memberObjects)[number] }>
+  /** The file calls `method`, whose result depends on the locale of the environment. */
   | Of<"localeMethod", { readonly method: (typeof localeMethods)[number] }>
+  /** The file declares a module-level `let` or `var`, through which a spec function could keep state between calls. */
   | Of<"mutableModule", { readonly declaration: "let" | "var" }>
+  /** The file imports `module`, whose functions return random values. */
   | Of<"cryptoImport", { readonly module: (typeof cryptoModules)[number] }>
+  /** The file uses a non-null assertion (`!`), which tells tsc that a value is defined without checking it. */
   | Of<"nonNull", Readonly<Record<string, never>>>
+  /** The file casts a value to `type` with `as`, which tells tsc a type without checking it. `as const` is allowed. */
   | Of<"as", { readonly type: string }>
+  /** The file has the mark `mark`, which silences tsc or the linter. */
   | Of<"suppression", { readonly mark: (typeof suppressionMarks)[number] }>
+  /** A file of one service imports from the service `service` anything other than its contract. */
   | Of<"crossServiceImport", { readonly service: string }>;

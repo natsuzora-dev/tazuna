@@ -42,6 +42,10 @@ export type BagOrderDependent =
         readonly limit: number;
       };
     }
+  /**
+   * Two transitions in parallel regions of `state`, taken on one event, both assign the context field `field`, so the
+   * result depends on the order of the regions.
+   */
   | {
       readonly kind: "BagOrderDependent.bothAssign";
       readonly definition: DefinitionRef;
@@ -52,6 +56,10 @@ export type BagOrderDependent =
         readonly field: string;
       };
     }
+  /**
+   * The transition `writer` in one parallel region of `state` assigns the context field `field`, which the transition
+   * `reader` in another region, taken on the same event, reads, so the result depends on the order of the regions.
+   */
   | {
       readonly kind: "BagOrderDependent.assignRead";
       readonly definition: DefinitionRef;

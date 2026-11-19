@@ -52,5 +52,7 @@ export type NonCanonical =
   | Of<"answerLiteral", null, { readonly result: "accepted" | "fulfilled" | "rejected" }>
   /** No function of the command or automation reads the binding of its `binds`. */
   | Of<"unreadBinding", DefinitionRef, { readonly binding: string }>
+  /** The service definer `service` has an empty `description`. */
   | Of<"undescribedService", null, { readonly service: string }>
+  /** The definition has an empty `description`. */
   | Of<"undescribedDefinition", DefinitionRef, Readonly<Record<string, never>>>;

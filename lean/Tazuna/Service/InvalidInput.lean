@@ -15,7 +15,9 @@ subject, so `definition` is null.
 inductive InvalidInput where
   /-- The input names a command, query, or screen that the service does not own. -/
   | unownedTarget (target : Spec.Ref)
+  /-- The event input has a payload that does not match the payload schema of `event`. -/
   | eventPayloadSchema (event : Spec.Ref)
+  /-- The operation input has a payload that does not match the payload schema of the control `control` of `screen`. -/
   | controlPayloadSchema (screen : Spec.Ref) (control : String)
   /-- The subscribe input has the id of a subscription that is open. -/
   | reusedSubscriptionId (subscriptionId : String)
@@ -25,6 +27,7 @@ inductive InvalidInput where
   /-- The answer rejects the request for a requires reason that the target does not list. -/
   | unlistedRejectionReason (requestId : String) (target : Spec.Ref) (rejection : Rejection)
   | resultOf (event : Spec.Ref) (requestId : String) (target : Spec.Ref) (mismatch : Spec.ResultOfMismatch)
+  /-- The operation input names the control `control`, which `screen` does not have. -/
   | unknownControl (screen : Spec.Ref) (control : String)
   /-- The operation input operates a screen that is not open. -/
   | unopenedScreen (screen : Spec.Ref) (control : String)

@@ -35,30 +35,6 @@ const groups: Readonly<Record<string, readonly string[]>> = {
   ChoiceDependent: choiceDependentKinds,
 };
 
-const unexemplified: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  InvalidInput: {
-    "InvalidInput.unownedTarget":
-      "Only a data scenario names a target that its receiver does not own (the DSL's types let the client send only the definitions of the service it names); test/sim/Run/network/unownedTarget exemplifies it",
-    "InvalidInput.unlistedRejectionReason":
-      "The type of an answer accepts as the reason of a requires rejection only a requires condition of the request",
-    "InvalidInput.unknownControl":
-      "The type of operate accepts only the controls of the screen, and the exploration of test operates only those",
-    "InvalidInput.unreadyStep":
-      "Only test's step-order search writes a step order, naming only the steps that an execution took",
-    "InvalidInput.unusedStepOrder":
-      "Only test's step-order search writes a step order, naming only the steps that an execution took",
-  },
-  ChoiceDependent: {
-    "ChoiceDependent.uncomparable":
-      "verify binds each created key at its first place in the outputs, so the records compare under bindings that fix every created key, unless the outputs cannot be compared with themselves; an example needs equal requests with different answers and seven created records that only their keys tell apart",
-  },
-  Fault: {
-    "Fault.exceededMessageWork":
-      "An example that reaches the limit 100000 writes about 8300 event lines in one message and makes run.diff several times slower",
-    "Fault.exceededExitDepth": "Reaching the exit nesting limit 100 takes about 50 nested screen definitions",
-  },
-};
-
 /** The kinds of another group that an example reports besides those of its own, each example with the reason. */
 const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string[]; readonly because: string }>> = {
   "choiceDependent/Explore/ChoiceDependent/halted-later": {
@@ -128,5 +104,5 @@ for (const [group, kinds] of Object.entries(groups)) {
         relative(tests, example),
       );
   });
-  testEveryKind(examples, kinds, unexemplified[group]);
+  testEveryKind(examples, kinds);
 }

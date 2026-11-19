@@ -8,6 +8,7 @@ import type { Json } from "./values.ts";
  * the snapshot.
  */
 export type Uncomparable =
+  /** The line is not a trace line that the trace line schema reads. */
   | {
       readonly kind: "Uncomparable.lineSchema";
       readonly definition: null;
@@ -29,6 +30,7 @@ export type Uncomparable =
         readonly firstLine: number;
       };
     }
+  /** The `in` request line of an external service's trace names a command or query that the service does not have. */
   | {
       readonly kind: "Uncomparable.unknownRequest";
       readonly definition: null;
@@ -46,6 +48,7 @@ export type Uncomparable =
         readonly subject: Subject;
       };
     }
+  /** The event line of an external service's trace names an event that the service does not have. */
   | {
       readonly kind: "Uncomparable.unknownEvent";
       readonly definition: null;
@@ -54,6 +57,7 @@ export type Uncomparable =
         readonly subject: Subject;
       };
     }
+  /** The event names as its cause (`resultOf`) `requestId`, which no earlier request line has as its id. */
   | {
       readonly kind: "Uncomparable.resultOfUnknownRequest";
       readonly definition: null;
@@ -63,6 +67,7 @@ export type Uncomparable =
         readonly requestId: string;
       };
     }
+  /** The event names as its cause (`resultOf`) the request `requestId` to `target`, which is not a command. */
   | {
       readonly kind: "Uncomparable.resultOfNonCommand";
       readonly definition: null;
@@ -101,6 +106,10 @@ export type Uncomparable =
         readonly snapshotLine: number;
       };
     }
+  /**
+   * The `in` line differs from the snapshot's `in` line `snapshotLine`, so the trace's run took another input than the
+   * snapshot's.
+   */
   | {
       readonly kind: "Uncomparable.differentInput";
       readonly definition: null;
@@ -142,6 +151,7 @@ export type Uncomparable =
         readonly limit: number;
       };
     }
+  /** The traces folder has a folder `service` that names no service of the spec. */
   | {
       readonly kind: "Uncomparable.unknownService";
       readonly definition: null;
@@ -165,6 +175,10 @@ export type Uncomparable =
         readonly runner: string;
       };
     }
+  /**
+   * The traces folder has an entry that is not a `<service>/<scenario>.jsonl` or `<service>/<scenario>.<peer>.jsonl`
+   * trace.
+   */
   | {
       readonly kind: "Uncomparable.unknownTraceEntry";
       readonly definition: null;
@@ -185,6 +199,7 @@ export type Uncomparable =
       readonly definition: null;
       readonly data: Readonly<Record<string, never>>;
     }
+  /** A snapshot folder has an entry that is not a `<scenario>.jsonl` or `<scenario>.<peer>.jsonl` snapshot. */
   | {
       readonly kind: "Uncomparable.unknownSnapshotEntry";
       readonly definition: null;

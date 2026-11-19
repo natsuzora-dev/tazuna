@@ -26,8 +26,16 @@ inductive BagOrderDependent where
   results created, so whether they differ is not known.
   -/
   | uncomparable (definition : Spec.Ref) (function : String) (limit : Nat)
+  /--
+  Two transitions in parallel regions of `state`, taken on one event, both assign the context field `field`, so the
+  result depends on the order of the regions.
+  -/
   | bothAssign (definition : Spec.Ref) (state : String) (firstTransition secondTransition : Spec.TransitionRef)
       (field : String)
+  /--
+  The transition `writer` in one parallel region of `state` assigns the context field `field`, which the transition
+  `reader` in another region, taken on the same event, reads, so the result depends on the order of the regions.
+  -/
   | assignRead (definition : Spec.Ref) (state : String) (writer reader : Spec.TransitionRef) (field : String)
 deriving DecidableEq, Repr, Inhabited
 

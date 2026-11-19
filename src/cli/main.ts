@@ -4,6 +4,7 @@ import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import { verifyTraces } from "../verify/index.ts";
+import { explain } from "./explain.ts";
 import { testSpec, uncoveredOf } from "./test.ts";
 import { isViewerBuilt, viewerFolder, viewSpec } from "./view.ts";
 
@@ -30,7 +31,8 @@ type Invocation =
       readonly only: readonly string[] | undefined;
     }
   | { readonly command: "verify"; readonly root: string; readonly traces: string }
-  | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string };
+  | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string }
+  | { readonly command: "explain"; readonly markdown: string };
 
 type Name = Invocation["command"];
 
@@ -41,8 +43,6 @@ interface Misuse {
 }
 
 interface Given {
-  readonly root: string;
-  /** The arguments after the spec root. */
   readonly positionals: readonly string[];
   /** The values of each given option in order, or [""] for an option without a value. */
   readonly options: ReadonlyMap<string, readonly string[]>;
@@ -69,7 +69,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
     positionals: ["spec"],
     description: "Check the spec's structure and source without running it.",
     options: {},
-    parse: ({ root }) => ({ command: "check", root }),
+    parse: ({ positionals: [root = ""] }) => ({ command: "check", root }),
   },
   test: {
     positionals: ["spec"],
@@ -96,7 +96,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
           "Run only the scenario named exactly <service>/<scenario>, the service and name fields of a violation's scenario. The paths explored after it still take their values from every scenario. Snapshots of the scenarios that do not run are neither compared, reported, nor removed. --coverage needs every scenario, so it cannot be given with --only.",
       },
     },
-    parse: ({ root, options }) => {
+    parse: ({ positionals: [root = ""], options }) => {
       const depth = options.get("--depth")?.at(-1) ?? "";
       if (!/^\d+$/.test(depth)) return { misuse: `invalid depth ${depth} (expected a non-negative integer)` };
       const coverage = options.has("--coverage");
@@ -110,7 +110,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
     description:
       "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of a spec service <peer> that runs as a peer in the scenario. verify compares the latter with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace. Any other entry of <traces> is a violation. verify checks a trace of an external service against the service's contract once the trace ends, so a result event may come before or after its request's answer. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
     options: {},
-    parse: ({ root, positionals: [traces = ""] }, io) =>
+    parse: ({ positionals: [root = "", traces = ""] }, io) =>
       isFolder(resolve(io.cwd, traces))
         ? { command: "verify", root, traces: resolve(io.cwd, traces) }
         : { misuse: `no such folder ${traces}` },
@@ -120,13 +120,23 @@ const commands: { readonly [N in Name]: Command<N> } = {
     description:
       "Serve the viewer of the spec's services, definitions, and scenario snapshots, and print its URL. The viewer reloads when a spec file or snapshot changes.",
     options: { "--port": { value: "n", description: "Serve on port n instead of a free port." } },
-    parse: ({ root, options }, io) => {
+    parse: ({ positionals: [root = ""], options }, io) => {
       const port = options.get("--port")?.at(-1) ?? "0";
       if (!/^\d+$/.test(port) || Number(port) > 65535)
         return { misuse: `invalid port ${port} (expected an integer from 0 to 65535)` };
       const viewer = io.viewer ?? viewerFolder;
       if (!isViewerBuilt(viewer)) return { misuse: "viewer not built. Run npm run build -w tazuna" };
       return { command: "view", root, port: Number(port), viewer };
+    },
+  },
+  explain: {
+    positionals: ["kind"],
+    description:
+      "Print in markdown what the violation kind <kind>, such as Fault.failedEnsures, means, who reports it, the side at fault, and an example from tazuna's tests: an excerpt of a spec and the violation line that tazuna reports on it.",
+    options: {},
+    parse: ({ positionals: [kind = ""] }) => {
+      const markdown = explain(kind);
+      return markdown === undefined ? { misuse: `unknown kind ${kind}` } : { command: "explain", markdown };
     },
   },
 };
@@ -176,7 +186,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none (test also writes how many scenarios it ran out of all, and the depth), and the paths of the snapshots that test --update writes or removes.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none (test also writes how many scenarios it ran out of all, and the depth), and the paths of the snapshots that test --update writes or removes.",
   ),
   ...wrap(
     "",
@@ -230,9 +240,9 @@ function parse(args: readonly string[], io: Io): Invocation | Misuse {
     return { misuse: `wrong number of arguments for ${command}`, help: true };
   const missing = Object.keys(known.options).find((o) => known.options[o]?.required === true && !options.has(o));
   if (missing !== undefined) return { misuse: `missing option ${missing} for ${command}`, help: true };
-  const [root = "", ...after] = positionals;
-  if (!isFolder(resolve(io.cwd, root))) return { misuse: `no such folder ${root}` };
-  return known.parse({ root, positionals: after, options }, io);
+  const [root = ""] = positionals;
+  if (known.positionals[0] === "spec" && !isFolder(resolve(io.cwd, root))) return { misuse: `no such folder ${root}` };
+  return known.parse({ positionals, options }, io);
 }
 
 export async function main(args: readonly string[], io: Io): Promise<number> {
@@ -247,6 +257,10 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   const invocation = parse(args, io);
   if ("misuse" in invocation)
     return misused(invocation.help === true ? `${invocation.misuse}. Run tazuna --help for usage` : invocation.misuse);
+  if (invocation.command === "explain") {
+    io.log(invocation.markdown);
+    return 0;
+  }
   const { root } = invocation;
   const specRoot = resolve(io.cwd, root);
   const result = await checkSpecWith(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd));

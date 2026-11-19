@@ -44,6 +44,7 @@
     "dist",
     "docs/guarantees.md",
     "docs/concepts.md",
+    "explain.json",
     "tsconfig.base.json"
   ],
   "scripts": {
