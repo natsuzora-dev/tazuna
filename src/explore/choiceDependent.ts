@@ -12,6 +12,7 @@ import type { ChoiceDependent, Difference } from "../data/choiceDependent.genera
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
+import type { Undecided } from "../data/undecided.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, type Json, plain } from "../data/values.ts";
 import type { ViolationValue } from "../data/violation.ts";
 import type { Schema, Service } from "../service/basic.ts";
@@ -175,14 +176,15 @@ export const outcomeOf = (
 ): Outcome => (halted !== null ? { halted } : { finished: { lines, state: stateValue(st, s, encode), created } });
 
 /**
- * Lean's Compare: the first violation that verify finds in `actual`, with `expected` as the snapshot, or else the set of
- * bindings. `renamed` refines what verify knows of the values (renaming).
+ * Lean's Compare: the difference in outputs that verify finds first in `actual`, with `expected` as the snapshot, a
+ * violation or an `after` that differs, or else the set of bindings. `renamed` refines what verify knows of the values
+ * (renaming).
  */
 export type Compare = (
   renamed: (v: Values) => Values,
   expected: readonly TraceLine[],
   actual: readonly TraceLine[],
-) => { readonly mismatch: ViolationValue } | { readonly set: readonly Binding[] };
+) => { readonly difference: Difference } | { readonly set: readonly Binding[] };
 
 /** Lean's Finished.renaming. */
 const renaming =
@@ -204,8 +206,6 @@ function sameState(set: readonly Binding[], original: Finished, alternative: Fin
   )({ domain: () => "", fresh: new Set(original.created.keys()), image: () => true });
   return anySameness(set.map((b) => matchesSameness(matchValue(values, b, original.state, alternative.state))));
 }
-
-type Of<K extends ChoiceDependent["kind"]> = Extract<ChoiceDependent, { readonly kind: K }>;
 
 /** Returns the identity of a halting violation; two halting violations differ when their kinds or data differ. */
 const haltIdentity = (v: ViolationValue | null): string | null => (v === null ? null : canonicalJson([v.kind, v.data]));
@@ -229,20 +229,11 @@ function difference(compare: Compare, original: Outcome, alternative: Outcome): 
   }
   const [o, a] = [original.finished, alternative.finished];
   const compared = compare(renaming(o, a), o.lines, a.lines);
-  if (!("mismatch" in compared)) return compareStates(compared.set, o, a);
-  return "mismatch" in compare(renaming(o, o), o.lines, o.lines)
+  if (!("difference" in compared)) return compareStates(compared.set, o, a);
+  return "difference" in compare(renaming(o, o), o.lines, o.lines)
     ? compareStates([emptyBinding], o, a)
-    : { aspect: "outputs", mismatch: compared.mismatch };
+    : compared.difference;
 }
-
-/** Lean's Comparison.violation. */
-const uncomparable = (
-  definition: Of<"ChoiceDependent.uncomparable">["definition"],
-): Of<"ChoiceDependent.uncomparable"> => ({
-  kind: "ChoiceDependent.uncomparable",
-  definition,
-  data: { limit: bindingLimit },
-});
 
 /**
  * Lean's stepOrder: the violation when the two executions differ. `aFirst` takes step `a` first and is the execution with the step
@@ -258,13 +249,18 @@ export function stepOrder(
   bOrder: readonly StepName[],
   aFirst: Outcome,
   bFirst: Outcome,
-): Of<"ChoiceDependent.stepOrder" | "ChoiceDependent.uncomparable"> | undefined {
+): ChoiceDependent | Undecided | undefined {
   const [first, second, originalOrder, alternativeOrder, original, alternative] =
     byCodePoint(canonicalJson(a), canonicalJson(b)) <= 0
       ? [a, b, aOrder, bOrder, aFirst, bFirst]
       : [b, a, bOrder, aOrder, bFirst, aFirst];
   const found = difference(compare, original, alternative);
-  if (found === "uncomparable") return uncomparable(stepNameDefinition(service, first));
+  if (found === "uncomparable")
+    return {
+      kind: "Undecided.stepOrderBindings",
+      definition: stepNameDefinition(service, first),
+      data: { limit: bindingLimit },
+    };
   return found === undefined
     ? undefined
     : {

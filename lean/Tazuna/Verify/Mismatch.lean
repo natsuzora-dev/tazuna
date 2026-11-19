@@ -8,21 +8,6 @@ namespace Tazuna.Verify
 open Tazuna.Data
 
 /--
-A trace line as a violation names it: an answer or unsubscribe line by its `to`, and any other line by its name and
-id.
--/
-inductive Subject where
-  | reply (type to : String)
-  | named (type : String) (name : Option String) (id : String)
-
-derive_wire Subject untagged
-
-def Subject.of (l : TraceLine) : Subject :=
-  match l.body with
-  | .answer _ _ to _ | .unsubscribe _ _ to => .reply l.body.type to
-  | _ => .named l.body.type l.body.name? l.body.id
-
-/--
 A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
 `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
 failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
@@ -53,11 +38,6 @@ inductive Mismatch where
   | unexpectedLine (line : Nat) (subject : Subject)
   /-- The line comes before the line `before`, which its snapshot line must follow. -/
   | lineOrder (line : Nat) (subject before : Subject)
-  /--
-  The line follows other lines of its group than its snapshot line follows (`after`, compared through the pairing). Only
-  test compares this, on two runs of the simulation, since an implementation's trace has no `after`.
-  -/
-  | after (line : Nat) (subject : Subject) (snapshot trace : List String)
   /-- The line has another time than the snapshot's. -/
   | time (line : Nat) (subject : Subject) (snapshot trace : String)
   /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/

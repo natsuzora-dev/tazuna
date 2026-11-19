@@ -3,6 +3,7 @@ import { stepOrderLimit } from "../data/limits.generated.ts";
 import type { Origin, Scenario } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
+import type { Undecided } from "../data/undecided.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
@@ -21,26 +22,39 @@ import { leadsTo } from "./instrument.ts";
 /** Lean's Tried: a step order that the search ran, refused (Execution.refused) or with the violation found, if any. */
 export type Tried =
   | { readonly order: readonly StepName[]; readonly refused: true }
-  | { readonly order: readonly StepName[]; readonly found: ChoiceDependent | null };
+  | { readonly order: readonly StepName[]; readonly found: ChoiceDependent | Undecided | null };
 
 /** Lean's Searched: what the search of the processing of `service` ran and its first violation. The diff test asks Lean. */
 export interface Searched {
   readonly origin: Origin;
   readonly service: string;
   readonly tried: readonly Tried[];
-  readonly found: ChoiceDependent | null;
+  readonly found: ChoiceDependent | Undecided | null;
 }
 
 export type OnSearched = ((searched: Searched) => void) | undefined;
 
 const violationValue = ({ kind, definition, data }: ViolationValue): ViolationValue => ({ kind, definition, data });
 
+/** Lean's DiffTest `compare`: verify's comparison of two runs, a finding as the difference in outputs that it shows. */
 const compareOf =
   (spec: Spec, service: string): Compare =>
   (renamed, expected, actual) => {
-    const { found, set } = compareRuns(spec, service, expected, actual, renamed);
-    const [mismatch] = found;
-    return mismatch === undefined ? { set } : { mismatch: violationValue(mismatch) };
+    const compared = compareRuns(spec, service, expected, actual, renamed);
+    if (!("found" in compared)) return compared;
+    const f = compared.found;
+    return {
+      difference:
+        "after" in f
+          ? {
+              aspect: "after",
+              line: f.after.line,
+              subject: f.after.subject,
+              original: f.after.snapshot,
+              alternative: f.after.trace,
+            }
+          : { aspect: "outputs", mismatch: violationValue(f) },
+    };
   };
 
 /** Lean's Execution.outcomeWith: the outcome of `service` in `m`, with its lines `lines` when given. */
@@ -171,8 +185,8 @@ function stepOrderSearch(
       if (tried.some((t) => canonicalJson(t.order as Json) === key)) continue;
       first ??= a;
       if (tried.length === stepOrderLimit) {
-        const limit: ChoiceDependent = {
-          kind: "ChoiceDependent.searchLimit",
+        const limit: Undecided = {
+          kind: "Undecided.stepOrderLimit",
           definition: stepNameDefinition(service, first),
           data: { limit: stepOrderLimit },
         };

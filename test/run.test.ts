@@ -21,10 +21,17 @@ const tests = import.meta.dirname;
  * The kinds of each group. Its examples are in test/run/<group with a lowercase first letter>/<path>/<example>, where
  * <path> is the path, relative to lean/Tazuna, of the one Lean file that reports the violations of the example's
  * scenarios: the Sim file that reports the InvalidScenario violations, the Service file that calls State.report, Processing.report or State.reportAll, or the Explore file
- * that builds the BagOrderDependent or ChoiceDependent violations. An example without violations is in the
+ * that builds the BagOrderDependent, ChoiceDependent, or Undecided violations. An example without violations is in the
  * same folder as the example that it counters.
  */
-const groups = ["InvalidScenario", "InvalidInput", "Fault", "BagOrderDependent", "ChoiceDependent"] as const;
+const groups = [
+  "InvalidScenario",
+  "InvalidInput",
+  "Fault",
+  "BagOrderDependent",
+  "ChoiceDependent",
+  "Undecided",
+] as const;
 
 /** The kinds of another group that an example reports besides those of its own, each example with the reason. */
 const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string[]; readonly because: string }>> = {

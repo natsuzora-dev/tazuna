@@ -4,6 +4,7 @@ import Tazuna.Service.Limits
 import Tazuna.Data.Trace
 import Tazuna.Explore.ChoiceDependent
 import Tazuna.Explore.BagOrderDependent
+import Tazuna.Explore.Undecided
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
 import Tazuna.Service.Note
@@ -54,7 +55,7 @@ def sums : List (Name × List Name) :=
 /-- Each generated module, by repository path, and the Lean types that it declares, the root last. -/
 def modules : List (String × List Name) :=
   [("src/data/illegal.generated.ts", [``Tazuna.Validation.Illegal]),
-   ("src/data/mismatch.generated.ts", [``Tazuna.Verify.Subject, ``Tazuna.Verify.Mismatch]),
+   ("src/data/mismatch.generated.ts", [``Tazuna.Data.Subject, ``Tazuna.Verify.Mismatch]),
    ("src/data/uncomparable.generated.ts", [``Tazuna.Verify.Uncomparable]),
    ("src/data/invalidInput.generated.ts", [``Tazuna.Service.InvalidInput]),
    ("src/data/invalidScenario.generated.ts", [``Tazuna.Sim.InvalidScenario]),
@@ -66,6 +67,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Scenario]),
    ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),
    ("src/data/bagOrderDependent.generated.ts", [``Tazuna.Explore.BagOrderDependent]),
+   ("src/data/undecided.generated.ts", [``Tazuna.Explore.Undecided]),
    ("src/data/choiceDependent.generated.ts",
     [``Tazuna.Explore.Difference, ``Tazuna.Explore.ChoiceDependent]),
    ("src/data/transitionRef.generated.ts",
@@ -177,11 +179,16 @@ def object (indent : String) (properties : List (Option String × Property)) : W
 def typeDoc (type : Name) : MetaM String := do
   return ((← findDocString? (← getEnv) type).map (jsdoc "")).getD ""
 
-/-- A union of `members`, each after its docstring, an intersection in parentheses. -/
+/--
+A union of `members`, each after its docstring, an intersection in parentheses. One member has no `|`, and its lines
+move two columns left, as Biome formats it.
+-/
 def union (name : String) (doc : String) (members : List (Option String × String)) : String :=
   let member (m : String) := if (m.splitOn "} & ").length > 1 then s!"({m})" else m
-  doc ++ s!"export type {name} =\n" ++
-    "\n".intercalate (members.map fun (d, m) => ((d.map (jsdoc "  ")).getD "") ++ "  | " ++ member m) ++ ";\n"
+  let documented (d : Option String) := (d.map (jsdoc "  ")).getD ""
+  doc ++ s!"export type {name} =\n" ++ (match members with
+    | [(d, m)] => documented d ++ "  " ++ (member m).replace "\n  " "\n"
+    | _ => "\n".intercalate (members.map fun (d, m) => documented d ++ "  | " ++ member m)) ++ ";\n"
 
 /-- The TS declaration of a type with derive_wire, in the shape that `wireShape` decides. -/
 def declaration (type : Name) : Write String := do
@@ -467,6 +474,7 @@ def files : List (String × String) :=
    appended (typescript% "src/data/fault.generated.ts")
      (halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
    typescript% "src/data/bagOrderDependent.generated.ts",
+   typescript% "src/data/undecided.generated.ts",
    typescript% "src/data/choiceDependent.generated.ts",
    types% "src/data/transitionRef.generated.ts",
    types% "src/data/step.generated.ts",

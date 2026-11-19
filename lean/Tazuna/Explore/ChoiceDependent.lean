@@ -2,6 +2,7 @@ import Tazuna.Data.Binding
 import Tazuna.Data.Group
 import Tazuna.Data.Trace
 import Tazuna.Explore.Instrument
+import Tazuna.Explore.Undecided
 import Tazuna.Service.Message
 import Tazuna.Service.Note
 import Tazuna.Service.Basic
@@ -15,11 +16,14 @@ open Tazuna.Data Tazuna.Service Tazuna.Sim
 A difference between the results of two executions. `original` is the result of the execution that takes the step that
 the violation names first before the second, and `alternative` is the result of the execution that takes the second
 first. `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
-snapshot. `state` is the state that a later input reads, the records and the open instances, when it differs.
+snapshot. `after` is the first alternative output line, at `line`, that follows other lines of its group (`original`)
+than its original line follows (`alternative`), compared through the pairing, when it comes before any such violation.
+`state` is the state that a later input reads, the records and the open instances, when it differs.
 -/
 inductive Difference where
   | halt (original alternative : Option Violation)
   | outputs (mismatch : Violation)
+  | after (line : Nat) (subject : Subject) (original alternative : List String)
   | state (original alternative : Value)
 deriving Repr, Inhabited
 
@@ -39,18 +43,6 @@ inductive ChoiceDependent where
   -/
   | stepOrder (definition : Spec.Ref) (firstStep secondStep : StepName) (originalOrder alternativeOrder : List StepName)
       (difference : Difference)
-  /--
-  The search of the step orders of one processing ran `limit` (`stepOrderLimit`) orders and stopped with orders left, so
-  a result that only those change is not reported. `definition` is the definition of the first step of the first pair
-  that the search swapped.
-  -/
-  | searchLimit (definition : Spec.Ref) (limit : Nat)
-  /--
-  Comparing the states of two executions that a `stepOrder` violation at `definition` would name held more
-  than `limit` (`bindingLimit`) bindings of created keys at one step, so whether the choice changes the state is not
-  known.
-  -/
-  | uncomparable (definition : Spec.Ref) (limit : Nat)
 deriving Repr, Inhabited
 
 derive_group ChoiceDependent
@@ -184,12 +176,12 @@ def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLin
   | none => .finished { lines, state := stateValue st s, created }
 
 /--
-The first violation that verify finds in the second lines, with the first lines as the snapshot, or else the set of
-bindings that agree with every line (Data/Binding). The first argument refines what verify knows of the values
-(Finished.renaming).
+The difference in outputs that verify finds first in the second lines, with the first lines as the snapshot: a
+violation (`outputs`) or an `after` that differs (`after`), or else the set of bindings that agree with every line
+(Data/Binding). The first argument refines what verify knows of the values (Finished.renaming).
 -/
 abbrev Compare (m : Type → Type) :=
-  (Values → Values) → List TraceLine → List TraceLine → m (Except Violation (List Binding))
+  (Values → Values) → List TraceLine → List TraceLine → m (Except Difference (List Binding))
 
 /--
 What a comparison of `original` with `alternative` knows of the values beyond verify's `v`: a key that `original`
@@ -250,19 +242,19 @@ def difference (compare : Compare m) : Outcome → Outcome → m Comparison
   | .finished o, .finished a => do
     match ← compare (o.renaming a) o.lines a.lines with
     | .ok set => return compareStates set o a
-    | .error mismatch =>
+    | .error found =>
       match ← compare (o.renaming o) o.lines o.lines with
-      | .ok _ => return .differ (.outputs mismatch)
+      | .ok _ => return .differ found
       | .error _ => return compareStates [.empty] o a
   | o, a => return if haltIdentity o.halted? == haltIdentity a.halted? then .same
     else .differ (.halt o.halted? a.halted?)
 
 /-- The violation, if any, that a comparison found for a choice at `definition`, with `found` for a difference. -/
 def Comparison.violation (definition : Spec.Ref) (found : Difference → ChoiceDependent) :
-    Comparison → Option ChoiceDependent
+    Comparison → Option Violation
   | .same => none
-  | .differ d => some (found d)
-  | .uncomparable => some (.uncomparable definition bindingLimit)
+  | .differ d => some (found d).toViolation
+  | .uncomparable => some (Undecided.stepOrderBindings definition bindingLimit).toViolation
 
 /--
 The ChoiceDependent violation, if any, for the order of steps `a` and `b`. `aFirst` takes `a` first and is the execution
@@ -270,7 +262,7 @@ with the step order `aOrder`, and `bFirst` takes `b` first and is the execution 
 of their canonical texts.
 -/
 def stepOrder (compare : Compare m) (service : String) (a b : StepName) (aOrder bOrder : List StepName) (aFirst bFirst : Outcome) :
-    m (Option ChoiceDependent) := do
+    m (Option Violation) := do
   let (first, second, firstOrder, secondOrder, original, alternative) :=
     if (ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical then (a, b, aOrder, bOrder, aFirst, bFirst)
     else (b, a, bOrder, aOrder, bFirst, aFirst)

@@ -51,6 +51,7 @@ export type Group =
   | "Fault"
   | "BagOrderDependent"
   | "ChoiceDependent"
+  | "Undecided"
   | "Mismatch"
   | "Uncomparable"
   | "Uncovered"

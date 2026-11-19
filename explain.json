@@ -9,6 +9,7 @@
     "Fault": "A definition that breaks the meaning while the run evaluates it.",
     "BagOrderDependent": "A result, found while the run evaluates, that depends on an order the spec does not fix.",
     "ChoiceDependent": "A result that depends on a choice nobody controls: the order of two steps of one processing that no cause chain links, of two deadlines of one service due at one time, or of two messages that one line delivers to one service.",
+    "Undecided": "A check of `test` that reached a limit that tazuna sets before it could decide, so it neither reports the violation that the check looks for nor rules it out, as an SMT solver answers unknown.",
     "Uncovered": "A part that neither a scenario's run nor an explored path reached, which test --coverage reports.",
     "Mismatch": "A difference between compared lines.",
     "Uncomparable": "A line or file that verify cannot compare."
@@ -66,32 +67,6 @@
         "violation": "{\"kind\":\"BagOrderDependent.reversedResult\",\"definition\":{\"service\":\"todo\",\"name\":\"titlesInArray\"},\"data\":{\"function\":\"resolve\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":23},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwoAndReadArray\"}}"
       }
     },
-    "BagOrderDependent.uncomparable": {
-      "meaning": "Comparing the second result with the first held more than `limit` (`bindingLimit`) bindings of the keys that the results created, so whether they differ is not known.",
-      "example": {
-        "excerpt": {
-          "file": "marks/marks.ts",
-          "from": 22,
-          "to": 24,
-          "line": 22,
-          "text": "export const markEveryTask = automation({ receives: { taskAdded }, commands: { takeMarks } }).send({\n  input: ({ createKey, records }) => ({ markIds: records.Task.map(() => createKey(ref(Mark))) }),\n});"
-        },
-        "violation": "{\"kind\":\"BagOrderDependent.uncomparable\",\"definition\":{\"service\":\"marks\",\"name\":\"markEveryTask\"},\"data\":{\"function\":\"react\",\"limit\":256},\"location\":{\"file\":\"marks/marks.ts\",\"line\":22},\"scenario\":{\"service\":\"marks\",\"name\":\"addSeventh\"}}"
-      }
-    },
-    "ChoiceDependent.searchLimit": {
-      "meaning": "The search of the step orders of one processing ran `limit` (`stepOrderLimit`) orders and stopped with orders left, so a result that only those change is not reported. `definition` is the definition of the first step of the first pair that the search swapped.",
-      "example": {
-        "excerpt": {
-          "file": "counter/counter.ts",
-          "from": 29,
-          "to": 29,
-          "line": 29,
-          "text": "export const bumpWithA = automation({ receives: { ticked }, commands: { bumpA } }).send({});"
-        },
-        "violation": "{\"kind\":\"ChoiceDependent.searchLimit\",\"definition\":{\"service\":\"counter\",\"name\":\"bumpWithA\"},\"data\":{\"limit\":64},\"location\":{\"file\":\"counter/counter.ts\",\"line\":29},\"scenario\":{\"service\":\"counter\",\"name\":\"tickOnce\"}}"
-      }
-    },
     "ChoiceDependent.stepOrder": {
       "meaning": "The execution with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the execution with `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the execution without one. One order comes from the other (`stepOrderSearch`), so the pair is the steps whose order they swap. `definition` is the definition of the first step.",
       "example": {
@@ -104,9 +79,6 @@
         },
         "violation": "{\"kind\":\"ChoiceDependent.stepOrder\",\"definition\":{\"service\":\"waiter\",\"name\":\"m\"},\"data\":{\"firstStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"secondStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"originalOrder\":[],\"alternativeOrder\":[{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]}],\"difference\":{\"aspect\":\"state\",\"original\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T05:00:00Z\"}]}]},\"alternative\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T06:00:00Z\"}]}]}}},\"location\":{\"file\":\"waiter/waiter.ts\",\"line\":22},\"scenario\":{\"service\":\"waiter\",\"name\":\"once\"}}"
       }
-    },
-    "ChoiceDependent.uncomparable": {
-      "meaning": "Comparing the states of two executions that a `stepOrder` violation at `definition` would name held more than `limit` (`bindingLimit`) bindings of created keys at one step, so whether the choice changes the state is not known."
     },
     "Fault.contextSchema": {
       "meaning": "An assign of the chart writes a context that does not match its context schema.",
@@ -1447,9 +1419,6 @@
         "violation": "{\"kind\":\"Malformed.writtenCreatedKey\",\"definition\":null,\"data\":{\"key\":\"todo/Task-1\",\"entity\":{\"service\":\"todo\",\"name\":\"Task\"}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"givenCreatedKey\"}}"
       }
     },
-    "Mismatch.after": {
-      "meaning": "The line follows other lines of its group than its snapshot line follows (`after`, compared through the pairing). Only test compares this, on two runs of the simulation, since an implementation's trace has no `after`."
-    },
     "Mismatch.answerOutputSchema": {
       "meaning": "The answer has an output that does not match the target's output schema.",
       "example": {
@@ -2459,6 +2428,45 @@
           "text": "export const progress = machine({\n  description: \"Follow the added tasks\",\n  receives: { taskAdded },\n  initial: \"empty\",\n  states: { empty: {}, busy: {} },\n}).chart({\n  states: {\n    empty: { on: { taskAdded: [{ target: \"busy\" }] } },\n    busy: { on: { taskAdded: [{ target: \"empty\" }] } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Uncovered.transition\",\"definition\":{\"service\":\"backlog\",\"name\":\"progress\"},\"data\":{\"transition\":{\"state\":\"busy\",\"trigger\":{\"type\":\"on\",\"key\":\"taskAdded\"},\"index\":0}},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":23}}"
+      }
+    },
+    "Undecided.reversedBagBindings": {
+      "meaning": "Comparing the result of the spec function `function` of `definition` with its result when every `Bag` visits its values in reverse order held more than `limit` (`bindingLimit`) bindings of the keys that the results created, so whether they differ is not known.",
+      "example": {
+        "excerpt": {
+          "file": "marks/marks.ts",
+          "from": 22,
+          "to": 24,
+          "line": 22,
+          "text": "export const markEveryTask = automation({ receives: { taskAdded }, commands: { takeMarks } }).send({\n  input: ({ createKey, records }) => ({ markIds: records.Task.map(() => createKey(ref(Mark))) }),\n});"
+        },
+        "violation": "{\"kind\":\"Undecided.reversedBagBindings\",\"definition\":{\"service\":\"marks\",\"name\":\"markEveryTask\"},\"data\":{\"function\":\"react\",\"limit\":256},\"location\":{\"file\":\"marks/marks.ts\",\"line\":22},\"scenario\":{\"service\":\"marks\",\"name\":\"addSeventh\"}}"
+      }
+    },
+    "Undecided.stepOrderBindings": {
+      "meaning": "Comparing the states of two step orders whose first steps run `definition` held more than `limit` (`bindingLimit`) bindings of created keys at one step, so whether the order changes the state is not known.",
+      "example": {
+        "excerpt": {
+          "file": "marks/marks.ts",
+          "from": 63,
+          "to": 63,
+          "line": 63,
+          "text": "export const first = clock(\"first\");"
+        },
+        "violation": "{\"kind\":\"Undecided.stepOrderBindings\",\"definition\":{\"service\":\"marks\",\"name\":\"first\"},\"data\":{\"limit\":256},\"location\":{\"file\":\"marks/marks.ts\",\"line\":63},\"scenario\":{\"service\":\"marks\",\"name\":\"tied\"}}"
+      }
+    },
+    "Undecided.stepOrderLimit": {
+      "meaning": "The search of the step orders of one processing ran `limit` (`stepOrderLimit`) orders and stopped with orders left, so a `ChoiceDependent` violation that only those orders show is not reported. `definition` is the definition of the first step of the first pair that the search swapped.",
+      "example": {
+        "excerpt": {
+          "file": "counter/counter.ts",
+          "from": 29,
+          "to": 29,
+          "line": 29,
+          "text": "export const bumpWithA = automation({ receives: { ticked }, commands: { bumpA } }).send({});"
+        },
+        "violation": "{\"kind\":\"Undecided.stepOrderLimit\",\"definition\":{\"service\":\"counter\",\"name\":\"bumpWithA\"},\"data\":{\"limit\":64},\"location\":{\"file\":\"counter/counter.ts\",\"line\":29},\"scenario\":{\"service\":\"counter\",\"name\":\"tickOnce\"}}"
       }
     }
   }

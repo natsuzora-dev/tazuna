@@ -7,6 +7,7 @@ import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
+import type { Undecided } from "../data/undecided.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, plain, sameJson } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { ref, type Schema, type Service } from "../service/basic.ts";
@@ -142,7 +143,7 @@ function tied(steps: readonly StepInfo[], i: number, j: number): boolean {
 const sameMessage = (steps: readonly StepInfo[], i: number, j: number): boolean =>
   tieOf(steps[i]) === undefined && tieOf(steps[j]) === undefined && steps[i]?.message === steps[j]?.message;
 
-const reportedKey = (v: BagOrderDependent): string => JSON.stringify([v.kind, v.definition, v.data]);
+const reportedKey = (v: BagOrderDependent | Undecided): string => JSON.stringify([v.kind, v.definition, v.data]);
 
 /**
  * Lean's Collect: the values each step reads and writes, the context fields each part of the open microstep reads and
@@ -181,7 +182,7 @@ export class Collect
   private arrival: StepAccess | undefined;
   /** For each message, the values that its afterMessage read: subscription answers and invariants. */
   private readonly afters = new Map<number, Footprint>();
-  readonly violations: (BagOrderDependent & Located)[] = [];
+  readonly violations: ((BagOrderDependent | Undecided) & Located)[] = [];
   /** The kind, definition and data of each of `violations`, which Lean's Violation compares. */
   private readonly reported = new Set<string>();
 
@@ -203,7 +204,7 @@ export class Collect
     return this.reportedOrder.has(JSON.stringify(definition));
   }
 
-  reportOrder(definition: DefinitionRef, v: BagOrderDependent & Located): void {
+  reportOrder(definition: DefinitionRef, v: (BagOrderDependent | Undecided) & Located): void {
     this.reportedOrder.add(JSON.stringify(definition));
     this.reported.add(reportedKey(v));
     this.violations.push(v);
@@ -468,7 +469,7 @@ export class InstrumentedFunctions implements Functions {
         this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
       if (same === "uncomparable")
         this.c.reportOrder(definition, {
-          kind: "BagOrderDependent.uncomparable",
+          kind: "Undecided.reversedBagBindings",
           definition,
           data: { ...data, limit: bindingLimit },
         });

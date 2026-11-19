@@ -135,7 +135,7 @@ A step order that the search ran: refused, or compared with an execution `parent
 without a violation meaning that difference finds the two outcomes the same, in one order or the other.
 -/
 def Ran (t : Tried) : Prop :=
-  t.verdict = .refused ∨ ∃ (parent : Execution) (found : Option ChoiceDependent), t.verdict = .decided found ∧
+  t.verdict = .refused ∨ ∃ (parent : Execution) (found : Option Violation), t.verdict = .decided found ∧
     (found = none →
       (difference compare (parent.outcome st) (aligned o st parent (executeWith t.order)) : Id _) = .same ∨
       (difference compare (aligned o st parent (executeWith t.order)) (parent.outcome st) : Id _) = .same)
@@ -207,9 +207,9 @@ theorem searchQueue_inv : ∀ (fuel : Nat) (r : Searching), SearchInv compare ex
 /--
 The verdict of the step-order search of one processing: when it reports nothing, each order that it ran was refused (no
 queue could take it) or gives the same outcome as the execution that it came from, as difference finds outcomes the
-same (difference_same, compareTraces_ok). The search reports searchLimit when it stops with orders left, so it ran
-every order that it reached. That it reaches every order of dependent steps (dynamic partial-order reduction) has no
-theorem.
+same (difference_same, compareTraces_ok). The search reports Undecided.stepOrderLimit when it stops with orders left,
+so it ran every order that it reached. That it reaches every order of dependent steps (dynamic partial-order reduction)
+has no theorem.
 -/
 theorem stepOrderSearch_same (base : Execution)
     (h : (stepOrderSearch compare executeWith o st base : Id _).found = none) :

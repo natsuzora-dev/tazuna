@@ -1,5 +1,6 @@
 import Tazuna.Service.Restart
 import Tazuna.Explore.BagOrderDependent
+import Tazuna.Explore.Undecided
 import Tazuna.Sim.Order
 import Tazuna.Data.Binding
 
@@ -292,25 +293,25 @@ def observe {α : Type} (x : m α) (f : α → StateT Collect m Unit) : StateT C
   f r
   pure r
 
-def reportOrder (definition : Spec.Ref) (found : BagOrderDependent) : StateT Collect m Unit :=
-  modify (·.reportOrder definition found.toViolation)
+def reportOrder (definition : Spec.Ref) (found : Violation) : StateT Collect m Unit :=
+  modify (·.reportOrder definition found)
 
 /--
 Takes the answer of `again`, the question `function` asked again of `ifs.reversed`, and reports
 BagOrderDependent.reversedException when an Issue stops it, BagOrderDependent.reversedResult when `same` tells it apart
-from `original`, or BagOrderDependent.uncomparable when `same` cannot tell. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
+from `original`, or Undecided.reversedBagBindings when `same` cannot tell. It reports at most once per definition. The one reversed order approximates every order of a Bag: an
 answer that depends on the order only as the reversal keeps it, such as on the middle of three values, is not reported.
 -/
 def orderAudit {ε α : Type} (definition : Spec.Ref) (function : String) (original : α) (again : m (Except ε α))
     (same : α → α → Sameness) : StateT Collect m Unit := do
   if definition ∈ (← get).reportedOrder then return
   match ← again with
-  | .error _ => reportOrder definition (.reversedException definition function)
+  | .error _ => reportOrder definition (BagOrderDependent.reversedException definition function).toViolation
   | .ok answer =>
     match same original answer with
     | .same => pure ()
-    | .different => reportOrder definition (.reversedResult definition function)
-    | .uncomparable => reportOrder definition (.uncomparable definition function bindingLimit)
+    | .different => reportOrder definition (BagOrderDependent.reversedResult definition function).toViolation
+    | .uncomparable => reportOrder definition (Undecided.reversedBagBindings definition function bindingLimit).toViolation
 
 /--
 Runs `collect` after the call of `call` that answered `r`, and audits the answer with orderAudit when that call
@@ -342,11 +343,11 @@ def resolveCollect (name : String) (input : Value) (records : Records) (now : Ti
   if st.ref name ∈ (← get).reportedOrder then return
   let .ok (some output) ← normalizeOutput (m := m) st fs name output | return
   let .ok original ← fs.comparable name (.fulfilled output) | return
-  let exception := reportOrder (st.ref name) (.reversedException (st.ref name) "resolve")
+  let exception := reportOrder (st.ref name) (BagOrderDependent.reversedException (st.ref name) "resolve").toViolation
   let .ok raw ← ifs.reversed.resolve name input records now | exception
   let .ok (some reversed) ← normalizeOutput (m := m) st fs name raw | exception
   let .ok reordered ← fs.comparable name (.fulfilled reversed) | exception
-  unless original == reordered do reportOrder (st.ref name) (.reversedResult (st.ref name) "resolve")
+  unless original == reordered do reportOrder (st.ref name) (BagOrderDependent.reversedResult (st.ref name) "resolve").toViolation
 
 def decideCollect (name : String) (records : Records) (decided : Except Issue (List (List Emit))) :
     StateT Collect m Unit := do

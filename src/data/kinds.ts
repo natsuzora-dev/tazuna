@@ -10,6 +10,7 @@ import type { NonCanonical } from "./nonCanonical.ts";
 import type { Restricted } from "./restricted.ts";
 import { uncomparableKinds } from "./uncomparable.generated.ts";
 import type { Uncovered } from "./uncovered.ts";
+import { undecidedKinds } from "./undecided.generated.ts";
 import type { Group } from "./violation.ts";
 
 /** `list` when it holds every member of `U`; a missing member is a type error that names it. */
@@ -100,6 +101,7 @@ export const kindsOf = {
   Fault: faultKinds,
   BagOrderDependent: bagOrderDependentKinds,
   ChoiceDependent: choiceDependentKinds,
+  Undecided: undecidedKinds,
   Uncovered: uncoveredKinds,
   Mismatch: mismatchKinds,
   Uncomparable: uncomparableKinds,
@@ -119,6 +121,7 @@ export const groupNames = every<Group>()([
   "Fault",
   "BagOrderDependent",
   "ChoiceDependent",
+  "Undecided",
   "Uncovered",
   "Mismatch",
   "Uncomparable",

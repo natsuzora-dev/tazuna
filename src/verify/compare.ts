@@ -20,7 +20,7 @@ import {
 } from "../data/binding.ts";
 import { Bag, comparable, comparableAnswer, type KeyPositions, orderFree, Ref, Runs } from "../data/canonical.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
-import type { Mismatch } from "../data/mismatch.generated.ts";
+import type { Mismatch, Subject } from "../data/mismatch.generated.ts";
 import { Subscriptions } from "../data/subscriptions.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import {
@@ -37,7 +37,6 @@ import {
   toOf,
   untilMalformed,
 } from "../data/trace.ts";
-import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import { canonicalJson, type Json, mapStrings, plain, type Shape, stringsOf } from "../data/values.ts";
 import type { Spec } from "../load/load.ts";
 import { keyPositions } from "../load/schemas.ts";
@@ -303,7 +302,22 @@ function sameAfter(
   return images.length === expected.length && sameSet(images, follows(trace, t));
 }
 
-type Finding = Mismatch | Uncomparable;
+/**
+ * Lean's Finding.after: the trace line `line` follows other lines of its group (`trace`) than its snapshot line follows
+ * (`snapshot`), compared through the pairing. It is no violation: only test compares it, and it reports it inside a
+ * ChoiceDependent violation.
+ */
+export interface After {
+  readonly line: number;
+  readonly subject: Subject;
+  readonly snapshot: readonly string[];
+  readonly trace: readonly string[];
+}
+
+/** Lean's Finding. */
+export type Finding = Found | { readonly after: After };
+
+const findingLine = (f: Finding): number => ("after" in f ? f.after.line : (f.line ?? 0));
 
 /** Lean's pairChecks: the time, order, and (when `relation`) `after` findings of the way with pairs `pairNumbers`. */
 function pairChecks(
@@ -351,10 +365,12 @@ function pairChecks(
           ? []
           : [
               {
-                kind: "Mismatch.after",
-                definition: null,
-                line: t.index,
-                data: { subject: subjectOf(t.line), snapshot: s.line.after ?? [], trace: t.line.after ?? [] },
+                after: {
+                  line: t.index,
+                  subject: subjectOf(t.line),
+                  snapshot: s.line.after ?? [],
+                  trace: t.line.after ?? [],
+                },
               },
             ],
       )
@@ -751,9 +767,29 @@ function withoutResends(lines: readonly (TraceLine | undefined)[]): (TraceLine |
 }
 
 /**
- * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
- * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Finished.renaming, or
- * the identity for verify. `relation` compares the lines' `after` too, as test does for two runs of the simulation.
+ * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the findings and the bindings.
+ * `renamed` is Lean's: Explore's Finished.renaming, or the identity for verify. `relation` compares the lines' `after`
+ * too, as test does for two runs of the simulation.
+ */
+function compareLines(
+  spec: Spec,
+  service: string,
+  snapshot: readonly (TraceLine | undefined)[],
+  trace: readonly FileLine[],
+  renamed: (v: Values) => Values,
+  relation: boolean,
+): { readonly found: readonly Finding[]; readonly set: readonly Binding[] } {
+  const { lines, cut } = comparedLines("out", trace);
+  const read = readLine(spec, service);
+  const expected = snapshot.map((l) => l && read(l));
+  const actual = withoutRepeatedAnswers(withoutResends(lines).map((l) => l && read(l)));
+  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed, relation);
+  return { found: [...found, ...(cut === undefined ? [] : [cut])], set };
+}
+
+/**
+ * Lean's verifyLines for verify, which compares no `after`: the violations and the bindings. A trace line's violation
+ * has its 1-based line number in `line`.
  */
 export function verifyLines(
   spec: Spec,
@@ -761,16 +797,11 @@ export function verifyLines(
   snapshot: readonly (TraceLine | undefined)[],
   trace: readonly FileLine[],
   renamed: (v: Values) => Values = (v) => v,
-  relation = false,
 ): Compared {
-  const { lines, cut } = comparedLines("out", trace);
-  const read = readLine(spec, service);
-  const expected = snapshot.map((l) => l && read(l));
-  const actual = withoutRepeatedAnswers(withoutResends(lines).map((l) => l && read(l)));
-  const [found, set] = compare(expected, actual, cut !== undefined, internalEvent(spec, service), renamed, relation);
+  const { found, set } = compareLines(spec, service, snapshot, trace, renamed, false);
   const [first] = set;
   return {
-    found: [...found, ...(cut === undefined ? [] : [cut])],
+    found: found.flatMap((f) => ("after" in f ? [] : [f])),
     set,
     first: first === undefined ? new Map() : new Map(stringPairs(first)),
   };
@@ -788,14 +819,18 @@ export function compareTrace(
   return { ...compared, found: compared.found.sort(byLine) };
 }
 
-/** Lean's DiffTest compareOf: compares two runs of the simulation, their `after` included, sorted by line. */
+/**
+ * Lean's compareTraces: compares two runs of the simulation, their `after` included, and returns the first finding by
+ * line, or else the bindings.
+ */
 export function compareRuns(
   spec: Spec,
   service: string,
   snapshot: readonly TraceLine[],
   run: readonly TraceLine[],
   renamed: (v: Values) => Values,
-): Compared {
-  const compared = verifyLines(spec, service, snapshot, run, renamed, true);
-  return { ...compared, found: compared.found.sort(byLine) };
+): { readonly found: Finding } | { readonly set: readonly Binding[] } {
+  const { found, set } = compareLines(spec, service, snapshot, run, renamed, true);
+  const [first] = found.toSorted((a, b) => findingLine(a) - findingLine(b));
+  return first === undefined ? { set } : { found: first };
 }

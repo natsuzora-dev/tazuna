@@ -92,7 +92,7 @@ def alignTo (ids : List LineId) (span : Sim.Span) (s : State) : State :=
 /-- The verdict of the search on one step order: refused (Execution.refused), or the violation found, if any. -/
 inductive Verdict where
   | refused
-  | decided (found : Option ChoiceDependent)
+  | decided (found : Option Violation)
 deriving Repr, Inhabited
 
 /-- A step order that the search ran, and its verdict. -/
@@ -103,12 +103,12 @@ deriving Repr, Inhabited
 
 /--
 What the search of one processing did: each step order it ran in turn, and the violation it reports. The search stops at
-its first violation, as Concuerror, loom, and shuttle stop at the first failing schedule: searchLimit when it ran
+its first violation, as Concuerror, loom, and shuttle stop at the first failing schedule: Undecided.stepOrderLimit when it ran
 stepOrderLimit orders with orders left, and otherwise the first order whose outcome differs.
 -/
 structure Search where
   tried : List Tried := []
-  found : Option ChoiceDependent := none
+  found : Option Violation := none
 deriving Repr, Inhabited
 
 /--
@@ -145,7 +145,7 @@ variable {m : Type → Type} [Monad m]
 The search after the pair `(i, j)` of the execution `parent`, whose step order is `parentOrder`: unless the search
 found a violation, the pair's order (pairOrder) is run unless it ran before or undoes the swap that made `parent` (its
 order ends with `a` then `b`), compared with `parent` unless refused, and queued when it reaches a new sequence of taken
-steps. At stepOrderLimit orders the search stops with searchLimit at the first step it swapped.
+steps. At stepOrderLimit orders the search stops with Undecided.stepOrderLimit at the first step it swapped.
 
 The undo is skipped to save its execution and its share of stepOrderLimit. Running it would find nothing: `parent` was
 queued only because its outcome equals that of the execution `g` that it came from, and the undo runs `g`'s order of
@@ -167,7 +167,8 @@ def searchPair (compare : Compare m) (executeWith : List StepName → m Executio
   let first := r.first.getD a
   if r.search.tried.length == stepOrderLimit then
     return { r with first := some first,
-                    search := { r.search with found := some (.searchLimit (first.definition st.service) stepOrderLimit) } }
+                    search := { r.search with
+                      found := some (Undecided.stepOrderLimit (first.definition st.service) stepOrderLimit).toViolation } }
   let r := { r with first := some first }
   let alternative ← executeWith order
   if alternative.refused st.service then

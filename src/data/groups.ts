@@ -24,6 +24,11 @@ export const groups = {
   Fault: { reportedBy: ["test"], fixedIn: "The spec." },
   BagOrderDependent: { reportedBy: ["test"], fixedIn: "The spec." },
   ChoiceDependent: { reportedBy: ["test"], fixedIn: "The spec." },
+  Undecided: {
+    reportedBy: ["test"],
+    fixedIn:
+      "Neither side: the check stopped at a limit of tazuna. A smaller processing, or fewer created keys that only their keys tell apart, lets it decide.",
+  },
   Uncovered: { reportedBy: ["test --coverage"], fixedIn: "The scenarios." },
   Mismatch: {
     reportedBy: ["test", "verify"],

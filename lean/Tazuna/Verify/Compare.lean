@@ -209,9 +209,15 @@ where
       if l.body.dir == .out then go ls (i + 1) input ({ line := l, index := i } :: acc)
       else { input, outs := acc.reverse } :: go ls (i + 1) (some { line := l, index := i }) []
 
+/--
+A finding of a comparison: a violation, or, between two runs of the simulation (`relation`), a trace line that follows
+other lines of its group than its snapshot line follows (`after`, compared through the pairing). The second is no
+violation, since only test compares it, and it reports it inside the ChoiceDependent violation that it shows.
+-/
 inductive Finding where
   | mismatch (m : Mismatch)
   | uncomparable (u : Uncomparable)
+  | after (line : Nat) (subject : Subject) (snapshot trace : List String)
 
 /-- The violations of a comparison, and the bindings that agree with every compared line. -/
 structure Compared where
@@ -353,6 +359,7 @@ def valueDomains (snapshot : List (Option Line)) : String → String :=
 def Finding.line : Finding → Nat
   | .mismatch m => m.line?.getD 0
   | .uncomparable u => u.line?.getD 0
+  | .after line .. => line
 
 def differentInput (b : Binding) (s t : Numbered) : Finding :=
   .uncomparable (.differentInput t.index s.index (Bindings.substitute b.strings (lineValue s.line)) (lineValue t.line))
@@ -460,8 +467,7 @@ def pairChecks (relation : Bool) (snapshot trace : List Numbered) (pairNumbers :
           (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
   let afters := if !relation then [] else pairs.filterMap fun (s, t) =>
     if sameAfter snapshot trace pairNumbers s t then none
-    else some (Finding.mismatch
-      (.after t.index (Subject.of t.line.toTraceLine) (s.line.after.getD []) (t.line.after.getD [])))
+    else some (Finding.after t.index (Subject.of t.line.toTraceLine) (s.line.after.getD []) (t.line.after.getD []))
   times ++ orders ++ afters
 
 /--
@@ -684,19 +690,17 @@ def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String)
   pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service) renamed relation)
 
 /--
-The comparison by which test's step-order search compares two runs' trace lines of `service` (Explore's Compare):
-verify's (verifyLines), with `after` (`relation`), reporting its first violation by line. `ask` reads a value by its
+The comparison by which test's step-order search compares two runs' trace lines of `service` (Explore's Compare, with
+each finding as the difference that it shows): verify's (verifyLines), with `after` (`relation`), reporting its first
+finding by line. `ask` reads a value by its
 definition's schema.
 -/
 def compareTraces {m : Type → Type} [Monad m] (spec : Structure) (service : String)
     (ask : Definition → Part → Value → m CValue) :
-    (Values → Values) → List TraceLine → List TraceLine → m (Except Violation (List Binding)) :=
+    (Values → Values) → List TraceLine → List TraceLine → m (Except Finding (List Binding)) :=
   fun renamed expected actual => do
     let compared ← verifyLines spec service ask (expected.map some) (actual.map .line) renamed true
-    let numbered := compared.findings.map fun f =>
-      (f.line, match f with
-        | .mismatch m => m.toViolation
-        | .uncomparable u => u.toViolation)
+    let numbered := compared.findings.map fun f => (f.line, f)
     pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
       | some (_, v) => .error v
       | none => .ok compared.bindings)

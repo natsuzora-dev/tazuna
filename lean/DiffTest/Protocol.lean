@@ -159,7 +159,10 @@ derive_wire Replied flatten reply skip_serializing_none
 
 instance : ToValue Verify.Finding := ⟨fun
   | .mismatch m => ToValue.toValue m
-  | .uncomparable u => ToValue.toValue u⟩
+  | .uncomparable u => ToValue.toValue u
+  | .after line subject snapshot trace =>
+    .obj [("after", .obj [("line", ToValue.toValue line), ("subject", ToValue.toValue subject),
+      ("snapshot", ToValue.toValue snapshot), ("trace", ToValue.toValue trace)])]⟩
 
 /-- A pairing violation and where it is. -/
 structure Unpaired where
@@ -188,7 +191,7 @@ derive_wire SimulatedService serialize_only skip_serializing_none
 structure TriedOrder where
   order : List StepName
   refused : Option Bool
-  found : Option (Option Explore.ChoiceDependent)
+  found : Option (Option Violation)
 
 derive_wire TriedOrder serialize_only skip_serializing_none
 
@@ -197,7 +200,7 @@ structure SearchedProcessing where
   origin : Scenario.Origin
   service : String
   tried : List TriedOrder
-  found : Option Explore.ChoiceDependent
+  found : Option Violation
 
 derive_wire SearchedProcessing serialize_only
 

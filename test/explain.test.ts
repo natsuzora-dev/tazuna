@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { test } from "node:test";
 import { exampleFolders, explanations } from "../scripts/explain.ts";
 import { explain, explanationsPath } from "../src/cli/explain.ts";
-import { isUserKind, type Kind, kinds } from "../src/data/kinds.ts";
+import { isUserKind, kinds } from "../src/data/kinds.ts";
 import { expectedOf, kindOfLine } from "./expected.ts";
 
 const maxExcerptLines = 40;
@@ -26,16 +26,10 @@ test("Each group and each kind has a doc comment", () => {
   );
 });
 
-/** The kinds without an example until the next change gives them one or removes them. */
-const withoutExample: readonly Kind[] = ["ChoiceDependent.uncomparable", "Mismatch.after"];
-
 test("Each kind that a user meets has one example, the folder under test named after it, which reports that kind and no other, and no internal kind has one", () => {
   const folders = exampleFolders();
   assert.deepEqual(
-    kinds.filter(
-      (kind) =>
-        folders.filter(([k]) => k === kind).length !== (isUserKind(kind) && !withoutExample.includes(kind) ? 1 : 0),
-    ),
+    kinds.filter((kind) => folders.filter(([k]) => k === kind).length !== (isUserKind(kind) ? 1 : 0)),
     [],
   );
   assert.deepEqual(

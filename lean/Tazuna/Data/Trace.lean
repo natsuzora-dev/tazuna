@@ -127,4 +127,20 @@ def operationParts (name : String) : String × String :=
   | screen :: control :: _ => (screen, control)
   | parts => (parts.headD "", "")
 
+/--
+A trace line as a violation names it: an answer or unsubscribe line by its `to`, and any other line by its name and
+id.
+-/
+inductive Subject where
+  | reply (type to : String)
+  | named (type : String) (name : Option String) (id : String)
+deriving Repr
+
+derive_wire Subject untagged
+
+def Subject.of (l : TraceLine) : Subject :=
+  match l.body with
+  | .answer _ _ to _ | .unsubscribe _ _ to => .reply l.body.type to
+  | _ => .named l.body.type l.body.name? l.body.id
+
 end Tazuna.Data

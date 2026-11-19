@@ -296,7 +296,12 @@ def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure
     let (w, acting) ← ran.run {}
     pure { world := w, collect := acting.collect }
   let reads ← IO.mkRef {}
-  let searched ← stepOrderChanges (fun service => Verify.compareTraces spec service (askComparable stdin stdout reads))
+  let compare service renamed expected actual := do
+    pure ((← Verify.compareTraces spec service (askComparable stdin stdout reads) renamed expected actual).mapError fun
+      | .mismatch m => Explore.Difference.outputs m.toViolation
+      | .uncomparable u => .outputs u.toViolation
+      | .after line subject snapshot trace => .after line subject snapshot trace)
+  let searched ← stepOrderChanges compare
     executeWith sc (← executeWith sc []) 0
   pure (.stepOrderChanges (searched.map searchedOf))
 
