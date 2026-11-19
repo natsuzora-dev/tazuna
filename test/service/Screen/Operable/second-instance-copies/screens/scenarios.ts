@@ -1,12 +1,12 @@
 import { offered } from "@natsuzora-dev/tazuna";
-import { board, panel, scenario } from "./screens.ts";
+import { board, given, panel, scenario } from "./screens.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] } as const;
+const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] });
 
 export const bumpSecondPanel = scenario(
   "Open two panels and bump row b of the second; the copies of the second panel's rows read their own key and context; no violation",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const boardScreen = w.startup.screen(board);
       w.user.operate(boardScreen, "openLeft");

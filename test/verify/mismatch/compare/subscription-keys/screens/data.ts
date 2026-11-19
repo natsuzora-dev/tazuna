@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Draft = entity({ description: "A draft note", fields: { id: z.string() }, key: "id" });
 
-export const { screen, scenario, contract } = service({
+export const { screen, given, scenario, contract } = service({
   name: "screens",
   description: "Show the notes",
   entities: { Draft },

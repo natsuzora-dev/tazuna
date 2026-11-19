@@ -4,7 +4,7 @@ import { notes } from "../notes/contract.ts";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
-export const { automation, command, createEvent, contract, scenario } = service({
+export const { automation, command, createEvent, contract, given, scenario } = service({
   name: "todo",
   description: "Keep the tasks",
   entities: { Task },

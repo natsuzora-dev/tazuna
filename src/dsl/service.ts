@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
-import { type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
+import { type GivenDefiner, givenDefiner, type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
 import type { Conditions, Named, Present, SomeKey } from "./conditions.ts";
 import type { ConstantsGroup } from "./constants.ts";
 import type { Contract, RecordsData } from "./contract.ts";
@@ -108,6 +108,8 @@ interface Definers<Es extends Entities, N extends string> {
   contract: ContractDefiner<RecordsData<Es>, "spec", N>;
   /** Defines a scenario of the service (ScenarioDefiner). */
   scenario: ScenarioDefiner<RecordsData<Es>, N>;
+  /** Defines a Given that scenarios share (GivenDefiner). */
+  given: GivenDefiner<RecordsData<Es>, N>;
 }
 
 interface CommandSetup<
@@ -378,7 +380,8 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
   const events = eventDefiners(owner);
   const contract = contractDefiner(owner);
   const scenario = scenarioDefiner(owner);
-  register(owner, [command, query, automation, machine, screen, contract, scenario, ...Object.values(events)]);
+  const given = givenDefiner();
+  register(owner, [command, query, automation, machine, screen, contract, scenario, given, ...Object.values(events)]);
   return {
     command,
     query,
@@ -387,6 +390,7 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
     screen,
     contract,
     scenario,
+    given,
     ...events,
   } as unknown as Definers<Entities, string>;
 }

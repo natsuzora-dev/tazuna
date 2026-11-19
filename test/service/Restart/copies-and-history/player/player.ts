@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Track = entity({ description: "A track in the queue", fields: { id: z.string() }, key: "id" });
 
-export const { command, machine, event, createEvent, contract, scenario } = service({
+export const { command, machine, event, createEvent, contract, given, scenario } = service({
   name: "player",
   description: "Play songs",
   entities: { Track },

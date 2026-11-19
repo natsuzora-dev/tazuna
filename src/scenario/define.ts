@@ -29,7 +29,10 @@ type OutputShape<D> =
           ? O
           : never
       : never;
-type InputOf<D> = Encoded<InputShape<D>>;
+/** The input of the command or query `D`, in trace form. */
+export type InputOf<D> = Encoded<InputShape<D>>;
+/** The output of the query or command `D`, in trace form. */
+export type OutputOf<D> = Encoded<OutputShape<D>>;
 
 /** An answer to the request `T`, in trace form. */
 export type AnswerOf<T> =
@@ -660,6 +663,21 @@ export type ScenarioDefiner<R, Own extends string> = <const P extends Peers, N>(
     readonly then: (lines: N) => readonly Expectation[];
   },
 ) => ScenarioDefinition;
+
+/** A Given of the own service `Own`, whose `step` types a function of When lines by the services that it lists. */
+export type Arranged<R, P extends Peers, Own extends string> = Given<R, P, Own> & {
+  /** `f` as is: a part of When, whose own parameters after `w` keep the types that `f` writes. */
+  readonly step: <A extends unknown[], T>(f: (w: When<P, Own>, ...args: A) => T) => (w: When<P, Own>, ...args: A) => T;
+};
+
+/** Defines a Given of the own service, which scenarios share and whose steps it types. */
+export type GivenDefiner<R, Own extends string> = <const P extends Peers>(
+  given: Given<R, P, Own>,
+) => Arranged<R, P, Own>;
+
+export const givenDefiner =
+  <R, Own extends string>(): GivenDefiner<R, Own> =>
+  (given) => ({ ...given, step: (f) => f });
 
 const scenarioOwners = new WeakMap<object, ServiceDefinition>();
 

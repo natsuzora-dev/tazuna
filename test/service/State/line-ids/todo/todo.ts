@@ -14,7 +14,7 @@ export const Tag = entity({
   key: "id",
 });
 
-export const { automation, command, createEvent, machine, contract, scenario } = service({
+export const { automation, command, createEvent, machine, contract, given, scenario } = service({
   name: "todo",
   description: "Keep tasks",
   entities: { Task, Note, Tag },

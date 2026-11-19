@@ -24,7 +24,7 @@ export const NotificationPermission = singleEntity({
   fields: { status: z.enum(["undetermined", "granted", "denied"]).default("undetermined") },
 });
 
-export const { command, automation, machine, event, createEvent, deleteEvent, updateEvent, contract, scenario } =
+export const { command, automation, machine, event, createEvent, deleteEvent, updateEvent, contract, given, scenario } =
   service({
     name: "notifier",
     description: "Notify the user about open tasks, with the notification permission that it requests",

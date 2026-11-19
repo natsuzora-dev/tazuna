@@ -27,9 +27,11 @@ export type {
   DeliveredRequest,
   EndRef,
   EventMessage,
+  InputOf,
   Look,
   Message,
   Observed,
+  OutputOf,
   OutRequest,
   OutSubscription,
   PeerAnswerLine,
@@ -46,7 +48,6 @@ export type {
   SingleRequestLine,
   SubscribeLine,
   Value,
-  When,
 } from "./scenario/define.ts";
 export {
   accepted,

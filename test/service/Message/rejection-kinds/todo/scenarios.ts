@@ -1,20 +1,19 @@
-import { accepted, type Caused, external, raw, rejected, type When } from "@natsuzora-dev/tazuna";
+import { accepted, type Caused, external, raw, rejected } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
-import { addTask, completeTask, scenario, swapTitles, titledCount } from "./todo.ts";
+import { addTask, completeTask, given, scenario, swapTitles, titledCount } from "./todo.ts";
 
-const peers = [external(device)];
-const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers } as const;
+const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [external(device)] });
 
-const deliverAndAccept = (w: When<typeof peers>, line: Caused) => {
+const deliverAndAccept = arranged.step((w, line: Caused) => {
   const notification = line.request(device.showNotification);
   w.net.deliver(notification);
   w.net.deliver(w.peer.device.answer(notification, accepted));
-};
+});
 
 export const commandRejections = scenario(
   "Add a task with an empty title, complete a missing task, add tasks with a duplicate key and a duplicate unique title, and complete a task twice; todo rejects them with invalid-input, not-found, already-exists, and, for the second completion, requires with the condition name isOpen",
   {
-    given,
+    given: arranged,
     when: (w) => {
       w.client.send(addTask, { taskId: "task-1", title: "" });
       w.client.send(completeTask, { taskId: "task-9" });
@@ -31,7 +30,7 @@ export const commandRejections = scenario(
 export const queryRejections = scenario(
   "Ask for titledCount with a title that is not a string, with an empty title, and with a title; todo rejects the first with invalid-input and the second, for which the requires condition hasTitle fails, with requires and the condition name",
   {
-    given,
+    given: arranged,
     when: (w) => {
       w.client.call(titledCount, raw({ title: 1 }));
       w.client.call(titledCount, { title: "" });
@@ -44,7 +43,7 @@ export const queryRejections = scenario(
 export const unavailableAnswer = scenario(
   "Add a task, reject the notification with unavailable, and accept it a minute later; the guard of onRejected of notifier reads the rejection kind and goes to retrying, which requests the notification again a minute later",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
       const notification = add.request(device.showNotification);
@@ -59,7 +58,7 @@ export const unavailableAnswer = scenario(
 export const swappedTitles = scenario(
   "Add two tasks and swap their titles; the first event of swapTitles makes two tasks share the unique title until the second event is written. todo checks duplicates when the command ends, so it accepts swapTitles",
   {
-    given,
+    given: arranged,
     when: (w) => {
       deliverAndAccept(w, w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
       deliverAndAccept(w, w.client.send(addTask, { taskId: "task-2", title: "Buy eggs" }));

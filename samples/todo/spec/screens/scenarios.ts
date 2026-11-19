@@ -1,21 +1,20 @@
 import {
-  type AnswerOf,
   accepted,
   endOf,
   external,
   fulfilled,
   notOffered,
+  type OutputOf,
   offered,
   request,
   requested,
   run,
   type ScreenRef,
   subscription,
-  type When,
 } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { todo } from "../todo/contract.ts";
-import { scenario } from "./data.ts";
+import { given, scenario } from "./data.ts";
 import { taskDetailScreen } from "./taskDetailScreen.ts";
 import { taskListScreen } from "./taskListScreen.ts";
 
@@ -39,7 +38,7 @@ const completedEggsRecord = {
 } as const;
 
 const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsRecord)[]) =>
-  ({
+  given({
     start: "2026-10-25T10:00:00+09:00",
     records: {},
     peers: [
@@ -47,33 +46,28 @@ const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsReco
       // todo's run asks calendar when a task's reminder becomes pending.
       external(calendar),
     ],
-  }) as const;
+  });
 const milk = givenTasks([milkRecord]);
 const milkAndCompletedEggs = givenTasks([milkRecord, completedEggsRecord]);
-type W = When<typeof milk.peers>;
 
-const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: "2026-10-26T18:00:00+09:00", completedAt: null } as const;
-const completedMilkRow = { ...milkRow, completedAt: "2026-10-25T10:00:00+09:00" } as const;
+const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: "2026-10-26T18:00:00+09:00", completedAt: null };
+const completedMilkRow = { ...milkRow, completedAt: "2026-10-25T10:00:00+09:00" };
 const completedEggsRow = {
   taskId: "task-2",
   title: "Buy eggs",
   dueAt: null,
   completedAt: "2026-10-25T09:00:00+09:00",
-} as const;
+};
 const milkDetail = {
   title: "Buy milk",
   isCompleted: false,
   dueAt: "2026-10-26T18:00:00+09:00",
   createdAt: "2026-10-25T08:00:00+09:00",
   remindAt: "2026-10-26T18:00:00+09:00",
-} as const;
+};
 
-type Rows = Extract<AnswerOf<typeof todo.tasks>, { readonly result: "fulfilled" }>["output"]["tasks"];
-type List = ScreenRef<typeof taskListScreen>;
-type Detail = ScreenRef<typeof taskDetailScreen>;
-
-const openList = (w: W, tasks: Rows = [milkRow]) => {
-  const list: List = w.startup.screen(taskListScreen);
+const openList = milk.step((w, tasks: OutputOf<typeof todo.tasks>["tasks"] = [milkRow]) => {
+  const list = w.startup.screen(taskListScreen);
   const tasksSub = w.startup.subscription(todo.tasks);
   const tasksReached = w.net.deliver(tasksSub);
   w.net.deliver(w.peer.todo.answer(tasksSub, fulfilled({ tasks })));
@@ -81,21 +75,21 @@ const openList = (w: W, tasks: Rows = [milkRow]) => {
   const settingsReached = w.net.deliver(settingsSub);
   w.net.deliver(w.peer.todo.answer(settingsSub, fulfilled({ shouldRemind: true })));
   return { list, tasksSub, tasksReached, settingsSub, settingsReached };
-};
+});
 
-const openTask = (w: W, list: List) => {
+const openTask = milk.step((w, list: ScreenRef<typeof taskListScreen>) => {
   const opening = w.user.operate(list, "openTask", { taskId: "task-1", title: "Buy milk" });
-  const detail: Detail = opening.screen(taskDetailScreen);
+  const detail = opening.screen(taskDetailScreen);
   return { detail, detailSub: opening.subscription(todo.taskDetail) };
-};
+});
 
-const openDetail = (w: W) => {
+const openDetail = milk.step((w) => {
   const opened = openList(w);
   const { detail, detailSub } = openTask(w, opened.list);
   const detailReached = w.net.deliver(detailSub);
   w.net.deliver(w.peer.todo.answer(detailSub, fulfilled({ task: milkDetail })));
   return { ...opened, detail, detailSub, detailReached };
-};
+});
 
 export const addTask = scenario(
   "Enter a title in the new task field of the list screen and press add; the screen sends addTask",

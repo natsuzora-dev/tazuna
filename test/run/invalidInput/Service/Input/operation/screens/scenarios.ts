@@ -1,10 +1,10 @@
 import { notOffered, offered } from "@natsuzora-dev/tazuna";
-import { board, confirmDialog, listScreen, panel, scenario } from "./screens.ts";
+import { board, confirmDialog, given, listScreen, panel, scenario } from "./screens.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] } as const;
+const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] });
 
 export const pickAndCancel = scenario("Pick a shown task, open the dialog, and cancel it; no violation", {
-  given,
+  given: arranged,
   when: (w) => {
     const list = w.startup.screen(listScreen);
     w.user.operate(list, "pick", { taskId: "task-1" });
@@ -18,7 +18,7 @@ export const pickAndCancel = scenario("Pick a shown task, open the dialog, and c
 export const cannotPickUnaccepted = scenario(
   "Look at the list before and while the dialog covers it; the list offers no task that it does not show, and no task while the dialog covers it; no violation",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const list = w.startup.screen(listScreen);
       const before = w.user.look(list);
@@ -36,7 +36,7 @@ export const cannotPickUnaccepted = scenario(
 export const cancelUnopened = scenario(
   "Cancel the dialog twice; the first cancel closes it, so the second operates a screen that is not open, and test reports unopenedScreen",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const dialog = w.user.operate(w.startup.screen(listScreen), "clear").screen(confirmDialog);
       w.user.operate(dialog, "cancel");
@@ -47,7 +47,7 @@ export const cancelUnopened = scenario(
 );
 
 export const pickUnderDialog = scenario("Pick a task while the dialog covers the list; test reports coveredByModal", {
-  given,
+  given: arranged,
   when: (w) => {
     const list = w.startup.screen(listScreen);
     w.user.operate(list, "clear");
@@ -57,7 +57,7 @@ export const pickUnderDialog = scenario("Pick a task while the dialog covers the
 });
 
 export const pickUnoffered = scenario("Pick a task that the list does not show; test reports unofferedPayload", {
-  given,
+  given: arranged,
   when: (w) => {
     w.user.operate(w.startup.screen(listScreen), "pick", { taskId: "task-3" });
   },
@@ -67,7 +67,7 @@ export const pickUnoffered = scenario("Pick a task that the list does not show; 
 export const closeEarlierPanel = scenario(
   "Open a panel from each region and close the earlier one by its handle; both are open, so the operation line names it by nth; no violation",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const boardScreen = w.startup.screen(board);
       const left = w.user.operate(boardScreen, "openLeft").screen(panel);
@@ -83,7 +83,7 @@ export const closeEarlierPanel = scenario(
 export const cancelReopened = scenario(
   "Open the dialog, cancel it, and open it again; the reopened dialog takes the closed one's name, and the second cancel operates it; no violation",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const list = w.startup.screen(listScreen);
       w.user.operate(w.user.operate(list, "clear").screen(confirmDialog), "cancel");

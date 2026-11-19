@@ -1,7 +1,10 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event, contract, scenario } = service({ name: "player", description: "Play songs" });
+export const { command, machine, event, contract, given, scenario } = service({
+  name: "player",
+  description: "Play songs",
+});
 
 export const playPressed = event({});
 export const skipPressed = event({});

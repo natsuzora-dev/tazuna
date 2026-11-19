@@ -1,15 +1,15 @@
 import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
-import { addTask, scenario } from "./todo.ts";
+import { addTask, given, scenario } from "./todo.ts";
 
-const given = {
+const arranged = given({
   start: "2026-10-25T00:00:00Z",
   records: { Task: [] },
   peers: [external(calendar)],
-} as const;
+});
 
 export const addTwo = scenario("Add two tasks an hour apart, and get the next day for each; no violation", {
-  given,
+  given: arranged,
   when: (w) => {
     const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
     w.net.deliver(first);
@@ -25,7 +25,7 @@ export const addTwo = scenario("Add two tasks an hour apart, and get the next da
 export const addOneOwnAnswer = scenario(
   "Add a task; the implementation trace of this scenario gives its calendar.nextDay request the id of the addTask command, which already stands for that command, so verify reports the request as Mismatch.request",
   {
-    given,
+    given: arranged,
     when: (w) => {
       w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
     },
@@ -36,7 +36,7 @@ export const addOneOwnAnswer = scenario(
 export const addOneResent = scenario(
   "Add a task and get the next day for it; the implementation trace of this scenario sends the calendar.nextDay request again with its id and input, and gets an answer to each send, so verify takes the second request as a resend of the first and its answer as an answer to the resend; no violation",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
       w.net.deliver(first);

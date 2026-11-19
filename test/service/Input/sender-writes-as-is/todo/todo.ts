@@ -2,7 +2,7 @@ import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { notes } from "../notes/contract.ts";
 
-export const { automation, command, event, contract, scenario } = service({
+export const { automation, command, event, contract, given, scenario } = service({
   name: "todo",
   description: "Keep the list",
 });

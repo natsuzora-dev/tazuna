@@ -1,7 +1,7 @@
 import { any, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { screen, scenario } = service({ name: "screens", description: "Count per row in panels" });
+export const { screen, given, scenario } = service({ name: "screens", description: "Count per row in panels" });
 
 export const panel = screen({
   description: "A panel whose rows each count the bumps of their key",

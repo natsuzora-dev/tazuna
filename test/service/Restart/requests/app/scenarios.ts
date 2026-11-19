@@ -1,13 +1,13 @@
 import { accepted, external } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
-import { scenario } from "./app.ts";
+import { given, scenario } from "./app.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(device)] } as const;
+const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(device)] });
 
 export const firstRestart = scenario(
   "Restart as the first line; the service began at the start of Given, and begins again on the restart, so permission sends a second requestPermission, after the restart line",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const restarting = w.host.restart();
       const first = w.startup.request(device.requestPermission);
@@ -24,7 +24,7 @@ export const firstRestart = scenario(
 export const requestsDiscarded = scenario(
   "Begin at 10:00, restart at 10:05, and answer requestPermission; the restart discards the request of the first start, so the answer goes to the request of the new start",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const first = w.startup.request(device.requestPermission);
       w.net.deliver(first);
@@ -41,7 +41,7 @@ export const requestsDiscarded = scenario(
 export const resultAfterRestart = scenario(
   "Restart while the device holds requestPermission, then the device accepts it and emits granted as its result; the answer arrived, so the event is the result of that request, though the request of the stopped process waits no more",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const first = w.startup.request(device.requestPermission);
       w.net.deliver(first);

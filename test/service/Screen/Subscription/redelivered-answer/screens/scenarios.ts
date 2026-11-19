@@ -1,14 +1,14 @@
 import { request, requested, run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
-import { scenario } from "./data.ts";
+import { given, scenario } from "./data.ts";
 import { counterScreen } from "./screens.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, { Task: [] })] } as const;
+const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, { Task: [] })] });
 
 export const staleAnswerRedelivered = scenario(
   "The count answer 0 arrives, then 1, then the network redelivers the answer 0 with its id; screens drops the duplicate, so report sends the count 1",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const screen = w.startup.screen(counterScreen);
       const sub = w.startup.subscription(todo.taskCount);

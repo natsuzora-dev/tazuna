@@ -5,7 +5,7 @@ export const Setting = singleEntity({
   fields: { due: datetime.nullable().default(null) },
 });
 
-export const { automation, command, machine, event, updateEvent, contract, scenario } = service({
+export const { automation, command, machine, event, updateEvent, contract, given, scenario } = service({
   name: "sender",
   description: "Pong at the time that the setting holds",
   entities: { Setting },

@@ -4,7 +4,7 @@ import { contract as externalContract, query as externalQuery } from "../samples
 import { device as devicePeer } from "../samples/todo/spec/device/contract.ts";
 import { command as externalCommand } from "../samples/todo/spec/device/data.ts";
 import { screens as screensPeer } from "../samples/todo/spec/screens/contract.ts";
-import { scenario as scenarioOfScreens } from "../samples/todo/spec/screens/data.ts";
+import { given as givenOfScreens, scenario as scenarioOfScreens } from "../samples/todo/spec/screens/data.ts";
 import { taskDetailScreen } from "../samples/todo/spec/screens/taskDetailScreen.ts";
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
 import { addTask, completeTask, setReminder } from "../samples/todo/spec/todo/commands.ts";
@@ -43,7 +43,9 @@ import {
   external,
   externalService,
   fulfilled,
+  type InputOf,
   type KindOf,
+  type OutputOf,
   type RecordsOf,
   type RowOf,
   raw,
@@ -1491,3 +1493,32 @@ scenarioOfTodo("types", {
   },
   then: () => [],
 });
+
+// A shared Given is checked where it is written, and its steps place lines with its services and the own service.
+const withTodo = givenOfScreens({
+  start: "2026-10-25T10:00:00+09:00",
+  records: {},
+  peers: [run(todoPeer, { Task: [], Settings: { shouldRemind: true } }), external(calendarPeer)],
+});
+// @ts-expect-error a start is an ISO datetime with an offset
+givenOfScreens({ start: "yesterday", records: {}, peers: [] });
+// @ts-expect-error the own service is no peer (unknownPeer)
+givenOfScreens({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [skip(screensPeer, "the own service")] });
+const addMilk = withTodo.step((w, title: string) => w.client.send(todoPeer.addTask, { taskId: "task-1", title }));
+withTodo.step((w) => {
+  // @ts-expect-error a step's lines reach only the own service and the running peers of its Given
+  w.client.send(devicePeer.requestNotificationPermission, {});
+  // @ts-expect-error a step's own parameters keep their types
+  addMilk(w, 1);
+  return addMilk(w, "Buy milk");
+});
+scenarioOfScreens("types", {
+  given: withTodo,
+  when: (w) => ({ adding: addMilk(w, "Buy milk") }),
+  then: ({ adding }) => [answered(adding, accepted)],
+});
+const rows: OutputOf<typeof tasks>["tasks"] = [{ taskId: "task-1", title: "Buy milk", dueAt: null, completedAt: null }];
+const input: InputOf<typeof addTask> = { taskId: "task-1", title: "Buy milk" };
+// @ts-expect-error an output has the fields of the query's output
+const badRows: OutputOf<typeof tasks>["tasks"] = [{ taskId: "task-1" }];
+void [rows, input, badRows];

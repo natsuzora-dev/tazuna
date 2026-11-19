@@ -13,7 +13,7 @@ export const Last = singleEntity({
   fields: { taskId: z.string().default("") },
 });
 
-export const { command, machine, createEvent, updateEvent, contract, scenario } = service({
+export const { command, machine, createEvent, updateEvent, contract, given, scenario } = service({
   name: "todo",
   description: "Keep tasks, each due on the next business day",
   entities: { Task, Last },

@@ -1,17 +1,17 @@
 import { accepted, external, rejected } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
-import { addTask, scenario } from "./todo.ts";
+import { addTask, given, scenario } from "./todo.ts";
 
-const given = {
+const arranged = given({
   start: "2026-10-25T10:00:00+09:00",
   records: { Task: [] },
   peers: [external(device)],
-} as const;
+});
 
 export const notifiedAfterAdd = scenario(
   "Add a task and accept the notification; notifyAdded reacts to taskAdded, sends device.showNotification as a request, and receives device's acceptance",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
       const notification = add.request(device.showNotification);
@@ -25,7 +25,7 @@ export const notifiedAfterAdd = scenario(
 export const ignoredUnavailable = scenario(
   "Add a task and reject the notification with unavailable; notifyAdded ignores the rejection by onRejected: [], so no violation is reported",
   {
-    given,
+    given: arranged,
     when: (w) => {
       const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
       const notification = add.request(device.showNotification);

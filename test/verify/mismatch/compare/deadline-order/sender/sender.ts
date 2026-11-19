@@ -1,7 +1,7 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event, contract, scenario } = service({
+export const { command, machine, event, contract, given, scenario } = service({
   name: "sender",
   description: "Ping on arming and pong at each machine's deadline",
 });

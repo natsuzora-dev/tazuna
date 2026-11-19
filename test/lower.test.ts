@@ -6,8 +6,8 @@ import { scenario } from "../samples/todo/spec/screens/data.ts";
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
 import { todo } from "../samples/todo/spec/todo/contract.ts";
 import type { DefinitionRef } from "../src/data/definitionRef.ts";
-import { created, external, raw, request, requested, run, type When } from "../src/index.ts";
-import type { ScenarioDefinition } from "../src/scenario/define.ts";
+import { created, external, raw, request, requested, run } from "../src/index.ts";
+import type { ScenarioDefinition, When } from "../src/scenario/define.ts";
 import { lower } from "../src/scenario/lower.ts";
 
 const refs = new Map<unknown, DefinitionRef>([

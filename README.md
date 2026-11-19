@@ -56,7 +56,7 @@ Run the commands in [samples/todo](samples/todo).
    ```
 
    Given is the start, When is the lines in order, and Then is what `todo` did on those lines.
-   `noTasks` and `addMilk` are a plain constant and function earlier in the same file.
+   Earlier in the same file, `noTasks` is a Given that the file's scenarios share, and `addMilk` is a step of it.
    `addMilk` adds a task and delivers its request to the `calendar` service and the answer.
 
 2. Check the spec:

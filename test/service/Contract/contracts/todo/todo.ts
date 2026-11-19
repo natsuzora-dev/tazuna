@@ -14,7 +14,7 @@ export const Board = singleEntity({
   invariants: { fewPins: ({ record }) => record.pins < 3 },
 });
 
-export const { command, query, createEvent, updateEvent, contract, scenario } = service({
+export const { command, query, createEvent, updateEvent, contract, given, scenario } = service({
   name: "todo",
   description: "Keep tasks",
   entities: { Task, Board },

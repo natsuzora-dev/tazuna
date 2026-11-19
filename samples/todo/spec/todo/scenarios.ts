@@ -10,49 +10,45 @@ import {
   request,
   requested,
   skip,
-  type When,
 } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { device } from "../device/contract.ts";
 import { notifier } from "../notifier/contract.ts";
 import { screens } from "../screens/contract.ts";
 import { addTask, changeDue, changeReminders, completeTask, deleteTask, renameTask, reopenTask } from "./commands.ts";
-import { scenario } from "./data.ts";
+import { given, scenario } from "./data.ts";
 import { taskCompleted, taskDeleted, taskReopened } from "./events.ts";
 import { reminderSettings, taskDetail, tasks } from "./queries.ts";
 
-const peers = [
-  external(calendar),
-  external(device),
-  skip(notifier, "notifier's reactions to todo's events are notifier's scenarios"),
-  skip(screens, "the screens' subscriptions are the screens' scenarios"),
-];
-type W = When<typeof peers>;
-
-const noTasks = {
+const noTasks = given({
   start: "2026-10-25T10:00:00+09:00",
   records: { Task: [], Settings: { shouldRemind: true } },
-  peers,
-} as const;
+  peers: [
+    external(calendar),
+    external(device),
+    skip(notifier, "notifier's reactions to todo's events are notifier's scenarios"),
+    skip(screens, "the screens' subscriptions are the screens' scenarios"),
+  ],
+});
 
-const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: null, completedAt: null } as const;
+const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: null, completedAt: null };
 const milkDetail = {
   title: "Buy milk",
   isCompleted: false,
   dueAt: null,
   createdAt: "2026-10-25T10:00:00+09:00",
   remindAt: "2026-10-26T00:00:00+09:00",
-} as const;
+};
 const showMilk = request(device.showNotification, { text: "Buy milk" });
 
-const addMilkUnanswered = (w: W) => w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+const addMilkUnanswered = noTasks.step((w) => w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
 
-const addMilk = (w: W, nextBusinessDay: string) => {
+const addMilk = noTasks.step((w, nextBusinessDay: string) => {
   const add = addMilkUnanswered(w);
   w.net.deliver(add.request(calendar.nextBusinessDay));
   w.net.deliver(w.peer.calendar.answer(add.request(calendar.nextBusinessDay), fulfilled({ day: nextBusinessDay })));
   return add;
-};
+});
 
 export const completeTwice = scenario(
   "Complete a task twice; todo rejects the second completeTask by requires notCompleted",

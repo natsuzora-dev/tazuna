@@ -1,7 +1,10 @@
 import { datetime, emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, machine, event, contract, scenario } = service({ name: "todo", description: "Keep tasks" });
+export const { command, machine, event, contract, given, scenario } = service({
+  name: "todo",
+  description: "Keep tasks",
+});
 
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const taskCompleted = event({ payload: { taskId: z.string() } });

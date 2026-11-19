@@ -1,79 +1,73 @@
 import {
   type AnswerOf,
   accepted,
-  type Delivered,
   external,
   type OutRequest,
-  type PeerEventLine,
   type ProcessingLine,
   rejected,
   request,
   requested,
   run,
-  type When,
 } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { device } from "../device/contract.ts";
 import { todo } from "../todo/contract.ts";
-import { scenario } from "./data.ts";
+import { given, scenario } from "./data.ts";
 
-const peers = [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)];
-type W = When<typeof peers>;
-
-const fresh = {
+const fresh = given({
   start: "2026-10-25T10:00:00+09:00",
   records: { OpenTask: [], NotificationPermission: { status: "undetermined" } },
-  peers,
-} as const;
+  peers: [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)],
+});
 
 const show = (openTasks: number) => request(device.showNotification, { text: `You have ${openTasks} open tasks` });
 const askPermission = request(device.requestNotificationPermission, {});
 
-function taskAddedReaches(w: W, n: number): Delivered<PeerEventLine> {
+const taskAddedReaches = fresh.step((w, n: number) => {
   const adding = w.client.send(todo.addTask, { taskId: `task-${n}`, title: `Task ${n}` });
   const asking = adding.request(calendar.nextBusinessDay);
   w.net.deliver(asking);
   w.peer.calendar.leaveUnanswered(asking);
   return w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: `task-${n}` }, { resultOf: adding }));
-}
+});
 
-function taskCompletedReaches(w: W, n: number): ProcessingLine {
+const taskCompletedReaches = fresh.step((w, n: number) => {
   const completing = w.client.send(todo.completeTask, { taskId: `task-${n}` });
   return w.net.deliver(w.peer.todo.emit(todo.taskCompleted, { taskId: `task-${n}` }, { resultOf: completing }));
-}
+});
 
 const asked = (line: ProcessingLine) => line.request(device.requestNotificationPermission);
 
-function shownUnanswered(w: W, line: ProcessingLine): void {
+const shownUnanswered = fresh.step((w, line: ProcessingLine) => {
   const showing = line.request(device.showNotification);
   w.net.deliver(showing);
   w.peer.device.leaveUnanswered(showing);
-}
+});
 
 type DeviceEvent = typeof device.notificationPermissionGranted | typeof device.notificationPermissionDenied;
 
-function deviceTells(
-  w: W,
-  event: DeviceEvent,
-  resultOf: OutRequest<typeof device.requestNotificationPermission> | null,
-): void {
-  w.net.deliver(w.peer.device.emit(event, {}, { resultOf }));
-}
+const deviceTells = fresh.step(
+  (w, event: DeviceEvent, resultOf: OutRequest<typeof device.requestNotificationPermission> | null) => {
+    w.net.deliver(w.peer.device.emit(event, {}, { resultOf }));
+  },
+);
 
-function deviceGrants(w: W, asking: OutRequest<typeof device.requestNotificationPermission>): void {
+const deviceGrants = fresh.step((w, asking: OutRequest<typeof device.requestNotificationPermission>) => {
   w.net.deliver(asking);
   w.net.deliver(w.peer.device.answer(asking, accepted));
   deviceTells(w, device.notificationPermissionGranted, asking);
-}
+});
 
-function deviceAnswers(
-  w: W,
-  asking: OutRequest<typeof device.requestNotificationPermission | typeof device.showNotification>,
-  answer: AnswerOf<typeof device.requestNotificationPermission | typeof device.showNotification>,
-): void {
-  w.net.deliver(asking);
-  w.net.deliver(w.peer.device.answer(asking, answer));
-}
+const deviceAnswers = fresh.step(
+  (
+    w,
+    asking: OutRequest<typeof device.requestNotificationPermission | typeof device.showNotification>,
+    answer: AnswerOf<typeof device.requestNotificationPermission | typeof device.showNotification>,
+  ) => {
+    w.net.deliver(asking);
+    w.net.deliver(w.peer.device.answer(asking, answer));
+  },
+);
 
 export const warnsWhenTooMany = scenario(
   "Add too many open tasks and let 1 hour pass while they stay too many; notifier warns, and warns again",
