@@ -35,11 +35,11 @@ import {
   constants,
   created,
   datetime,
-  emission,
   emit,
   emitted,
   endOf,
   entity,
+  eventOf,
   external,
   externalService,
   fulfilled,
@@ -1354,7 +1354,7 @@ scenarioOfScreens({
     // @ts-expect-error Then states requests only to the peers that Given lists
     requested(adding, [requestOf(devicePeer.requestNotificationPermission, {})]),
     // @ts-expect-error Then states only the own service's events
-    emitted(adding, [emission(todoPeer.taskAdded, { taskId: "task-1" })]),
+    emitted(adding, [eventOf(todoPeer.taskAdded, { taskId: "task-1" })]),
     requested(adding, [endOf(watching)]),
     answered(completing, rejected("requires", "notCompleted")),
     answered(completing, rejected("requires")),

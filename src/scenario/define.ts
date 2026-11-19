@@ -591,7 +591,7 @@ export const requested = <X extends Listed>(
 });
 
 /** An event that the own service emitted, for Then's `emitted`. */
-export const emission = <Ev extends AnyEvent>(event: Ev, payload: Value<EncodedPayload<Ev>>): Emitted<OwnerOf<Ev>> => ({
+export const eventOf = <Ev extends AnyEvent>(event: Ev, payload: Value<EncodedPayload<Ev>>): Emitted<OwnerOf<Ev>> => ({
   event,
   payload,
 });

@@ -46,7 +46,7 @@ Run the commands in [samples/todo](samples/todo).
      },
      then: ({ first, second }) => [
        answered(first, accepted),
-       emitted(first, [emission(taskCompleted, { taskId: "task-1" })]),
+       emitted(first, [eventOf(taskCompleted, { taskId: "task-1" })]),
        answered(second, rejected("requires", "notCompleted")),
        emitted(second, []),
      ],
