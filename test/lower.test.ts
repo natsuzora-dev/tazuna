@@ -6,7 +6,7 @@ import { scenario } from "../samples/todo/spec/screens/data.ts";
 import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
 import { todo } from "../samples/todo/spec/todo/contract.ts";
 import type { DefinitionRef } from "../src/data/definitionRef.ts";
-import { created, external, raw, request, requested, run } from "../src/index.ts";
+import { created, external, raw, requested, requestOf, run } from "../src/index.ts";
 import type { ScenarioDefinition, When } from "../src/scenario/define.ts";
 import { lower } from "../src/scenario/lower.ts";
 
@@ -24,7 +24,8 @@ const services = new Map<unknown, string>([
 const peers = [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)];
 
 function lowered(when: (w: When<typeof peers>) => unknown, then: (lines: never) => readonly never[] = () => []) {
-  const definition = scenario("lowered", {
+  const definition = scenario({
+    description: "lowered",
     given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers },
     when,
     then: then as never,
@@ -174,7 +175,7 @@ test("Then lowers each expectation about the line it names", () => {
   const { expectations } = lowered(
     (w) => ({ adding: w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" }) }),
     (({ adding }: { adding: never }) => [
-      requested(adding, [request(calendar.nextBusinessDay, { from: "2026-10-25" })]),
+      requested(adding, [requestOf(calendar.nextBusinessDay, { from: "2026-10-25" })]),
     ]) as never,
   );
   assert.deepEqual(expectations, [

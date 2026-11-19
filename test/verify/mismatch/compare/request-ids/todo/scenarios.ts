@@ -8,7 +8,8 @@ const arranged = given({
   peers: [external(calendar)],
 });
 
-export const addTwo = scenario("Add two tasks an hour apart, and get the next day for each; no violation", {
+export const addTwo = scenario({
+  description: "Add two tasks an hour apart, and get the next day for each; no violation",
   given: arranged,
   when: (w) => {
     const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
@@ -22,26 +23,24 @@ export const addTwo = scenario("Add two tasks an hour apart, and get the next da
   then: () => [],
 });
 
-export const addOneOwnAnswer = scenario(
-  "Add a task; the implementation trace of this scenario gives its calendar.nextDay request the id of the addTask command, which already stands for that command, so verify reports the request as Mismatch.request",
-  {
-    given: arranged,
-    when: (w) => {
-      w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
-    },
-    then: () => [],
+export const addOneOwnAnswer = scenario({
+  description:
+    "Add a task; the implementation trace of this scenario gives its calendar.nextDay request the id of the addTask command, which already stands for that command, so verify reports the request as Mismatch.request",
+  given: arranged,
+  when: (w) => {
+    w.net.leaveInFlight(w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay));
   },
-);
+  then: () => [],
+});
 
-export const addOneResent = scenario(
-  "Add a task and get the next day for it; the implementation trace of this scenario sends the calendar.nextDay request again with its id and input, and gets an answer to each send, so verify takes the second request as a resend of the first and its answer as an answer to the resend; no violation",
-  {
-    given: arranged,
-    when: (w) => {
-      const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
-      w.net.deliver(first);
-      w.net.deliver(w.peer.calendar.answer(first, fulfilled({ day: "2026-10-26T00:00:00Z" })));
-    },
-    then: () => [],
+export const addOneResent = scenario({
+  description:
+    "Add a task and get the next day for it; the implementation trace of this scenario sends the calendar.nextDay request again with its id and input, and gets an answer to each send, so verify takes the second request as a resend of the first and its answer as an answer to the resend; no violation",
+  given: arranged,
+  when: (w) => {
+    const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
+    w.net.deliver(first);
+    w.net.deliver(w.peer.calendar.answer(first, fulfilled({ day: "2026-10-26T00:00:00Z" })));
   },
-);
+  then: () => [],
+});

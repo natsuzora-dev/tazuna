@@ -20,11 +20,15 @@ type Frozen<T> = T extends Temporal.Instant | Temporal.PlainDate | Temporal.Dura
  * The name is written rather than taken from the service's definer, because entities, which the definer lists, may read
  * the constants.
  */
-export function constants<const S extends z.ZodObject>(
-  service: string,
-  schema: S,
-  values: z.input<S>,
-): ConstantsGroup<Frozen<z.output<S>>> {
+export function constants<const S extends z.ZodObject>({
+  service,
+  schema,
+  values,
+}: {
+  service: string;
+  schema: S;
+  values: z.input<S>;
+}): ConstantsGroup<Frozen<z.output<S>>> {
   const parsed = Object.freeze(schema.parse(values));
   schemas.set(parsed, schema);
   services.set(parsed, service);

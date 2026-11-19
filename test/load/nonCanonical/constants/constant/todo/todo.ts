@@ -1,11 +1,11 @@
 import { constants, duration, emit, entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const todoConstants = constants(
-  "todo",
-  z.object({ titleLengthMax: z.int(), reminderOffsets: z.array(duration), defaultLabel: z.string() }),
-  { titleLengthMax: 80, reminderOffsets: ["PT10M", "PT1H"], defaultLabel: "inbox" },
-);
+export const todoConstants = constants({
+  service: "todo",
+  schema: z.object({ titleLengthMax: z.int(), reminderOffsets: z.array(duration), defaultLabel: z.string() }),
+  values: { titleLengthMax: 80, reminderOffsets: ["PT10M", "PT1H"], defaultLabel: "inbox" },
+});
 
 export const Task = entity({
   description: "A task",

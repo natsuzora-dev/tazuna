@@ -597,14 +597,14 @@ export const emission = <Ev extends AnyEvent>(event: Ev, payload: Value<EncodedP
 });
 
 /** A command or query that the own service sent, for Then's `requested`. */
-export const request = <T extends Request>(target: T, input: Value<InputOf<T>>): Sent<OwnerOf<T>> => ({
+export const requestOf = <T extends Request>(target: T, input: Value<InputOf<T>>): Sent<OwnerOf<T>> => ({
   kind: target.kind,
   target,
   input,
 });
 
 /** A subscription that the own service opened, for Then's `requested`. */
-export const subscription = <Q extends AnyQuery>(query: Q, input: Value<InputOf<Q>>): Sent<OwnerOf<Q>> => ({
+export const subscriptionOf = <Q extends AnyQuery>(query: Q, input: Value<InputOf<Q>>): Sent<OwnerOf<Q>> => ({
   kind: "subscribe",
   target: query,
   input,
@@ -655,14 +655,12 @@ export interface ScenarioDefinition {
  * Defines a scenario of the own service: Given arranges, When places the lines in order, and Then states what the own
  * service did. The export name of the scenario is its name.
  */
-export type ScenarioDefiner<R, Own extends string> = <const P extends Peers, N>(
-  description: string,
-  sections: {
-    readonly given: Given<R, P, Own>;
-    readonly when: (w: When<P, Own>) => N;
-    readonly then: (lines: N) => readonly Expectation[];
-  },
-) => ScenarioDefinition;
+export type ScenarioDefiner<R, Own extends string> = <const P extends Peers, N>(sections: {
+  readonly description: string;
+  readonly given: Given<R, P, Own>;
+  readonly when: (w: When<P, Own>) => N;
+  readonly then: (lines: N) => readonly Expectation[];
+}) => ScenarioDefinition;
 
 /** A Given of the own service `Own`, whose `step` types a function of When lines by the services that it lists. */
 export type Arranged<R, P extends Peers, Own extends string> = Given<R, P, Own> & {
@@ -683,7 +681,7 @@ const scenarioOwners = new WeakMap<object, ServiceDefinition>();
 
 export const scenarioDefiner =
   <R, Own extends string>(owner: ServiceDefinition): ScenarioDefiner<R, Own> =>
-  (description, { given, when, then }) => {
+  ({ description, given, when, then }) => {
     const definition = { kind: "scenario", description, given, when, expect: then } as unknown as ScenarioDefinition;
     scenarioOwners.set(definition, owner);
     return definition;

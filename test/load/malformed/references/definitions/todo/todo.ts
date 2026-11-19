@@ -47,4 +47,8 @@ export const taskDetail = query({ input: { taskId: ref(Task) }, output: { relate
 
 export const todo = contract({ TaskId: ref(Task) });
 
-export const todoConstants = constants("todo", z.object({ defaultTaskId: ref(Task) }), { defaultTaskId: "task-1" });
+export const todoConstants = constants({
+  service: "todo",
+  schema: z.object({ defaultTaskId: ref(Task) }),
+  values: { defaultTaskId: "task-1" },
+});

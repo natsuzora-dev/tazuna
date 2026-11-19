@@ -8,28 +8,26 @@ const arranged = given({
   peers: [external(calendar)],
 });
 
-export const twoDays = scenario(
-  "Add a task and answer the calendar.nextDay request; its snapshot, edited by hand, has the planner send two equal calendar.nextDay requests and answers them with different days. The trace's two requests are equal too, so no line tells which of them stands for the first, and the request that the harness gave the first answer to decides what the implementation got; verify reports Uncomparable.ambiguous",
-  {
-    given: arranged,
-    when: (w) => {
-      const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
-      w.net.deliver(ask);
-      w.net.deliver(w.peer.calendar.answer(ask, fulfilled({ day: "2026-10-26T00:00:00Z" })));
-    },
-    then: () => [],
+export const twoDays = scenario({
+  description:
+    "Add a task and answer the calendar.nextDay request; its snapshot, edited by hand, has the planner send two equal calendar.nextDay requests and answers them with different days. The trace's two requests are equal too, so no line tells which of them stands for the first, and the request that the harness gave the first answer to decides what the implementation got; verify reports Uncomparable.ambiguous",
+  given: arranged,
+  when: (w) => {
+    const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
+    w.net.deliver(ask);
+    w.net.deliver(w.peer.calendar.answer(ask, fulfilled({ day: "2026-10-26T00:00:00Z" })));
   },
-);
+  then: () => [],
+});
 
-export const twoDaysAlike = scenario(
-  "Same inputs as twoDays; its snapshot, edited by hand, answers the two equal requests with the same day, so whichever request the harness gives each answer to, the implementation gets the same inputs; no violation",
-  {
-    given: arranged,
-    when: (w) => {
-      const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
-      w.net.deliver(ask);
-      w.net.deliver(w.peer.calendar.answer(ask, fulfilled({ day: "2026-10-26T00:00:00Z" })));
-    },
-    then: () => [],
+export const twoDaysAlike = scenario({
+  description:
+    "Same inputs as twoDays; its snapshot, edited by hand, answers the two equal requests with the same day, so whichever request the harness gives each answer to, the implementation gets the same inputs; no violation",
+  given: arranged,
+  when: (w) => {
+    const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
+    w.net.deliver(ask);
+    w.net.deliver(w.peer.calendar.answer(ask, fulfilled({ day: "2026-10-26T00:00:00Z" })));
   },
-);
+  then: () => [],
+});

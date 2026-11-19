@@ -62,9 +62,9 @@ export {
   offered,
   raw,
   rejected,
-  request,
   requested,
+  requestOf,
   run,
   skip,
-  subscription,
+  subscriptionOf,
 } from "./scenario/define.ts";

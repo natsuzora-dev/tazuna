@@ -29,4 +29,8 @@ export const readingTaken = event({
 
 export const todo = contract({ readingTaken });
 
-export const limits = constants("todo", z.strictObject({ most: z.union([celsius, z.string()]) }), { most: 3 });
+export const limits = constants({
+  service: "todo",
+  schema: z.strictObject({ most: z.union([celsius, z.string()]) }),
+  values: { most: 3 },
+});

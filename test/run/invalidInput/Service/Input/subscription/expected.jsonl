@@ -1,2 +1,2 @@
-{"kind":"InvalidInput.unopenedSubscription","definition":null,"data":{"subscriptionId":"taskTitles#1"},"location":{"file":"todo/scenarios.ts","line":16},"scenario":{"service":"todo","name":"endUnopenedAndSubscribeTwice"}}
-{"kind":"InvalidInput.reusedSubscriptionId","definition":null,"data":{"subscriptionId":"taskTitles#2"},"location":{"file":"todo/scenarios.ts","line":16},"scenario":{"service":"todo","name":"endUnopenedAndSubscribeTwice"}}
+{"kind":"InvalidInput.unopenedSubscription","definition":null,"data":{"subscriptionId":"taskTitles#1"},"location":{"file":"todo/scenarios.ts","line":14},"scenario":{"service":"todo","name":"endUnopenedAndSubscribeTwice"}}
+{"kind":"InvalidInput.reusedSubscriptionId","definition":null,"data":{"subscriptionId":"taskTitles#2"},"location":{"file":"todo/scenarios.ts","line":14},"scenario":{"service":"todo","name":"endUnopenedAndSubscribeTwice"}}

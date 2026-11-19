@@ -4,7 +4,8 @@ import { given, scenario } from "./notifier.ts";
 
 const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(todo)] });
 
-export const receiveAdded = scenario("Receive an added task; no violation", {
+export const receiveAdded = scenario({
+  description: "Receive an added task; no violation",
   given: arranged,
   when: (w) => {
     w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: "task-1", title: "Buy milk" }, { resultOf: null }));
@@ -12,13 +13,12 @@ export const receiveAdded = scenario("Receive an added task; no violation", {
   then: () => [],
 });
 
-export const receiveAddedEmptyTitle = scenario(
-  "Receive an added task with an empty title; the payload schema of taskAdded rejects it, so test reports eventPayloadSchema",
-  {
-    given: arranged,
-    when: (w) => {
-      w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: "task-1", title: "" }, { resultOf: null }));
-    },
-    then: () => [],
+export const receiveAddedEmptyTitle = scenario({
+  description:
+    "Receive an added task with an empty title; the payload schema of taskAdded rejects it, so test reports eventPayloadSchema",
+  given: arranged,
+  when: (w) => {
+    w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: "task-1", title: "" }, { resultOf: null }));
   },
-);
+  then: () => [],
+});

@@ -1,6 +1,7 @@
 import { addTask, scenario } from "./todo.ts";
 
-export const addOne = scenario("Add a task; its snapshot and trace pair up; no violation", {
+export const addOne = scenario({
+  description: "Add a task; its snapshot and trace pair up; no violation",
   given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: [] },
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
@@ -8,7 +9,8 @@ export const addOne = scenario("Add a task; its snapshot and trace pair up; no v
   then: () => [],
 });
 
-export const addTwo = scenario("Add two tasks; its snapshot has no trace, so verify reports missingTrace", {
+export const addTwo = scenario({
+  description: "Add two tasks; its snapshot has no trace, so verify reports missingTrace",
   given: { start: "2026-10-25T00:00:00Z", records: { Task: [] }, peers: [] },
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });

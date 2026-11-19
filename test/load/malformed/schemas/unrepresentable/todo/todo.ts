@@ -24,4 +24,8 @@ export const taskAdded = event({
 
 export const todo = contract({ taskAdded });
 
-export const limits = constants("todo", z.strictObject({ most: z.bigint() }), { most: 3n });
+export const limits = constants({
+  service: "todo",
+  schema: z.strictObject({ most: z.bigint() }),
+  values: { most: 3n },
+});

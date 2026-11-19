@@ -52,8 +52,8 @@ import {
   raw,
   ref,
   rejected,
-  request,
   requested,
+  requestOf,
   run,
   service,
   set,
@@ -1075,16 +1075,16 @@ screen({
 });
 
 // @ts-expect-error constants values have the schema's input type
-constants("types", z.object({ limit: z.int() }), { limit: "10" });
+constants({ service: "types", schema: z.object({ limit: z.int() }), values: { limit: "10" } });
 
 // A contract can hold the object that a constants() call returns.
-contract({ limits: constants("types", z.object({ limit: z.int() }), { limit: 10 }) });
+contract({ limits: constants({ service: "types", schema: z.object({ limit: z.int() }), values: { limit: 10 } }) });
 
 // @ts-expect-error a contract holds no object not made by constants()
 contract({ limits: { limit: 10 } });
 
 // A bag constant stays an array, since an implementation reads constants too.
-void constants("types", z.object({ tags: bag(z.string()) }), { tags: ["a"] }).tags.length;
+void constants({ service: "types", schema: z.object({ tags: bag(z.string()) }), values: { tags: ["a"] } }).tags.length;
 
 // A sortedBy key is a number, date or datetime field.
 sortedBy(z.strictObject({ n: z.int(), at: datetime }), "at");
@@ -1341,7 +1341,8 @@ service({ name: "todo.tasks", description: "" });
 externalService({ name: "a/b", description: "" });
 
 // Given lists the peers, the own service among none of them, and When names each by its service's name.
-scenarioOfScreens("types", {
+scenarioOfScreens({
+  description: "types",
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
@@ -1355,7 +1356,8 @@ scenarioOfScreens("types", {
   },
   then: () => [],
 });
-scenarioOfScreens("types", {
+scenarioOfScreens({
+  description: "types",
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
@@ -1367,7 +1369,8 @@ scenarioOfScreens("types", {
 });
 
 // A line names only messages between the own service and the peers that Given lists as running or external.
-scenarioOfScreens("types", {
+scenarioOfScreens({
+  description: "types",
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
@@ -1394,12 +1397,13 @@ scenarioOfScreens("types", {
   },
   then: ({ adding }) => [
     // Then states a request to a skipped peer: the own service sends it, though nobody receives it.
-    requested(adding, [request(devicePeer.requestNotificationPermission, {})]),
+    requested(adding, [requestOf(devicePeer.requestNotificationPermission, {})]),
   ],
 });
 
 // The scenario grammar: what a line names and writes.
-scenarioOfScreens("types", {
+scenarioOfScreens({
+  description: "types",
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
@@ -1449,9 +1453,9 @@ scenarioOfScreens("types", {
     emitted(look, []),
     // @ts-expect-error endOf takes a subscription, not a command
     requested(adding, [endOf(adding.request(calendarPeer.nextBusinessDay))]),
-    requested(adding, [request(calendarPeer.nextBusinessDay, { from: "2026-10-25" })]),
+    requested(adding, [requestOf(calendarPeer.nextBusinessDay, { from: "2026-10-25" })]),
     // @ts-expect-error Then states requests only to the peers that Given lists
-    requested(adding, [request(devicePeer.requestNotificationPermission, {})]),
+    requested(adding, [requestOf(devicePeer.requestNotificationPermission, {})]),
     // @ts-expect-error Then states only the own service's events
     emitted(adding, [emission(todoPeer.taskAdded, { taskId: "task-1" })]),
     requested(adding, [endOf(watching)]),
@@ -1476,7 +1480,8 @@ scenarioOfScreens("types", {
 });
 
 // An event line's resultOf names the request of a command.
-scenarioOfTodo("types", {
+scenarioOfTodo({
+  description: "types",
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: { Task: [], Settings: { shouldRemind: true } },
@@ -1513,7 +1518,8 @@ withTodo.step((w) => {
   addMilk(w, 1);
   return addMilk(w, "Buy milk");
 });
-scenarioOfScreens("types", {
+scenarioOfScreens({
+  description: "types",
   given: withTodo,
   when: (w) => ({ adding: addMilk(w, "Buy milk") }),
   then: ({ adding }) => [answered(adding, accepted)],

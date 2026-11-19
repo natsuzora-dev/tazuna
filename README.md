@@ -34,25 +34,23 @@ Run the commands in [samples/todo](samples/todo).
    The user adds a task and completes it twice, and the `todo` service rejects the second completion:
 
    ```ts
-   export const completeTwice = scenario(
-     "Complete a task twice; todo rejects the second completeTask by requires notCompleted",
-     {
-       given: noTasks,
-       when: (w) => {
-         addMilk(w, "2026-10-26");
-         w.clock.at("2026-10-25T10:01:00+09:00");
-         const first = w.client.send(completeTask, { taskId: "task-1" });
-         const second = w.client.send(completeTask, { taskId: "task-1" });
-         return { first, second };
-       },
-       then: ({ first, second }) => [
-         answered(first, accepted),
-         emitted(first, [emission(taskCompleted, { taskId: "task-1" })]),
-         answered(second, rejected("requires", "notCompleted")),
-         emitted(second, []),
-       ],
+   export const completeTwice = scenario({
+     description: "Complete a task twice; todo rejects the second completeTask by requires notCompleted",
+     given: noTasks,
+     when: (w) => {
+       addMilk(w, "2026-10-26");
+       w.clock.at("2026-10-25T10:01:00+09:00");
+       const first = w.client.send(completeTask, { taskId: "task-1" });
+       const second = w.client.send(completeTask, { taskId: "task-1" });
+       return { first, second };
      },
-   );
+     then: ({ first, second }) => [
+       answered(first, accepted),
+       emitted(first, [emission(taskCompleted, { taskId: "task-1" })]),
+       answered(second, rejected("requires", "notCompleted")),
+       emitted(second, []),
+     ],
+   });
    ```
 
    Given is the start, When is the lines in order, and Then is what `todo` did on those lines.

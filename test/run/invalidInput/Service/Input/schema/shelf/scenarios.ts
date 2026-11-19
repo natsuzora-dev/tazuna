@@ -2,7 +2,8 @@ import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { catalog } from "../catalog/contract.ts";
 import { scenario, shelfScreen } from "./shelf.ts";
 
-export const answerUnsorted = scenario("Answer the items out of n order; test reports answerOutputSchema", {
+export const answerUnsorted = scenario({
+  description: "Answer the items out of n order; test reports answerOutputSchema",
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(catalog)] },
   when: (w) => {
     w.net.deliver(w.startup.request(catalog.numbers));
@@ -21,7 +22,8 @@ export const answerUnsorted = scenario("Answer the items out of n order; test re
   then: () => [],
 });
 
-export const pickTwice = scenario("Pick the name a twice; test reports controlPayloadSchema", {
+export const pickTwice = scenario({
+  description: "Pick the name a twice; test reports controlPayloadSchema",
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(catalog)] },
   when: (w) => {
     w.user.operate(w.startup.screen(shelfScreen), "pick", { names: ["a", "a"] });

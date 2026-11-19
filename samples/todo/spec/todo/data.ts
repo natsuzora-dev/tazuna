@@ -26,9 +26,13 @@ export const Settings = singleEntity({
 });
 
 // timeZone decides calendar dates; dueAheadLimit is how far ahead of now a due date may be.
-export const todoConstants = constants("todo", z.object({ timeZone, dueAheadLimit: duration }), {
-  timeZone: "Asia/Tokyo",
-  dueAheadLimit: "P1Y",
+export const todoConstants = constants({
+  service: "todo",
+  schema: z.object({ timeZone, dueAheadLimit: duration }),
+  values: {
+    timeZone: "Asia/Tokyo",
+    dueAheadLimit: "P1Y",
+  },
 });
 
 export const {

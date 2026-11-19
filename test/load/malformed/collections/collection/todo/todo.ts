@@ -21,4 +21,8 @@ export const marks = query({
 
 export const todo = contract({ marksWithVisibleCollections, marks });
 
-export const defaults = constants("todo", z.strictObject({ days: z.tuple([set(z.string())]) }), { days: [[]] });
+export const defaults = constants({
+  service: "todo",
+  schema: z.strictObject({ days: z.tuple([set(z.string())]) }),
+  values: { days: [[]] },
+});

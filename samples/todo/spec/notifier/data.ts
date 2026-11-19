@@ -2,16 +2,16 @@ import { constants, duration, entity, service, singleEntity } from "@natsuzora-d
 import { z } from "zod";
 import { todo } from "../todo/contract.ts";
 
-export const notifierConstants = constants(
-  "notifier",
-  z.object({
+export const notifierConstants = constants({
+  service: "notifier",
+  schema: z.object({
     openTaskLimit: z.int(),
     warnedPeriod: duration,
     permissionAttempts: z.int(),
     permissionRetryDelay: duration,
   }),
-  { openTaskLimit: 10, warnedPeriod: "PT1H", permissionAttempts: 3, permissionRetryDelay: "PT1M" },
-);
+  values: { openTaskLimit: 10, warnedPeriod: "PT1H", permissionAttempts: 3, permissionRetryDelay: "PT1M" },
+});
 
 export const OpenTask = entity({
   description: "An open task of todo",

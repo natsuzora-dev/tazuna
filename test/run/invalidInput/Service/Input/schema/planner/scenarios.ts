@@ -10,26 +10,24 @@ const answered = arranged.step((w, answer: AnswerOf<typeof todo.addTask>) => {
   w.net.deliver(w.peer.todo.answer(adding, answer));
 });
 
-export const rejectAdd = scenario("Reject the task as already existing; no violation", {
+export const rejectAdd = scenario({
+  description: "Reject the task as already existing; no violation",
   given: arranged,
   when: (w) => answered(w, rejected("already-exists")),
   then: () => [],
 });
 
-export const rejectAddNotFound = scenario(
-  "Reject the task as not-found although its input has no ref; addTask cannot answer with that kind, so test reports unlistedRejectionKind",
-  {
-    given: arranged,
-    when: (w) => answered(w, rejected("not-found")),
-    then: () => [],
-  },
-);
+export const rejectAddNotFound = scenario({
+  description:
+    "Reject the task as not-found although its input has no ref; addTask cannot answer with that kind, so test reports unlistedRejectionKind",
+  given: arranged,
+  when: (w) => answered(w, rejected("not-found")),
+  then: () => [],
+});
 
-export const rejectMetRequires = scenario(
-  "Reject the task for the requires short, which its title meets, so test reports rejectedAssumedRequires",
-  {
-    given: arranged,
-    when: (w) => answered(w, rejected("requires", "short")),
-    then: () => [],
-  },
-);
+export const rejectMetRequires = scenario({
+  description: "Reject the task for the requires short, which its title meets, so test reports rejectedAssumedRequires",
+  given: arranged,
+  when: (w) => answered(w, rejected("requires", "short")),
+  then: () => [],
+});
