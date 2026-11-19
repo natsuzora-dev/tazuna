@@ -1,6 +1,0 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"noteAdded#1","name":"noteAdded","payload":{"id":"todo/Note-1","taskId":"task-1"},"created":["todo/Note-1"]}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"noteIds#1","name":"noteIds","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"noteIds#1","answer":{"result":"fulfilled","output":{"noteIds":["todo/Note-1"]}}}

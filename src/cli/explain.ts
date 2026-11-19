@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { groups } from "../data/groups.ts";
-import { type Kind, parseKind } from "../data/kinds.ts";
+import { isUserKind, parseKind, type UserKind } from "../data/kinds.ts";
 import type { Group } from "../data/violation.ts";
 
 /** The lines `from` to `to` of a file of an example's spec: the top-level statement that holds `line`, the reported one. */
@@ -25,7 +25,7 @@ export interface Example {
  */
 export interface Explanations {
   readonly groups: Readonly<Record<Group, string>>;
-  readonly kinds: Readonly<Record<Kind, { readonly meaning: string; readonly example?: Example }>>;
+  readonly kinds: Readonly<Record<UserKind, { readonly meaning: string; readonly example?: Example }>>;
 }
 
 export const explanationsPath = join(import.meta.dirname, "../../explain.json");
@@ -48,7 +48,7 @@ function excerptText({ file, from, to, line, text }: Excerpt): string[] {
 
 /**
  * The markdown that explains the kind that `text` names, from the explanations at `path`, or a misuse when `text` names
- * no kind or `path` is missing.
+ * no kind or an internal kind (internalKinds), or `path` is missing.
  */
 export function explain(
   text: string,
@@ -56,9 +56,13 @@ export function explain(
 ): { readonly markdown: string } | { readonly misuse: string } {
   const parsed = parseKind(text);
   if (parsed === undefined) return { misuse: `unknown kind ${text}` };
+  const { kind, group } = parsed;
+  if (!isUserKind(kind))
+    return {
+      misuse: `${kind} is internal to tazuna, and a spec that check passes never reports it. Report it as a bug`,
+    };
   if (!existsSync(path)) return { misuse: `${path} is missing. Reinstall tazuna` };
   const explanations = JSON.parse(readFileSync(path, "utf8")) as Explanations;
-  const { kind, group } = parsed;
   const { meaning, example } = explanations.kinds[kind];
   const { reportedBy, fixedIn } = groups[group];
   const markdown = [

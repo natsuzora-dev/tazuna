@@ -100,9 +100,9 @@ export type Malformed =
   /** Given lists as a peer the own service's contract or no contract (null). */
   | (Of<"unknownPeer", null, { readonly service: string | null }> & { readonly scenario: DefinitionRef })
   /**
-   * The scenario writes, in Given or on a line, `key`, a value in the form of a key that a spec service creates of
-   * `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a running peer's answer
-   * writes `created()`. The report is at the line, or at the scenario for Given.
+   * The scenario writes, in Given, on a line, or in an expectation of Then, `key`, a value in the form of a key that a
+   * spec service creates of `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a
+   * running peer's answer writes `created()`. The report is at the line or the expectation, or at the scenario for Given.
    */
   | (Of<"writtenCreatedKey", null, { readonly key: string; readonly entity: DefinitionRef }> & {
       readonly scenario: DefinitionRef;

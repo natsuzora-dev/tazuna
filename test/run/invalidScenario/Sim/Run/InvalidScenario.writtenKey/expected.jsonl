@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.writtenKey","definition":null,"data":{"scenarioLine":1,"key":"todo/Note-1","entity":{"service":"todo","name":"Note"}},"location":{"file":"todo/scenarios.ts","line":10},"scenario":{"service":"todo","name":"stateCreatedNote"}}

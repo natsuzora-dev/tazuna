@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseSync } from "oxc-parser";
 import { type Example, type Excerpt, type Explanations, explanationsPath } from "../src/cli/explain.ts";
-import { groupNames, type Kind, kindsOf, parseKind } from "../src/data/kinds.ts";
+import { groupNames, isUserKind, type Kind, kindsOf, parseKind, type UserKind } from "../src/data/kinds.ts";
 import type { Group } from "../src/data/violation.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -95,12 +95,14 @@ function exampleOf(dir: string): Example {
 /** The data of explain.json, from the doc comments in src/data and the examples under test. */
 export function explanations(): Explanations {
   const examples = new Map(exampleFolders());
-  const explanation = (kind: Kind, group: Group) => {
+  const explanation = (kind: UserKind, group: Group) => {
     const dir = examples.get(kind);
     return { meaning: meaningOf(kind, group), ...(dir === undefined ? {} : { example: exampleOf(dir) }) };
   };
   const entries = groupNames
-    .flatMap((group) => kindsOf[group].map((kind: Kind) => [kind, explanation(kind, group)] as const))
+    .flatMap((group) =>
+      kindsOf[group].flatMap((kind: Kind) => (isUserKind(kind) ? [[kind, explanation(kind, group)] as const] : [])),
+    )
     .sort(([a], [b]) => (a < b ? -1 : 1));
   return {
     groups: Object.fromEntries(groupNames.map((g) => [g, groupDoc(g)])) as Explanations["groups"],

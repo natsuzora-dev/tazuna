@@ -131,5 +131,35 @@ const parsed: ReadonlyMap<string, { readonly kind: Kind; readonly group: Group }
 /** Every violation kind. */
 export const kinds: readonly Kind[] = [...parsed.values()].map((p) => p.kind);
 
+/**
+ * The kinds that no spec that `tazuna check` passes can produce: the DSL's types reject what they report, check reports
+ * it first as a Malformed kind, or only test's own step-order search writes the input that they check. The simulation
+ * keeps them as the validation of its input, which tazuna's own data scenarios reach without types or check. Explain
+ * leaves them out.
+ */
+export const internalKinds = [
+  "InvalidScenario.repeatedPeer",
+  "InvalidScenario.missingRecord",
+  "InvalidScenario.malformedValue",
+  "InvalidScenario.unrefusable",
+  "InvalidScenario.notALook",
+  "InvalidScenario.misplacedCreated",
+  "InvalidScenario.writtenKey",
+  "InvalidScenario.writtenGivenKey",
+  "InvalidInput.unownedTarget",
+  "InvalidInput.unlistedRejectionReason",
+  "InvalidInput.unknownControl",
+  "InvalidInput.unreadyStep",
+  "InvalidInput.unusedStepOrder",
+] as const satisfies readonly Kind[];
+
+/** A kind that a user meets: one of the kinds except internalKinds. */
+export type UserKind = Exclude<Kind, (typeof internalKinds)[number]>;
+
+const internal: ReadonlySet<Kind> = new Set(internalKinds);
+
+/** Whether `kind` is a kind that a user meets. */
+export const isUserKind = (kind: Kind): kind is UserKind => !internal.has(kind);
+
 /** The kind that `text` names and its group, or undefined when `text` is no violation kind. */
 export const parseKind = (text: string): { readonly kind: Kind; readonly group: Group } | undefined => parsed.get(text);

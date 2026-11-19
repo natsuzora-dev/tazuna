@@ -4,12 +4,12 @@ import { join, relative } from "node:path";
 import { test } from "node:test";
 import { exampleFolders, explanations } from "../scripts/explain.ts";
 import { explain, explanationsPath } from "../src/cli/explain.ts";
-import { type Kind, kinds } from "../src/data/kinds.ts";
+import { isUserKind, type Kind, kinds } from "../src/data/kinds.ts";
 import { expectedOf, kindOfLine } from "./expected.ts";
 
 const maxExcerptLines = 40;
 const built = explanations();
-const kindEntries = kinds.map((kind) => [kind, built.kinds[kind]] as const);
+const kindEntries = kinds.filter(isUserKind).map((kind) => [kind, built.kinds[kind]] as const);
 
 test("explain.json is what scripts/explain.ts builds", () => {
   assert.deepEqual(JSON.parse(readFileSync(explanationsPath, "utf8")), built);
@@ -26,29 +26,16 @@ test("Each group and each kind has a doc comment", () => {
   );
 });
 
-/** The kinds without an example, each with why, until the owner decides whether each stays a user-facing kind. */
-const withoutExample: Readonly<Partial<Record<Kind, string>>> = {
-  "InvalidScenario.repeatedPeer": "Given's peers type rejects a service listed twice",
-  "InvalidScenario.missingRecord": "Given's records type requires the record of each single entity",
-  "InvalidScenario.malformedValue": "AnswerOf types each answer, Instant types each time, and check parses each time",
-  "InvalidScenario.unrefusable": "net.refuse takes only a request",
-  "InvalidScenario.notALook": "offered and notOffered take only a look line",
-  "InvalidScenario.misplacedCreated": "created() types only in a running peer's message, and raw() hides it",
-  "InvalidScenario.writtenGivenKey": "check reports a created key in Given as Malformed.writtenCreatedKey first",
-  "InvalidInput.unownedTarget": "the request types take only definitions of the service that the request reaches",
-  "InvalidInput.unlistedRejectionReason": "an answer's type takes as reason only a requires condition of the request",
-  "InvalidInput.unknownControl": "operate takes only a control of the screen",
-  "InvalidInput.unreadyStep": "only test's own step-order search writes a step order",
-  "InvalidInput.unusedStepOrder": "only test's own step-order search writes a step order",
-  "ChoiceDependent.uncomparable":
-    "a spec can reach it, but only through equal requests with different answers and seven created records that only their keys tell apart",
-  "Mismatch.after": "only test's step-order search reports it, inside the difference of a ChoiceDependent.stepOrder",
-};
+/** The kinds without an example until the next change gives them one or removes them. */
+const withoutExample: readonly Kind[] = ["ChoiceDependent.uncomparable", "Mismatch.after"];
 
-test("Each kind has one example, the folder under test named after it, which reports that kind and no other, except the kinds without one", () => {
+test("Each kind that a user meets has one example, the folder under test named after it, which reports that kind and no other, and no internal kind has one", () => {
   const folders = exampleFolders();
   assert.deepEqual(
-    kinds.filter((kind) => folders.filter(([k]) => k === kind).length !== (withoutExample[kind] === undefined ? 1 : 0)),
+    kinds.filter(
+      (kind) =>
+        folders.filter(([k]) => k === kind).length !== (isUserKind(kind) && !withoutExample.includes(kind) ? 1 : 0),
+    ),
     [],
   );
   assert.deepEqual(
@@ -72,7 +59,7 @@ test(`Each example's excerpt has at most ${maxExcerptLines} lines and holds the 
   );
 });
 
-test("explain marks the reported line of the excerpt, and names an unknown kind and a missing explain.json as misuses", () => {
+test("explain marks the reported line of the excerpt, and names an unknown kind, an internal kind, and a missing explain.json as misuses", () => {
   const explained = explain("Fault.failedEnsures");
   assert.ok("markdown" in explained);
   const excerpt = built.kinds["Fault.failedEnsures"].example?.excerpt;
@@ -80,6 +67,10 @@ test("explain marks the reported line of the excerpt, and names an unknown kind 
   assert.match(explained.markdown, new RegExp(`^> +${excerpt.line} \\| `, "m"));
   assert.deepEqual(explain("Fault.data"), { misuse: "unknown kind Fault.data" });
   assert.deepEqual(explain("constructor"), { misuse: "unknown kind constructor" });
+  assert.deepEqual(explain("InvalidInput.unreadyStep"), {
+    misuse:
+      "InvalidInput.unreadyStep is internal to tazuna, and a spec that check passes never reports it. Report it as a bug",
+  });
   assert.deepEqual(explain("Fault.failedEnsures", "/missing/explain.json"), {
     misuse: "/missing/explain.json is missing. Reinstall tazuna",
   });

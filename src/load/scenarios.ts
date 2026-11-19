@@ -124,17 +124,17 @@ export function loadScenarios(
       return owner === undefined ? undefined : serviceNames.get(owner);
     });
     const linePlaces = lowered.stacks.map((s) => placeInStack(root, s));
-    const givenKey = writtenKey(services, [definition.given.records, peers]);
-    if (givenKey !== undefined)
-      report({ kind: "Malformed.writtenCreatedKey", definition: null, scenario: ref, data: givenKey });
-    lowered.lines.forEach((line, i) => {
-      const found = writtenKey(services, line);
+    const expectationPlaces = lowered.expectationStacks.map((s) => placeInStack(root, s));
+    const written = [
+      [[definition.given.records, peers], place] as const,
+      ...lowered.lines.map((line, i) => [line, linePlaces[i] ?? place] as const),
+      ...lowered.expectations.map((e, i) => [e, expectationPlaces[i] ?? place] as const),
+    ];
+    for (const [value, at] of written) {
+      const found = writtenKey(services, value);
       if (found !== undefined)
-        report(
-          { kind: "Malformed.writtenCreatedKey", definition: null, scenario: ref, data: found },
-          linePlaces[i] ?? place,
-        );
-    });
+        report({ kind: "Malformed.writtenCreatedKey", definition: null, scenario: ref, data: found }, at);
+    }
     for (const p of lowered.violations) {
       const line = lineOf(p);
       report(loweringMalformed(ref, p), (line === undefined ? undefined : linePlaces[line]) ?? place);
@@ -154,7 +154,7 @@ export function loadScenarios(
           expectations: [...lowered.expectations],
         },
         linePlaces,
-        expectationPlaces: lowered.expectationStacks.map((s) => placeInStack(root, s)),
+        expectationPlaces,
       },
     };
   });

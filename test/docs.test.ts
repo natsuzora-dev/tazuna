@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { explain } from "../src/cli/explain.ts";
 import { main } from "../src/cli/main.ts";
 import { groups as groupInfos } from "../src/data/groups.ts";
-import { groupNames, parseKind } from "../src/data/kinds.ts";
+import { groupNames, isUserKind, parseKind } from "../src/data/kinds.ts";
 import { leanRoot, typeChecked } from "./examples.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -90,18 +90,27 @@ test("Each Lean name that a doc cites with its files is declared in each of them
   );
 });
 
-/** The words `<Group>.<name>` of `text` whose group is a violation group and that name no kind of it. */
-const unknownKinds = (path: string, text: string, pattern: RegExp) =>
+/**
+ * The words `<Group>.<name>` of `text` whose group is a violation group and that name no kind of it, or, unless
+ * `internal`, an internal kind.
+ */
+const unknownKinds = (path: string, text: string, pattern: RegExp, internal = true) =>
   [...text.matchAll(pattern)]
     .filter(([, group = ""]) => groupNames.some((g) => g === group))
     .map(([, group, name]) => `${group}.${name}`)
-    .filter((kind) => parseKind(kind) === undefined)
+    .filter((kind) => {
+      const parsed = parseKind(kind);
+      return parsed === undefined || (!internal && !isUserKind(parsed.kind));
+    })
     .map((kind) => `${path} ${kind}`);
 
-test("Each violation kind that a shipped markdown file names is a kind of its group", () => {
-  assert.deepEqual(unknownKinds("x", "`Fault.data` and `Fault.failedEnsures`", /`(\w+)\.(\w+)`/g), ["x Fault.data"]);
+test("Each violation kind that a shipped markdown file names is a kind of its group that a user meets", () => {
   assert.deepEqual(
-    shipped.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g)),
+    unknownKinds("x", "`Fault.data`, `InvalidInput.unreadyStep`, and `Fault.failedEnsures`", /`(\w+)\.(\w+)`/g, false),
+    ["x Fault.data", "x InvalidInput.unreadyStep"],
+  );
+  assert.deepEqual(
+    shipped.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g, false)),
     [],
   );
 });

@@ -784,9 +784,6 @@
         "violation": "{\"kind\":\"InvalidInput.reusedSubscriptionId\",\"definition\":null,\"data\":{\"subscriptionId\":\"taskTitles#1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"subscribeTwice\"}}"
       }
     },
-    "InvalidInput.unknownControl": {
-      "meaning": "The operation input names the control `control`, which `screen` does not have."
-    },
     "InvalidInput.unlistedRejectionKind": {
       "meaning": "The answer rejects the request with a kind that the target does not list.",
       "example": {
@@ -799,9 +796,6 @@
         },
         "violation": "{\"kind\":\"InvalidInput.unlistedRejectionKind\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"rejection\":{\"kind\":\"not-found\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"rejectNextDayNotFound\"}}"
       }
-    },
-    "InvalidInput.unlistedRejectionReason": {
-      "meaning": "The answer rejects the request for a requires reason that the target does not list."
     },
     "InvalidInput.unofferedPayload": {
       "meaning": "No active state of the screen offers the payload of the operation input.",
@@ -841,15 +835,6 @@
         },
         "violation": "{\"kind\":\"InvalidInput.unopenedSubscription\",\"definition\":null,\"data\":{\"subscriptionId\":\"status#1\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":18},\"scenario\":{\"service\":\"app\",\"name\":\"unsubscribeAfterRestart\"}}"
       }
-    },
-    "InvalidInput.unownedTarget": {
-      "meaning": "The input names a command, query, or screen that the service does not own."
-    },
-    "InvalidInput.unreadyStep": {
-      "meaning": "The stepOrder entry `named` is not among the steps that can begin next, `candidates`."
-    },
-    "InvalidInput.unusedStepOrder": {
-      "meaning": "No step choice during the input used the stepOrder `entries`."
     },
     "InvalidScenario.ambiguousReference": {
       "meaning": "The facts `candidates` that match the handle `fact` differ, so the line cannot act on each alike. The handle must name content that tells them apart. Equal messages are not ambiguous: a line acts on each of them.",
@@ -942,12 +927,6 @@
         "violation": "{\"kind\":\"InvalidScenario.leftInFlight\",\"definition\":null,\"data\":{\"message\":{\"sender\":\"app\",\"receiver\":\"mailer\",\"id\":\"mailer.sendMail#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"undelivered\"}}"
       }
     },
-    "InvalidScenario.malformedValue": {
-      "meaning": "The written value `value` is not of the form that the line needs."
-    },
-    "InvalidScenario.misplacedCreated": {
-      "meaning": "The line writes `created()` outside a running peer's request, answer or event, or in a handle's pick."
-    },
     "InvalidScenario.missingField": {
       "meaning": "The line reads the field at `path` of `value`, which has none.",
       "example": {
@@ -973,12 +952,6 @@
         },
         "violation": "{\"kind\":\"InvalidScenario.missingOutput\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"fact\":{\"type\":\"line\",\"index\":0}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":9},\"scenario\":{\"service\":\"todo\",\"name\":\"copyRejected\"}}"
       }
-    },
-    "InvalidScenario.missingRecord": {
-      "meaning": "Given writes no record of the single-entity `entity` of the running service `service`."
-    },
-    "InvalidScenario.notALook": {
-      "meaning": "The offered expectation `expectation` names the line `scenarioLine`, which is no look line."
     },
     "InvalidScenario.notDelivered": {
       "meaning": "The line delivers `message` again, or its external receiver answers it or leaves it unanswered, and no line delivered it.",
@@ -1058,9 +1031,6 @@
         "violation": "{\"kind\":\"InvalidScenario.repeatedInFlight\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"message\":{\"sender\":\"app\",\"receiver\":\"device\",\"id\":\"device.requestPermission#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"leaveTwice\"}}"
       }
     },
-    "InvalidScenario.repeatedPeer": {
-      "meaning": "Given lists `service` as a peer more than once, or lists the own service as a peer."
-    },
     "InvalidScenario.unlistedPeer": {
       "meaning": "The own service exchanges messages with `service` (its definitions name the other's, or `service` is a spec service whose definitions name the own service's), and Given does not list it as run, external or skip.",
       "example": {
@@ -1139,9 +1109,6 @@
         "violation": "{\"kind\":\"InvalidScenario.unreceivedRequest\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"peer\":\"device\",\"fact\":{\"type\":\"request\",\"origin\":{\"type\":\"startup\"},\"kind\":\"command\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"grantUndelivered\"}}"
       }
     },
-    "InvalidScenario.unrefusable": {
-      "meaning": "The line refuses `message`, which is no request: only a request has an answer that can tell its sender."
-    },
     "InvalidScenario.unresolvedReference": {
       "meaning": "No fact matches the handle `fact` that the line names.",
       "example": {
@@ -1179,22 +1146,6 @@
           "text": "export const addMilk = scenario({\n  description:\n    \"Add a task, and state the events that todo emits, which its contract lists none of, so the expectation cannot fail\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    return { add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) };\n  },\n  then: ({ add }) => [emitted(add, [])],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.vacuousExpectation\",\"definition\":null,\"data\":{\"expectation\":0},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"addMilk\"}}"
-      }
-    },
-    "InvalidScenario.writtenGivenKey": {
-      "meaning": "Given's record of `entity` with `key` of the running service `service` holds `written`, of the form of a key of `created` that a running service creates: a created key exists only once the run creates it."
-    },
-    "InvalidScenario.writtenKey": {
-      "meaning": "A written value holds `key`, of the form of a key of `entity` that a running service creates: a scenario names a created key only through a handle.",
-      "example": {
-        "excerpt": {
-          "file": "todo/scenarios.ts",
-          "from": 4,
-          "to": 13,
-          "line": 10,
-          "text": "export const stateCreatedNote = scenario({\n  description:\n    \"Add a task, which creates a note, and state that noteIds answers with a key that the scenario writes in the form of a key that todo creates\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [], Note: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\" });\n    return { noting: w.client.call(noteIds, {}) };\n  },\n  then: ({ noting }) => [answered(noting, fulfilled({ noteIds: [\"todo/Note-1\"] }))],\n});"
-        },
-        "violation": "{\"kind\":\"InvalidScenario.writtenKey\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"key\":\"todo/Note-1\",\"entity\":{\"service\":\"todo\",\"name\":\"Note\"}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"todo\",\"name\":\"stateCreatedNote\"}}"
       }
     },
     "InvalidScenario.wrongRole": {
@@ -1484,7 +1435,7 @@
       }
     },
     "Malformed.writtenCreatedKey": {
-      "meaning": "The scenario writes, in Given or on a line, `key`, a value in the form of a key that a spec service creates of `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a running peer's answer writes `created()`. The report is at the line, or at the scenario for Given.",
+      "meaning": "The scenario writes, in Given, on a line, or in an expectation of Then, `key`, a value in the form of a key that a spec service creates of `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a running peer's answer writes `created()`. The report is at the line or the expectation, or at the scenario for Given.",
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
