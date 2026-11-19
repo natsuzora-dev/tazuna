@@ -1,0 +1,1 @@
+{"kind":"InvalidInput.resultOfUnacceptedRequest","definition":null,"data":{"event":{"service":"device","name":"granted"},"requestId":"device.requestPermission#1","target":{"service":"device","name":"requestPermission"}},"location":{"file":"app/scenarios.ts","line":5},"scenario":{"service":"app","name":"grantRejected"}}

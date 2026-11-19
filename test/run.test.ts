@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { test } from "node:test";
-import { type Kind, kindsOf } from "../src/data/kinds.ts";
 import {
   folders,
   isServiceFolder,
@@ -14,7 +13,7 @@ import {
   serviceRoot,
   subjects,
 } from "./examples.ts";
-import { exampleTest, expected, expectedOf, kindOfLine, testEveryKind } from "./expected.ts";
+import { exampleTest, expected, expectedOf, kindOfLine } from "./expected.ts";
 
 const tests = import.meta.dirname;
 
@@ -25,13 +24,7 @@ const tests = import.meta.dirname;
  * that builds the BagOrderDependent or ChoiceDependent violations. An example without violations is in the
  * same folder as the example that it counters.
  */
-const groups: Readonly<Record<string, readonly Kind[]>> = {
-  InvalidScenario: kindsOf.InvalidScenario,
-  InvalidInput: kindsOf.InvalidInput,
-  Fault: kindsOf.Fault,
-  BagOrderDependent: kindsOf.BagOrderDependent,
-  ChoiceDependent: kindsOf.ChoiceDependent,
-};
+const groups = ["InvalidScenario", "InvalidInput", "Fault", "BagOrderDependent", "ChoiceDependent"] as const;
 
 /** The kinds of another group that an example reports besides those of its own, each example with the reason. */
 const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string[]; readonly because: string }>> = {
@@ -43,13 +36,10 @@ const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string
 
 const folderOf = (group: string) => group.charAt(0).toLowerCase() + group.slice(1);
 
-const groupFolderExamples = Object.keys(groups).flatMap((group) => runGroupExamples(folderOf(group)));
+const groupFolderExamples = groups.flatMap((group) => runGroupExamples(folderOf(group)));
 
 test("The folder names directly under test/run are the group names of groups with a lowercase first letter", () => {
-  assert.deepEqual(
-    new Set(folders(runRoot).map((folder) => basename(folder))),
-    new Set(Object.keys(groups).map(folderOf)),
-  );
+  assert.deepEqual(new Set(folders(runRoot).map((folder) => basename(folder))), new Set(groups.map(folderOf)));
 });
 
 test("Every folder under test/service and test/run/<group> is a Lean module path, an ancestor of one, or an example directly under one or inside it, and every file is inside an example. The modules are those of lean/Tazuna/Service for test/service and of lean/Tazuna outside Thm for test/run/<group>", () => {
@@ -86,7 +76,7 @@ test("The expected.jsonl of each test/service and test/sim subject is empty", ()
   for (const subject of subjects()) assert.deepEqual(expectedOf(subject), [], relative(tests, subject));
 });
 
-for (const [group, kinds] of Object.entries(groups)) {
+for (const group of groups) {
   const examples = runGroupExamples(folderOf(group));
   test(`The kinds in the expected.jsonl of the examples under test/run/${folderOf(group)} are kinds of ${group}`, () => {
     for (const example of examples)
@@ -102,5 +92,4 @@ for (const [group, kinds] of Object.entries(groups)) {
         relative(tests, example),
       );
   });
-  testEveryKind(examples, kinds);
 }

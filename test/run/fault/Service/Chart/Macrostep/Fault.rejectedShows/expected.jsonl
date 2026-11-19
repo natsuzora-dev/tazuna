@@ -1,0 +1,1 @@
+{"kind":"Fault.rejectedShows","definition":{"service":"emptyPrefixScreens","name":"titledScreen"},"data":{"slot":"titled","rejection":{"kind":"requires","reason":"notEmpty"}},"location":{"file":"emptyPrefixScreens/screens.ts","line":9},"scenario":{"service":"emptyPrefixScreens","name":"show"}}

@@ -1,0 +1,1 @@
+{"kind":"Fault.failedSingleInvariant","definition":{"service":"invariantsBreakingTodo","name":"Tally"},"data":{"condition":"belowTwo","command":{"service":"invariantsBreakingTodo","name":"addTask"}},"location":{"file":"invariantsBreakingTodo/todo.ts","line":11},"scenario":{"service":"invariantsBreakingTodo","name":"addTwo"}}

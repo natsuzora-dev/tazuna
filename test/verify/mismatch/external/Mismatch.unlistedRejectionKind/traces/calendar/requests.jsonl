@@ -1,0 +1,2 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q4","name":"nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"q4","answer":{"result":"rejected","rejection":{"kind":"not-found"}}}

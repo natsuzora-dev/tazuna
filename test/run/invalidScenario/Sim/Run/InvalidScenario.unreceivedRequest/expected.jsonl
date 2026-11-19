@@ -1,0 +1,1 @@
+{"kind":"InvalidScenario.unreceivedRequest","definition":null,"data":{"scenarioLine":1,"peer":"device","fact":{"type":"request","origin":{"type":"startup"},"kind":"command","target":{"service":"device","name":"requestPermission"}}},"location":{"file":"app/scenarios.ts","line":10},"scenario":{"service":"app","name":"grantUndelivered"}}

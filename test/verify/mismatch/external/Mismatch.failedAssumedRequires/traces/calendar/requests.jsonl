@@ -1,0 +1,2 @@
+{"time":"2026-10-26T00:00:00Z","dir":"in","type":"query","id":"q3","name":"nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
+{"time":"2026-10-26T00:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"q3","answer":{"result":"fulfilled","output":{"day":"2026-10-24T00:00:00Z"}}}

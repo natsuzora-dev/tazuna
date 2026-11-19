@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { basename, join, relative } from "node:path";
 import { test } from "node:test";
-import { mismatchKinds } from "../src/data/mismatch.generated.ts";
-import { uncomparableKinds } from "../src/data/uncomparable.generated.ts";
-import { depth, folders, groupExamples, runRoot } from "./examples.ts";
-import { kindOfLine, recordsOf, testEveryKind, testExamples } from "./expected.ts";
+import { depth, folders } from "./examples.ts";
+import { kindOfLine, recordsOf, testExamples } from "./expected.ts";
 
 const groups = { mismatch: "Mismatch", uncomparable: "Uncomparable" } as const;
 
@@ -29,11 +27,6 @@ test("The folder names directly under test/verify/<group> are the targets of com
 for (const [folder, group] of Object.entries(groups))
   for (const [target, args] of Object.entries(commands))
     testExamples(folders(join(verifyRoot, folder, target)), group, args);
-
-testEveryKind(
-  [...groupExamples("verify"), ...folders(join(runRoot, "choiceDependent/Explore/ChoiceDependent"))],
-  [...mismatchKinds, ...uncomparableKinds],
-);
 
 const snapshotChecks = Object.values(groups).map((group) => `${group}.`);
 

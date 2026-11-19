@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseSync } from "oxc-parser";
 import { type Example, type Excerpt, type Explanations, explanationsPath } from "../src/cli/explain.ts";
-import { groupNames, type Kind, kindsOf } from "../src/data/kinds.ts";
+import { groupNames, type Kind, kindsOf, parseKind } from "../src/data/kinds.ts";
 import type { Group } from "../src/data/violation.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -42,43 +42,19 @@ const groupDoc = (group: Group) => {
   return /^.*?\.(?=\s|$)/.exec(docText(body))?.[0] ?? "";
 };
 
-const exampleRoots = (dir: string): string[] =>
-  readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && e.name !== "__snapshots__")
-    .flatMap((e) => exampleRoots(join(dir, e.name)))
-    .concat(existsSync(join(dir, expected)) ? [dir] : []);
-
-const specLines = (dir: string): number =>
-  readdirSync(dir, { recursive: true, encoding: "utf8" })
-    .filter((f) => f.endsWith(".ts"))
-    .reduce((n, f) => n + readFileSync(join(dir, f), "utf8").split("\n").length, 0);
+/** The example of each kind: the folder under test named after the kind, which reports only that kind. */
+export function exampleFolders(dir = join(root, "test")): readonly (readonly [Kind, string])[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .flatMap((e) => {
+      const kind = parseKind(e.name)?.kind;
+      return kind === undefined ? exampleFolders(join(dir, e.name)) : [[kind, join(dir, e.name)] as const];
+    });
+}
 
 interface Reported {
-  readonly kind: Kind;
-  readonly data?: { readonly difference?: { readonly mismatch?: { readonly kind: Kind } } };
   readonly location: { readonly file: string; readonly line?: number };
 }
-
-/** A violation line of an example that reports `kind`, as itself or as the mismatch of a ChoiceDependent difference. */
-interface Candidate {
-  readonly kind: Kind;
-  /** The kind of the reported violation whose difference holds `violation`, when that is nested. */
-  readonly within?: Kind;
-  readonly violation: object;
-  readonly location: Reported["location"];
-  readonly dir: string;
-  readonly size: number;
-}
-
-/** The criteria by which one example is preferred to another, in order: the lower value wins. */
-const preferences: readonly ((c: Candidate) => number)[] = [
-  (c) => (c.within === undefined ? 0 : 1),
-  (c) => (c.location.file.startsWith("..") ? 1 : 0),
-  (c) => (c.location.line === undefined ? 1 : 0),
-  (c) => c.size,
-];
-
-const byPreference = (a: Candidate, b: Candidate) => preferences.map((p) => p(a) - p(b)).find((d) => d !== 0) ?? 0;
 
 /** The lines of the top-level statement of the spec file `text` that holds line `line`. */
 function statementAt(file: string, text: string, line: number): Pick<Excerpt, "from" | "to"> {
@@ -109,38 +85,19 @@ function excerptOf(dir: string, { file, line }: Reported["location"]): Excerpt |
   };
 }
 
-function candidates(): Candidate[] {
-  return exampleRoots(join(root, "test"))
-    .sort()
-    .flatMap((dir) => {
-      const size = specLines(dir);
-      return readFileSync(join(dir, expected), "utf8")
-        .split("\n")
-        .filter((l) => l !== "")
-        .flatMap((line): Candidate[] => {
-          const v = JSON.parse(line) as Reported;
-          const nested = v.data?.difference?.mismatch;
-          const own = { kind: v.kind, violation: v, location: v.location, dir, size };
-          return nested === undefined ? [own] : [own, { ...own, kind: nested.kind, violation: nested, within: v.kind }];
-        });
-    });
-}
-
-function exampleOf(c: Candidate): Example {
-  const excerpt = excerptOf(c.dir, c.location);
-  return {
-    ...(excerpt === undefined ? {} : { excerpt }),
-    violation: JSON.stringify(c.violation),
-    ...(c.within === undefined ? {} : { within: c.within }),
-  };
+/** The first violation that the example `dir` reports, and the excerpt at its location if it names a line. */
+function exampleOf(dir: string): Example {
+  const [line = "{}"] = readFileSync(join(dir, expected), "utf8").split("\n");
+  const excerpt = excerptOf(dir, (JSON.parse(line) as Reported).location);
+  return { ...(excerpt === undefined ? {} : { excerpt }), violation: line };
 }
 
 /** The data of explain.json, from the doc comments in src/data and the examples under test. */
 export function explanations(): Explanations {
-  const all = candidates().sort(byPreference);
+  const examples = new Map(exampleFolders());
   const explanation = (kind: Kind, group: Group) => {
-    const best = all.find((c) => c.kind === kind);
-    return { meaning: meaningOf(kind, group), ...(best === undefined ? {} : { example: exampleOf(best) }) };
+    const dir = examples.get(kind);
+    return { meaning: meaningOf(kind, group), ...(dir === undefined ? {} : { example: exampleOf(dir) }) };
   };
   const entries = groupNames
     .flatMap((group) => kindsOf[group].map((kind: Kind) => [kind, explanation(kind, group)] as const))

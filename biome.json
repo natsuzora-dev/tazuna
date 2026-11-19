@@ -25,6 +25,10 @@
   },
   "overrides": [
     {
+      "includes": ["test/load/restricted/sources/Restricted.nonNull/**"],
+      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    },
+    {
       "includes": ["**/*.svg"],
       "linter": {
         "rules": {

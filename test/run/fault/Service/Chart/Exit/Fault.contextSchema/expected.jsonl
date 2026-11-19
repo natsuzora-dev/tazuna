@@ -1,0 +1,1 @@
+{"kind":"Fault.contextSchema","definition":{"service":"picks","name":"picker"},"data":{},"location":{"file":"picks/picks.ts","line":6},"scenario":{"service":"picks","name":"start"},"error":{"type":"zod","issues":[{"code":"custom","message":"duplicate element \"a\"","path":["picked",1]}]}}

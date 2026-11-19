@@ -1,0 +1,1 @@
+{"kind":"InvalidScenario.unlistedService","definition":null,"data":{"scenarioLine":1,"service":"device"},"location":{"file":"todo/scenarios.ts","line":10},"scenario":{"service":"todo","name":"notifyWithoutDevice"}}

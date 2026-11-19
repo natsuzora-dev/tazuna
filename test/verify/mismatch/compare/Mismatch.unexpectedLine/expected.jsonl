@@ -1,0 +1,1 @@
+{"kind":"Mismatch.unexpectedLine","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e9"}},"location":{"file":"traces/todo/addThreeWrongEvents.jsonl","line":11},"scenario":{"service":"todo","name":"addThreeWrongEvents"}}

@@ -300,8 +300,8 @@ describe("Content comparison", () => {
     assert.deepEqual(
       snapshots.filter((s) => s.read.violations.length > 0).map((s) => s.label),
       [
-        "verify/uncomparable/lines/unknown-after/todo/addOneUnknownAfter",
-        "verify/uncomparable/snapshot/line-schema/todo/addOneCut",
+        "verify/uncomparable/lines/Uncomparable.unknownAfter/todo/addOneUnknownAfter",
+        "verify/uncomparable/snapshot/Uncomparable.lineSchema/todo/addOneCut",
       ],
     );
   });
@@ -479,13 +479,14 @@ describe("Content comparison", () => {
     assert.deepEqual(keys("mismatch/compare/created-keys", "seenMultiplicity", "todo/Seen-1", "todo/Seen-2"), [
       ["y", "x"],
     ]);
-    assert.deepEqual(keys("mismatch/compare/symmetric-keys", "draftTwo", "screens/Draft-1", "screens/Draft-2"), [
+    assert.deepEqual(keys("mismatch/compare/Mismatch.request", "draftTwo", "screens/Draft-1", "screens/Draft-2"), [
       ["n2", "n1"],
       ["n1", "n2"],
     ]);
-    assert.deepEqual(keys("mismatch/compare/symmetric-keys", "draftTwoPointed", "screens/Draft-1", "screens/Draft-2"), [
-      ["n2", "n1"],
-    ]);
+    assert.deepEqual(
+      keys("mismatch/compare/Mismatch.request", "draftTwoPointed", "screens/Draft-1", "screens/Draft-2"),
+      [["n2", "n1"]],
+    );
   });
 
   test("TS and Lean report an implementation that gives a created key the value of an existing key of its entity", () => {

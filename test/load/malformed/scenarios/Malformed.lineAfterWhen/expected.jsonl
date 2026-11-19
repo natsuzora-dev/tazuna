@@ -1,0 +1,1 @@
+{"kind":"Malformed.lineAfterWhen","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"placesLineInThen"}}

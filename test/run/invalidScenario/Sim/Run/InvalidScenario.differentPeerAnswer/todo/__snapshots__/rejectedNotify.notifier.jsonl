@@ -1,0 +1,2 @@
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"todo/notifier.notify#1","name":"notify","input":{"text":"task-1"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"todo/notifier.notify#1","answer":{"result":"accepted"}}

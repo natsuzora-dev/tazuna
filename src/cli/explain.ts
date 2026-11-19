@@ -13,14 +13,10 @@ export interface Excerpt {
   readonly text: string;
 }
 
-/**
- * A violation that one of tazuna's test examples reports, and the excerpt at its location if it names a line. `within`
- * is the kind of the reported violation whose `difference` holds it, for a kind that is reported only there.
- */
+/** A violation that the test example named after its kind reports, and the excerpt at its location if it names a line. */
 export interface Example {
   readonly excerpt?: Excerpt;
   readonly violation: string;
-  readonly within?: Kind;
 }
 
 /**
@@ -81,9 +77,7 @@ export function explain(
           "## Example",
           "",
           ...(example.excerpt === undefined ? [] : excerptText(example.excerpt)),
-          example.within === undefined
-            ? "The violation:"
-            : `The violation, inside the \`difference\` of a \`${example.within}\` violation:`,
+          "The violation:",
           "",
           fence("json", example.violation),
         ]),

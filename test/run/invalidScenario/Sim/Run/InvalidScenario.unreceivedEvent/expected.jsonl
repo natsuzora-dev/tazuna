@@ -1,0 +1,1 @@
+{"kind":"InvalidScenario.unreceivedEvent","definition":null,"data":{"scenarioLine":1,"event":{"service":"device","name":"muted"}},"location":{"file":"app/scenarios.ts","line":10},"scenario":{"service":"app","name":"emitMuted"}}

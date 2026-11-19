@@ -1,0 +1,1 @@
+{"kind":"Fault.failedServiceInvariant","definition":null,"data":{"condition":"uniqueTitles","command":{"service":"invariantsBreakingTodo","name":"addTask"}},"location":{"file":"invariantsBreakingTodo/todo.ts","line":16},"scenario":{"service":"invariantsBreakingTodo","name":"addSameTitle"}}

@@ -1,3 +1,0 @@
-{"kind":"Malformed.listedTwice","definition":null,"data":{"name":"Task","services":["notes","todo"]},"location":{"file":"todo/contract.ts","line":4}}
-{"kind":"Malformed.unlistedEntity","definition":null,"data":{"name":"Note"},"location":{"file":"todo/data.ts","line":5}}
-{"kind":"Malformed.missingDefiner","definition":null,"data":{"name":"noted"},"location":{"file":"todo/data.ts","line":10}}

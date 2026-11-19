@@ -180,7 +180,7 @@ test("check, test, and verify write one line with the error and its place and ex
 test("check writes one JSON line per violation to stdout and the count, or that there is no violation, to stderr", async () => {
   const sourcesOf = (folder: string) =>
     readdirSync(join(root, folder), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
-  const violatingFolder = "test/validation/illegal/commands/emitted-event";
+  const violatingFolder = "test/validation/illegal/commands/Illegal.foreignEvent";
   const violating = await run("check", violatingFolder);
   assert.equal(violating.code, 1);
   assert.deepEqual(
@@ -314,7 +314,7 @@ test("explain writes an error and exits with 2 for a name that is no violation k
 });
 
 test("test, verify, and view write the same violation lines and count as check and do nothing else when check reports violations", async () => {
-  const folder = "test/load/malformed/times/at";
+  const folder = "test/load/malformed/times/Malformed.unparsableTime";
   const checked = await run("check", folder);
   assert.notDeepEqual(checked.out, []);
   for (const args of [
