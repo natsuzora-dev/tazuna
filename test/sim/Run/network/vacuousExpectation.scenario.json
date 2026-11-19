@@ -1,0 +1,27 @@
+{
+  "service": "notifier",
+  "given": {
+    "start": "2026-10-25T01:00:00.000Z",
+    "records": [],
+    "peers": [
+      {
+        "service": "todo",
+        "role": "skip",
+        "because": "notifier lists no event in a contract, whatever todo sends"
+      }
+    ]
+  },
+  "lines": [
+    {
+      "type": "at",
+      "time": "2026-10-25T02:00:00.000Z"
+    }
+  ],
+  "expectations": [
+    {
+      "type": "emitted",
+      "line": 0,
+      "events": []
+    }
+  ]
+}

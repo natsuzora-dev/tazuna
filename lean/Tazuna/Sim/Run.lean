@@ -461,6 +461,9 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
     | some pair => pure (some pair)
     | none => throw (.unresolvedReference line (ToValue.toValue (Fact.line line)))
   | .emitted line events =>
+    let listed := st.structure.definitions.any fun d =>
+      d.service == own && d.kind == "event" && !(st.structure.contractsListing d.ref).isEmpty
+    if !listed then throw (.vacuousExpectation k)
     let actual ← ((w.spanLines (.line line) own).filterMap fun l => match l.dir, l.body with
       | .out, .event event payload _ =>
         if (st.structure.contractsListing event).isEmpty then none else some (event, payload)

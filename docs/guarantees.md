@@ -156,7 +156,7 @@ The side that breaks a contract is at fault: the caller for a precondition, and 
 | `NonCanonical` | `check` | The spec. |
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
-| `InvalidScenario` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold. |
+| `InvalidScenario` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold or cannot fail. |
 | `InvalidInput` | `test` | The scenario: a message that no sender could give the running service, including an external peer's answer that breaks the peer's contract. |
 | `Fault` | `test` | The spec. |
 | `BagOrderDependent` | `test` | The spec. |

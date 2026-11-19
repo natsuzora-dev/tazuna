@@ -981,6 +981,9 @@
     "InvalidScenario.unusedInFlight": {
       "meaning": "The message that the leaveInFlight line names is not undelivered at the end."
     },
+    "InvalidScenario.vacuousExpectation": {
+      "meaning": "The emitted expectation `expectation` cannot fail: no contract lists an event of the own service, so what it compares is empty by construction."
+    },
     "InvalidScenario.writtenGivenKey": {
       "meaning": "Given's record of `entity` with `key` of the running service `service` holds `written`, of the form of a key of `created` that a running service creates: a created key exists only once the run creates it."
     },

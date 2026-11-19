@@ -329,6 +329,17 @@ export type InvalidScenario =
         readonly scenarioLine: number;
       };
     }
+  /**
+   * The emitted expectation `expectation` cannot fail: no contract lists an event of the own service, so what it compares
+   * is empty by construction.
+   */
+  | {
+      readonly kind: "InvalidScenario.vacuousExpectation";
+      readonly definition: null;
+      readonly data: {
+        readonly expectation: number;
+      };
+    }
   /** The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`. */
   | {
       readonly kind: "InvalidScenario.unmetExpectation";
@@ -372,6 +383,7 @@ export const invalidScenarioKinds = [
   "InvalidScenario.repeatedInFlight",
   "InvalidScenario.awaitingAnswer",
   "InvalidScenario.notALook",
+  "InvalidScenario.vacuousExpectation",
   "InvalidScenario.unmetExpectation",
 ] as const;
 

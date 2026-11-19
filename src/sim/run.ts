@@ -841,6 +841,14 @@ function compared(
       return pair;
     }
     case "emitted": {
+      const listed = st.structure.definitions.some(
+        (d) =>
+          d.service === own &&
+          d.kind === "event" &&
+          contractsListing(st.structure, { service: own, name: d.name }).length > 0,
+      );
+      if (!listed)
+        return reportedHere({ kind: "InvalidScenario.vacuousExpectation", definition: null, data: { expectation: k } });
       const actual = spanLines(w, { type: "line", index: e.line }, own).flatMap((l) =>
         l.dir === "out" && l.type === "event" && contractsListing(st.structure, l.event).length > 0
           ? [{ event: l.event, payload: comparedOr(r, payloadSchema(l.event), l.payload) }]

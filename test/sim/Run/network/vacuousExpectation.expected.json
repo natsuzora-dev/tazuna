@@ -1,0 +1,27 @@
+{
+  "services": [
+    {
+      "service": "notifier",
+      "lines": [
+        {
+          "time": "2026-10-25T02:00:00Z",
+          "dir": "in",
+          "type": "time",
+          "id": "time#1"
+        }
+      ],
+      "violations": [],
+      "candidates": []
+    }
+  ],
+  "violations": [
+    {
+      "kind": "InvalidScenario.vacuousExpectation",
+      "definition": null,
+      "data": {
+        "expectation": 0
+      }
+    }
+  ],
+  "halted": null
+}

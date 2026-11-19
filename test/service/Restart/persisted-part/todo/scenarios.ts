@@ -1,4 +1,4 @@
-import { accepted, answered, emitted, fulfilled } from "@natsuzora-dev/tazuna";
+import { accepted, answered, fulfilled } from "@natsuzora-dev/tazuna";
 import { addTask, given, scenario, taskCount } from "./todo.ts";
 
 const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [] });
@@ -15,11 +15,7 @@ export const recordsStay = scenario({
     const resent = w.client.resend(adding);
     return { counting, resent };
   },
-  then: ({ counting, resent }) => [
-    answered(counting, fulfilled({ count: 1 })),
-    answered(resent, accepted()),
-    emitted(resent, []),
-  ],
+  then: ({ counting, resent }) => [answered(counting, fulfilled({ count: 1 })), answered(resent, accepted())],
 });
 
 export const subscriptionsEnd = scenario({

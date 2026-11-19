@@ -14,7 +14,7 @@ export const groups = {
   InvalidScenario: {
     reportedBy: ["test"],
     fixedIn:
-      "The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold.",
+      "The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold or cannot fail.",
   },
   InvalidInput: {
     reportedBy: ["test"],

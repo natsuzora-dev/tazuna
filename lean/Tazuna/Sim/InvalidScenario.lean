@@ -108,6 +108,11 @@ inductive InvalidScenario where
   | awaitingAnswer (message : Value)
   /-- The offered expectation `expectation` names the line `scenarioLine`, which is no look line. -/
   | notALook (expectation scenarioLine : Nat)
+  /--
+  The emitted expectation `expectation` cannot fail: no contract lists an event of the own service, so what it compares
+  is empty by construction.
+  -/
+  | vacuousExpectation (expectation : Nat)
   /-- The expectation `expectation` of Then, from 0, states `expected`, and the run gave `actual`. -/
   | unmetExpectation (expectation : Nat) (expected actual : Value)
 deriving Repr, Inhabited
@@ -127,7 +132,7 @@ those of the end and of Then come after every line.
 -/
 def InvalidScenario.halts : InvalidScenario → Bool
   | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight .. | .awaitingAnswer .. | .unmetExpectation ..
-  | .notALook .. => false
+  | .notALook .. | .vacuousExpectation .. => false
   | .repeatedPeer .. | .unlistedPeer .. | .invalidRecord .. | .duplicateRecord .. | .brokenGivenInvariant .. => false
   | .missingRecord .. | .writtenGivenKey .. => false
   | _ => true
