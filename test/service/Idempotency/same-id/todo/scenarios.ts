@@ -2,7 +2,7 @@ import { run } from "@natsuzora-dev/tazuna";
 import { notifier } from "../notifier/contract.ts";
 import { addTask, scenario, taskAdded, taskCount } from "./todo.ts";
 
-const peers = { notifier: run(notifier, { OpenTask: [] }) } as const;
+const peers = [run(notifier, { OpenTask: [] })];
 const given = { start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers } as const;
 
 export const resent = scenario(

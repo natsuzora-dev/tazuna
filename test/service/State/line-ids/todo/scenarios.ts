@@ -1,6 +1,6 @@
 import { addTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [], Note: [], Tag: [] }, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [], Note: [], Tag: [] }, peers: [] } as const;
 
 export const twoTasks = scenario(
   "Add two tasks; test gives each line an id of its name, or its kind for a line without a name, and its ordinal, such as addTask#1, answer#1, and taskAdded#1. createKey returns todo/Note-1 and todo/Note-2, and the snapshot writes each value in created of the line where it first appears",

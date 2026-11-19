@@ -31,7 +31,7 @@ import { completeTask } from "../../../samples/todo/spec/todo/commands.ts";
 import { scenario } from "../../../samples/todo/spec/todo/data.ts";
 
 export const typo = scenario("typo", {
-  given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [], Settings: { shouldRemind: true } }, peers: {} },
+  given: { start: "2026-10-25T10:00:00+09:00", records: { Task: [], Settings: { shouldRemind: true } }, peers: [] },
   when: (w) => ({ first: w.client.send(completeTask, { taskId: "task-1" }) }),
   then: ({ first }) => [answered(first, rejected("requires", "notCompletedTypo"))],
 });

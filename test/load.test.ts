@@ -30,7 +30,6 @@ const kinds: Readonly<Record<Malformed["kind"] | NonCanonical["kind"] | Restrict
   "Malformed.unparsableTime": true,
   "Malformed.unknownPeer": true,
   "Malformed.inexactDelay": true,
-  "Malformed.misnamedPeer": true,
   "Malformed.lineAfterWhen": true,
   "Malformed.misusedObserved": true,
   "NonCanonical.emptyGuard": true,

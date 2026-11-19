@@ -8,7 +8,7 @@ export const start = scenario(
     given: {
       start: "2026-10-25T09:00:00+09:00",
       records: {},
-      peers: { todo: run(todo, { Task: [] }) },
+      peers: [run(todo, { Task: [] })],
     },
     when: (w) => {
       const reached = w.net.deliver(w.startup.subscription(todo.recent));

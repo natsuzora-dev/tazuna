@@ -5,7 +5,7 @@ import { addTask, completeTask, reopenTask, scenario } from "./todo.ts";
 export const copiesFollowItems = scenario(
   "Add task-1 and task-2, complete task-1, and reopen it; dayNoter runs a copy for each added task and asks calendar for the next day in each copy. Completing task-1 removes it from items, so its copy exits its states and the answer to its request is stale. Reopening task-1 makes dayNoter run a new copy of task-1, which asks calendar again",
   {
-    given: { start: "2026-10-25T10:00:00Z", records: { Task: [] }, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T10:00:00Z", records: { Task: [] }, peers: [external(calendar)] },
     when: (w) => {
       const first = w.client.send(addTask, { taskId: "task-1" }).request(calendar.nextDay);
       w.net.deliver(first);

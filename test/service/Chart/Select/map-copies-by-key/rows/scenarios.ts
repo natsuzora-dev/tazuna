@@ -6,7 +6,7 @@ import { rowScreen } from "./rowScreen.ts";
 export const offersPerCopy = scenario(
   "Show task-1 and task-2 and complete them; rowScreen evaluates offers per copy. While the copies of task-1 and task-2 are in idle, it accepts complete for both taskIds. When the copy of task-1 enters completing, its offers return [], so rowScreen does not accept complete for task-1 but still accepts it for task-2",
   {
-    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } },
+    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(todo)] },
     when: (w) => {
       const rows = w.startup.screen(rowScreen);
       const openTasks = w.startup.subscription(todo.openTasks);

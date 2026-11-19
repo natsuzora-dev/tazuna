@@ -1,7 +1,7 @@
 import { notOffered, offered } from "@natsuzora-dev/tazuna";
 import { board, confirmDialog, listScreen, panel, scenario } from "./screens.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] } as const;
 
 export const pickAndCancel = scenario("Pick a shown task, open the dialog, and cancel it; no violation", {
   given,

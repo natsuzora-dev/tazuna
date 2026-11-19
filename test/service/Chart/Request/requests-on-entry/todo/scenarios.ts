@@ -2,7 +2,7 @@ import { external, fulfilled } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { addDoneTask, addTask, completeTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { calendar: external(calendar) } } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(calendar)] } as const;
 const nextDay = fulfilled({ day: "2026-10-26T00:00:00+09:00" });
 
 export const answerAfterExit = scenario(

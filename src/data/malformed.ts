@@ -40,8 +40,6 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  *   and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds. The
  *   report is at the clock line, or at the scenario for Given's start.
  * - `unknownPeer`: Given lists as a peer the own service's contract or no contract (null).
- * - `misnamedPeer`: the scenario's Given lists the contract of `service` under the key `name`. A peer is keyed by its
- *   service name.
  * - `writtenCreatedKey`: the scenario writes, in Given or on a line, `key`, a value in the form of a key that a spec
  *   service creates of `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a
  *   running peer's answer writes `created()`. The report is at the line, or at the scenario for Given.
@@ -88,9 +86,6 @@ export type Malformed =
   | Of<"unexportedDefinition", null, { readonly contract: string; readonly key: string }>
   | (Of<"unparsableTime", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
   | (Of<"unknownPeer", null, { readonly service: string | null }> & { readonly scenario: DefinitionRef })
-  | (Of<"misnamedPeer", null, { readonly name: string; readonly service: string }> & {
-      readonly scenario: DefinitionRef;
-    })
   | (Of<"writtenCreatedKey", null, { readonly key: string; readonly entity: DefinitionRef }> & {
       readonly scenario: DefinitionRef;
     })

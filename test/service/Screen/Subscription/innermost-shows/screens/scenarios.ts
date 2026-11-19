@@ -6,7 +6,7 @@ import { listScreen } from "./listScreen.ts";
 export const showAll = scenario(
   "Operate showAll; open and its child allTasks both show tasks, and the shows of the innermost state applies, so listScreen ends the subscription with the filter open and subscribes with the filter all",
   {
-    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } },
+    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, {})] },
     when: (w) => {
       const openSub = w.startup.subscription(todo.tasks);
       const openReached = w.net.deliver(openSub);

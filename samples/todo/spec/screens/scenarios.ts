@@ -42,11 +42,11 @@ const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsReco
   ({
     start: "2026-10-25T10:00:00+09:00",
     records: {},
-    peers: {
-      todo: run(todo, { Task, Settings: { shouldRemind: true } }),
+    peers: [
+      run(todo, { Task, Settings: { shouldRemind: true } }),
       // todo's run asks calendar when a task's reminder becomes pending.
-      calendar: external(calendar),
-    },
+      external(calendar),
+    ],
   }) as const;
 const milk = givenTasks([milkRecord]);
 const milkAndCompletedEggs = givenTasks([milkRecord, completedEggsRecord]);

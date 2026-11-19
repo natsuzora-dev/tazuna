@@ -17,11 +17,7 @@ import { device } from "../device/contract.ts";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 
-const peers = {
-  todo: run(todo, { Task: [], Settings: { shouldRemind: true } }),
-  calendar: external(calendar),
-  device: external(device),
-} as const;
+const peers = [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)];
 type W = When<typeof peers>;
 
 const fresh = {

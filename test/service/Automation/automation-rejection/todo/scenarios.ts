@@ -5,7 +5,7 @@ import { addTask, scenario } from "./todo.ts";
 const given = {
   start: "2026-10-25T10:00:00+09:00",
   records: { Task: [] },
-  peers: { device: external(device) },
+  peers: [external(device)],
 } as const;
 
 export const notifiedAfterAdd = scenario(

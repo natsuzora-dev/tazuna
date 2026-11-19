@@ -5,7 +5,7 @@ import { addTasks, scenario } from "./todo.ts";
 const given = {
   start: "2026-10-25T10:00:00Z",
   records: { Task: [], Last: { taskId: "" } },
-  peers: { calendar: external(calendar) },
+  peers: [external(calendar)],
 } as const;
 
 export const lastAnswerFiled = scenario(

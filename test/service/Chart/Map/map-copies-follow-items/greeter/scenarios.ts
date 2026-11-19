@@ -1,6 +1,6 @@
 import { addTasks, completeTask, scenario } from "./greeter.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [] } as const;
 
 export const copiesInKeyOrder = scenario(
   "Add task-1 and task-2; items lists task-2 before task-1, but items is a set, so greeter runs the copies in key order and greets task-1 first",

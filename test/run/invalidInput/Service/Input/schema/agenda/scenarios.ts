@@ -3,7 +3,7 @@ import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./agenda.ts";
 
 export const answerNextDay = scenario("Answer the next day; no violation", {
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.nextDay));
     w.net.deliver(
@@ -14,7 +14,7 @@ export const answerNextDay = scenario("Answer the next day; no violation", {
 });
 
 export const rejectNextDay = scenario("Reject the next day as unavailable; no violation", {
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.nextDay));
     w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), rejected("unavailable")));
@@ -25,7 +25,7 @@ export const rejectNextDay = scenario("Reject the next day as unavailable; no vi
 export const answerMalformedNextDay = scenario(
   "Answer the next day with a day that is not a datetime; the output schema of nextDay rejects it, so test reports answerOutputSchema",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.nextDay));
       w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: "tomorrow" })));
@@ -37,7 +37,7 @@ export const answerMalformedNextDay = scenario(
 export const rejectNextDayNotFound = scenario(
   "Reject the next day as not-found; nextDay cannot answer with that kind, so test reports unlistedRejectionKind",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.nextDay));
       w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), rejected("not-found")));

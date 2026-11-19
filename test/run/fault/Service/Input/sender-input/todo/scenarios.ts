@@ -2,7 +2,7 @@ import { run } from "@natsuzora-dev/tazuna";
 import { notes } from "../notes/contract.ts";
 import { addTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: { notes: run(notes, {}) } } as const;
+const given = { start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: [run(notes, {})] } as const;
 
 export const emptyTitle = scenario(
   "Add a task with an empty title; noteAdded sends addNote with the empty text, which only notes parses: its input schema does not take it, so notes rejects it with invalid-input, and test reports inputSchema of noteAdded, the sender",

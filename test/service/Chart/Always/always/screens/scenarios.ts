@@ -9,7 +9,7 @@ export const settlesAfterShownChange = scenario(
     given: {
       start: "2026-10-25T10:00:00+09:00",
       records: {},
-      peers: { todo: run(todo, { Task: [], Signal: [] }) },
+      peers: [run(todo, { Task: [], Signal: [] })],
     },
     when: (w) => {
       const list = w.startup.screen(listScreen);

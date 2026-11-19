@@ -3,7 +3,7 @@ import { addTask, pinTask, pinTaskByTitle, renameTask, scenario, taskTitles } fr
 const given = {
   start: "2026-10-25T10:00:00+09:00",
   records: { Task: [], Board: { pinned: null, pins: 0 } },
-  peers: {},
+  peers: [],
 } as const;
 
 export const renamedThroughBlank = scenario(

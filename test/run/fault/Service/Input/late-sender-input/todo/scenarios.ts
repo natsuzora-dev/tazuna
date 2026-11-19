@@ -2,7 +2,7 @@ import { run } from "@natsuzora-dev/tazuna";
 import { notes } from "../notes/contract.ts";
 import { addTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: { notes: run(notes, {}) } } as const;
+const given = { start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: [run(notes, {})] } as const;
 
 export const emptyTitleAfterRestart = scenario(
   "As sender-input's emptyTitle, but todo restarts before notes' invalid-input rejection arrives, so nothing waits for it: the end of the run checks every answer that arrived, and test reports inputSchema of noteAdded, the sender",

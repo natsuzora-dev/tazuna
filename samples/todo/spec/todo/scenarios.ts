@@ -21,12 +21,12 @@ import { scenario } from "./data.ts";
 import { taskCompleted, taskDeleted, taskReopened } from "./events.ts";
 import { reminderSettings, taskDetail, tasks } from "./queries.ts";
 
-const peers = {
-  calendar: external(calendar),
-  device: external(device),
-  notifier: skip(notifier, "notifier's reactions to todo's events are notifier's scenarios"),
-  screens: skip(screens, "the screens' subscriptions are the screens' scenarios"),
-} as const;
+const peers = [
+  external(calendar),
+  external(device),
+  skip(notifier, "notifier's reactions to todo's events are notifier's scenarios"),
+  skip(screens, "the screens' subscriptions are the screens' scenarios"),
+];
 type W = When<typeof peers>;
 
 const noTasks = {

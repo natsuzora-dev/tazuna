@@ -1337,15 +1337,19 @@ service({ name: "todo.tasks", description: "" });
 // @ts-expect-error a created key would read a/b as two parts
 externalService({ name: "a/b", description: "" });
 
-// Given keys each peer by its service's name, and the own service is no peer.
+// Given lists the peers, the own service among none of them, and When names each by its service's name.
 scenarioOfScreens("types", {
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
-    // @ts-expect-error a peer is keyed by its service name (misnamedPeer)
-    peers: { cal: external(calendarPeer) },
+    peers: [external(calendarPeer), skip(devicePeer, "the screens never reach the device")],
   },
-  when: () => ({}),
+  when: (w) => {
+    void w.peer.calendar;
+    // @ts-expect-error a peer is named by its service's name
+    void w.peer.cal;
+    return {};
+  },
   then: () => [],
 });
 scenarioOfScreens("types", {
@@ -1353,7 +1357,7 @@ scenarioOfScreens("types", {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
     // @ts-expect-error the own service is no peer (unknownPeer)
-    peers: { screens: skip(screensPeer, "the own service") },
+    peers: [skip(screensPeer, "the own service")],
   },
   when: () => ({}),
   then: () => [],
@@ -1364,11 +1368,11 @@ scenarioOfScreens("types", {
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
-    peers: {
-      todo: run(todoPeer, { Task: [], Settings: { shouldRemind: true } }),
-      calendar: external(calendarPeer),
-      device: skip(devicePeer, "the screens never reach the device in this scenario"),
-    },
+    peers: [
+      run(todoPeer, { Task: [], Settings: { shouldRemind: true } }),
+      external(calendarPeer),
+      skip(devicePeer, "the screens never reach the device in this scenario"),
+    ],
   },
   when: (w) => {
     const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
@@ -1396,10 +1400,7 @@ scenarioOfScreens("types", {
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: {},
-    peers: {
-      todo: run(todoPeer, { Task: [], Settings: { shouldRemind: true } }),
-      calendar: external(calendarPeer),
-    },
+    peers: [run(todoPeer, { Task: [], Settings: { shouldRemind: true } }), external(calendarPeer)],
   },
   when: (w) => {
     const list = w.startup.screen(taskListScreen);
@@ -1476,7 +1477,7 @@ scenarioOfTodo("types", {
   given: {
     start: "2026-10-25T10:00:00+09:00",
     records: { Task: [], Settings: { shouldRemind: true } },
-    peers: { calendar: external(calendarPeer), device: external(devicePeer) },
+    peers: [external(calendarPeer), external(devicePeer)],
   },
   when: (w) => {
     const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });

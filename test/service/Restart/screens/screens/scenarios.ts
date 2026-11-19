@@ -3,7 +3,7 @@ import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { homeScreen, taskListScreen } from "./screens.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, {})] } as const;
 type W = When<typeof given.peers>;
 
 const deliverSubscription = (w: W, sub: OutSubscription) => {

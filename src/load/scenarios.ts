@@ -105,15 +105,11 @@ export function loadScenarios(
     const ref = { service: own, name: named.name };
     const report = (violation: Malformed, at: Place = place) => malformed.push({ violation: violation, place: at });
     const entitiesOf = (service: string) => services.get(service)?.definition.entities ?? {};
-    const peers: PeerEntry[] = Object.entries(definition.given.peers).flatMap(([key, entry]): PeerEntry[] => {
+    const peers: PeerEntry[] = definition.given.peers.flatMap((entry): PeerEntry[] => {
       const owner = contractService(entry.contract);
       const service = owner === undefined ? undefined : serviceNames.get(owner);
       if (service === undefined || service === own) {
         report({ kind: "Malformed.unknownPeer", definition: null, scenario: ref, data: { service: service ?? null } });
-        return [];
-      }
-      if (service !== key) {
-        report({ kind: "Malformed.misnamedPeer", definition: null, scenario: ref, data: { name: key, service } });
         return [];
       }
       if (entry.role === "external") return [{ service, role: "external" }];

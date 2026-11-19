@@ -2,7 +2,7 @@ import { accepted, external } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { scenario } from "./app.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { device: external(device) } } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(device)] } as const;
 
 export const firstRestart = scenario(
   "Restart as the first line; the service began at the start of Given, and begins again on the restart, so permission sends a second requestPermission, after the restart line",

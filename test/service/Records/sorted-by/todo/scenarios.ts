@@ -1,6 +1,6 @@
 import { checkPlan, listTasks, listVisits, pickScreen, planScreen, planTasks, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] } as const;
 
 export const listed = scenario(
   "List the tasks; decide writes the titles and the entries of tasksListed out of order, and tazuna sorts the titles bag by canonical JSON and the entries by day, the two entries of day 1 by canonical JSON",

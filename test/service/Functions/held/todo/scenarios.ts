@@ -1,6 +1,6 @@
 import { addTask, openLabels, pressRemind, renameTask, scenario, selectTask } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [] } as const;
 
 export const renamedWhileWatching = scenario(
   "Add a task, select it, rename it, and press remind; the held title of watcher is not a stored value but is computed from the current record by the holds expression each time it is read, so watcher notifies the first title when it enters watching and the new title when it reenters watching after the rename",

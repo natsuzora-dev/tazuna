@@ -1,6 +1,6 @@
 import { addTask, pickTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] } as const;
 
 export const leftRegionWins = scenario(
   "Add the task left; reminder selects the transition of leftWaiting in the region left over the transition of running, and notifies left",

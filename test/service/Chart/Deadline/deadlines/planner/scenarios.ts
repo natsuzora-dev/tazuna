@@ -1,6 +1,6 @@
 import { addTask, scenario } from "./planner.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] } as const;
 
 export const deadlineMoved = scenario(
   "Add a task at 10:00 and another at 12:30; reminder enters waiting again on each taskAdded, which fixes its deadline anew. The deadline becomes 13:00 after the first addTask and 14:00 after the second, so reminder notifies at 14:00; fixedReminder does not enter waiting again, so it notifies at 12:00",

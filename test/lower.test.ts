@@ -21,11 +21,7 @@ const services = new Map<unknown, string>([
   [calendar, "calendar"],
 ]);
 
-const peers = {
-  todo: run(todo, { Task: [], Settings: { shouldRemind: true } }),
-  calendar: external(calendar),
-  device: external(device),
-} as const;
+const peers = [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)];
 
 function lowered(when: (w: When<typeof peers>) => unknown, then: (lines: never) => readonly never[] = () => []) {
   const definition = scenario("lowered", {

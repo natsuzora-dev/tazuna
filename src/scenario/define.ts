@@ -311,7 +311,9 @@ export interface Skip<C = unknown> {
   readonly because: string;
 }
 export type PeerEntry = Run | External | Skip;
-type Peers = Readonly<Record<string, PeerEntry>>;
+type Peers = readonly PeerEntry[];
+/** The name of the service of the peer `E`. */
+type NameOf<E> = E extends { readonly contract: infer C } ? (unknown extends C ? string : ServiceOf<C>) : never;
 
 /** The peer runs its spec from `records` and checks every line it takes part in. */
 export const run = <C extends Contract<unknown, unknown, "spec">>(contract: C, records: RecordsOf<C>): Run<C> => ({
@@ -332,25 +334,24 @@ export const skip = <C extends Contract<unknown, unknown, "spec" | "external">>(
   because: string,
 ): Skip<C> => ({ role: "skip", contract, because });
 
-/**
- * Each peer of `P` keyed by the name of its contract's service, which is not the own service `Own`
- * (`Malformed.misnamedPeer`, `Malformed.unknownPeer`).
- */
-type PeerKeys<P extends Peers, Own extends string> = {
-  readonly [K in keyof P]: K extends Own
-    ? "the own service is no peer"
-    : ServiceOf<P[K]["contract"]> extends K
-      ? unknown
-      : `key the peer by its service name ${ServiceOf<P[K]["contract"]>}`;
-};
+/** Each peer of `P`, unless it is the own service `Own` (`Malformed.unknownPeer`). */
+type NotOwn<P extends Peers, Own extends string> = string extends Own
+  ? unknown
+  : {
+      readonly [I in keyof P]: [NameOf<P[I]>] extends [never]
+        ? unknown
+        : NameOf<P[I]> extends Own
+          ? "the own service is no peer"
+          : unknown;
+    };
 
 /** The arrangement: every running service begins at `start`, the own service `Own` from `records`. */
 export interface Given<R, P extends Peers, Own extends string = string> {
   readonly start: Instant;
   /** Every record of the own service. Nothing defaults, so a single entity's record is written too. */
   readonly records: R;
-  /** Every service that exchanges messages with the own service, keyed by its service name. */
-  readonly peers: P & NoInfer<PeerKeys<P, Own>>;
+  /** Every service that exchanges messages with the own service. */
+  readonly peers: P & NoInfer<NotOwn<P, Own>>;
 }
 
 type Members<C> = C[keyof C];
@@ -363,9 +364,9 @@ type PayloadArgs<Cs, K extends keyof Cs> =
 type ResultOf = OutRequest<AnyCommand> | RequestLine<AnyCommand> | null;
 
 /** The names of the peers of `P` that run their spec. */
-type Running<P extends Peers> = { readonly [K in keyof P]: P[K] extends Run ? K : never }[keyof P] & string;
+type Running<P extends Peers> = NameOf<Extract<P[number], Run>>;
 /** The names of the peers of `P` that take part in the simulation: running and external ones. */
-type Taking<P extends Peers> = { readonly [K in keyof P]: P[K] extends Skip ? never : K }[keyof P] & string;
+type Taking<P extends Peers> = NameOf<Exclude<P[number], Skip>>;
 
 /** The client, which reaches the services of `R` directly. Its lines' messages travel between services of `S`. */
 interface Client<R extends string, S extends string, X extends Listed> {
@@ -452,16 +453,16 @@ export interface When<
   P extends Peers,
   Own extends string = string,
   S extends string = Own | Taking<P>,
-  X extends Listed = { readonly own: Own; readonly peers: keyof P & string },
+  X extends Listed = { readonly own: Own; readonly peers: NameOf<P[number]> },
 > {
   /** What the startup of every running service at Given's start caused. */
   readonly startup: Caused<S>;
   readonly client: Client<Own | Running<P>, S, X>;
   readonly user: User<S, X>;
   readonly peer: {
-    readonly [K in keyof P as P[K] extends Skip ? never : K]: P[K] extends Run<infer C>
+    readonly [E in Exclude<P[number], Skip> as NameOf<E>]: E extends Run<infer C>
       ? RunningPeer<C, S>
-      : P[K] extends External<infer C>
+      : E extends External<infer C>
         ? ExternalPeer<C, S>
         : never;
   };

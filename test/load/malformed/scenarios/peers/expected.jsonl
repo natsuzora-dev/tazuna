@@ -1,3 +1,2 @@
-{"kind":"Malformed.misnamedPeer","definition":null,"data":{"name":"cal","service":"calendar"},"location":{"file":"todo/scenarios.ts","line":7},"scenario":{"service":"todo","name":"listsPeerUnderOtherName"}}
-{"kind":"Malformed.unknownPeer","definition":null,"data":{"service":"todo"},"location":{"file":"todo/scenarios.ts","line":13},"scenario":{"service":"todo","name":"listsUnknownPeers"}}
-{"kind":"Malformed.unknownPeer","definition":null,"data":{"service":null},"location":{"file":"todo/scenarios.ts","line":13},"scenario":{"service":"todo","name":"listsUnknownPeers"}}
+{"kind":"Malformed.unknownPeer","definition":null,"data":{"service":"todo"},"location":{"file":"todo/scenarios.ts","line":7},"scenario":{"service":"todo","name":"listsUnknownPeers"}}
+{"kind":"Malformed.unknownPeer","definition":null,"data":{"service":null},"location":{"file":"todo/scenarios.ts","line":7},"scenario":{"service":"todo","name":"listsUnknownPeers"}}

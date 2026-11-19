@@ -1,7 +1,7 @@
 import { homeScreen } from "./screens.ts";
 import { addTask, archiveTask, dropTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] } as const;
 
 export const onDoneAfterExit = scenario(
   "Add a task and archive it; on the taskFinished of archiveTask, tracker enters finished of tracking and queues the onDone of tracking. On the taskArchived of the same message, tracker exits tracking, so the onDone processed later is dropped and tracker sends no logTask",

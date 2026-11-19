@@ -5,7 +5,7 @@ import { scenario, taskListScreen } from "./screens.ts";
 const given = {
   start: "2026-10-25T00:00:00Z",
   records: {},
-  peers: { todo: skip(todo, "verify compares the subscriptions that the screen opens, not their answers") },
+  peers: [skip(todo, "verify compares the subscriptions that the screen opens, not their answers")],
 } as const;
 
 export const filterAndClose = scenario("Filter the list and close it; no violation", {

@@ -12,7 +12,7 @@ export const pairAtTen = scenario(
           { id: "b", n: 2 },
         ],
       },
-      peers: {},
+      peers: [],
     },
     when: (w) => {
       w.client.send(arm, {});

@@ -1,6 +1,6 @@
 import { pause, play, scenario, skip, skipTrack, startTrack, tuneRadio } from "./player.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] } as const;
 
 export const resumeWhereStopped = scenario(
   "Play, skip, pause, and play; song has not exited playing yet, so the first play enters intro, the initial state of playing, through the history state resumed. The play after the pause in chorus reenters chorus, where song was when it exited playing",

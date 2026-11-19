@@ -5,7 +5,7 @@ import { scenario } from "./booking.ts";
 export const acceptBookingLater = scenario(
   "Accept a booking an hour after the start of a day; this breaks the assumed requires startOfDay, so test reports failedAssumedRequires and does not check the booked event of another day against the assumed ensures sameDay",
   {
-    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.book));
       w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted));
@@ -24,7 +24,7 @@ export const acceptBookingLater = scenario(
 export const rejectBookingAtStartOfDay = scenario(
   "Reject a booking at the start of a day with requires; startOfDay holds, so test reports rejectedAssumedRequires",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.book));
       w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), rejected("requires", "startOfDay")));

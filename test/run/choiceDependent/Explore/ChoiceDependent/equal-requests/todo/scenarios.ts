@@ -5,7 +5,7 @@ import { addTasks, scenario } from "./todo.ts";
 const given = {
   start: "2026-10-25T10:00:00Z",
   records: { Task: [] },
-  peers: { calendar: run(calendar, { Booking: [] }) },
+  peers: [run(calendar, { Booking: [] })],
 } as const;
 
 export const sameDay = scenario(

@@ -4,7 +4,7 @@ import { scenario } from "./data.ts";
 import { editScreen } from "./editScreen.ts";
 import { taskScreen } from "./taskScreen.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(todo)] } as const;
 type W = When<typeof given.peers>;
 
 const deliverTaskSubscription = (w: W) => w.net.deliver(w.startup.subscription(todo.task));

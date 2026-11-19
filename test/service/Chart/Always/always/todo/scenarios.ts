@@ -5,7 +5,7 @@ import { addTask, completeTask, openRows, scenario, signal } from "./todo.ts";
 const given = {
   start: "2026-10-25T10:00:00+09:00",
   records: { Task: [], Signal: [] },
-  peers: { screens: skip(screens, "the screens' subscriptions are the screens' scenario") },
+  peers: [skip(screens, "the screens' subscriptions are the screens' scenario")],
 } as const;
 
 export const tooManyTasks = scenario(

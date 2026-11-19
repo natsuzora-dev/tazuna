@@ -2,7 +2,7 @@ import { accepted, type Caused, external, raw, rejected, type When } from "@nats
 import { device } from "../device/contract.ts";
 import { addTask, completeTask, scenario, swapTitles, titledCount } from "./todo.ts";
 
-const peers = { device: external(device) } as const;
+const peers = [external(device)];
 const given = { start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers } as const;
 
 const deliverAndAccept = (w: When<typeof peers>, line: Caused) => {

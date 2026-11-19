@@ -2,7 +2,7 @@ import { external } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./notifier.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
+const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(todo)] } as const;
 
 export const receiveAdded = scenario("Receive an added task; no violation", {
   given,

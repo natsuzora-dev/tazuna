@@ -3,7 +3,7 @@ import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./agenda.ts";
 
 export const answer = scenario("Answer the start of a day, then reject an hour later with requires; no violation", {
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.holiday));
     const l0 = w.net.deliver(
@@ -18,7 +18,7 @@ export const answer = scenario("Answer the start of a day, then reject an hour l
 export const rejectStartOfDay = scenario(
   "Reject the start of a day with requires, then answer an hour later; startOfDay holds for the first and fails for the second, so test reports rejectedAssumedRequires and failedAssumedRequires",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.holiday));
       const l0 = w.net.deliver(

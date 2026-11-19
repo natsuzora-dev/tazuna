@@ -1,6 +1,6 @@
 import { addTask, scenario } from "./todo.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] } as const;
 
 export const dueDeadlineFires = scenario(
   "Add a task at 10:00 and restart at 11:00; the 11:00 deadline of waiting is due by the restart, so reminder reports before the restart line",

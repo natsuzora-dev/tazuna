@@ -9,7 +9,7 @@ export const draftAndOpen = scenario(
     given: {
       start: "2026-10-25T00:00:00Z",
       records: { Draft: [] },
-      peers: { todo: skip(todo, "verify compares the subscriptions that the screen opens, not their answers") },
+      peers: [skip(todo, "verify compares the subscriptions that the screen opens, not their answers")],
     },
     when: (w) => {
       const notes = w.startup.screen(noteScreen);

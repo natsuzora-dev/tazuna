@@ -3,7 +3,7 @@ import { todo } from "../todo/contract.ts";
 import { scenario } from "./data.ts";
 import { helpPanel, homeScreen, taskListScreen } from "./screens.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: { todo: run(todo, {}) } } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, {})] } as const;
 
 export const listClosedByParent = scenario(
   "Open the list at 10:00 and again at 10:02; homeScreen opens one taskListScreen each time it enters listing, and when it exits listing at the one-minute deadline at 10:01, it closes taskListScreen, which ends its subscription to tasks. homeScreen keeps its subscription to taskCount while taskListScreen is open",

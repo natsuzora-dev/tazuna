@@ -2,7 +2,7 @@ import { external, rejected, type When } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./planner.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { todo: external(todo) } } as const;
+const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(todo)] } as const;
 
 const answered = (w: When<typeof given.peers>, answer: Parameters<typeof w.peer.todo.answer>[1]) => {
   const adding = w.startup.request(todo.addTask);

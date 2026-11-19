@@ -5,7 +5,7 @@ import { addTask, scenario } from "./todo.ts";
 const given = {
   start: "2026-10-25T00:00:00Z",
   records: { Task: [] },
-  peers: { calendar: external(calendar) },
+  peers: [external(calendar)],
 } as const;
 
 export const addTwoReusedId = scenario(

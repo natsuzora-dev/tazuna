@@ -16,7 +16,7 @@ export const addSeventh = scenario(
         ],
         Mark: [],
       },
-      peers: {},
+      peers: [],
     },
     when: (w) => {
       w.client.send(addTask, { taskId: "task-7" });

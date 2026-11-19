@@ -1,6 +1,6 @@
 import { arm, scenario } from "./sender.ts";
 
-const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: {} } as const;
+const given = { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] } as const;
 
 const when = (w: Parameters<Parameters<typeof scenario>[1]["when"]>[0]) => {
   w.client.send(arm, {});

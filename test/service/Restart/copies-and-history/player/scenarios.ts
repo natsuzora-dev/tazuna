@@ -1,6 +1,6 @@
 import { pause, play, queueTrack, scenario, skip } from "./player.ts";
 
-const given = { start: "2026-10-25T10:00:00+09:00", records: { Track: [] }, peers: {} } as const;
+const given = { start: "2026-10-25T10:00:00+09:00", records: { Track: [] }, peers: [] } as const;
 
 export const historyReset = scenario(
   "Play, skip, pause, restart, and play; the restart forgets that song was last in chorus, so the play after it enters intro, the initial state of playing, through the history state resumed",

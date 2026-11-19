@@ -3,7 +3,7 @@ import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./booking.ts";
 
 export const answerBooking = scenario("Answer the booking with its id; no violation", {
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.book));
     w.net.deliver(
@@ -19,7 +19,7 @@ export const answerBooking = scenario("Answer the booking with its id; no violat
 export const answerBookingEmptyId = scenario(
   "Answer the booking with an empty id; the output schema of book rejects it, so test reports answerOutputSchema",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.book));
       w.net.deliver(

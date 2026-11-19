@@ -3,7 +3,7 @@ import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./alarm.ts";
 
 export const addOnce = scenario("The calendar adds the reminder once; no violation", {
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.addReminder));
     w.net.deliver(
@@ -26,7 +26,7 @@ export const addOnce = scenario("The calendar adds the reminder once; no violati
 export const addTwice = scenario(
   "Receive reminderAdded twice for one addReminder; this breaks the assumed ensures once, so test reports failedAssumedEnsures",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.addReminder));
       w.net.deliver(
@@ -57,7 +57,7 @@ export const addTwice = scenario(
 export const addOther = scenario(
   "Receive reminderAdded with another id than the answer to addReminder; this breaks the assumed ensures answeredId, so test reports failedAssumedEnsures",
   {
-    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: { calendar: external(calendar) } },
+    given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
     when: (w) => {
       w.net.deliver(w.startup.request(calendar.addReminder));
       w.net.deliver(
