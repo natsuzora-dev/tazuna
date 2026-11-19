@@ -4,9 +4,9 @@ import { pathToFileURL } from "node:url";
 import { parseSync } from "oxc-parser";
 import type { z } from "zod";
 import type { Malformed } from "../data/malformed.ts";
+import { chartOf } from "../dsl/chart.ts";
 import { constantsSchema, constantsService } from "../dsl/constants.ts";
 import {
-  type ChartSpec,
   type Contract,
   type Definition,
   isDefinition,
@@ -304,9 +304,10 @@ export function structured(spec: Pick<Spec, "definitions" | "structure">) {
 }
 
 export function charts(spec: Pick<Spec, "definitions" | "structure">) {
-  return structured(spec).flatMap(({ named, structure }) =>
-    structure.kind === "machine" || structure.kind === "screen"
-      ? [{ named, chart: named.definition as unknown as ChartSpec, structure }]
-      : [],
-  );
+  return structured(spec).flatMap(({ named, structure }) => {
+    const chart = chartOf(named.definition);
+    return (structure.kind === "machine" || structure.kind === "screen") && chart !== undefined
+      ? [{ named, chart, structure }]
+      : [];
+  });
 }

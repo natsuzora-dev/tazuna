@@ -4,7 +4,7 @@ import { pathOf } from "../spec/tree.ts";
 import type { ChartSpec, Definition, StateSpec, TransitionSpec } from "./definition.ts";
 
 export function chartOf(d: Definition): ChartSpec | undefined {
-  return d.kind === "machine" || d.kind === "screen" ? (d as unknown as ChartSpec) : undefined;
+  return d.kind === "machine" || d.kind === "screen" ? d : undefined;
 }
 
 export interface TransitionArray {

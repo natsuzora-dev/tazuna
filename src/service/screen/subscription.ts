@@ -1,5 +1,5 @@
 import type { Activity } from "../../data/step.generated.ts";
-import type { Json } from "../../data/values.ts";
+import { canonicalJson, type Json } from "../../data/values.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { openShows, stateEndSubscription } from "../chart/exit.ts";
@@ -35,12 +35,12 @@ function refresh(r: Processing, instance: Instance): boolean {
     const records = new LazyRecordSource(r.state.records, r.note);
     const input = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
     if (input instanceof Failed) return halt(issueViolation(definition, input));
-    wanted.set(slot, { activity, input, text: JSON.stringify(input) });
+    wanted.set(slot, { activity, input, text: canonicalJson(input) });
   }
   const open = openShows(r.state, instance.id);
   for (const p of open) {
     const { slot } = p.requester;
-    if (wanted.get(slot)?.text === JSON.stringify(p.input)) continue;
+    if (wanted.get(slot)?.text === canonicalJson(p.input)) continue;
     stateEndSubscription(r, p);
     if (!wanted.has(slot)) {
       r.note.wroteShown(instance.id, slot);
@@ -49,7 +49,7 @@ function refresh(r: Processing, instance: Instance): boolean {
     }
   }
   for (const [slot, { activity, input, text }] of wanted) {
-    if (open.some((p) => p.requester.slot === slot && JSON.stringify(p.input) === text)) continue;
+    if (open.some((p) => p.requester.slot === slot && canonicalJson(p.input) === text)) continue;
     awaitAnswer(
       r.state,
       { type: "subscribe", target: activity.target, input },

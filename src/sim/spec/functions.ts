@@ -721,8 +721,7 @@ export class SpecFunctions implements Functions {
         );
         break;
       case "opens": {
-        const screen = chart.screens?.[key] as unknown as ChartSpec;
-        given = this.writtenInput(screen.input ?? {}, node?.opens?.[key]?.input, args);
+        given = this.writtenInput(chart.screens?.[key]?.input ?? {}, node?.opens?.[key]?.input, args);
       }
     }
     return given instanceof Failed ? given : { written: given, created };

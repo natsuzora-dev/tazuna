@@ -10,7 +10,13 @@ const root = join(import.meta.dirname, "..");
 /** Each Biome plugin in biome.json, with expressions it reports and expressions it leaves alone. */
 const examples: Record<string, { readonly reported: readonly string[]; readonly clean: readonly string[] }> = {
   "./lint/sameJson.grit": {
-    reported: ["canonicalJson(a) === canonicalJson(b)", "JSON.stringify(a) !== JSON.stringify(b)"],
+    reported: [
+      "canonicalJson(a) === canonicalJson(b)",
+      "JSON.stringify(a) !== JSON.stringify(b)",
+      "canonicalJson(a) === JSON.stringify(b)",
+      "JSON.stringify(a) != canonicalJson(b)",
+      "canonicalJson(a) == canonicalJson(b)",
+    ],
     clean: ["sameJson(a, b)", "canonicalJson(a) === key"],
   },
 };

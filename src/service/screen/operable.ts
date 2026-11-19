@@ -1,5 +1,5 @@
 import type { DefinitionRef } from "../../data/definitionRef.ts";
-import type { Fields, Json } from "../../data/values.ts";
+import { canonicalJson, type Fields, type Json } from "../../data/values.ts";
 import type { StateStructure } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
@@ -125,9 +125,9 @@ export function accepting(
   if (found.kind === "notOpen") return { closed: true };
   if (found.kind === "covered") return { child: ref(r.st, found.child.chart.name) };
   const top = { top: found.instance };
-  const asked = JSON.stringify(payload.encoded);
+  const asked = canonicalJson(payload.encoded);
   const admits = offered(r, found.instance, key, payload.value).some(
-    ({ offered }) => offered === "any" || offered.some((o) => JSON.stringify(o.encoded) === asked),
+    ({ offered }) => offered === "any" || offered.some((o) => canonicalJson(o.encoded) === asked),
   );
   return admits ? top : { payload: payload.encoded as Json };
 }
@@ -157,7 +157,7 @@ export function operationsOf(r: Run, resource: InstanceId): Operation[] {
       return [{ screen, id: resource, control: key, payloads: hasPayload ? undefined : [{}] }];
     const listed = new Map<string, Payload>();
     for (const { offered } of applied.flat())
-      if (offered !== "any") for (const o of offered) listed.set(JSON.stringify(o.encoded), o);
+      if (offered !== "any") for (const o of offered) listed.set(canonicalJson(o.encoded), o);
     const payloads = [...listed.values()]
       .filter((o) => copies.length === 0 || "top" in accepting(r, resource, key, o))
       .map((o) => o.encoded);

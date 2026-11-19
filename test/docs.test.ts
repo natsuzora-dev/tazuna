@@ -207,6 +207,9 @@ test("Each command and option that a shipped markdown file names exists", async 
   assert.deepEqual(unknown, []);
 });
 
+/** The product and language names that a heading writes capitalized. */
+const properNouns: ReadonlySet<string> = new Set(["GitHub", "Lean", "ToDo", "TypeScript", "Zod"]);
+
 /** The structure rules of pstack technical-writing that a script can check. Each returns the lines that break it. */
 const proseRules: readonly {
   readonly rule: string;
@@ -251,18 +254,18 @@ const proseRules: readonly {
     clean: "1. Run it.\n   It prints - and 2. as text.\n\n   ```sh\n   - not a list\n   ```",
   },
   {
-    rule: "A heading is in sentence case",
+    rule: "A heading is in sentence case, except for the names of products and languages",
     check: (text) =>
       headings(text)
         .filter((h) =>
           withoutCode(h.title)
             .split(/\s+/)
             .slice(1)
-            .some((word) => /^[A-Z][a-z]/.test(word)),
+            .some((word) => /^[A-Z][a-z]/.test(word) && !properNouns.has(word.replace(/\W+$/, ""))),
         )
         .map((h) => h.number),
     reported: "# Install The Tool",
-    clean: "# Install the `Tool` from npm with the CLI",
+    clean: "# Install the `Tool` from npm with the CLI, and prove the ToDo sample in Lean",
   },
   {
     rule: "Prose joins sentences with periods, not semicolons",

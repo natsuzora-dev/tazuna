@@ -1,8 +1,20 @@
 or {
   `canonicalJson($a) === canonicalJson($b)`,
   `canonicalJson($a) !== canonicalJson($b)`,
+  `canonicalJson($a) == canonicalJson($b)`,
+  `canonicalJson($a) != canonicalJson($b)`,
   `JSON.stringify($a) === JSON.stringify($b)`,
-  `JSON.stringify($a) !== JSON.stringify($b)`
+  `JSON.stringify($a) !== JSON.stringify($b)`,
+  `JSON.stringify($a) == JSON.stringify($b)`,
+  `JSON.stringify($a) != JSON.stringify($b)`,
+  `canonicalJson($a) === JSON.stringify($b)`,
+  `canonicalJson($a) !== JSON.stringify($b)`,
+  `canonicalJson($a) == JSON.stringify($b)`,
+  `canonicalJson($a) != JSON.stringify($b)`,
+  `JSON.stringify($a) === canonicalJson($b)`,
+  `JSON.stringify($a) !== canonicalJson($b)`,
+  `JSON.stringify($a) == canonicalJson($b)`,
+  `JSON.stringify($a) != canonicalJson($b)`
 } as $comparison where {
   register_diagnostic(span=$comparison, message="Compare JSON values with sameJson. JSON.stringify depends on key order, and a hand-written comparison restates the rule.")
 }

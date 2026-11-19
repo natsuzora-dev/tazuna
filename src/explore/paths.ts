@@ -4,7 +4,8 @@ import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.
 import type { Answer, LineId } from "../data/trace.generated.ts";
 import { canonicalJson, type Shape } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
-import type { AnyCommand, AnyEvent, AnyQuery, ChartSpec, Named } from "../dsl/definition.ts";
+import { chartOf } from "../dsl/chart.ts";
+import type { AnyCommand, AnyEvent, AnyQuery, Named } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { serviceOf } from "../service/basic.ts";
@@ -205,7 +206,7 @@ export function enabledLines(
         (d) => d.service === own && d.name === o.screen && d.definition.kind === "screen",
       );
       if (opened === undefined || screen === undefined) return [];
-      const shape = ((screen.definition as unknown as ChartSpec).controls?.[o.control]?.payload ?? {}) as Shape;
+      const shape = (chartOf(screen.definition)?.controls?.[o.control]?.payload ?? {}) as Shape;
       const listed = seen.payloads.get(`${own}.${o.screen}.${o.control}`) ?? [];
       const payloads =
         o.payloads === null
