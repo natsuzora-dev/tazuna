@@ -11,6 +11,7 @@
   "workspaces": [
     "samples/todo",
     "samples/todo/spec",
+    "!samples/todo/spec/tsconfig.json",
     "samples/todo/web"
   ],
   "imports": {
@@ -42,9 +43,11 @@
   },
   "files": [
     "dist",
-    "docs/guarantees.md",
-    "docs/concepts.md",
+    "docs/*.md",
     "explain.json",
+    "samples/todo/spec",
+    "!samples/todo/spec/tsconfig.json",
+    "skills",
     "tsconfig.base.json"
   ],
   "scripts": {
@@ -89,7 +92,8 @@
     "node": ">=26"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "allowScripts": {
     "@swc/core@1.16.22": true,
