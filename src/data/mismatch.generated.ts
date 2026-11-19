@@ -280,7 +280,7 @@ export type Mismatch =
         readonly result: string;
       };
     }
-  /** The answer answers a request that an earlier line answered. */
+  /** The answer answers a request whose every send, the first and each resend, an earlier line answered. */
   | {
       readonly kind: "Mismatch.repeatedAnswer";
       readonly definition: null;

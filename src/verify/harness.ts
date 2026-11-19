@@ -104,7 +104,8 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     while (id === undefined && requestIds.has(`${name}@${sent}`));
     const appId = id ?? `${name}@${sent}`;
     write({ dir: "out", type, id: appId, name, input: plain(request.input) }, at);
-    // A second request with the same id stays in the trace, where verify reports it as Uncomparable.duplicateId.
+    // A second request with the same id stays in the trace, where verify takes it as the first sent again, or reports
+    // Uncomparable.duplicateId when its type, name or input differs.
     const key = waitingKey(id === undefined ? "harness" : "implementation", appId);
     if (!waiting.has(key)) waiting.set(key, { ...request, id: appId, subscription: type === "subscribe" });
     return appId;

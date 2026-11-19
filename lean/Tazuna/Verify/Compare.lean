@@ -38,9 +38,10 @@ values that the implementation chose in its own way are open.
   report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
   unexpected. Paired lines compare their time and the snapshot's `after` order. The set keeps the ways that leave the
   same trace lines unpaired and, when the first way compares, that compare too.
-- Verify reports the trace's first malformed line, and the first `out` request line with the id of an earlier one
-  (duplicateId), and compares neither the group of the first of them nor anything later. Other lines' ids name no
-  line, so the ids that the harness gives the lines that the implementation gives no id never meet them.
+- Verify reports the trace's first malformed line, and the first `out` request line that reuses an earlier one's id
+  with another input (duplicateId), and compares neither the group of the first of them nor anything later. Other
+  lines' ids name no line, so the ids that the harness gives the lines that the implementation gives no id never meet
+  them.
 -/
 
 namespace Tazuna.Verify
@@ -601,27 +602,29 @@ def isRequestLine (dir : Dir) (l : TraceLine) : Bool :=
   | _ => false
 
 /--
-The number of the first request line of the direction `dir` with the id of an earlier one, and its report. Answers in
-the other direction name those requests, so their ids must differ. Compare checks `out` requests: an `in` request of a
-spec service may come again with its id, as a resent request does, and the snapshot fixes how the service answers it.
-The check of an external service's trace, which has no snapshot, checks `in` requests (External).
+The number of the first request line of the direction `dir` that reuses an earlier one's id with another body, and its
+report. Answers in the other direction name those requests by id alone, so an id names one request: a line with an
+earlier line's id and the same type, name and input is that request sent again, as a client resends a request with its
+`Idempotency-Key`, and its answers answer that request. Compare checks `out` requests and the check of an external
+service's trace checks `in` requests (External). An `in` request of a spec service is not checked: the scenario may
+reuse an id with another input, and the snapshot fixes how the service answers it.
 -/
 def firstDuplicate (dir : Dir) (lines : List (Option TraceLine)) : Option (Nat × Uncomparable) :=
   go lines 1 []
 where
-  go : List (Option TraceLine) → Nat → List (String × Nat) → Option (Nat × Uncomparable)
+  go : List (Option TraceLine) → Nat → List (String × Nat × TraceLine.Body) → Option (Nat × Uncomparable)
     | [], _, _ => none
     | none :: ls, i, seen => go ls (i + 1) seen
     | some l :: ls, i, seen =>
       if !isRequestLine dir l then go ls (i + 1) seen
       else
         match seen.lookup l.body.id with
-        | some first => some (i, .duplicateId i l.body.id first)
-        | none => go ls (i + 1) (seen ++ [(l.body.id, i)])
+        | some (first, body) => if body == l.body then go ls (i + 1) seen else some (i, .duplicateId i l.body.id first)
+        | none => go ls (i + 1) (seen ++ [(l.body.id, i, l.body)])
 
 /--
 The trace lines that verify checks, and the report of the line that ends them, if any: the first malformed line, or the
-first request line of the direction `dir` with an earlier one's id (firstDuplicate).
+first request line of the direction `dir` that reuses an earlier one's id with another input (firstDuplicate).
 -/
 def comparedLines (dir : Dir) (trace : List (FileLine TraceLine)) : List (Option TraceLine) × Option Uncomparable :=
   let (lines, malformed) := untilMalformed trace

@@ -24,11 +24,13 @@ import { comparedLines } from "./compare.ts";
 import { byLine, type Found } from "./lines.ts";
 
 /**
- * Lean's Exchange: a request that the external service received, and the answers and the events naming it as their
- * resultOf that later lines record, in trace order, each at its line. TS keeps the input and payloads for verifyExternal.
+ * Lean's Exchange: a request that the external service received, the lines that send it again, and the answers and the
+ * events naming it as their resultOf that later lines record, in trace order, each at its line. TS keeps the input and
+ * payloads for verifyExternal.
  */
 interface Exchange {
   readonly at: number;
+  readonly resends: readonly number[];
   readonly id: string;
   readonly definition: AnyCommand | AnyQuery;
   readonly input: unknown;
@@ -88,16 +90,20 @@ function exchanges(
   named: readonly Named[],
   events: readonly EventLine[],
 ): Exchange[] {
+  const sentWith = (id: string, l: TraceLine | undefined) => l !== undefined && isInRequest(l) && l.id === id;
   return lines.flatMap((l, i): Exchange[] => {
     const definition = named[i]?.request;
     if (l === undefined || !isInRequest(l) || definition === undefined) return [];
+    if (lines.slice(0, i).some((e) => sentWith(l.id, e))) return [];
     const at = i + 1;
+    const resends = lines.flatMap((r, j) => (j > i && sentWith(l.id, r) ? [j + 1] : []));
     const answers = lines.flatMap((a, j) =>
       j > i && a?.dir === "out" && a.type === "answer" && a.to === l.id ? [{ at: j + 1, answer: a.answer }] : [],
     );
     return [
       {
         at,
+        resends,
         id: l.id,
         definition,
         input: l.input,
@@ -160,23 +166,22 @@ function checkAnswer(spec: Spec, service: string, x: Exchange, at: number, answe
 }
 
 /**
- * Lean's checkExchange: the violations of the request `x`, of its first answer, of each later answer as repeated, and
- * of each result event against the target and all the answers (resultOfMismatch, as test checks them).
+ * Lean's checkExchange: the violations of the request `x`, of each answer that answers a send of it that no earlier
+ * answer answered, of each other answer as repeated, and of each result event against the target and all the answers
+ * (resultOfMismatch, as test checks them).
  */
 function checkExchange(spec: Spec, service: string, x: Exchange): Found[] {
   const target = refOfDefinition(spec, x.definition);
-  const [first, ...repeated] = x.answers;
   const answers = x.answers.map((a) => a.answer);
+  let answered = 0;
   return [
-    ...(first === undefined ? [] : [checkAnswer(spec, service, x, first.at, first.answer)]),
-    ...repeated.map(
-      ({ at }): Found => ({
-        kind: "Mismatch.repeatedAnswer",
-        definition: null,
-        line: at,
-        data: { requestId: x.id, target },
-      }),
-    ),
+    ...x.answers.map(({ at, answer }): Found | undefined => {
+      if (answered < 1 + x.resends.filter((r) => r < at).length) {
+        answered += 1;
+        return checkAnswer(spec, service, x, at, answer);
+      }
+      return { kind: "Mismatch.repeatedAnswer", definition: null, line: at, data: { requestId: x.id, target } };
+    }),
     ...x.events.map(({ at, event }): Found | undefined => {
       const mismatch = resultOfMismatch(spec.structure, target, answers, refOfDefinition(spec, event));
       return mismatch === undefined

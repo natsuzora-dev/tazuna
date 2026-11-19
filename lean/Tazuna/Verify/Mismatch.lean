@@ -62,7 +62,7 @@ inductive Mismatch where
   | assumption (line : Nat) (requestId : String) (target : Spec.Ref) (mismatch : Spec.AssumptionMismatch)
   /-- The answer has a result that the target never answers with: `fulfilled` to a command or `accepted` to a query. -/
   | answerResult (line : Nat) (requestId : String) (target : Spec.Ref) (result : String)
-  /-- The answer answers a request that an earlier line answered. -/
+  /-- The answer answers a request whose every send, the first and each resend, an earlier line answered. -/
   | repeatedAnswer (line : Nat) (requestId : String) (target : Spec.Ref)
   | eventPayloadSchema (line : Nat) (event : Spec.Ref)
 

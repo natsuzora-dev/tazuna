@@ -13,11 +13,13 @@ open Tazuna.Data
 open Tazuna.Spec
 
 /--
-A request that the external service received, as its trace records it: its line, and the answers and the events naming
-it as their resultOf that later lines record, in trace order, each with its line.
+A request that the external service received, as its trace records it: its first line, the lines that send it again
+(firstDuplicate), and the answers and the events naming it as their resultOf that later lines record, in trace order,
+each with its line.
 -/
 structure Exchange where
   line : Nat
+  resends : List Nat
   id : String
   definition : Definition
   answers : List (Nat × Answer)
@@ -26,12 +28,17 @@ structure Exchange where
 /-- The trace's requests that have a definition of `service`, in trace order, each with what later lines record of it. -/
 def exchanges (s : Structure) (service : String) (lines : List (Option TraceLine)) : List Exchange :=
   let numbered := (lines.zipIdx 1).filterMap fun (l, i) => l.map (i, ·)
+  let sentWith (id : String) (l : TraceLine) := match l.body with
+    | .command .in i .. | .query .in i .. => i == id
+    | _ => false
   numbered.filterMap fun (i, l) =>
     let later := numbered.filter (·.1 > i)
     match l.body with
     | .command .in id name _ | .query .in id name _ =>
-      (s.named service (some name) [l.body.type]).map fun definition =>
+      if numbered.any fun (j, e) => j < i && sentWith id e then none
+      else (s.named service (some name) [l.body.type]).map fun definition =>
         { line := i, id, definition
+          resends := later.filterMap fun (j, r) => if sentWith id r then some j else none
           answers := later.filterMap fun (j, a) => match a.body with
             | .answer .out _ to answer => if to == id then some (j, answer) else none
             | _ => none
@@ -87,16 +94,17 @@ def resultOfFinding (line : Nat) (event : Ref) (requestId : String) (target : Re
   | .resultOfUnlistedEvent => .mismatch (.resultOfUnlistedEvent line event requestId target)
 
 /--
-The violations of the request `x`: of its first answer, of each later answer as repeated, and of each result event
-against the target and all the answers (Structure.resultOfMismatch, as test checks them).
+The violations of the request `x`: of each answer that answers a send of it that no earlier answer answered, of each
+other answer as repeated, and of each result event against the target and all the answers (Structure.resultOfMismatch,
+as test checks them).
 -/
 def checkExchange (s : Structure) (service : String) (x : Exchange) : List Finding :=
   let target := x.definition.ref
-  let answers := match x.answers with
-    | [] => []
-    | (line, answer) :: repeated =>
-      (checkAnswer s service x.id x.definition line answer).toList ++
-        repeated.map fun (line, _) => .mismatch (.repeatedAnswer line x.id target)
+  let sentBefore (line : Nat) := 1 + (x.resends.filter (· < line)).length
+  let (answers, _) := x.answers.foldl (init := ([], 0)) fun (found, answered) (line, answer) =>
+    if answered < sentBefore line then
+      (found ++ (checkAnswer s service x.id x.definition line answer).toList, answered + 1)
+    else (found ++ [.mismatch (.repeatedAnswer line x.id target)], answered)
   answers ++ x.events.filterMap fun (line, event) =>
     (s.resultOfMismatch target (x.answers.map (·.2)) event).map (resultOfFinding line event x.id target)
 

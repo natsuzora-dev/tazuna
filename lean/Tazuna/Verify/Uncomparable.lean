@@ -13,9 +13,10 @@ the snapshot.
 inductive Uncomparable where
   | lineSchema (line : Nat)
   /--
-  The line is a request line (a command, query or subscribe line) with the id of the earlier request line `firstLine`,
-  so the answers that name that id do not tell which request they answer: an `out` request in a trace that verify
-  compares with a snapshot, an `in` request in an external service's trace (Verify/Compare's firstDuplicate).
+  The line is a request line (a command, query or subscribe line) with the id of the earlier request line `firstLine`
+  and another type, name or input, so the answers that name that id do not tell which request they answer: an `out`
+  request in a trace that verify compares with a snapshot, an `in` request in an external service's trace
+  (Verify/Compare's firstDuplicate).
   -/
   | duplicateId (line : Nat) (id : String) (firstLine : Nat)
   | unknownRequest (line : Nat) (subject : Subject)

@@ -142,7 +142,10 @@ function groups(lines: readonly (TraceLine | undefined)[]): Group[] {
   return result;
 }
 
-const isRequestOf = (dir: TraceLine["dir"], l: TraceLine): boolean =>
+const isRequestOf = (
+  dir: TraceLine["dir"],
+  l: TraceLine,
+): l is Extract<TraceLine, { readonly type: "command" | "query" | "subscribe" }> =>
   l.dir === dir && (l.type === "command" || l.type === "query" || l.type === "subscribe");
 
 const isOutRequest = (l: TraceLine): boolean => isRequestOf("out", l);
@@ -680,15 +683,24 @@ function compare(
   );
 }
 
-/** Lean's firstDuplicate: the first request line of the direction `dir` with the id of an earlier one. */
+/**
+ * Lean's firstDuplicate: the first request line of the direction `dir` that reuses an earlier one's id with another type,
+ * name or input. A line with the same ones sends that request again.
+ */
 function firstDuplicate(dir: TraceLine["dir"], lines: readonly (TraceLine | undefined)[]): Found | undefined {
-  const seen = new Map<string, number>();
+  const seen = new Map<string, { readonly line: number; readonly request: string }>();
   for (const [i, l] of lines.entries()) {
     if (l === undefined || !isRequestOf(dir, l)) continue;
+    const request = JSON.stringify([l.type, l.name, l.input]);
     const first = seen.get(l.id);
-    if (first !== undefined)
-      return { kind: "Uncomparable.duplicateId", definition: null, line: i + 1, data: { id: l.id, firstLine: first } };
-    seen.set(l.id, i + 1);
+    if (first === undefined) seen.set(l.id, { line: i + 1, request });
+    else if (first.request !== request)
+      return {
+        kind: "Uncomparable.duplicateId",
+        definition: null,
+        line: i + 1,
+        data: { id: l.id, firstLine: first.line },
+      };
   }
   return undefined;
 }

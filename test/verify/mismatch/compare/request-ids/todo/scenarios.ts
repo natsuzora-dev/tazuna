@@ -32,3 +32,16 @@ export const addOneOwnAnswer = scenario(
     then: () => [],
   },
 );
+
+export const addOneResent = scenario(
+  "Add a task and get the next day for it; the implementation trace of this scenario sends the calendar.nextDay request again with its id and input, so verify takes it as a resend, not as a duplicate id, and reports the second line as Mismatch.unexpectedLine",
+  {
+    given,
+    when: (w) => {
+      const first = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
+      w.net.deliver(first);
+      w.net.deliver(w.peer.calendar.answer(first, { result: "fulfilled", output: { day: "2026-10-26T00:00:00Z" } }));
+    },
+    then: () => [],
+  },
+);
