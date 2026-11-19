@@ -71,7 +71,6 @@ The lines after the halt never took place, so those checks would read a cut-off 
 A command *passes* when it reports no violation.
 
 - When `check` passes, every spec file type-checks under the nearest `tsconfig.json`, and the spec has no violation of the groups that `check` reports.
-  `drive` and `verifyTraces` take only a spec that `checkSpec` returned as checked.
 - When `test` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, each running service's trace equals its snapshot, and no explored path reports a violation.
   The scenario then states everything that happened between the running services, and each `InvalidScenario` kind is one rule of that statement.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
@@ -138,7 +137,7 @@ An implementation's trace has no `after` or `created`, and `verify` reports a tr
 - the input that the service sent, against the external target's input schema, also when no answer came
 - each answer, against the target's contract, also one that came after a restart
 - a command's `ensures`, once an answer accepted the command, with all its result events
-- each result event, against its request's answer, which may come before or after it
+- each result event, against its request's answer
 
 In the trace of an external service, an id names one request, as a Stripe `Idempotency-Key` does, since the answers and result events name requests by id.
 A request line with an earlier line's id and the same type, name, and input, whatever the order of object fields, sends that request again, and each send gets at most one answer.
@@ -198,7 +197,6 @@ tazuna detects a break of each assumption only in part or not at all.
   The adapter reports only the messages that the implementation received or sent, with the values that the implementation used.
   Its `settled` resolves only when the implementation has no work left that it can do before it gets a message or the clock moves.
   `drive` then gives the next `in` line, so an output that the implementation sends later is compared with the outputs of a later input, and does not match.
-  An adapter that can only wait, such as one that drives a browser, bounds the wait and rejects with `Unsettled`.
 - **External services.** Each external service keeps the contract that the spec assumes of it.
   `test` and `verify` check only the [exchanges](#exchanges-with-external-services) that a scenario or a trace contains.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.

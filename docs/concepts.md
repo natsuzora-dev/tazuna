@@ -1,12 +1,10 @@
 # Concepts
 
-This page explains why tazuna asks a spec to be written the way it does.
 [Guarantees](guarantees.md) defines the terms and states what a passing command proves.
 
 ## A scenario states the whole world
 
 A scenario writes everything outside the services that it runs: the start time, the records, every request and operation, every move of the clock, every restart, and the fate of every message.
-tazuna fills in nothing that the scenario leaves out.
 A message that no line delivers, loses, refuses, or leaves in flight is `InvalidScenario.leftInFlight`, not a message that arrives by default.
 
 Two things depend on that.
