@@ -55,6 +55,8 @@ export type Restricted =
   | Of<"nonNull", Readonly<Record<string, never>>>
   /** The file casts a value to `type` with `as`, which tells tsc a type without checking it. `as const` is allowed. */
   | Of<"as", { readonly type: string }>
+  /** The file writes the type `any`, which turns off tsc's checks of every value of that type. */
+  | Of<"any", Readonly<Record<string, never>>>
   /** The file has the mark `mark`, which silences tsc or the linter. */
   | Of<"suppression", { readonly mark: (typeof suppressionMarks)[number] }>
   /** A file of one service imports from the service `service` anything other than its contract. */

@@ -228,10 +228,10 @@ theorem deadlinesShrink_exitOne (fuel : Nat) (name : InstanceId) (n : String) : 
     · have h2 := deadlinesShrink_leaveWith (fun c n => ih c n) name n _ t ht
       exact h1 t h2
 
-theorem exit_cancels_deadlines (name : InstanceId) (n : String) (r : Processing) (i : Instance)
-    (hi : r.state.machine? name = some i) (hh : (exitOne fs st Limit.exitDepth.max name n r).1.halted = none) :
-    ∀ t ∈ (exitOne fs st Limit.exitDepth.max name n r).1.deadlines, ¬(t.machine = name ∧ t.state = n) := by
-  rw [show Limit.exitDepth.max = 99 + 1 from rfl, exitOne] at hh ⊢
+theorem exit_cancels_deadlines (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) (i : Instance)
+    (hi : r.state.machine? name = some i) (hh : (exitOne fs st (fuel + 1) name n r).1.halted = none) :
+    ∀ t ∈ (exitOne fs st (fuel + 1) name n r).1.deadlines, ¬(t.machine = name ∧ t.state = n) := by
+  rw [exitOne] at hh ⊢
   unfold withMachine at hh ⊢
   split at hh
   · rename_i hr
@@ -246,7 +246,7 @@ theorem exit_cancels_deadlines (name : InstanceId) (n : String) (r : Processing)
       simp [Processing.halted, hh, -List.foldlM_reverse] at hx
     · rename_i hx
       simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
-      exact leave_removes_deadlines (fun c n => deadlinesShrink_exitOne 99 c n) name n _ hh
+      exact leave_removes_deadlines (fun c n => deadlinesShrink_exitOne fuel c n) name n _ hh
 
 theorem runAssign_pending (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
     (held : Option Value) (r : Processing) : (runAssign fs st name a scope extra held r).1.pending = r.state.pending := by
@@ -409,10 +409,10 @@ theorem machinesKept_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Mac
       rw [setMachine_resources _ _ _ (by intro _; rfl)]
       exact h1
 
-theorem exit_stales_requests (name : InstanceId) (n : String) (r : Processing) (i : Instance) (hi : r.state.machine? name = some i)
-    (hh : (exitOne fs st Limit.exitDepth.max name n r).1.halted = none) :
-    ∀ p ∈ (exitOne fs st Limit.exitDepth.max name n r).1.pending, p.requester = .state name n → p.stale = true := by
-  rw [show Limit.exitDepth.max = 99 + 1 from rfl, exitOne] at hh ⊢
+theorem exit_stales_requests (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) (i : Instance)
+    (hi : r.state.machine? name = some i) (hh : (exitOne fs st (fuel + 1) name n r).1.halted = none) :
+    ∀ p ∈ (exitOne fs st (fuel + 1) name n r).1.pending, p.requester = .state name n → p.stale = true := by
+  rw [exitOne] at hh ⊢
   unfold withMachine at hh ⊢
   split at hh
   · rename_i hr
@@ -427,7 +427,7 @@ theorem exit_stales_requests (name : InstanceId) (n : String) (r : Processing) (
       simp [Processing.halted, hh, -List.foldlM_reverse] at hx
     · rename_i hx
       simp only [hx, Bool.false_eq_true, ↓reduceIte] at hh ⊢
-      generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st 99) (InstanceId.copy i.id n k)) r) r = X at hh ⊢
+      generalize (i.copyKeysOf n).reverse.foldlM (fun r k => unlessHalted (endWith (exitOne fs st fuel) (InstanceId.copy i.id n k)) r) r = X at hh ⊢
       unfold leaveWith at hh ⊢
       simp only [id_bind] at hh ⊢
       split at hh
@@ -438,7 +438,7 @@ theorem exit_stales_requests (name : InstanceId) (n : String) (r : Processing) (
         simp only [ha, Bool.false_eq_true, ↓reduceIte]
         intro p hp hr
         obtain ⟨q, hq, mq⟩ := (foldlM_pendingMapped (fun c => pendingMapped_unlessHalted
-          (pendingMapped_endWith (fun c n => pendingMapped_exitOne (st := st) (fs := fs) 99 c n) c)) _).marked _ p hp
+          (pendingMapped_endWith (fun c n => pendingMapped_exitOne (st := st) (fs := fs) fuel c n) c)) _).marked _ p hp
         obtain ⟨o, -, rfl⟩ := List.mem_map.mp hq
         have mo := (leaveMark_marked name n o).trans mq
         refine mq.2.2 ?_
@@ -463,35 +463,35 @@ theorem machine?_isSome_of_mem (s : State) (c : InstanceId) (hm : c ∈ s.machin
   | some i => exact ⟨i, rfl⟩
 
 theorem exits_cancel (c : InstanceId) (ns : List String) (r : Processing) (hm : c ∈ r.state.machines.map (·.id))
-    (hn : (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st Limit.exitDepth.max c n) r) r).halted = false) :
-    (∀ t ∈ (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st Limit.exitDepth.max c n) r) r).state.deadlines,
+    (hn : (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st st.exitFuel c n) r) r).halted = false) :
+    (∀ t ∈ (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st st.exitFuel c n) r) r).state.deadlines,
       t.machine = c → t.state ∉ ns) ∧
-      ∀ p ∈ (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st Limit.exitDepth.max c n) r) r).state.pending,
+      ∀ p ∈ (ns.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st st.exitFuel c n) r) r).state.pending,
         ∀ n, p.requester = .state c n → n ∈ ns → p.stale = true := by
   induction ns generalizing r with
   | nil => exact ⟨fun _ _ _ h => (nomatch h), fun _ _ _ _ h => (nomatch h)⟩
   | cons x xs ih =>
     simp only [List.foldlM_cons, id_bind] at hn ⊢
-    have hr1 : (unlessHalted (exitOne fs st Limit.exitDepth.max c x) r).halted = false := by
-      cases h1 : (unlessHalted (exitOne fs st Limit.exitDepth.max c x) r).halted
+    have hr1 : (unlessHalted (exitOne fs st st.exitFuel c x) r).halted = false := by
+      cases h1 : (unlessHalted (exitOne fs st st.exitFuel c x) r).halted
       · rfl
       · rw [unlessHalted_foldlM_halted _ _ _ h1] at hn; rw [h1] at hn; cases hn
     have hr0 : r.halted = false := by
       cases h0 : r.halted
       · rfl
       · simp [unlessHalted, h0] at hr1
-    have hstep : unlessHalted (exitOne fs st Limit.exitDepth.max c x) r = exitOne fs st Limit.exitDepth.max c x r := by
+    have hstep : unlessHalted (exitOne fs st st.exitFuel c x) r = exitOne fs st st.exitFuel c x r := by
       simp [unlessHalted, hr0]
     rw [hstep] at hr1 hn ⊢
-    have hm1 : c ∈ (exitOne fs st Limit.exitDepth.max c x r).1.machines.map (·.id) := by
+    have hm1 : c ∈ (exitOne fs st st.exitFuel c x r).1.machines.map (·.id) := by
       rw [machinesKept_exitOne]; exact hm
     obtain ⟨i, hi⟩ := machine?_isSome_of_mem r.state c hm
-    have hh1 : (exitOne fs st Limit.exitDepth.max c x r).1.halted = none := by
+    have hh1 : (exitOne fs st st.exitFuel c x r).1.halted = none := by
       simpa [Processing.halted] using hr1
     obtain ⟨iht, ihp⟩ := ih _ hm1 hn
     refine ⟨fun t ht htm hts => ?_, fun p hp hps hpm hpn => ?_⟩
     · rcases List.mem_cons.mp hts with hx | hx
-      · exact exit_cancels_deadlines c x r i hi hh1 t
+      · exact exit_cancels_deadlines _ c x r i hi hh1 t
           (foldlM_deadlinesShrink (fun n => deadlinesShrink_unlessHalted (deadlinesShrink_exitOne _ c n)) xs _ t ht)
           ⟨htm, hx⟩
       · exact iht t ht htm hx
@@ -499,22 +499,22 @@ theorem exits_cancel (c : InstanceId) (ns : List String) (r : Processing) (hm : 
       · obtain ⟨q, hq, mq⟩ := (foldlM_pendingMapped (fun n => pendingMapped_unlessHalted (pendingMapped_exitOne _ c n))
           xs).marked _ p hp
         subst hx
-        exact mq.2.2 (exit_stales_requests c _ r i hi hh1 q hq (mq.2.1 ▸ hpm))
+        exact mq.2.2 (exit_stales_requests _ c _ r i hi hh1 q hq (mq.2.1 ▸ hpm))
       · exact ihp p hp hps hpm hx
 
 theorem endWith_cancels_deadlines_and_requests (c : InstanceId) (r : Processing) (ci : Instance) (hh : r.state.halted = none)
     (hi : r.state.machine? c = some ci) (hm : c ∈ r.state.machines.map (·.id))
-    (hn : (endWith (exitOne fs st Limit.exitDepth.max) c r).1.halted = none)
+    (hn : (endWith (exitOne fs st st.exitFuel) c r).1.halted = none)
     (ht : ∀ t ∈ r.state.deadlines, t.machine = c → t.state ∈ ci.chart.tree.exitOrder ci.active)
     (hp : ∀ p ∈ r.state.pending, ∀ n, p.requester = .state c n → p.stale = false → n ∈ ci.chart.tree.exitOrder ci.active) :
-    (∀ t ∈ (endWith (exitOne fs st Limit.exitDepth.max) c r).1.deadlines, t.machine ≠ c) ∧
-      ∀ p ∈ (endWith (exitOne fs st Limit.exitDepth.max) c r).1.pending, p.requester.machine? = some c → p.stale = true := by
+    (∀ t ∈ (endWith (exitOne fs st st.exitFuel) c r).1.deadlines, t.machine ≠ c) ∧
+      ∀ p ∈ (endWith (exitOne fs st st.exitFuel) c r).1.pending, p.requester.machine? = some c → p.stale = true := by
   rw [endWith_exits_then_closes _ c r ci hh hi] at hn ⊢
-  have hT := foldlM_deadlinesShrink (fun n => deadlinesShrink_unlessHalted (deadlinesShrink_exitOne (st := st) (fs := fs) Limit.exitDepth.max c n))
+  have hT := foldlM_deadlinesShrink (fun n => deadlinesShrink_unlessHalted (deadlinesShrink_exitOne (st := st) (fs := fs) st.exitFuel c n))
     (ci.chart.tree.exitOrder ci.active) r
-  have hP := (foldlM_pendingMapped (fun n => pendingMapped_unlessHalted (pendingMapped_exitOne (st := st) (fs := fs) Limit.exitDepth.max c n))
+  have hP := (foldlM_pendingMapped (fun n => pendingMapped_unlessHalted (pendingMapped_exitOne (st := st) (fs := fs) st.exitFuel c n))
     (ci.chart.tree.exitOrder ci.active)).marked r
-  generalize hX : List.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st Limit.exitDepth.max c n) r) r
+  generalize hX : List.foldlM (m := Id) (fun r n => unlessHalted (exitOne fs st st.exitFuel c n) r) r
     (ci.chart.tree.exitOrder ci.active) = X at hn hT hP ⊢
   by_cases hx : X.halted = true
   · simp only [hx, ↓reduceIte] at hn

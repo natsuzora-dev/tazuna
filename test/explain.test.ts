@@ -40,9 +40,6 @@ const withoutExample: Readonly<Partial<Record<Kind, string>>> = {
   "InvalidInput.unknownControl": "operate takes only a control of the screen",
   "InvalidInput.unreadyStep": "only test's own step-order search writes a step order",
   "InvalidInput.unusedStepOrder": "only test's own step-order search writes a step order",
-  "Fault.exceededMessageWork":
-    "a spec can reach the limit, but 100001 work items in one message run test out of memory",
-  "Fault.exceededExitDepth": "a spec can reach the limit, but only through about 50 nested screen definitions",
   "ChoiceDependent.uncomparable":
     "a spec can reach it, but only through equal requests with different answers and seven created records that only their keys tell apart",
   "Mismatch.after": "only test's step-order search reports it, inside the difference of a ChoiceDependent.stepOrder",

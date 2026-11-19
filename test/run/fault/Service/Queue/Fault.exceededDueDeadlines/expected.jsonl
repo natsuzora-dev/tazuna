@@ -1,1 +1,1 @@
-{"kind":"Fault.exceededDueDeadlines","definition":null,"data":{"limit":10000},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"weekLater"}}
+{"kind":"Fault.exceededDueDeadlines","definition":null,"data":{"limit":1000},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"dayLater"}}

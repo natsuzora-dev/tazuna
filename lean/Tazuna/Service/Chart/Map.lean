@@ -30,7 +30,7 @@ def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (k
 
 def exitLeftCopy (st : Service) (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     m Processing :=
-  if k ∈ itemKeys then pure r else unlessHalted (endWith (exitOne fs st Limit.exitDepth.max) (.copy owner map k)) r
+  if k ∈ itemKeys then pure r else unlessHalted (endWith (exitOne fs st st.exitFuel) (.copy owner map k)) r
 
 def newKeys (current : List Value) (keys : List (Value × Value)) : List (Value × Value) :=
   keys.filter (·.2 ∉ current)

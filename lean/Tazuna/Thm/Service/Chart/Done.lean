@@ -19,7 +19,7 @@ theorem keeps_closeFinal (st : Service) (step : Nat) (name : InstanceId) : Keeps
   apply keeps_withMachine
   intro i r
   try simp only [id_bind]
-  have hc := keeps_endWith (fun c n => keeps_exitOne (st := st) (fs := fs) Limit.exitDepth.max c n) name
+  have hc := keeps_endWith (fun c n => keeps_exitOne (st := st) (fs := fs) st.exitFuel c n) name
   split
   · simp [Processing.report]
   · repeat' split
@@ -35,8 +35,8 @@ theorem growsBy_closeFinal (st : Service) (step : Nat) (name : InstanceId) : Gro
   apply growsBy_withMachine
   intro i r
   try simp only [id_bind]
-  have hc := growsBy_endWith (fun c n => growsBy_exitOne (st := st) (fs := fs) Limit.exitDepth.max c n)
-    (fun c n => keeps_exitOne (st := st) Limit.exitDepth.max c n) name
+  have hc := growsBy_endWith (fun c n => growsBy_exitOne (st := st) (fs := fs) st.exitFuel c n)
+    (fun c n => keeps_exitOne (st := st) st.exitFuel c n) name
   split
   · exact Grows.of_lines (report_lines ..)
   · repeat' split

@@ -1,10 +1,9 @@
-import { limits } from "../../data/limits.generated.ts";
 import { finished } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, issueViolation } from "../functions.ts";
 import { LazyRecordSource } from "../records.ts";
 import { failedEnsures, halt, type Instance, NoteAccess, reportAll, scopeOf, startQueued } from "../state.ts";
-import { endWith } from "./exit.ts";
+import { endWith, exitFuel } from "./exit.ts";
 import type { Processing } from "./queue.ts";
 
 export function enterFinal(r: Processing, instance: Instance, parent: string, step: number): void {
@@ -27,7 +26,7 @@ export function closeFinal(r: Processing, instance: Instance, step: number): voi
     halt(issueViolation(definition, closed, () => ({ kind: "Fault.screenOutputSchema", definition, data: {} })));
   const { output, failed } = closed;
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
-  endWith(r, instance.id, limits.exitDepth);
+  endWith(r, instance.id, exitFuel(r.st));
   const { id } = instance;
   if (id.kind !== "opened") return;
   r.queue.tasks.push({

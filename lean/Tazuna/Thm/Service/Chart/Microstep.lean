@@ -119,7 +119,7 @@ theorem keeps_enterOne (step : Nat) (filled : Bool) (name : InstanceId) (n : Str
         · split
           · split
             · exact (keeps_closeFinal st step name _).trans ha
-            · exact (keeps_endWith (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _).trans ha
+            · exact (keeps_endWith (fun c n => keeps_exitOne st.exitFuel c n) name _).trans ha
           · simp only [id_pure, enterFinal_fixed]; exact ha
         · exact (addDeadlines_fixed _ _ _ _).trans ha
 
@@ -140,7 +140,7 @@ theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (Instanc
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_enterOne step _ e.1.1 e.1.2)) _ _).trans ?_
     refine (foldlM_keeps (fun c => keeps_transitionContent extra _ _ c) _ _).trans ?_
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) =>
-      keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2)) _ _).trans ?_
+      keeps_unlessHalted (keeps_exitOne st.exitFuel e.1.1 e.1.2)) _ _).trans ?_
     have h0 : ∀ (hs : List InstanceId) (f : InstanceId → Instance → Instance) (t : State),
         (hs.foldl (fun s h => s.setMachine h (f h)) t).fixed = t.fixed := by
       intro hs f
@@ -173,8 +173,8 @@ theorem growsBy_enterOne (step : Nat) (filled : Bool) (name : InstanceId) (n : S
         · split
           · split
             · exact (Grows.of_lines ha).trans hn (growsBy_closeFinal st step name _)
-            · exact (Grows.of_lines ha).trans hn (growsBy_endWith (fun c n => growsBy_exitOne Limit.exitDepth.max c n)
-                (fun c n => keeps_exitOne Limit.exitDepth.max c n) name _)
+            · exact (Grows.of_lines ha).trans hn (growsBy_endWith (fun c n => growsBy_exitOne st.exitFuel c n)
+                (fun c n => keeps_exitOne st.exitFuel c n) name _)
           · simp only [id_pure]; exact Grows.of_lines ((enterFinal_lines _ _ _ _).trans ha)
         · exact Grows.of_lines ((addDeadlines_lines _ _ _ _).trans ha)
 
@@ -194,12 +194,12 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
   · exact Grows.refl _
   · simp only [id_bind, note_id, id_pure]
     have kE : ∀ xs (r : Processing), (List.foldlM (m := Id) (fun r (e : (InstanceId × String) × Nat) =>
-        unlessHalted (exitOne fs st Limit.exitDepth.max e.1.1 e.1.2) r) r xs).1.fixed = r.state.fixed :=
-      foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2))
+        unlessHalted (exitOne fs st st.exitFuel e.1.1 e.1.2) r) r xs).1.fixed = r.state.fixed :=
+      foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_exitOne st.exitFuel e.1.1 e.1.2))
     have hE : ∀ xs (r : Processing), Grows r.state (List.foldlM (m := Id) (fun r (e : (InstanceId × String) × Nat) =>
-        unlessHalted (exitOne fs st Limit.exitDepth.max e.1.1 e.1.2) r) r xs).1 :=
-      foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_exitOne Limit.exitDepth.max e.1.1 e.1.2))
-        (fun e => keeps_unlessHalted (keeps_exitOne Limit.exitDepth.max e.1.1 e.1.2))
+        unlessHalted (exitOne fs st st.exitFuel e.1.1 e.1.2) r) r xs).1 :=
+      foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_exitOne st.exitFuel e.1.1 e.1.2))
+        (fun e => keeps_unlessHalted (keeps_exitOne st.exitFuel e.1.1 e.1.2))
     have kA : ∀ sh es xs (r : Processing),
         (List.foldlM (m := Id) (transitionContent fs st extra sh es) r xs).1.fixed = r.state.fixed :=
       fun sh es => foldlM_keeps (fun c => keeps_transitionContent extra sh es c)

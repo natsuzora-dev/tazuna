@@ -125,7 +125,7 @@ def enterOne (st : Service) (step : Nat) (filled : Bool) (name : InstanceId) (n 
         match cs.parent with
         | none =>
           if i.chart.screen then closeFinal fs st step name r
-          else endWith (exitOne fs st Limit.exitDepth.max) name r
+          else endWith (exitOne fs st st.exitFuel) name r
         | some parent => pure (enterFinal step name parent r)
       else do
       let deadlines ← fs.deadlines i.chart.name n
@@ -171,7 +171,7 @@ def microstep (st : Service) (step : Nat) (name : InstanceId) (chosen : List (In
     let s := holders.foldl (fun s h => s.setMachine h (recordHistory ((exiting.filter (·.1.1 == h)).map (·.1.2)))) r.state
     let r ← exiting.foldlM (fun r (e, k) => do
       MonadNote.note (.transitionPart k)
-      unlessHalted (exitOne fs st Limit.exitDepth.max e.1 e.2) r) ⟨s, r.queue⟩
+      unlessHalted (exitOne fs st st.exitFuel e.1 e.2) r) ⟨s, r.queue⟩
     let entries := chosen.map r.state.entryPairsOf
     let r ← chosen.zipIdx.foldlM (transitionContent fs st extra sourceHeld entries) r
     let entering := indexedInOrder i.documentOrder (transitionIndexOf entries)

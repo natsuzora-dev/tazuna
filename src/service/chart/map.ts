@@ -1,11 +1,10 @@
-import { limits } from "../../data/limits.generated.ts";
 import { byCodePoint, plain } from "../../data/values.ts";
 import { ref } from "../basic.ts";
 import { Failed, type Functions, issueViolation } from "../functions.ts";
 import { copyId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import { copyKeysOf, halt, type Instance, inStep, NoteAccess, newStep, report, scopeOf } from "../state.ts";
-import { endWith } from "./exit.ts";
+import { endWith, exitFuel } from "./exit.ts";
 import { enter } from "./microstep.ts";
 import type { Processing } from "./queue.ts";
 
@@ -69,7 +68,7 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
     if (same) continue;
     changed = true;
     for (const k of current.toReversed())
-      if (!itemKeys.includes(k)) endWith(r, copyId(owner.id, map, k), limits.exitDepth);
+      if (!itemKeys.includes(k)) endWith(r, copyId(owner.id, map, k), exitFuel(r.st));
     for (const { key, encodedKey } of keys)
       if (!current.includes(encodedKey)) startCopy(r, owner, map, key, encodedKey, step);
     owner.copyKeys.set(map, itemKeys);

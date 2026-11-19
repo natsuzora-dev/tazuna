@@ -29,6 +29,10 @@
       "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
     },
     {
+      "includes": ["test/load/restricted/sources/Restricted.any/**"],
+      "linter": { "rules": { "suspicious": { "noExplicitAny": "off" } } }
+    },
+    {
       "includes": ["**/*.svg"],
       "linter": {
         "rules": {

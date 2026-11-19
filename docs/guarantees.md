@@ -213,7 +213,7 @@ No theorem proves the following properties yet.
 
 | Property | Holds by |
 |---|---|
-| Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit. | `drain` in `lean/Tazuna/Service/Chart/Macrostep.lean`, `settle` in `lean/Tazuna/Service/Chart/Always.lean`, `exitOne` in `lean/Tazuna/Service/Chart/Exit.lean`, `fireDue` in `lean/Tazuna/Service/Queue.lean` |
+| Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit. | `drain` in `lean/Tazuna/Service/Chart/Macrostep.lean`, `settle` in `lean/Tazuna/Service/Chart/Always.lean`, `fireDue` in `lean/Tazuna/Service/Queue.lean` |
 | The service answers a repeated query again, because a query has no identity. | `call` in `lean/Tazuna/Service/Input.lean` |
 | A refuse line gives the sender the `unavailable` answer. | `take` in `lean/Tazuna/Sim/Run.lean` |
 | A halting `Fault` or `InvalidInput` halts the simulation. | `stopped` in `lean/Tazuna/Sim/Network.lean` |

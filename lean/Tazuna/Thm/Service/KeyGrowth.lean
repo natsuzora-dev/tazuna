@@ -177,7 +177,7 @@ theorem keysBy_closeFinal (step : Nat) (name : InstanceId) : KeysBy (closeFinal 
   · keys_leaf
   · rename_i output failed _
     have h := (keeps_reportAll r.state (failed.toList.map (st.failedEnsures i.chart.name))).trans
-      (keysBy_endWith (fun c n => keysBy_exitOne (fs := fs) (st := st) Limit.exitDepth.max c n) name
+      (keysBy_endWith (fun c n => keysBy_exitOne (fs := fs) (st := st) st.exitFuel c n) name
         ⟨r.state.reportAll (failed.toList.map (st.failedEnsures i.chart.name)), r.queue⟩)
     split
     · exact h

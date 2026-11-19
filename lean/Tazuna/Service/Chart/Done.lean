@@ -29,7 +29,7 @@ def closeFinal (st : Service) (step : Nat) (name : InstanceId) : Processing → 
         .screenOutputSchema (st.ref i.chart.name))))
     | .ok (output, failed) =>
       let ensures := failed.toList.map (st.failedEnsures i.chart.name)
-      let r ← endWith (exitOne fs st Limit.exitDepth.max) name ⟨r.state.reportAll ensures, r.queue⟩
+      let r ← endWith (exitOne fs st st.exitFuel) name ⟨r.state.reportAll ensures, r.queue⟩
       if r.halted then pure r else
       match i.id.opener? with
       | some (parent, state, key) =>

@@ -70,6 +70,7 @@ const restrictedKinds = every<Restricted["kind"]>()([
   "Restricted.cryptoImport",
   "Restricted.nonNull",
   "Restricted.as",
+  "Restricted.any",
   "Restricted.suppression",
   "Restricted.crossServiceImport",
 ]);

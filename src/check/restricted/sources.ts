@@ -142,6 +142,7 @@ function assertions(source: SourceFile): Found<Restricted>[] {
     const n = node as Node;
     if (n.type === "TSNonNullExpression")
       report(n.start ?? 0, { kind: "Restricted.nonNull", definition: null, data: {} });
+    if (n.type === "TSAnyKeyword") report(n.start ?? 0, { kind: "Restricted.any", definition: null, data: {} });
     if (n.type === "TSAsExpression" && n.typeAnnotation !== undefined && n.typeAnnotation.typeName?.name !== "const") {
       const type = source.text.slice(n.typeAnnotation.start, n.typeAnnotation.end);
       report(n.start ?? 0, { kind: "Restricted.as", definition: null, data: { type } });

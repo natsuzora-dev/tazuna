@@ -1,11 +1,11 @@
 import { scenario } from "./todo.ts";
 
-export const weekLater = scenario({
+export const dayLater = scenario({
   description:
-    "Start the service and come back a week later; more than 10000 minutes have passed, so test reports exceededDueDeadlines",
+    "Start the service and come back a day later; more than 1000 minutes have passed, so test reports exceededDueDeadlines",
   given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] },
   when: (w) => {
-    w.clock.at("2026-11-01T09:00:00+09:00");
+    w.clock.at("2026-10-26T09:00:00+09:00");
   },
   then: () => [],
 });

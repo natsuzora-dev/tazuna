@@ -220,13 +220,10 @@
           "from": 3,
           "to": 11,
           "line": 3,
-          "text": "export const weekLater = scenario({\n  description:\n    \"Start the service and come back a week later; more than 10000 minutes have passed, so test reports exceededDueDeadlines\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-11-01T09:00:00+09:00\");\n  },\n  then: () => [],\n});"
+          "text": "export const dayLater = scenario({\n  description:\n    \"Start the service and come back a day later; more than 1000 minutes have passed, so test reports exceededDueDeadlines\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-10-26T09:00:00+09:00\");\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Fault.exceededDueDeadlines\",\"definition\":null,\"data\":{\"limit\":10000},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"weekLater\"}}"
+        "violation": "{\"kind\":\"Fault.exceededDueDeadlines\",\"definition\":null,\"data\":{\"limit\":1000},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"dayLater\"}}"
       }
-    },
-    "Fault.exceededExitDepth": {
-      "meaning": "Exits nest deeper than `limit`, through copies and screens that their parent's exit closes. They run through several definitions, so the fault names no definition."
     },
     "Fault.exceededMessageCommands": {
       "meaning": "Automations send more than `limit` commands to their own service on one message. `definition` sent the command past the limit.",
@@ -236,13 +233,23 @@
           "from": 8,
           "to": 39,
           "line": 8,
-          "text": "export const pinger = machine({\n  description: \"Run 101 chains of 100 pings at the start, each ping sent when the one before is accepted\",\n  commands: { ping },\n  initial: \"chains\",\n  states: {\n    chains: {\n      type: \"map\",\n      key: { chain: z.number() },\n      context: { pings: z.number().default(1) },\n      initial: \"pinging\",\n      states: { pinging: {} },\n    },\n  },\n}).chart({\n  states: {\n    chains: { items: () => Array.from({ length: 101 }, (_, chain) => ({ chain })) },\n    pinging: {\n      sends: {\n        ping: {\n          onAccepted: [\n            {\n              guard: { hasMore: ({ context }) => context.pings < 100 },\n              target: \"pinging\",\n              reenter: true,\n              assign: { pings: ({ context }) => context.pings + 1 },\n            },\n          ],\n        },\n      },\n    },\n  },\n});"
+          "text": "export const pinger = machine({\n  description: \"Run 11 chains of 100 pings at the start, each ping sent when the one before is accepted\",\n  commands: { ping },\n  initial: \"chains\",\n  states: {\n    chains: {\n      type: \"map\",\n      key: { chain: z.number() },\n      context: { pings: z.number().default(1) },\n      initial: \"pinging\",\n      states: { pinging: {} },\n    },\n  },\n}).chart({\n  states: {\n    chains: { items: () => Array.from({ length: 11 }, (_, chain) => ({ chain })) },\n    pinging: {\n      sends: {\n        ping: {\n          onAccepted: [\n            {\n              guard: { hasMore: ({ context }) => context.pings < 100 },\n              target: \"pinging\",\n              reenter: true,\n              assign: { pings: ({ context }) => context.pings + 1 },\n            },\n          ],\n        },\n      },\n    },\n  },\n});"
         },
-        "violation": "{\"kind\":\"Fault.exceededMessageCommands\",\"definition\":{\"service\":\"chains\",\"name\":\"pinger\"},\"data\":{\"limit\":10000},\"location\":{\"file\":\"chains/chains.ts\",\"line\":8},\"scenario\":{\"service\":\"chains\",\"name\":\"start\"}}"
+        "violation": "{\"kind\":\"Fault.exceededMessageCommands\",\"definition\":{\"service\":\"chains\",\"name\":\"pinger\"},\"data\":{\"limit\":1000},\"location\":{\"file\":\"chains/chains.ts\",\"line\":8},\"scenario\":{\"service\":\"chains\",\"name\":\"start\"}}"
       }
     },
     "Fault.exceededMessageWork": {
-      "meaning": "One message runs more than `limit` work items and commands. They come from every definition that the message runs, none of which alone exceeds the limit, so the fault names no definition."
+      "meaning": "One message runs more than `limit` work items and commands. They come from every definition that the message runs, none of which alone exceeds the limit, so the fault names no definition.",
+      "example": {
+        "excerpt": {
+          "file": "loop/scenarios.ts",
+          "from": 3,
+          "to": 11,
+          "line": 3,
+          "text": "export const start = scenario({\n  description:\n    \"Start the home screen; it opens the done screen again each time the done screen is done, without end, so the start message runs more than 10000 work items and test reports exceededMessageWork\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.startup.screen(homeScreen);\n  },\n  then: () => [],\n});"
+        },
+        "violation": "{\"kind\":\"Fault.exceededMessageWork\",\"definition\":null,\"data\":{\"limit\":10000},\"location\":{\"file\":\"loop/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"loop\",\"name\":\"start\"}}"
+      }
     },
     "Fault.exceededOnDoneSelections": {
       "meaning": "The chart's onDone transitions select states that finish again more than `limit` times in one work.",
@@ -2010,6 +2017,19 @@
           "text": "const M = Math;"
         },
         "violation": "{\"kind\":\"Restricted.alias\",\"definition\":null,\"data\":{\"object\":\"Math\"},\"location\":{\"file\":\"todo/helpers.ts\",\"line\":1}}"
+      }
+    },
+    "Restricted.any": {
+      "meaning": "The file writes the type `any`, which turns off tsc's checks of every value of that type.",
+      "example": {
+        "excerpt": {
+          "file": "todo/helpers.ts",
+          "from": 1,
+          "to": 1,
+          "line": 1,
+          "text": "export const titleOf = (value: any): string => value;"
+        },
+        "violation": "{\"kind\":\"Restricted.any\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/helpers.ts\",\"line\":1}}"
       }
     },
     "Restricted.as": {

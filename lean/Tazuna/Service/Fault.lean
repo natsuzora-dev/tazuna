@@ -94,11 +94,6 @@ inductive Fault where
   -/
   | exceededDueDeadlines (limit : Nat)
   /--
-  Exits nest deeper than `limit`, through copies and screens that their parent's exit closes. They run through several
-  definitions, so the fault names no definition.
-  -/
-  | exceededExitDepth (limit : Nat)
-  /--
   The automation's command is rejected for a reason that blames the caller, such as `requires` or `not-found`, so the
   automation sent a command that it must not send.
   -/
@@ -121,7 +116,7 @@ def Fault.halts : Fault → Bool
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
   | .itemsSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
-  | .exceededDueDeadlines .. | .exceededExitDepth .. => true
+  | .exceededDueDeadlines .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..
   | .failedServiceInvariant .. | .failedChartInvariant .. | .rejectedAutomationCommand .. | .rejectedShows .. => false
 

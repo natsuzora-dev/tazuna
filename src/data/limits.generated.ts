@@ -7,17 +7,15 @@ export const limits = {
   /** The depth of a chain of own-service commands. */
   commandDepth: 100,
   /** The own-service commands in one message. */
-  messageCommands: 10000,
+  messageCommands: 1000,
   /** The always rounds in one settle. */
   alwaysRounds: 100,
   /** The onDone selections in one onDone work. */
   onDoneSelections: 10000,
   /** The work items and commands in one message. */
-  messageWork: 100000,
+  messageWork: 10000,
   /** The deadlines in one clock advance. */
-  dueDeadlines: 10000,
-  /** The nesting depth of exits, through copies and screens that their parent's exit closes. */
-  exitDepth: 100,
+  dueDeadlines: 1000,
 } as const;
 
 /**

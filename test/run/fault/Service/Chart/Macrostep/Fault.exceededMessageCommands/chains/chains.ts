@@ -6,7 +6,7 @@ export const { command, machine, scenario } = service({ name: "chains", descript
 export const ping = command({ emits: [] }).decide(() => []);
 
 export const pinger = machine({
-  description: "Run 101 chains of 100 pings at the start, each ping sent when the one before is accepted",
+  description: "Run 11 chains of 100 pings at the start, each ping sent when the one before is accepted",
   commands: { ping },
   initial: "chains",
   states: {
@@ -20,7 +20,7 @@ export const pinger = machine({
   },
 }).chart({
   states: {
-    chains: { items: () => Array.from({ length: 101 }, (_, chain) => ({ chain })) },
+    chains: { items: () => Array.from({ length: 11 }, (_, chain) => ({ chain })) },
     pinging: {
       sends: {
         ping: {

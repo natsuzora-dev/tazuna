@@ -1,8 +1,7 @@
-import { limits } from "../../data/limits.generated.ts";
 import type { Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../spec/tree.ts";
-import { ref } from "../basic.ts";
+import { ref, type Service } from "../basic.ts";
 import { type Assignment, Failed, issueViolation } from "../functions.ts";
 import { copyId, type InstanceId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -16,7 +15,6 @@ import {
   nextKeys,
   type Pending,
   removeFromStack,
-  report,
   type State,
   scopeOf,
   write,
@@ -112,10 +110,12 @@ function leaveWith(r: Processing, fuel: number, instance: Instance, n: string): 
   for (const child of childrenOf(r.state, instance.id, n)) endWith(r, child, fuel);
 }
 
+/** Lean's exitFuel. */
+export const exitFuel = (st: Service): number => [...st.charts.values()].reduce((n, c) => n + c.states.size + 1, 1);
+
 /** Exits state `n` of `instance`, after its copies; `fuel` is the remaining nesting depth of exits. */
 export function exitOne(r: Processing, fuel: number, instance: Instance, n: string): void {
-  if (fuel === 0)
-    report(r.state, { kind: "Fault.exceededExitDepth", definition: null, data: { limit: limits.exitDepth } });
+  if (fuel === 0) throw new Error("exits nest deeper than exitFuel");
   for (const k of copyKeysOf(instance, n).toReversed()) endWith(r, copyId(instance.id, n, k), fuel - 1);
   instance.copyKeys.delete(n);
   leaveWith(r, fuel - 1, instance, n);

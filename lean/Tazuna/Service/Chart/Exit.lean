@@ -6,6 +6,13 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
+/--
+The fuel of exitOne: more than the instances that one exit can nest. Each instance of a nest starts at a distinct chart
+or map state of the service, since no screen opens a screen that opens it in turn: the types of the DSL reject such a
+screen, and a spec file cannot escape them (`Restricted.any`, `Restricted.as`).
+-/
+abbrev exitFuel (st : Service) : Nat := (st.charts.map (·.states.length + 1)).sum + 1
+
 /-- The state with subscription `p` ended: `p` is stale, so an answer that arrives for it later changes nothing. -/
 def State.endSubscription (s : State) (p : Pending) : State :=
   let s : State := { s with pending := s.pending.map fun q => if q.id == p.id then { q with stale := true } else q }
@@ -90,10 +97,10 @@ def leaveWith (st : Service) (exit : InstanceId → String → Processing → m 
 
 /--
 The processing after instance `name` exits state `n`, after the copies of `n`. The fuel is the remaining nesting depth
-of exits.
+of exits, and exitFuel never runs out, so running out changes nothing.
 -/
 def exitOne (st : Service) : Nat → InstanceId → String → Processing → m Processing
-  | 0, _, _, r => pure (r.report (.fault (.exceededExitDepth Limit.exitDepth.max)))
+  | 0, _, _, r => pure r
   | fuel + 1, name, n, r =>
     withMachine name (fun i r => do
       let r : Processing ←

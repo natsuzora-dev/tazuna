@@ -20,18 +20,15 @@ inductive Limit where
   | messageWork
   /-- The deadlines in one clock advance. -/
   | dueDeadlines
-  /-- The nesting depth of exits, through copies and screens that their parent's exit closes. -/
-  | exitDepth
 deriving DecidableEq, Repr, Inhabited
 
 def Limit.max : Limit → Nat
   | .commandDepth => 100
-  | .messageCommands => 10000
+  | .messageCommands => 1000
   | .alwaysRounds => 100
   | .onDoneSelections => 10000
-  | .messageWork => 100000
-  | .dueDeadlines => 10000
-  | .exitDepth => 100
+  | .messageWork => 10000
+  | .dueDeadlines => 1000
 
 def Limit.name (l : Limit) : String := (constructorNames% Limit).getD l.ctorIdx ""
 

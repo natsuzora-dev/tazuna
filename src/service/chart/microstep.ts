@@ -1,4 +1,3 @@
-import { limits } from "../../data/limits.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
@@ -21,7 +20,7 @@ import {
 import { exitsOf } from "./config.ts";
 import { addDeadlines } from "./deadline.ts";
 import { closeFinal, enterFinal } from "./done.ts";
-import { endWith, exitOne, recordHistory, runAssign } from "./exit.ts";
+import { endWith, exitFuel, exitOne, recordHistory, runAssign } from "./exit.ts";
 import { enter as enterQueue, type Processing } from "./queue.ts";
 
 function sharedMap(a: Chosen, b: Chosen): string | null {
@@ -106,7 +105,7 @@ function enterOne(r: Processing, instance: Instance, name: string, step: number,
   if (state.kind === "final") {
     if (state.parent !== null) enterFinal(r, instance, state.parent, step);
     else if (instance.chart.screen) closeFinal(r, instance, step);
-    else endWith(r, instance.id, limits.exitDepth);
+    else endWith(r, instance.id, exitFuel(r.st));
     return;
   }
   addDeadlines(r, instance, name, step);
@@ -159,7 +158,7 @@ export function microstep(
   for (const e of exiting) recordHistory(e.holder, e.n);
   for (const e of exiting) {
     r.note.transitionPart(e.k);
-    exitOne(r, limits.exitDepth, e.holder, e.n);
+    exitOne(r, exitFuel(r.st), e.holder, e.n);
   }
   const entries = chosen.map(entriesOf);
   for (const [k, c] of chosen.entries()) {

@@ -24,7 +24,7 @@ theorem exitLeftCopy_fixed (owner : InstanceId) (map : String) (itemKeys : List 
   unfold exitLeftCopy
   split
   · rfl
-  · exact keeps_unlessHalted (keeps_endWith (fun c n => keeps_exitOne Limit.exitDepth.max c n) _) _
+  · exact keeps_unlessHalted (keeps_endWith (fun c n => keeps_exitOne st.exitFuel c n) _) _
 
 theorem syncMap_fixed (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     (syncMap fs st step owner r map).1.1.fixed = r.state.fixed := by
@@ -108,8 +108,8 @@ theorem exitLeftCopy_grows (owner : InstanceId) (map : String) (itemKeys : List 
   unfold exitLeftCopy
   split
   · exact Grows.refl _
-  · exact growsBy_unlessHalted (growsBy_endWith (fun c n => growsBy_exitOne Limit.exitDepth.max c n)
-      (fun c n => keeps_exitOne Limit.exitDepth.max c n) _) r
+  · exact growsBy_unlessHalted (growsBy_endWith (fun c n => growsBy_exitOne st.exitFuel c n)
+      (fun c n => keeps_exitOne st.exitFuel c n) _) r
 
 theorem syncMap_grows (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     Grows r.state (syncMap fs st step owner r map).1.1 := by

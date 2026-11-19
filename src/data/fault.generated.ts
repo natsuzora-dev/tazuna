@@ -269,17 +269,6 @@ export type Fault =
       };
     }
   /**
-   * Exits nest deeper than `limit`, through copies and screens that their parent's exit closes. They run through several
-   * definitions, so the fault names no definition.
-   */
-  | {
-      readonly kind: "Fault.exceededExitDepth";
-      readonly definition: null;
-      readonly data: {
-        readonly limit: number;
-      };
-    }
-  /**
    * The automation's command is rejected for a reason that blames the caller, such as `requires` or `not-found`, so the
    * automation sent a command that it must not send.
    */
@@ -334,7 +323,6 @@ export const faultKinds = [
   "Fault.exceededOnDoneSelections",
   "Fault.exceededMessageWork",
   "Fault.exceededDueDeadlines",
-  "Fault.exceededExitDepth",
   "Fault.rejectedAutomationCommand",
   "Fault.rejectedShows",
 ] as const;
@@ -364,5 +352,4 @@ export const haltingFaultKinds = [
   "Fault.exceededOnDoneSelections",
   "Fault.exceededMessageWork",
   "Fault.exceededDueDeadlines",
-  "Fault.exceededExitDepth",
 ] as const;
