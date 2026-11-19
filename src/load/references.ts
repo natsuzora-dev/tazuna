@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Malformed } from "../data/malformed.ts";
+import { sameJson } from "../data/values.ts";
 import { chartOf } from "../dsl/chart.ts";
 import {
   type ChartSpec,
@@ -39,9 +40,7 @@ const chartReferences = (chart: ChartSpec): Reference[] => [
 const schemaReferences = (schemas: readonly SchemaAt[]): Reference[] =>
   schemas.flatMap(({ path, schema }, i) => {
     const target = refTarget(schema);
-    const counted = schemas
-      .slice(0, i)
-      .some((s) => refTarget(s.schema) === target && JSON.stringify(s.path) === JSON.stringify(path));
+    const counted = schemas.slice(0, i).some((s) => refTarget(s.schema) === target && sameJson(s.path, path));
     return target === undefined || counted ? [] : [{ path, target }];
   });
 

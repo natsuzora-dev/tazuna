@@ -2,7 +2,7 @@ import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Fact, Origin, Template, ValueRef } from "../data/scenario.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import { canonicalJson, type Json, mapStrings, overlay, stringsOf } from "../data/values.ts";
+import { canonicalJson, type Json, mapStrings, overlay, sameJson, stringsOf } from "../data/values.ts";
 import type { Schema } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
@@ -83,8 +83,10 @@ const processingOf = (w: World, service: string): Processing | undefined => w.se
 /** Lean's picks. */
 const picks = (w: World, service: string, schema: Schema, pick: unknown, v: unknown): boolean =>
   pick === undefined ||
-  canonicalJson(comparedOr(processingOf(w, service), schema, overlay(v, pick))) ===
-    canonicalJson(comparedOr(processingOf(w, service), schema, v));
+  sameJson(
+    comparedOr(processingOf(w, service), schema, overlay(v, pick)),
+    comparedOr(processingOf(w, service), schema, v),
+  );
 
 /** Lean's World.schemaOf?. */
 function schemaOf(w: World, m: Message): readonly [string, Schema] | undefined {

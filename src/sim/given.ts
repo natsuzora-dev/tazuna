@@ -1,7 +1,7 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
-import { byCodePoint, canonicalJson, type Fields, stringsOf } from "../data/values.ts";
+import { byCodePoint, type Fields, sameJson, stringsOf } from "../data/values.ts";
 import { ref, type Service, uniqueOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
@@ -110,7 +110,7 @@ function clash(st: Service, a: GivenRow, b: GivenRow): boolean {
   return (
     unique.length > 0 &&
     unique.every((f) => a.row.encoded[f] !== null) &&
-    unique.every((f) => canonicalJson(a.row.encoded[f]) === canonicalJson(b.row.encoded[f]))
+    unique.every((f) => sameJson(a.row.encoded[f], b.row.encoded[f]))
   );
 }
 

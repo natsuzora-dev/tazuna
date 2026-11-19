@@ -3,7 +3,7 @@ import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer, LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
-import { byCodePoint, canonicalJson } from "../data/values.ts";
+import { byCodePoint, canonicalJson, sameJson } from "../data/values.ts";
 import { ref, type Schema } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { Failed } from "../service/functions.ts";
@@ -289,10 +289,7 @@ function sameValue(
   actual: unknown,
 ): boolean {
   const e = markCreated(t, expected);
-  return (
-    canonicalJson(comparedOr(r, schema, e)) ===
-    canonicalJson(comparedOr(r, schema, maskCreated(w, peer, t, expected, actual)))
-  );
+  return sameJson(comparedOr(r, schema, e), comparedOr(r, schema, maskCreated(w, peer, t, expected, actual)));
 }
 
 const isCarried = (w: World, k: number): boolean => w.carried.some(([, j]) => j === k);
@@ -565,7 +562,7 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
           const target = targetOf(m);
           const shown = comparedAnswerValue(r, target, maskCreated(w, l.peer, l.answer, v, actual));
           const expected = comparedAnswerValue(r, target, markCreated(l.answer, v));
-          if (canonicalJson(expected) !== canonicalJson(shown))
+          if (!sameJson(expected, shown))
             reportTo(w, {
               kind: "InvalidScenario.differentPeerAnswer",
               definition: null,
@@ -834,7 +831,7 @@ function compared(
         const expected = e.answers.map((t) => comparedAnswerValue(rr, target, fill(w, e.line, t)));
         return [expected, actual];
       });
-      const pair = pairs.find(([expected, actual]) => canonicalJson(expected) !== canonicalJson(actual)) ?? pairs[0];
+      const pair = pairs.find(([expected, actual]) => !sameJson(expected, actual)) ?? pairs[0];
       if (pair === undefined)
         return reportedHere({
           kind: "InvalidScenario.unresolvedReference",
@@ -914,7 +911,7 @@ function expect(
       const both = compared(w, own, lines, looked, k, e);
       if (both === undefined) return;
       const [expected, actual] = both;
-      if (canonicalJson(expected) !== canonicalJson(actual))
+      if (!sameJson(expected, actual))
         noteTo(w, {
           kind: "InvalidScenario.unmetExpectation",
           definition: null,

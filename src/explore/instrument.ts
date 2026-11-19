@@ -7,7 +7,7 @@ import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
-import { byCodePoint, canonicalJson, type Fields, plain } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, plain, sameJson } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
 import { ref, type Schema, type Service } from "../service/basic.ts";
 import {
@@ -513,7 +513,7 @@ export class InstrumentedFunctions implements Functions {
     if (normalized instanceof Failed || "error" in normalized) return exception(normalized.error);
     const reordered = this.fs.comparable(name, { result: "fulfilled", output: normalized.encoded });
     if (reordered instanceof Failed) return exception(reordered.error);
-    if (canonicalJson(original) !== canonicalJson(reordered))
+    if (!sameJson(original, reordered))
       this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
   }
 

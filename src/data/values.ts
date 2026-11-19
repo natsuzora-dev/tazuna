@@ -51,6 +51,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 /** Whether two values are equal as JSON, objects compared without regard to key order. */
+// biome-ignore lint/plugin: the one place that defines JSON equality
 export const sameJson = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
 
 export type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };

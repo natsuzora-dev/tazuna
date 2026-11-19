@@ -1,5 +1,6 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "plugins": ["./lint/sameJson.grit"],
   "files": {
     "includes": ["**", "!**/routeTree.gen.ts", "!lean/lake-manifest.json", "!test/sim/**/*.expected.json"]
   },

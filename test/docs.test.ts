@@ -100,6 +100,82 @@ test("Each violation kind that a doc comment in src names is a kind of its group
   assert.deepEqual(unknown, []);
 });
 
+/** The lines of a Markdown text outside fenced code blocks, each with its line number. */
+const proseLines = (text: string) => {
+  let fenced = false;
+  return text.split("\n").flatMap((line, i) => {
+    const fence = line.trimStart().startsWith("```");
+    if (fence) fenced = !fenced;
+    return fenced || fence ? [] : [{ number: i + 1, line }];
+  });
+};
+const headings = (text: string) =>
+  proseLines(text).flatMap(({ number, line }) => {
+    const [, marks = "", title = ""] = /^(#+) (.*)$/.exec(line) ?? [];
+    return marks === "" ? [] : [{ number, level: marks.length, title }];
+  });
+const withoutCode = (line: string) => line.replace(/`[^`]*`/g, "");
+
+/** The structure rules of pstack technical-writing that a script can check. Each returns the lines that break it. */
+const proseRules: readonly {
+  readonly rule: string;
+  readonly check: (text: string) => number[];
+  readonly reported: string;
+  readonly clean: string;
+}[] = [
+  {
+    rule: "A page has one h1",
+    check: (text) => {
+      const titles = headings(text).filter((h) => h.level === 1);
+      return titles.length === 0 ? [1] : titles.slice(1).map((h) => h.number);
+    },
+    reported: "# Guide\n\n# Reference",
+    clean: "# Guide\n\n## Reference",
+  },
+  {
+    rule: "A heading is at most one level below the heading before it",
+    check: (text) =>
+      headings(text)
+        .filter((h, i, all) => h.level > (all[i - 1]?.level ?? 0) + 1)
+        .map((h) => h.number),
+    reported: "# Guide\n\n### Install",
+    clean: "# Guide\n\n## Install\n\n### From npm\n\n## Use",
+  },
+  {
+    rule: "A heading is in sentence case",
+    check: (text) =>
+      headings(text)
+        .filter((h) =>
+          withoutCode(h.title)
+            .split(/\s+/)
+            .slice(1)
+            .some((word) => /^[A-Z][a-z]/.test(word)),
+        )
+        .map((h) => h.number),
+    reported: "# Install The Tool",
+    clean: "# Install the `Tool` from npm with the CLI",
+  },
+  {
+    rule: "Prose joins sentences with periods, not semicolons",
+    check: (text) =>
+      proseLines(text)
+        .filter(({ line }) => withoutCode(line).includes(";"))
+        .map(({ number }) => number),
+    reported: "It runs; it stops.",
+    clean: "It runs. It stops. `a; b` is code.\n\n1. Run it.\n\n   ```ts\n   run();\n   ```",
+  },
+];
+
+for (const { rule, check, reported, clean } of proseRules)
+  test(`${rule}: each doc follows it, and the check reports its reported example and not its clean one`, () => {
+    assert.notDeepEqual(check(reported), []);
+    assert.deepEqual(check(clean), []);
+    assert.deepEqual(
+      docs.flatMap(({ path, text }) => check(text).map((line) => `${path}:${line}`)),
+      [],
+    );
+  });
+
 test("The table of who fixes a violation in docs/guarantees.md has one row per group of src/data/groups.ts, in its order and with its reportedBy and fixedIn", () => {
   const table = guarantees.slice(guarantees.indexOf("## Who fixes a violation"), guarantees.indexOf("## Detections"));
   const rows = table.split("\n").filter((line) => line.startsWith("| `"));
