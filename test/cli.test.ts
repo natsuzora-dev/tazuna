@@ -193,6 +193,56 @@ test("check writes one JSON line per violation to stdout and the count, or that 
   assert.deepEqual(clean.err, [`Checked ${sourcesOf(cleanFolder).length} files. No violations found.`]);
 });
 
+test("test writes how many scenarios it ran out of all and the depth to stderr, and with --only runs only the named scenarios and leaves the snapshots of the others unreported and unremoved", async () => {
+  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-"));
+  cpSync(join(import.meta.dirname, "verify/uncomparable/snapshot/unpaired"), project, { recursive: true });
+  const folder = relative(root, project);
+  const snapshots = join(project, "todo/__snapshots__");
+  const entries = readdirSync(snapshots).toSorted();
+  try {
+    const all = await run("test", folder, "--depth", "0");
+    assert.equal(all.code, 1);
+    assert.deepEqual(all.err, ["2/2 scenarios, depth 0: 4 violations"]);
+    const one = await run("test", folder, "--depth", "0", "--only", "todo/addOne", "--update");
+    assert.equal(one.code, 0);
+    assert.deepEqual(one.out, []);
+    assert.deepEqual(one.err.at(-1), "1/2 scenarios (--only), depth 0: no violations");
+    assert.deepEqual(readdirSync(snapshots).toSorted(), entries);
+    const both = await run(
+      "test",
+      folder,
+      "--depth",
+      "1",
+      "--only",
+      "todo/addOneUnsnapshotted",
+      "--only",
+      "todo/addOne",
+    );
+    assert.deepEqual(
+      both.out.map((line) => (JSON.parse(line) as { readonly kind: string }).kind),
+      ["Uncomparable.missingSnapshot"],
+    );
+    assert.deepEqual(both.err, ["2/2 scenarios (--only), depth 1: 1 violation"]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("test writes an error and exits with 2 when --only names no scenario of the spec or comes with --coverage", async () => {
+  const folder = "test/verify/uncomparable/snapshot/unpaired";
+  const cases: [string[], string][] = [
+    [["--only", "todo/addOn"], "unknown scenario todo/addOn"],
+    [["--only", "addOne"], "unknown scenario addOne"],
+    [["--only", "todo/addOne", "--coverage"], "--coverage cannot be given with --only"],
+  ];
+  for (const [args, message] of cases) {
+    const { code, out, err } = await run("test", folder, "--depth", "0", ...args);
+    assert.equal(code, 2);
+    assert.deepEqual(out, []);
+    assert.deepEqual(err, [`tazuna: ${message}.`]);
+  }
+});
+
 test("test, verify, and view write the same violation lines and count as check and do nothing else when check reports violations", async () => {
   const folder = "test/load/malformed/times/at";
   const checked = await run("check", folder);

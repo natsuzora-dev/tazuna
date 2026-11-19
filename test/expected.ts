@@ -8,7 +8,8 @@ import { depth, maskedStack, typeChecked } from "./examples.ts";
 
 export const expected = "expected.jsonl";
 
-const summaryOnly = /^(Checked|Tested|Verified) [^\n]*\. (No violations found|\d+ violations?)\.$/;
+const summaryOnly =
+  /^(?:(?:Checked|Verified) [^\n]*\. (?:No violations found|\d+ violations?)\.|\d+\/\d+ scenarios, depth \d+: (?:no violations|\d+ violations?))$/;
 
 export async function recordsOf(example: string, runs: readonly (readonly string[])[]): Promise<readonly string[]> {
   const logged: string[] = [];

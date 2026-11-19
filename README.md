@@ -84,7 +84,7 @@ Run the commands in [samples/todo](samples/todo).
 
    The output is a JSON line whose `kind` is `InvalidScenario.unmetExpectation`.
    Change the answer back to `accepted()`, and run the test again.
-   The output ends with `No violations found.`
+   The output ends with `depth 1: no violations`.
 
 5. To compare an implementation with the snapshots, an implementation test first checks the spec with `checkSpec` from `@natsuzora-dev/tazuna/verify`.
    It then drives the implementation through each scenario with `drive` and writes each trace.

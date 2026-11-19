@@ -26,6 +26,8 @@ type Invocation =
       readonly depth: number;
       readonly update: boolean;
       readonly coverage: boolean;
+      /** The `<service>/<scenario>` names that --only selects, or undefined to run every scenario. */
+      readonly only: readonly string[] | undefined;
     }
   | { readonly command: "verify"; readonly root: string; readonly traces: string }
   | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string };
@@ -42,8 +44,8 @@ interface Given {
   readonly root: string;
   /** The arguments after the spec root. */
   readonly positionals: readonly string[];
-  /** The value of each given option, or "" for an option without a value. */
-  readonly options: ReadonlyMap<string, string>;
+  /** The values of each given option in order, or [""] for an option without a value. */
+  readonly options: ReadonlyMap<string, readonly string[]>;
 }
 
 interface Command<N extends Name> {
@@ -51,7 +53,10 @@ interface Command<N extends Name> {
   readonly description: string;
   /** An option with `value` takes the next argument. */
   readonly options: Readonly<
-    Record<string, { readonly value?: string; readonly required?: true; readonly description: string }>
+    Record<
+      string,
+      { readonly value?: string; readonly required?: true; readonly repeatable?: true; readonly description: string }
+    >
   >;
   /** Parses what the table's arity and option checks let through. */
   readonly parse: (given: Given, io: Io) => Extract<Invocation, { readonly command: N }> | Misuse;
@@ -84,12 +89,20 @@ const commands: { readonly [N in Name]: Command<N> } = {
         description:
           "Also report the parts of commands, queries, automations, and charts that neither a scenario's run nor an explored path reaches (Uncovered).",
       },
+      "--only": {
+        value: "service/scenario",
+        repeatable: true,
+        description:
+          "Run only the scenario named exactly <service>/<scenario>, the service and name fields of a violation's scenario. The paths explored after it still take their values from every scenario. Snapshots of the scenarios that do not run are neither compared, reported, nor removed. --coverage needs every scenario, so it cannot be given with --only.",
+      },
     },
     parse: ({ root, options }) => {
-      const depth = options.get("--depth") ?? "";
+      const depth = options.get("--depth")?.at(-1) ?? "";
       if (!/^\d+$/.test(depth)) return { misuse: `invalid depth ${depth} (expected a non-negative integer)` };
-      const update = options.has("--update");
-      return { command: "test", root, depth: Number(depth), update, coverage: options.has("--coverage") };
+      const coverage = options.has("--coverage");
+      const only = options.get("--only");
+      if (coverage && only !== undefined) return { misuse: "--coverage cannot be given with --only" };
+      return { command: "test", root, depth: Number(depth), update: options.has("--update"), coverage, only };
     },
   },
   verify: {
@@ -108,7 +121,7 @@ const commands: { readonly [N in Name]: Command<N> } = {
       "Serve the viewer of the spec's services, definitions, and scenario snapshots, and print its URL. The viewer reloads when a spec file or snapshot changes.",
     options: { "--port": { value: "n", description: "Serve on port n instead of a free port." } },
     parse: ({ root, options }, io) => {
-      const port = options.get("--port") ?? "0";
+      const port = options.get("--port")?.at(-1) ?? "0";
       if (!/^\d+$/.test(port) || Number(port) > 65535)
         return { misuse: `invalid port ${port} (expected an integer from 0 to 65535)` };
       const viewer = io.viewer ?? viewerFolder;
@@ -147,7 +160,7 @@ const help = [
     ...Object.entries(c.options).flatMap(([option, o]) =>
       entry(
         "    ",
-        `${option}${o.value === undefined ? "" : ` <${o.value}>`}${o.required === true ? " (required)" : ""}`,
+        `${option}${o.value === undefined ? "" : ` <${o.value}>`}${o.required === true ? " (required)" : ""}${o.repeatable === true ? " (repeatable)" : ""}`,
         o.description,
       ),
     ),
@@ -163,7 +176,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none, and the paths of the snapshots that test --update writes or removes.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr the number of violations, or that they found none (test also writes how many scenarios it ran out of all, and the depth), and the paths of the snapshots that test --update writes or removes.",
   ),
   ...wrap(
     "",
@@ -177,11 +190,20 @@ function record(io: Io, specRoot: string, r: ReportedViolation): string {
   return JSON.stringify({ ...r, location: { ...r.location, file: relative(io.cwd, join(specRoot, r.location.file)) } });
 }
 
-function report(io: Io, specRoot: string, violations: readonly ReportedViolation[], done: string): number {
+/** Writes the violation lines to stdout, and to stderr the summary that `summary` makes of the violation count. */
+function report(
+  io: Io,
+  specRoot: string,
+  violations: readonly ReportedViolation[],
+  summary: (found: number) => string,
+): number {
   for (const p of violations) io.log(record(io, specRoot, p));
-  io.error(`${done}. ${violations.length === 0 ? "No violations found" : count(violations.length, "violation")}.`);
+  io.error(summary(violations.length));
   return violations.length === 0 ? 0 : 1;
 }
+
+const counted = (done: string) => (found: number) =>
+  `${done}. ${found === 0 ? "No violations found" : count(found, "violation")}.`;
 
 const isName = (command: string): command is Name => Object.hasOwn(commands, command);
 
@@ -190,17 +212,17 @@ function parse(args: readonly string[], io: Io): Invocation | Misuse {
   const [command = "", ...rest] = args;
   if (!isName(command)) return { misuse: `unknown command ${command}`, help: true };
   const known = commands[command];
-  const options = new Map<string, string>();
+  const options = new Map<string, string[]>();
   const positionals: string[] = [];
   for (let i = 0; i < rest.length; i += 1) {
     const arg = rest[i] ?? "";
     const value = rest[i + 1];
     if (!arg.startsWith("-")) positionals.push(arg);
     else if (known.options[arg] === undefined) return { misuse: `unknown option ${arg} for ${command}`, help: true };
-    else if (known.options[arg].value === undefined) options.set(arg, "");
+    else if (known.options[arg].value === undefined) options.set(arg, [""]);
     else if (value === undefined || value.startsWith("-")) return { misuse: `missing value for ${arg}`, help: true };
     else {
-      options.set(arg, value);
+      options.set(arg, known.options[arg].repeatable === true ? [...(options.get(arg) ?? []), value] : [value]);
       i += 1;
     }
   }
@@ -236,7 +258,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   if (result.kind === "violations" || invocation.command === "check") {
     const files = result.kind === "violations" ? result.files : result.spec.sources.length;
     const violations = result.kind === "violations" ? result.violations : [];
-    return report(io, specRoot, violations, `Checked ${count(files, "file")}`);
+    return report(io, specRoot, violations, counted(`Checked ${count(files, "file")}`));
   }
   const { spec } = result;
   switch (invocation.command) {
@@ -248,17 +270,25 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
       return 0;
     }
     case "test": {
-      const { depth } = invocation;
-      const tested = testSpec(spec, { update: invocation.update, depth });
+      const { depth, only } = invocation;
+      const names = new Set(spec.scenarios.map((s) => `${s.service}/${s.name}`));
+      const unknown = only?.find((name) => !names.has(name));
+      if (unknown !== undefined) return misused(`unknown scenario ${unknown}`);
+      const selected = only && new Set(only);
+      const tested = testSpec(spec, { update: invocation.update, depth, only: selected });
       for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
       for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
       const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
-      const paths = `explored paths of up to ${count(depth, "move")} after each scenario`;
-      return report(io, spec.root, violations, `Tested ${count(spec.scenarios.length, "scenario")} and ${paths}`);
+      const run = selected === undefined ? `${names.size}/${names.size}` : `${selected.size}/${names.size}`;
+      const filtered = selected === undefined ? "" : " (--only)";
+      return report(io, spec.root, violations, (found) => {
+        const result = found === 0 ? "no violations" : count(found, "violation");
+        return `${run} scenarios${filtered}, depth ${depth}: ${result}`;
+      });
     }
     case "verify": {
       const verified = verifyTraces(spec, invocation.traces);
-      return report(io, spec.root, verified.violations, `Verified ${count(verified.traces, "trace")}`);
+      return report(io, spec.root, verified.violations, counted(`Verified ${count(verified.traces, "trace")}`));
     }
   }
 }

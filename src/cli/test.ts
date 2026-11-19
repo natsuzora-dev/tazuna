@@ -47,12 +47,14 @@ interface Snapshotted {
 
 /**
  * Compares each run that did not halt with its snapshot, or, with `update`, writes that snapshot and removes the
- * snapshots without a run. Also reports the other violations in the snapshot folders.
+ * snapshots without a run. Unless `selected`, also reports the other violations in the snapshot folders; a selection
+ * leaves the snapshots of the scenarios that did not run as they are.
  */
 function testSnapshots(
   spec: Spec,
   snapshotted: readonly Snapshotted[],
   update: boolean,
+  selected: boolean,
 ): Pick<TestResult, "violations" | "written" | "removed"> {
   const ended = snapshotted.flatMap(({ run, lines }) => (lines === undefined ? [] : [{ run, lines }]));
   const written = update ? ended.map((s) => writeSnapshot(spec, s.run, s.lines)) : [];
@@ -71,7 +73,8 @@ function testSnapshots(
   ];
   const removed: string[] = [];
   for (const p of pairing.violations)
-    if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && p.at.kind === "snapshotEntry") {
+    if (selected && p.at.kind !== "scenario") continue;
+    else if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && p.at.kind === "snapshotEntry") {
       const path = snapshotEntryPath(spec, p.at.service, p.at.entry);
       rmSync(path);
       removed.push(path);
@@ -80,13 +83,21 @@ function testSnapshots(
 }
 
 /**
- * Simulates and explores every scenario, then tests the snapshots (testSnapshots). A scenario still written as an input
- * list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it is.
+ * Simulates and explores every scenario, or the `<service>/<scenario>` names of `only`, then tests the snapshots
+ * (testSnapshots). The explored paths take their values from every scenario either way. A scenario still written as an
+ * input list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it
+ * is.
  */
-export function testSpec(spec: CheckedSpec, options: { readonly update: boolean; readonly depth: number }): TestResult {
+export function testSpec(
+  spec: CheckedSpec,
+  options: { readonly update: boolean; readonly depth: number; readonly only?: ReadonlySet<string> | undefined },
+): TestResult {
+  const { only } = options;
+  const scenarios =
+    only === undefined ? spec.scenarios : spec.scenarios.filter((s) => only.has(`${s.service}/${s.name}`));
   const bounds = { depth: options.depth, valuesPerPayload };
   const reached = new Coverage();
-  const simulated = simulateScenarios(spec);
+  const simulated = simulateScenarios(spec, scenarios);
   const violations: ReportedViolation[] = [];
   const reported = new Set<string>();
   // Two violations count as one when they differ only in `error`.
@@ -98,7 +109,7 @@ export function testSpec(spec: CheckedSpec, options: { readonly update: boolean;
   };
   for (const violation of simulated.violations) report(violation);
   const seenInLines = seenLines(spec);
-  for (const named of spec.scenarios) {
+  for (const named of scenarios) {
     const explored = exploreLines(spec, named as Named<LoadedScenario>, seenInLines, bounds);
     reached.addAll(explored.reached);
     const ref = { service: named.service, name: named.name };
@@ -111,22 +122,25 @@ export function testSpec(spec: CheckedSpec, options: { readonly update: boolean;
         ),
       );
   }
-  const snapshots = testSnapshots(spec, simulated.snapshotted, options.update);
+  const snapshots = testSnapshots(spec, simulated.snapshotted, options.update, only !== undefined);
   return { ...snapshots, violations: [...violations, ...snapshots.violations], reached };
 }
 
 /**
- * Simulates each scenario and returns the violations that it reports, each at the line it names, with the step orders
+ * Simulates each of `scenarios` and returns the violations that it reports, each at the line it names, with the step orders
  * that change the result of one of its processings, and the trace of each running service when the simulation did not
  * halt: the own service's, and each running peer's that has lines.
  */
-function simulateScenarios(spec: Spec): {
+function simulateScenarios(
+  spec: Spec,
+  scenarios: readonly Named<LoadedScenario>[],
+): {
   readonly violations: ReportedViolation[];
   readonly snapshotted: Snapshotted[];
 } {
   const violations: ReportedViolation[] = [];
   const snapshotted: Snapshotted[] = [];
-  for (const named of spec.scenarios) {
+  for (const named of scenarios) {
     const { scenario, linePlaces } = named.definition as LoadedScenario;
     const ref = { service: named.service, name: named.name };
     const simulated = simulateSpec(spec, scenario);
