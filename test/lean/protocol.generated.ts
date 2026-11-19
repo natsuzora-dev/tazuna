@@ -676,7 +676,7 @@ export type SearchedProcessing = {
   readonly origin: Origin;
   readonly service: string;
   readonly tried: readonly TriedOrder[];
-  readonly found: readonly ChoiceDependent[];
+  readonly found: ChoiceDependent | null;
 };
 
 /** What Lean answers a Request with, the constructor named after the request's. */

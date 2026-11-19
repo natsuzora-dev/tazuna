@@ -102,19 +102,14 @@ structure Tried where
 deriving Repr, Inhabited
 
 /--
-What the search of one processing did: each step order it ran in turn, and the violations it reports, each stepOrder
-violation once as first found (by pair and difference), then searchLimit when it stopped with orders left.
+What the search of one processing did: each step order it ran in turn, and the violation it reports. The search stops at
+its first violation, as Concuerror, loom, and shuttle stop at the first failing schedule: searchLimit when it ran
+stepOrderLimit orders with orders left, and otherwise the first order whose outcome differs.
 -/
 structure Search where
   tried : List Tried := []
-  found : List ChoiceDependent := []
+  found : Option ChoiceDependent := none
 deriving Repr, Inhabited
-
-/-- The identity of a found violation, by which the search reports it once. -/
-def findingKey : ChoiceDependent → String
-  | .stepOrder _ first second _ _ difference =>
-    (Value.arr [ToValue.toValue first, ToValue.toValue second, ToValue.toValue difference]).canonical
-  | .searchLimit .. | .uncomparable .. => ""
 
 /--
 The order that runs the pair `(i, j)` of an execution's candidates the other way: the steps before `i` as the execution took them,
@@ -141,43 +136,36 @@ structure Searching where
   first : Option StepName := none
   /-- The executions left to search, each with its step order. -/
   queue : List (Execution × List StepName)
-  stopped : Bool := false
 
 section
 
 variable {m : Type → Type} [Monad m]
 
 /--
-The search after the pair `(i, j)` of the execution `parent`, whose step order is `parentOrder`: the pair's order
-(pairOrder) is run unless it ran before or undoes the swap that made `parent` (its order ends with `a` then `b`),
-compared with `parent` unless refused, and queued when it reaches a new sequence of taken steps. At stepOrderLimit
-orders the search stops with searchLimit at the first step it swapped. Skipping the undo misses no order. Call `g` the
-execution that `parent` came from. If `a` conflicts with a step between, `g` reverses that pair itself. If a step between
-conflicts with `b`, `g` reverses that pair, and its order is the skipped one. Otherwise the skipped order commutes to
-the order of `g`. This rests on the premises of the search (steps whose reads and writes do not overlap commute, and
-each race is reversed at the execution where it occurs), not on sleep sets, which carry a set down every branch.
+The search after the pair `(i, j)` of the execution `parent`, whose step order is `parentOrder`: unless the search
+found a violation, the pair's order (pairOrder) is run unless it ran before, compared with `parent` unless refused, and
+queued when it reaches a new sequence of taken steps. At stepOrderLimit orders the search stops with searchLimit at the
+first step it swapped.
 -/
 def searchPair (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin) (st : Service)
     (parent : Execution) (parentOrder : List StepName) (parentOutcome : Explore.Outcome) (taken : List (Nat × StepName))
     (r : Searching) (pair : Nat × Nat) : m Searching := do
   let (i, j) := pair
-  if r.stopped then return r
+  if r.search.found.isSome then return r
   let (some a, some b) := (taken.lookup i, taken.lookup j) | return r
-  if parentOrder.drop (parentOrder.length - 2) == [a, b] then return r
   let order := pairOrder (parent.world.state st.service) taken i j a b
   if r.search.tried.any (·.order == order) then return r
   let first := r.first.getD a
   if r.search.tried.length == stepOrderLimit then
-    return { r with stopped := true, first := some first,
-                    search := { r.search with found := r.search.found ++ [.searchLimit (first.definition st.service) stepOrderLimit] } }
+    return { r with first := some first,
+                    search := { r.search with found := some (.searchLimit (first.definition st.service) stepOrderLimit) } }
   let r := { r with first := some first }
   let alternative ← executeWith order
   if alternative.refused st.service then
     return { r with search := { r.search with tried := r.search.tried ++ [{ order, verdict := .refused }] } }
   let found ← stepOrder compare st.service a b parentOrder order parentOutcome (aligned o st parent alternative)
-  let fresh := found.filter fun v => !r.search.found.any (findingKey · == findingKey v)
-  let r := { r with search := { tried := r.search.tried ++ [{ order, verdict := .decided found }],
-                                found := r.search.found ++ fresh.toList } }
+  let r := { r with search := { tried := r.search.tried ++ [{ order, verdict := .decided found }], found } }
+  if found.isSome then return r
   let some altSpan := alternative.span? o st.service | return r
   let sequence := (alternative.taken altSpan).map (·.2)
   if r.reached.contains sequence then return r
@@ -191,7 +179,7 @@ def searchQueue (compare : Compare m) (executeWith : List StepName → m Executi
     match r.queue with
     | [] => pure r
     | (executed, order) :: rest => do
-      if r.stopped then return r
+      if r.search.found.isSome then return r
       let r := { r with queue := rest }
       let some span := executed.span? o st.service | searchQueue compare executeWith o st fuel r
       let taken := executed.taken span
@@ -205,7 +193,7 @@ result, from `base`, the scenario executed up to that processing without an orde
 order of the processing. Each pair of an execution's candidates runs in the other order (pairOrder) and is compared with
 that execution, and each execution that reaches a new sequence of taken steps is searched in turn, so the search reaches
 every order of dependent steps (dynamic partial-order reduction, Flanagan and Godefroid, POPL 2005), up to
-stepOrderLimit orders. Each queued execution follows a new order, so stepOrderLimit + 1
+stepOrderLimit orders or its first violation. Each queued execution follows a new order, so stepOrderLimit + 1
 executions bound the queue.
 -/
 def stepOrderSearch (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin)
@@ -250,7 +238,7 @@ def stepOrderChanges (compareFor : String → Compare m)
     let base ← executeWith pre []
     let search ← stepOrderSearch (compareFor span.service)
       (fun order => executeWith pre [(span.origin, span.service, order)]) span.origin st base
-    if search.tried.isEmpty && search.found.isEmpty then return none
+    if search.tried.isEmpty && search.found.isNone then return none
     return some { origin := span.origin, service := span.service, search }
 
 end

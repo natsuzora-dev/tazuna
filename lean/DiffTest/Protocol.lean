@@ -195,7 +195,7 @@ structure SearchedProcessing where
   origin : Scenario.Origin
   service : String
   tried : List TriedOrder
-  found : List Explore.ChoiceDependent
+  found : Option Explore.ChoiceDependent
 
 derive_wire SearchedProcessing serialize_only
 

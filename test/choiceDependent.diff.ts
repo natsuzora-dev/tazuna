@@ -47,7 +47,7 @@ for (const { root, spec, scenarios } of simCases) {
     }
     const tried = searches.flatMap((s) => s.tried);
     t.diagnostic(
-      `${searches.length} searches, ${tried.length} orders (${tried.filter((o) => "refused" in o).length} refused), ${searches.flatMap((s) => s.found).length} findings`,
+      `${searches.length} searches, ${tried.length} orders (${tried.filter((o) => "refused" in o).length} refused), ${searches.filter((s) => s.found !== null).length} findings`,
     );
   });
 }

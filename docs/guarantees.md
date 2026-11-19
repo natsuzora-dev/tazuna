@@ -75,6 +75,7 @@ Each `InvalidScenario` kind is one rule of that statement, and its doc comment s
   Each message is told apart by its id, so equal messages are ordered like any others.
 
 When an order changes the outcome, `test` reports `ChoiceDependent`.
+`test` searches the orders of each service's processing of each scenario line on its own, and stops each search at its first violation, as Concuerror, loom, and shuttle stop at the first failing schedule.
 Two outcomes are the same when both halt with the same violation, or when neither halts, their lines pair one to one with equal contents and the same `after` through the pairing, the records are equal up to a renaming of created keys, and the pending deadlines are equal, since a later clock line reads their times.
 The renaming maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position.
 Lines that a service wrote for messages that one line delivered compare by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
@@ -143,7 +144,7 @@ An explored path uses values from the scenarios and new ids, and it neither rese
 | Violations on explored paths | Paths longer than `--depth`, and values that no scenario uses. |
 | `Restricted` | A clock, random source, or locale that a spec function reaches by a name that `check` does not look for, or through a package that the spec imports. `check` also reads the local files that the spec imports by a relative path. |
 | `BagOrderDependent` | Orders of a `Bag` other than the written one and its reverse, and answers with too many renamings of created keys to compare, which it reports as `BagOrderDependent.uncomparable`. |
-| `ChoiceDependent` | Orders beyond `ChoiceDependent.searchLimit`. The order of two ready steps that run the same definition on equal inputs, which the search takes as one step. Such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
+| `ChoiceDependent` | Orders beyond `ChoiceDependent.searchLimit`, and the orders of a processing after its first violation. The order of two ready steps that run the same definition on equal inputs, which the search takes as one step. Such steps differ only in the step that caused them or, for answers, in which of two equal requests each answers. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the records are still compared. Records with too many renamings of created keys to compare are reported as `ChoiceDependent.uncomparable`. |
 | `InvalidInput` | Parts of an external peer's contract other than the requires that read only the input and the ensures that read no records. |
 | `Uncovered` | Parts that only paths longer than `--depth` reach. |
 

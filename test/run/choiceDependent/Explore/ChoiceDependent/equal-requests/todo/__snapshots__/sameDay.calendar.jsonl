@@ -3,3 +3,5 @@
 {"time":"2026-10-25T10:00:00Z","dir":"out","type":"event","id":"booked#1","name":"booked","payload":{"day":"Mon"},"resultOf":"todo/calendar.reserve#1"}
 {"time":"2026-10-25T10:00:00Z","dir":"in","type":"command","id":"todo/calendar.reserve#2","name":"reserve","input":{"day":"Mon"}}
 {"time":"2026-10-25T10:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"todo/calendar.reserve#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"free"}}}
+{"time":"2026-10-25T10:00:00Z","dir":"in","type":"command","id":"todo/calendar.reserve#3","name":"reserve","input":{"day":"Mon"}}
+{"time":"2026-10-25T10:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"todo/calendar.reserve#3","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"free"}}}

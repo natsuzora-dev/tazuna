@@ -9,7 +9,7 @@ const given = {
 } as const;
 
 export const sameDay = scenario(
-  "Add task-1 and task-2 for Monday; the copy of each sends calendar the same reserve, so one handle names both, and calendar books Monday for whichever it processes first and refuses the other: it processes equal requests differently, so which task is booked depends on which arrives first, which nothing outside tells, and test runs the other arrival order and reports ChoiceDependent.stepOrder at reserve naming the two messages",
+  "Add task-1, task-2 and task-3 for Monday; the copy of each sends calendar the same reserve, so one handle names all three, and calendar books Monday for whichever it processes first and refuses the others: it processes equal requests differently, so which task is booked depends on which arrives first, which nothing outside tells, and test runs other arrival orders and reports ChoiceDependent.stepOrder at reserve once, naming the first two messages whose order changes the outcome",
   {
     given,
     when: (w) => {
@@ -17,6 +17,7 @@ export const sameDay = scenario(
         tasks: [
           { id: "task-1", day: "Mon" },
           { id: "task-2", day: "Mon" },
+          { id: "task-3", day: "Mon" },
         ],
       });
       const reserving = w.net.deliver(add.request(calendar.reserve));

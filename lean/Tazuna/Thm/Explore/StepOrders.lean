@@ -144,31 +144,20 @@ def Ran (t : Tried) : Prop :=
 /-- What every state of a search holds: each order it ran is Ran, and while it found nothing, none had a violation. -/
 def SearchInv (r : Searching) : Prop :=
   (∀ t ∈ r.search.tried, Ran compare executeWith o st t) ∧
-    (r.search.found = [] → (∀ t ∈ r.search.tried, t.verdict = .refused ∨ ∃ f, t.verdict = .decided f ∧ f = none) ∧
-      r.stopped = false)
-
-omit compare executeWith o st in
-theorem filter_none {α : Type} {x : Option α} {p : α → Bool} (h : (x.filter p).toList = [])
-    (hp : ∀ v, p v = true) : x = none := by
-  cases x with
-  | none => rfl
-  | some v => simp [Option.filter, hp v] at h
+    (r.search.found = none → ∀ t ∈ r.search.tried, t.verdict = .refused ∨ ∃ f, t.verdict = .decided f ∧ f = none)
 
 theorem inv_step {r r' : Searching} (hr : SearchInv compare executeWith o st r)
     (htried : ∀ t ∈ r'.search.tried, t ∈ r.search.tried ∨ (Ran compare executeWith o st t ∧
-      (r'.search.found = [] → t.verdict = .refused ∨ ∃ f, t.verdict = .decided f ∧ f = none)))
-    (hfound : r'.search.found = [] → r.search.found = [] ∧ r'.stopped = r.stopped) :
+      (r'.search.found = none → t.verdict = .refused ∨ ∃ f, t.verdict = .decided f ∧ f = none)))
+    (hfound : r'.search.found = none → r.search.found = none) :
     SearchInv compare executeWith o st r' := by
   obtain ⟨hran, hnone⟩ := hr
-  refine ⟨fun t ht => ?_, fun h => ?_⟩
+  refine ⟨fun t ht => ?_, fun h t ht => ?_⟩
   · rcases htried t ht with ht | ⟨hr, -⟩
     · exact hran t ht
     · exact hr
-  · obtain ⟨hf, hs⟩ := hfound h
-    obtain ⟨h₁, h₂⟩ := hnone hf
-    refine ⟨fun t ht => ?_, hs ▸ h₂⟩
-    rcases htried t ht with ht | ⟨-, hv⟩
-    · exact h₁ t ht
+  · rcases htried t ht with ht | ⟨-, hv⟩
+    · exact hnone (hfound h) t ht
     · exact hv h
 
 theorem searchPair_inv (parent : Execution) (parentOrder : List StepName) (taken : List (Nat × StepName))
@@ -177,28 +166,27 @@ theorem searchPair_inv (parent : Execution) (parentOrder : List StepName) (taken
       (searchPair compare executeWith o st parent parentOrder (parent.outcome st) taken r pair : Id _) := by
   unfold searchPair
   simp only [bind, pure]
-  repeat' split
-  all_goals first
-    | exact hr
-    | refine inv_step compare executeWith o st hr (fun t ht => ?_) (fun h => ?_)
-  · exact .inl ht
-  · simp at h
-  all_goals first
-    | (simp only [List.mem_append, List.mem_singleton] at ht
-       rcases ht with ht | rfl
-       · exact .inl ht
-       · refine .inr ⟨?_, fun h => ?_⟩
-         · first
-           | exact .inl rfl
-           | exact .inr ⟨parent, _, rfl, fun hn => stepOrder_none hn⟩
-         · first
-           | exact .inl rfl
-           | (refine .inr ⟨_, rfl, ?_⟩
-              obtain ⟨h₁, h₂⟩ := List.append_eq_nil_iff.mp h
-              rw [h₁] at h₂
-              exact filter_none h₂ (fun v => by simp)))
-    | exact ⟨h, rfl⟩
-    | exact ⟨(List.append_eq_nil_iff.mp h).1, rfl⟩
+  by_cases hs : r.search.found.isSome = true
+  · simp only [hs, ↓reduceIte]
+    exact hr
+  · have hn : r.search.found = none := by simpa using hs
+    simp only [hs, Bool.false_eq_true, ↓reduceIte]
+    repeat' split
+    all_goals first
+      | exact hr
+      | refine inv_step compare executeWith o st hr (fun t ht => ?_) (fun _ => hn)
+    all_goals first
+      | exact .inl ht
+      | (simp only [List.mem_append, List.mem_singleton] at ht
+         rcases ht with ht | rfl
+         · exact .inl ht
+         · refine .inr ⟨?_, fun h => ?_⟩
+           · first
+             | exact .inl rfl
+             | exact .inr ⟨parent, _, rfl, fun hn => stepOrder_none hn⟩
+           · first
+             | exact .inl rfl
+             | exact .inr ⟨_, rfl, h⟩)
 
 theorem searchQueue_inv : ∀ (fuel : Nat) (r : Searching), SearchInv compare executeWith o st r →
     SearchInv compare executeWith o st (searchQueue compare executeWith o st fuel r : Id _)
@@ -225,7 +213,7 @@ every order that it reached. That it reaches every order of dependent steps (dyn
 theorem.
 -/
 theorem stepOrderSearch_same (base : Execution)
-    (h : (stepOrderSearch compare executeWith o st base : Id _).found = []) :
+    (h : (stepOrderSearch compare executeWith o st base : Id _).found = none) :
     ∀ t ∈ (stepOrderSearch compare executeWith o st base : Id _).tried,
       t.verdict = .refused ∨ (t.verdict = .decided none ∧ ∃ parent : Execution,
         (difference compare (parent.outcome st) (aligned o st parent (executeWith t.order)) : Id _) = .same ∨
@@ -239,9 +227,9 @@ theorem stepOrderSearch_same (base : Execution)
     · simp only [hs, hc, Bool.false_eq_true, ↓reduceIte, bind, pure] at h ⊢
       obtain ⟨hran, hnone⟩ := searchQueue_inv compare executeWith o st (stepOrderLimit + 1)
         { reached := [(base.taken span).map (·.2)], queue := [(base, [])] }
-        ⟨fun t ht => by simp at ht, fun _ => ⟨fun t ht => by simp at ht, rfl⟩⟩
+        ⟨fun t ht => by simp at ht, fun _ t ht => by simp at ht⟩
       intro t ht
-      obtain ⟨hv, -⟩ := hnone h
+      have hv := hnone h
       rcases hran t ht with hr | ⟨parent, found, hf, hs⟩
       · exact .inl hr
       · rcases hv t ht with hv | ⟨f, hv, rfl⟩

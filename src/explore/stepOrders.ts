@@ -8,7 +8,7 @@ import { type Violation, type ViolationValue, withExtra } from "../data/violatio
 import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import { type Line, sameLineId } from "../service/message.ts";
-import { sameStep, stepNameDefinition, stepsKey } from "../service/note.ts";
+import { stepNameDefinition, stepsKey } from "../service/note.ts";
 import { created, tieOf } from "../service/state.ts";
 import { type Span, type StepOrder, sameOrigin } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
@@ -22,12 +22,12 @@ export type Tried =
   | { readonly order: readonly StepName[]; readonly refused: true }
   | { readonly order: readonly StepName[]; readonly found: ChoiceDependent | null };
 
-/** Lean's Searched: what the search of the processing of `service` ran and found. The diff test asks Lean. */
+/** Lean's Searched: what the search of the processing of `service` ran and its first violation. The diff test asks Lean. */
 export interface Searched {
   readonly origin: Origin;
   readonly service: string;
   readonly tried: readonly Tried[];
-  readonly found: readonly ChoiceDependent[];
+  readonly found: ChoiceDependent | null;
 }
 
 export type OnSearched = ((searched: Searched) => void) | undefined;
@@ -130,12 +130,6 @@ function candidatesOf(m: Made, span: Span): (readonly [number, number])[] {
   return (collected?.candidates(p.processing.state, span.stepsFrom) ?? []).filter(([i]) => i < span.stepsTo);
 }
 
-/** Lean's findingKey. */
-const findingKey = (v: ChoiceDependent): string =>
-  v.kind === "ChoiceDependent.stepOrder"
-    ? canonicalJson([v.data.firstStep, v.data.secondStep, v.data.difference] as unknown as Json)
-    : "";
-
 /** Lean's stepOrderSearch of the processing of `service` while `origin` is processed, of `prefix`, which ends with it. */
 function stepOrderSearch(
   spec: Spec,
@@ -145,9 +139,8 @@ function stepOrderSearch(
 ): Pick<Searched, "tried" | "found"> {
   const base = executeSpec(spec, prefix);
   const baseSpan = spanOf(base, origin, service);
-  if (baseSpan === undefined) return { tried: [], found: [] };
-  if (candidatesOf(base, baseSpan).length === 0) return { tried: [], found: [] };
-  const found: ChoiceDependent[] = [];
+  if (baseSpan === undefined) return { tried: [], found: null };
+  if (candidatesOf(base, baseSpan).length === 0) return { tried: [], found: null };
   const compare = compareOf(spec, service);
   const tried: Tried[] = [];
   const reached = new Set([stepsKey(taken(base, baseSpan).map(([, name]) => name))]);
@@ -164,9 +157,6 @@ function stepOrderSearch(
     for (const [i, j] of candidatesOf(executed, span)) {
       const [a, b] = [nameOf.get(i), nameOf.get(j)];
       if (a === undefined || b === undefined) continue;
-      const [last2, last] = parentOrder.slice(-2);
-      // Lean's searchPair states why skipping the undo of the parent's own swap misses no order.
-      if (last2 !== undefined && last !== undefined && sameStep(last2, a) && sameStep(last, b)) continue;
       const order = [
         ...names.filter(([n]) => n < i).map(([, name]) => name),
         ...names.filter(([n]) => i < n && n < j && leadsTo(steps, n, j)).map(([, name]) => name),
@@ -182,7 +172,7 @@ function stepOrderSearch(
           definition: stepNameDefinition(service, first),
           data: { limit: stepOrderLimit },
         };
-        return { tried, found: [...found, limit] };
+        return { tried, found: limit };
       }
       const stepOrders: StepOrder[] = [{ origin, service, order }];
       const alternative = executeSpec(spec, prefix, stepOrders);
@@ -201,7 +191,7 @@ function stepOrderSearch(
             );
       const result = stepOrder(compare, service, a, b, parentOrder, order, parentOutcome, aligned);
       tried.push({ order, found: result ?? null });
-      if (result !== undefined && !found.some((v) => findingKey(v) === findingKey(result))) found.push(result);
+      if (result !== undefined) return { tried, found: result };
       if (altSpan === undefined) continue;
       const sequence = stepsKey(taken(alternative, altSpan).map(([, name]) => name));
       if (reached.has(sequence)) continue;
@@ -209,7 +199,7 @@ function stepOrderSearch(
       queue.push({ executed: alternative, order });
     }
   }
-  return { tried, found };
+  return { tried, found: null };
 }
 
 /**
@@ -233,8 +223,8 @@ export function stepOrderChanges(
     if (candidatesOf(executed, span).length === 0) return [];
     const prefix: Scenario = { ...sc, lines: sc.lines.slice(0, index + 1), expectations: [] };
     const search = stepOrderSearch(spec, prefix, span.origin, span.service);
-    if (search.tried.length === 0 && search.found.length === 0) return [];
+    if (search.tried.length === 0 && search.found === null) return [];
     onSearched?.({ origin: span.origin, service: span.service, ...search });
-    return search.found.map((v) => withExtra(v, { location: placeOf(spec, v.definition) }));
+    return search.found === null ? [] : [withExtra(search.found, { location: placeOf(spec, search.found.definition) })];
   });
 }
