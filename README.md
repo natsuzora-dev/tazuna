@@ -1,36 +1,48 @@
 # tazuna
 
 tazuna is a language for specifying services in TypeScript.
-Lean 4 defines what a spec means, so each spec has exactly one meaning.
+A spec defines services, and its scenarios state what each service does.
+Lean 4 defines what a spec means, and the `tazuna` command checks a spec, simulates its scenarios, and compares an implementation's traces with the simulation.
 
-A spec defines services, and scenarios state what a service does.
-The `tazuna` command checks the spec, simulates the scenarios, and compares an implementation's traces with the simulation.
+Before 1.0, a minor version may break the DSL.
+Read the docs and samples of the version you installed, in `node_modules/@natsuzora-dev/tazuna`, not those on GitHub.
 
 ## Install tazuna
 
-tazuna is published to GitHub Packages.
-
-1. Add the following line to your project's `.npmrc`:
-
-   ```
-   @natsuzora-dev:registry=https://npm.pkg.github.com
-   ```
-
-2. Authenticate to GitHub Packages with a token that has the `read:packages` scope.
-3. Install tazuna, its peers `typescript` and `zod`, and `@types/node`:
+1. Install tazuna, its peers `typescript` and `zod`, and `@types/node`:
 
    ```sh
    npm install -D @natsuzora-dev/tazuna typescript zod @types/node
    ```
 
-4. Add `"extends": "@natsuzora-dev/tazuna/tsconfig.base.json"` to your `tsconfig.json`.
+2. Create a `tsconfig.json` that extends tazuna's:
+
+   ```json
+   { "extends": "@natsuzora-dev/tazuna/tsconfig.base.json" }
+   ```
+
+   If you already have a `tsconfig.json`, add the `extends` line to it.
 
 ## Test a first scenario
 
-In this section, we check the spec of the ToDo sample, simulate one of its scenarios, and see where an implementation comes in.
-Run the commands in [samples/todo](samples/todo).
+In this section, we copy the spec of the ToDo sample, run its scenarios, break one of them, and fix it with the help of `tazuna explain`.
+Run the commands in the folder of your `package.json`.
 
-1. Open [spec/todo/scenarios.ts](samples/todo/spec/todo/scenarios.ts) and find the scenario `completeTwice`.
+1. Copy the spec that tazuna ships:
+
+   ```sh
+   cp -R node_modules/@natsuzora-dev/tazuna/samples/todo/spec spec
+   ```
+
+2. Check the spec:
+
+   ```sh
+   npx tazuna check spec
+   ```
+
+   The output ends with `No violations found.`
+
+3. Open [spec/todo/scenarios.ts](samples/todo/spec/todo/scenarios.ts) and find the scenario `completeTwice`.
    The user adds a task and completes it twice, and the `todo` service rejects the second completion:
 
    ```ts
@@ -53,51 +65,48 @@ Run the commands in [samples/todo](samples/todo).
    });
    ```
 
-   Given is the start, When is the lines in order, and Then is what `todo` did on those lines.
-   Earlier in the same file, `noTasks` is a Given that the file's scenarios share, and `addMilk` is a step of it.
-   `addMilk` adds a task and delivers its request to the `calendar` service and the answer.
+   Given is where the scenario starts, When is its lines in order, and Then is what `todo` did on those lines.
+   `noTasks` and `addMilk` are defined earlier in the same file.
 
-2. Check the spec:
-
-   ```sh
-   npx tazuna check spec
-   ```
-
-   The output ends with `No violations found.`
-
-3. Simulate the scenarios and write their snapshots:
-
-   ```sh
-   npx tazuna test spec --depth 1 --update
-   ```
-
-   tazuna writes the trace of each run to the scenario's snapshot.
-   Open `spec/todo/__snapshots__/completeTwice.jsonl`.
-   Each line is one message that `todo` received (`"dir":"in"`) or sent (`"dir":"out"`).
-   The last two lines are the second `completeTask` request and its rejection.
-
-4. In Then, change the expected answer of `first` from `accepted()` to `rejected("requires", "notCompleted")`, and run the test again:
+4. Run the scenarios:
 
    ```sh
    npx tazuna test spec --depth 1
    ```
 
-   The output is a JSON line whose `kind` is `InvalidScenario.unmetExpectation`.
-   Change the answer back to `accepted()`, and run the test again.
-   The output ends with `depth 1: no violations`.
+   The output ends with `65/65 scenarios, depth 1: no violations`.
+   `test` compared the run of each scenario with its snapshot.
+   Open `spec/todo/__snapshots__/completeTwice.jsonl` to see one: each line is a message that `todo` received (`"dir":"in"`) or sent (`"dir":"out"`).
 
-5. To compare an implementation with the snapshots, an implementation test first checks the spec with `checkSpec` from `@natsuzora-dev/tazuna/verify`.
-   It then drives the implementation through each scenario with `drive` and writes each trace.
-   The ToDo sample's server does this in [web/test/todo.test.ts](samples/todo/web/test/todo.test.ts), with the spec from [web/test/support/spec.ts](samples/todo/web/test/support/spec.ts) and the `Adapter` in [web/test/support/serverAdapter.ts](samples/todo/web/test/support/serverAdapter.ts).
-   After that test writes the traces to `web/.traces`, compare them:
+5. In Then, change the expected answer of `first` from `accepted()` to `rejected("requires", "notCompleted")`, and run the scenarios again.
+   The output is a violation line, followed by `65/65 scenarios, depth 1: 1 violation`:
+
+   ```json
+   {"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}],"actual":[{"result":"accepted"}]},"location":{"file":"spec/todo/scenarios.ts","line":53},"scenario":{"service":"todo","name":"completeTwice"}}
+   ```
+
+6. Ask tazuna what the violation means:
 
    ```sh
-   npx tazuna verify spec web/.traces
+   npx tazuna explain InvalidScenario.unmetExpectation
    ```
+
+   The output says what the violation means and that the scenario is the side at fault.
+
+7. Change the answer back to `accepted()`, and run only the scenario that failed:
+
+   ```sh
+   npx tazuna test spec --depth 1 --only todo/completeTwice
+   ```
+
+   The output ends with `1/65 scenarios (--only), depth 1: no violations`.
+
+8. Run every scenario again, as in step 4, to see that the fix broke no other scenario.
 
 ## Next steps
 
-- To learn the ideas behind specs and scenarios, see [Concepts](docs/concepts.md).
-- To learn what `check`, `test`, and `verify` guarantee when they pass, see [Guarantees](docs/guarantees.md).
-- To list the commands and their options, run `npx tazuna --help`.
-- Each exported function, such as `service()`, `scenario`, or `drive`, documents itself in its doc comment.
+- To learn why a spec is written the way it is, read [Concepts](docs/concepts.md).
+- To look up what a passing command guarantees and who fixes each violation, read [Guarantees](docs/guarantees.md).
+- To drive tazuna from a coding agent, give it the skill in [skills/tazuna](skills/tazuna/SKILL.md).
+- To compare an implementation with the snapshots, see how the ToDo sample's server drives itself through the scenarios in [web/test/todo.test.ts](samples/todo/web/test/todo.test.ts).
+- To list the commands and options, run `npx tazuna --help`. Each exported function documents itself in its doc comment.

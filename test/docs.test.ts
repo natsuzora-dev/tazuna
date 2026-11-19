@@ -142,6 +142,24 @@ const proseRules: readonly {
     clean: "# Guide\n\n## Install\n\n### From npm\n\n## Use",
   },
   {
+    rule: "A heading is at most level 3",
+    check: (text) =>
+      headings(text)
+        .filter((h) => h.level > 3)
+        .map((h) => h.number),
+    reported: "# Guide\n\n## Install\n\n### From npm\n\n#### On macOS",
+    clean: "# Guide\n\n## Install\n\n### From npm",
+  },
+  {
+    rule: "A list is not nested",
+    check: (text) =>
+      proseLines(text)
+        .filter(({ line }) => /^\s+(?:[-*+]|\d+\.) /.test(line))
+        .map(({ number }) => number),
+    reported: "- Run it.\n  - On macOS.",
+    clean: "1. Run it.\n   It prints - and 2. as text.\n\n   ```sh\n   - not a list\n   ```",
+  },
+  {
     rule: "A heading is in sentence case",
     check: (text) =>
       headings(text)
@@ -186,4 +204,60 @@ test("The table of who fixes a violation in docs/guarantees.md has one row per g
         `| \`${group}\` | ${reportedBy.map((c) => `\`${c}\``).join(", ")} | ${fixedIn} |`,
     ),
   );
+});
+
+test("Only docs/guarantees.md, the reference page, has tables", () => {
+  assert.deepEqual(
+    docs
+      .filter(({ path }) => path !== "docs/guarantees.md")
+      .flatMap(({ path, text }) =>
+        proseLines(text)
+          .filter(({ line }) => line.trimStart().startsWith("|"))
+          .map(({ number }) => `${path}:${number}`),
+      ),
+    [],
+  );
+});
+
+const readme = read("README.md");
+/** Each fenced block of README.md with its language and the last link before it, de-indented to the fence. */
+const readmeBlocks = [...readme.matchAll(/^( *)```(\w*)\n([\s\S]*?)^ *```$/gm)].map((m) => {
+  const [, indent = "", language = "", body = ""] = m;
+  const links = [...readme.slice(0, m.index).matchAll(/\]\((samples\/[^)]+)\)/g)];
+  return {
+    language,
+    code: body.replace(new RegExp(`^${indent}`, "gm"), ""),
+    link: links.at(-1)?.[1],
+  };
+});
+const sample = "samples/todo/spec";
+
+test("Each TypeScript block of README.md appears verbatim in the sample file that the last link before it points to", () => {
+  const blocks = readmeBlocks.filter((b) => b.language === "ts");
+  assert.ok(blocks.length > 0);
+  for (const { code, link } of blocks) {
+    assert.ok(link !== undefined, code);
+    assert.ok(read(link).includes(code), `${link} does not contain:\n${code}`);
+  }
+});
+
+test("The scenario counts and the violation line in README.md match the ToDo sample", () => {
+  const scenarioFiles = readdirSync(join(root, sample), { recursive: true, encoding: "utf8" }).filter(
+    (f) => f.endsWith(".ts") && !f.includes("node_modules"),
+  );
+  const total = scenarioFiles
+    .map((f) => [...read(`${sample}/${f}`).matchAll(/^export const \w+ = scenario\(/gm)].length)
+    .reduce((a, b) => a + b, 0);
+  const counts = [...readme.matchAll(/`(\d+)\/(\d+) scenarios/g)].map((m) => Number(m[2]));
+  assert.ok(counts.length > 0);
+  assert.deepEqual(new Set(counts), new Set([total]));
+  const violations = readmeBlocks
+    .filter((b) => b.language === "json")
+    .map((b) => JSON.parse(b.code))
+    .filter((json) => "kind" in json);
+  assert.ok(violations.length > 0);
+  for (const { location, scenario } of violations) {
+    const lines = read(location.file.replace(/^spec\//, `${sample}/`)).split("\n");
+    assert.equal(lines[location.line - 1], `export const ${scenario.name} = scenario({`);
+  }
 });

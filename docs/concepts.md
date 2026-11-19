@@ -1,101 +1,93 @@
 # Concepts
 
-What a passing command guarantees is in [Guarantees](guarantees.md).
+This page explains why tazuna asks a spec to be written the way it does.
+[Guarantees](guarantees.md) defines the terms and states what a passing command proves.
 
-## The scenario writes the whole world
+## A scenario states the whole world
 
-A scenario controls everything outside the services that it runs: the start time, the records, every request and operation, every movement of the clock, every restart, and the fate of every message.
-tazuna never fills in a part that the scenario leaves out.
+A scenario writes everything outside the services that it runs: the start time, the records, every request and operation, every move of the clock, every restart, and the fate of every message.
+tazuna fills in nothing that the scenario leaves out.
 A message that no line delivers, loses, refuses, or leaves in flight is `InvalidScenario.leftInFlight`, not a message that arrives by default.
 
-tazuna works this way for two reasons.
-First, the simulation is deterministic, so a snapshot depends only on what the scenario wrote, and `test` can compare it line by line.
-Second, `drive` puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
-If tazuna chose a delivery order or a default record for the simulation, the implementation would face a world that the scenario never stated, and a difference between the two would be nobody's fault.
+Two things depend on that.
+The simulation is deterministic, so a snapshot depends only on what the scenario wrote, and `test` can compare a run with it line by line.
+And `drive` puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
+If tazuna picked a delivery order or a default record, the implementation would face a world that nobody wrote down, and a difference between the two runs would be nobody's fault.
 
-The implementation is controlled only through that world.
-It creates its keys and request ids in its own way, and `verify` binds them to the simulation's values by where they first appear.
-tazuna asks nothing else of how the implementation is written.
+That world is the only control tazuna has over an implementation.
+The implementation creates its keys and request ids in its own way, and `verify` binds them to the simulation's values by where they first appear.
 
-## Every service follows the same rules
+## The own service and its peers follow one set of rules
 
 A scenario has one *own* service, whose behavior it states.
-Every other service that the own service exchanges messages with is a peer, which Given lists as running (`run`), external (`external`), or skipped (`skip`).
+Every other service that the own service exchanges messages with is a peer, and Given lists each peer as running (`run`), external (`external`), or skipped (`skip`).
 
-Apart from what the role decides, the own service and the peers follow one set of rules.
-A message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario.
-A running peer's lines state the messages that its run sent.
-
-The symmetry is what lets one scenario check both sides of an exchange.
-A rule that held only for the own service would let a peer's message arrive without a line, and the scenario would no longer state the whole world.
+Apart from what the role decides, the own service and its peers follow the same rules.
+A message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario, and a running peer's lines state the messages that its run sent.
+That symmetry lets one scenario check both sides of an exchange.
+If the rule held only for the own service, a peer's message could arrive without a line, and the scenario would no longer state the whole world.
 
 tazuna checks an external peer's lines against its contract once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
-A result event may arrive before or after its request's answer, so a check in the middle of the exchange would read a record that is not complete yet.
+A result event may arrive before or after its request's answer, so a check in the middle of the exchange would read an incomplete record.
 
-## A line refers to earlier lines through handles
+## A line names earlier messages through handles
 
 Each line returns a *handle*, and a later line refers to what an earlier line caused only through that handle.
-A handle names messages by their definition and, when needed, by their content, as a Playwright filter does: `add.request(calendar.reserve, { day: "Mon" })`.
-It names every message that matches, and a line that uses it acts on each in sending order.
-When no message matches, or the matches differ, tazuna reports it instead of picking one.
+A handle names messages by their definition and, when needed, by their content, as a Playwright locator filters elements: `add.request(calendar.reserve, { day: "Mon" })`.
+It names every message that matches, and a line that uses it acts on each match in sending order.
+When nothing matches, or the matches differ, tazuna reports it instead of picking one.
 
-A scenario never refers to a message by its position or by a count, such as "the second request that this command sent".
+A scenario never names a message by its position, such as "the second request that this command sent".
 A position breaks silently when the spec changes: a command that sends one more request shifts every later position, and the scenario then names a different message without any error.
 A handle that names content fails loudly instead.
-For the same reason, an operation names its screen instance by the handle of the line that opened it, so several open instances of one screen need no position.
-When tazuna compares two runs, it names a screen instance by its place, the screen that opened it and the state that opens it, as Akka names an actor by its path.
+For the same reason, an operation names its screen instance by the handle of the line that opened it.
 
 A scenario also never writes a key that a running service creates, such as `todo/Task-1`.
-The value of a created key is the run's decision, and the implementation makes it differently.
-A scenario that wrote the simulation's value would state a fact about the simulation, not about the service.
-The scenario reads a created key through the handle of the line that returned it.
+The created key is the run's choice, and the implementation chooses differently.
+A scenario that wrote the simulation's key would state a fact about the simulation, not about the service, so it reads the key through the handle of the line that returned it.
 
 ## Messages travel on channels
 
-While a message is in flight, other lines can run, which is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
+While a message is in flight, other lines can run.
+That is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
 
 Messages on one channel arrive in the order in which they were sent, as on one TCP connection or one Kafka partition, and nothing orders two channels.
 The result events of a request travel on a channel of their own, as a Stripe webhook may arrive before the API response.
-The spec fixes the send order of two events only along a cause chain, as Lamport's happens-before orders messages.
+The spec orders two events only along a cause chain, as Lamport's happens-before orders messages.
 Two steps that no cause chain links, such as the steps of two parallel regions, could run in two processes of a deployed system, and nothing orders the messages of two processes.
-[Terms](guarantees.md#terms) defines the channels and the send order.
 Neither the snapshot nor `verify` records an order that a deployed system does not keep, so a spec cannot rely on one.
+[Terms](guarantees.md#terms) gives the exact rules.
 
 A message carries its value as the sender wrote it, and only the receiver parses it, as in a web API.
-A sender that checked or normalized the value first would make the simulation accept a message that the deployed receiver rejects.
-Turning a value back into JSON, for the sender's message or the receiver's record, runs only its codecs and no check, as Pydantic and serde serialize a parsed value.
+If the sender checked or normalized the value first, the simulation would accept a message that the deployed receiver rejects.
+For the same reason, turning a parsed value back into JSON runs only its codecs and no check, as Pydantic and serde serialize a parsed value.
 
-A subscription lives as long as the process that serves it, as a WebSocket does.
+A subscription lives as long as the process that serves it, as a WebSocket does, so a restart ends it.
 
-## No result depends on an uncontrolled order
+## No result depends on an order that nobody wrote
 
 A choice that the scenario does not write and the spec does not make is an uncontrolled order.
-tazuna does not resolve it silently, because the implementation would resolve it in its own way, and the simulation and the implementation would then disagree for a reason that nobody wrote down.
+The implementation resolves such a choice in its own way, so if tazuna resolved it silently, the simulation and the implementation could disagree for a reason that nobody wrote down.
 tazuna removes some of these orders by construction and searches the rest.
 
-Records have no order.
-Spec functions receive the records of an entity as a `Bag`, which has no index and no iterator, so a function cannot depend on the order in which a database returns rows.
-To order records, the spec sorts them by a key with `sortedBy`, and records with equal keys stay one group without order.
-A function can still depend on the order through a variable outside its callbacks, which `test` detects only partly as `BagOrderDependent`.
+Records have no order, because a database returns rows in an order that the spec does not control.
+Spec functions receive the records of an entity as a `Bag`, and a spec that needs an order sorts by a key with `sortedBy`.
 
 Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one group that `decide` returns.
-One search runs all of these orders.
-`test` reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, and stops searching that processing, as Concuerror, loom, and shuttle stop at the first failing schedule.
+`test` runs all of these orders in one search and reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, as Concuerror, loom, and shuttle stop at the first failing schedule.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
-Two outcomes are the same when their lines and the state that later lines read are the same, as [Step orders that `test` searches](guarantees.md#step-orders-that-test-searches) defines.
-Whether two orders give the same outcome depends on what each step changes:
+Whether two orders give the same outcome depends on what each step changes.
+The following examples show the difference:
 
-- Two tied deadlines that each send one request give the same outcome, because the requests keep no order between them.
-- Two tied deadlines that each emit an event without `resultOf` to the same receiver also do, because the two steps have no send order.
-- Two tied deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
-- Two tied deadlines whose events a machine reacts to only the first time do not, because the reaction's event follows whichever event came first.
+- Two deadlines that each send one request give the same outcome, because the requests keep no order between them.
+- Two deadlines that each emit an event without `resultOf` to the same receiver also give the same outcome, because the two steps have no send order.
+- Two deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
 - Two events that move one machine to different states do not, even without a line, because the next event finds the machine in a different state.
 
-The same rule covers the messages that one line delivers to one service, since nothing outside tells which of them arrives first.
-Equal messages are searched too, since each has its own id.
+The same search covers the messages that one line delivers to one service, equal messages included, since each has its own id.
 For example, two copies of a map state that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
-The requests then need content that tells them apart, such as the task's id in the input.
+The requests then need content that tells them apart, such as the task's id.
 
 ## Each meaning has one form
 
@@ -104,37 +96,30 @@ The author of a spec is often an LLM.
 Each variant that a language allows is a choice that the author makes without meaning to, and a reviewer then has to ask whether two forms mean the same thing.
 With one form, two specs that look different mean different things.
 
-The same reasoning makes the spec write a choice to do nothing.
-A state whose request can be rejected writes `onRejected`, and `onRejected: []` ignores the rejection on purpose.
+For the same reason, a spec writes a choice to do nothing, such as `onRejected: []` for a rejection that it ignores on purpose.
 An omitted handler would read the same whether the author decided to ignore the rejection or forgot it.
 
-Data in a chart has one form per lifetime.
-`context` holds what spans states, and `assign` changes it.
-`held` holds what belongs to one visit of a state: the edge that enters the state fills it with `with`, and it stays fixed until the state exits, as a state carries its data in Erlang's gen_statem and in an Elm variant.
-A deadline's time and a guard of the state therefore read the same value, and entering the state again is the one way to refresh it.
+Data in a chart has one form per lifetime: `context` for what spans states, and `held` for one visit of a state, as a state carries its data in Erlang's gen_statem and in an Elm variant.
+Because `held` stays fixed for the visit, a deadline's time and a guard of the state read the same value, and entering the state again is the only way to refresh it.
 A value derived from records is a plain function that reads `records` where it is needed.
 
-## Then states what you want checked
+## Then states the intent, and the snapshot records the run
 
 Then lists the facts that the scenario exists to check, and it does not have to list everything.
 The snapshot records every message of the run, and `test` compares the run with it exactly, so a change in a message that Then leaves out still fails `test`.
-
-The two parts have different readers.
-Then is the scenario's intent, which a reviewer reads to see what the scenario is about.
-The snapshot is the full record, which `test` and `verify` compare.
+The two have different readers.
+A reviewer reads Then to see what the scenario is about, and `test` and `verify` compare the snapshot.
 
 ## Each tool reports one kind of mistake
 
 The TypeScript type checker reports a value of the wrong shape or meaning, such as a guard that reads a field that its state does not have.
-`check` reports the rules that need the whole spec, such as whether the target of a request may reject, and every form that has a canonical alternative, as Clippy does next to the Rust compiler and ESLint next to tsc.
-The simulation in `test`, the exploration in `test`, and `verify` report what only a run shows.
+`check` reports the rules that need the whole spec, such as whether the target of a request may reject, and every form that has a canonical alternative, as Clippy does next to the Rust compiler.
+`test` and `verify` report what only a run shows.
 
 Each rule lives in one tool.
-A type sees one definition and the types it names, so a rule that also depends on the rest of the spec would be split between a type that covers some cases and `check`, which covers the others.
-The earlier tools report a mistake closer to the line that causes it, and need no implementation to run.
+A type sees one definition and the types it names, so a rule that also depended on the rest of the spec would be split between a type that covers some cases and `check`, which covers the others.
+The earlier tools report a mistake closer to the line that causes it, and they need no implementation.
 
-## Some violations are fixed in the spec or the scenario
-
-Some violations point at the spec or the scenario even when nothing in them is wrong as written, because the run that they describe leaves a choice open that a comparison cannot settle.
+Some violations point at the spec or the scenario even when nothing in them is wrong as written, because the run leaves open a choice that no comparison can settle.
 `ChoiceDependent` in `test` and `Uncomparable.ambiguous` in `verify` are such violations.
-The fix states the choice in the spec or the scenario, so that the simulation and the implementation make it alike.
+The fix writes the choice into the spec or the scenario, so that the simulation and the implementation make it alike.
