@@ -100,6 +100,18 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Offer
 
+/--
+A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose schema is `ref(entity)` or `entity`'s key field
+(its own key field included), with `entity` null when it is no definition. Array elements and union options do not
+extend the path. Lines, records, and instances rename created keys at these positions.
+-/
+structure KeyPosition where
+  path : List String
+  entity : Option Ref
+deriving Repr, Inhabited
+
+derive_wire KeyPosition
+
 structure State where
   name : String
   /-- The names from a child of the root down to the state itself. -/
@@ -115,6 +127,9 @@ structure State where
   transitions : List Transition
   /-- The names of the deadlines that the body writes under `after`. -/
   deadlines : List String
+  /-- The key positions of a map state's item key, and of its own context; empty for any other state. -/
+  itemKeys : List KeyPosition
+  contextKeys : List KeyPosition
 deriving Repr, Inhabited
 
 derive_wire State
@@ -126,6 +141,8 @@ def State.shape (st : State) : Shape :=
 structure ChartFields where
   initial : String
   context : List String
+  /-- The key positions of the context. -/
+  contextKeys : List KeyPosition
   /-- The input fields. A machine has none, and no `output`, `requires`, or `ensures`. -/
   input : List String
   output : List String
@@ -166,18 +183,6 @@ structure Reference where
 deriving Repr, Inhabited
 
 derive_wire Reference
-
-/--
-A key position of an entity's records: the field path to a value whose schema is `ref(entity)` or `entity`'s key field
-(its own key field included), with `entity` null when it is no definition. Array elements and union options do not
-extend the path. Lines and records rename created keys at the same positions.
--/
-structure KeyPosition where
-  path : List String
-  entity : Option Ref
-deriving Repr, Inhabited
-
-derive_wire KeyPosition
 
 inductive Change where
   | none

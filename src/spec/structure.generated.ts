@@ -56,11 +56,16 @@ export type State = {
   readonly transitions: readonly Transition[];
   /** The names of the deadlines that the body writes under `after`. */
   readonly deadlines: readonly string[];
+  /** The key positions of a map state's item key, and of its own context; empty for any other state. */
+  readonly itemKeys: readonly KeyPosition[];
+  readonly contextKeys: readonly KeyPosition[];
 };
 
 export type ChartFields = {
   readonly initial: string;
   readonly context: readonly string[];
+  /** The key positions of the context. */
+  readonly contextKeys: readonly KeyPosition[];
   /** The input fields. A machine has none, and no `output`, `requires`, or `ensures`. */
   readonly input: readonly string[];
   readonly output: readonly string[];
@@ -86,9 +91,9 @@ export type Reference = {
 };
 
 /**
- * A key position of an entity's records: the field path to a value whose schema is `ref(entity)` or `entity`'s key field
+ * A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose schema is `ref(entity)` or `entity`'s key field
  * (its own key field included), with `entity` null when it is no definition. Array elements and union options do not
- * extend the path. Lines and records rename created keys at the same positions.
+ * extend the path. Lines, records, and instances rename created keys at these positions.
  */
 export type KeyPosition = {
   readonly path: readonly string[];

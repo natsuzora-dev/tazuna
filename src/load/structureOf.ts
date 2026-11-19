@@ -79,7 +79,7 @@ export function structureOf(
           fields: Object.keys(d.fields),
           unique: d.single ? [] : [...d.unique],
           references: references(d.fields as Shape),
-          keys: keyPositions(d.fields as Shape).map(({ path, entity }) => ({ path: [...path], entity: ref(entity) })),
+          keys: keysOf(d.fields as Shape, ref),
         };
       if (d.kind === "event")
         return {
@@ -130,6 +130,9 @@ export function structureOf(
   };
   return { structure, thrownDefaults };
 }
+
+const keysOf = (shape: Shape, ref: RefOf) =>
+  keyPositions(shape).map(({ path, entity }) => ({ path: [...path], entity: ref(entity) }));
 
 const offerKinds = (offers: StateSpec["offers"]): Record<string, "any" | "listed"> =>
   Object.fromEntries(Object.entries(offers ?? {}).map(([control, o]) => [control, o === any ? "any" : "listed"]));
@@ -185,6 +188,8 @@ function structureOfChart(
         activities,
         transitions: transitions(node, name),
         deadlines: Object.keys(node.after ?? {}),
+        itemKeys: keysOf(node.key ?? {}, ref),
+        contextKeys: keysOf(node.context ?? {}, ref),
       };
       states.push(state);
       visit(node.states ?? {}, state);
@@ -196,6 +201,7 @@ function structureOfChart(
   return {
     initial: chart.initial,
     context: Object.keys(chart.context),
+    contextKeys: keysOf(chart.context, ref),
     input: Object.keys(chart.input ?? {}),
     output: Object.keys(chart.output ?? {}),
     requires: Object.keys(chart.requires ?? {}),

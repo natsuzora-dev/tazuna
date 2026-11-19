@@ -721,7 +721,7 @@ export function comparedLines(
 
 /**
  * Lean's verifyLines: compares the trace lines with the snapshot's lines, and returns the violations and the bindings.
- * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Outcome.renaming, or
+ * A trace line's violation has its 1-based line number in `line`. `renamed` is Lean's: Explore's Settled.renaming, or
  * the identity for verify. `relation` compares the lines' `after` too, as test does for two runs of the simulation.
  */
 export function verifyLines(

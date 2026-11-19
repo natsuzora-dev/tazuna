@@ -581,7 +581,7 @@ The violations of comparing a trace with a snapshot, and the bindings that agree
 `snapshot`, `none` is a blank line. `lines` holds the trace lines before the line that `cut` reports, if any, with `none`
 for blank lines and repeated subscription answers. `internal` selects the event lines that verify does not compare. An
 `unknownAfters` id orders no line, because reading the snapshot reports it before the comparison. `renamed` refines
-what the comparison knows of the values (Explore's Outcome.renaming); verify passes `id`. `relation` compares the lines'
+what the comparison knows of the values (Explore's Settled.renaming); verify passes `id`. `relation` compares the lines'
 `after` too, as test does for two runs of the simulation; verify's trace has none, so verify passes false.
 -/
 def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool)

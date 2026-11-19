@@ -8,7 +8,7 @@ import type { ViolationValue } from "./violation.ts";
  * A difference between the results of two executions. `original` is the result of the execution that takes the step that the
  * violation names first before the second, and `alternative` is the result of the execution that takes the second first.
  * `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
- * snapshot.
+ * snapshot. `records` and `instances` are the parts of the state (Settled.state) that differ.
  */
 export type Difference =
   | {
@@ -26,9 +26,9 @@ export type Difference =
       readonly alternative: Json;
     }
   | {
-      readonly aspect: "deadlines";
-      readonly original: readonly Json[];
-      readonly alternative: readonly Json[];
+      readonly aspect: "instances";
+      readonly original: Json;
+      readonly alternative: Json;
     };
 
 /**
@@ -67,9 +67,9 @@ export type ChoiceDependent =
       };
     }
   /**
-   * Comparing the records of two executions that a stepOrder violation at `definition` would name held more
+   * Comparing the states of two executions that a stepOrder violation at `definition` would name held more
    * than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
-   * the choice changes the records is not known.
+   * the choice changes the state is not known.
    */
   | {
       readonly kind: "ChoiceDependent.uncomparable";

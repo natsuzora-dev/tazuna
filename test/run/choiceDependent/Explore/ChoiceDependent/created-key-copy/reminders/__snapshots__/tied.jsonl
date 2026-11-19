@@ -1,0 +1,5 @@
+{"time":"2026-10-25T02:00:00Z","dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"added#1","name":"added","payload":{"id":"reminders/Task-1","text":"a"},"created":["reminders/Task-1"]}
+{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"added#2","name":"added","payload":{"id":"reminders/Task-2","text":"b"},"created":["reminders/Task-2"]}

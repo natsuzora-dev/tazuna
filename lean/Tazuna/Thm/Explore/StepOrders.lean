@@ -66,51 +66,48 @@ theorem compareTraces_ok {spec : Spec.Structure} {service : String}
       exact ⟨hne, hall⟩
 
 /--
-Two outcomes that difference finds the same halt alike, and when neither halts, either the outputs compare under bindings
-of which one makes the records equal (sameRecords), or the original outputs do not compare even with themselves, and the
-records are equal (sameRecords under the empty binding); and the pending deadlines are equal.
+Two outcomes that difference finds the same halt alike, and when both settle, either the outputs compare under bindings
+of which one makes the states equal (sameState: records and open instances, deadlines included), or the original
+outputs do not compare even with themselves, and the states are equal (sameState under the empty binding).
 -/
 theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (difference compare o a : Id _) = .same) :
-    haltIdentity o.halted = haltIdentity a.halted ∧
-    (o.halted = none →
-      ((∃ set, compare (o.renaming a) o.lines a.lines = .ok set ∧ sameRecords set o a = .same) ∨
-      ((∃ v, compare (o.renaming a) o.lines a.lines = .error v) ∧
-        (∃ v, compare (o.renaming o) o.lines o.lines = .error v) ∧ sameRecords [.empty] o a = .same)) ∧
-      o.deadlines = a.deadlines) := by
-  unfold difference at h
-  by_cases hh : (o.halted.isSome || a.halted.isSome) = true
-  · simp only [hh, ↓reduceIte, pure] at h
+    haltIdentity o.halted? = haltIdentity a.halted? ∧
+    ∀ x y, o = .settled x → a = .settled y →
+      (∃ set, compare (x.renaming y) x.lines y.lines = .ok set ∧ sameState set x y = .same) ∨
+      ((∃ v, compare (x.renaming y) x.lines y.lines = .error v) ∧
+        (∃ v, compare (x.renaming x) x.lines x.lines = .error v) ∧ sameState [.empty] x y = .same) := by
+  have hs : ∀ set x y, compareStates set x y = .same → sameState set x y = .same := by
+    intro set x y hc
+    unfold compareStates at hc
+    split at hc
+    · assumption
+    · cases hc
+    · split at hc <;> cases hc
+  cases o with
+  | settled x =>
+    cases a with
+    | settled y =>
+      refine ⟨rfl, fun x' y' hx hy => ?_⟩
+      cases hx; cases hy
+      simp only [difference, bind, pure] at h
+      split at h
+      · rename_i set hc
+        exact .inl ⟨set, hc, hs _ _ _ h⟩
+      · rename_i v hc
+        split at h
+        · cases h
+        · rename_i w hc'
+          exact .inr ⟨⟨v, hc⟩, ⟨w, hc'⟩, hs _ _ _ h⟩
+    | halted w =>
+      simp only [difference, pure] at h
+      split at h
+      · exact ⟨beq_iff_eq.mp ‹_›, fun _ _ _ hy => by cases hy⟩
+      · cases h
+  | halted v =>
+    simp only [difference, pure] at h
     split at h
-    · rename_i he
-      refine ⟨beq_iff_eq.mp he, fun hn => ?_⟩
-      rw [hn] at he
-      cases ha : a.halted with
-      | none => simp [hn, ha] at hh
-      | some v => simp [ha, haltIdentity] at he
+    · exact ⟨beq_iff_eq.mp ‹_›, fun _ _ hx => by cases hx⟩
     · cases h
-  · simp only [hh, Bool.false_eq_true, ↓reduceIte, bind, pure] at h
-    simp only [Bool.or_eq_true, Option.isSome_iff_ne_none, not_or, Decidable.not_not] at hh
-    refine ⟨by rw [hh.1, hh.2], fun _ => ?_⟩
-    split at h
-    · rename_i set hc
-      split at h
-      · rename_i hs
-        split at h
-        · exact ⟨.inl ⟨set, hc, hs⟩, beq_iff_eq.mp ‹_›⟩
-        · cases h
-      · cases h
-      · cases h
-    · rename_i v hc
-      split at h
-      · cases h
-      · rename_i w hc'
-        split at h
-        · rename_i hs
-          split at h
-          · exact ⟨.inr ⟨⟨v, hc⟩, ⟨w, hc'⟩, hs⟩, beq_iff_eq.mp ‹_›⟩
-          · cases h
-        · cases h
-        · cases h
 
 theorem violation_none {d : Spec.Ref} {f : Difference → ChoiceDependent} {c : Comparison}
     (h : c.violation d f = none) : c = .same := by

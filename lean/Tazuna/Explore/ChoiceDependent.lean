@@ -15,13 +15,13 @@ open Tazuna.Data Tazuna.Service Tazuna.Sim
 A difference between the results of two executions. `original` is the result of the execution that takes the step that the
 violation names first before the second, and `alternative` is the result of the execution that takes the second first.
 `mismatch` is the first violation that verify finds in the alternative outputs, with the original outputs as the
-snapshot.
+snapshot. `records` and `instances` are the parts of the state (Settled.state) that differ.
 -/
 inductive Difference where
   | halt (original alternative : Option Violation)
   | outputs (mismatch : Violation)
   | records (original alternative : Value)
-  | deadlines (original alternative : List Value)
+  | instances (original alternative : Value)
 deriving Repr, Inhabited
 
 derive_wire Difference tag "aspect"
@@ -47,9 +47,9 @@ inductive ChoiceDependent where
   -/
   | searchLimit (definition : Spec.Ref) (limit : Nat)
   /--
-  Comparing the records of two executions that a stepOrder violation at `definition` would name held more
+  Comparing the states of two executions that a stepOrder violation at `definition` would name held more
   than `limit` (bindingLimit) renamings of created keys at one step: too many renaming candidates to compare, so whether
-  the choice changes the records is not known.
+  the choice changes the state is not known.
   -/
   | uncomparable (definition : Spec.Ref) (limit : Nat)
 deriving Repr, Inhabited
@@ -63,32 +63,37 @@ processing with many steps that touch the same values, whose count grows factori
 def stepOrderLimit : Nat := 64
 
 /--
-The result of a run: the violation that halted it, the trace lines that verify reads, its records (recordsValue), its
-pending deadlines (deadlineValue, in canonical order), and the keys that its running services created, each with its
-domain `<service>/<entity>` as verify's valueDomains names a key reference's.
+The outcome of a run that did not halt, as the relation compares it: the trace lines that verify reads, and the state
+that a later input reads, its created keys as key references: the records (recordsValue) and the open instances
+(instancesValue). `created` holds the keys that the running services created, each with its domain
+`<service>/<entity>` as verify's valueDomains names a key reference's; it renames, and is not compared.
 -/
-structure Outcome where
-  halted : Option Violation
+structure Settled where
   lines : List TraceLine
   records : CValue
-  deadlines : List Value
+  instances : CValue
   created : List (String × String)
 
-/--
-A pending deadline as the relation compares it: its instance, state, name and time. A later clock line reads the time,
-so two orders that set it differently differ even when no line of the processing tells them apart.
--/
-def deadlineValue (d : Deadline) : Value :=
-  .obj [("machine", ToValue.toValue d.machine), ("state", .str d.state), ("name", .str d.name),
-    ("time", Time.toValue d.time)]
+/-- The outcome of a run: the violation that halted it, or what it settled to. -/
+inductive Outcome where
+  | halted (violation : Violation)
+  | settled (s : Settled)
 
-/-- The key positions of entity `e`'s records (Structure.KeyPosition), each path with the entity it names. -/
+def Outcome.halted? : Outcome → Option Violation
+  | .halted v => some v
+  | .settled _ => none
+
+/-- The key positions `keys` that name a definition, each path with the entity it names. -/
+def refsAt (keys : List Spec.KeyPosition) : List (List String × Spec.Ref) :=
+  keys.filterMap fun k => k.entity.map (k.path, ·)
+
+/-- The key positions of entity `e`'s records (Structure.KeyPosition). -/
 def keyPaths (st : Service) (e : String) : List (List String × Spec.Ref) :=
   let found := st.structure.definitions.findSome? fun d =>
     match d.body with
     | .entity _ _ _ _ keys => if d.service == st.service && d.name == e then some keys else none
     | _ => none
-  (found.getD []).filterMap fun k => k.entity.map (k.path, ·)
+  refsAt (found.getD [])
 
 /-- The value `v` at field path `path` with the strings at the key positions `keys` as key references. -/
 def keyed (keys : List (List String × Spec.Ref)) (path : List String) : Value → CValue
@@ -115,33 +120,72 @@ def recordsValue (st : Service) (records : Records) : CValue :=
       let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.key.getD "" ≤ b.key.getD "")
       some (e, .bag (rows.map row)))
 
+/-- The chart `name` of the running service `st`. -/
+def chartNamed (st : Service) (name : String) : Option Spec.Chart :=
+  st.structure.definitions.findSome? fun d => if d.service == st.service && d.name == name then d.chart? else none
+
+/-- The map state `map` of the chart `name` of `st`. -/
+def mapNamed (st : Service) (name map : String) : Option Spec.State :=
+  (chartNamed st name).bind fun c => c.states.find? (·.name == map)
+
+/-- The instance id `i` as the relation compares it: a copy's item key at its map state's key positions renames. -/
+def idValue (st : Service) : InstanceId → CValue
+  | .top c n => CValue.ofValue (ToValue.toValue (InstanceId.top c n))
+  | .copy o m k =>
+    .obj [("kind", .leaf (.str "copy")), ("owner", idValue st o), ("map", .leaf (.str m)),
+      ("key", keyed (refsAt ((mapNamed st o.chart m).map (·.itemKeys) |>.getD [])) [] k)]
+
+/-- `vs` in the order of their canonical texts. -/
+def canonicalOrder (vs : List Value) : List Value := vs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
+
 /--
-The outcome of a run as the relation compares it: only the violation that halted the run, or else its trace lines, its
-records and its pending deadlines.
+An open instance as the relation compares it: its id, its active states and the children that each parent last left
+(history), each in name order, since a later input reads which states are active and not the order they were entered
+in; its context at the key positions of its chart or map state; and its pending deadlines, each with its state, name
+and time, which a later clock line reads.
 -/
-def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLine) (records : Records)
-    (deadlines : List Deadline) (created : List (String × String)) : Outcome :=
+def instanceValue (st : Service) (deadlines : List Deadline) (i : Instance) : CValue :=
+  let contextKeys : Option (List Spec.KeyPosition) := match i.id.map? with
+    | some m => (mapNamed st i.id.chart m).map Spec.State.contextKeys
+    | none => (chartNamed st i.id.chart).map (·.toChartFields.contextKeys)
+  let names (ns : List String) : Value := .arr (ns.mergeSort (· ≤ ·) |>.map .str)
+  .obj [("id", idValue st i.id), ("states", .leaf (names i.active)),
+    ("history", .leaf (.arr ((i.lastChildren.mergeSort fun a b => decide (a.1 ≤ b.1)).map fun (p, cs) =>
+      .arr [.str p, names cs]))),
+    ("context", keyed (refsAt (contextKeys.getD [])) [] i.context),
+    ("deadlines", .leaf (.arr (canonicalOrder ((deadlines.filter (·.machine == i.id)).map fun d =>
+      .obj [("state", .str d.state), ("name", .str d.name), ("time", Time.toValue d.time)]))))]
+
+/--
+The open instances as the relation compares them: a bag of instanceValue, in the order of their texts, since renamed
+copy keys no longer order them. A closed instance is left out, since no input reaches it again.
+-/
+def instancesValue (st : Service) (s : State) : CValue :=
+  let views := ((s.machines ++ s.copies).filter (!·.closed)).map (instanceValue st s.deadlines)
+  .bag (views.mergeSort fun a b => decide (a.flatten.canonical ≤ b.flatten.canonical))
+
+/-- The outcome of a run of the running service `st` that halted with `halted`, or else settled to `s`. -/
+def Outcome.of (st : Service) (halted : Option Violation) (lines : List TraceLine) (s : State)
+    (created : List (String × String)) : Outcome :=
   match halted with
-  | some v => { halted := some v, lines := [], records := .leaf .null, deadlines := [], created := [] }
-  | none =>
-    { halted := none, lines, records := recordsValue st records, created,
-      deadlines := (deadlines.map deadlineValue).mergeSort fun a b => decide (a.canonical ≤ b.canonical) }
+  | some v => .halted v
+  | none => .settled { lines, records := recordsValue st s.records, instances := instancesValue st s, created }
 
 /--
 The first violation that verify finds in the second lines, with the first lines as the snapshot, or else the set of
 bindings that agree with every line (Data/Binding). The first argument refines what verify knows of the values
-(Outcome.renaming).
+(Settled.renaming).
 -/
 abbrev Compare (m : Type → Type) :=
   (Values → Values) → List TraceLine → List TraceLine → m (Except Violation (List Binding))
 
 /--
 What a comparison of `original` with `alternative` knows of the values beyond verify's `v`: a key that `original`
-created has its domain from `original.created`, so the lines and the records bind it alike; and it may stand only for a
+created has its domain from `original.created`, so the lines and the state bind it alike; and it may stand only for a
 key that `alternative` created in the same domain, never for "", a literal, or a Given key. It renames only at key
 references (matchValue).
 -/
-def Outcome.renaming (original alternative : Outcome) (v : Values) : Values :=
+def Settled.renaming (original alternative : Settled) (v : Values) : Values :=
   { v with
     domain := fun s => (original.created.lookup s).getD (v.domain s)
     image := fun s t =>
@@ -149,27 +193,46 @@ def Outcome.renaming (original alternative : Outcome) (v : Values) : Values :=
       | some d => alternative.created.lookup t == some d
       | none => v.image s t }
 
+/-- The state that a later input reads: the records and the open instances, renamed together. -/
+def Settled.state (s : Settled) : CValue := .obj [("records", s.records), ("instances", s.instances)]
+
 /--
-Whether the records of `original` and `alternative` are equal under one of the bindings `set`, extended by a renaming
-of the created keys of `original` (one to one within each entity's keys, created keys only); uncomparable when matching
-held more than bindingLimit bindings and no binding of `set` made them equal.
+Whether the part `part` of `original` and `alternative` is equal under one of the bindings `set`, extended by a
+renaming of the created keys of `original` (one to one within each entity's keys, created keys only); uncomparable
+when matching held more than bindingLimit bindings and no binding of `set` made them equal.
 -/
-def sameRecords (set : List Binding) (original alternative : Outcome) : Sameness :=
+def samePart (part : Settled → CValue) (set : List Binding) (original alternative : Settled) : Sameness :=
   let v := original.renaming alternative
     { domain := fun _ => "", fresh := original.created.map (·.1), image := fun _ _ => true }
-  .any (set.map fun b => (matchValue v b original.records alternative.records).sameness)
+  .any (set.map fun b => (matchValue v b (part original) (part alternative)).sameness)
+
+/-- Whether the states of `original` and `alternative` are equal under one of the bindings `set` (samePart). -/
+abbrev sameState := samePart Settled.state
 
 /-- The identity of a halting violation. Two halting violations differ when their kinds or data differ. -/
 def haltIdentity : Option Violation → Option (String × String)
   | some v => some (v.kind, v.data.canonical)
   | none => none
 
-/-- What comparing two outcomes found: no difference, a difference, or too many renamings to tell (sameRecords). -/
+/-- What comparing two outcomes found: no difference, a difference, or too many renamings to tell (samePart). -/
 inductive Comparison where
   | same
   | differ (difference : Difference)
   | uncomparable
 deriving Repr, Inhabited
+
+/--
+The comparison of the states of `original` and `alternative` under the bindings `set`: when they differ, the records
+when the records alone differ, and else the instances.
+-/
+def compareStates (set : List Binding) (original alternative : Settled) : Comparison :=
+  match sameState set original alternative with
+  | .same => .same
+  | .uncomparable => .uncomparable
+  | .different =>
+    if samePart Settled.records set original alternative == .same then
+      .differ (.instances original.instances.flatten alternative.instances.flatten)
+    else .differ (.records original.records.flatten alternative.records.flatten)
 
 section
 
@@ -177,29 +240,21 @@ variable {m : Type → Type} [Monad m]
 
 /--
 The first difference: the halting violations, then the outputs as `compare` finds them with `original` as the
-snapshot, then the records, which later inputs read, under the bindings of the outputs (sameRecords), then the pending
-deadlines, whose times later clock lines read. Two outcomes
-without a difference are equal up to a renaming of their created keys (symmetry, as TLA+ symmetry sets reduce states).
+snapshot, then the state, which later inputs read, under the bindings of the outputs (sameState). Two outcomes without
+a difference are equal up to a renaming of their created keys (symmetry, as TLA+ symmetry sets reduce states).
 Outputs that `compare` cannot compare with themselves, as when equal requests get different answers, tell no choice
-apart, so only the records are compared then.
+apart, so only the states are compared then.
 -/
-def difference (compare : Compare m) (original alternative : Outcome) : m Comparison := do
-  if original.halted.isSome || alternative.halted.isSome then
-    return if haltIdentity original.halted == haltIdentity alternative.halted then .same
-      else .differ (.halt original.halted alternative.halted)
-  let records (set : List Binding) : Comparison :=
-    match sameRecords set original alternative with
-    | .same =>
-      if original.deadlines == alternative.deadlines then .same
-      else .differ (.deadlines original.deadlines alternative.deadlines)
-    | .different => .differ (.records original.records.flatten alternative.records.flatten)
-    | .uncomparable => .uncomparable
-  match ← compare (original.renaming alternative) original.lines alternative.lines with
-  | .ok set => return records set
-  | .error mismatch =>
-    match ← compare (original.renaming original) original.lines original.lines with
-    | .ok _ => return .differ (.outputs mismatch)
-    | .error _ => return records [.empty]
+def difference (compare : Compare m) : Outcome → Outcome → m Comparison
+  | .settled o, .settled a => do
+    match ← compare (o.renaming a) o.lines a.lines with
+    | .ok set => return compareStates set o a
+    | .error mismatch =>
+      match ← compare (o.renaming o) o.lines o.lines with
+      | .ok _ => return .differ (.outputs mismatch)
+      | .error _ => return compareStates [.empty] o a
+  | o, a => return if haltIdentity o.halted? == haltIdentity a.halted? then .same
+    else .differ (.halt o.halted? a.halted?)
 
 /-- The violation, if any, that a comparison found for a choice at `definition`, with `found` for a difference. -/
 def Comparison.violation (definition : Spec.Ref) (found : Difference → ChoiceDependent) :

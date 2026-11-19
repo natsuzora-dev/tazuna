@@ -82,13 +82,14 @@ Some steps have no cause that orders them: deadlines of one service due at the s
 One search runs all of these orders, and `test` reports `ChoiceDependent.stepOrder` for the first two orders that give different outcomes.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
-Two outcomes are the same when their lines have the same contents and each line follows the same earlier lines, which the snapshot records as `after`.
+Two outcomes are the same when their lines have the same contents and each line follows the same earlier lines, which the snapshot records as `after`, and when they leave the same state for later lines: the same records and the same active states, contexts, and pending deadlines of each machine and screen.
 Whether two orders give the same outcome depends on what each step changes:
 
 - Two tied deadlines that each send one request give the same outcome, because the requests keep no order between them.
 - Two tied deadlines that each emit an event without `resultOf` to the same receiver also do, because the two steps have no send order.
 - Two tied deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
 - Two tied deadlines whose events a machine reacts to only the first time do not, because the reaction's event follows whichever event came first.
+- Two events that move one machine to different states do not, even without a line, because the next event finds the machine in a different state.
 
 The same rule covers the messages that one line delivers to one service, since nothing outside tells which of them arrives first.
 The same search runs their orders and reports `ChoiceDependent.stepOrder`.

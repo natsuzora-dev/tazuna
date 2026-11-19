@@ -1,18 +1,23 @@
 import type { ChoiceDependent } from "../data/choiceDependent.generated.ts";
+import { written } from "../data/collections.ts";
 import { stepOrderLimit } from "../data/limits.generated.ts";
 import type { Origin, Scenario } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
-import { canonicalJson, type Json } from "../data/values.ts";
+import { canonicalJson, type Json, objectOf } from "../data/values.ts";
 import { type Violation, type ViolationValue, withExtra } from "../data/violation.ts";
+import { chartOf, stateAt } from "../dsl/chart.ts";
+import type { ChartSpec, Definition } from "../dsl/definition.ts";
 import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
+import { chartOf as instanceChart, mapOf } from "../service/instance.ts";
 import { type Line, sameLineId } from "../service/message.ts";
 import { stepNameDefinition, stepsKey } from "../service/note.ts";
-import { created, tieOf } from "../service/state.ts";
+import { created, type Instance, tieOf } from "../service/state.ts";
 import { type Span, type StepOrder, sameOrigin } from "../sim/network.ts";
 import { executeSpec, type Made, snapshotsOf } from "../sim/spec/simulate.ts";
 import { snapshotLines } from "../sim/trace.ts";
+import { stateNamed } from "../spec/structure.ts";
 import { compareRuns } from "../verify/compare.ts";
 import { type Compare, type Outcome, outcomeOf, stepOrder } from "./choiceDependent.ts";
 import { leadsTo } from "./instrument.ts";
@@ -43,7 +48,7 @@ const compareOf =
   };
 
 /** Lean's Execution.outcomeWith: the outcome of `service` in `m`, with its lines `lines` when given. */
-function outcomeFor(m: Made, service: string, lines?: readonly Line[]): Outcome {
+function outcomeFor(spec: Spec, m: Made, service: string, lines?: readonly Line[]): Outcome {
   const p = m.world.services.get(service);
   if (p === undefined) throw new Error(`${service} does not run`);
   const s = p.processing.state;
@@ -63,10 +68,26 @@ function outcomeFor(m: Made, service: string, lines?: readonly Line[]): Outcome 
     p.processing.st,
     p.halted === undefined ? null : violationValue(p.halted),
     traceLines,
-    s.records,
-    s.deadlines,
+    s,
     new Map(keys),
+    contextOf(spec, service),
   );
+}
+
+/** Returns the context of an instance of `service` encoded by its chart's or map state's context schema, as Lean holds it. */
+function contextOf(spec: Spec, service: string): (i: Instance) => Json {
+  return (i) => {
+    const name = instanceChart(i.id);
+    const named = spec.definitions.find(
+      (d) =>
+        d.service === service && d.name === name && (d.definition.kind === "machine" || d.definition.kind === "screen"),
+    );
+    const chart = chartOf(named?.definition as Definition) as ChartSpec;
+    const map = mapOf(i.id);
+    const state = map === undefined ? undefined : stateNamed(i.chart.tree, map);
+    const shape = state === undefined ? chart.context : (stateAt(chart, state.path).context ?? {});
+    return written(objectOf(shape), i.context);
+  };
 }
 
 /** Lean's Execution.refused. */
@@ -153,7 +174,7 @@ function stepOrderSearch(
     const names = taken(executed, span);
     const nameOf = new Map(names);
     const steps = executed.world.services.get(service)?.processing.state.steps ?? [];
-    const parentOutcome = outcomeFor(executed, service);
+    const parentOutcome = outcomeFor(spec, executed, service);
     for (const [i, j] of candidatesOf(executed, span)) {
       const [a, b] = [nameOf.get(i), nameOf.get(j)];
       if (a === undefined || b === undefined) continue;
@@ -183,8 +204,9 @@ function stepOrderSearch(
       const altSpan = spanOf(alternative, origin, service);
       const aligned =
         altSpan === undefined
-          ? outcomeFor(alternative, service)
+          ? outcomeFor(spec, alternative, service)
           : outcomeFor(
+              spec,
               alternative,
               service,
               alignTo(inIds(linesOf(executed, service), span), altSpan, linesOf(alternative, service)),
