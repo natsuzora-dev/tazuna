@@ -28,22 +28,25 @@ const isTheorem = (name: string) =>
 const groups = [...read("src/data/violation.ts").matchAll(/^ {2}\| "(\w+)"/gm)].map((m) => m[1] ?? "");
 
 const proven = guarantees.slice(guarantees.indexOf("## Proven properties"));
-const citationList = /\((`[\w.]+`(?:, `[\w.]+`)*)\)/g;
 const namesIn = (list: string) => [...list.matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? "");
+/** The last cell of each body row of the tables under Proven properties: the theorems that prove the row. */
+const theoremCells = proven
+  .split("\n")
+  .filter((line) => line.startsWith("| ") && !line.startsWith("| Property |"))
+  .map((line) => line.slice(0, -" |".length).split(" | ").at(-1) ?? "");
 
-test("Proven properties is the last section of docs/guarantees.md, and each of its items cites the theorems that prove it", () => {
+test("Proven properties is the last section of docs/guarantees.md, and each of its rows cites the theorems that prove it", () => {
   assert.ok(!proven.includes("\n## "));
-  const items = proven.split("\n").filter((line) => line.startsWith("- "));
-  assert.ok(items.length > 0);
+  assert.ok(theoremCells.length > 0);
   assert.deepEqual(
-    items.filter((item) => item.match(citationList) === null),
+    theoremCells.filter((cell) => !/^`[\w.]+`(?:, `[\w.]+`)*$/.test(cell)),
     [],
   );
 });
 
-test("Each theorem that a doc cites is a theorem stated in lean/Tazuna/Thm: every name in a citation under Proven properties, and every name with an underscore elsewhere", () => {
+test("Each theorem that a doc cites is a theorem stated in lean/Tazuna/Thm: every name in a Theorems cell under Proven properties, and every name with an underscore elsewhere", () => {
   const cited = [
-    ...[...proven.matchAll(citationList)].flatMap((m) => namesIn(m[1] ?? "")),
+    ...theoremCells.flatMap(namesIn),
     ...docs.flatMap(({ text }) => [...text.matchAll(/`([a-z][A-Za-z0-9]*_\w*)`/g)].map((m) => m[1] ?? "")),
   ];
   assert.ok(cited.length > 0);

@@ -31,6 +31,9 @@ A running peer's lines state the messages that its run sent, and its trace is a 
 The symmetry is what lets one scenario check both sides of an exchange.
 A rule that held only for the own service would let a peer's message arrive without a line, and the scenario would no longer state the whole world.
 
+tazuna checks an external peer's lines against its contract once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
+A result event may arrive before or after its request's answer, so a check in the middle of the exchange would read a record that is not complete yet.
+
 ## A line refers to earlier lines through handles
 
 Each line returns a *handle*, and a later line refers to what an earlier line caused only through that handle.
@@ -42,6 +45,8 @@ A scenario never refers to a message by its position or by a count, such as "the
 A position breaks silently when the spec changes: a command that sends one more request shifts every later position, and the scenario then names a different message without any error.
 A handle that names content fails loudly instead.
 For the same reason, an operation names its screen instance by the handle of the line that opened it, so several open instances of one screen need no position.
+When tazuna compares two runs, it names a screen instance by its place, the screen that opened it and the state that opens it, as Akka names an actor by its path.
+The order in which screens open does not change a name.
 
 A scenario also never writes a key that a running service creates, such as `todo/Task-1`.
 The value of a created key is the run's decision, and the implementation makes it differently.
@@ -54,8 +59,9 @@ A message stays *in flight* from the moment its sender sends it until a line of 
 While a message is in flight, other lines can run, which is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
 
 Messages on one channel arrive in the order in which they were sent, as on one TCP connection or one Kafka partition, and nothing orders two channels.
-The spec fixes the send order of two events only along a chain of causes, as Lamport's happens-before orders messages.
-Two steps that no chain of causes links, such as the steps of two parallel regions, could run in two processes of a deployed system, and nothing orders the messages of two processes.
+The result events of a request travel on a channel of their own, as a Stripe webhook may arrive before the API response.
+The spec fixes the send order of two events only along a cause chain, as Lamport's happens-before orders messages.
+Two steps that no cause chain links, such as the steps of two parallel regions, could run in two processes of a deployed system, and nothing orders the messages of two processes.
 [Terms](guarantees.md#terms) defines the channels and the send order.
 Neither the snapshot nor `verify` records an order that a deployed system does not keep, so a spec cannot rely on one.
 
@@ -79,11 +85,11 @@ To order records, the spec sorts them by a key with `sortedBy`, and records with
 A function can still depend on the order through a variable outside its callbacks, which `test` detects only partly as `BagOrderDependent`.
 
 Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one group that `decide` returns.
-One search runs all of these orders. `test` reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, and stops searching that processing.
+One search runs all of these orders.
+`test` reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, and stops searching that processing, as Concuerror, loom, and shuttle stop at the first failing schedule.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
-Two outcomes are the same when their lines have the same contents and each line follows the same earlier lines, which the snapshot records as `after`.
-They must also leave the same state for later lines: the same records, and the same active states, contexts, and pending deadlines of each open machine, screen, and map state copy.
+Two outcomes are the same when their lines and the state that later lines read are the same, as [Step orders that `test` searches](guarantees.md#step-orders-that-test-searches) defines.
 Whether two orders give the same outcome depends on what each step changes:
 
 - Two tied deadlines that each send one request give the same outcome, because the requests keep no order between them.
@@ -117,6 +123,11 @@ The snapshot records every message of the run, and `test` compares the run with 
 The two parts have different readers.
 Then is the scenario's intent, which a reviewer reads to see what the scenario is about.
 The snapshot is the full record, which `test` and `verify` compare.
+
+## The earliest tool reports a mistake
+
+tazuna aims to report each mistake with the earliest tool that can find it, in this order: the TypeScript type checker, `check`, the simulation in `test`, the exploration in `test`, and `verify`.
+An earlier tool reports a mistake closer to the line that causes it, and needs no implementation to run.
 
 ## Some violations are fixed in the spec or the scenario
 
