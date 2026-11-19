@@ -117,10 +117,15 @@ The two parts have different readers.
 Then is the scenario's intent, which a reviewer reads to see what the scenario is about.
 The snapshot is the full record, which `test` and `verify` compare.
 
-## The earliest tool reports a mistake
+## Each tool reports one kind of mistake
 
-tazuna aims to report each mistake with the earliest tool that can find it, in this order: the TypeScript type checker, `check`, the simulation in `test`, the exploration in `test`, and `verify`.
-An earlier tool reports a mistake closer to the line that causes it, and needs no implementation to run.
+The TypeScript type checker reports a value of the wrong shape or meaning, such as a guard that reads a field that its state does not have.
+`check` reports the rules that need the whole spec, such as whether the target of a request may reject, and every form that has a canonical alternative, as Clippy does next to the Rust compiler and ESLint next to tsc.
+The simulation in `test`, the exploration in `test`, and `verify` report what only a run shows.
+
+Each rule lives in one tool.
+A type sees one definition and the types it names, so a rule that also depends on the rest of the spec would be split between a type that covers some cases and `check`, which covers the others.
+The earlier tools report a mistake closer to the line that causes it, and need no implementation to run.
 
 ## Some violations are fixed in the spec or the scenario
 

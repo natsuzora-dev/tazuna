@@ -106,24 +106,19 @@ type Handled<N extends string, Ctx, A> =
   | readonly [...Transitions<N, Ctx, A>, Transition<N, Ctx, A> & { readonly guard?: never }];
 
 /**
- * The `onRejected` transitions, written exactly when an answer may be rejected: never for an external target that
- * declares `rejects: []`, always for another external target, and for a target of a spec service when its definition or
- * the sender's service allows a rejection (`NonCanonical.missingOnRejected`, `NonCanonical.unreachableOnRejected`; the
- * type cannot tell the sender's own service from another spec service, since a service has no type of its own). They
- * are empty, which ignores every rejection, or end with a transition without a guard, which takes every rejection that
- * no earlier guard takes (`{}` does nothing), so no rejection goes unhandled.
+ * The `onRejected` transitions, written exactly when an answer may be rejected (`NonCanonical.missingOnRejected`,
+ * `NonCanonical.unreachableOnRejected`). They are empty, which ignores every rejection, or end with a transition without
+ * a guard, which takes every rejection that no earlier guard takes (`{}` does nothing), so no rejection goes unhandled.
  */
-type OnRejected<N extends string, Ctx, B, D> = D extends { readonly rejects: readonly [] }
-  ? { readonly onRejected?: never }
-  : D extends { readonly rejects: readonly RejectionKind[] }
-    ? { readonly onRejected: Handled<N, Ctx, B & { readonly rejection: RejectionBinding }> }
-    : { readonly onRejected?: Handled<N, Ctx, B & { readonly rejection: RejectionBinding }> };
+type OnRejected<N extends string, Ctx, B> = {
+  readonly onRejected?: Handled<N, Ctx, B & { readonly rejection: RejectionBinding }>;
+};
 
 /** The queries that a state calls. A state that does nothing on an answer writes `[]`. */
 type StateCalls<N extends string, Ctx, B, Qs extends Queries> = SomeKnownKey<Qs> & {
   readonly [K in keyof Qs]?: {
     readonly onFulfilled: Transitions<N, Ctx, B & { readonly output: QueryOutput<Qs[K]> }>;
-  } & OnRejected<N, Ctx, B, Qs[K]> &
+  } & OnRejected<N, Ctx, B> &
     InputOf<Qs[K], B>;
 };
 
@@ -131,7 +126,7 @@ type StateCalls<N extends string, Ctx, B, Qs extends Queries> = SomeKnownKey<Qs>
 export type StateSends<N extends string, Ctx, B, Cs extends Commands> = SomeKnownKey<Cs> & {
   readonly [K in keyof Cs]?: {
     readonly onAccepted: Transitions<N, Ctx, B & AcceptedOutput<Cs[K]>>;
-  } & OnRejected<N, Ctx, B, Cs[K]> &
+  } & OnRejected<N, Ctx, B> &
     InputOf<Cs[K], B & CreateKey>;
 };
 

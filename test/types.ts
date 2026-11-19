@@ -438,32 +438,14 @@ const externalKind: KindOf<typeof calendarContract> = "external";
 void externalKind;
 
 const notify = externalCommand({ input: { text: z.string() }, emits: [], rejects: ["unavailable"] });
-const beep = externalCommand({ emits: [], rejects: [] });
 
 // An automation ignores an unavailable rejection with onRejected: [].
 automation({ receives: { taskAdded }, commands: { notify } }).send({ input: () => ({ text: "" }), onRejected: [] });
-
-// @ts-expect-error an automation writes onRejected: [] when its command may reject with unavailable
-automation({ receives: { taskAdded }, commands: { notify } }).send({ input: () => ({ text: "" }) });
 
 automation({ receives: { taskAdded }, commands: { notify } }).send({
   input: () => ({ text: "" }),
   // @ts-expect-error an automation's onRejected only ignores
   onRejected: [{}],
-});
-
-// @ts-expect-error an automation writes no onRejected when its command never rejects
-automation({ receives: { taskAdded }, commands: { beep } }).send({ onRejected: [] });
-
-machine({ description: "", commands: { beep }, initial: "a", states: { a: {} } }).chart({
-  states: {
-    a: {
-      sends: {
-        // @ts-expect-error a state writes no onRejected when its command never rejects
-        beep: { onAccepted: [], onRejected: [] },
-      },
-    },
-  },
 });
 
 // @ts-expect-error an automation receives exactly one event

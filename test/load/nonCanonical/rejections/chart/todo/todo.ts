@@ -1,5 +1,6 @@
 import { emit, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
+import { device } from "../device/contract.ts";
 
 export const { command, event, machine, contract } = service({ name: "todo", description: "Keep the tasks" });
 
@@ -28,5 +29,21 @@ export const counter = machine({
     counting: {
       sends: { countTask: { input: () => ({ taskId: "task-1" }), onAccepted: [{ target: "idle" }], onRejected: [] } },
     },
+  },
+});
+
+export const alerter = machine({
+  description: "Notify and beep for each added task",
+  receives: { taskAdded },
+  commands: { notify: device.notify, beep: device.beep },
+  initial: "idle",
+  states: { idle: {}, notifying: {}, beeping: {} },
+}).chart({
+  states: {
+    idle: { on: { taskAdded: [{ target: "notifying" }] } },
+    notifying: {
+      sends: { notify: { input: () => ({ text: "A task was added" }), onAccepted: [{ target: "beeping" }] } },
+    },
+    beeping: { sends: { beep: { onAccepted: [{ target: "idle" }], onRejected: [] } } },
   },
 });

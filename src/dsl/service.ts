@@ -157,21 +157,6 @@ type SendInput<C, Args> =
       : { input: (args: Args) => MadeRow<I> }
     : never;
 
-/**
- * `onRejected: []` ignores an unavailable rejection, the only kind that is not a fault of the automation
- * (`Fault.rejectedAutomationCommand`). It is written exactly when one can arrive: the command is of another service and
- * may reject with unavailable (`NonCanonical.missingOnRejected`, `NonCanonical.unreachableOnRejected`; the type cannot
- * tell the own service from another spec service, since a service has no type of its own). The precedent is Swift's
- * `try?`.
- */
-type SendRejected<C> = C extends { readonly rejects: infer Rj }
-  ? Rj extends readonly RejectionKind[]
-    ? "unavailable" extends Rj[number]
-      ? { onRejected: readonly [] }
-      : { onRejected?: never }
-    : { onRejected?: readonly [] }
-  : never;
-
 interface AutomationSetup<Ev extends AnyEvent, Cs extends Readonly<Record<string, AnyCommand>>, Es extends Entities> {
   /** Sends the command when `guard` holds, or always without `guard`. */
   send<const B = Record<never, never>, const Bn extends string = never, const G extends string = never>(
@@ -180,8 +165,14 @@ interface AutomationSetup<Ev extends AnyEvent, Cs extends Readonly<Record<string
       binds?: Binds<AutomationArgs<Ev, Es>, B> & Present<Bn>;
       /** A condition that checks the same as one of the command's `requires` calls the same `condition`. */
       guard?: Named<G, AutomationArgs<Ev, Es> & { bound: Bound<B> }>;
-    } & SendInput<Cs[keyof Cs], AutomationArgs<Ev, Es> & { bound: Bound<B> } & CreateKey> &
-      SendRejected<Cs[keyof Cs]>,
+      /**
+       * Ignores an unavailable rejection, the only kind that is not a fault of the automation
+       * (`Fault.rejectedAutomationCommand`). Written exactly when one can arrive: the command is of another service and
+       * may reject with unavailable (`NonCanonical.missingOnRejected`, `NonCanonical.unreachableOnRejected`). The
+       * precedent is Swift's `try?`.
+       */
+      onRejected?: readonly [];
+    } & SendInput<Cs[keyof Cs], AutomationArgs<Ev, Es> & { bound: Bound<B> } & CreateKey>,
   ): Automation;
 }
 
