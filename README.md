@@ -40,7 +40,7 @@ Run the commands in the folder of your `package.json`.
    npx tazuna check spec
    ```
 
-   The output ends with `No violations found.`
+   The output ends with `27 files: no violations`.
 
 3. Open [spec/todo/scenarios.ts](samples/todo/spec/todo/scenarios.ts) and find the scenario `completeTwice`.
    The user adds a task and completes it twice, and the `todo` service rejects the second completion:

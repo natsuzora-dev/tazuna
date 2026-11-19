@@ -47,15 +47,17 @@ interface Snapshotted {
 
 /**
  * Compares each run that did not halt with its snapshot, or, with `update`, writes that snapshot and removes the
- * snapshots without a run. Unless `selected`, also reports the other violations in the snapshot folders; a selection
- * leaves the snapshots of the scenarios that did not run as they are.
+ * snapshots without a run, and reports the other violations in the snapshot folders. It leaves as they are the entries
+ * named after a scenario that `skipped` holds: `<scenario>`, or `<scenario>.<anything>`.
  */
 function testSnapshots(
   spec: Spec,
   snapshotted: readonly Snapshotted[],
   update: boolean,
-  selected: boolean,
+  skipped: readonly Named<LoadedScenario>[],
 ): Pick<TestResult, "violations" | "written" | "removed"> {
+  const ofSkipped = (service: string, entry: string) =>
+    skipped.some((s) => s.service === service && (entry === s.name || entry.startsWith(`${s.name}.`)));
   const ended = snapshotted.flatMap(({ run, lines }) => (lines === undefined ? [] : [{ run, lines }]));
   const written = update ? ended.map((s) => writeSnapshot(spec, s.run, s.lines)) : [];
   const { services, folders } = snapshotFolders(spec);
@@ -73,7 +75,7 @@ function testSnapshots(
   ];
   const removed: string[] = [];
   for (const p of pairing.violations)
-    if (selected && p.at.kind !== "scenario") continue;
+    if (p.at.kind === "snapshotEntry" && ofSkipped(p.at.service, p.at.entry)) continue;
     else if (update && p.violation.kind === "Uncomparable.obsoleteSnapshot" && p.at.kind === "snapshotEntry") {
       const path = snapshotEntryPath(spec, p.at.service, p.at.entry);
       rmSync(path);
@@ -83,18 +85,16 @@ function testSnapshots(
 }
 
 /**
- * Simulates and explores every scenario, or the `<service>/<scenario>` names of `only`, then tests the snapshots
- * (testSnapshots). The explored paths take their values from every scenario either way. A scenario still written as an
+ * Simulates and explores `scenarios`, some or all of the spec's, then tests the snapshots (testSnapshots). The explored
+ * paths take their values from every scenario either way. A scenario still written as an
  * input list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it
  * is.
  */
 export function testSpec(
   spec: CheckedSpec,
-  options: { readonly update: boolean; readonly depth: number; readonly only?: ReadonlySet<string> | undefined },
+  options: { readonly update: boolean; readonly depth: number; readonly scenarios: readonly Named<LoadedScenario>[] },
 ): TestResult {
-  const { only } = options;
-  const scenarios =
-    only === undefined ? spec.scenarios : spec.scenarios.filter((s) => only.has(`${s.service}/${s.name}`));
+  const { scenarios } = options;
   const bounds = { depth: options.depth, valuesPerPayload };
   const reached = new Coverage();
   const simulated = simulateScenarios(spec, scenarios);
@@ -110,7 +110,7 @@ export function testSpec(
   for (const violation of simulated.violations) report(violation);
   const seenInLines = seenLines(spec);
   for (const named of scenarios) {
-    const explored = exploreLines(spec, named as Named<LoadedScenario>, seenInLines, bounds);
+    const explored = exploreLines(spec, named, seenInLines, bounds);
     reached.addAll(explored.reached);
     const ref = { service: named.service, name: named.name };
     for (const { violation, appended } of explored.found)
@@ -122,7 +122,8 @@ export function testSpec(
         ),
       );
   }
-  const snapshots = testSnapshots(spec, simulated.snapshotted, options.update, only !== undefined);
+  const skipped = spec.scenarios.filter((s) => !scenarios.includes(s));
+  const snapshots = testSnapshots(spec, simulated.snapshotted, options.update, skipped);
   return { ...snapshots, violations: [...violations, ...snapshots.violations], reached };
 }
 
@@ -141,7 +142,7 @@ function simulateScenarios(
   const violations: ReportedViolation[] = [];
   const snapshotted: Snapshotted[] = [];
   for (const named of scenarios) {
-    const { scenario, linePlaces } = named.definition as LoadedScenario;
+    const { scenario, linePlaces } = named.definition;
     const ref = { service: named.service, name: named.name };
     const simulated = simulateSpec(spec, scenario);
     const { world } = simulated;

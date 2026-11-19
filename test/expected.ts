@@ -3,25 +3,40 @@ import { readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { type TestContext, test } from "node:test";
 import { main } from "../src/cli/main.ts";
-import type { Kind } from "../src/data/kinds.ts";
+import { groups } from "../src/data/groups.ts";
+import { type Kind, parseKind } from "../src/data/kinds.ts";
 import type { Group, ReportedViolation } from "../src/data/violation.ts";
 import { depth, maskedStack, typeChecked } from "./examples.ts";
 import { unexemplified } from "./kinds.ts";
 
 export const expected = "expected.jsonl";
 
-const summaryOnly =
-  /^(?:(?:Checked|Verified) [^\n]*\. (?:No violations found|\d+ violations?)\.|\d+\/\d+ scenarios, depth \d+: (?:no violations|\d+ violations?))$/;
+const summaryOnly = /^[^:\n]+: (?:no violations|\d+ violations?)$/;
 
+/**
+ * The violation lines of the runs of `example`, each checked to be of a group whose reportedBy lists the command that
+ * reported it.
+ */
 export async function recordsOf(example: string, runs: readonly (readonly string[])[]): Promise<readonly string[]> {
   const logged: string[] = [];
-  for (const args of runs)
+  for (const args of runs) {
+    const [name = ""] = args;
+    const commands = [name, ...(args.includes("--coverage") ? [`${name} --coverage`] : [])];
     await main(args, {
       cwd: example,
-      log: (line) => logged.push(JSON.stringify(maskedStack(JSON.parse(line) as ReportedViolation))),
+      log: (line) => {
+        const violation = JSON.parse(line) as ReportedViolation;
+        const group = parseKind(violation.kind)?.group;
+        assert.ok(
+          group !== undefined && groups[group].reportedBy.some((c) => commands.includes(c)),
+          `${violation.kind} from tazuna ${args.join(" ")}`,
+        );
+        logged.push(JSON.stringify(maskedStack(violation)));
+      },
       error: (line) => assert.match(line, summaryOnly, `tazuna ${args.join(" ")}`),
       typeCheck: () => typeChecked,
     });
+  }
   return logged;
 }
 
