@@ -115,4 +115,5 @@ Run the commands in the folder of your `package.json`.
 - To look up what a passing command guarantees and who fixes each violation, read [Guarantees](docs/guarantees.md).
 - To drive tazuna from a coding agent, give it the skill in [skills/tazuna](skills/tazuna/SKILL.md).
 - To compare an implementation with the snapshots, see how the ToDo sample's server drives itself through the scenarios in [web/test/todo.test.ts](https://github.com/natsuzora-dev/tazuna/blob/main/samples/todo/web/test/todo.test.ts) in the tazuna repository.
+- To browse a spec's definitions and scenario snapshots in a browser, run `npx tazuna view spec`.
 - To list the commands and options, run `npx tazuna --help`. Each exported function documents itself in its doc comment.
