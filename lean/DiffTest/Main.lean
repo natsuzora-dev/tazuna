@@ -220,6 +220,12 @@ instance : Sim.MonadActing ActingIO where
     modify ({ · with current := previous })
     pure r
 
+/-- The notes of a run outside a simulation, of which tazuna-lean hears only a bug, and stops on it. -/
+instance : MonadNote IO where
+  note
+    | .bug message => throw (IO.userError message)
+    | _ => pure ()
+
 /--
 The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
 Collect. Each question to TS names its service.
@@ -238,12 +244,6 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (Strin
         lastEnumerated := do pure (((← reads.get).replied.bind (·.enumerated)) == some true)
         reversed := functions stdin stdout reads memo true (some service) }
       (instrument st fs ifs).hoist (focus service)
-
-/-- The notes of a run outside a simulation, of which tazuna-lean hears only a bug, and stops on it. -/
-instance : MonadNote IO where
-  note
-    | .bug message => throw (IO.userError message)
-    | _ => pure ()
 
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do

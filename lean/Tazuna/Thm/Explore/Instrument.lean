@@ -152,6 +152,10 @@ theorem endWith_agrees {e : InstanceId → String → Processing → StateT C Id
     (c : InstanceId) (r : Processing) : Agrees (endWith e c r) (endWith e' c r) := by
   unfold endWith; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, he]
 
+theorem sorted_agrees (schema : Schema) (v : Value) :
+    Agrees (st.sorted schema v : StateT C Id Value) (st.sorted schema v : Id Value) := by
+  unfold Service.sorted; agree [expectFound_agrees]
+
 section
 variable (h : FunctionsAgree fsI fs)
 include h
@@ -367,10 +371,9 @@ theorem deliverAnswer_agrees (step : Nat) (p : Pending) (answer : Answer) (r : P
     Agrees (deliverAnswer fsI st step p answer r) (deliverAnswer fs st step p answer r) := by
   unfold deliverAnswer; agree [answerTo_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem normalizeEmits_agrees (name : String) (emits : List Emit) :
     Agrees (normalizeEmits st fsI name emits) (normalizeEmits st fs name emits) := by
-  unfold normalizeEmits; agree [h.normalize]
+  unfold normalizeEmits; agree [h.normalize, sorted_agrees]
 
 theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
     Agrees (runWork st fsI s q step w) (runWork st fs s q step w) := by
@@ -385,7 +388,7 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
 theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :
     Agrees (resolveChecked st fsI s name raw) (resolveChecked st fs s name raw) := by
   unfold resolveChecked normalizeOutput; agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve, h.normalize,
-    h.queryEnsures]
+    h.queryEnsures, sorted_agrees]
 
 theorem publishOne_agrees (s : State) (sub : Subscription) :
     Agrees (publishOne st fsI s sub) (publishOne st fs s sub) := by

@@ -48,8 +48,7 @@ export type Schema =
   | { readonly kind: "record"; readonly entity: DefinitionRef };
 
 /**
- * The values of one service read from the structure. Lean's `schemas` has no field: the TS Functions check and sort
- * values themselves. The lists that Lean looks up by name are maps.
+ * The values of one service read from the structure. The lists that Lean looks up by name are maps.
  */
 export interface Service {
   readonly service: string;

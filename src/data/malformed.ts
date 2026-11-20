@@ -65,9 +65,11 @@ export type Malformed =
     >
   /**
    * The schema at `path` has a value that tazuna cannot write back as JSON, of the Zod type `type`: one that JSON
-   * cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), or a `union` that holds
-   * a codec at some depth. Writing a value as JSON runs its codecs and no check, so it picks the option by the tag of a
-   * `z.discriminatedUnion` and cannot guess one in a `z.union`. A codec or null is written `.nullable()`.
+   * cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), a `union` that holds
+   * a codec at some depth, or an `intersection`. Writing a value as JSON runs its codecs and no check, and picks a
+   * union's option by the written form, which a codec in a `z.union` changes; a `z.discriminatedUnion`'s tag is no
+   * codec. A codec or null is written `.nullable()`. An intersection's JSON Schema cannot reject a field that neither
+   * side names, so objects are joined with `.extend()`.
    */
   | Of<"unrepresentableSchema", DefinitionRef, { readonly path: readonly string[]; readonly type: UnrepresentableType }>
   | Of<

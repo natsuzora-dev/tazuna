@@ -147,48 +147,14 @@ export function holdsCodec(schema: z.ZodType, seen = new Set<z.ZodType>()): bool
   return node.type === "codec" || childrenOf(node).some((child) => holdsCodec(child, seen));
 }
 
-const tolerantSchemas = new WeakMap<z.ZodType, z.ZodType>();
-
-export function tolerant(schema: z.ZodType): z.ZodType {
-  const known = tolerantSchemas.get(schema);
-  if (known !== undefined) return known;
-  const node = schemaNode(schema);
-  const rebuilt = (changes: Record<string, unknown>) => schema.clone({ ...schema.def, ...changes } as never);
-  const result = ((): z.ZodType => {
-    switch (node.type) {
-      case "object": {
-        const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, tolerant(v)]));
-        return rebuilt({ shape, catchall: node.catchall });
-      }
-      case "union":
-        return rebuilt({ options: node.options.map(tolerant) });
-      case "array":
-        return rebuilt({ element: tolerant(node.element) });
-      case "optional":
-      case "nullable":
-      case "default":
-        return rebuilt({ innerType: tolerant(node.inner) });
-      default:
-        return schema;
-    }
-  })();
-  tolerantSchemas.set(schema, result);
-  return result;
-}
-
 const strictSchemas = new WeakMap<z.ZodType, z.ZodType>();
-const openSchemas = new WeakMap<z.ZodType, z.ZodType>();
 
 /**
  * Returns `schema` with every object at any depth rejecting a field that it does not name, as z.strictObject does; a
- * catchall stays. Each side of an intersection keeps every field, and the intersection rejects a field that neither
- * side names, since a check sees only the parsed value.
+ * catchall stays. Load reports an intersection (Malformed.unrepresentableSchema), whose sides each see every field.
  */
-export const strict = (schema: z.ZodType): z.ZodType => strictOf(schema, true);
-
-function strictOf(schema: z.ZodType, closed: boolean): z.ZodType {
-  const cache = closed ? strictSchemas : openSchemas;
-  const known = cache.get(schema);
+export function strict(schema: z.ZodType): z.ZodType {
+  const known = strictSchemas.get(schema);
   if (known !== undefined) return known;
   const node = schemaNode(schema);
   const rebuilt = (changes: Record<string, unknown>) => schema.clone({ ...schema.def, ...changes } as never);
@@ -196,51 +162,31 @@ function strictOf(schema: z.ZodType, closed: boolean): z.ZodType {
     switch (node.type) {
       case "object": {
         const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, strict(v)]));
-        const catchall = node.catchall === undefined ? (closed ? z.never() : z.unknown()) : strict(node.catchall);
-        return rebuilt({ shape, catchall });
+        return rebuilt({ shape, catchall: node.catchall === undefined ? z.never() : strict(node.catchall) });
       }
       case "union":
-        return rebuilt({ options: node.options.map((o) => strictOf(o, closed)) });
+        return rebuilt({ options: node.options.map(strict) });
       case "array":
         return rebuilt({ element: strict(node.element) });
       case "optional":
       case "nullable":
       case "default":
-        return rebuilt({ innerType: strictOf(node.inner, closed) });
+        return rebuilt({ innerType: strict(node.inner) });
       case "codec":
       case "pipe":
-        return rebuilt({ in: strictOf(node.in, closed), out: strictOf(node.out, closed) });
+        return rebuilt({ in: strict(node.in), out: strict(node.out) });
       case "tuple":
         return rebuilt({ items: node.items.map(strict), rest: node.rest === undefined ? null : strict(node.rest) });
       case "record":
         return rebuilt({ valueType: strict(node.value) });
-      case "intersection": {
-        const both = rebuilt({ left: strictOf(node.left, false), right: strictOf(node.right, false) });
-        const named = namedFields(node);
-        return closed && named !== undefined ? both.check(unnamedFields(named)) : both;
-      }
+      case "intersection":
+        return rebuilt({ left: strict(node.left), right: strict(node.right) });
       case "lazy":
-        return rebuilt({ getter: () => strictOf(node.inner, closed) });
+        return rebuilt({ getter: () => strict(node.inner) });
       case "opaque":
-        return node.inner === undefined ? schema : rebuilt({ innerType: strictOf(node.inner, closed) });
+        return node.inner === undefined ? schema : rebuilt({ innerType: strict(node.inner) });
     }
   })();
-  cache.set(schema, result);
+  strictSchemas.set(schema, result);
   return result;
 }
-
-/** The fields that an object or an intersection of objects names, or undefined when it takes any field. */
-function namedFields(node: SchemaNode): ReadonlySet<string> | undefined {
-  if (node.type === "object") return node.catchall === undefined ? new Set(Object.keys(node.shape)) : undefined;
-  if (node.type !== "intersection") return undefined;
-  const [left, right] = [namedFields(schemaNode(node.left)), namedFields(schemaNode(node.right))];
-  return left === undefined || right === undefined ? undefined : new Set([...left, ...right]);
-}
-
-const unnamedFields = (named: ReadonlySet<string>) =>
-  z.check<unknown>((ctx) => {
-    const value = ctx.value;
-    if (value === null || typeof value !== "object" || Array.isArray(value)) return;
-    const keys = Object.keys(value).filter((k) => !named.has(k));
-    if (keys.length > 0) ctx.issues.push({ code: "unrecognized_keys", keys, input: value as Record<string, unknown> });
-  });

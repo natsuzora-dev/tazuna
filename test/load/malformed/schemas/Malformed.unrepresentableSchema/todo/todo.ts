@@ -19,6 +19,7 @@ export const taskAdded = event({
     ids: z.set(z.bigint()),
     first: box,
     second: box,
+    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),
   },
 });
 

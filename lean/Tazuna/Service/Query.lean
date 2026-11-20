@@ -6,9 +6,9 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def normalizeOutput [Monad m] (st : Service) (fs : Functions m) (name : String) (output : Value) :
-    m (Except Issue (Option Value)) :=
-  fs.normalize (.output (st.ref name)) (st.sorted (.output (st.ref name)) output)
+def normalizeOutput [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : String) (output : Value) :
+    m (Except Issue (Option Value)) := do
+  fs.normalize (.output (st.ref name)) (← st.sorted (.output (st.ref name)) output)
 
 inductive Resolution where
   | answered (answer : Answer) (violations : List Fault)

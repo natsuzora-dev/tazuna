@@ -26,14 +26,15 @@ theorem not_issue_of_not_halts {owner : Spec.Ref} {e : Issue} {mismatch : Schema
   cases hh
 
 def NormalizedEmit (st : Service) (fs : Functions Id) (e o : Emit) : Prop :=
-  o.event = e.event ∧ fs.normalize (.payload e.event) (st.sorted (.payload e.event) e.payload) = .ok (some o.payload)
+  o.event = e.event ∧
+    fs.normalize (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) = .ok (some o.payload)
 
 theorem normalizeEmits_fold (name : String) (es : List Emit) (done out : List Emit)
     (h : (es.foldlM (m := Id) (init := (.ok done : Except Fault (List Emit))) fun acc e => do
         match acc with
         | .error r => pure (.error r)
         | .ok done =>
-          match ← fs.normalize (.payload e.event) (st.sorted (.payload e.event) e.payload) with
+          match ← fs.normalize (.payload e.event) (← st.sorted (.payload e.event) e.payload) with
           | .error i => pure (.error (issueViolation (st.ref name) i))
           | .ok (some payload) => pure (.ok (done ++ [{ e with payload }]))
           | .ok none => pure (.error (.emittedPayloadSchema (st.ref name) e.event))) =
@@ -46,7 +47,7 @@ theorem normalizeEmits_fold (name : String) (es : List Emit) (done out : List Em
     exact ⟨[], by simp [h], rfl, by simp⟩
   | cons e es ih =>
     simp only [List.foldlM_cons, id_bind] at h
-    cases hn : fs.normalize (.payload e.event) (st.sorted (.payload e.event) e.payload) with
+    cases hn : fs.normalize (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) with
     | error i =>
       simp only [hn, id_pure] at h
       rw [foldlM_error _ (fun v x => rfl)] at h

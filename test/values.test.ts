@@ -47,9 +47,3 @@ test("strict rejects a field that no object names, at any depth, and picks the u
   assert.equal(schema.safeParse({ ...valid, items: [{ n: 1, note: "x" }] }).success, false);
   assert.equal(schema.safeParse({ ...valid, tags: { a: { on: true, note: "x" } } }).success, false);
 });
-
-test("strict takes the fields of both sides of an intersection and rejects a field that neither names", () => {
-  const schema = strict(z.intersection(z.object({ a: z.number() }), z.object({ b: z.number() })));
-  assert.deepEqual(schema.parse({ a: 1, b: 2 }), { a: 1, b: 2 });
-  assert.equal(schema.safeParse({ a: 1, b: 2, c: 3 }).success, false);
-});

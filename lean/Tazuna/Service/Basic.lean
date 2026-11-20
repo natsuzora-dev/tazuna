@@ -1,5 +1,6 @@
 import Tazuna.Service.Chart.Basic
 import Tazuna.Service.Note
+import Tazuna.Data.UnionOptions
 
 namespace Tazuna.Service
 
@@ -77,8 +78,6 @@ structure Service where
   automations : List Automation
   /-- The machines and screens in definition order. -/
   charts : List Chart
-  /-- The JSON Schemas of the service's definitions, read to sort sortedBy arrays. -/
-  schemas : List (Schema × Value) := []
   /-- The own entities, in the order of the service's `entities`. -/
   entities : List String := []
   singles : List String := []
@@ -96,8 +95,48 @@ namespace Tazuna.Service
 
 open Tazuna.Data
 
-/-- The JSON Schema of `schema`. A schema missing from the structure reads nothing. -/
-def schemaOf (st : Service) (schema : Schema) : Value := (st.schemas.lookup schema).getD (.obj [])
+open Tazuna.Spec in
+def body? (st : Service) (r : Spec.Ref) : Option Body :=
+  (st.structure.definitions.find? (·.ref == r)).map (·.body)
+
+open Tazuna.Spec in
+def state? (st : Service) (chart : Spec.Ref) (state : String) : Option Spec.State :=
+  (st.body? chart).bind fun
+    | .machine c | .screen c => c.states.find? (·.name == state)
+    | _ => none
+
+open Tazuna.Spec in
+/--
+The JSON Schema that `schema` names, read from the structure: a held parameter's as an object of that one field, and a
+control without a payload's as an object without fields. None when the structure has no such schema.
+-/
+def schemaOf (st : Service) : Schema → Option Value
+  | .input d => (st.body? d).bind fun
+    | .command c => some c.input
+    | .query q => some q.input
+    | .machine c | .screen c => some c.input
+    | _ => none
+  | .output d => (st.body? d).bind fun
+    | .command c => c.output
+    | .query q => q.output
+    | .machine c | .screen c => some c.output
+    | _ => none
+  | .payload e => (st.body? e).bind fun
+    | .event b => some b.payload
+    | _ => none
+  | .control screen control => (st.body? screen).bind fun
+    | .screen c => (c.controls.lookup control).map (·.getD (.obj []))
+    | _ => none
+  | .held chart state name => ((st.state? chart state).bind (·.held)).bind fun h =>
+    (propertyOf h.schema name).map fun p => .obj [("type", .str "object"), ("properties", .obj [(name, p)])]
+  | .context chart => (st.body? chart).bind fun
+    | .machine c | .screen c => some c.context
+    | _ => none
+  | .mapContext chart map => ((st.state? chart map).bind (·.map)).map (·.context)
+  | .mapKey chart map => ((st.state? chart map).bind (·.map)).map (·.key)
+  | .record entity => (st.body? entity).bind fun
+    | .entity b => some b.fields
+    | _ => none
 
 def chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
 
@@ -149,13 +188,11 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
   let mut queries := []
   let mut events : List (String × Change) := []
   let mut automations := []
-  let mut schemas : List (Schema × Value) := []
   for (d, order) in own do
     let name := d.name
     match d.body with
     | .entity .. => pure ()
     | .event { change, payload } =>
-      schemas := schemas ++ [(.payload d.ref, payload)]
       match change with
       | none => events := events ++ [(name, .none)]
       | some { kind := .create, entity := e } =>
@@ -168,25 +205,15 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
       | some { kind := .delete, entity := e } =>
         let (key, fields) ← keyed e
         events := events ++ [(name, .delete e.name key fields)]
-    | .command c =>
+    | .command _ =>
       commands := commands ++ [name]
-      schemas := schemas ++ [(.input d.ref, c.input)]
-    | .query q =>
+    | .query _ =>
       queries := queries ++ [name]
-      schemas := schemas ++ [(.input d.ref, q.input)] ++ (q.output.map fun o => [(.output d.ref, o)]).getD []
     | .automation a =>
       let sends := Activity.sends name a.command
       automations := automations ++
         [({ name, order, receives := a.receives, sends, binds := a.binds, guard := a.guard } : Automation)]
-      if a.command.service != service then
-        if let some input := j.definitions.findSome? fun d =>
-            match d.body with
-            | .command c => if d.ref == a.command then some c.input else none
-            | _ => none then
-          schemas := schemas ++ [(.input a.command, input)]
-    | .machine _ => pure ()
-    | .screen c =>
-      schemas := schemas ++ c.controls.filterMap fun (control, payload) => payload.map ((.control d.ref control, ·))
+    | .machine _ | .screen _ => pure ()
   let listed := j.contracts.filter (·.service != service) |>.flatMap fun c =>
     c.members.filterMap fun (_, r) => r.bind fun r =>
       if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some r else none
@@ -207,7 +234,7 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
   let receives := listed.filter (heard ++ results).contains
   let entities ← expectFound s!"service {service}" ((j.services.find? (·.name == service)).map (·.entities))
   let bodies ← entities.mapM fun e => do pure (e, ← entityBody { service, name := e })
-  pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities,
+  pure { service, «structure» := j, commands, queries, events, receives, automations, charts, entities,
          singles := bodies.filterMap fun (e, b) => if b.key.isNone then some e else none
          references := bodies.flatMap fun (e, b) => b.references.map fun r => (e, r.field, r.entity.name)
          uniques := bodies.map fun (e, b) => (e, b.unique)

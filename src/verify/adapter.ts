@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
 import type { GivenRecord } from "../data/scenario.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
-import { objectOf, type Shape } from "../data/values.ts";
+import { type Shape, strictObjectOf } from "../data/values.ts";
 import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
 
 /**
@@ -86,7 +86,9 @@ export function decodeAnswer(request: AnyCommand | AnyQuery, answer: Answer): An
   if (answer.result === "rejected") return answer;
   if (answer.result !== (request.kind === "query" ? "fulfilled" : "accepted"))
     throw new Error(`a ${request.kind} has no ${answer.result} answer`);
-  return request.output === undefined ? answer : { ...answer, output: objectOf(request.output).parse(answer.output) };
+  return request.output === undefined
+    ? answer
+    : { ...answer, output: strictObjectOf(request.output).parse(answer.output) };
 }
 
 export const commandRequest = (

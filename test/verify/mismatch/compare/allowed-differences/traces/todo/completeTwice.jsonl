@@ -2,7 +2,7 @@
 {"time":"2026-10-25T10:00:00+09:00","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":"2026-10-25T10:00:00+09:00","dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T10:00:00+09:00","dir":"out","type":"answer","id":"answer#2","to":"completeTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T10:00:00+09:00","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1","completedBy":"web"},"resultOf":"completeTask#1"}
+{"time":"2026-10-25T10:00:00+09:00","dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"resultOf":"completeTask#1"}
 {"time":"2026-10-25T10:00:00+09:00","dir":"in","type":"command","id":"completeTask#2","name":"completeTask","input":{"taskId":"task-1"}}
 {"time":"2026-10-25T10:00:00+09:00","dir":"out","type":"answer","id":"answer#3","to":"completeTask#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"This task is already completed"}}}
 {"time":"2026-10-25T10:00:00+09:00","dir":"in","type":"query","id":"taskNote#1","name":"taskNote","input":{"taskId":""}}

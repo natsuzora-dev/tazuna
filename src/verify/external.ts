@@ -1,10 +1,9 @@
 import { z } from "zod";
 import type { Mismatch } from "../data/mismatch.generated.ts";
-import { tolerant } from "../data/schemaNode.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { type FileLine, subjectOf } from "../data/trace.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
-import { objectOf } from "../data/values.ts";
+import { strictObjectOf } from "../data/values.ts";
 import { zodError } from "../data/violation.ts";
 import { type Conditions, firstFailing } from "../dsl/conditions.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, Emit } from "../dsl/definition.ts";
@@ -232,8 +231,6 @@ export function checkExternal(
   };
 }
 
-const parseKnown = (schema: z.ZodType, value: unknown) => tolerant(schema).safeParse(value);
-
 /**
  * Runs checkExternal, and on the lines that it finds nothing on, the checks that need spec functions or Zod schemas:
  * each event's payload, and each answer that answers a send of its request, a command's ensures with all its result
@@ -246,7 +243,7 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
   const emitted = new Map<number, Emit>();
   for (const { at, event, payload } of events) {
     if (flagged.has(at)) continue;
-    const parsed = parseKnown(objectOf(event.payload), payload);
+    const parsed = strictObjectOf(event.payload).safeParse(payload);
     if (parsed.success) emitted.set(at, emit(event, parsed.data as never));
     else
       violations.push({
@@ -266,7 +263,7 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
       const out =
         answer.result === "rejected" || definition.output === undefined
           ? undefined
-          : parseKnown(z.object(definition.output as Record<string, z.ZodType>), answer.output);
+          : strictObjectOf(definition.output).safeParse(answer.output);
       if (input.success) {
         const decoded = { input: input.data, ...(out?.success === true ? { output: out.data } : {}) };
         const failedRequires = assumedRequires(definition, input.data);

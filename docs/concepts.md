@@ -60,6 +60,7 @@ A message carries its value as the sender wrote it, and only the receiver parses
 If the sender checked or normalized the value first, the simulation would accept a message that the deployed receiver rejects.
 For the same reason, turning a parsed value back into JSON runs only its codecs and no check, as Pydantic and serde serialize a parsed value.
 A value fails its schema when it has a field that the schema does not name, at any depth, as under JSON Schema's `additionalProperties: false`, because a field that nothing reads is the writer's mistake.
+`verify` holds an implementation's lines to the same rule, so a field that the implementation writes beyond the spec is a `Mismatch`.
 
 A subscription lives as long as the process that serves it, as a WebSocket does, so a restart ends it.
 

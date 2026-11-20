@@ -285,7 +285,7 @@ def liftFunctions {m n : Type → Type} [MonadLiftT m n] (fs : Functions m) : Fu
 
 section
 
-variable {m : Type → Type} [Monad m] (st : Service) (fs : Functions m) (ifs : InstrumentFunctions m)
+variable {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (ifs : InstrumentFunctions m)
 
 /-- Asks Functions and collects from the answer without changing it. -/
 def observe {α : Type} (x : m α) (f : α → StateT Collect m Unit) : StateT Collect m α := do

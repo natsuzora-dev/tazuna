@@ -1,17 +1,24 @@
 import type { z } from "zod";
 import { toJson, unionOption } from "./collections.ts";
 import { collectionOf } from "./marks.ts";
-import { fieldSchema, schemaNode, tolerant } from "./schemaNode.ts";
+import { fieldSchema, schemaNode, strict } from "./schemaNode.ts";
 import type { Answer } from "./trace.generated.ts";
 import { canonicalJson, objectOf, type Shape } from "./values.ts";
 
+/**
+ * Returns the value with each field of `shape` parsed, its defaults filled in, and encoded again, so that two writings of
+ * one value compare equal. A field that does not parse, or that `shape` does not name, stays as it is and so differs.
+ */
 function canonical(shape: Shape, value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const fields = value as Record<string, unknown>;
+  const schemas = shape as Readonly<Record<string, z.ZodType>>;
   return Object.fromEntries(
-    Object.entries(shape as Record<string, z.ZodType>).flatMap(([k, field]) => {
-      const schema = tolerant(field);
+    [...new Set([...Object.keys(schemas), ...Object.keys(fields)])].flatMap((k) => {
       const given = Object.hasOwn(fields, k);
+      const field = Object.hasOwn(schemas, k) ? schemas[k] : undefined;
+      if (field === undefined) return [[k, fields[k]]];
+      const schema = strict(field);
       const parsed = schema.safeParse(given ? fields[k] : undefined);
       if (!parsed.success) return given ? [[k, fields[k]]] : [];
       const encoded = toJson(schema, parsed.data);

@@ -9,3 +9,8 @@
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"c4","answer":{"result":"accepted"}}
 {"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c5","name":"reserve","input":{"day":"2026-10-27T00:00:00Z"}}
 {"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#5","to":"c5","answer":{"result":"accepted","output":{"reservationId":""}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q6","name":"nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#6","to":"q6","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z","note":"weekend"}}}
+{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"c6","name":"book","input":{"day":"2026-10-28T00:00:00Z"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#7","to":"c6","answer":{"result":"accepted"}}
+{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e8","name":"booked","resultOf":"c6","payload":{"day":"2026-10-28T00:00:00Z","by":"front desk"}}

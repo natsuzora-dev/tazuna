@@ -7,13 +7,13 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def normalizeEmits [Monad m] (st : Service) (fs : Functions m) (command : String) (emits : List Emit) :
+def normalizeEmits [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (command : String) (emits : List Emit) :
     m (Except Fault (List Emit)) :=
   emits.foldlM (init := .ok []) fun acc e => do
     match acc with
     | .error r => pure (.error r)
     | .ok done =>
-      match ← fs.normalize (.payload e.event) (st.sorted (.payload e.event) e.payload) with
+      match ← fs.normalize (.payload e.event) (← st.sorted (.payload e.event) e.payload) with
       | .error issue => pure (.error (issueViolation (st.ref command) issue))
       | .ok (some payload) => pure (.ok (done ++ [{ e with payload }]))
       | .ok none => pure (.error (.emittedPayloadSchema (st.ref command) e.event))
