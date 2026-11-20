@@ -558,30 +558,11 @@ export class RunFunctions implements Answering {
             keys: keys.map((k) => ({ key: k.encoded as Json, canonical: JSON.parse(k.encodedKey) as Json })),
           })),
         );
-      case "copyContext": {
-        const shape = this.functions.node(q.machine, q.map)?.context ?? {};
-        return { type: "copyContext", context: encode(shape, this.functions.copyContext(q.machine, q.map)) };
-      }
-      case "singleRecord":
-        return { type: "singleRecord", record: this.functions.singleRecord(q.entity).encoded as Json };
-      case "copyKey": {
-        const { ref } = this.functions.chartOf(q.machine);
-        const row = q.payload as Fields;
-        const present = Object.fromEntries(
-          Object.entries(this.functions.node(q.machine, q.map)?.key ?? {}).filter(([f]) => row[f] !== undefined),
-        );
-        // The payload arrives as JSON, so its key fields are decoded first.
-        const fields = Object.fromEntries(Object.keys(present).map((f) => [f, row[f]]));
-        return this.replied(decodeStrict({ kind: "mapKey", chart: ref, map: q.map }, present, fields), (decoded) =>
-          decoded === undefined
-            ? { type: "copyKey", key: null }
-            : this.replied(this.functions.copyKey(q.machine, q.map, decoded), (key) =>
-                key === undefined
-                  ? { type: "copyKey" }
-                  : { type: "copyKey", key: key === null ? null : (JSON.parse(key) as Json) },
-              ),
-        );
-      }
+      case "defaults":
+        return this.replied(this.functions.defaults(q.schema), (row) => ({
+          type: "defaults",
+          defaults: row.encoded as Json,
+        }));
       case "close":
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.close(scope, this.records, access), ({ output, failed }) => ({

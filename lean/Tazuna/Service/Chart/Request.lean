@@ -7,13 +7,24 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-/-- The initial context of `chart` started with `input`, or the fault that an Issue of initialContext means. -/
+/--
+The initial context of `chart` started with `input`: what its initialContext computes, with each field that it leaves
+out taking its default, or the fault that an Issue means.
+-/
 def initialContextOf [Monad m] (fs : Functions m) (st : Service) (chart : String) (input : Value) :
     m (Except Fault Value) := do
   let definition := st.ref chart
+  let fault := issueViolation definition (mismatch := fun _ => .initialContextSchema definition)
   match ← fs.initialContext chart input with
-  | .error e => pure (.error (issueViolation definition e fun _ => .initialContextSchema definition))
-  | .ok context => pure (.ok context)
+  | .error e => pure (.error (fault e))
+  | .ok given =>
+    match ← fs.defaults (.context definition) with
+    | .error e => pure (.error (fault e))
+    | .ok defaults =>
+      match ← fs.normalize (.context definition) (defaults.merge given) with
+      | .error e => pure (.error (fault e))
+      | .ok none => pure (.error (.initialContextSchema definition))
+      | .ok (some context) => pure (.ok context)
 
 /-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`. -/
 def Activity.requestLine (a : Activity) (input : Value) : LineBody :=

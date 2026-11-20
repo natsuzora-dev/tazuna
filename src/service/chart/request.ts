@@ -25,15 +25,26 @@ import { type Chart, isOwn } from "./basic.ts";
 import { slots } from "./config.ts";
 import type { Processing } from "./queue.ts";
 
-/** Returns the initial context of `chart` started with `input`, or halts with what an Issue of initialContext means. */
+/**
+ * Lean's initialContextOf: what the initialContext of `chart` computes from `input`, with each field that it leaves out
+ * taking its default, or a halt with what an Issue means.
+ */
 export function initialContextOf(r: Processing, chart: string, input: Fields): Fields {
   const definition = ref(r.st, chart);
-  const context = r.functions.initialContext(chart, input);
-  if (context instanceof Failed)
-    return halt(
-      issueViolation(definition, context, () => ({ kind: "Fault.initialContextSchema", definition, data: {} })),
-    );
-  return context;
+  const fault = (failed: Failed) =>
+    halt(issueViolation(definition, failed, () => ({ kind: "Fault.initialContextSchema", definition, data: {} })));
+  const given = r.functions.initialContext(chart, input);
+  if (given instanceof Failed) return fault(given);
+  const schema = { kind: "context", chart: definition } as const;
+  const defaults = r.functions.defaults(schema);
+  if (defaults instanceof Failed) return fault(defaults);
+  // Lean merges JSON, which has no undefined field.
+  const written = Object.entries(given).filter(([, value]) => value !== undefined);
+  const context = r.functions.normalize(schema, { ...defaults.value, ...Object.fromEntries(written) });
+  if (context instanceof Failed) return fault(context);
+  if ("error" in context)
+    return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: context.error }));
+  return context.value;
 }
 
 export function newInstance(

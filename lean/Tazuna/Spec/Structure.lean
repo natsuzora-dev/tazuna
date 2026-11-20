@@ -164,13 +164,17 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Deadline flatten time
 
-/-- The key positions of a map state: those of its item key, and those of its own context, which each copy holds. -/
-structure MapKeys where
+/--
+What a map state adds to a state: the JSON Schema of its item key, and the key positions of its item key and of its
+own context, which each copy holds.
+-/
+structure MapState where
+  key : Value
   itemKeys : List KeyPosition
   contextKeys : List KeyPosition
 deriving Repr, Inhabited
 
-derive_wire MapKeys
+derive_wire MapState
 
 /-- The key positions of a state's parameters. -/
 structure HeldKeys where
@@ -194,8 +198,8 @@ structure State where
   transitions : List Transition
   /-- The deadlines that the body writes under `after`, in declaration order. -/
   deadlines : List Deadline
-  /-- The key positions of a map state's item key and own context; null for any other state. -/
-  map : Option MapKeys
+  /-- What a map state adds; null for any other state. -/
+  map : Option MapState
   /--
   The key positions of the state's parameters (`held`), which the edge that enters the state fills; null for a state
   without parameters.

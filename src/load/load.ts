@@ -44,7 +44,8 @@ export interface SourceFile {
   readonly comments: Parsed["comments"];
 }
 
-export interface Spec {
+/** A spec as loaded, which may hold Malformed violations and so has no structure. */
+export interface LoadedSpec {
   readonly root: string;
   /** The definitions, without the definitions and entities that no single service owns. */
   readonly definitions: readonly Named<Definition>[];
@@ -57,8 +58,17 @@ export interface Spec {
   readonly imports: readonly ServiceImport[];
   readonly names: ReadonlyMap<unknown, Named<Definition>>;
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
+}
+
+/** A loaded spec without Malformed violations, with its structure. */
+export interface Spec extends LoadedSpec {
   readonly structure: Structure;
 }
+
+/** The spec in a folder: with its structure when loading found no Malformed violation, else with the violations. */
+export type Loaded =
+  | { readonly kind: "structured"; readonly spec: Spec }
+  | { readonly kind: "malformed"; readonly spec: LoadedSpec; readonly malformed: readonly Found<Malformed>[] };
 
 const skippedFolders = new Set(["__snapshots__", "node_modules"]);
 
@@ -190,7 +200,7 @@ function serviceImports(
 }
 
 /** The spec in `root`, and what keeps the loader from reading it faithfully. */
-export async function loadSpec(root: string): Promise<{ readonly spec: Spec; readonly malformed: Found<Malformed>[] }> {
+export async function loadSpec(root: string): Promise<Loaded> {
   const found: Omit<Named<Definition>, "service">[] = [];
   const foundContracts: { readonly place: Place; readonly value: Readonly<Record<string, unknown>> }[] = [];
   const foundConstants: { readonly name: string; readonly place: Place; readonly value: unknown }[] = [];
@@ -265,7 +275,7 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     return n === undefined ? undefined : { service: n.service, name: n.name };
   });
   const serviceNamed = [...services].map(([name, { place }]) => ({ name, place }));
-  const spec: Spec = {
+  const spec: LoadedSpec = {
     root,
     definitions,
     contracts,
@@ -276,7 +286,6 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     imports: serviceImports(sources, fileExports, serviceOf),
     names,
     services,
-    structure: built.structure,
   };
   const malformed = [
     ...duplicateNames(namedExports),
@@ -289,13 +298,14 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),
-    ...defaultSchemas(definitions, built.structure, opaque, built.thrownDefaults),
+    ...defaultSchemas(definitions, opaque, built.thrownDefaults),
     ...built.malformed,
     ...loaded.malformed,
   ];
-  if (malformed.length === 0 && built.unnamed.length > 0)
+  if (malformed.length > 0) return { kind: "malformed", spec, malformed };
+  if (built.structure === undefined)
     throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
-  return { spec, malformed };
+  return { kind: "structured", spec: { ...spec, structure: built.structure } };
 }
 
 export function structured(spec: Pick<Spec, "definitions" | "structure">) {

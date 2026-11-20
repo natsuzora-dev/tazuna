@@ -40,7 +40,7 @@ def nextDeadline (s : State) : Option Time :=
   s.deadlines.foldl (fun best t => some (match best with | none => t.time | some b => min b t.time)) none
 
 /-- What can happen next in a state. Operations are grouped by open screen instance, in opening order. -/
-def enabled [Monad m] (st : Service) (fs : Functions m) (s : State) :
+def enabled [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) :
     m (Except Fault Enabled) := do
   let operations ← (dedupe s.stack).foldlM
       (init := (.ok [] : Except Fault (List Operation))) fun acc resource => do

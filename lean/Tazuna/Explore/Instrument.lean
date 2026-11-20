@@ -278,9 +278,7 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   offers a b c := f (fs.offers a b c)
   showInput a b c := f (fs.showInput a b c)
   items a b := f (fs.items a b)
-  copyContext a b := f (fs.copyContext a b)
-  singleRecord a := f (fs.singleRecord a)
-  copyKey a b c := f (fs.copyKey a b c)
+  defaults a := f (fs.defaults a)
   close a b := f (fs.close a b)
 
 def liftFunctions {m n : Type → Type} [MonadLiftT m n] (fs : Functions m) : Functions n := fs.hoist liftM

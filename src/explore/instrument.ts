@@ -685,14 +685,8 @@ export class InstrumentedFunctions implements Functions {
       (keys) => textSet(keys.map((k) => k.encodedKey)),
     );
   }
-  copyContext(machine: string, map: string): Fields {
-    return this.fs.copyContext(machine, map);
-  }
-  singleRecord(entity: string) {
-    return this.fs.singleRecord(entity);
-  }
-  copyKey(machine: string, map: string, payload: unknown) {
-    return this.fs.copyKey(machine, map, payload);
+  defaults(schema: Schema) {
+    return this.fs.defaults(schema);
   }
   close(scope: Scope, records: RecordSource, access: Access) {
     return this.chartAudited(

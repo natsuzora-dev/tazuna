@@ -3,10 +3,8 @@ import { sameRef } from "../data/definitionRef.ts";
 import type { Malformed } from "../data/malformed.ts";
 import { objectOf, type Shape } from "../data/values.ts";
 import { thrown, type ViolationError, zodError } from "../data/violation.ts";
-import { chartOf, stateAt } from "../dsl/chart.ts";
-import type { Definition, Named } from "../dsl/definition.ts";
-import type { Structure } from "../spec/structure.generated.ts";
-import { chartStructure } from "../spec/structure.ts";
+import { chartOf } from "../dsl/chart.ts";
+import type { Definition, Named, StateSpec } from "../dsl/definition.ts";
 import type { Found } from "./found.ts";
 import type { ThrownDefault } from "./structureOf.ts";
 
@@ -25,6 +23,15 @@ function defaultsError(shape: Shape): ViolationError | undefined {
   }
 }
 
+/** The map states among `states` and their descendants, each with its name, in document order. */
+const mapStates = (
+  states: Readonly<Record<string, StateSpec>>,
+): (readonly [string, Extract<StateSpec, { readonly type: "map" }>])[] =>
+  Object.entries(states).flatMap(([name, node]) => [
+    ...(node.type === "map" ? [[name, node] as const] : []),
+    ...mapStates(node.states ?? {}),
+  ]);
+
 /**
  * Returns the declared defaults that fail their schemas or throw: a single entity's fields, a map state's copy context,
  * and the schemas whose conversion in structureOf threw. A definition gets one finding for its conversions; for an
@@ -33,7 +40,6 @@ function defaultsError(shape: Shape): ViolationError | undefined {
  */
 export function defaultSchemas(
   definitions: readonly Named<Definition>[],
-  structure: Structure,
   opaque: readonly Found<Malformed>[],
   thrownDefaults: readonly ThrownDefault[],
 ): Found<Malformed>[] {
@@ -61,15 +67,11 @@ export function defaultSchemas(
     if (chart === undefined) return conversion;
     return [
       ...conversion,
-      ...(chartStructure(structure, service, name)?.states ?? [])
-        .filter((s) => s.kind === "map")
-        .flatMap((s): Found<Malformed>[] => {
-          const error = defaultsError(stateAt(chart, s.path).context ?? {});
-          if (error === undefined) return [];
-          return [
-            { violation: { kind: "Malformed.defaultSchema", definition: ref, data: { map: s.name } }, place, error },
-          ];
-        }),
+      ...mapStates(chart.states).flatMap(([map, node]): Found<Malformed>[] => {
+        const error = defaultsError(node.context ?? {});
+        if (error === undefined) return [];
+        return [{ violation: { kind: "Malformed.defaultSchema", definition: ref, data: { map } }, place, error }];
+      }),
     ];
   });
 }

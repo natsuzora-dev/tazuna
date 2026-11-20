@@ -7,7 +7,7 @@ import type { Restricted } from "../data/restricted.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
-import { loadSpec, type Spec } from "../load/load.ts";
+import { type Loaded, type LoadedSpec, loadSpec, type Spec } from "../load/load.ts";
 import { check as validate } from "../validation/check.ts";
 import * as answers from "./nonCanonical/answers.ts";
 import * as binds from "./nonCanonical/binds.ts";
@@ -36,7 +36,7 @@ export type SpecFailure =
 
 export type SpecCheck = SpecFailure | { readonly kind: "checked"; readonly spec: CheckedSpec };
 
-const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<NonCanonical | Restricted>[] }[] = [
+const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Found<NonCanonical | Restricted>[] }[] = [
   answers,
   binds,
   constants,
@@ -101,7 +101,10 @@ export function failureText(failure: SpecFailure, folder: string): string {
   }
 }
 
-function unlistedFiles(spec: Spec, typeChecked: Extract<TypeCheck, { readonly kind: "passed" }>): Found<Malformed>[] {
+function unlistedFiles(
+  spec: LoadedSpec,
+  typeChecked: Extract<TypeCheck, { readonly kind: "passed" }>,
+): Found<Malformed>[] {
   const tsconfig = relative(spec.root, typeChecked.tsconfig).split(sep).join("/");
   return spec.sources
     .filter((s) => !typeChecked.includes(join(spec.root, s.file)))
@@ -114,7 +117,7 @@ function unlistedFiles(spec: Spec, typeChecked: Extract<TypeCheck, { readonly ki
 /** checkSpec after `typeChecked`, the type check of `root`. */
 export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promise<SpecCheck> {
   if (typeChecked.kind !== "passed") return typeChecked;
-  let loaded: Awaited<ReturnType<typeof loadSpec>>;
+  let loaded: Loaded;
   try {
     loaded = await loadSpec(root);
   } catch (error) {
@@ -122,17 +125,20 @@ export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promi
     return { kind: "unloadable", reason: reason(error) };
   }
   const { spec } = loaded;
-  const malformed = [...unlistedFiles(spec, typeChecked), ...loaded.malformed];
+  const malformed = [...unlistedFiles(spec, typeChecked), ...(loaded.kind === "malformed" ? loaded.malformed : [])];
   const loading = [...malformed, ...syntaxChecks.flatMap((c) => c.check(spec))];
   const found: Found<Malformed | NonCanonical | Restricted | Illegal>[] =
-    malformed.length > 0
+    loaded.kind === "malformed" || malformed.length > 0
       ? loading
       : [
           ...loading,
-          ...structureChecks.flatMap((c) => c.check(spec)),
-          ...validate(spec.structure).map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
+          ...structureChecks.flatMap((c) => c.check(loaded.spec)),
+          ...validate(loaded.spec.structure).map((violation) => ({
+            violation,
+            place: placeOfIllegal(loaded.spec, violation),
+          })),
         ];
-  if (found.length === 0) return { kind: "checked", spec: spec as CheckedSpec };
+  if (found.length === 0 && loaded.kind === "structured") return { kind: "checked", spec: loaded.spec as CheckedSpec };
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
   return { kind: "violations", files: spec.sources.length, violations };
 }

@@ -13,11 +13,14 @@ import type { Processing } from "./queue.ts";
  * `copies`.
  */
 function startCopy(r: Processing, owner: Instance, map: string, key: unknown, encodedKey: string, step: number): void {
+  const chart = ref(r.st, owner.chart.name);
+  const context = r.functions.defaults({ kind: "mapContext", chart, map });
+  if (context instanceof Failed) halt(issueViolation(chart, context));
   const id = copyId(owner.id, map, encodedKey);
   const copy: Instance = {
     chart: owner.chart,
     id,
-    context: r.functions.copyContext(owner.chart.name, map),
+    context: context.value,
     input: owner.input,
     entered: new Map(),
     lastChildren: new Map(),

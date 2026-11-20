@@ -27,12 +27,17 @@ const examples = [
   ...runExamples(),
 ];
 
-const bases = await Promise.all(
-  examples.map(async (root) => ({
-    name: relative(import.meta.dirname, root),
-    structure: (await loadSpec(root)).spec.structure,
-  })),
-);
+// A spec with a Malformed violation has no structure.
+const bases = (
+  await Promise.all(
+    examples.map(async (root) => {
+      const loaded = await loadSpec(root);
+      return loaded.kind === "structured"
+        ? [{ name: relative(import.meta.dirname, root), structure: loaded.spec.structure }]
+        : [];
+    }),
+  )
+).flat();
 
 for (const { name, structure } of bases)
   test(`${name}: TS and Lean find the same Illegal violations in the structure`, () => {

@@ -252,6 +252,7 @@ export interface Functions {
    * equal keys.
    */
   comparable(query: string, answer: Answer): unknown;
+  /** Returns what the initialContext of `machine` computes from `input`, unchecked, or {} without one. */
   initialContext(machine: string, input: Fields): Fields | Failed;
   /**
    * Evaluates one guard condition. `extra` is what caused the transition (its payload, output, or rejection), or {} for
@@ -311,14 +312,8 @@ export interface Functions {
     records: RecordSource,
     access: Access,
   ): readonly { readonly key: unknown; readonly encoded: unknown; readonly encodedKey: string }[] | Failed;
-  copyContext(machine: string, map: string): Fields;
-  /** Returns the initial record of a single entity, decoded and encoded. */
-  singleRecord(entity: string): Row;
-  /**
-   * Returns the copy key of the payload: null when the payload's key fields fail the key schema, and undefined when the
-   * payload has no key fields, in which case it reaches every copy.
-   */
-  copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed;
+  /** Returns the default value of each field of `schema` that declares one, decoded and encoded. */
+  defaults(schema: Schema): Row | Failed;
   /** Returns the output of a screen that closes in a final state, and its first failing ensures. */
   close(
     scope: Scope,

@@ -160,7 +160,7 @@ def Ensured.passes : Ensured → Bool
 
 /--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
-value or the Issue that stopped the code; copyContext and singleRecord (defaults, checked at load) always answer.
+value or the Issue that stopped the code.
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and
   written back as JSON (only its codecs run, encoding) if it matches the schema (the canonical value), or none otherwise.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
@@ -191,17 +191,16 @@ value or the Issue that stopped the code; copyContext and singleRecord (defaults
   none so far), and react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
-- initialContext: the initial context of a machine or screen started with the input (the parsed input of a screen that
-  opens opened, or `{}` when nothing opens it).
+- initialContext: the context that the initialContext of a machine or screen computes from the input (the parsed input of
+  a screen that opens opened, or `{}` when nothing opens it), as the sender writes it (only its codecs run, encoding),
+  `{}` without one. initialContextOf fills in the defaults of the fields that it leaves out and normalizes it.
 - guard: whether one guard condition of a transition holds.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
 - showInput: the query input of a shows slot, as the sender writes it (only its codecs run, encoding).
 - items: the keys that a map state's items return, encoded and as canonical values. The map state takes them as a set.
-- copyContext: a copy's initial context (defaults, checked at load).
-- singleRecord: the initial record of a single entity (defaults, checked at load).
-- copyKey: the canonical value of the payload's key fields if the payload has all of them (none if they fail the schema),
-  or none without them, in which case the payload reaches every copy.
+- defaults: the default value of each field of the schema that declares one, encoded and sorted. Load runs those of a
+  single entity's fields and of a map state's copy context, and reports one that throws or fails its schema.
 - close: the output of a screen that closes in a final state (the resolve value, schema-checked and encoded) and the
   first failing ensures.
 - assign: the context after the assign, unchanged where there is none. For a copy, copy context fields go to the copy
@@ -242,9 +241,7 @@ structure Functions (m : Type → Type) where
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
   items : Scope → Records → m (Except Issue (List (Value × Value)))
-  copyContext : String → String → m Value
-  singleRecord : String → m Value
-  copyKey : String → String → Value → m (Except Issue (Option (Option Value)))
+  defaults : Schema → m (Except Issue Value)
   close : Scope → Records → m (Except Issue (Value × Option String))
 
 /--

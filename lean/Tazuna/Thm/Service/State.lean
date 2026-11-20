@@ -260,7 +260,7 @@ theorem AddsOnly.trans {P : Line → Prop} {a b c : State} (h₁ : AddsOnly P a 
   · exact p₁ l h
   · exact p₂ l h
 
-def CopiesOf (chart map : String) (cs : List Instance) : Prop :=
-  ∀ c ∈ cs, c.chart.name = chart ∧ c.id.map? = some map
+def CopiesOf (chart : Chart) (map : String) (cs : List Instance) : Prop :=
+  ∀ c ∈ cs, c.chart = chart ∧ c.id.map? = some map
 
 end Tazuna.Thm.Service.State

@@ -39,9 +39,10 @@ export async function checkedRoot(root: string): Promise<CheckedSpec> {
 
 /** Loads the spec of the example `root`, and throws when loading finds a Malformed violation. */
 export async function loadedSpec(root: string): Promise<Spec> {
-  const { spec, malformed } = await loadSpec(root);
-  if (malformed.length > 0) throw new Error(`${root}: ${malformed.map((f) => f.violation.kind).join(", ")}`);
-  return spec;
+  const loaded = await loadSpec(root);
+  if (loaded.kind === "malformed")
+    throw new Error(`${root}: ${loaded.malformed.map((f) => f.violation.kind).join(", ")}`);
+  return loaded.spec;
 }
 
 /** Returns the examples test/<folder>/<group>/<target>/<example> of `group`, or of every group without it. */

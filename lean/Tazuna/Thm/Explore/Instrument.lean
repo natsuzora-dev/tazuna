@@ -94,9 +94,7 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   offers : ∀ a b c, Agrees (fsI.offers a b c) (fs.offers a b c)
   showInput : ∀ a b c, Agrees (fsI.showInput a b c) (fs.showInput a b c)
   items : ∀ a b, Agrees (fsI.items a b) (fs.items a b)
-  copyContext : ∀ a b, Agrees (fsI.copyContext a b) (fs.copyContext a b)
-  singleRecord : ∀ a, Agrees (fsI.singleRecord a) (fs.singleRecord a)
-  copyKey : ∀ a b c, Agrees (fsI.copyKey a b c) (fs.copyKey a b c)
+  defaults : ∀ a, Agrees (fsI.defaults a) (fs.defaults a)
   close : ∀ a b, Agrees (fsI.close a b) (fs.close a b)
 
 theorem note_agrees [MonadNote (StateT C Id)] (n : Note) :
@@ -191,7 +189,7 @@ theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Ac
 omit [MonadNote (StateT C Id)] in
 theorem initialContextOf_agrees (chart : String) (input : Value) :
     Agrees (initialContextOf fsI st chart input) (initialContextOf fs st chart input) := by
-  unfold initialContextOf; agree [h.initialContext]
+  unfold initialContextOf; agree [h.initialContext, h.defaults, h.normalize]
 
 theorem openScreen_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
@@ -263,16 +261,13 @@ theorem firstLevel_agrees (s : State) (extra : Extra) (levels : List (Instance �
   | nil => exact Agrees.pure _
   | cons l rest ih => unfold firstLevel; agree [choose_agrees h, ih]
 
-omit [MonadNote (StateT C Id)] in
 theorem reaches_agrees (c : Instance) (payload : Value) : Agrees (reaches fsI st c payload) (reaches fs st c payload) := by
-  unfold reaches; agree [h.copyKey]
+  unfold reaches copyKey; agree [h.normalize]
 
-omit [MonadNote (StateT C Id)] in
 theorem reachedCopies_agrees (s : State) (top : Instance) (payload : Value) :
     Agrees (reachedCopies fsI st s top payload) (reachedCopies fs st s top payload) := by
   unfold reachedCopies; agree [reaches_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem eventLeaves_agrees (s : State) (top : Instance) (payload : Value) :
     Agrees (eventLeaves fsI st s top payload) (eventLeaves fs st s top payload) := by
   unfold eventLeaves; agree [reachedCopies_agrees h]
@@ -288,7 +283,7 @@ theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (ext
 
 theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) (r : Processing) :
     Agrees (startCopy fsI st step owner map key encodedKey r) (startCopy fs st step owner map key encodedKey r) := by
-  unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.copyContext, enter_agrees h]
+  unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.defaults, enter_agrees h]
 
 theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     Agrees (exitLeftCopy fsI st owner map itemKeys r k) (exitLeftCopy fs st owner map itemKeys r k) := by
@@ -411,17 +406,14 @@ omit [MonadNote (StateT C Id)] in
 theorem refreshScreens_agrees (s : State) : Agrees (refreshScreens st fsI s) (refreshScreens st fs s) := by
   unfold refreshScreens; agree [refresh_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem offeringStates_agrees (s : State) (top : Instance) (control : String) (payload : Value) :
     Agrees (offeringStates fsI st s top control payload) (offeringStates fs st s top control payload) := by
   unfold offeringStates; agree [reachedCopies_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem offered_agrees (s : State) (top : Instance) (control : String) (payload : Value) :
     Agrees (offered fsI st s top control payload) (offered fs st s top control payload) := by
   unfold offered; agree [offeringStates_agrees h, h.offers]
 
-omit [MonadNote (StateT C Id)] in
 theorem acceptsOperation_agrees (s : State) (screen : InstanceId) (control : String) (payload : Value) :
     Agrees (acceptsOperation fsI st s screen control payload) (acceptsOperation fs st s screen control payload) := by
   unfold acceptsOperation; agree [offered_agrees h]
@@ -576,7 +568,7 @@ theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (ch
 
 omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
-  unfold startRecords; agree [h.singleRecord]
+  unfold startRecords; agree [h.defaults]
 
 theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
   unfold begin startInstances; agree [startRecords_agrees h, startInstance_agrees h, message_agrees h]

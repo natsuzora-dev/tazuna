@@ -114,10 +114,6 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
   let answered {α : Type} (question : Question) (read : Reply → Option α) (records : Records := [])
       (before : Records := []) : IO (Except Issue α) := do
     answer question (← asking records question before) read
-  let always {α : Type} (question : Question) (read : Reply → Option α) : IO α := do
-    match ← answered question read with
-    | .ok a => pure a
-    | .error issue => throw (IO.userError s!"TS answered {question.type} with {repr issue}, which has no issue")
   { parse := fun schema value => answered (.parse schema value) fun | .parse v => some v | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     normalize := fun schema value => answered (.normalize schema value) fun | .normalize v => some v | _ => none
@@ -178,11 +174,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     items := fun scope records =>
       answered (.items scope) (records := records) fun
         | .items keys => some (keys.map fun k => (k.key, k.canonical)) | _ => none
-    copyContext := fun chart map =>
-      always (.copyContext chart map) fun | .copyContext context => some context | _ => none
-    singleRecord := fun entity => always (.singleRecord entity) fun | .singleRecord record => some record | _ => none
-    copyKey := fun chart map payload =>
-      answered (.copyKey chart map payload) fun | .copyKey key => some key | _ => none
+    defaults := fun schema => answered (.defaults schema) fun | .defaults v => some v | _ => none
     close := fun scope records =>
       answered (.close scope) (records := records) fun | .close output failed => some (output, failed) | _ => none }
 

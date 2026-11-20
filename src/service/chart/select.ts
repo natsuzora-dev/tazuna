@@ -1,6 +1,7 @@
+import { expectFound } from "../../data/internalError.ts";
 import type { Trigger } from "../../data/transitionRef.generated.ts";
 import { canonicalJson, type Fields } from "../../data/values.ts";
-import { transitionRef } from "../../spec/structure.ts";
+import { schemaProperties, transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, firstFalse, issueViolation } from "../functions.ts";
@@ -54,11 +55,25 @@ function passes(r: Run, instance: Instance, t: Transition, extra: Fields): boole
   return failing === undefined;
 }
 
+/**
+ * Lean's copyKey: the canonical JSON of the item key that `payload` names for the copies of the map state `map`;
+ * undefined when the payload lacks one of the key fields, and null when its key fields fail the key schema.
+ */
+function copyKey(r: Run, chart: Chart, map: string, payload: Fields): string | null | undefined | Failed {
+  const state = expectFound(`map state ${map} of ${chart.name}`, chart.states.get(map)?.spec.map ?? undefined);
+  const fields = schemaProperties(state.key);
+  if (!fields.every((f) => payload[f] !== undefined)) return undefined;
+  const schema = { kind: "mapKey", chart: ref(r.st, chart.name), map } as const;
+  const key = r.functions.normalize(schema, Object.fromEntries(fields.map((f) => [f, payload[f]])));
+  if (key instanceof Failed) return key;
+  return "error" in key ? null : canonicalJson(key.encoded);
+}
+
 export function reaches(r: Run, copy: Instance, payload: unknown): boolean {
-  const map = mapOf(copy.id) as string;
-  const key = r.functions.copyKey(copy.chart.name, map, payload);
+  if (copy.id.kind !== "copy") return true;
+  const key = copyKey(r, copy.chart, copy.id.map, payload as Fields);
   if (key instanceof Failed) return halt(issueViolation(ref(r.st, copy.chart.name), key));
-  return key === undefined || (copy.id.kind === "copy" && key === canonicalJson(copy.id.key));
+  return key === undefined || key === canonicalJson(copy.id.key);
 }
 
 function exitKeys(s: State, c: Chosen): Set<string> {

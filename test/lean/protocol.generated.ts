@@ -479,19 +479,8 @@ export type Question =
       readonly scope: Scope;
     }
   | {
-      readonly type: "copyContext";
-      readonly machine: string;
-      readonly map: string;
-    }
-  | {
-      readonly type: "singleRecord";
-      readonly entity: string;
-    }
-  | {
-      readonly type: "copyKey";
-      readonly machine: string;
-      readonly map: string;
-      readonly payload: Json;
+      readonly type: "defaults";
+      readonly schema: Schema;
     }
   | {
       readonly type: "close";
@@ -651,17 +640,8 @@ export type Reply =
       readonly keys: readonly ItemKey[];
     }
   | {
-      readonly type: "copyContext";
-      readonly context: Json;
-    }
-  | {
-      readonly type: "singleRecord";
-      readonly record: Json;
-    }
-  /** The key, null when the payload's key fields fail the schema, or none without them. */
-  | {
-      readonly type: "copyKey";
-      readonly key?: Json | null;
+      readonly type: "defaults";
+      readonly defaults: Json;
     }
   | {
       readonly type: "close";

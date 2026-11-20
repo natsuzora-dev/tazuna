@@ -305,9 +305,11 @@ theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key e
   intro o r
   simp only [id_bind, note_id, id_pure]
   split
-  · refine KeepsKeys.trans ?_ (keysBy_enter _ _ _ _)
-    keys_leaf
   · keys_leaf
+  · split
+    · refine KeepsKeys.trans ?_ (keysBy_enter _ _ _ _)
+      keys_leaf
+    · keys_leaf
 
 theorem keysBy_exitLeftCopy (owner : InstanceId) (map : String) (itemKeys : List Value) (k : Value) :
     KeysBy (fun r => exitLeftCopy fs st owner map itemKeys r k) := by
@@ -694,7 +696,7 @@ theorem keeps_begin (s : State) : KeepsKeys s (begin st fs s) := by
       all_goals first | exact .refl _ | keys_leaf) _ _)
     refine KeepsKeys.trans ?_ (keeps_foldlM _ (fun t e => by
       simp only [id_bind]; repeat' split
-      all_goals exact .refl _) _ _)
+      all_goals first | exact .refl _ | keys_leaf) _ _)
     keys_leaf
 
 theorem keeps_operate (screen : InstanceId) (control : String) (payload : Value) (s : State) :

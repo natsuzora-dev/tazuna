@@ -85,9 +85,7 @@ inductive Question where
   | offers (scope : Scope) (control : String)
   | showInput (scope : Scope) (activity : Activity)
   | items (scope : Scope)
-  | copyContext (machine map : String)
-  | singleRecord (entity : String)
-  | copyKey (machine map : String) (payload : Value)
+  | defaults (schema : Schema)
   | close (scope : Scope)
   /-- The comparable value of `value`, read by the schema `part` of the definition `kind` `definition`. -/
   | comparableValue (kind : String) (definition : Spec.Ref) (part : Verify.Part) (value : Value)
@@ -143,10 +141,7 @@ inductive Reply where
   | offers (payloads : List Value)
   | showInput (input : Value)
   | items (keys : List ItemKey)
-  | copyContext (context : Value)
-  | singleRecord (record : Value)
-  /-- The key, null when the payload's key fields fail the schema, or none without them. -/
-  | copyKey (key : Option (Option Value))
+  | defaults (defaults : Value)
   | close (output : Value) (failed : Option String)
   | comparableValue (value : Value)
 

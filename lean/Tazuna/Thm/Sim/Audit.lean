@@ -225,7 +225,7 @@ theorem given_agrees (w : World) (j : Spec.Structure) (sc : Scenario) :
     Agrees (w.given j fsOfI sc) (w.given j fsOf sc) := by
   unfold World.given givenRows givenInvariants; agreeE [(h _).parse, (h _).invariant, (h _).serviceInvariant]
 
-theorem offeredAt_agrees (q : String) (st : Service) (s : State) (o : Opened) (control : String) (payload : Value) :
+theorem offeredAt_agrees [MonadNote (StateT C Id)] (q : String) (st : Service) (s : State) (o : Opened) (control : String) (payload : Value) :
     Agrees (offeredAt st (fsOfI q) s o control payload) (offeredAt st (fsOf q) s o control payload) := by
   unfold offeredAt; agreeE [(h q).parse, acceptsOperation_agrees (h q)]
 
@@ -241,7 +241,7 @@ theorem forEach_agrees {α : Type} (w : World) (xs : List α) {f : World → α 
     Agrees (w.forEach xs f) (w.forEach xs g) := by
   unfold World.forEach; agreeE [hf]
 
-theorem found_agrees (w : World) (expectations : List Scenario.Expectation) (i : Nat) (l : Scenario.Line) :
+theorem found_agrees [MonadNote (StateT C Id)] (w : World) (expectations : List Scenario.Expectation) (i : Nat) (l : Scenario.Line) :
     Agrees (w.found fsOfI expectations i l) (w.found fsOf expectations i l) := by
   unfold World.found; agreeE [AgreesE.mapGetD (fill_agrees h w i), offeredAt_agrees h]
 

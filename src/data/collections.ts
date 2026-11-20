@@ -305,8 +305,11 @@ export const normalizedRow = (
   value: unknown,
 ): { readonly value: Fields } | { readonly error: z.ZodError } => normalized(strictObjectOf(shape), value as Fields);
 
-/** Returns the row of the shape's defaults with every collection sorted. Load checks it against the shape. */
+/** Returns the default value of each field of the shape that declares one, with every collection sorted. */
 export function defaultRow(shape: Shape): Fields {
-  const object = objectOf(shape);
-  return sorted(object, object.parse({})) as Fields;
+  const row = Object.entries(shape as Readonly<Record<string, z.ZodType>>).flatMap(([field, schema]) => {
+    const defaulted = schema.safeParse(undefined);
+    return defaulted.success && defaulted.data !== undefined ? [[field, defaulted.data] as const] : [];
+  });
+  return sorted(objectOf(shape), Object.fromEntries(row)) as Fields;
 }

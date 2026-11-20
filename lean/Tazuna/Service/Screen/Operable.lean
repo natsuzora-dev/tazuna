@@ -21,7 +21,7 @@ derive_wire Operation
 
 section Operations
 
-variable [Monad m] (fs : Functions m)
+variable [Monad m] [MonadNote m] (fs : Functions m)
 
 inductive Refusal where
   | notOpen

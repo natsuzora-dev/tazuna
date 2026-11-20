@@ -36,10 +36,7 @@ export interface ThrownDefault {
   readonly error: unknown;
 }
 
-/**
- * The ref that the structure holds where a definition names nothing it can resolve. check stops at the violation that
- * reports it, before anything reads the structure.
- */
+/** Stands where a definition names nothing it can resolve, in a structure that structureOf then drops. */
 const unresolved: DefinitionRef = { service: "", name: "" };
 
 const isExpected = (definition: Definition, expected: Expected): boolean =>
@@ -55,19 +52,16 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
  * The structure, with the unresolved references and the throwing defaults found on the way. A reference that is
  * missing or names a definition of another kind is Malformed.unresolvedReference. A value that no export names is left
  * to unexportedDefinitions and owners, which report it; `unnamed` lists where, so that load can tell when neither did.
+ * The structure is undefined when anything was found, because it would hold a placeholder where it was found.
  */
 export interface StructureOf {
-  readonly structure: Structure;
+  readonly structure: Structure | undefined;
   readonly thrownDefaults: readonly ThrownDefault[];
   readonly malformed: readonly Found<Malformed>[];
   readonly unnamed: readonly string[];
 }
 
-/**
- * Computes state trees and definition refs, which every other part reads from this JSON. A schema whose conversion
- * throws is {} in the structure, and an unresolved reference is a placeholder; check stops at the Malformed violation
- * that each becomes, before anything reads it.
- */
+/** Computes state trees and definition refs, which every other part reads from this JSON. */
 export function structureOf(
   definitions: readonly Named<Definition>[],
   names: ReadonlyMap<unknown, Named<Definition>>,
@@ -129,7 +123,8 @@ export function structureOf(
       return definitionStructure(named, ref, schemaOf, unreadableDeadline);
     }),
   };
-  return { structure, thrownDefaults, malformed, unnamed };
+  const found = thrownDefaults.length > 0 || malformed.length > 0 || unnamed.length > 0;
+  return { structure: found ? undefined : structure, thrownDefaults, malformed, unnamed };
 }
 
 function definitionStructure(
@@ -213,8 +208,7 @@ function definitionStructure(
 
 /**
  * Returns how the time of the deadline `d` is computed, with its delay as Temporal.Duration reads it, or null when it
- * does not. A deadline with both a delay and an `at` or neither, which only `any` gets past the types, is `unreadable`
- * and gets the placeholder of an unread delay.
+ * does not. A deadline with both a delay and an `at` or neither, which only `any` gets past the types, is `unreadable`.
  */
 function deadlineTimeOf(d: { readonly delay?: Delay; readonly at?: unknown }, unreadable: () => void): DeadlineTime {
   if ((d.at === undefined) === (d.delay === undefined)) {
@@ -327,6 +321,7 @@ function structureOfChart(
         map:
           node.type === "map"
             ? {
+                key: schemaOf(node.key),
                 itemKeys: keysOf(node.key, ref, [...at, "key"]),
                 contextKeys: keysOf(node.context ?? {}, ref, [...at, "context"]),
               }

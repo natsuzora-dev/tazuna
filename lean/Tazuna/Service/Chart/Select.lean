@@ -32,6 +32,18 @@ def firstLevel (st : Service) (s : State) (extra : Extra) : List (Instance × Li
     | .ok none => firstLevel st s extra rest
 
 /--
+The item key that `payload` names for the copies of the map state `map` of `chart`: none when the payload lacks one of
+the key fields, so that it reaches every copy; `some none` when its key fields fail the key schema; and otherwise the
+key fields as normalize writes them, which is how `items` writes a copy's key.
+-/
+def copyKey (st : Service) (chart : Chart) (map : String) (payload : Value) :
+    m (Except Issue (Option (Option Value))) := do
+  let state ← expectFound s!"map state {map} of {chart.name}" ((chart.state? map).bind (·.spec.map))
+  match (Spec.schemaProperties state.key).mapM fun f => (payload.field? f).map (f, ·) with
+  | none => pure (.ok none)
+  | some fields => pure ((← fs.normalize (.mapKey (st.ref chart.name) map) (.obj fields)).map some)
+
+/--
 Whether an event with `payload` reaches copy `c`. As in BPMN correlation, the payload's key fields choose the copies
 that an event reaches.
 -/
@@ -39,7 +51,7 @@ def reaches (st : Service) (c : Instance) (payload : Value) : m (Except Fault Bo
   match c.id.map? with
   | none => pure (.ok true)
   | some map =>
-    match ← fs.copyKey c.chart.name map payload with
+    match ← copyKey fs st c.chart map payload with
     | .error e => pure (.error (issueViolation (st.ref c.chart.name) e))
     | .ok none => pure (.ok true)
     | .ok (some none) => pure (.ok false)

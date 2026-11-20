@@ -260,13 +260,13 @@ export class SpecFunctions implements Functions {
         return this.chartOf(schema.chart.name).named.definition.context;
       case "mapContext":
         return this.mapNode(schema.chart.name, schema.map).context ?? {};
+      case "mapKey":
+        return this.mapNode(schema.chart.name, schema.map).key;
       case "held": {
         const field = this.node(schema.chart.name, schema.state).held?.[schema.name];
         if (field === undefined) throw new InternalError(`the state ${schema.state} has no parameter ${schema.name}`);
         return { [schema.name]: field };
       }
-      default:
-        throw new InternalError(`no question checks a value of the ${schema.kind} schema`);
     }
   }
 
@@ -665,24 +665,18 @@ export class SpecFunctions implements Functions {
     return attempt(() => orderFree(comparableAnswer(answer, found.definition.output)), schema);
   }
 
-  /** Returns initialContext with the defaults of the fields that it leaves out. */
   initialContext(machine: string, input: Fields): Fields | Failed {
-    const { named, ref } = this.chartOf(machine);
-    const chart = named.definition;
-    const row = attempt(() => {
-      const initial = (chart.initialContext === undefined ? {} : chart.initialContext({ input })) as Fields;
-      const filled: Fields = { ...initial };
-      for (const [field, schema] of Object.entries(chart.context)) {
-        if (field in initial) continue;
-        const defaulted = (schema as z.ZodType).safeParse(undefined);
-        if (defaulted.success) filled[field] = defaulted.data;
-      }
-      return filled;
-    });
-    if (row instanceof Failed) return row;
-    const context = matching({ kind: "context", chart: ref }, strictObjectOf(chart.context), row);
-    if (context instanceof Failed) return context;
-    return context.value;
+    const chart = this.chartOf(machine).named.definition;
+    const f = chart.initialContext;
+    return attempt(() => sortedFields(chart.context, f === undefined ? {} : f({ input })) as Fields);
+  }
+
+  defaults(schema: Schema): Row | Failed {
+    const shape = this.shape(schema);
+    const object = objectOf(shape);
+    const value = attempt(() => defaultRow(shape), schema);
+    if (value instanceof Failed) return value;
+    return { value: bagged(object, value) as Fields, encoded: toJson(object, value) as Fields };
   }
 
   guard(
@@ -863,31 +857,6 @@ export class SpecFunctions implements Functions {
       encoded,
       encodedKey: canonicalJson(encoded),
     }));
-  }
-
-  /** Returns the defaults of the map state's copy context, which load checks against the schema. */
-  copyContext(machine: string, map: string): Fields {
-    const shape = this.mapNode(machine, map).context ?? {};
-    return bagged(objectOf(shape), defaultRow(shape)) as Fields;
-  }
-
-  /** Returns the defaults of a single entity's fields, which load checks against the schema. */
-  singleRecord(entity: string): Row {
-    const shape = this.entity(entity).fields as Shape;
-    const value = defaultRow(shape);
-    return { value: bagged(objectOf(shape), value) as Fields, encoded: toJson(objectOf(shape), value) as Fields };
-  }
-
-  copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed {
-    const shape = this.mapNode(machine, map).key;
-    const fields = Object.keys(shape);
-    const row = payload as Fields;
-    if (!fields.every((f) => row[f] !== undefined)) return undefined;
-    const key = sorted(objectOf(shape), Object.fromEntries(fields.map((f) => [f, row[f]])));
-    const chart = this.chartOf(machine).ref;
-    const encoded = attempt(() => z.safeEncode(objectOf(shape), key as never), { kind: "mapKey", chart, map });
-    if (encoded instanceof Failed) return encoded;
-    return encoded.success ? canonicalJson(encoded.data) : null;
   }
 
   close(
