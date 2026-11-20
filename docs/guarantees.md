@@ -288,6 +288,7 @@ The other rows are tazuna's own.
 | An answer to a stale request only ends the wait for it. | `stale_answer_ignored`, `stale_command_answer_ignored` |
 | A state that is exited before it sends its requests sends nothing. | `exited_state_sends_nothing` |
 | When every deadline and live request of an instance belongs to one of its active states, stopping the instance cancels them all. | `endWith_cancels_deadlines_and_requests` |
+| In a spec that `check` accepts, every deadline with a delay has a length in milliseconds that the run adds to the time its state is entered. | `deadlines_exact` |
 
 ### Subscriptions and screens
 

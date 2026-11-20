@@ -1,6 +1,5 @@
 import type { Delay } from "../data/datetime.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import { InternalError } from "../data/internalError.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import type { Expected, Malformed } from "../data/malformed.ts";
 import type { Shape } from "../data/values.ts";
@@ -60,7 +59,7 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
 export interface StructureOf {
   readonly structure: Structure;
   readonly thrownDefaults: readonly ThrownDefault[];
-  readonly unresolvedReferences: readonly Found<Malformed>[];
+  readonly malformed: readonly Found<Malformed>[];
   readonly unnamed: readonly string[];
 }
 
@@ -80,7 +79,7 @@ export function structureOf(
     return named === undefined ? undefined : { service: named.service, name: named.name };
   };
   const thrownDefaults: ThrownDefault[] = [];
-  const unresolvedReferences: Found<Malformed>[] = [];
+  const malformed: Found<Malformed>[] = [];
   const unnamed: string[] = [];
   const structure: Structure = {
     services: [...services].map(([name, s]) => ({
@@ -103,7 +102,7 @@ export function structureOf(
         if (found !== undefined && isExpected(found.definition, expected))
           return { service: found.service, name: found.name };
         if (value === undefined || found !== undefined)
-          unresolvedReferences.push({
+          malformed.push({
             violation: {
               kind: "Malformed.unresolvedReference",
               definition: { service, name },
@@ -122,16 +121,22 @@ export function structureOf(
           return {};
         }
       };
-      return definitionStructure(named, ref, schemaOf);
+      const unreadableDeadline = (path: Path) =>
+        malformed.push({
+          violation: { kind: "Malformed.unreadableDeadline", definition: { service, name }, data: { path: [...path] } },
+          place,
+        });
+      return definitionStructure(named, ref, schemaOf, unreadableDeadline);
     }),
   };
-  return { structure, thrownDefaults, unresolvedReferences, unnamed };
+  return { structure, thrownDefaults, malformed, unnamed };
 }
 
 function definitionStructure(
   { service, name, definition: d }: Named<Definition>,
   ref: RefOf,
   schemaOf: (owner: Definition, shape: Shape) => JsonSchema,
+  unreadableDeadline: (path: Path) => void,
 ): DefinitionStructure {
   const references = (shape: Shape, key: string) =>
     Object.entries(shape).flatMap(([field, schema]) => {
@@ -202,17 +207,21 @@ function definitionStructure(
     kind: chart.kind,
     service,
     name,
-    ...structureOfChart(chart, ref, (shape) => schemaOf(d, shape)),
+    ...structureOfChart(chart, ref, (shape) => schemaOf(d, shape), unreadableDeadline),
   };
 }
 
 /**
  * Returns how the time of the deadline `d` is computed, with its delay as Temporal.Duration reads it, or null when it
- * does not. The types give a deadline a delay or an `at`.
+ * does not. A deadline with both a delay and an `at` or neither, which only `any` gets past the types, is `unreadable`
+ * and gets the placeholder of an unread delay.
  */
-function deadlineTimeOf(d: { readonly delay?: Delay; readonly at?: unknown }, deadline: string): DeadlineTime {
-  if (d.at !== undefined) return { kind: "at" };
-  if (d.delay === undefined) throw new InternalError(`the deadline ${deadline} has neither delay nor at`);
+function deadlineTimeOf(d: { readonly delay?: Delay; readonly at?: unknown }, unreadable: () => void): DeadlineTime {
+  if ((d.at === undefined) === (d.delay === undefined)) {
+    unreadable();
+    return { kind: "delay", delay: null };
+  }
+  if (d.delay === undefined) return { kind: "at" };
   try {
     const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } =
       Temporal.Duration.from(d.delay);
@@ -236,6 +245,7 @@ function structureOfChart(
   chart: ChartSpec,
   ref: RefOf,
   schemaOf: (shape: Shape) => JsonSchema,
+  unreadableDeadline: (path: Path) => void,
 ): Omit<ChartStructure, "kind" | "service" | "name"> {
   const byKey = (keyword: string, record: Readonly<Record<string, unknown>> | undefined, expected: Expected) =>
     Object.fromEntries(Object.entries(record ?? {}).map(([key, value]) => [key, ref(value, [keyword, key], expected)]));
@@ -312,7 +322,7 @@ function structureOfChart(
         transitions: transitions(node, name),
         deadlines: Object.entries(node.after ?? {}).map(([deadline, d]) => ({
           name: deadline,
-          ...deadlineTimeOf(d, `${name} ${deadline}`),
+          ...deadlineTimeOf(d, () => unreadableDeadline([...at, "after", deadline])),
         })),
         map:
           node.type === "map"

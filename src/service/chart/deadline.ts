@@ -7,14 +7,21 @@ import { LazyRecordSource } from "../records.ts";
 import { type Deadline, halt, type Instance, NoteAccess, type State, scopeOf } from "../state.ts";
 import type { Processing } from "./queue.ts";
 
+/** Lean's Time.inRange: whether the run's time can hold `ms`, an instant from year 0000 through year 9999. */
+const inRange = (ms: bigint): boolean => -62_167_219_200_000n <= ms && ms < 253_402_300_800_000n;
+
 /**
- * Lean's instantTime?: the instant that `text` writes, when renderTime writes it back as `text`. parseTime reads a
- * four-digit year, and renderTime writes whole milliseconds.
+ * Lean's instantTime?: the instant that `text` writes, when the run's time can hold it and renderTime writes it back
+ * as `text`. parseTime reads a four-digit year, and renderTime writes whole milliseconds.
  */
 function instantTime(text: string): Temporal.Instant | undefined {
   if (!/^\d{4}-/.test(text)) return undefined;
   const instant = Temporal.Instant.from(text);
-  return instant.epochNanoseconds % 1_000_000n === 0n && instant.toString() === text ? instant : undefined;
+  return instant.epochNanoseconds % 1_000_000n === 0n &&
+    inRange(instant.epochNanoseconds / 1_000_000n) &&
+    instant.toString() === text
+    ? instant
+    : undefined;
 }
 
 /** Lean's addDeadlines: arms the `after` deadlines of `state`, each time fixed now: now plus its delay, or its `at`. */
@@ -28,17 +35,28 @@ export function addDeadlines(
   for (const deadline of deadlines) {
     const { name } = deadline;
     const definition = ref(r.st, instance.chart.name);
-    const time = deadline.kind === "delay" ? delayed(r, deadline.delay, name) : computedTime(r, instance, state, name);
-    if (time === undefined) halt({ kind: "Fault.atSchema", definition, data: { state, deadline: name } });
+    const data = { state, deadline: name };
+    if (deadline.kind === "delay") {
+      const ms =
+        r.state.now.epochNanoseconds / 1_000_000n +
+        expectFound(`delay in milliseconds of ${name}`, delayMsOf(deadline.delay));
+      if (!inRange(ms)) halt({ kind: "Fault.deadlineOutOfRange", definition, data });
+      r.state.deadlines.push({
+        time: Temporal.Instant.fromEpochMilliseconds(Number(ms)),
+        machine: instance.id,
+        state,
+        name,
+        armedBy: step,
+      });
+      continue;
+    }
+    const time = computedTime(r, instance, state, name);
+    if (time === undefined) halt({ kind: "Fault.atSchema", definition, data });
     r.state.deadlines.push({ time, machine: instance.id, state, name, armedBy: step });
   }
 }
 
-/** Returns now plus `delay`, which check makes a length in milliseconds (Illegal.inexactDelay). */
-function delayed(r: Processing, delay: Delay | null, name: string): Temporal.Instant {
-  const ms = expectFound(`delay in milliseconds of ${name}`, delay === null ? undefined : delayMs(delay));
-  return r.state.now.add({ milliseconds: ms });
-}
+const delayMsOf = (delay: Delay | null): bigint | undefined => (delay === null ? undefined : delayMs(delay));
 
 /** Returns the instant that the deadline's `at` computes, or undefined when it computes none. */
 function computedTime(r: Processing, instance: Instance, state: string, name: string): Temporal.Instant | undefined {

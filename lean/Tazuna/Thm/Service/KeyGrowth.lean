@@ -91,9 +91,14 @@ theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : L
     · exact .refl _
     · split
       · generalize (expectFound _ _ : Id Int) = ms
-        keys_leaf
+        show KeepsKeys _ (if (t.now + Id.run ms).inRange = true then _ else _)
+        split <;> keys_leaf
       · generalize fs.deadlineAt _ _ _ = r
-        rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> keys_leaf
+        rcases r with e | (_ | u)
+        · keys_leaf
+        · keys_leaf
+        · show KeepsKeys _ (match instantTime? u with | some _ => _ | none => _)
+          split <;> keys_leaf
 
 /-- Processing `f` keeps the createKey values. -/
 def KeysBy (f : Processing → Id Processing) : Prop := ∀ r, KeepsKeys r.state (f r).1

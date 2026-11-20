@@ -24,10 +24,14 @@ theorem addDeadlines_fixed (step : Nat) (name : InstanceId) (n : String) (ds : L
       · rfl
       · split
         · generalize (expectFound _ _ : Id Int) = ms
-          simp [State.fixed]
+          show State.fixed (if (s.now + Id.run ms).inRange = true then _ else _) = _
+          split <;> simp [report_eq, State.fixed]
         · generalize fs.deadlineAt _ _ _ = r
-          rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;>
-            (try split) <;> simp [report_eq, State.fixed]
+          rcases r with e | (_ | t)
+          · simp [report_eq, State.fixed]
+          · simp [report_eq, State.fixed]
+          · show State.fixed (match instantTime? t with | some _ => _ | none => _) = _
+            split <;> simp [report_eq, State.fixed]
 
 theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : List Spec.Deadline) :
     (addDeadlines st fs step name n ds s).lines = s.lines := by
@@ -45,9 +49,14 @@ theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : L
       · rfl
       · split
         · generalize (expectFound _ _ : Id Int) = ms
-          simp
+          show State.lines (if (s.now + Id.run ms).inRange = true then _ else _) = _
+          split <;> simp
         · generalize fs.deadlineAt _ _ _ = r
-          rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> simp
+          rcases r with e | (_ | t)
+          · simp
+          · simp
+          · show State.lines (match instantTime? t with | some _ => _ | none => _) = _
+            split <;> simp
 
 theorem takeDeadline_fixed (t : Deadline) : (s.takeDeadline t).1.fixed = s.fixed := rfl
 

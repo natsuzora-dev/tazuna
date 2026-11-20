@@ -120,6 +120,18 @@ export type Illegal =
         readonly state: string;
         readonly deadline: string;
       };
+    }
+  /**
+   * The delay of the deadline `deadline` of `state` is below zero, so it would be due before `state` was entered.
+   * `check` reports none exactly when no delay is below zero (`Checked.delaysNonNegative`).
+   */
+  | {
+      readonly kind: "Illegal.negativeDelay";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly state: string;
+        readonly deadline: string;
+      };
     };
 
 export const illegalKinds = [
@@ -133,4 +145,5 @@ export const illegalKinds = [
   "Illegal.foreignMember",
   "Illegal.restoredHeld",
   "Illegal.inexactDelay",
+  "Illegal.negativeDelay",
 ] as const;

@@ -105,6 +105,11 @@ export type Malformed =
       { readonly path: readonly (string | number)[]; readonly expected: Expected }
     >
   /**
+   * The deadline at `path` writes both a delay and `at`, or neither, so it has no one time. Only a value of type `any`
+   * gets it past the types.
+   */
+  | Of<"unreadableDeadline", DefinitionRef, { readonly path: readonly (string | number)[] }>
+  /**
    * A time of the scenario, Given's start or a clock line's time, is not an ISO datetime with seconds and an offset, or
    * has a part below a millisecond, so the run cannot read it as an instant in milliseconds. The report is at the clock
    * line, or at the scenario for Given's start.

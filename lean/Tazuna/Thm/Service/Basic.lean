@@ -1,4 +1,5 @@
 import Tazuna.Service.Basic
+import Tazuna.Thm.Validation.Check
 
 namespace Tazuna.Thm.Service.Basic
 
@@ -51,5 +52,25 @@ theorem requirements_lookup (j : Spec.Structure) (service : String) (d : Spec.De
         · exact ⟨v, by simp [List.lookup, hn]⟩
         · have hf : (d.name == k) = false := by simp [hn]
           exact ⟨rq, by simp only [List.lookup, hf]; exact hrq⟩
+
+theorem charts_ofStructure (j : Spec.Structure) (service : String) :
+    (ofStructure (m := Id) j service).run.charts = (j.definitions.zipIdx.filter (·.1.service == service)).filterMap
+      fun (d, order) => d.chart?.map (Chart.ofSpec · d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)) :=
+  rfl
+
+/--
+Every deadline of a checked structure's charts has a delay in milliseconds, so addDeadlines' lookup of it
+(expectFound) always finds one.
+-/
+theorem deadlines_exact (j : Spec.Structure) (h : Tazuna.Thm.Validation.Check.Checked j) (service : String) :
+    ∀ c ∈ (ofStructure (m := Id) j service).run.charts, ∀ cs ∈ c.states, ∀ t ∈ cs.spec.deadlines,
+      t.time.isExact = true := by
+  intro c hc cs hcs t ht
+  rw [charts_ofStructure] at hc
+  obtain ⟨⟨d, order⟩, hmem, hmap⟩ := List.mem_filterMap.mp hc
+  have hd : d ∈ j.definitions := List.fst_mem_of_mem_zipIdx (List.mem_filter.mp hmem).1
+  obtain ⟨sc, hsc, rfl⟩ := Option.map_eq_some_iff.mp hmap
+  obtain ⟨st, hst, rfl⟩ := List.mem_map.mp hcs
+  exact h.delaysExact d hd sc hsc st hst t ht
 
 end Tazuna.Thm.Service.Basic

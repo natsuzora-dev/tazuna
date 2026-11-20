@@ -290,7 +290,7 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),
     ...defaultSchemas(definitions, built.structure, opaque, built.thrownDefaults),
-    ...built.unresolvedReferences,
+    ...built.malformed,
     ...loaded.malformed,
   ];
   if (malformed.length === 0 && built.unnamed.length > 0)

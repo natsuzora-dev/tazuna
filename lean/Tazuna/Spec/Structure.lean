@@ -152,6 +152,11 @@ def DeadlineTime.isExact : DeadlineTime → Bool
   | .delay d => (d.bind delayMs?).isSome
   | .at => true
 
+/-- Whether the delay of `time` is below zero, which would arm the deadline before its state was entered. -/
+def DeadlineTime.isNegative : DeadlineTime → Bool
+  | .delay d => (d.bind delayMs?).any (· < 0)
+  | .at => false
+
 structure Deadline where
   name : String
   time : DeadlineTime

@@ -126,6 +126,18 @@ export type Fault =
         readonly deadline: string;
       };
     }
+  /**
+   * The delay of the deadline `deadline` of state `state` takes its time past year 9999, which the run's time cannot hold
+   * (Time.inRange, the rule that an `at` meets too).
+   */
+  | {
+      readonly kind: "Fault.deadlineOutOfRange";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly state: string;
+        readonly deadline: string;
+      };
+    }
   /** A function reads `held` (its state's parameter) under a name that the state does not have. */
   | {
       readonly kind: "Fault.unheld";
@@ -319,6 +331,7 @@ export const faultKinds = [
   "Fault.contextSchema",
   "Fault.itemsSchema",
   "Fault.atSchema",
+  "Fault.deadlineOutOfRange",
   "Fault.unheld",
   "Fault.notOnly",
   "Fault.exception",
@@ -356,6 +369,7 @@ export const haltingFaultKinds = [
   "Fault.contextSchema",
   "Fault.itemsSchema",
   "Fault.atSchema",
+  "Fault.deadlineOutOfRange",
   "Fault.unheld",
   "Fault.notOnly",
   "Fault.exception",

@@ -1,9 +1,10 @@
 import type { Illegal } from "../data/illegal.generated.ts";
-import type { Structure } from "../spec/structure.generated.ts";
+import type { Deadline, Structure } from "../spec/structure.generated.ts";
 import {
   type ChartStructure,
   hasParameters,
   isExact,
+  isNegative,
   isOpenedByScreen,
   stateNamed,
   type TransitionStructure,
@@ -188,24 +189,34 @@ function restoredHeld(structure: Structure): Illegal[] {
   );
 }
 
-/** Lean's inexactDelays. */
-function inexactDelays(structure: Structure): Illegal[] {
+/** The deadlines of every chart that `holds` is true of, each as the Illegal violation of `kind`. */
+function delayViolations(
+  structure: Structure,
+  holds: (t: Deadline) => boolean,
+  kind: "Illegal.inexactDelay" | "Illegal.negativeDelay",
+): Illegal[] {
   return structure.definitions.flatMap((d) =>
     d.kind !== "machine" && d.kind !== "screen"
       ? []
       : d.states.flatMap((st) =>
-          st.deadlines
-            .filter((t) => !isExact(t))
-            .map(
-              (t): Illegal => ({
-                kind: "Illegal.inexactDelay",
-                definition: { service: d.service, name: d.name },
-                data: { state: st.name, deadline: t.name },
-              }),
-            ),
+          st.deadlines.filter(holds).map(
+            (t): Illegal => ({
+              kind,
+              definition: { service: d.service, name: d.name },
+              data: { state: st.name, deadline: t.name },
+            }),
+          ),
         ),
   );
 }
+
+/** Lean's inexactDelays. */
+const inexactDelays = (structure: Structure): Illegal[] =>
+  delayViolations(structure, (t) => !isExact(t), "Illegal.inexactDelay");
+
+/** Lean's negativeDelays. */
+const negativeDelays = (structure: Structure): Illegal[] =>
+  delayViolations(structure, isNegative, "Illegal.negativeDelay");
 
 export function check(structure: Structure): Illegal[] {
   return [
@@ -215,5 +226,6 @@ export function check(structure: Structure): Illegal[] {
     ...alwaysCycles(structure),
     ...restoredHeld(structure),
     ...inexactDelays(structure),
+    ...negativeDelays(structure),
   ];
 }

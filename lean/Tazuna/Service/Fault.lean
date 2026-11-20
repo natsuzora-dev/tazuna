@@ -50,6 +50,11 @@ inductive Fault where
   milliseconds, which the run's time cannot hold.
   -/
   | atSchema (definition : Spec.Ref) (state deadline : String)
+  /--
+  The delay of the deadline `deadline` of state `state` takes its time past year 9999, which the run's time cannot hold
+  (Time.inRange, the rule that an `at` meets too).
+  -/
+  | deadlineOutOfRange (definition : Spec.Ref) (state deadline : String)
   /-- A function reads `held` (its state's parameter) under a name that the state does not have. -/
   | unheld (definition : Spec.Ref) (held : String)
   /-- A function calls `only()` on a bag with more than one element. -/
@@ -119,7 +124,7 @@ def Fault.halts : Fault → Bool
   | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .sameRecordInBag .. | .outputSchema ..
   | .inputSchema .. | .failedRequires .. | .heldSchema ..
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
-  | .itemsSchema .. | .atSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey ..
+  | .itemsSchema .. | .atSchema .. | .deadlineOutOfRange .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey ..
   | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
   | .exceededDueDeadlines .. => true

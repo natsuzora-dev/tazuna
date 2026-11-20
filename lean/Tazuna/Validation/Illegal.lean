@@ -62,6 +62,11 @@ inductive Illegal where
   has a length in milliseconds (`Checked.delaysExact`).
   -/
   | inexactDelay (definition : Spec.Ref) (state deadline : String)
+  /--
+  The delay of the deadline `deadline` of `state` is below zero, so it would be due before `state` was entered.
+  `check` reports none exactly when no delay is below zero (`Checked.delaysNonNegative`).
+  -/
+  | negativeDelay (definition : Spec.Ref) (state deadline : String)
 
 derive_group Illegal
 

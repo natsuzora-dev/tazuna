@@ -238,16 +238,24 @@ export function schemaProperties(schema: unknown): string[] {
   return properties !== null && typeof properties === "object" ? Object.keys(properties) : [];
 }
 
-/** Lean's delayMs?: the length of `d` in milliseconds, or undefined when a date unit or a part below one is not 0. */
-export function delayMs(d: Delay): number | undefined {
+/**
+ * Lean's delayMs?: the length of `d` in milliseconds, or undefined when a date unit or a part below one is not 0. It
+ * counts in bigint, as Lean counts in Int, since the parts may add up past 2^53.
+ */
+export function delayMs(d: Delay): bigint | undefined {
   const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } = d;
   if ([years, months, weeks, days, microseconds, nanoseconds].some((n) => n !== 0)) return undefined;
-  return ((hours * 60 + minutes) * 60 + seconds) * 1000 + milliseconds;
+  return ((BigInt(hours) * 60n + BigInt(minutes)) * 60n + BigInt(seconds)) * 1000n + BigInt(milliseconds);
 }
 
+const delayMsOf = (time: DeadlineTime): bigint | undefined =>
+  time.kind === "delay" && time.delay !== null ? delayMs(time.delay) : undefined;
+
 /** Lean's DeadlineTime.isExact: whether the run can add the delay of `time` to an instant. */
-export const isExact = (time: DeadlineTime): boolean =>
-  time.kind === "at" || (time.delay !== null && delayMs(time.delay) !== undefined);
+export const isExact = (time: DeadlineTime): boolean => time.kind === "at" || delayMsOf(time) !== undefined;
+
+/** Lean's DeadlineTime.isNegative: whether the delay of `time` is below zero. */
+export const isNegative = (time: DeadlineTime): boolean => (delayMsOf(time) ?? 0n) < 0n;
 
 /** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value of the entity. */
 export function isKeyOf(entity: string, value: string): boolean {

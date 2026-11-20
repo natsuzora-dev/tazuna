@@ -79,10 +79,16 @@ def renderTime (t : Time) : String :=
     "." ++ String.ofList ((pad 3 (ms % 1000)).toList.reverse.dropWhile (· == '0')).reverse
   s!"{pad 4 y}-{pad 2 mo}-{pad 2 d}T{pad 2 (ms / 3600000)}:{pad 2 (ms / 60000 % 60)}:{pad 2 (ms / 1000 % 60)}{fraction}Z"
 
-/-- The time of `text`, when renderTime writes that time back as `text`. -/
+/--
+Whether the run's time can hold `t`: an instant from year 0000 through year 9999, which renderTime writes with the
+four-digit year that parseTime reads back.
+-/
+def Time.inRange (t : Time) : Bool := daysFromCivil 0 1 1 * 86400000 ≤ t && t < daysFromCivil 10000 1 1 * 86400000
+
+/-- The time of `text`, when the run's time can hold it and renderTime writes it back as `text`. -/
 def instantTime? (text : String) : Option Time :=
   match parseTime text with
-  | .ok t => if renderTime t == text then some t else none
+  | .ok t => if t.inRange && renderTime t == text then some t else none
   | .error _ => none
 
 /-- An instant as the wire writes it, in the form that renderTime writes. Time is Int, so modules use it locally. -/

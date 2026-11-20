@@ -145,6 +145,19 @@
         "violation": "{\"kind\":\"Fault.danglingSingleRef\",\"definition\":{\"service\":\"todo\",\"name\":\"Pin\"},\"data\":{\"field\":\"taskId\",\"targetKey\":\"task-1\",\"command\":{\"service\":\"todo\",\"name\":\"deleteTask\"}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":12},\"scenario\":{\"service\":\"todo\",\"name\":\"deletePinned\"}}"
       }
     },
+    "Fault.deadlineOutOfRange": {
+      "meaning": "The delay of the deadline `deadline` of state `state` takes its time past year 9999, which the run's time cannot hold (Time.inRange, the rule that an `at` meets too).",
+      "example": {
+        "excerpt": {
+          "file": "farReminder/farReminder.ts",
+          "from": 5,
+          "to": 13,
+          "line": 5,
+          "text": "export const reminder = machine({\n  description: \"Remind eighty million hours after it starts, past the year 9999, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: { after: { far: { delay: { hours: 80_000_000 }, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Fault.deadlineOutOfRange\",\"definition\":{\"service\":\"farReminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"far\"},\"location\":{\"file\":\"farReminder/farReminder.ts\",\"line\":5},\"scenario\":{\"service\":\"farReminder\",\"name\":\"start\"}}"
+      }
+    },
     "Fault.duplicateItemKey": {
       "meaning": "Two items that the chart computes for the map `map` have the key `itemKey`.",
       "example": {
@@ -598,6 +611,19 @@
           "text": "export const homeScreen = screen({\n  description: \"The home screen, which no screen opens, so nothing gives the input that requires would read\",\n  initial: \"showing\",\n  states: { showing: {} },\n  requires: { signedIn: () => false },\n}).chart({});"
         },
         "violation": "{\"kind\":\"Illegal.missingParent\",\"definition\":{\"service\":\"home\",\"name\":\"homeScreen\"},\"data\":{\"keys\":[\"requires\"]},\"location\":{\"file\":\"home/home.ts\",\"line\":5}}"
+      }
+    },
+    "Illegal.negativeDelay": {
+      "meaning": "The delay of the deadline `deadline` of `state` is below zero, so it would be due before `state` was entered. `check` reports none exactly when no delay is below zero (`Checked.delaysNonNegative`).",
+      "example": {
+        "excerpt": {
+          "file": "reminder/reminder.ts",
+          "from": 5,
+          "to": 13,
+          "line": 5,
+          "text": "export const reminder = machine({\n  description: \"Remind an hour before it starts, which no clock reaches\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {} },\n}).chart({\n  states: {\n    waiting: { after: { early: { delay: { hours: -1 }, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Illegal.negativeDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"early\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":5}}"
       }
     },
     "Illegal.ownQuery": {
@@ -1404,6 +1430,19 @@
           "text": "export const countAtEachTime = scenario({\n  description:\n    \"Count at a time with ten fraction digits, at a time with a part below a millisecond, and at a time with zeros below a millisecond; the first two are unparsable\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-10-25T09:02:00.1234567891+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:03:00.0009+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:04:00.001000+09:00\");\n    w.client.call(taskCount, {});\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.unparsableTime\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"countAtEachTime\"}}"
+      }
+    },
+    "Malformed.unreadableDeadline": {
+      "meaning": "The deadline at `path` writes both a delay and `at`, or neither, so it has no one time. Only a value of type `any` gets it past the types.",
+      "example": {
+        "excerpt": {
+          "file": "alarms/alarms.ts",
+          "from": 5,
+          "to": 21,
+          "line": 5,
+          "text": "export const alarm = machine({\n  description: \"Ring after a minute and at a fixed time at once, past the types without a written any\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: {} },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: JSON.parse(\"0\") || {\n          delay: { minutes: 1 },\n          at: () => Temporal.Instant.from(\"2026-10-25T00:01:00Z\"),\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.unreadableDeadline\",\"definition\":{\"service\":\"alarms\",\"name\":\"alarm\"},\"data\":{\"path\":[\"states\",\"waiting\",\"after\",\"ring\"]},\"location\":{\"file\":\"alarms/alarms.ts\",\"line\":5}}"
       }
     },
     "Malformed.unrepresentableSchema": {

@@ -199,7 +199,15 @@ def inexactDelays (s : Structure) : List Illegal :=
       (st.deadlines.filter (!·.time.isExact)).map fun t => .inexactDelay d.ref st.name t.name
     | none => []
 
+def negativeDelays (s : Structure) : List Illegal :=
+  s.definitions.flatMap fun d =>
+    match d.chart? with
+    | some c => c.states.flatMap fun st =>
+      (st.deadlines.filter (·.time.isNegative)).map fun t => .negativeDelay d.ref st.name t.name
+    | none => []
+
 def check (s : Structure) : List Illegal :=
-  missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s ++ restoredHeld s ++ inexactDelays s
+  missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s ++ restoredHeld s ++ inexactDelays s ++
+    negativeDelays s
 
 end Tazuna.Validation.Charts
