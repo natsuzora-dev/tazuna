@@ -12,6 +12,7 @@ import {
   type TransitionStructure,
 } from "../src/spec/structure.ts";
 import { kindOf, pathOf } from "../src/spec/tree.ts";
+import { check as canonical } from "../src/validation/canonical.ts";
 import { check } from "../src/validation/check.ts";
 import { groupExamples, runExamples } from "./examples.ts";
 import { Lean } from "./lean/lean.ts";
@@ -41,8 +42,9 @@ const bases = (
 ).flat();
 
 for (const { name, structure } of bases)
-  test(`${name}: TS and Lean find the same Illegal violations in the structure`, () => {
+  test(`${name}: TS and Lean find the same Illegal and structure NonCanonical violations`, () => {
     assert.deepEqual(lean.check(structure), check(structure));
+    assert.deepEqual(lean.checkCanonical(structure), canonical(structure));
   });
 
 type Pick3 = readonly [number, number, number];
@@ -219,6 +221,16 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     const control = chart === undefined ? undefined : pick(Object.keys(chart.offers), b);
     if (chart && control !== undefined) delete (chart.offers as Record<string, unknown>)[control];
   },
+  onRejected(s, [a, b]) {
+    const written = [
+      ...s.definitions.filter((d) => d.kind === "automation"),
+      ...charts(s).flatMap((c) =>
+        c.states.flatMap((st) => st.activities.filter((x) => x.keyword === "calls" || x.keyword === "sends")),
+      ),
+    ];
+    const found = pick(written, a + b);
+    if (found) (found as { onRejected: boolean }).onRejected = !found.onRejected;
+  },
   external(s, [a]) {
     const service = pick(s.services, a);
     if (service) (service as { external: boolean }).external = !service.external;
@@ -228,7 +240,7 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
 const runs = Number(process.env["TAZUNA_LEAN_CHECK_RUNS"] ?? 1000);
 const mutable = bases.filter(({ structure }) => structure.definitions.some((d) => d.kind !== "entity"));
 
-test("TS and Lean find the same Illegal violations in mutated structures", (t) => {
+test("TS and Lean find the same Illegal and structure NonCanonical violations in mutated structures", (t) => {
   const counts = new Map<string, number>();
   fc.assert(
     fc.property(
@@ -241,8 +253,11 @@ test("TS and Lean find the same Illegal violations in mutated structures", (t) =
         const structure = structuredClone((mutable[base] as (typeof mutable)[number]).structure);
         for (const [op, a, b, c] of ops) mutations[op]?.(structure, [a, b, c]);
         const ts = check(structure);
-        for (const { kind } of ts) counts.set(kind, (counts.get(kind) ?? 0) + 1);
-        assert.deepEqual(lean.check(structure), ts, `${mutable[base]?.name} ${JSON.stringify(ops)}`);
+        const tsCanonical = canonical(structure);
+        for (const { kind } of [...ts, ...tsCanonical]) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+        const named = `${mutable[base]?.name} ${JSON.stringify(ops)}`;
+        assert.deepEqual(lean.check(structure), ts, named);
+        assert.deepEqual(lean.checkCanonical(structure), tsCanonical, named);
       },
     ),
     { numRuns: runs },

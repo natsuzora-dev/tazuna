@@ -8,15 +8,14 @@ import type { ReportedViolation } from "../data/violation.ts";
 import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
 import { type Loaded, type LoadedSpec, loadSpec, type Spec } from "../load/load.ts";
+import { check as canonical } from "../validation/canonical.ts";
 import { check as validate } from "../validation/check.ts";
 import * as answers from "./nonCanonical/answers.ts";
 import * as binds from "./nonCanonical/binds.ts";
-import * as charts from "./nonCanonical/charts.ts";
 import * as constants from "./nonCanonical/constants.ts";
 import * as descriptions from "./nonCanonical/descriptions.ts";
 import * as keywords from "./nonCanonical/keywords.ts";
 import * as offers from "./nonCanonical/offers.ts";
-import * as rejections from "./nonCanonical/rejections.ts";
 import * as sources from "./restricted/sources.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
 
@@ -44,12 +43,6 @@ const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Fo
   keywords,
   offers,
   sources,
-];
-
-/** The syntax checks that read the structure, which run only when loading found no Malformed violation, as Validation. */
-const structureChecks: readonly { readonly check: (spec: Spec) => readonly Found<NonCanonical>[] }[] = [
-  charts,
-  rejections,
 ];
 
 function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
@@ -133,7 +126,10 @@ export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promi
     loaded.kind === "structured" && unlisted.length === 0
       ? [
           ...syntax,
-          ...structureChecks.flatMap((c) => c.check(loaded.spec)),
+          ...canonical(loaded.spec.structure).map((violation) => ({
+            violation,
+            place: placeOf(loaded.spec, violation.definition),
+          })),
           ...validate(loaded.spec.structure).map((violation) => ({
             violation,
             place: placeOfIllegal(loaded.spec, violation),

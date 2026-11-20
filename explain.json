@@ -1901,7 +1901,7 @@
       }
     },
     "NonCanonical.missingOnRejected": {
-      "meaning": "An answer may be rejected, but the request has no `onRejected`.",
+      "meaning": "An answer may be rejected, but the request has no `onRejected`. `request` is null for an automation, which may be rejected only with `unavailable`.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
@@ -1910,7 +1910,7 @@
           "line": 14,
           "text": "export const notifyAdded = automation({\n  receives: { taskAdded },\n  commands: { notify: device.notify },\n}).send({ input: () => ({ text: \"A task was added\" }) });"
         },
-        "violation": "{\"kind\":\"NonCanonical.missingOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"notifyAdded\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
+        "violation": "{\"kind\":\"NonCanonical.missingOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"notifyAdded\"},\"data\":{\"request\":null},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
       }
     },
     "NonCanonical.missingReenter": {
@@ -2005,7 +2005,7 @@
       }
     },
     "NonCanonical.unreachableOnRejected": {
-      "meaning": "The request has an `onRejected`, but no answer can be rejected.",
+      "meaning": "The request has an `onRejected`, but no answer can be rejected. `request` is null for an automation.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
@@ -2014,7 +2014,7 @@
           "line": 19,
           "text": "export const countAdded = automation({\n  receives: { taskAdded },\n  commands: { countTask },\n}).send({ input: ({ payload }) => ({ taskId: payload.taskId }), onRejected: [] });"
         },
-        "violation": "{\"kind\":\"NonCanonical.unreachableOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"countAdded\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":19}}"
+        "violation": "{\"kind\":\"NonCanonical.unreachableOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"countAdded\"},\"data\":{\"request\":null},\"location\":{\"file\":\"todo/todo.ts\",\"line\":19}}"
       }
     },
     "NonCanonical.unreadBinding": {

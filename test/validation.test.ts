@@ -5,13 +5,17 @@ import { test } from "node:test";
 import { folders, groupExamples } from "./examples.ts";
 import { testExamples } from "./expected.ts";
 
-const illegalRoot = join(import.meta.dirname, "validation/illegal");
+const roots = { illegal: "Illegal", nonCanonical: "NonCanonical" } as const;
 
-test("The folder names directly under test/validation/illegal are the file names of src/validation except check.ts", () => {
+test("The folder names directly under test/validation/<group> are the file names of src/validation except check.ts", () => {
   const targets = readdirSync(join(import.meta.dirname, "../src/validation"))
     .filter((file) => file !== "check.ts")
     .map((file) => basename(file, ".ts"));
-  assert.deepEqual(new Set(folders(illegalRoot).map((folder) => basename(folder))), new Set(targets));
+  const named = Object.keys(roots).flatMap((group) =>
+    folders(join(import.meta.dirname, "validation", group)).map((folder) => basename(folder)),
+  );
+  assert.deepEqual(named.toSorted(), targets.toSorted());
 });
 
-testExamples(groupExamples("validation", "illegal"), "Illegal", ["check", "."]);
+for (const [folder, group] of Object.entries(roots))
+  testExamples(groupExamples("validation", folder), group, ["check", "."]);

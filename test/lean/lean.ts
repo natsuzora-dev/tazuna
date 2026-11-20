@@ -30,6 +30,7 @@ export type VerifyViolation = Mismatch | Uncomparable;
 /** The response that each request gets. */
 const responses = {
   check: "checked",
+  checkCanonical: "checkedCanonical",
   verify: "verified",
   checkExternal: "checkedExternal",
   pair: "paired",
@@ -205,6 +206,10 @@ export class Lean {
 
   check(structure: Structure): Responded<"check">["findings"] {
     return this.exchange({ type: "check", structure }).findings;
+  }
+
+  checkCanonical(structure: Structure): Responded<"checkCanonical">["findings"] {
+    return this.exchange({ type: "checkCanonical", structure }).findings;
   }
 
   sort(schema: Json, value: Json): Json {

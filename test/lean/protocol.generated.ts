@@ -4,6 +4,7 @@ import type { Ensured } from "../../src/data/ensured.generated.ts";
 import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { InvalidScenario } from "../../src/data/invalidScenario.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
+import type { NonCanonical } from "../../src/data/nonCanonical.generated.ts";
 import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
 import type { Activity, InstanceId, StepName } from "../../src/data/step.generated.ts";
 import type { Answer, LineId, Rejection, TraceLine } from "../../src/data/trace.generated.ts";
@@ -261,6 +262,10 @@ export type StepOrder = {
 export type Request =
   | {
       readonly type: "check";
+      readonly structure: Structure;
+    }
+  | {
+      readonly type: "checkCanonical";
       readonly structure: Structure;
     }
   | {
@@ -723,6 +728,10 @@ export type Response =
   | {
       readonly type: "checked";
       readonly findings: readonly Illegal[];
+    }
+  | {
+      readonly type: "checkedCanonical";
+      readonly findings: readonly NonCanonical[];
     }
   /** The pairs of each binding that the comparison ends with. */
   | {

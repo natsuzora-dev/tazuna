@@ -6,7 +6,8 @@ import { internalInvalidInputKinds, invalidInputKinds } from "./invalidInput.gen
 import { internalInvalidScenarioKinds, invalidScenarioKinds } from "./invalidScenario.generated.ts";
 import type { Malformed } from "./malformed.ts";
 import { mismatchKinds } from "./mismatch.generated.ts";
-import type { NonCanonical } from "./nonCanonical.ts";
+import { nonCanonicalKinds as structureNonCanonicalKinds } from "./nonCanonical.generated.ts";
+import type { SourceNonCanonical } from "./nonCanonical.ts";
 import type { Restricted } from "./restricted.ts";
 import { uncomparableKinds } from "./uncomparable.generated.ts";
 import type { Uncovered } from "./uncovered.ts";
@@ -47,21 +48,18 @@ const malformedKinds = every<Malformed["kind"]>()([
   "Malformed.misusedObserved",
 ]);
 
-const nonCanonicalKinds = every<NonCanonical["kind"]>()([
-  "NonCanonical.emptyKeyword",
-  "NonCanonical.missingReenter",
-  "NonCanonical.reenterOnRoot",
-  "NonCanonical.reenterOutsideSource",
-  "NonCanonical.ungroupedConstant",
-  "NonCanonical.statelessMachine",
-  "NonCanonical.missingOnRejected",
-  "NonCanonical.unreachableOnRejected",
-  "NonCanonical.constantOffer",
-  "NonCanonical.answerLiteral",
-  "NonCanonical.unreadBinding",
-  "NonCanonical.undescribedService",
-  "NonCanonical.undescribedDefinition",
-]);
+const nonCanonicalKinds = [
+  ...structureNonCanonicalKinds,
+  ...every<SourceNonCanonical["kind"]>()([
+    "NonCanonical.emptyKeyword",
+    "NonCanonical.ungroupedConstant",
+    "NonCanonical.constantOffer",
+    "NonCanonical.answerLiteral",
+    "NonCanonical.unreadBinding",
+    "NonCanonical.undescribedService",
+    "NonCanonical.undescribedDefinition",
+  ]),
+] as const;
 
 const restrictedKinds = every<Restricted["kind"]>()([
   "Restricted.global",

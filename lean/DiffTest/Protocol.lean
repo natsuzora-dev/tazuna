@@ -4,6 +4,7 @@ import Tazuna.Explore.Instrument
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
 import Tazuna.Validation.Illegal
+import Tazuna.Validation.NonCanonical
 import Tazuna.Verify.Compare
 import Tazuna.Verify.Pairing
 
@@ -37,6 +38,7 @@ derive_wire StepOrder
 /-- What TS asks Lean to compute. A snapshot line is null for a blank line. -/
 inductive Request where
   | check («structure» : Spec.Structure)
+  | checkCanonical («structure» : Spec.Structure)
   | verify («structure» : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
       (trace : List (FileLine TraceLine))
   | checkExternal («structure» : Spec.Structure) (service : String) (trace : List (FileLine TraceLine))
@@ -212,6 +214,7 @@ derive_wire SearchedProcessing serialize_only
 /-- What Lean answers a Request with, the constructor named after the request's. -/
 inductive Response where
   | checked (findings : List Validation.Illegal)
+  | checkedCanonical (findings : List Validation.NonCanonical)
   /-- The pairs of each binding that the comparison ends with. -/
   | verified (findings : List Verify.Finding) (bindings : List (List (String × String)))
   | checkedExternal (findings : List Verify.Finding)

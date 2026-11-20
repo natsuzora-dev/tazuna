@@ -229,7 +229,7 @@ No theorem proves the following properties yet.
 | The end-of-run checks of the exchanges with external services. | `checkExchanges` in `lean/Tazuna/Service/Input.lean` |
 | Which steps cause which, beyond the `after` theorems under Ordering. | `causedBy` in `lean/Tazuna/Sim/Order.lean` |
 | Spec functions read the keys of an entity in one order, whatever order the records were written in. The Lean definitions give spec functions the records in write order. | The TypeScript runtime only. |
-| `check`'s `Malformed`, `NonCanonical`, and `Restricted` rules. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it. | The TypeScript runtime only. |
+| `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it. | The TypeScript runtime only. |
 
 ## Proven properties
 
@@ -361,6 +361,7 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields. | `compareSnapshot_eq_none_iff`, `compareSnapshot_reordered` |
 | A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states. | `compare_matches`, `contentMatch_renamed` |
 | When `check` reports no `Illegal` violation, the spec keeps every structural rule that `Checked` lists, one per `Illegal` kind. | `check_eq_nil_iff` |
+| When `check` reports none of the `NonCanonical` kinds that read only the structure, each transition has a `reenter` exactly when it leads within its source, each automation and each calls or sends has `onRejected` exactly when an answer may be rejected, and no machine is stateless. | `canonical_check_eq_nil_iff` |
 | When the step-order search of a message reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from. | `stepOrderSearch_same` |
 | The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, or outputs that do not compare even with themselves and a state equal under a binding. The state is the records and the open instances, pending deadlines included. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
 | `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace. | `no_violation_iff` |

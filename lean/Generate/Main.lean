@@ -12,6 +12,7 @@ import Tazuna.Spec.Structure
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
 import Tazuna.Validation.Illegal
+import Tazuna.Validation.NonCanonical
 import Tazuna.Verify.Mismatch
 import Tazuna.Verify.Uncomparable
 import DiffTest.Protocol
@@ -56,6 +57,7 @@ def sums : List (Name × List Name) :=
 /-- Each generated module, by repository path, and the Lean types that it declares, the root last. -/
 def modules : List (String × List Name) :=
   [("src/data/illegal.generated.ts", [``Tazuna.Validation.Illegal]),
+   ("src/data/nonCanonical.generated.ts", [``Tazuna.Validation.OnRejectedAt, ``Tazuna.Validation.NonCanonical]),
    ("src/data/mismatch.generated.ts", [``Tazuna.Data.Subject, ``Tazuna.Verify.Mismatch]),
    ("src/data/uncomparable.generated.ts", [``Tazuna.Verify.Uncomparable]),
    ("src/data/invalidInput.generated.ts", [``Tazuna.Service.InvalidInput]),
@@ -476,6 +478,7 @@ def appended (file : String × String) (extra : String) : String × String := (f
 
 def files : List (String × String) :=
   [typescript% "src/data/illegal.generated.ts",
+   typescript% "src/data/nonCanonical.generated.ts",
    typescript% "src/data/mismatch.generated.ts",
    typescript% "src/data/uncomparable.generated.ts",
    appended (typescript% "src/data/invalidInput.generated.ts")

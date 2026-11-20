@@ -3,6 +3,7 @@ import DiffTest.Json
 import DiffTest.Protocol
 import Tazuna.Explore.StepOrders
 import Tazuna.Sim.Run
+import Tazuna.Validation.Canonical
 
 /-!
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).
@@ -317,6 +318,7 @@ def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure
 /-- The response to `request`. A snapshot line is none for a blank line. -/
 def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .check s => pure (.checked (Validation.check s))
+  | .checkCanonical s => pure (.checkedCanonical (Validation.Canonical.check s))
   | .verify s service snapshot trace => verify stdin stdout s service snapshot trace
   | .checkExternal s service trace => pure (.checkedExternal (Verify.checkExternal s service trace))
   | .pair services expected others folders =>

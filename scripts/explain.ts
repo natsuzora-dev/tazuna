@@ -8,9 +8,13 @@ import type { Group } from "../src/data/violation.ts";
 const root = join(import.meta.dirname, "..");
 const expected = "expected.jsonl";
 
+/** The sources of a group's type: its TS file, then its generated file, either of which may be missing. */
 const sourceOf = (group: Group): string => {
   const base = join(root, "src/data", group.charAt(0).toLowerCase() + group.slice(1));
-  return readFileSync(existsSync(`${base}.generated.ts`) ? `${base}.generated.ts` : `${base}.ts`, "utf8");
+  return [`${base}.ts`, `${base}.generated.ts`]
+    .filter((file) => existsSync(file))
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
 };
 
 /** The text of a doc comment's body: its paragraphs, each on one line. */
