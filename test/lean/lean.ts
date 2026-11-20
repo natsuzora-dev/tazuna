@@ -194,19 +194,33 @@ export class Lean {
     functions: Answering,
     execute = false,
     stepOrders: readonly StepOrder[] = [],
-    explore?: ExploreOptions,
-  ): Responded<"simulate"> {
-    return this.exchange(
+  ): Omit<Responded<"simulate">, "fingerprint"> {
+    const { fingerprint: _, ...outcome } = this.exchange(
       {
         type: "simulate",
         structure: spec.structure,
         scenario,
         ...(execute ? { execute } : {}),
         ...(stepOrders.length > 0 ? { stepOrders } : {}),
-        ...(explore === undefined ? {} : { explore }),
       },
       functions,
     );
+    return outcome;
+  }
+
+  /** Executes `scenario` as explore does, and returns its outcome with the moves after it and its world's fingerprint. */
+  explored(
+    spec: Spec,
+    scenario: Scenario,
+    functions: Answering,
+    explore: ExploreOptions,
+  ): { readonly outcome: Omit<Responded<"simulate">, "fingerprint">; readonly fingerprint: string } {
+    const { fingerprint, ...outcome } = this.exchange(
+      { type: "simulate", structure: spec.structure, scenario, execute: true, explore },
+      functions,
+    );
+    if (fingerprint === null) throw new Error("tazuna-lean gave no fingerprint for an explored world");
+    return { outcome, fingerprint };
   }
 
   check(structure: Structure): Responded<"check">["findings"] {

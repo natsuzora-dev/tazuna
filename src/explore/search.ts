@@ -15,8 +15,7 @@ export interface SearchOptions<I, R> {
 /**
  * Searches breadth-first, continuing each path from its parent's result, with a visited set of state fingerprints.
  * Yields each path with its result and its parent's result (none for the start); the caller stops the search by
- * leaving the loop. Breadth-first order visits each state first at its shallowest depth, so merging leaves no state
- * unextended that the bound would reach.
+ * leaving the loop. Lean's Space.merged, whose layers the queue takes in order.
  */
 export function* search<I, R>(
   options: SearchOptions<I, R>,

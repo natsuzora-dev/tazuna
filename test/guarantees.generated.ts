@@ -72,6 +72,7 @@ export const guarantees = [
   "lines_after_stop_ignored",
   "matchValue_renamed",
   "matchValue_strRenamed",
+  "merged_search_reports",
   "message_keysDistinct",
   "message_outputs_at_its_time",
   "message_work_limit_halts",

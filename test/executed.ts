@@ -4,6 +4,7 @@ import { canonicalJson, type Json, plain } from "../src/data/values.ts";
 import type { Violation } from "../src/data/violation.ts";
 import { stateValue } from "../src/explore/choiceDependent.ts";
 import { enabled } from "../src/explore/enabled.ts";
+import { worldFingerprint } from "../src/explore/fingerprint.ts";
 import {
   type Executed,
   enabledLines,
@@ -62,22 +63,43 @@ export function executedOutcome(spec: Spec, sc: Scenario, executed: Executed) {
   };
 }
 
-/** The run that an execution with the evaluation cache differs from: Lean's, or the TS run without the cache. */
+/**
+ * The run that an execution with the evaluation cache differs from: Lean's, or the TS run without the cache; or, for
+ * `fingerprint`, two worlds that one of TS and Lean takes as the same and the other does not, with the other's two
+ * fingerprints.
+ */
 export interface Difference {
-  readonly against: "lean" | "noCache";
+  readonly against: "lean" | "noCache" | "fingerprint";
   readonly ts: string;
   readonly other: string;
 }
 
+/** The explored worlds by TS's and Lean's fingerprints, which must take the same worlds as the same. */
+export class SameWorlds {
+  private readonly leanOf = new Map<string, string>();
+  private readonly tsOf = new Map<string, string>();
+
+  /** Adds a world, and returns the difference when one fingerprint matches an earlier world's and the other does not. */
+  add(ts: string, lean: string): Difference | undefined {
+    const known = { lean: this.leanOf.get(ts), ts: this.tsOf.get(lean) };
+    if (known.lean !== undefined && known.lean !== lean) return { against: "fingerprint", ts: known.lean, other: lean };
+    if (known.ts !== undefined && known.ts !== ts) return { against: "fingerprint", ts: known.ts, other: ts };
+    this.leanOf.set(ts, lean);
+    this.tsOf.set(lean, ts);
+    return undefined;
+  }
+}
+
 /**
- * Executes the scenario with `appended` after its lines in TS with the evaluation cache, in TS without it, and in Lean.
- * Returns the cached TS execution, and the first run whose outcome differs from it.
+ * Executes the scenario with `appended` after its lines in TS with the evaluation cache, in TS without it, and in Lean,
+ * and adds the world to `worlds`. Returns the cached TS execution, and the first run whose outcome differs from it.
  */
 export function executeEach(
   lean: Lean,
   spec: Spec,
   sc: Scenario,
   appended: readonly Line[],
+  worlds: SameWorlds,
 ): { readonly executed: Executed; readonly difference?: Difference } {
   const executed = executeAppended(spec, sc, appended);
   const plainRun = executeAppended(spec, sc, appended, () => new NoCache());
@@ -90,8 +112,11 @@ export function executeEach(
     scenarios: spec.scenarios.map((s) => (s.definition as LoadedScenario).scenario),
     valuesPerPayload,
   };
-  const fromLean = canonicalJson(lean.simulate(spec, extended, functions, true, [], explore));
-  return fromLean === ts ? { executed } : { executed, difference: { against: "lean", ts, other: fromLean } };
+  const { outcome, fingerprint } = lean.explored(spec, extended, functions, explore);
+  const fromLean = canonicalJson(outcome);
+  if (fromLean !== ts) return { executed, difference: { against: "lean", ts, other: fromLean } };
+  const merged = worlds.add(worldFingerprint(executed.world), fingerprint);
+  return merged === undefined ? { executed } : { executed, difference: merged };
 }
 
 /**

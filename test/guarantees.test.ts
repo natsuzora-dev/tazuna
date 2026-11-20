@@ -136,6 +136,10 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     example: "service/Chart/Config/exit-transition-entry-order",
     scenario: "intoRegion",
   },
+  merged_search_reports: {
+    because:
+      "a property of breadth-first search over any space whose fingerprint keeps what later paths report; run.diff.ts compares the fingerprint itself in TS and Lean",
+  },
   modal_child_covers: { kindExample: "InvalidInput.coveredByModal" },
   moves_enabled: ofExplored,
   no_violation_iff: ofCompare,

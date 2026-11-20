@@ -8,7 +8,7 @@ import { search } from "../src/explore/search.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
 import { checkedRoot, depth, fuzzFoundRoot, runExamples } from "./examples.ts";
-import { executeEach, invalidLines } from "./executed.ts";
+import { executeEach, invalidLines, SameWorlds } from "./executed.ts";
 import { Lean } from "./lean/lean.ts";
 
 const tazuna = join(import.meta.dirname, "..");
@@ -25,11 +25,12 @@ const specs = await Promise.all(
 for (const { name, spec } of specs) {
   const seen = seenLines(spec);
   for (const named of spec.scenarios)
-    test(`${name}: ${named.service}/${named.name} and every path of up to ${depth} moves after it execute alike in TS and Lean`, (t) => {
+    test(`${name}: ${named.service}/${named.name} and every path of up to ${depth} moves after it execute alike in TS and Lean, whose fingerprints take the same worlds as the same`, (t) => {
       const sc = (named.definition as LoadedScenario).scenario;
       const appendedOf = new Map<Executed, readonly Line[]>();
+      const worlds = new SameWorlds();
       const both = (appended: readonly Line[]): Executed => {
-        const { executed, difference } = executeEach(lean, spec, sc, appended);
+        const { executed, difference } = executeEach(lean, spec, sc, appended, worlds);
         appendedOf.set(executed, appended);
         assert.equal(
           difference?.other,
@@ -89,6 +90,6 @@ for (const file of fuzzFound.sort())
   test(`fuzz-found/${file} executes alike in TS with and without the evaluation cache and in Lean`, async () => {
     const found = JSON.parse(readFileSync(join(fuzzFoundRoot, file), "utf8")) as { spec: string; scenario: unknown };
     const spec = specOf.get(found.spec) ?? (await checkedRoot(join(tazuna, found.spec)));
-    const { difference } = executeEach(lean, spec, scenario.parse(found.scenario), []);
+    const { difference } = executeEach(lean, spec, scenario.parse(found.scenario), [], new SameWorlds());
     assert.equal(difference?.other, difference?.ts, `the execution differs from ${difference?.against}`);
   });

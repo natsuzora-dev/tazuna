@@ -199,6 +199,9 @@ tazuna detects a break of each assumption only in part or not at all.
   The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists (`checkExchanges` in `lean/Tazuna/Service/Input.lean`).
   No theorem ties each item of that list to the definition.
   The cause chain is what `causedBy` in `lean/Tazuna/Sim/Order.lean` computes, and the theorems under [Ordering](#ordering) state only the `after` that it gives.
+- **Fingerprints.** Two explored worlds with the same fingerprint report the same violations and reach the same parts on every later path of the same number of moves (`worldFingerprint` in `lean/Tazuna/Explore/Fingerprint.lean`).
+  `test` extends only the first explored world of each fingerprint, so its explored paths rest on this assumption.
+  No theorem proves it of the fingerprint, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
@@ -369,4 +372,5 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | Property | Theorems |
 |---|---|
 | Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each enabled slot is enumerated. Values fill each slot only up to two per payload, so the values are not complete. | `moves_enabled`, `slots_complete` |
+| Extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to `--depth` moves, under the fingerprints assumption. | `merged_search_reports` |
 | `test --coverage` reports only parts that no scenario's run and no explored path reached. Lean and the TypeScript runtime report the same reached parts on every explored path, which the diff test of explored paths compares. | `uncovered_unreached` |

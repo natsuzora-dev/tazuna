@@ -781,11 +781,13 @@ export type Response =
       readonly type: "decodedLines";
       readonly lines: readonly (TraceLine | null)[];
     }
+  /** With `explore`, the world's fingerprint (Explore.worldFingerprint), which TS compares by the worlds it merges. */
   | {
       readonly type: "simulated";
       readonly services: readonly SimulatedService[];
       readonly violations: readonly InvalidScenario[];
       readonly halted: InvalidScenario | null;
+      readonly fingerprint: string | null;
     }
   | {
       readonly type: "stepOrderChanges";

@@ -3,6 +3,7 @@ import Tazuna.Explore.Enabled
 import Tazuna.Explore.Moves
 import Tazuna.Explore.Coverage
 import Tazuna.Explore.Instrument
+import Tazuna.Explore.Fingerprint
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
 import Tazuna.Validation.Illegal
@@ -238,8 +239,9 @@ inductive Response where
   | afters (findings : List Verify.Uncomparable)
   /-- Each value as a trace line, or null when it is none. -/
   | decodedLines (lines : List (Option TraceLine))
+  /-- With `explore`, the world's fingerprint (Explore.worldFingerprint), which TS compares by the worlds it merges. -/
   | simulated (services : List SimulatedService) (violations : List Sim.InvalidScenario)
-      (halted : Option Sim.InvalidScenario)
+      (halted : Option Sim.InvalidScenario) (fingerprint : Option String)
   | stepOrderChanges (searched : List SearchedProcessing)
   | sorted (value : Value)
   | keyOrdered (ordered : Bool)

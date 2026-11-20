@@ -3,7 +3,7 @@ import { expectFound, InternalError } from "../data/internalError.ts";
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { LineId } from "../data/trace.generated.ts";
-import { canonicalJson, type Json } from "../data/values.ts";
+import type { Json } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
@@ -15,11 +15,11 @@ import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
 import type { Cache } from "../sim/spec/cache.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
-import { fingerprint } from "../sim/spec/fingerprint.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec } from "../sim/spec/simulate.ts";
 import { rejectionKinds } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
+import { halted, worldFingerprint } from "./fingerprint.ts";
 import { search } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
 import { distinct, nameOf, type Seen, seenOf, valuesFor } from "./values.ts";
@@ -278,9 +278,6 @@ function violationsSince(parent: Executed, child: Executed): Violation[] {
   });
 }
 
-const halted = (w: World): boolean =>
-  w.halted !== undefined || [...w.services.values()].some((p) => p.halted !== undefined);
-
 /**
  * Returns whether the lines appended after `parent` are lines that someone could write: no report of the simulation
  * and no InvalidInput violation of a running service. explore discards the others.
@@ -289,16 +286,6 @@ const givable = (parent: Executed, child: Executed): boolean =>
   child.world.violations.length === parent.world.violations.length &&
   (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
-
-/** The state of a world that explore merges paths by: each running service's and the messages in flight. */
-function worldFingerprint(w: World): string {
-  return canonicalJson([
-    halted(w),
-    w.now.toString(),
-    [...w.services].map(([service, p]) => [service, fingerprint(p.processing)]),
-    w.messages.flatMap((m) => (m.status === "inFlight" ? [[m.sender, m.receiver, m.body as never]] : [])),
-  ]);
-}
 
 export const valuesPerPayload = 2;
 

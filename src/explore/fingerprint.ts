@@ -1,14 +1,16 @@
-import type { Requester } from "../../data/step.generated.ts";
-import type { LineId } from "../../data/trace.generated.ts";
-import { canonicalJson, type Json } from "../../data/values.ts";
-import type { Processing } from "../../service/chart/queue.ts";
-import { exchanges } from "../../service/input.ts";
-import { copyId } from "../../service/instance.ts";
-import { sameLineId } from "../../service/message.ts";
-import { type Instance, keyCounts, machine } from "../../service/state.ts";
+import type { Requester } from "../data/step.generated.ts";
+import type { LineId } from "../data/trace.generated.ts";
+import { canonicalJson, type Json } from "../data/values.ts";
+import type { Processing } from "../service/chart/queue.ts";
+import { exchanges } from "../service/input.ts";
+import { copyId } from "../service/instance.ts";
+import { sameLineId } from "../service/message.ts";
+import { type Instance, keyCounts, machine } from "../service/state.ts";
+import type { World } from "../sim/network.ts";
 
 const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown]) => (a < b ? -1 : 1);
 
+/** Lean's instanceValue. */
 function instanceFingerprint(instance: Instance): unknown {
   return {
     id: instance.id,
@@ -22,17 +24,14 @@ function instanceFingerprint(instance: Instance): unknown {
   };
 }
 
-/**
- * Returns the pending requests and, for each, what alikeTo reads from the trace: the time of the request line, the
- * number of input lines before it, and whether a line names it. Only the order of the turns and of the input-line
- * counts is read.
- */
+/** Lean's requestsValue. */
 function requestsFingerprint(r: Processing): unknown {
   const s = r.state;
   const { lines } = s;
   const rank = (all: readonly number[], n: number) => new Set(all.filter((x) => x < n)).size;
   const inputsBefore = (id: LineId) => {
     const at = lines.findIndex((l) => l.dir === "out" && sameLineId(l.id, id));
+    if (at === -1) return { time: null, inputs: 0 };
     return { time: lines[at]?.time ?? null, inputs: lines.slice(0, at).filter((l) => l.dir === "in").length };
   };
   const traced = s.pending.map((p) => inputsBefore(p.id));
@@ -58,32 +57,22 @@ function requestsFingerprint(r: Processing): unknown {
   };
 }
 
-/**
- * Returns a fingerprint of the state after the last input: two runs with the same fingerprint reach the same state and
- * report the same violations on the same later inputs, apart from a violation that a run reports only once. The queue
- * and each instance's awaitingOnDone are left out: they are empty after an input that completed (see clone), and a
- * halted run takes no more inputs. The open shows subscriptions are the pending requests of shows slots that are not
- * stale. The counts of line ids and of created keys decide the ids and keys that later lines and records get. Also left
- * out are the records of what happened: the trace, violations, steps, messageCount, coverage and request pairs, and the
- * write counts of values, which only decide whether a cached evaluation is reused. The sets of violations already
- * reported are left out too: they only stop a run from reporting a violation twice. The requests sent, with what arrived of each
- * (exchanges), are compared as a set: the end of the run checks them. The copies of a map state follow their owner, in the order of their keys; a closed copy that no map state lists
- * is left out, since the run reads from it only what its id names (owner, map and key) and that it is closed. The
- * deadlines stay in entry order, which is the order of the due deadlines.
- */
-export function fingerprint(r: Processing): string {
+/** Lean's serviceFingerprint. */
+function serviceFingerprint(r: Processing): string {
   const s = r.state;
   return canonicalJson({
     now: s.now.toString(),
     lineCounts: [...s.lineCounts].toSorted(byKey),
     keyCounts: keyCounts(s).toSorted(byKey),
     records: [
-      ...[...s.records.keyed].map(([name, rows]) => [
-        name,
-        [...rows].map(([key, row]): [string, unknown] => [key, row.encoded]).toSorted(byKey),
-      ]),
-      ...[...s.records.singles].map(([name, row]) => [name, row.encoded]),
-    ],
+      ...[...s.records.keyed]
+        .filter(([, rows]) => rows.size > 0)
+        .map(([name, rows]): [string, unknown] => [
+          name,
+          [...rows].map(([key, row]): [string, unknown] => [key, row.encoded]).toSorted(byKey),
+        ]),
+      ...[...s.records.singles].map(([name, row]): [string, unknown] => [name, row.encoded]),
+    ].toSorted(byKey),
     requests: requestsFingerprint(r),
     deadlines: s.deadlines.map((t) => [t.machine, t.state, t.name, t.time.toString()]),
     subscriptions: s.subscriptions.fingerprint(({ query, input }) => [query, input]),
@@ -100,7 +89,7 @@ export function fingerprint(r: Processing): string {
     stack: s.stack,
     commandAnswers: [...s.commandAnswers]
       .toSorted(byKey)
-      .map(([id, { request, answer }]) => [id, request.name, JSON.stringify(request.input), answer]),
+      .map(([id, { request, answer }]) => [id, request.name, request.input, answer]),
     deliveries: [...s.deliveries].toSorted(),
     exchanges: exchanges(s)
       .map(({ id, target, sender, input, answers, events }) =>
@@ -109,4 +98,17 @@ export function fingerprint(r: Processing): string {
       .toSorted(),
     started: s.started,
   });
+}
+
+export const halted = (w: World): boolean =>
+  w.halted !== undefined || [...w.services.values()].some((p) => p.halted !== undefined);
+
+/** Lean's worldFingerprint. */
+export function worldFingerprint(w: World): string {
+  if (halted(w)) return "halted";
+  return canonicalJson([
+    w.now.toString(),
+    [...w.services].map(([service, p]) => [service, serviceFingerprint(p.processing)]),
+    w.messages.flatMap((m) => (m.status === "inFlight" ? [[m.sender, m.receiver, m.body as never]] : [])),
+  ]);
 }

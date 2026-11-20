@@ -21,7 +21,7 @@ import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
 import { checkedRoot, fuzzFoundRoot, runExamples } from "../test/examples.ts";
-import { type Difference, executeEach, invalidLines } from "../test/executed.ts";
+import { type Difference, executeEach, invalidLines, SameWorlds } from "../test/executed.ts";
 import { Lean } from "../test/lean/lean.ts";
 
 const usage = "npm run fuzz -- [--seed <integer>] [--runs <count>] [--depth <moves>]";
@@ -54,6 +54,8 @@ interface Case {
   readonly sc: Scenario;
   readonly words: readonly string[];
   readonly enabledAfter: (lines: readonly Line[], executed: Executed) => Move[];
+  /** The worlds that every run of the case reached, whose fingerprints TS and Lean must group alike. */
+  readonly worlds: SameWorlds;
 }
 
 const cases: Case[] = (
@@ -72,6 +74,7 @@ const cases: Case[] = (
             sc,
             words: seen.words,
             enabledAfter: enabledLines(spec, sc, seen, valuesPerPayload),
+            worlds: new SameWorlds(),
           },
         ];
       });
@@ -211,7 +214,7 @@ let executions = 0;
 /**
  * Draws a scenario and up to `depth` moves after it, each one that explore enables after the moves before it (with its
  * value drawn anew half of the time), a move of the clock, or a line no one could write. Executes every prefix in TS
- * with and without the evaluation cache and in Lean.
+ * with and without the evaluation cache and in Lean, and compares how TS and Lean fingerprints group its worlds.
  */
 const property = fc.property(fc.gen(), (g) => {
   const c = cases[g(fc.nat, cases.length - 1)] as Case;
@@ -219,7 +222,7 @@ const property = fc.property(fc.gen(), (g) => {
   let appended: Line[] = [];
   const each = (): Executed => {
     executions += 1;
-    const { executed, difference } = executeEach(lean, spec, sc, appended);
+    const { executed, difference } = executeEach(lean, spec, sc, appended, c.worlds);
     if (difference === undefined) return executed;
     found = { c, appended, difference };
     throw new Error(`the execution differs from ${difference.against}`);
