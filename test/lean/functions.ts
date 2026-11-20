@@ -467,10 +467,7 @@ export class RunFunctions implements Answering {
         const chart = this.functions.chartOf(q.machine).named.definition;
         return this.replied(
           this.functions.initialContext(q.machine, decode(chart.input ?? {}, q.input)),
-          (context) => ({
-            type: "initialContext",
-            context: encode(chart.context, context),
-          }),
+          (context) => ({ type: "initialContext", context }),
         );
       }
       case "guard":
@@ -496,18 +493,12 @@ export class RunFunctions implements Answering {
           const extra = this.extraOf(chartOf(scope.id), trigger, q.extra);
           return this.replied(
             this.functions.assign(scope, this.records, assignment, extra, keysOf(q.keys), access),
-            ({ context, copyContext, created }) => {
-              const { copy } = scope;
-              const chart = this.functions.chartOf(chartOf(scope.id)).named.definition;
-              const map = mapOf(scope.id);
-              const shape = map === undefined ? {} : (this.functions.node(chartOf(scope.id), map).context ?? {});
-              return {
-                type: "assign",
-                context: encode(chart.context, context),
-                ...(copy === undefined ? {} : { copy: encode(shape, copyContext ?? copy.context) }),
-                created: [...created],
-              };
-            },
+            ({ context, copyContext, created }) => ({
+              type: "assign",
+              context,
+              ...(copyContext === undefined ? {} : { copy: copyContext }),
+              created: [...created],
+            }),
           );
         });
       }
@@ -527,7 +518,7 @@ export class RunFunctions implements Answering {
           const machine = chartOf(scope.id);
           return this.replied(
             this.functions.held(scope, this.records, q.state, edge, this.extraOf(machine, trigger, q.extra), access),
-            (fields) => ({ type: "held", held: encode(this.functions.node(machine, q.state).held ?? {}, fields) }),
+            (held) => ({ type: "held", held }),
           );
         });
       }

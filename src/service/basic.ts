@@ -2,7 +2,7 @@ import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { expectFound } from "../data/internalError.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { KeyPosition, Structure } from "../spec/structure.generated.ts";
-import { type DefinitionStructure, isOpenedByScreen, schemaProperties } from "../spec/structure.ts";
+import { type DefinitionStructure, isOpenedByScreen, mapStateOf, schemaProperties } from "../spec/structure.ts";
 import { type Chart, executableChart } from "./chart/basic.ts";
 
 type Change =
@@ -101,6 +101,56 @@ export function schemaOwner(schema: Schema): DefinitionRef {
     case "record":
       return schema.entity;
   }
+}
+
+/**
+ * Lean's Service.schemaOf: the JSON Schema that `schema` names, read from the structure, a held parameter's as an
+ * object of that one field. The loader builds every schema that a run names, so a missing one is an InternalError.
+ */
+export function schemaOf(st: Service, schema: Schema): unknown {
+  const body = (r: DefinitionRef) => st.structure.definitions.find((d) => sameRef(d, r));
+  const state = (chart: DefinitionRef, name: string) => {
+    const d = body(chart);
+    return d?.kind === "machine" || d?.kind === "screen" ? d.states.find((s) => s.name === name) : undefined;
+  };
+  const found = ((): unknown => {
+    switch (schema.kind) {
+      case "input":
+      case "output": {
+        const d = body(schema.definition);
+        if (d?.kind === "command" || d?.kind === "query") return d[schema.kind] ?? undefined;
+        return d?.kind === "machine" || d?.kind === "screen" ? d[schema.kind] : undefined;
+      }
+      case "payload": {
+        const d = body(schema.event);
+        return d?.kind === "event" ? d.payload : undefined;
+      }
+      case "control": {
+        const d = body(schema.screen);
+        if (d?.kind !== "screen" || !Object.hasOwn(d.controls, schema.control)) return undefined;
+        return d.controls[schema.control] ?? {};
+      }
+      case "held": {
+        const p = (
+          state(schema.chart, schema.state)?.held?.schema as { properties?: Record<string, unknown> } | undefined
+        )?.properties?.[schema.name];
+        return p === undefined ? undefined : { type: "object", properties: { [schema.name]: p } };
+      }
+      case "context": {
+        const d = body(schema.chart);
+        return d?.kind === "machine" || d?.kind === "screen" ? d.context : undefined;
+      }
+      case "mapContext":
+        return mapStateOf(state(schema.chart, schema.map))?.context;
+      case "mapKey":
+        return mapStateOf(state(schema.chart, schema.map))?.key;
+      case "record": {
+        const d = body(schema.entity);
+        return d?.kind === "entity" ? d.fields : undefined;
+      }
+    }
+  })();
+  return expectFound(`schema ${JSON.stringify(schema)}`, found);
 }
 
 export const uniqueOf = (st: Service, entity: string): readonly string[] => st.uniques.get(entity) ?? [];

@@ -398,6 +398,12 @@ def groupTexts (groups : List (List Emit)) : List (List String) := groups.map fu
 def sameValue (a b : Value) : Bool := a.canonical == b.canonical
 
 /--
+The answer `v` with its collections sorted by `schema`, as the run sorts it before it keeps it. A missing schema is the
+run's internal error (Service.sorted), so `v` stays as it is then.
+-/
+def sortedBy (schema : Option Value) (v : Value) : Value := (schema.map (sortCollections · v)).getD v
+
+/--
 Functions that return the same values as `fs`, collect what each call reads and writes, and audit the answers of the
 spec functions that read records or values. The service invariants are not audited, because they have no definition
 for a report to name.
@@ -440,16 +446,24 @@ def instrument : Functions (StateT Collect m) :=
     react := fun name payload records now keys =>
       auditBy (collect none) (st.ref name) "react" (·.react name payload records now keys) (sameMade keys)
     initialContext := fun machine input =>
-      audit (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input) sameValue
+      let sorted := sortedBy (st.schemaOf (.context (st.ref machine)))
+      audit (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input)
+        fun a b => sameValue (sorted a) (sorted b)
     guard := fun scope records t c extra =>
       audit (collect (some scope)) (st.ref scope.machine) "guard" (·.guard scope records t c extra) (· == ·)
     assign := fun scope records a extra keys =>
-      auditBy (collect (some scope)) (st.ref scope.machine) "assign" (·.assign scope records a extra keys)
-        fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)
+      let chart := st.ref scope.machine
+      let made (x : Value × Option Value × List String) : Value × List String :=
+        let copy := scope.id.map?.bind fun map => st.schemaOf (.mapContext chart map)
+        (.arr [sortedBy (st.schemaOf (.context chart)) x.1, (x.2.1.map (sortedBy copy)).getD .null], x.2.2)
+      auditBy (collect (some scope)) chart "assign" (·.assign scope records a extra keys)
+        fun a b => sameMade keys (made a) (made b)
     input := fun scope records a keys =>
       auditBy (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
     held := fun scope records n edge extra =>
-      audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records n edge extra) sameValue
+      let sorted := sortedBy (((st.state? (st.ref scope.machine) n).bind (·.held)).map (·.schema))
+      audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records n edge extra)
+        fun a b => sameValue (sorted a) (sorted b)
     items := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
         fun a b => textSet (a.map (·.2.canonical)) == textSet (b.map (·.2.canonical))

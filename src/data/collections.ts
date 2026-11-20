@@ -4,7 +4,7 @@ import type { date as dateSchema, datetime as datetimeSchema } from "./datetime.
 import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
 import { type Collection, collectionOf, mark } from "./marks.ts";
 import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
-import { fits } from "./unionOptions.ts";
+import { field, fits, unionOptions } from "./unionOptions.ts";
 import {
   byCodePoint,
   canonicalJson,
@@ -157,6 +157,91 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
       return value;
   }
 }
+
+/**
+ * Lean's sortCollections: the encoded value `v` with each array sorted as its JSON Schema says, the elements of a bag or
+ * set by canonical text and a sortedBy array by its key, with equal keys by canonical text.
+ */
+export function sortCollections(schema: unknown, v: Json): Json {
+  const options = unionOptions(schema);
+  if (options !== undefined) {
+    const option = options.find((o) => fits(o, v));
+    return option === undefined ? v : sortCollections(option, v);
+  }
+  if (Array.isArray(v)) {
+    const item = field(schema, "items");
+    const items = item === undefined ? v : v.map((x) => sortCollections(item, x));
+    const sortedBy = field(schema, "x-tazuna-sorted-by");
+    const unordered =
+      typeof sortedBy === "string" || [field(schema, "x-tazuna-bag"), field(schema, "x-tazuna-set")].includes(true);
+    if (!unordered) return items;
+    const text = new Map(items.map((x) => [x, canonicalJson(x)]));
+    const canonical = items.toSorted((a, b) => byCodePoint(text.get(a) as string, text.get(b) as string));
+    if (typeof sortedBy !== "string") return canonical;
+    const key = (x: Json) => encodedKey(field(x, sortedBy));
+    return canonical.toSorted((a, b) => compareKeys(key(a), key(b)));
+  }
+  if (!isRecord(v)) return v;
+  return Object.fromEntries(
+    Object.entries(v).map(([k, x]) => {
+      const child = field(field(schema, "properties"), k) ?? field(schema, "additionalProperties");
+      return [k, child === undefined ? x : sortCollections(child, x as Json)];
+    }),
+  );
+}
+
+/**
+ * Returns a value that spec code made for `schema` with each Bag in a bag or set, and each Bag or run of Bags in a
+ * sortedBy array, as an array in the order that it holds its values, so that Zod can encode it. A sortedBy array goes
+ * in key order, which its check reads; its elements with equal keys stay in the order they were built.
+ */
+function arrayed(schema: z.ZodType, value: unknown): unknown {
+  const node = schemaNode(schema);
+  switch (node.type) {
+    case "array": {
+      const collection = collectionOf(schema);
+      const array = unbagged(collection, value);
+      if (!Array.isArray(array)) return array;
+      const items = array.map((v) => arrayed(node.element, v));
+      if (collection?.kind !== "sortedBy") return items;
+      const key = keyOf(node.element, collection.key);
+      return items.toSorted((a, b) => compareKeys(key(a), key(b)));
+    }
+    case "object":
+      if (!isRecord(value)) return value;
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => {
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : arrayed(field, v)];
+        }),
+      );
+    case "union": {
+      const option = unionOption(node, value);
+      return option === undefined ? value : arrayed(option, value);
+    }
+    case "optional":
+    case "nullable":
+    case "default":
+      return value == null ? value : arrayed(node.inner, value);
+    default:
+      return value;
+  }
+}
+
+/**
+ * Returns a value that spec code made for `schema` encoded by Zod, in the order it was built, or why it does not match:
+ * a part that its codec cannot encode fails, unlike toJson.
+ */
+export function encodedAs(
+  schema: z.ZodType,
+  value: unknown,
+): { readonly encoded: Json } | { readonly error: z.ZodError } {
+  const encoded = z.safeEncode(schema, arrayed(schema, value) as never);
+  return encoded.success ? { encoded: plain(encoded.data) } : { error: encoded.error };
+}
+
+/** Returns a value of `schema` from its checked encoding, as spec code receives it. */
+export const decoded = (schema: z.ZodType, json: unknown): unknown => bagged(schema, fromJson(schema, json));
 
 /** Whether `sorted` and `bagged` walk into the node. A collection under any other node is opaque. */
 export const sortsInside = (node: SchemaNode): boolean =>

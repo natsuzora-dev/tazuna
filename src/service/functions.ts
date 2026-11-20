@@ -1,3 +1,4 @@
+import { sortCollections } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Ensured } from "../data/ensured.generated.ts";
 import type { Fault } from "../data/fault.generated.ts";
@@ -6,7 +7,7 @@ import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
-import { type Schema, schemaOwner } from "./basic.ts";
+import { type Schema, type Service, schemaOf, schemaOwner } from "./basic.ts";
 import { type InstanceId, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource, Row } from "./records.ts";
@@ -63,6 +64,10 @@ export function issueViolation(
     }
   }
 }
+
+/** Lean's Service.sorted, then the decode that the TS engine keeps: an encoded answer as spec code receives it. */
+export const sortedDecoded = (st: Service, fs: Functions, schema: Schema, json: Json): Fields =>
+  fs.decode(schema, sortCollections(schemaOf(st, schema), json));
 
 /** Lean's firstFalse: the first of `names` that `test` finds false, in order. */
 export function firstFalse<N, R extends boolean | Failed>(
@@ -176,6 +181,8 @@ export interface Functions {
    */
   unordered(schema: Schema, value: unknown): unknown;
   normalize(schema: Schema, value: unknown): Checked | Failed;
+  /** Returns a value of `schema` from its checked encoding, as spec code receives it. */
+  decode(schema: Schema, value: Json): Fields;
   binding(
     command: string,
     binding: string,
@@ -252,8 +259,8 @@ export interface Functions {
    * equal keys.
    */
   comparable(query: string, answer: Answer): unknown;
-  /** Returns what the initialContext of `machine` computes from `input`, unchecked, or {} without one. */
-  initialContext(machine: string, input: Fields): Fields | Failed;
+  /** Lean's initialContext: what the initialContext of `machine` computes from `input`, encoded, or {} without one. */
+  initialContext(machine: string, input: Fields): Json | Failed;
   /**
    * Evaluates one guard condition. `extra` is what caused the transition (its payload, output, or rejection), or {} for
    * none.
@@ -267,8 +274,8 @@ export interface Functions {
     access: Access,
   ): boolean | Failed;
   /**
-   * Returns the context after the assign, unchanged where there is none. For a copy, copy context fields go to
-   * `copyContext` and the rest to `context`. `keys` and `created` are as in react.
+   * Lean's assign: the context after the assign, unchanged where there is none, checked and encoded. For a copy, copy
+   * context fields go to `copyContext` and the rest to `context`. `keys` and `created` are as in react.
    */
   assign(
     scope: Scope,
@@ -277,9 +284,7 @@ export interface Functions {
     extra: Fields,
     keys: Keys,
     access: Access,
-  ):
-    | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
-    | Failed;
+  ): { readonly context: Json; readonly copyContext: Json | undefined; readonly created: readonly string[] } | Failed;
   /**
    * Returns the input of the request that a state sends, or of the screen it opens, as the sender writes it. `keys`
    * and `created` are as in react.
@@ -295,7 +300,7 @@ export interface Functions {
    * Returns the parameters of `state`, which `edge` enters and its `with` computes, checked against the held schema of
    * `state`. A transition's `with` reads what its assign reads.
    */
-  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed;
+  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Json | Failed;
   /** Lean's deadlineAt, with undefined for none. */
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
   offers(

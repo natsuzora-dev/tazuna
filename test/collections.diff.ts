@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import fc from "fast-check";
 import { z } from "zod";
-import { bag, fromJson, set, sortedBy, toJson, written } from "../src/data/collections.ts";
+import { bag, fromJson, set, sortCollections, sortedBy, toJson, written } from "../src/data/collections.ts";
 import { date, datetime } from "../src/data/datetime.ts";
 import { jsonSchema } from "../src/data/jsonSchema.ts";
 import { canonicalJson, type Json, plain } from "../src/data/values.ts";
@@ -112,6 +112,19 @@ test("TS sorts the collections of a value as Lean's sortCollections sorts its en
         // A codec writes back its own form of the value, such as an instant in UTC, so Lean sorts that form.
         const value = fromJson(n.schema, json);
         assert.deepEqual(written(n.schema, value), lean.sort(jsonSchema(n.schema), plain(toJson(n.schema, value))));
+      },
+    ),
+    { numRuns: 400 },
+  );
+});
+
+test("The TS engine's sortCollections sorts an encoded value as Lean's sortCollections does", () => {
+  fc.assert(
+    fc.property(
+      node.chain((n) => n.value.map((json) => [n, json] as const)),
+      ([n, json]) => {
+        const encoded = plain(toJson(n.schema, fromJson(n.schema, json)));
+        assert.deepEqual(sortCollections(jsonSchema(n.schema), encoded), lean.sort(jsonSchema(n.schema), encoded));
       },
     ),
     { numRuns: 400 },

@@ -79,7 +79,10 @@ def fillHeld (st : Service) (name : InstanceId) (n : String) (edge : Edge) (scop
     let sc := r.state.scopeOf i scope
     match ← fs.held { sc with held := held.getD sc.held } r.state.records n edge extra with
     | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
-    | .ok v => pure ⟨r.state.setMachine name fun i => { i with held := i.held ++ [(n, v)] }, r.queue⟩
+    | .ok v =>
+      let held ← expectFound s!"held schema of {n}" ((st.state? (st.ref i.chart.name) n).bind (·.held))
+      let v := sortCollections held.schema v
+      pure ⟨r.state.setMachine name fun i => { i with held := i.held ++ [(n, v)] }, r.queue⟩
 
 /--
 The processing after transition `c` fills the parameters of its target with its `with`, when `entered`, the states that

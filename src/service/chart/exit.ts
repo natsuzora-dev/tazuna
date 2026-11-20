@@ -1,9 +1,9 @@
-import { InternalError } from "../../data/internalError.ts";
+import { expectFound, InternalError } from "../../data/internalError.ts";
 import type { Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../spec/tree.ts";
 import { ref, type Service } from "../basic.ts";
-import { type Assignment, Failed, issueViolation } from "../functions.ts";
+import { type Assignment, Failed, issueViolation, sortedDecoded } from "../functions.ts";
 import { copyId, type InstanceId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
@@ -63,13 +63,16 @@ export function runAssign(
       ),
     );
   createKeys(r.state, assigned.created);
+  const context = sortedDecoded(r.st, r.functions, { kind: "context", chart: definition }, assigned.context);
   if (instance.id.kind !== "copy") {
-    instance.context = assigned.context;
+    instance.context = context;
     return;
   }
   const owner = machine(r.state, ownerId(instance.id));
-  if (owner !== undefined) owner.context = assigned.context;
-  instance.context = assigned.copyContext ?? instance.context;
+  if (owner !== undefined) owner.context = context;
+  const schema = { kind: "mapContext", chart: definition, map: instance.id.map } as const;
+  const copyContext = expectFound(`the copy context of ${instance.id.map}`, assigned.copyContext);
+  instance.context = sortedDecoded(r.st, r.functions, schema, copyContext);
 }
 
 /**

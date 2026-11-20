@@ -9,9 +9,9 @@ variable {m : Type → Type}
 
 /--
 The initial context of `chart` started with `input`: what its initialContext computes, with each field that it leaves
-out taking its default, or the fault that an Issue means.
+out taking its default, parsed and with its collections sorted, or the fault that an Issue means.
 -/
-def initialContextOf [Monad m] (fs : Functions m) (st : Service) (chart : String) (input : Value) :
+def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (chart : String) (input : Value) :
     m (Except Fault Value) := do
   let definition := st.ref chart
   let fault := issueViolation definition (mismatch := fun _ => .initialContextSchema definition)
@@ -21,10 +21,10 @@ def initialContextOf [Monad m] (fs : Functions m) (st : Service) (chart : String
     match ← fs.defaults (.context definition) with
     | .error e => pure (.error (fault e))
     | .ok defaults =>
-      match ← fs.normalize (.context definition) (defaults.merge given) with
+      match ← fs.parse (.context definition) (defaults.merge given) with
       | .error e => pure (.error (fault e))
       | .ok none => pure (.error (.initialContextSchema definition))
-      | .ok (some context) => pure (.ok context)
+      | .ok (some context) => pure (.ok (← st.sorted (.context definition) context))
 
 /-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`. -/
 def Activity.requestLine (a : Activity) (input : Value) : LineBody :=

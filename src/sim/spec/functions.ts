@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
 import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
-import { bag, bagged, defaultRow, sorted, toJson, written } from "../../data/collections.ts";
+import { bag, bagged, decoded, defaultRow, encodedAs, sorted, toJson, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
 import { expectFound, InternalError } from "../../data/internalError.ts";
@@ -102,6 +102,16 @@ function matching<T>(
   const checked = encodedSorted(schema, zod, value);
   if (checked instanceof Failed || !("error" in checked)) return checked;
   return new Failed({ kind: "schema", schema }, zodError(checked.error.issues));
+}
+
+/**
+ * Returns a value that author code made, encoded by `zod` in the order it was built, or the Issue of a value that does
+ * not match `schema`.
+ */
+function encodedAnswer(schema: Schema, zod: z.ZodType, value: unknown): Json | Failed {
+  const checked = attempt(() => encodedAs(zod, value), schema);
+  if (checked instanceof Failed) return checked;
+  return "error" in checked ? new Failed({ kind: "schema", schema }, zodError(checked.error.issues)) : checked.encoded;
 }
 
 const nonNull = (value: unknown): boolean => value !== null && value !== undefined;
@@ -470,6 +480,10 @@ export class SpecFunctions implements Functions {
     return attempt(() => orderFree(comparableOf(shape, value)), schema);
   }
 
+  decode(schema: Schema, value: Json): Fields {
+    return decoded(objectOf(this.shape(schema)), value) as Fields;
+  }
+
   normalize(schema: Schema, value: unknown): Checked | Failed {
     const checked = encodedSorted(schema, strictObjectOf(this.shape(schema)), value as Fields);
     if (checked instanceof Failed || !("error" in checked)) return checked;
@@ -665,10 +679,12 @@ export class SpecFunctions implements Functions {
     return attempt(() => orderFree(comparableAnswer(answer, found.definition.output)), schema);
   }
 
-  initialContext(machine: string, input: Fields): Fields | Failed {
-    const chart = this.chartOf(machine).named.definition;
-    const f = chart.initialContext;
-    return attempt(() => (f === undefined ? {} : f({ input })) as Fields);
+  initialContext(machine: string, input: Fields): Json | Failed {
+    const { named, ref } = this.chartOf(machine);
+    const f = named.definition.initialContext;
+    const given = attempt(() => (f === undefined ? {} : f({ input })));
+    if (given instanceof Failed) return given;
+    return encodedAnswer({ kind: "context", chart: ref }, strictObjectOf(named.definition.context).partial(), given);
   }
 
   defaults(schema: Schema): Row | Failed {
@@ -702,38 +718,33 @@ export class SpecFunctions implements Functions {
     extra: Fields,
     keys: Keys,
     access: Access,
-  ):
-    | { readonly context: Fields; readonly copyContext: Fields | undefined; readonly created: readonly string[] }
-    | Failed {
+  ): { readonly context: Json; readonly copyContext: Json | undefined; readonly created: readonly string[] } | Failed {
     const { named, ref } = this.chartOf(chartOf(scope.id));
     const copy = scope.copy;
-    const assignments = this.assignments(chartOf(scope.id), assignment);
-    if (assignments === undefined) return { context: scope.context, copyContext: copy?.context, created: [] };
-    const { createKey, created } = this.keysFrom(keys);
-    const args = this.args(scope, records, access, { ...extra, createKey });
-    const assigned = attempt(() => Object.entries(assignments).map(([field, f]) => [field, f(args)] as const));
-    if (assigned instanceof Failed) return assigned;
     const map = mapOf(scope.id);
     const shape = map === undefined ? {} : (this.mapNode(chartOf(scope.id), map).context ?? {});
+    const assignments = this.assignments(chartOf(scope.id), assignment);
+    const { createKey, created } = this.keysFrom(keys);
+    let assigned: readonly (readonly [string, unknown])[] = [];
+    if (assignments !== undefined) {
+      const args = this.args(scope, records, access, { ...extra, createKey });
+      const values = attempt(() => Object.entries(assignments).map(([field, f]) => [field, f(args)] as const));
+      if (values instanceof Failed) return values;
+      assigned = values;
+    }
     const [own, outer] = [assigned.filter(([f]) => f in shape), assigned.filter(([f]) => !(f in shape))];
-    let copyContext = copy?.context;
-    if (copy !== undefined && own.length > 0) {
-      const checked = matching({ kind: "mapContext", chart: ref, map: map as string }, strictObjectOf(shape), {
-        ...copy.context,
-        ...Object.fromEntries(own),
-      });
+    let copyContext: Json | undefined;
+    if (copy !== undefined) {
+      const schema: Schema = { kind: "mapContext", chart: ref, map: map as string };
+      const checked = encodedAnswer(schema, strictObjectOf(shape), { ...copy.context, ...Object.fromEntries(own) });
       if (checked instanceof Failed) return checked;
-      copyContext = checked.value;
+      copyContext = checked;
     }
-    let context = scope.context;
-    if (outer.length > 0) {
-      const checked = matching({ kind: "context", chart: ref }, strictObjectOf(named.definition.context), {
-        ...scope.context,
-        ...Object.fromEntries(outer),
-      });
-      if (checked instanceof Failed) return checked;
-      context = checked.value;
-    }
+    const context = encodedAnswer({ kind: "context", chart: ref }, strictObjectOf(named.definition.context), {
+      ...scope.context,
+      ...Object.fromEntries(outer),
+    });
+    if (context instanceof Failed) return context;
     for (const [field] of own) access.assigned("copy", field);
     for (const [field] of outer) access.assigned("owner", field);
     return { context, copyContext, created };
@@ -774,8 +785,8 @@ export class SpecFunctions implements Functions {
     return given instanceof Failed ? given : { input: given, created };
   }
 
-  /** Returns the parameters of `state` that `edge`'s `with` fills, each checked against its held schema. */
-  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed {
+  /** Returns the parameters of `state` that `edge`'s `with` fills, each checked against its held schema and encoded. */
+  held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Json | Failed {
     const machine = chartOf(scope.id);
     const fills = (
       edge.kind === "transition"
@@ -784,14 +795,14 @@ export class SpecFunctions implements Functions {
     ) as Assignments | undefined;
     const ref = this.chartOf(machine).ref;
     const args = this.args(scope, records, access, extra);
-    const values: Record<string, unknown> = {};
+    const values: Record<string, Json> = {};
     for (const [name, schema] of Object.entries(this.node(machine, state).held ?? {})) {
       const fill = named(fills, name, "with parameter");
       const value = attempt(() => fill(args));
       if (value instanceof Failed) return value;
-      const checked = matching({ kind: "held", chart: ref, state, name }, strict(schema as z.ZodType), value);
+      const checked = encodedAnswer({ kind: "held", chart: ref, state, name }, strict(schema as z.ZodType), value);
       if (checked instanceof Failed) return checked;
-      values[name] = checked.value;
+      values[name] = checked;
     }
     return values;
   }

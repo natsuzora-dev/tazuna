@@ -1,9 +1,9 @@
 import { expectFound } from "../../data/internalError.ts";
 import type { Activity, Requester } from "../../data/step.generated.ts";
-import type { Fields } from "../../data/values.ts";
+import type { Fields, Json } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { ref } from "../basic.ts";
-import { Failed, firstFalse, issueViolation } from "../functions.ts";
+import { Failed, firstFalse, issueViolation, sortedDecoded } from "../functions.ts";
 import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
@@ -27,7 +27,7 @@ import type { Processing } from "./queue.ts";
 
 /**
  * Lean's initialContextOf: what the initialContext of `chart` computes from `input`, with each field that it leaves out
- * taking its default, or a halt with what an Issue means.
+ * taking its default, parsed and with its collections sorted, or a halt with what an Issue means.
  */
 export function initialContextOf(r: Processing, chart: string, input: Fields): Fields {
   const definition = ref(r.st, chart);
@@ -38,16 +38,18 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
   const schema = { kind: "context", chart: definition } as const;
   const defaults = r.functions.defaults(schema);
   if (defaults instanceof Failed) return fault(defaults);
-  // Lean's Value.merge: JSON has no undefined field, and a value that is no object replaces the defaults.
-  const isObject = (given as unknown) !== null && typeof given === "object" && !Array.isArray(given);
-  const merged = isObject
-    ? { ...defaults.value, ...Object.fromEntries(Object.entries(given).filter(([, value]) => value !== undefined)) }
-    : given;
-  const context = r.functions.normalize(schema, merged);
-  if (context instanceof Failed) return fault(context);
-  if ("error" in context)
-    return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: context.error }));
-  return context.value;
+  const parsed = r.functions.parse(schema, merged(defaults.encoded, given));
+  if (parsed instanceof Failed) return fault(parsed);
+  if ("error" in parsed)
+    return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: parsed.error }));
+  return sortedDecoded(r.st, r.functions, schema, parsed.encoded as Json);
+}
+
+/** Lean's Value.merge: the fields of `a` with those of `b` over them, or `b` when either is no object. */
+function merged(a: unknown, b: Json): Json {
+  const isObject = (v: unknown): v is Readonly<Record<string, Json>> =>
+    v !== null && typeof v === "object" && !Array.isArray(v);
+  return isObject(a) && isObject(b) ? { ...a, ...b } : b;
 }
 
 export function newInstance(

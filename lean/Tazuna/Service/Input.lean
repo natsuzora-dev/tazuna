@@ -263,7 +263,7 @@ The state after the run ends: each request that the service sent is checked once
 def checkExchanges [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.exchanges.foldlM (checkExchange st fs) s
 
-def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do
+def startInstance [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do
   if s.halted.isSome then pure s else
   match ← initialContextOf fs st c.name (.obj []) with
   | .error fault => pure (s.report (.fault fault))
@@ -275,7 +275,7 @@ def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : C
 /-- The charts that start when the service begins. A screen that another screen opens does not. -/
 def starting (st : Service) : List Chart := st.charts.filter (!·.opened)
 
-def startInstances [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
+def startInstances [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   st.starting.foldlM (startInstance st fs) s
 
 /--

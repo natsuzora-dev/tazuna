@@ -160,11 +160,10 @@ section
 variable (h : FunctionsAgree fsI fs)
 include h
 
-omit [MonadNote (StateT C Id)] in
 theorem runAssign_agrees (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
     (held : Option Value) (r : Processing) :
     Agrees (runAssign fsI st name a scope extra held r) (runAssign fs st name a scope extra held r) := by
-  unfold runAssign; refine withMachine_agrees (fun i r => ?_) r; agree [h.assign]
+  unfold runAssign; refine withMachine_agrees (fun i r => ?_) r; agree [h.assign, sorted_agrees]
 
 theorem leaveWith_agrees {e : InstanceId → String → Processing → StateT C Id Processing}
     {e' : InstanceId → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))
@@ -190,10 +189,9 @@ theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Ac
     Agrees (request fsI st step name state a r) (request fs st step name state a r) := by
   unfold request; refine withMachine_agrees (fun i r => ?_) r; agree [h.input]
 
-omit [MonadNote (StateT C Id)] in
 theorem initialContextOf_agrees (chart : String) (input : Value) :
     Agrees (initialContextOf fsI st chart input) (initialContextOf fs st chart input) := by
-  unfold initialContextOf; agree [h.initialContext, h.defaults, h.normalize]
+  unfold initialContextOf; agree [h.initialContext, h.defaults, h.parse, sorted_agrees]
 
 theorem openScreen_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
@@ -214,19 +212,16 @@ theorem addDeadlines_agrees (step : Nat) (name : InstanceId) (n : String) (ds : 
     (s : State) : Agrees (addDeadlines st fsI step name n ds s) (addDeadlines st fs step name n ds s) := by
   unfold addDeadlines; agree [h.deadlineAt]
 
-omit [MonadNote (StateT C Id)] in
 theorem fillHeld_agrees (name : InstanceId) (n : String) (edge : Edge) (scope : Option String) (held : Option Value)
     (extra : Extra) (r : Processing) :
     Agrees (fillHeld fsI st name n edge scope held extra r) (fillHeld fs st name n edge scope held extra r) := by
   unfold fillHeld; refine withMachine_agrees (fun i r => ?_) r; agree [h.held]
 
-omit [MonadNote (StateT C Id)] in
 theorem fillByTransition_agrees (c : InstanceId × Transition) (entered : List (InstanceId × String)) (held : Value)
     (extra : Extra) (r : Processing) :
     Agrees (fillByTransition fsI st c entered held extra r) (fillByTransition fs st c entered held extra r) := by
   unfold fillByTransition; refine withMachine_agrees (fun i r => ?_) r; agree [fillHeld_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem fillByInitial_agrees (filled : Bool) (name : InstanceId) (n : String) (r : Processing) :
     Agrees (fillByInitial fsI st filled name n r) (fillByInitial fs st filled name n r) := by
   unfold fillByInitial; refine withMachine_agrees (fun i r => ?_) r; agree [fillHeld_agrees h]
@@ -440,7 +435,6 @@ theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterM
   unfold afterMessage
   agree [refreshScreens_agrees h, checkInvariants_agrees h, publish_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st fsI s c) (startInstance st fs s c) := by
   unfold startInstance; agree [initialContextOf_agrees h]
 

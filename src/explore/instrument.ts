@@ -2,15 +2,16 @@ import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag, Ref } from "../data/canonical.ts";
+import { sortCollections } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Undecided } from "../data/undecided.generated.ts";
-import { byCodePoint, canonicalJson, type Fields, plain, sameJson } from "../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, type Json, plain, sameJson } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
-import { ref, type Schema, type Service } from "../service/basic.ts";
+import { ref, type Schema, type Service, schemaOf } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -23,7 +24,7 @@ import {
   type Keys,
   type Scope,
 } from "../service/functions.ts";
-import { chartOf, type InstanceId, within } from "../service/instance.ts";
+import { chartOf, type InstanceId, mapOf, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import { normalizeOutput } from "../service/query.ts";
@@ -494,6 +495,24 @@ export class InstrumentedFunctions implements Functions {
     );
   }
 
+  /** What Lean's assign audit compares of an answer: both contexts with their collections sorted, and the created keys. */
+  private assignedMade(
+    scope: Scope,
+    {
+      context,
+      copyContext,
+      created,
+    }: { readonly context: Json; readonly copyContext: Json | undefined; readonly created: readonly string[] },
+  ): readonly [unknown, readonly string[]] {
+    const chart = ref(this.st, chartOf(scope.id));
+    const map = mapOf(scope.id);
+    const copy =
+      copyContext === undefined || map === undefined
+        ? null
+        : sortCollections(schemaOf(this.st, { kind: "mapContext", chart, map }), copyContext);
+    return [[sortCollections(schemaOf(this.st, { kind: "context", chart }), context), copy], created];
+  }
+
   /** Lean's resolveCollect. */
   private resolveAudit(name: string, input: Fields, records: RecordSource, now: Temporal.Instant, resolved: unknown) {
     const definition = ref(this.st, name);
@@ -523,6 +542,9 @@ export class InstrumentedFunctions implements Functions {
   }
   unordered(schema: Schema, value: unknown): unknown {
     return this.fs.unordered(schema, value);
+  }
+  decode(schema: Schema, value: Json) {
+    return this.fs.decode(schema, value);
   }
   normalize(schema: Schema, value: unknown) {
     return this.fs.normalize(schema, value);
@@ -613,7 +635,14 @@ export class InstrumentedFunctions implements Functions {
   }
   initialContext(machine: string, input: Fields) {
     const call = (fs: Functions) => fs.initialContext(machine, input);
-    return this.audited(ref(this.st, machine), "initialContext", () => call(this.fs), call, text);
+    const schema = schemaOf(this.st, { kind: "context", chart: ref(this.st, machine) });
+    return this.audited(
+      ref(this.st, machine),
+      "initialContext",
+      () => call(this.fs),
+      call,
+      (answer) => text(sortCollections(schema, answer)),
+    );
   }
   guard(
     scope: Scope,
@@ -637,14 +666,7 @@ export class InstrumentedFunctions implements Functions {
       access,
       "assign",
       (fs, a) => fs.assign(scope, records, assignment, extra, keys, a),
-      {
-        same: (x, y) =>
-          sameMade(
-            keys,
-            [[x.context, x.copyContext ?? null], x.created],
-            [[y.context, y.copyContext ?? null], y.created],
-          ),
-      },
+      { same: (x, y) => sameMade(keys, this.assignedMade(scope, x), this.assignedMade(scope, y)) },
     );
   }
   input(scope: Scope, records: RecordSource, activity: Activity, keys: Keys, access: Access) {
@@ -653,7 +675,14 @@ export class InstrumentedFunctions implements Functions {
     });
   }
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access) {
-    return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, state, edge, extra, a), text);
+    const schema = this.st.charts.get(chartOf(scope.id))?.states.get(state)?.spec.held?.schema;
+    return this.chartAudited(
+      scope,
+      access,
+      "held",
+      (fs, a) => fs.held(scope, records, state, edge, extra, a),
+      (held) => text(schema === undefined ? held : sortCollections(schema, held)),
+    );
   }
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access) {
     return this.chartAudited(scope, access, "deadlineAt", (fs, a) => fs.deadlineAt(scope, records, name, a), String);

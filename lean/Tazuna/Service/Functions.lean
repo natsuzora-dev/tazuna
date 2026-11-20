@@ -194,8 +194,9 @@ dropped.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
 - initialContext: the context that the initialContext of a machine or screen computes from the input (the parsed input of
-  a screen that opens opened, or `{}` when nothing opens it), as the sender writes it (only its codecs run, encoding),
-  `{}` without one. initialContextOf fills in the defaults of the fields that it leaves out and normalizes it.
+  a screen that opens opened, or `{}` when nothing opens it), encoded and in the order it was built, `{}` without one.
+  A field that its schema does not encode is a schema Issue. initialContextOf fills in the defaults of the fields that
+  it leaves out, parses it, and sorts its collections.
 - guard: whether one guard condition of a transition holds.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
@@ -205,12 +206,14 @@ dropped.
   single entity's fields and of a map state's copy context, and reports one that throws or fails its schema.
 - close: the output of a screen that closes in a final state (the resolve value, schema-checked and encoded) and the
   first failing ensures.
-- assign: the context after the assign, unchanged where there is none. For a copy, copy context fields go to the copy
-  and the rest to the owner, and assign returns both. `keys` and the returned entities are as in react.
+- assign: the context after the assign, unchanged where there is none, checked, encoded and in the order it was built,
+  which runAssign sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign returns
+  both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
-  of `n` and encoded. A transition's `with` reads what its assign reads.
+  of `n`, encoded and in the order they were built, which fillHeld sorts. A transition's `with` reads what its assign
+  reads.
 - deadlineAt: what the `at` of a state's `after` deadline computes on entering it, as
   Temporal.Instant.prototype.toString writes it, or none when it computes no Instant.
 -/

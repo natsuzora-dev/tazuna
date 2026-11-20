@@ -1,4 +1,6 @@
-import type { Fields } from "../../data/values.ts";
+import { sortCollections } from "../../data/collections.ts";
+import { expectFound } from "../../data/internalError.ts";
+import type { Fields, Json } from "../../data/values.ts";
 import { hasParameters, transitionRef } from "../../spec/structure.ts";
 import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
@@ -71,8 +73,19 @@ function fillHeld(
   const scope = scopeOf(r.state, instance, state, held);
   const records = new LazyRecordSource(r.state.records, r.note);
   const filled = r.functions.held(scope, records, n, edge, extra, new NoteAccess(r, scope));
-  if (filled instanceof Failed) halt(issueViolation(ref(r.st, instance.chart.name), filled));
-  instance.held.set(n, filled);
+  const chart = ref(r.st, instance.chart.name);
+  if (filled instanceof Failed) halt(issueViolation(chart, filled));
+  const schema = expectFound(`held schema of ${n}`, instance.chart.states.get(n)?.spec.held?.schema);
+  const sorted = sortCollections(schema, filled) as Readonly<Record<string, Json>>;
+  instance.held.set(
+    n,
+    Object.fromEntries(
+      Object.entries(sorted).map(([name, v]) => [
+        name,
+        r.functions.decode({ kind: "held", chart, state: n, name }, { [name]: v })[name],
+      ]),
+    ),
+  );
 }
 
 /**
