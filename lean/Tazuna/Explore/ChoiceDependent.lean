@@ -120,7 +120,7 @@ def idValue (st : Service) : InstanceId → CValue
       ("state", .leaf (.str state)), ("key", .leaf (.str key))]
   | .copy o m k =>
     .obj [("kind", .leaf (.str "copy")), ("owner", idValue st o), ("map", .leaf (.str m)),
-      ("key", keyed (refsAt (((mapNamed st o.chart m).bind (·.map)).map (·.itemKeys) |>.getD [])) [] k)]
+      ("key", keyed (refsAt (((mapNamed st o.chart m).bind (·.type.map?)).map (·.itemKeys) |>.getD [])) [] k)]
 
 /-- `vs` in the order of their canonical texts. -/
 def canonicalOrder (vs : List Value) : List Value := vs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
@@ -134,7 +134,7 @@ reads.
 -/
 def instanceValue (st : Service) (deadlines : List Deadline) (i : Instance) : CValue :=
   let contextKeys : Option (List Spec.KeyPosition) := match i.id.map? with
-    | some m => ((mapNamed st i.id.chart m).bind (·.map)).map (·.contextKeys)
+    | some m => ((mapNamed st i.id.chart m).bind (·.type.map?)).map (·.contextKeys)
     | none => (chartNamed st i.id.chart).map (·.toChartFields.contextKeys)
   let heldKeys (n : String) : List Spec.KeyPosition :=
     (((chartNamed st i.id.chart).bind (·.state? n)).bind (·.held)).map (·.keys) |>.getD []

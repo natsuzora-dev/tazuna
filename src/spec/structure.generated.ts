@@ -87,6 +87,25 @@ export type MapState = {
   readonly contextKeys: readonly KeyPosition[];
 };
 
+/** The kind that a state's `type` names (StateKind), carrying what a map state adds. */
+export type StateType =
+  | {
+      readonly kind: "plain";
+    }
+  | {
+      readonly kind: "parallel";
+    }
+  | {
+      readonly kind: "final";
+    }
+  | {
+      readonly kind: "history";
+    }
+  | {
+      readonly kind: "map";
+      readonly map: MapState;
+    };
+
 /** The JSON Schema of a state's parameters and their key positions. */
 export type Held = {
   readonly schema: Json;
@@ -98,8 +117,6 @@ export type State = {
   /** The names from a child of the root down to the state itself. */
   readonly path: readonly string[];
   readonly parent: string | null;
-  /** The kind that the state's `type` names. */
-  readonly kind: "plain" | "parallel" | "final" | "history" | "map";
   readonly initial: string | null;
   readonly children: readonly string[];
   readonly offers: Readonly<Record<string, "any" | "listed">>;
@@ -108,11 +125,9 @@ export type State = {
   readonly transitions: readonly Transition[];
   /** The deadlines that the body writes under `after`, in declaration order. */
   readonly deadlines: readonly Deadline[];
-  /** What a map state adds; null for any other state. */
-  readonly map: MapState | null;
   /** The state's parameters (`held`), which the edge that enters the state fills; null for a state without them. */
   readonly held: Held | null;
-};
+} & StateType;
 
 export type ChartFields = {
   readonly initial: string;

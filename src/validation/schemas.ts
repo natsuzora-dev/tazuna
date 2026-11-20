@@ -73,12 +73,12 @@ function schemasOf(d: DefinitionStructure): [string[], unknown][] {
           p === null ? [] : [[["controls", k, "payload"], p]],
         ),
         ...d.states.flatMap((st): [string[], unknown][] => [
-          ...(st.map === null
-            ? []
-            : ([
+          ...(st.kind === "map"
+            ? ([
                 [[st.name, "key"], st.map.key],
                 [[st.name, "context"], st.map.context],
-              ] as [string[], unknown][])),
+              ] as [string[], unknown][])
+            : []),
           ...(st.held === null ? [] : [[[st.name, "held"], st.held.schema] as [string[], unknown]]),
         ]),
       ];

@@ -16,7 +16,7 @@ import {
   type StateSpec,
 } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
-import type { DeadlineTime, Structure } from "../spec/structure.generated.ts";
+import type { DeadlineTime, StateType, Structure } from "../spec/structure.generated.ts";
 import type {
   ActivityStructure,
   ChartStructure,
@@ -340,13 +340,25 @@ function structureOfChart(
           }),
         ),
       ];
-      const context = node.type === "map" ? schemaOf(node.context ?? {}, name) : {};
-      if (node.type === "map") defaultsOf(node.context ?? {}, name);
+      const type = ((): StateType => {
+        if (node.type !== "map") return { kind: node.type ?? "plain" };
+        const context = schemaOf(node.context ?? {}, name);
+        defaultsOf(node.context ?? {}, name);
+        return {
+          kind: "map",
+          map: {
+            key: schemaOf(node.key),
+            context,
+            itemKeys: keysOf(node.key, ref, [...at, "key"]),
+            contextKeys: keysOf(node.context ?? {}, ref, [...at, "context"]),
+          },
+        };
+      })();
       const state: StateStructure = {
         name,
         path: [...(parent?.path ?? []), name],
         parent: parent?.name ?? null,
-        kind: node.type ?? "plain",
+        ...type,
         initial: node.initial ?? null,
         children: Object.keys(node.states ?? {}),
         offers: offerKinds(node.offers),
@@ -356,15 +368,6 @@ function structureOfChart(
           name: deadline,
           ...deadlineTimeOf(d, () => unreadableDeadline([...at, "after", deadline])),
         })),
-        map:
-          node.type === "map"
-            ? {
-                key: schemaOf(node.key),
-                context,
-                itemKeys: keysOf(node.key, ref, [...at, "key"]),
-                contextKeys: keysOf(node.context ?? {}, ref, [...at, "context"]),
-              }
-            : null,
         held:
           node.held === undefined
             ? null

@@ -21,7 +21,7 @@ import { stepNameDefinition } from "../service/note.ts";
 import type { Records } from "../service/records.ts";
 import type { Deadline, Instance, State } from "../service/state.ts";
 import type { KeyPosition } from "../spec/structure.generated.ts";
-import { chartStructure, stateNamed } from "../spec/structure.ts";
+import { chartStructure, mapStateOf, stateNamed } from "../spec/structure.ts";
 
 /** Lean's Finished: the outcome of a run that did not halt. */
 export interface Finished {
@@ -90,7 +90,7 @@ const idValue = (st: Service, id: InstanceId): unknown => {
         kind: "copy",
         owner: idValue(st, id.owner),
         map: id.map,
-        key: keyed(refsAt(mapNamed(st, chartOf(id.owner), id.map)?.map?.itemKeys), [], id.key),
+        key: keyed(refsAt(mapStateOf(mapNamed(st, chartOf(id.owner), id.map))?.itemKeys), [], id.key),
       };
   }
 };
@@ -107,7 +107,7 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
   const contextKeys =
     map === undefined
       ? chartStructure(st.structure, st.service, chart.name)?.contextKeys
-      : mapNamed(st, chart.name, map)?.map?.contextKeys;
+      : mapStateOf(mapNamed(st, chart.name, map))?.contextKeys;
   const context = encode(
     map === undefined ? { kind: "context", chart } : { kind: "mapContext", chart, map },
     i.context,

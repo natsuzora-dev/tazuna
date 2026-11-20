@@ -132,8 +132,8 @@ def schemaOf (st : Service) : Schema → Option Value
   | .context chart => (st.body? chart).bind fun
     | .machine c | .screen c => some c.context
     | _ => none
-  | .mapContext chart map => ((st.state? chart map).bind (·.map)).map (·.context)
-  | .mapKey chart map => ((st.state? chart map).bind (·.map)).map (·.key)
+  | .mapContext chart map => ((st.state? chart map).bind (·.type.map?)).map (·.context)
+  | .mapKey chart map => ((st.state? chart map).bind (·.type.map?)).map (·.key)
   | .record entity => (st.body? entity).bind fun
     | .entity b => some b.fields
     | _ => none

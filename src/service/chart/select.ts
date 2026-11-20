@@ -1,7 +1,7 @@
 import { expectFound } from "../../data/internalError.ts";
 import type { Trigger } from "../../data/transitionRef.generated.ts";
 import { canonicalJson, type Fields } from "../../data/values.ts";
-import { schemaProperties, transitionRef } from "../../spec/structure.ts";
+import { mapStateOf, schemaProperties, transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { Failed, firstFalse, issueViolation } from "../functions.ts";
@@ -63,7 +63,7 @@ type CopyTarget =
 
 /** Lean's copyKey. */
 function copyKey(r: Run, chart: Chart, map: string, payload: Fields): CopyTarget | Failed {
-  const state = expectFound(`map state ${map} of ${chart.name}`, chart.states.get(map)?.spec.map ?? undefined);
+  const state = expectFound(`map state ${map} of ${chart.name}`, mapStateOf(chart.states.get(map)?.spec));
   const fields = schemaProperties(state.key);
   if (!fields.every((f) => payload[f] !== undefined)) return { kind: "everyCopy" };
   const schema = { kind: "mapKey", chart: ref(r.st, chart.name), map } as const;

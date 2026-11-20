@@ -73,18 +73,17 @@ function chartView(name: string, chart: ChartStructure): StateView {
     control: t.trigger.type === "on" && Object.hasOwn(chart.controls, t.trigger.key),
     path: pathOfTrigger(t.trigger),
   });
-  const tree = ({
-    children,
-    activities,
-    transitions,
-    map: _map,
-    held: _held,
-    ...state
-  }: StateStructure): StateView => ({
-    ...state,
-    activities: activities.map(activityView),
-    transitions: transitions.map(transitionView),
-    states: children.map((child) => tree(stateNamed(chart, child) as StateStructure)),
+  const tree = (s: StateStructure): StateView => ({
+    name: s.name,
+    path: s.path,
+    parent: s.parent,
+    kind: s.kind,
+    initial: s.initial,
+    offers: s.offers,
+    deadlines: s.deadlines,
+    activities: s.activities.map(activityView),
+    transitions: s.transitions.map(transitionView),
+    states: s.children.map((child) => tree(stateNamed(chart, child) as StateStructure)),
   });
   return tree({
     name,
@@ -97,7 +96,6 @@ function chartView(name: string, chart: ChartStructure): StateView {
     activities: [],
     transitions: chart.on,
     deadlines: [],
-    map: null,
     held: null,
   });
 }

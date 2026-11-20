@@ -98,7 +98,7 @@ def schemasOf (d : Definition) : List (List String × Value) :=
     [(["context"], c.context), (["input"], c.input), (["output"], c.output)] ++
       c.controls.filterMap (fun (k, p) => p.map ((["controls", k, "payload"], ·))) ++
       c.states.flatMap fun st =>
-        (st.map.map fun m => [([st.name, "key"], m.key), ([st.name, "context"], m.context)]).getD [] ++
+        (st.type.map?.map fun m => [([st.name, "key"], m.key), ([st.name, "context"], m.context)]).getD [] ++
           (st.held.map fun h => [([st.name, "held"], h.schema)]).getD []
 
 def illegal (d : Definition) : List String × Issue → Illegal

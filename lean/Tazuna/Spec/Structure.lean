@@ -177,6 +177,28 @@ deriving Repr, Inhabited
 
 derive_wire MapState
 
+/-- The kind that a state's `type` names (StateKind), carrying what a map state adds. -/
+inductive StateType where
+  | plain
+  | parallel
+  | final
+  | history
+  | map (map : MapState)
+deriving Repr, Inhabited
+
+derive_wire StateType tag "kind"
+
+def StateType.toKind : StateType → StateKind
+  | .plain => .plain
+  | .parallel => .parallel
+  | .final => .final
+  | .history => .history
+  | .map _ => .map
+
+def StateType.map? : StateType → Option MapState
+  | .map m => some m
+  | _ => none
+
 /-- The JSON Schema of a state's parameters and their key positions. -/
 structure Held where
   schema : Value
@@ -190,8 +212,7 @@ structure State where
   /-- The names from a child of the root down to the state itself. -/
   path : List String
   parent : Option String
-  /-- The kind that the state's `type` names. -/
-  kind : StateKind
+  type : StateType
   initial : Option String
   children : List String
   offers : List (String × Offer)
@@ -200,13 +221,13 @@ structure State where
   transitions : List Transition
   /-- The deadlines that the body writes under `after`, in declaration order. -/
   deadlines : List Deadline
-  /-- What a map state adds; null for any other state. -/
-  map : Option MapState
   /-- The state's parameters (`held`), which the edge that enters the state fills; null for a state without them. -/
   held : Option Held
 deriving Repr, Inhabited
 
-derive_wire State
+derive_wire State flatten type
+
+def State.kind (st : State) : StateKind := st.type.toKind
 
 def State.hasParameters (st : State) : Bool := st.held.isSome
 
@@ -245,9 +266,7 @@ structure Chart extends ChartFields where
 deriving Repr
 
 def Chart.tryFrom (c : ChartFields) : Except String Chart :=
-  if !c.states.all fun st => (st.kind == .map) == st.map.isSome then
-    throw "expected the key positions of a map state on each map state and on no other state"
-  else if h : chartTree (c.states.map (·.shape)) c.initial (c.on.filterMap (·.target)) = true then
+  if h : chartTree (c.states.map (·.shape)) c.initial (c.on.filterMap (·.target)) = true then
     pure { toChartFields := c, shaped := h }
   else throw "expected the states as a tree in document order (the parent path of each state is a prefix of the path of the state before it), with unique names, parents, children, and initial states that match the paths, an initial state for each state with children other than a parallel state, no children of final and history states, no map or final state under a map state, and transition targets inside the same map state as their source or outside every map state, and an initial state of the chart among the children of the root"
 

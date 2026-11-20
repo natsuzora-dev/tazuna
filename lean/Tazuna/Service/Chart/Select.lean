@@ -42,7 +42,7 @@ inductive CopyTarget where
 
 /-- The copies of the map state `map` of `chart` that an event with `payload` reaches. -/
 def copyKey (st : Service) (chart : Chart) (map : String) (payload : Value) : m (Except Issue CopyTarget) := do
-  let state ← expectFound s!"map state {map} of {chart.name}" ((chart.state? map).bind (·.spec.map))
+  let state ← expectFound s!"map state {map} of {chart.name}" ((chart.state? map).bind (·.spec.type.map?))
   match (Spec.schemaProperties state.key).mapM fun f => (payload.field? f).map (f, ·) with
   | none => pure (.ok .everyCopy)
   | some fields =>

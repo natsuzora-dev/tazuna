@@ -9,6 +9,7 @@ import type {
   DeadlineTime,
   Definition as DefinitionStructure,
   Delay,
+  MapState,
   ResultOfMismatch,
   State as StateStructure,
   Structure,
@@ -25,6 +26,10 @@ export type {
 };
 export type ChartStructure = Extract<DefinitionStructure, { kind: "machine" | "screen" }>;
 type CommandStructure = Extract<DefinitionStructure, { kind: "command" }>;
+
+/** Lean's StateType.map?: what a map state adds, or undefined for any other state. */
+export const mapStateOf = (state: StateStructure | undefined): MapState | undefined =>
+  state?.kind === "map" ? state.map : undefined;
 
 const kinds: { readonly [K in DefinitionStructure["kind"]]: K } = {
   entity: "entity",

@@ -82,7 +82,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Data.TraceLine]),
    ("src/spec/structure.generated.ts",
     [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.Delay, ``Tazuna.Spec.DeadlineTime,
-     ``Tazuna.Spec.Deadline, ``Tazuna.Spec.MapState, ``Tazuna.Spec.Held, ``Tazuna.Spec.State,
+     ``Tazuna.Spec.Deadline, ``Tazuna.Spec.MapState, ``Tazuna.Spec.StateType, ``Tazuna.Spec.Held, ``Tazuna.Spec.State,
      ``Tazuna.Spec.ChartFields, ``Tazuna.Spec.Reference, ``Tazuna.Spec.KeyPosition, ``Tazuna.Spec.ChangeKind, ``Tazuna.Spec.Change,
      ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
      ``Tazuna.Spec.AutomationBody, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
