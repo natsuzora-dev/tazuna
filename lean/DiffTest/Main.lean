@@ -106,10 +106,10 @@ def answer {α : Type} (question : Question) (reply : Reply) (read : Reply → O
 
 /--
 The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set, about the service
-`service` when given, or else the request's service. A parse logs into `parses`, not `reads`: Functions.sorting asks it
+`service` when given, or else the request's service. A parse logs nothing into `reads`: Functions.sorting asks it
 inside another answer, whose reads Instrument then reads.
 -/
-def functions (stdin stdout : IO.FS.Stream) (reads parses : Reads) (memo : Memo) (reversed : Bool)
+def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool)
     (service : Option String := none) : Functions IO :=
   let asking (records : Records) (question : Question) (before : Records := []) :=
     ask stdin stdout reads memo reversed service records question before
@@ -117,7 +117,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads parses : Reads) (memo : Memo)
       (before : Records := []) : IO (Except Issue α) := do
     answer question (← asking records question before) read
   { parse := fun schema value => do
-      answer (.parse schema value) (← ask stdin stdout parses memo reversed service [] (.parse schema value)) fun
+      answer (.parse schema value) (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] (.parse schema value)) fun
         | .parse v => some v | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     binding := fun name binding input records now =>
@@ -176,7 +176,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads parses : Reads) (memo : Memo)
       answered (.showInput scope a) (records := records) fun | .showInput input => some input | _ => none
     items := fun scope records =>
       answered (.items scope) (records := records) fun
-        | .items keys => some (keys.map fun k => (k.key, k.canonical)) | _ => none
+        | .items keys => some keys | _ => none
     defaults := fun schema => answered (.defaults schema) fun | .defaults v => some v | _ => none
     close := fun scope records => answered (.close scope) (records := records) fun | .close o => some o | _ => none
     closeEnsures := fun screen input output =>
@@ -231,24 +231,23 @@ instance : MonadNote IO where
     | _ => pure ()
 
 /--
-The functions of each running service of `start`, sorted as Functions.sorting sorts them and instrumented as Instrument
-does, which collect into that service's Collect. Each question to TS names its service.
+The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
+Collect. Each question to TS names its service. The run asks only running services.
 -/
 def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (String → Functions ActingIO) := do
   let reads ← IO.mkRef {}
-  let parses ← IO.mkRef {}
   let memo ← IO.mkRef {}
   pure fun service =>
-    let fs := functions stdin stdout reads parses memo false (some service)
+    let fs := functions stdin stdout reads memo false (some service)
     match start.services.lookup service with
-    | none => liftFunctions fs
+    | none => fs.hoist fun _ => throw (IO.userError s!"the run asked {service}, which does not run")
     | some st =>
       let ifs : InstrumentFunctions IO := {
         lastReads := do pure (← reads.get).parts
         lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {})
         lastEnumerated := do pure (((← reads.get).replied.bind (·.enumerated)) == some true)
-        reversed := (functions stdin stdout reads parses memo true (some service)).sorting st }
-      (instrument st (fs.sorting st) ifs).hoist (focus service)
+        reversed := functions stdin stdout reads memo true (some service) }
+      (instrument st fs ifs).hoist (focus service)
 
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do

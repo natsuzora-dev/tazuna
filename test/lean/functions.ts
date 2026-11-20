@@ -492,10 +492,7 @@ export class RunFunctions implements Answering {
         );
       case "items":
         return this.scoped(q.scope, (scope, access) =>
-          this.replied(this.functions.items(scope, this.records, access), (keys) => ({
-            type: "items",
-            keys: keys.map((key) => ({ key, canonical: JSON.parse(canonicalJson(key)) as Json })),
-          })),
+          this.replied(this.functions.items(scope, this.records, access), (keys) => ({ type: "items", keys })),
         );
       case "defaults":
         return this.replied(this.functions.defaults(q.schema), (defaults) => ({ type: "defaults", defaults }));

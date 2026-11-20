@@ -23,6 +23,7 @@ import {
   holderId,
   type Keys,
   type Scope,
+  sorting,
 } from "../service/functions.ts";
 import { chartOf, type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
@@ -424,7 +425,7 @@ function sameMade(
 /** Lean's textSet: the texts without order or repetition. */
 const textSet = (texts: readonly string[]): string => canonicalJson([...new Set(texts)].toSorted(byCodePoint));
 
-/** Lean's `instrument`, which returns the same values as `fs`. */
+/** Lean's `instrument`, which returns the same values as `sorting(st, fs)`. */
 export class InstrumentedFunctions implements Functions {
   readonly st: Service;
   private readonly fs: Functions;
@@ -433,9 +434,14 @@ export class InstrumentedFunctions implements Functions {
 
   constructor(st: Service, fs: Functions, ifs: InstrumentFunctions, c: Collect) {
     this.st = st;
-    this.fs = fs;
+    this.fs = sorting(st, fs);
     this.ifs = ifs;
     this.c = c;
+  }
+
+  /** Lean's `ifs.reversed.sorting st` in `instrument`. */
+  private reversed<T>(call: (fs: Functions) => T): T {
+    return this.ifs.reversed((fs) => call(sorting(this.st, fs)));
   }
 
   /**
@@ -453,7 +459,7 @@ export class InstrumentedFunctions implements Functions {
     const before = enumerations();
     const answered = answer();
     if (answered instanceof Failed || enumerations() === before || this.c.hasReportedOrder(definition)) return answered;
-    const reversed = this.ifs.reversed(again);
+    const reversed = this.reversed(again);
     const data = { function: question };
     if (reversed instanceof Failed)
       this.c.reportOrder(
@@ -506,7 +512,7 @@ export class InstrumentedFunctions implements Functions {
         definition,
         withExtra({ kind: "BagOrderDependent.reversedException", definition, data }, { error }),
       );
-    const reversed = this.ifs.reversed((fs) => fs.resolve(name, input, records, now));
+    const reversed = this.reversed((fs) => fs.resolve(name, input, records, now));
     if (reversed instanceof Failed) return exception(reversed.error);
     const reordered = this.fs.comparable(name, { result: "fulfilled", output: reversed });
     if (reordered instanceof Failed) return exception(reordered.error);

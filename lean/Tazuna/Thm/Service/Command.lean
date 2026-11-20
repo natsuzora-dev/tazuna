@@ -161,4 +161,28 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
                 refine ⟨input, decided, hp, hd, fun e he => ?_, rfl⟩
                 simpa using List.find?_eq_none.mp hf e he
 
+/--
+Each event that a command accepted with the sorting functions (Functions.sorting, which `instrument` gives every run)
+emits is one that its `decide` returned, with the payload sorted by its event's schema, parsed by it, and sorted again.
+-/
+theorem decide_payloads_sorted (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
+    (groups : List (List Emit)) (vs : List Fault)
+    (h : evaluate st (fs.sorting st) records now name raw = .accepted written groups vs) :
+    ∃ input decided, fs.decide name input records now = .ok decided ∧
+      ∀ o ∈ groups.flatten, ∃ e ∈ decided.flatten, o.event = e.event ∧
+        ∃ y, fs.parse (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) = .ok (some y) ∧
+          o.payload = st.sorted (m := Id) (.payload e.event) y := by
+  obtain ⟨input, sorted, _, hd, hl, rfl⟩ := accepted_emits_decided records now name raw written groups vs h
+  obtain ⟨decided, hd', hs⟩ := sorting_decide_parsed name input records now sorted hd
+  refine ⟨input, decided, hd', fun o ho => ?_⟩
+  have ho := mem_orderedGroups _ _ _ ho
+  obtain ⟨g, hg, hog⟩ := List.mem_flatten.mp ho
+  obtain ⟨d, hdd, e, he, hoe⟩ := hs g hg o hog
+  refine ⟨e, List.mem_flatten.mpr ⟨d, hdd, he⟩, ?_⟩
+  split at hoe
+  · exact hoe
+  · rename_i hn
+    subst hoe
+    exact absurd (hl o ho) (by simpa using hn)
+
 end Tazuna.Thm.Service.Command

@@ -291,8 +291,8 @@ theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (ext
     Agrees (select fsI st s top trigger extra leaves) (select fs st s top trigger extra leaves) := by
   unfold select; agree [pick_agrees h]
 
-theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) (r : Processing) :
-    Agrees (startCopy fsI st step owner map key encodedKey r) (startCopy fs st step owner map key encodedKey r) := by
+theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key : Value) (r : Processing) :
+    Agrees (startCopy fsI st step owner map key r) (startCopy fs st step owner map key r) := by
   unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.defaults, expectFound_agrees, enter_agrees h]
 
 theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
@@ -607,7 +607,7 @@ theorem Agrees.lift {α : Type} (x : Id α) : Agrees (C := C) (liftM x) x := by
 theorem observe_agrees {α : Type} (x : Id α) (f : α → StateT Collect Id Unit) : Agrees (observe x f) x := by
   unfold Agrees observe; intro _; rfl
 
-theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) fs := by
+theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) (fs.sorting st) := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
 
 end Tazuna.Thm.Explore.Instrument

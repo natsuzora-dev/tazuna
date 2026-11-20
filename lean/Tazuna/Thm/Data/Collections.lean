@@ -85,7 +85,7 @@ theorem sortCanonical_perm {xs ys : List Value} (h : xs.Perm ys) :
 /--
 When no two elements have the same canonical text unless they are equal, the canonical sort of a permutation is the
 same list, and so is the sort by a key that follows it: a sortedBy array keeps no trace of the order in which spec code
-built it. Two distinct values have the same canonical text only when they differ in field order.
+built it.
 -/
 theorem sortByKey_perm (key : String) {xs ys : List Value} (h : xs.Perm ys)
     (hc : ∀ a ∈ xs, ∀ b ∈ xs, a.canonical = b.canonical → a = b) :

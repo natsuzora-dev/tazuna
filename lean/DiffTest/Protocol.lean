@@ -110,13 +110,6 @@ structure Asked where
 derive_wire Question tag "type" skip_serializing_none
 derive_wire Asked flatten question skip_serializing_none
 
-/-- A key of a map state's items, encoded and as a canonical value. -/
-structure ItemKey where
-  key : Value
-  canonical : Value
-
-derive_wire ItemKey
-
 /--
 A message that TS sends while it answers a question: a read of a record, an issue that stops the answer, or the answer
 to the question of the same name.
@@ -149,7 +142,7 @@ inductive Reply where
   | deadlineAt (time : Option String)
   | offers (payloads : List Value)
   | showInput (input : Value)
-  | items (keys : List ItemKey)
+  | items (keys : List Value)
   | defaults (defaults : Value)
   | close (output : Value)
   | closeEnsures (failed : Option String)

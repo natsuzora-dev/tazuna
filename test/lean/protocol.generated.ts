@@ -534,12 +534,6 @@ export type Asked = {
   readonly reversed?: boolean;
 } & Question;
 
-/** A key of a map state's items, encoded and as a canonical value. */
-export type ItemKey = {
-  readonly key: Json;
-  readonly canonical: Json;
-};
-
 /**
  * A message that TS sends while it answers a question: a read of a record, an issue that stops the answer, or the answer
  * to the question of the same name.
@@ -662,7 +656,7 @@ export type Reply =
     }
   | {
       readonly type: "items";
-      readonly keys: readonly ItemKey[];
+      readonly keys: readonly Json[];
     }
   | {
       readonly type: "defaults";

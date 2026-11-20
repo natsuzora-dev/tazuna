@@ -204,8 +204,8 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked,
   encoded and in the order they were built.
 - showInput: the query input of a shows slot, as the sender writes it.
-- items: the keys that a map state's items return, encoded in the order they were built and as canonical values. The
-  map state takes them as a set.
+- items: the keys that a map state's items return, encoded in the order they were built. The map state takes them as a
+  set.
 - defaults: the default value of each field of the schema that declares one, encoded and in the order it was built.
   Load runs those of a single entity's fields and of a map state's copy context, and reports one that throws or fails
   its schema.
@@ -250,7 +250,7 @@ structure Functions (m : Type → Type) where
   deadlineAt : Scope → Records → String → m (Except Issue (Option String))
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
-  items : Scope → Records → m (Except Issue (List (Value × Value)))
+  items : Scope → Records → m (Except Issue (List Value))
   defaults : Schema → m (Except Issue Value)
   close : Scope → Records → m (Except Issue Value)
   closeEnsures : String → Value → Value → m (Except Issue (Option String))
@@ -374,9 +374,7 @@ def Functions.sorting {m : Type → Type} [Monad m] [MonadNote m] (st : Service)
       | .error e => pure (.error e)
       | .ok items =>
         let schema := .mapKey (st.ref scope.machine) (← expectFound "the map state of an items question" scope.state)
-        mapChecked (fun (key, canonical) => do
-          let canonical ← st.sorted schema canonical
-          pure ((← fs.checked st schema key).map (·, canonical))) items
+        mapChecked (fs.checked st schema) items
     defaults := fun schema => do
       match ← fs.defaults schema with
       | .ok v => pure (.ok (← st.sorted schema v))

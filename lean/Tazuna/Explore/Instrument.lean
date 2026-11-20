@@ -394,11 +394,14 @@ def groupTexts (groups : List (List Emit)) : List (List String) := groups.map fu
 def sameValue (a b : Value) : Bool := a.canonical == b.canonical
 
 /--
-Functions that return the same values as `fs`, collect what each call reads and writes, and audit the answers of the
-spec functions that read records or values. The service invariants are not audited, because they have no definition
-for a report to name.
+Functions that return the same values as `fs.sorting st`, so a run is given its spec functions sorted as it keeps their
+values, collect what each call reads and writes, and audit the answers of the spec functions that read records or
+values, each asked again of `ifs.reversed`, sorted alike. The service invariants are not audited, because they have no
+definition for a report to name.
 -/
 def instrument : Functions (StateT Collect m) :=
+  let fs := fs.sorting st
+  let ifs := { ifs with reversed := ifs.reversed.sorting st }
   let auditBy {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
       (call : Functions m → m (Except ε α)) (same : α → α → Sameness) :=
     observe (call fs) (auditCollect ifs collect definition function call same)
@@ -448,7 +451,7 @@ def instrument : Functions (StateT Collect m) :=
     held := fun scope records n edge extra =>
       audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records n edge extra) sameValue
     items := fun scope records =>
-      let texts (keys : List (Value × Value)) := textSet (keys.map (·.2.canonical))
+      let texts (keys : List Value) := textSet (keys.map (·.canonical))
       audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records) fun a b => texts a == texts b
     offers := fun scope records control =>
       let texts (payloads : List Value) := textSet (payloads.map (·.canonical))
