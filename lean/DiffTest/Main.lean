@@ -331,6 +331,8 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
     simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD [])
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
   | .sort schema value => pure (.sorted (sortCollections schema value))
+  | .scenarioTime text => pure (.scenarioTime ((scenarioTime? text).map renderTime))
+  | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

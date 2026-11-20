@@ -10,6 +10,7 @@ import { type FileLine, isMalformed } from "../../src/data/trace.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
 import type { Json } from "../../src/data/values.ts";
 import type { Spec } from "../../src/load/load.ts";
+import type { Schema } from "../../src/service/basic.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
@@ -39,6 +40,8 @@ const responses = {
   simulate: "simulated",
   stepOrderChanges: "stepOrderChanges",
   sort: "sorted",
+  scenarioTime: "scenarioTime",
+  schemaOf: "schemaOf",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
@@ -205,5 +208,13 @@ export class Lean {
 
   sort(schema: Json, value: Json): Json {
     return this.exchange({ type: "sort", schema, value }).value as Json;
+  }
+
+  scenarioTime(text: string): string | undefined {
+    return this.exchange({ type: "scenarioTime", text }).time ?? undefined;
+  }
+
+  schemaOf(structure: Structure, service: string, schema: Schema): Json | undefined {
+    return (this.exchange({ type: "schemaOf", structure, service, schema }).schema ?? undefined) as Json | undefined;
   }
 }

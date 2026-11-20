@@ -321,6 +321,18 @@ export type Request =
       readonly type: "sort";
       readonly schema: Json;
       readonly value: Json;
+    }
+  /** scenarioTime? of a text, as renderTime writes the time. */
+  | {
+      readonly type: "scenarioTime";
+      readonly text: string;
+    }
+  /** Service.schemaOf of the service `service` of the structure. */
+  | {
+      readonly type: "schemaOf";
+      readonly structure: Structure;
+      readonly service: string;
+      readonly schema: Schema;
     };
 
 /**
@@ -754,6 +766,14 @@ export type Response =
   | {
       readonly type: "sorted";
       readonly value: Json;
+    }
+  | {
+      readonly type: "scenarioTime";
+      readonly time: string | null;
+    }
+  | {
+      readonly type: "schemaOf";
+      readonly schema: Json | null;
     }
   | {
       readonly type: "error";

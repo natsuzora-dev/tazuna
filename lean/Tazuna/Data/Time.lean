@@ -120,6 +120,18 @@ def isOffsetDateTime (text : String) : Bool :=
       | _ => false
   | _ => false
 
+/--
+The time of a scenario's start or clock line, as `Temporal.Instant.from` reads the form that tazuna documents: a date
+and time with seconds, a fraction of up to nine digits, and `Z` or an offset `±HH:MM`. A fraction below a millisecond,
+or a time that the run's time cannot hold, has none.
+-/
+def scenarioTime? (text : String) : Option Time :=
+  let fraction := ((text.toList.dropWhile (· != '.')).drop 1).takeWhile Char.isDigit
+  if !isOffsetDateTime text || fraction.length > 9 || (fraction.drop 3).any (· != '0') then none else
+  match parseTime text with
+  | .ok t => if t.inRange then some t else none
+  | .error _ => none
+
 structure DateTime where
   text : String
   time : Time
