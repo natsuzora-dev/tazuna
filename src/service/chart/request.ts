@@ -1,7 +1,8 @@
+import { expectFound } from "../../data/internalError.ts";
 import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
-import { ref, requirementsOf } from "../basic.ts";
+import { ref } from "../basic.ts";
 import { Failed, firstFalse, issueViolation } from "../functions.ts";
 import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -97,7 +98,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const input = parsed.value;
   const condition = firstFalse(
     (c) => r.functions.inputRequirement(screen, c, input),
-    requirementsOf(r.st, child.name).requires,
+    expectFound(`requirements of ${child.name}`, r.st.requirements.get(child.name)).requires,
   );
   if (condition instanceof Failed) halt(issueViolation(screen, condition));
   if (condition !== undefined)

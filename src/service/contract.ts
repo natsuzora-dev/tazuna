@@ -1,9 +1,10 @@
 import type { Fault } from "../data/fault.generated.ts";
+import { expectFound } from "../data/internalError.ts";
 import type { Rejection } from "../data/trace.generated.ts";
 import type { Unmet } from "../data/uncovered.ts";
 import type { Fields } from "../data/values.ts";
 import type { Located } from "../data/violation.ts";
-import { ref, requirementsOf } from "./basic.ts";
+import { ref } from "./basic.ts";
 import { Failed, firstFalse, issueViolation } from "./functions.ts";
 import type { RecordSource } from "./records.ts";
 import { failedEnsures, halt, type Run } from "./state.ts";
@@ -18,7 +19,7 @@ export function requirementsRejection(
   input: Fields,
   records: RecordSource,
 ): { readonly rejection: Rejection; readonly unmet?: Unmet } | undefined {
-  const rq = requirementsOf(r.st, name);
+  const rq = expectFound(`requirements of ${name}`, r.st.requirements.get(name));
   for (const [field, target] of rq.refs) {
     const value = input[field];
     if (value === null || value === undefined) continue;

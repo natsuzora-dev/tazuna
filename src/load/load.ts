@@ -60,6 +60,14 @@ export interface Spec {
   readonly structure: Structure;
 }
 
+/**
+ * A spec as loaded. Its structure is undefined when a definition names a value that is no definition of the spec, and
+ * `unresolved` says where.
+ */
+export type LoadedSpec =
+  | Spec
+  | (Omit<Spec, "structure"> & { readonly structure: undefined; readonly unresolved: string });
+
 const skippedFolders = new Set(["__snapshots__", "node_modules"]);
 
 /** The spec files under `dir`, walking each folder once however many symlinks lead to it. */
@@ -190,7 +198,9 @@ function serviceImports(
 }
 
 /** The spec in `root`, and what keeps the loader from reading it faithfully. */
-export async function loadSpec(root: string): Promise<{ readonly spec: Spec; readonly malformed: Found<Malformed>[] }> {
+export async function loadSpec(
+  root: string,
+): Promise<{ readonly spec: LoadedSpec; readonly malformed: Found<Malformed>[] }> {
   const found: Omit<Named<Definition>, "service">[] = [];
   const foundContracts: { readonly place: Place; readonly value: Readonly<Record<string, unknown>> }[] = [];
   const foundConstants: { readonly name: string; readonly place: Place; readonly value: unknown }[] = [];
@@ -257,7 +267,7 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     return named && service !== undefined ? [{ name, service, place, value }] : [];
   });
   const names = new Map<unknown, Named<Definition>>(definitions.map((d) => [d.definition, d]));
-  const { structure, thrownDefaults } = structureOf(definitions, names, services, contracts);
+  const built = structureOf(definitions, names, services, contracts);
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
   const loaded = loadScenarios(root, defined, services, (d) => {
@@ -265,7 +275,7 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     return n === undefined ? undefined : { service: n.service, name: n.name };
   });
   const serviceNamed = [...services].map(([name, { place }]) => ({ name, place }));
-  const spec: Spec = {
+  const common = {
     root,
     definitions,
     contracts,
@@ -276,8 +286,11 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     imports: serviceImports(sources, fileExports, serviceOf),
     names,
     services,
-    structure,
   };
+  const spec: LoadedSpec =
+    built.structure === undefined
+      ? { ...common, structure: undefined, unresolved: built.unresolved }
+      : { ...common, structure: built.structure };
   const malformed = [
     ...duplicateNames(namedExports),
     ...owned.malformed,
@@ -286,11 +299,13 @@ export async function loadSpec(root: string): Promise<{ readonly spec: Spec; rea
     ...caseCollisions(serviceNamed),
     ...[...services.keys()].flatMap((service) => caseCollisions(defined.filter((s) => s.service === service))),
     ...unexportedDefinitions(definitions, services, contracts, constants, exported),
-    ...inexactDelays(charts({ definitions, structure })),
+    ...(built.structure === undefined ? [] : inexactDelays(charts({ definitions, structure: built.structure }))),
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),
-    ...defaultSchemas(definitions, structure, opaque, thrownDefaults),
+    ...(built.structure === undefined
+      ? []
+      : defaultSchemas(definitions, built.structure, opaque, built.thrownDefaults)),
     ...loaded.malformed,
   ];
   return { spec, malformed };

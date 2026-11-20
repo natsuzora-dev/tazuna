@@ -7,7 +7,7 @@ open Tazuna.Data Tazuna.Spec
 theorem resultOfMismatch_eq_none_iff (s : Structure) (target : Ref) (answers : List Answer) (event : Ref) :
     s.resultOfMismatch target answers event = none ↔ answers.all (· matches .accepted _) = true ∧
       ∃ d ∈ s.definitions.find? (·.ref == target), match d.body with
-        | .command _ _ _ emits .. => some event ∈ emits
+        | .command c => event ∈ c.emits
         | _ => False := by
   unfold Structure.resultOfMismatch
   cases h : s.definitions.find? (·.ref == target) with
@@ -22,23 +22,15 @@ theorem resultOfMismatch_unaccepted (s : Structure) (target event : Ref) (answer
   simp only [List.all_eq_true, not_and]
   exact fun hall => absurd (hall a ha) (by simpa using hn)
 
-theorem emitsOf_mem (s : Structure) (command : Option Ref) (r : Ref) (h : some r ∈ s.emitsOf command) :
-    ∃ d ∈ s.definitions, sameRef (some d.ref) command = true ∧ match d.body with
-      | .command _ _ _ emits .. => some r ∈ emits
+theorem emitsOf_mem (s : Structure) (command r : Ref) (h : r ∈ s.emitsOf command) :
+    ∃ d ∈ s.definitions, d.ref = command ∧ match d.body with
+      | .command c => r ∈ c.emits
       | _ => False := by
   unfold Structure.emitsOf at h
-  generalize hf : s.definitions.findSome? _ = found at h
-  cases found with
-  | none => simp at h
-  | some es =>
-    rw [Option.getD_some] at h
-    obtain ⟨d, hd, hs⟩ := List.exists_of_findSome?_eq_some hf
-    refine ⟨d, hd, ?_⟩
-    cases hb : d.body <;> simp only [hb] at hs <;> try contradiction
-    split at hs
-    · simp only [Option.some.injEq] at hs
-      subst hs
-      exact ⟨by assumption, h⟩
-    · contradiction
+  cases hf : s.definitions.find? (·.ref == command) with
+  | none => simp [hf] at h
+  | some d =>
+    refine ⟨d, List.mem_of_find?_eq_some hf, by simpa using List.find?_some hf, ?_⟩
+    cases hb : d.body <;> simp [hf, hb] at h ⊢; exact h
 
 end Tazuna.Thm.Spec.Structure

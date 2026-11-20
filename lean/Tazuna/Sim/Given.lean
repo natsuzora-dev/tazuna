@@ -18,8 +18,8 @@ spec services whose definitions name its definitions, in code-point order.
 def staticPeers (j : Spec.Structure) (own : String) : List String :=
   let named (d : Spec.Definition) : List Spec.Ref :=
     match d.body with
-    | .automation receives command _ _ => receives.toList ++ command.toList
-    | .machine c | .screen c => (c.receives ++ c.commands ++ c.queries ++ c.screens).filterMap (·.2)
+    | .automation a => [a.receives, a.command]
+    | .machine c | .screen c => (c.receives ++ c.commands ++ c.queries ++ c.screens).map (·.2)
     | _ => []
   let external (s : String) := j.services.any fun i => i.name == s && i.external
   let found := j.definitions.flatMap fun d =>

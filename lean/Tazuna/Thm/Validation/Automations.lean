@@ -6,7 +6,7 @@ open Tazuna.Data Tazuna.Spec Tazuna.Validation Tazuna.Validation.Automations
 
 /-- Whether `b` receives an event that the command of `a` emits. -/
 def Follows (s : Structure) (a b : Automation) : Prop :=
-  b ∈ automations s ∧ ∃ e ∈ s.emitsOf a.command, sameRef b.receives e = true
+  b ∈ automations s ∧ ∃ e ∈ s.emitsOf a.command, (b.receives == e) = true
 
 inductive Chain (s : Structure) : Automation → Automation → Prop
   | single {a b : Automation} : Follows s a b → Chain s a b

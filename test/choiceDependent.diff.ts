@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { type Searched, stepOrderChanges } from "../src/explore/stepOrders.ts";
-import { loadSpec } from "../src/load/load.ts";
 import { simulateSpec } from "../src/sim/spec/simulate.ts";
-import { runExamples, runGroupExamples } from "./examples.ts";
+import { loadedSpec, runExamples, runGroupExamples } from "./examples.ts";
 import { expectedOf } from "./expected.ts";
 import { SimFunctions, VerifyFunctions } from "./lean/functions.ts";
 import { Lean } from "./lean/lean.ts";
@@ -22,7 +21,7 @@ const simRoots = [join(tests, "../samples/todo/spec"), ...runExamples()];
 // Every spec loads before any test runs, so that no test ends while a later one is still being registered.
 const simCases = await Promise.all(
   simRoots.map(async (root) => {
-    const spec = (await loadSpec(root)).spec;
+    const spec = await loadedSpec(root);
     const scenarios = spec.scenarios.map(({ service, name, definition }) => {
       const searched: Searched[] = [];
       stepOrderChanges(spec, definition.scenario, simulateSpec(spec, definition.scenario), 0, (s) => searched.push(s));

@@ -51,7 +51,8 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
       | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok none => pure (r.report (.fault (.inputSchema (st.ref i.chart.name) (st.ref c.name))))
       | .ok (some input) =>
-      match ← firstFalse (fs.inputRequirement (st.ref c.name) · input) (st.requirementsOf c.name).requires with
+      let rq ← expectFound s!"requirements of {c.name}" (st.requirements.lookup c.name)
+      match ← firstFalse (fs.inputRequirement (st.ref c.name) · input) rq.requires with
       | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok (some condition) =>
         pure (r.report (.fault (.failedRequires (st.ref i.chart.name) (st.ref c.name) condition)))

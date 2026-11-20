@@ -7,14 +7,14 @@ interface Automation {
   /** The position among the automations that send a command to their own service, in definition order. */
   readonly index: number;
   readonly ref: DefinitionRef;
-  readonly receives: DefinitionRef | null;
-  readonly command: DefinitionRef | null;
+  readonly receives: DefinitionRef;
+  readonly command: DefinitionRef;
 }
 
 function automations(structure: Structure): Automation[] {
   return structure.definitions
     .flatMap((d) =>
-      d.kind === "automation" && d.command?.service === d.service
+      d.kind === "automation" && d.command.service === d.service
         ? [{ ref: { service: d.service, name: d.name }, receives: d.receives, command: d.command }]
         : [],
     )

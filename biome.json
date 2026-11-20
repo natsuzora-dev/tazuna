@@ -29,7 +29,11 @@
       "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
     },
     {
-      "includes": ["test/load/restricted/sources/Restricted.any/**", "test/bug/**"],
+      "includes": [
+        "test/load/restricted/sources/Restricted.any/**",
+        "test/load/restricted/sources/anyAutomation/**",
+        "test/bug/**"
+      ],
       "linter": { "rules": { "suspicious": { "noExplicitAny": "off" } } }
     },
     {

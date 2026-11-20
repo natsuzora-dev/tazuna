@@ -229,9 +229,6 @@ theorem offeredAt_agrees (q : String) (st : Service) (s : State) (o : Opened) (c
     Agrees (offeredAt st (fsOfI q) s o control payload) (offeredAt st (fsOf q) s o control payload) := by
   unfold offeredAt; agreeE [(h q).parse, acceptsOperation_agrees (h q)]
 
-theorem ended_agrees (w : World) : Agrees (w.ended fsOfI) (w.ended fsOf) := by
-  unfold World.ended; agreeE [checkExchanges_agrees (h _)]
-
 omit h in
 theorem peerMessage_agrees (w : World) (i : Nat) (peer : String) {f : Message → StateT C Id Bool}
     {g : Message → Id Bool} (hf : ∀ msg, Agrees (f msg) (g msg)) :
@@ -261,6 +258,9 @@ theorem expect_agrees (w : World) (own : String) (lines : List Scenario.Line) (e
   unfold World.expect; agreeE [compared_agrees h]
 
 variable [MonadNote (StateT C Id)]
+
+theorem ended_agrees (w : World) : Agrees (w.ended fsOfI) (w.ended fsOf) := by
+  unfold World.ended; agreeE [checkExchanges_agrees (h _)]
 
 theorem arriveFrom_agrees (q : String) (st : Service) (s : State) (sender : String) (id : LineId) (body : LineBody) :
     Agrees (arriveFrom st (fsOfI q) s sender id body) (arriveFrom st (fsOf q) s sender id body) := by

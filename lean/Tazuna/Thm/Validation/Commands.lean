@@ -10,23 +10,19 @@ open Tazuna.Thm.Service.Command
 
 theorem commands_emit_own_events (s : Structure) :
     Commands.foreignEvents s = [] ↔
-      ∀ d ∈ s.definitions, ∀ rejects input output emits references binds requires ensures,
-        d.body = .command rejects input output emits references binds requires ensures →
-          ∀ e, some e ∈ emits → e.service = d.service := by
+      ∀ d ∈ s.definitions, ∀ c, d.body = .command c → ∀ e ∈ c.emits, e.service = d.service := by
   simp only [Commands.foreignEvents, List.flatMap_eq_nil_iff]
   constructor
-  · intro h d hd rejects input output emits references binds requires ensures hb e he
+  · intro h d hd c hb e he
     have hd' := h d hd
     rw [hb] at hd'
-    have := List.filterMap_eq_nil_iff.mp hd' (some e) he
+    have := List.filterMap_eq_nil_iff.mp hd' e he
     exact Classical.byContradiction fun hne => by simp [hne] at this
   · intro h d hd
     cases hb : d.body with
-    | command rejects input output emits references binds requires ensures =>
+    | command c =>
       refine List.filterMap_eq_nil_iff.mpr fun e he => ?_
-      cases e with
-      | none => rfl
-      | some e => simp [h d hd rejects input output emits references binds requires ensures hb e he]
+      simp [h d hd c hb e he]
     | _ => rfl
 
 theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignEvents j = []) (st : Service)
@@ -34,29 +30,23 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
     (ha : evaluate st fs records now name raw = .accepted written groups vs) :
     ∀ e ∈ groups.flatten,
-      ∃ r, some r ∈ j.emitsOf (some (st.ref name)) ∧ r.service = st.service ∧ e.event = r := by
+      ∃ r, r ∈ j.emitsOf (st.ref name) ∧ r.service = st.service ∧ e.event = r := by
   intro e he
   obtain ⟨_, decided, _, _, hl, out, -, hlen, hz, rfl⟩ := accepted_emits_decided records now name raw written groups vs ha
   obtain ⟨e', hx⟩ := Tazuna.Thm.Data.Basic.exists_zip_of_mem_right hlen (mem_orderedGroups _ _ e he)
   have he' := (List.of_mem_zip hx).1
   have hev := (hz _ hx).1
   have hlist := hl e' he'
-  simp only [Service.lists, hj, List.any_eq_true] at hlist
-  obtain ⟨_ | r, ho, hname⟩ := hlist
-  · simp at hname
-  have hname : r = e'.event := by simpa using hname
-  obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Spec.Structure.emitsOf_mem j _ r ho
-  have hsv : r.service = st.service := by
+  simp only [Service.lists, hj, List.contains_iff_mem] at hlist
+  obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Spec.Structure.emitsOf_mem j _ _ hlist
+  have hsv : e'.event.service = st.service := by
     cases hb : d.body with
-    | command rejects input output emits references binds requires ensures =>
+    | command c =>
       simp only [hb] at hm
-      have := (commands_emit_own_events j).mp h d hd rejects input output emits references binds requires ensures hb r
-        hm
-      simp only [sameRef, beq_iff_eq] at hs
-      rw [this, show d.service = (st.ref name).service from congrArg Ref.service hs]
+      rw [(commands_emit_own_events j).mp h d hd c hb _ hm, show d.service = (st.ref name).service from
+        congrArg Ref.service hs]
       rfl
     | _ => simp [hb] at hm
-  refine ⟨r, ho, hsv, ?_⟩
-  rw [hev, hname]
+  exact ⟨e'.event, hlist, hsv, hev⟩
 
 end Tazuna.Thm.Validation.Commands

@@ -12,14 +12,13 @@ order.
 structure Automation where
   index : Nat
   ref : Ref
-  receives : Option Ref
-  command : Option Ref
+  receives : Ref
+  command : Ref
 
 def automations (s : Structure) : List Automation :=
   (s.definitions.filterMap fun d =>
     match d.body with
-    | .automation receives command _ _ =>
-      if (command.map (·.service)) == some d.service then some (d.ref, receives, command) else none
+    | .automation a => if a.command.service == d.service then some (d.ref, a.receives, a.command) else none
     | _ => none).zipIdx.map fun ((ref, receives, command), index) => { index, ref, receives, command }
 
 /--
@@ -30,7 +29,7 @@ not yet in the chain (`rest`) are followed, so that each cycle is found once, fr
 def walk (s : Structure) (as : List Automation) (start : Nat) (rest : List Nat) (last : Automation)
     (chain : List Ref) : List (List Ref) :=
   (s.emitsOf last.command).flatMap fun emitted =>
-    (as.filter fun n => sameRef n.receives emitted).flatMap fun n =>
+    (as.filter (·.receives == emitted)).flatMap fun n =>
       if n.index == start then [chain]
       else if _h : start < n.index ∧ n.index ∈ rest then walk s as start (rest.erase n.index) n (chain ++ [n.ref])
       else []

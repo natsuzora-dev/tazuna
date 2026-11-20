@@ -27,12 +27,15 @@ const examples = [
   ...runExamples(),
 ];
 
-const bases = await Promise.all(
-  examples.map(async (root) => ({
-    name: relative(import.meta.dirname, root),
-    structure: (await loadSpec(root)).spec.structure,
-  })),
-);
+// A spec whose structure names no definition has no structure, which check reports or calls unloadable.
+const bases = (
+  await Promise.all(
+    examples.map(async (root) => ({
+      name: relative(import.meta.dirname, root),
+      structure: (await loadSpec(root)).spec.structure,
+    })),
+  )
+).flatMap(({ name, structure }) => (structure === undefined ? [] : [{ name, structure }]));
 
 for (const { name, structure } of bases)
   test(`${name}: TS and Lean find the same Illegal violations in the structure`, () => {
@@ -118,8 +121,8 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
   },
   screens(s, [a, b, c]) {
     const chart = pick(charts(s), a);
-    if (chart)
-      (chart.screens as Record<string, unknown>)[`k${b % 3}`] = pick([null, ...refsOf(s, ["screen"])], c) ?? null;
+    const screen = pick(refsOf(s, ["screen"]), c);
+    if (chart && screen) (chart.screens as Record<string, unknown>)[`k${b % 3}`] = screen;
   },
   input(s, [a]) {
     const chart = pick(charts(s), a);
@@ -131,8 +134,8 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
       a,
     );
     if (command?.kind !== "command") return;
-    const events = refsOf(s, ["event"]);
-    (command as { emits: readonly unknown[] }).emits = [...command.emits.slice(0, b % 2), pick(events, c) ?? null];
+    const event = pick(refsOf(s, ["event"]), c);
+    if (event) (command as { emits: readonly unknown[] }).emits = [...command.emits.slice(0, b % 2), event];
   },
   automation(s, [a, b, c]) {
     const automation = pick(
@@ -140,8 +143,10 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
       a,
     );
     if (automation?.kind !== "automation") return;
-    if (b % 2 === 0) (automation as { receives: unknown }).receives = pick(refsOf(s, ["event"]), c) ?? null;
-    else (automation as { command: unknown }).command = pick(refsOf(s, ["command"]), c) ?? null;
+    const event = pick(refsOf(s, ["event"]), c);
+    const command = pick(refsOf(s, ["command"]), c);
+    if (b % 2 === 0 && event) (automation as { receives: unknown }).receives = event;
+    else if (command) (automation as { command: unknown }).command = command;
   },
   members(s, [a, b, c]) {
     const contract = pick(s.contracts, a);
@@ -151,8 +156,8 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
   },
   queries(s, [a, b, c]) {
     const chart = pick(charts(s), a);
-    if (chart)
-      (chart.queries as Record<string, unknown>)[`k${b % 3}`] = pick([null, ...refsOf(s, ["query"])], c) ?? null;
+    const query = pick(refsOf(s, ["query"]), c);
+    if (chart && query) (chart.queries as Record<string, unknown>)[`k${b % 3}`] = query;
   },
   offers(s, [a, b]) {
     const chart = pick(

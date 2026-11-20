@@ -104,6 +104,12 @@ theorem note_agrees [MonadNote (StateT C Id)] (n : Note) :
     Agrees (MonadNote.note n : StateT C Id Unit) (MonadNote.note n : Id Unit) := by
   unfold Agrees; intro _; rfl
 
+theorem expectFound_agrees [MonadNote (StateT C Id)] {α : Type} [Inhabited α] (what : String) (found : Option α) :
+    Agrees (expectFound what found : StateT C Id α) (expectFound what found : Id α) := by
+  cases found
+  · exact Agrees.unit fun _ => Agrees.pure _
+  · exact Agrees.pure _
+
 syntax "agree" "[" term,* "]" : tactic
 macro_rules
   | `(tactic| agree [$ts,*]) => do
@@ -118,6 +124,7 @@ macro_rules
       | refine Agrees.foldlM (fun _ _ => ?_) _ _
       | refine Agrees.filterMapM (fun _ => ?_) _
       | with_reducible exact note_agrees _
+      | with_reducible exact expectFound_agrees _ _
       | split
       | (dsimp only)
       | intro _))
@@ -187,12 +194,10 @@ theorem initialContextOf_agrees (chart : String) (input : Value) :
     Agrees (initialContextOf fsI st chart input) (initialContextOf fs st chart input) := by
   unfold initialContextOf; agree [h.initialContext]
 
-omit [MonadNote (StateT C Id)] in
 theorem openScreen_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
   unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem activate_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (activate fsI st step name state a r) (activate fs st step name state a r) := by
   unfold activate; agree [openScreen_agrees h, request_agrees h]
@@ -384,18 +389,15 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
       firstFalse_agrees (fun _ => h.automationGuard _ _ _ _ _), h.react, h.normalize, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
       withMachine_agrees, applyCompletion_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :
     Agrees (resolveChecked st fsI s name raw) (resolveChecked st fs s name raw) := by
   unfold resolveChecked normalizeOutput; agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve, h.normalize,
     h.queryEnsures]
 
-omit [MonadNote (StateT C Id)] in
 theorem publishOne_agrees (s : State) (sub : Subscription) :
     Agrees (publishOne st fsI s sub) (publishOne st fs s sub) := by
   unfold publishOne; agree [resolveChecked_agrees h, h.comparable]
 
-omit [MonadNote (StateT C Id)] in
 theorem publish_agrees (s : State) : Agrees (publish st fsI s) (publish st fs s) := by
   unfold publish; agree [publishOne_agrees h]
 
@@ -441,7 +443,6 @@ omit [MonadNote (StateT C Id)] in
 theorem checkInvariants_agrees (s : State) : Agrees (checkInvariants st fsI s) (checkInvariants st fs s) := by
   unfold checkInvariants; exact Agrees.bind (invariantViolations_agrees h s) fun _ => Agrees.pure _
 
-omit [MonadNote (StateT C Id)] in
 theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterMessage st fs s) := by
   unfold afterMessage
   agree [refreshScreens_agrees h, checkInvariants_agrees h, publish_agrees h]
@@ -565,14 +566,12 @@ omit [MonadNote (StateT C Id)] in
 theorem decodedEvents_agrees (x : Exchange) : Agrees (decodedEvents fsI x) (decodedEvents fs x) := by
   unfold decodedEvents; agree [h.parse]
 
-omit [MonadNote (StateT C Id)] in
 theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List Emit) (s : State) (a : Answer) :
     Agrees (checkAssumedAnswer st fsI x input events s a) (checkAssumedAnswer st fs x input events s a) := by
   unfold checkAssumedAnswer
   agree [decodedAnswer_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _),
     firstFalse_agrees (fun _ => Agrees.map _ (h.resultEnsures _ _ _ _ _))]
 
-omit [MonadNote (StateT C Id)] in
 theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by
   unfold checkExchanges checkExchange
   agree [h.parse, decodedEvents_agrees h, checkAssumedAnswer_agrees h]

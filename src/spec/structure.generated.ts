@@ -6,28 +6,28 @@ import type { Json } from "../data/values.ts";
 
 /**
  * An activity of a state. `name` is the key under the keyword, and `definition` is the query, command, or screen of
- * that key, or null when the key names no definition.
+ * that key.
  */
 export type Activity =
   | {
       readonly keyword: "calls";
       readonly name: string;
-      readonly definition: DefinitionRef | null;
+      readonly definition: DefinitionRef;
     }
   | {
       readonly keyword: "sends";
       readonly name: string;
-      readonly definition: DefinitionRef | null;
+      readonly definition: DefinitionRef;
     }
   | {
       readonly keyword: "shows";
       readonly name: string;
-      readonly definition: DefinitionRef | null;
+      readonly definition: DefinitionRef;
     }
   | {
       readonly keyword: "opens";
       readonly name: string;
-      readonly definition: DefinitionRef | null;
+      readonly definition: DefinitionRef;
       readonly modal: boolean;
     };
 
@@ -83,84 +83,105 @@ export type ChartFields = {
   readonly states: readonly State[];
   /** The payload schema of each control, or null for a control without a payload. */
   readonly controls: Readonly<Record<string, Json | null>>;
-  readonly receives: Readonly<Record<string, DefinitionRef | null>>;
-  readonly commands: Readonly<Record<string, DefinitionRef | null>>;
-  readonly queries: Readonly<Record<string, DefinitionRef | null>>;
-  readonly screens: Readonly<Record<string, DefinitionRef | null>>;
+  readonly receives: Readonly<Record<string, DefinitionRef>>;
+  readonly commands: Readonly<Record<string, DefinitionRef>>;
+  readonly queries: Readonly<Record<string, DefinitionRef>>;
+  readonly screens: Readonly<Record<string, DefinitionRef>>;
 };
 
-/** A `ref()` field and the entity it points to, null when the entity is no definition. */
+/** A `ref()` field and the entity it points to. */
 export type Reference = {
   readonly field: string;
-  readonly entity: DefinitionRef | null;
+  readonly entity: DefinitionRef;
 };
 
 /**
  * A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose
- * schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field (its own key field included), with
- * `entity` null when it is no definition. Array elements and union options do not extend the path. Lines, records, and
- * instances rename created keys at these positions.
+ * schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field (its own key field included).
+ * Array elements and union options do not extend the path. Lines, records, and instances rename created keys at these
+ * positions.
  */
 export type KeyPosition = {
   readonly path: readonly string[];
-  readonly entity: DefinitionRef | null;
+  readonly entity: DefinitionRef;
 };
 
+export type ChangeKind = "create" | "update" | "delete";
+
+/** How an entity event changes the records of `entity`. */
+export type Change = {
+  readonly kind: ChangeKind;
+  readonly entity: DefinitionRef;
+};
+
+/** An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. */
+export type EntityBody = {
+  readonly key: string | null;
+  readonly fields: readonly string[];
+  readonly unique: readonly string[];
+  readonly references: readonly Reference[];
+  /** The key positions of the fields. */
+  readonly keys: readonly KeyPosition[];
+};
+
+export type EventBody = {
+  /** How the event changes records, or null for an event that changes none. */
+  readonly change: Change | null;
+  readonly payload: Json;
+};
+
+/**
+ * A command. For a command of an external service, `rejects` lists the rejection kinds that it declares, and `emits`
+ * lists the events that may arrive as results of an accepted request (resultOf). For a command of a spec service,
+ * `rejects` is null. `references` are in field order.
+ */
+export type CommandBody = {
+  readonly rejects: readonly RejectionKind[] | null;
+  readonly input: Json;
+  readonly output: Json | null;
+  readonly emits: readonly DefinitionRef[];
+  readonly references: readonly Reference[];
+  readonly binds: readonly string[];
+  readonly requires: readonly string[];
+  readonly ensures: readonly string[];
+};
+
+/**
+ * A query. For a query of an external service, `rejects` lists the rejection kinds that it declares. For a query of a
+ * spec service, `rejects` is null.
+ */
+export type QueryBody = {
+  readonly rejects: readonly RejectionKind[] | null;
+  readonly input: Json;
+  readonly output: Json | null;
+  readonly requires: readonly string[];
+  readonly ensures: readonly string[];
+};
+
+export type AutomationBody = {
+  readonly receives: DefinitionRef;
+  readonly command: DefinitionRef;
+  readonly binds: readonly string[];
+  readonly guard: readonly string[];
+};
+
+/** A definition's body, whose fields the definition writes in its place. */
 export type Body =
-  /**
-   * An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. `keys` are
-   * its key positions.
-   */
-  | {
+  | ({
       readonly kind: "entity";
-      readonly key: string | null;
-      readonly fields: readonly string[];
-      readonly unique: readonly string[];
-      readonly references: readonly Reference[];
-      readonly keys: readonly KeyPosition[];
-    }
-  /** An event. `entity` is null when `change` is none. */
-  | {
+    } & EntityBody)
+  | ({
       readonly kind: "event";
-      readonly change: "none" | "create" | "update" | "delete";
-      readonly entity: DefinitionRef | null;
-      readonly payload: Json;
-    }
-  /**
-   * A command. For a command of an external service, `rejects` lists the rejection kinds that it declares, and `emits`
-   * lists the events that may arrive as results of an accepted request (resultOf). For a command of a spec service,
-   * `rejects` is null. `references` are in field order.
-   */
-  | {
+    } & EventBody)
+  | ({
       readonly kind: "command";
-      readonly rejects: readonly RejectionKind[] | null;
-      readonly input: Json;
-      readonly output: Json | null;
-      readonly emits: readonly (DefinitionRef | null)[];
-      readonly references: readonly Reference[];
-      readonly binds: readonly string[];
-      readonly requires: readonly string[];
-      readonly ensures: readonly string[];
-    }
-  /**
-   * A query. For a query of an external service, `rejects` lists the rejection kinds that it declares. For a query of
-   * a spec service, `rejects` is null.
-   */
-  | {
+    } & CommandBody)
+  | ({
       readonly kind: "query";
-      readonly rejects: readonly RejectionKind[] | null;
-      readonly input: Json;
-      readonly output: Json | null;
-      readonly requires: readonly string[];
-      readonly ensures: readonly string[];
-    }
-  | {
+    } & QueryBody)
+  | ({
       readonly kind: "automation";
-      readonly receives: DefinitionRef | null;
-      readonly command: DefinitionRef | null;
-      readonly binds: readonly string[];
-      readonly guard: readonly string[];
-    }
+    } & AutomationBody)
   | ({
       readonly kind: "machine";
     } & ChartFields)

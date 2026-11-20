@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { InternalError } from "../src/data/internalError.ts";
 import { invalidScenarioKinds } from "../src/data/invalidScenario.generated.ts";
 import { scenario } from "../src/data/scenario.generated.ts";
-import { loadSpec } from "../src/load/load.ts";
 import type { RecordSource } from "../src/service/records.ts";
 import { SpecFunctions } from "../src/sim/spec/functions.ts";
 import { outcomeOf, simulateSpec } from "../src/sim/spec/simulate.ts";
@@ -13,6 +12,7 @@ import {
   folders,
   isServiceFolder,
   leanModulePaths,
+  loadedSpec,
   outcomeSuffix,
   scenarioSuffix,
   simExamples,
@@ -50,7 +50,7 @@ test("Every folder under test/sim is a Lean Sim module path or an example direct
 const outcomes = new Map<string, readonly string[]>();
 
 for (const { root, scenarios } of examples) {
-  const spec = (await loadSpec(root)).spec;
+  const spec = await loadedSpec(root);
   for (const name of scenarios)
     test(`${relative(tests, root)}/${name}: the simulation gives the outcome of ${name}${outcomeSuffix}`, (t) => {
       const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));
@@ -84,7 +84,7 @@ test("Each InvalidScenario kind is in the expected outcome of some scenario unde
 });
 
 test("An InternalError raised inside author code stops the question instead of becoming the author's thrown Issue", async () => {
-  const { spec } = await loadSpec(join(tests, "../samples/todo/spec"));
+  const spec = await loadedSpec(join(tests, "../samples/todo/spec"));
   const functions = new SpecFunctions(spec, "todo");
   const broken = new InternalError("the records lost a row");
   const records: RecordSource = {

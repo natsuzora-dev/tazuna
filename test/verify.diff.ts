@@ -10,14 +10,14 @@ import { isMalformed, parseFileLines } from "../src/data/trace.ts";
 import { type Run, readTrace, runStem, sameRun, snapshotPath } from "../src/data/traceFile.ts";
 import type { Json } from "../src/data/values.ts";
 import type { Placed, ViolationValue } from "../src/data/violation.ts";
-import { loadSpec, type Spec } from "../src/load/load.ts";
+import type { Spec } from "../src/load/load.ts";
 import { simulateSpec, snapshotsOf } from "../src/sim/spec/simulate.ts";
 import { type Compared, verifyLines } from "../src/verify/compare.ts";
 import { checkExternal, verifyExternal } from "../src/verify/external.ts";
 import { readSnapshotViolations, unknownAfters } from "../src/verify/lines.ts";
 import { type Expected, type Folder, pairTraces, type TraceFolder, traceFolderOf } from "../src/verify/pairing.ts";
 import { compareSnapshot, pairSnapshots, snapshotFolders, snapshotRuns, withSnapshot } from "../src/verify/snapshot.ts";
-import { folders, groupExamples, runExamples } from "./examples.ts";
+import { folders, groupExamples, loadedSpec, runExamples } from "./examples.ts";
 import { VerifyFunctions } from "./lean/functions.ts";
 import { Lean, type VerifyViolation } from "./lean/lean.ts";
 
@@ -31,11 +31,9 @@ const examples = groupExamples("verify");
 // Run and validation examples too: the resultOf mutations need snapshots with resultOf on `in` lines.
 const snapshotExamples = [...examples, ...runExamples(), ...groupExamples("validation")];
 
-const samples = (await loadSpec(join(import.meta.dirname, "../samples/todo/spec"))).spec;
+const samples = await loadedSpec(join(import.meta.dirname, "../samples/todo/spec"));
 
-const specs = new Map(
-  await Promise.all(snapshotExamples.map(async (root) => [root, (await loadSpec(root)).spec] as const)),
-);
+const specs = new Map(await Promise.all(snapshotExamples.map(async (root) => [root, await loadedSpec(root)] as const)));
 
 const value = ({ kind, definition, line, data }: ViolationValue & Placed) =>
   JSON.parse(JSON.stringify({ kind, definition, line, data })) as VerifyViolation;

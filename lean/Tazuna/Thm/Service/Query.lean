@@ -111,12 +111,13 @@ theorem query_invalid_input_rejected (name : String) (raw : Value)
   simp [resolveChecked, hp]
 
 theorem resolve_output_sorted_before_normalize (name : String) (raw input output normalized : Value)
-    (failed : Option String) (hp : fs.parse (.input (st.ref name)) raw = .ok (some input))
-    (hr : firstFalse (fs.inputRequirement (st.ref name) · input) (st.requirementsOf name).requires = .ok none)
+    (failed : Option String) (rq : Requirements) (hp : fs.parse (.input (st.ref name)) raw = .ok (some input))
+    (hq : st.requirements.lookup name = some rq)
+    (hr : firstFalse (fs.inputRequirement (st.ref name) · input) rq.requires = .ok none)
     (hv : fs.resolve name input s.records s.now = .ok output)
     (hn : fs.normalize (.output (st.ref name)) (st.sorted (.output (st.ref name)) output) = .ok (some normalized))
     (he : fs.queryEnsures name input normalized s.records = .ok failed) :
     ∃ vs, resolveChecked st fs s name raw = .answered (.fulfilled normalized) vs := by
-  cases failed <;> simp [resolveChecked, normalizeOutput, hp, hr, hv, hn, he] <;> exact ⟨_, rfl⟩
+  cases failed <;> simp [resolveChecked, normalizeOutput, expectFound, hp, hq, hr, hv, hn, he] <;> exact ⟨_, rfl⟩
 
 end Tazuna.Thm.Service.Query

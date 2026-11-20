@@ -13,7 +13,7 @@ const kindOf = (arrives: boolean) =>
  */
 const automations = (spec: Spec): Found<NonCanonical>[] =>
   spec.structure.definitions.flatMap((d): Found<NonCanonical>[] => {
-    if (d.kind !== "automation" || d.command === null) return [];
+    if (d.kind !== "automation") return [];
     const named = spec.definitions.find((n) => n.service === d.service && n.name === d.name);
     if (named === undefined) return [];
     const arrives = rejectionKinds(spec.structure, d.service, d.command).includes("unavailable");
@@ -32,7 +32,7 @@ const states = (spec: Spec): Found<NonCanonical>[] =>
   charts(spec).flatMap(({ named, chart, structure }) =>
     structure.states.flatMap((state) =>
       state.activities.flatMap((a): Found<NonCanonical>[] => {
-        if ((a.keyword !== "calls" && a.keyword !== "sends") || a.definition === null) return [];
+        if (a.keyword !== "calls" && a.keyword !== "sends") return [];
         const arrives = rejectionKinds(spec.structure, named.service, a.definition).length > 0;
         const written = stateAt(chart, state.path)[a.keyword]?.[a.name]?.onRejected !== undefined;
         if (arrives === written) return [];

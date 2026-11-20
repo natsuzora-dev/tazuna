@@ -3,6 +3,7 @@ import { basename, join, relative } from "node:path";
 import { type CheckedSpec, checkSpecWith, failureText } from "../src/check/spec.ts";
 import type { TypeCheck } from "../src/check/typeCheck.ts";
 import type { ViolationError } from "../src/data/violation.ts";
+import { loadSpec, type Spec } from "../src/load/load.ts";
 
 export const serviceRoot = join(import.meta.dirname, "service");
 export const runRoot = join(import.meta.dirname, "run");
@@ -34,6 +35,13 @@ export async function checkedRoot(root: string): Promise<CheckedSpec> {
   if (result.kind === "checked") return result.spec;
   const name = relative(join(import.meta.dirname, ".."), root);
   throw new Error(`${name} is not checked:\n${failureText(result, name)}`);
+}
+
+/** Loads the spec of the example `root`, and throws unless its structure names only definitions of the spec. */
+export async function loadedSpec(root: string): Promise<Spec> {
+  const { spec } = await loadSpec(root);
+  if ("unresolved" in spec) throw new Error(`${root}: ${spec.unresolved} names no definition`);
+  return spec;
 }
 
 /** Returns the examples test/<folder>/<group>/<target>/<example> of `group`, or of every group without it. */

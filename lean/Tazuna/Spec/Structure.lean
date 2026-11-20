@@ -51,23 +51,19 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire TransitionRef
 
-def sameRef : Option Ref → Option Ref → Bool
-  | some a, some b => a == b
-  | _, _ => false
-
 /-- The name of `r` in the traces of `service`. A definition of another service has its service name as a prefix. -/
 def Ref.traceName (r : Ref) (service : String) : String :=
   if r.service == service then r.name else s!"{r.service}.{r.name}"
 
 /--
 An activity of a state. `name` is the key under the keyword, and `definition` is the query, command, or screen of
-that key, or null when the key names no definition.
+that key.
 -/
 inductive Activity where
-  | calls (name : String) (definition : Option Ref)
-  | sends (name : String) (definition : Option Ref)
-  | shows (name : String) (definition : Option Ref)
-  | opens (name : String) (definition : Option Ref) (modal : Bool)
+  | calls (name : String) (definition : Ref)
+  | sends (name : String) (definition : Ref)
+  | shows (name : String) (definition : Ref)
+  | opens (name : String) (definition : Ref) (modal : Bool)
 deriving Repr, Inhabited
 
 derive_wire Activity tag "keyword"
@@ -102,13 +98,13 @@ derive_wire Offer
 
 /--
 A key position of a schema (an entity's fields, a context, or a map state's item key): the field path to a value whose
-schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field (its own key field included), with
-`entity` null when it is no definition. Array elements and union options do not extend the path. Lines, records, and
-instances rename created keys at these positions.
+schema is `ref(entity)`, `ref.self()` in `entity`'s fields, or `entity`'s key field (its own key field included).
+Array elements and union options do not extend the path. Lines, records, and instances rename created keys at these
+positions.
 -/
 structure KeyPosition where
   path : List String
-  entity : Option Ref
+  entity : Ref
 deriving Repr, Inhabited
 
 derive_wire KeyPosition
@@ -161,10 +157,10 @@ structure ChartFields where
   states : List State
   /-- The payload schema of each control, or null for a control without a payload. -/
   controls : List (String × Option Value)
-  receives : List (String × Option Ref)
-  commands : List (String × Option Ref)
-  queries : List (String × Option Ref)
-  screens : List (String × Option Ref)
+  receives : List (String × Ref)
+  commands : List (String × Ref)
+  queries : List (String × Ref)
+  screens : List (String × Ref)
 deriving Repr, Inhabited
 
 derive_wire ChartFields
@@ -182,52 +178,103 @@ derive_wire Chart try_from ChartFields
 
 def Chart.tree (c : Chart) : Tree := { states := c.states.map (·.shape), shaped := stateTree_of_chartTree c.shaped }
 
-/-- A `ref()` field and the entity it points to, null when the entity is no definition. -/
+/-- A `ref()` field and the entity it points to. -/
 structure Reference where
   field : String
-  entity : Option Ref
+  entity : Ref
 deriving Repr, Inhabited
 
 derive_wire Reference
 
-inductive Change where
-  | none
+inductive ChangeKind where
   | create
   | update
   | delete
 deriving DecidableEq, Repr, Inhabited
 
-derive_wire Change
+derive_wire ChangeKind
 
-inductive Body where
-  /--
-  An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. `keys` are
-  its key positions.
-  -/
-  | entity (key : Option String) (fields : List String) (unique : List String) (references : List Reference)
-      (keys : List KeyPosition)
-  /-- An event. `entity` is null when `change` is none. -/
-  | event (change : Change) (entity : Option Ref) (payload : Value)
-  /--
-  A command. For a command of an external service, `rejects` lists the rejection kinds that it declares, and `emits`
-  lists the events that may arrive as results of an accepted request (resultOf). For a command of a spec service,
-  `rejects` is null. `references` are in field order.
-  -/
-  | command (rejects : Option (List RejectionKind)) (input : Value) (output : Option Value)
-      (emits : List (Option Ref)) (references : List Reference) (binds : List String) («requires» : List String)
-      («ensures» : List String)
-  /--
-  A query. For a query of an external service, `rejects` lists the rejection kinds that it declares. For a query of
-  a spec service, `rejects` is null.
-  -/
-  | query (rejects : Option (List RejectionKind)) (input : Value) (output : Option Value) («requires» : List String)
-      («ensures» : List String)
-  | automation (receives : Option Ref) (command : Option Ref) (binds : List String) (guard : List String)
-  | machine (chart : Chart)
-  | screen (chart : Chart)
+/-- How an entity event changes the records of `entity`. -/
+structure Change where
+  kind : ChangeKind
+  entity : Ref
 deriving Repr, Inhabited
 
-derive_wire Body tag "kind" flatten chart
+derive_wire Change
+
+/-- An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. -/
+structure EntityBody where
+  key : Option String
+  fields : List String
+  unique : List String
+  references : List Reference
+  /-- The key positions of the fields. -/
+  keys : List KeyPosition
+deriving Repr, Inhabited
+
+derive_wire EntityBody
+
+structure EventBody where
+  /-- How the event changes records, or null for an event that changes none. -/
+  change : Option Change
+  payload : Value
+deriving Repr, Inhabited
+
+derive_wire EventBody
+
+/--
+A command. For a command of an external service, `rejects` lists the rejection kinds that it declares, and `emits`
+lists the events that may arrive as results of an accepted request (resultOf). For a command of a spec service,
+`rejects` is null. `references` are in field order.
+-/
+structure CommandBody where
+  rejects : Option (List RejectionKind)
+  input : Value
+  output : Option Value
+  emits : List Ref
+  references : List Reference
+  binds : List String
+  «requires» : List String
+  ensures : List String
+deriving Repr, Inhabited
+
+derive_wire CommandBody
+
+/--
+A query. For a query of an external service, `rejects` lists the rejection kinds that it declares. For a query of a
+spec service, `rejects` is null.
+-/
+structure QueryBody where
+  rejects : Option (List RejectionKind)
+  input : Value
+  output : Option Value
+  «requires» : List String
+  ensures : List String
+deriving Repr, Inhabited
+
+derive_wire QueryBody
+
+structure AutomationBody where
+  receives : Ref
+  command : Ref
+  binds : List String
+  guard : List String
+deriving Repr, Inhabited
+
+derive_wire AutomationBody
+
+/-- A definition's body, whose fields the definition writes in its place. -/
+inductive Body where
+  | entity (body : EntityBody)
+  | event (body : EventBody)
+  | command (body : CommandBody)
+  | query (body : QueryBody)
+  | automation (body : AutomationBody)
+  | machine (body : Chart)
+  | screen (body : Chart)
+deriving Repr, Inhabited
+
+derive_wire Body tag "kind" flatten body
 
 structure Definition where
   service : String
@@ -243,7 +290,8 @@ def Definition.kind (d : Definition) : String := d.body.kind
 
 def Definition.hasOutput (d : Definition) : Bool :=
   match d.body with
-  | .command _ _ output .. | .query _ _ output .. => output.isSome
+  | .command c => c.output.isSome
+  | .query q => q.output.isSome
   | _ => false
 
 def Definition.chart? (d : Definition) : Option Chart :=
@@ -296,7 +344,7 @@ def Chart.state? (c : Chart) (n : String) : Option State := c.states.find? (·.n
 def Structure.isOpenedByScreen (s : Structure) (r : Ref) : Bool :=
   s.definitions.any fun d =>
     match d.body with
-    | .screen c => c.screens.any (sameRef ·.2 (some r))
+    | .screen c => c.screens.any (·.2 == r)
     | _ => false
 
 /-- The definition with trace name `name` whose kind is one of `kinds`. -/
@@ -318,42 +366,37 @@ rejected with `invalidInput` is the sender's fault (rejectedInput?), so it is no
 def Structure.rejectionKinds (s : Structure) (service : String) (r : Ref) : List RejectionKind :=
   let other (kinds : List RejectionKind) := if r.service == service then [] else kinds
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.query (some kinds) ..) | some (.command (some kinds) ..) => kinds
-  | some (.query none _ _ conditions _) => (if conditions.isEmpty then [] else [.requires]) ++ other [.unavailable]
-  | some (.command none _ _ emits references binds conditions _) =>
-    let writes := emits.any fun e => s.definitions.any fun d =>
-      some d.ref == e && match d.body with
-        | .event .create .. | .event .update .. => true
+  | some (.query { rejects := some kinds, .. }) | some (.command { rejects := some kinds, .. }) => kinds
+  | some (.query q) => (if q.requires.isEmpty then [] else [.requires]) ++ other [.unavailable]
+  | some (.command c) =>
+    let writes := c.emits.any fun e => s.definitions.any fun d =>
+      d.ref == e && match d.body with
+        | .event { change := some { kind := .create, .. }, .. }
+        | .event { change := some { kind := .update, .. }, .. } => true
         | _ => false
-    other [.reusedId] ++ (if references.isEmpty then [] else [.notFound]) ++
-      (if binds.isEmpty && conditions.isEmpty then [] else [.requires]) ++ (if writes then [.alreadyExists] else []) ++
-      other [.unavailable]
+    other [.reusedId] ++ (if c.references.isEmpty then [] else [.notFound]) ++
+      (if c.binds.isEmpty && c.requires.isEmpty then [] else [.requires]) ++
+      (if writes then [.alreadyExists] else []) ++ other [.unavailable]
   | _ => []
 
-/-- The events that the command `command` lists in its emits, or no events when `command` names no command. -/
-def Structure.emitsOf (s : Structure) (command : Option Ref) : List (Option Ref) :=
-  (s.definitions.findSome? fun d =>
-    match d.body with
-    | .command _ _ _ emits .. => if sameRef (some d.ref) command then some emits else none
-    | _ => none).getD []
-
-/-- The requires conditions of the command or query `r`. -/
-def Structure.requiresOf (s : Structure) (r : Ref) : List String :=
+/-- The events that `r` lists in its emits, or no events when `r` is no command. -/
+def Structure.emitsOf (s : Structure) (r : Ref) : List Ref :=
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.command _ _ _ _ _ _ conditions _) | some (.query _ _ _ conditions _) => conditions
+  | some (.command c) => c.emits
   | _ => []
 
-/-- The ensures conditions of the command or query `r`. -/
-def Structure.ensuresOf (s : Structure) (r : Ref) : List String :=
+/-- The requires and ensures conditions of `r`, or none when `r` is no command or query. -/
+def Structure.conditionsOf? (s : Structure) (r : Ref) : Option (List String × List String) :=
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.command _ _ _ _ _ _ _ conditions) | some (.query _ _ _ _ conditions) => conditions
-  | _ => []
+  | some (.command c) => some (c.requires, c.ensures)
+  | some (.query q) => some (q.requires, q.ensures)
+  | _ => none
 
 /-- The reasons that a requires rejection of the command or query `r` may name: its binds, then its requires. -/
 def Structure.rejectionReasons (s : Structure) (r : Ref) : List String :=
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.command _ _ _ _ _ binds conditions _) => binds ++ conditions
-  | some (.query _ _ _ conditions _) => conditions
+  | some (.command c) => c.binds ++ c.requires
+  | some (.query q) => q.requires
   | _ => []
 
 def Structure.hasOutput (s : Structure) (r : Ref) : Bool :=
@@ -389,9 +432,9 @@ request that no answer reached may have results, as an API response may be lost 
 def Structure.resultOfMismatch (s : Structure) (target : Ref) (answers : List Answer) (event : Ref) :
     Option ResultOfMismatch :=
   match (s.definitions.find? (·.ref == target)).map Definition.body with
-  | some (.command _ _ _ emits ..) =>
+  | some (.command c) =>
     if !answers.all (· matches .accepted _) then some .resultOfUnacceptedRequest
-    else if emits.contains (some event) then none
+    else if c.emits.contains event then none
     else some .resultOfUnlistedEvent
   | _ => some .resultOfNonCommand
 

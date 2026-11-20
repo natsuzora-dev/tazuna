@@ -32,7 +32,7 @@ def missingRef (st : Service) (records : Records) (input : Value) : List (String
 
 def requirementsRejection [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records : Records) (now : Time)
     (name : String) (input : Value) : m (Except Fault (Option Rejection)) := do
-  let rq := st.requirementsOf name
+  let rq ← expectFound s!"requirements of {name}" (st.requirements.lookup name)
   let refs := missingRef st records input rq.refs
   MonadNote.note (.read (st.ref name) refs.reads)
   if refs.missing then return .ok (some { kind := .notFound })

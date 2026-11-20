@@ -40,7 +40,7 @@ function ownQueries(structure: Structure): Illegal[] {
     d.kind !== "machine" && d.kind !== "screen"
       ? []
       : Object.entries(d.queries).flatMap(([key, q]): Illegal[] =>
-          q === null || q.service !== d.service
+          q.service !== d.service
             ? []
             : [{ kind: "Illegal.ownQuery", definition: { service: d.service, name: d.name }, data: { key } }],
         ),

@@ -15,14 +15,15 @@ inductive Resolution where
   | halted (violation : Fault)
 deriving Repr, Inhabited
 
-def resolveChecked [Monad m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value) :
+def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value) :
     m Resolution := do
   let definition := st.ref name
   match ← fs.parse (.input definition) raw with
   | .error e => pure (.halted (issueViolation definition e))
   | .ok none => pure (.answered (.rejected { kind := .invalidInput }) [])
   | .ok (some input) =>
-    match ← firstFalse (fs.inputRequirement definition · input) (st.requirementsOf name).requires with
+    let rq ← expectFound s!"requirements of {name}" (st.requirements.lookup name)
+    match ← firstFalse (fs.inputRequirement definition · input) rq.requires with
     | .error e => pure (.halted (issueViolation definition e))
     | .ok (some reason) => pure (.answered (.rejected { kind := .requires, reason := some reason }) [])
     | .ok none =>
@@ -38,7 +39,7 @@ def resolveChecked [Monad m] (st : Service) (fs : Functions m) (s : State) (name
           | .ok (some c) => pure (.answered (.fulfilled output) [st.failedEnsures name c])
           | .ok none => pure (.answered (.fulfilled output) [])
 
-def publishOne [Monad m] (st : Service) (fs : Functions m) (s : State) (sub : Subscription) :
+def publishOne [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sub : Subscription) :
     m State := do
   if s.halted.isSome then pure s else
   match ← resolveChecked st fs s sub.query sub.input with
@@ -59,7 +60,7 @@ The state after each subscription receives its new answer. It runs after the mes
 depends only on the values at the end of the message, so its reads are not reads of a step. They are reads of the
 message (endMessage), which a later message may observe in another order.
 -/
-def publish [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
+def publish [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.subscriptions.foldlM (publishOne st fs) s
 
 end Tazuna.Service

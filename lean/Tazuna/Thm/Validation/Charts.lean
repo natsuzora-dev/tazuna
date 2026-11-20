@@ -9,21 +9,19 @@ open Tazuna.Spec
 
 theorem queries_of_other_services (s : Structure) :
     ownQueries s = [] ↔
-      ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ key q, (key, some q) ∈ c.queries → q.service ≠ d.service := by
+      ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ key q, (key, q) ∈ c.queries → q.service ≠ d.service := by
   simp only [ownQueries, List.flatMap_eq_nil_iff]
   constructor
   · intro h d hd c hc key q hq hs
     have hd := h d hd
     simp only [hc] at hd
-    have := List.filterMap_eq_nil_iff.mp hd (key, some q) hq
+    have := List.filterMap_eq_nil_iff.mp hd (key, q) hq
     simp [hs] at this
   · intro h d hd
     split
     · rename_i c hc
       refine List.filterMap_eq_nil_iff.mpr fun ⟨key, q⟩ hq => ?_
-      cases q with
-      | none => rfl
-      | some q => simp [h d hd c hc key q hq]
+      simp [h d hd c hc key q hq]
     · rfl
 
 /-- Whether taking an always transition from `y` re-evaluates always transitions in `z`. -/

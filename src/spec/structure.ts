@@ -1,5 +1,4 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import { InternalError } from "../data/internalError.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { Answer, RejectionKind } from "../data/trace.generated.ts";
@@ -79,9 +78,7 @@ export function stateNamed(chart: ChartStructure, name: string): StateStructure 
 
 export function isOpenedByScreen(structure: Structure, definition: DefinitionRef): boolean {
   return structure.definitions.some(
-    (d) =>
-      d.kind === "screen" &&
-      Object.values(d.screens).some((s) => s?.service === definition.service && s.name === definition.name),
+    (d) => d.kind === "screen" && Object.values(d.screens).some((s) => sameRef(s, definition)),
   );
 }
 
@@ -108,7 +105,7 @@ export function rejectionKinds(structure: Structure, service: string, target: De
     return [...(definition.requires.length === 0 ? [] : ["requires" as const]), ...other("unavailable")];
   const writes = definition.emits.some((e) =>
     structure.definitions.some(
-      (d) => d.kind === "event" && sameRef(d, e) && (d.change === "create" || d.change === "update"),
+      (d) => d.kind === "event" && sameRef(d, e) && (d.change?.kind === "create" || d.change?.kind === "update"),
     ),
   );
   return [
@@ -120,29 +117,21 @@ export function rejectionKinds(structure: Structure, service: string, target: De
   ];
 }
 
-/**
- * Returns the events that the command `command` lists in its emits, with null for an entry that names no definition.
- */
-export function emitsOf(structure: Structure, command: DefinitionRef | null): readonly (DefinitionRef | null)[] {
+/** Returns the events that `command` lists in its emits, or no events when `command` is no command. */
+export function emitsOf(structure: Structure, command: DefinitionRef): readonly DefinitionRef[] {
   return (
     structure.definitions.find((d): d is CommandStructure => d.kind === "command" && sameRef(d, command))?.emits ?? []
   );
 }
 
-/** Returns the command or query `target`, which callers name from the structure. */
-function requestOf(structure: Structure, target: DefinitionRef): CommandStructure | QueryStructure {
+/** Lean's conditionsOf?: the command or query `target`, or undefined when it is none. */
+export function conditionsOf(
+  structure: Structure,
+  target: DefinitionRef,
+): CommandStructure | QueryStructure | undefined {
   const definition = structure.definitions.find((d) => sameRef(d, target));
-  if (definition?.kind === "command" || definition?.kind === "query") return definition;
-  throw new InternalError(`the structure has no command or query ${target.service}.${target.name}`);
+  return definition?.kind === "command" || definition?.kind === "query" ? definition : undefined;
 }
-
-/** Returns the requires conditions of the command or query `target`. */
-export const requiresOf = (structure: Structure, target: DefinitionRef): readonly string[] =>
-  requestOf(structure, target).requires;
-
-/** Returns the ensures conditions of the command or query `target`. */
-export const ensuresOf = (structure: Structure, target: DefinitionRef): readonly string[] =>
-  requestOf(structure, target).ensures;
 
 /**
  * Returns the reasons that a requires rejection of the command or query `target` may name: its binds, then its

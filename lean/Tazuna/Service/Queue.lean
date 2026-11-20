@@ -28,7 +28,7 @@ when a message finishes, not between microsteps.
 def checkInvariants [Monad m] (st : Service) (fs : Functions m) (s : State) : m State := do
   pure (s.reportAll (← invariantViolations st fs s))
 
-def afterMessage [Monad m] (st : Service) (fs : Functions m) (s : State) : m State := do
+def afterMessage [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
   let s ← checkInvariants st fs s
   if s.halted.isSome then pure s else
   publish st fs s

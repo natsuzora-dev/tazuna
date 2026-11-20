@@ -1,7 +1,8 @@
+import { expectFound } from "../data/internalError.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { withExtra } from "../data/violation.ts";
-import { ref, requirementsOf, type Service } from "./basic.ts";
+import { ref, type Service } from "./basic.ts";
 import { type Checked, Failed, type Functions, firstFalse, issueViolation } from "./functions.ts";
 import { recordSource } from "./records.ts";
 import { failedEnsures, halt, type Run, report, reportAll, write } from "./state.ts";
@@ -23,7 +24,7 @@ export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
   const input = parsed.value;
   const reason = firstFalse(
     (condition) => r.functions.inputRequirement(definition, condition, input),
-    requirementsOf(r.st, name).requires,
+    expectFound(`requirements of ${name}`, r.st.requirements.get(name)).requires,
   );
   if (reason instanceof Failed) return halt(issueViolation(definition, reason));
   if (reason !== undefined)

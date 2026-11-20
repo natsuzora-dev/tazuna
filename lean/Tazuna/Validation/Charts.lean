@@ -21,8 +21,7 @@ def ownQueries (s : Structure) : List Illegal :=
   s.definitions.flatMap fun d =>
     match d.chart? with
     | some c =>
-      c.queries.filterMap fun (key, q) =>
-        q.bind fun q => if q.service == d.service then some (.ownQuery d.ref key) else none
+      c.queries.filterMap fun (key, q) => if q.service == d.service then some (.ownQuery d.ref key) else none
     | none => []
 
 def unlistedControls (s : Structure) : List Illegal :=

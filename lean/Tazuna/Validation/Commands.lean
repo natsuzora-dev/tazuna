@@ -8,8 +8,7 @@ open Tazuna.Spec
 def foreignEvents (s : Structure) : List Illegal :=
   s.definitions.flatMap fun d =>
     match d.body with
-    | .command _ _ _ emits .. =>
-      emits.filterMap fun e => e.bind fun e => if e.service == d.service then none else some (.foreignEvent d.ref e)
+    | .command c => c.emits.filterMap fun e => if e.service == d.service then none else some (.foreignEvent d.ref e)
     | _ => []
 
 /-- Whether `key` is an array index of ECMA-262: the canonical decimal form of a whole number below 2^32 - 1. -/

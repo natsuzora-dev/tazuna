@@ -8,7 +8,7 @@ import {
   suppressionMarks,
 } from "../../data/restricted.ts";
 import type { Found } from "../../load/found.ts";
-import { placeIn, type SourceFile, type Spec } from "../../load/load.ts";
+import { type LoadedSpec, placeIn, type SourceFile } from "../../load/load.ts";
 
 interface Node {
   readonly type?: string;
@@ -43,7 +43,7 @@ const memberRead = (object: Node | undefined, property: string | undefined) =>
     (m) => object?.type === "Identifier" && object.name === m.object && property === m.property,
   );
 
-function imports(spec: Spec): Found<Restricted>[] {
+function imports(spec: LoadedSpec): Found<Restricted>[] {
   return spec.imports
     .filter((i) => !i.contract)
     .map(({ source, statement, service }) => ({
@@ -157,7 +157,7 @@ function assertions(source: SourceFile): Found<Restricted>[] {
   return found;
 }
 
-export function check(spec: Spec): Found<Restricted>[] {
+export function check(spec: LoadedSpec): Found<Restricted>[] {
   const files = [...spec.sources, ...spec.imported];
   return [
     ...imports(spec),

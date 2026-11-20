@@ -7,7 +7,7 @@ const foreignEvents = (structure: Structure): Illegal[] =>
     d.kind !== "command"
       ? []
       : d.emits.flatMap((e): Illegal[] =>
-          e === null || e.service === d.service
+          e.service === d.service
             ? []
             : [{ kind: "Illegal.foreignEvent", definition: { service: d.service, name: d.name }, data: { event: e } }],
         ),

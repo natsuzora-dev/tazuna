@@ -73,15 +73,15 @@ def Outcome.halted? : Outcome → Option Violation
   | .halted v => some v
   | .finished _ => none
 
-/-- The key positions `keys` that name a definition, each path with the entity it names. -/
+/-- The key positions `keys`, each path with the entity it names. -/
 def refsAt (keys : List Spec.KeyPosition) : List (List String × Spec.Ref) :=
-  keys.filterMap fun k => k.entity.map (k.path, ·)
+  keys.map fun k => (k.path, k.entity)
 
 /-- The key positions of entity `e`'s records (Structure.KeyPosition). -/
 def keyPaths (st : Service) (e : String) : List (List String × Spec.Ref) :=
   let found := st.structure.definitions.findSome? fun d =>
     match d.body with
-    | .entity _ _ _ _ keys => if d.service == st.service && d.name == e then some keys else none
+    | .entity body => if d.service == st.service && d.name == e then some body.keys else none
     | _ => none
   refsAt (found.getD [])
 

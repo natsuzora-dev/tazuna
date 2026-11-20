@@ -106,8 +106,9 @@ theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : Strin
     (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : st.chart? a.ref.name = some c)
     (raw : Value) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (raw, keys))
-    (hq : fs.parse (.input (st.ref c.name)) raw = .ok (some given))
-    (hr : firstFalse (fs.inputRequirement (st.ref c.name) · given) (st.requirementsOf c.name).requires = .ok none)
+    (hq : fs.parse (.input (st.ref c.name)) raw = .ok (some given)) (rq : Requirements)
+    (hl : st.requirements.lookup c.name = some rq)
+    (hr : firstFalse (fs.inputRequirement (st.ref c.name) · given) rq.requires = .ok none)
     (hx : fs.initialContext c.name given = .ok context) :
     ∃ child : Instance,
       (openScreen fs st step name state a r).1.machines = r.state.machines.filter (·.id != child.id) ++ [child] ∧
@@ -115,7 +116,7 @@ theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : Strin
       (openScreen fs st step name state a r).1.stack = r.state.stack ++ [child.id] ∧
       (openScreen fs st step name state a r).2.tasks = r.queue.tasks ++ [.start child.id (some step)] := by
   simp only [openScreen, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
-    hc, hp, hq, hr, initialContextOf, hx]
+    hc, hp, hq, expectFound, hl, pure, hr, initialContextOf, hx]
   exact ⟨{ chart := c, id := .opened c.name name state a.key, context, input := given, shown := c.slots.map (·, .null) },
     rfl, rfl, rfl, rfl, rfl⟩
 

@@ -43,7 +43,7 @@ def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) 
 
 /-- Whether the command `command` lists the event of `e` in its emits. -/
 def lists (st : Service) (command : String) (e : Emit) : Bool :=
-  (st.«structure».emitsOf (some (st.ref command))).any (· == some e.event)
+  (st.«structure».emitsOf (st.ref command)).contains e.event
 
 inductive Outcome where
   | rejected (rejection : Rejection)

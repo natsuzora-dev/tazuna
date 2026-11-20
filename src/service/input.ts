@@ -1,4 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { expectFound } from "../data/internalError.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Answer, LineId } from "../data/trace.generated.ts";
 import { lineIdText } from "../data/trace.ts";
@@ -7,12 +8,11 @@ import { withExtra } from "../data/violation.ts";
 import {
   assumptionMismatch,
   assumptionViolation,
-  ensuresOf,
+  conditionsOf,
   hasOutput,
   isAssumed,
   rejectionKinds,
   rejectionReasons,
-  requiresOf,
   resultOfMismatch,
 } from "../spec/structure.ts";
 import { ref, type Service } from "./basic.ts";
@@ -306,21 +306,19 @@ function checkAssumedAnswer(r: Run, x: Exchange, input: Fields, events: readonly
     return;
   }
   const { decoded } = checked;
+  const conditions = expectFound(`conditions of ${target.name}`, conditionsOf(r.st.structure, target));
   const failedRequires = firstFalse(
     (condition) => r.functions.inputRequirement(target, condition, input),
-    requiresOf(r.st.structure, target),
+    conditions.requires,
   );
   if (failedRequires instanceof Failed) halt(issueViolation(target, failedRequires));
   const failedEnsures =
     decoded.result === "rejected" || failedRequires !== undefined
       ? undefined
-      : firstFalse(
-          (condition) => {
-            const ensured = r.functions.resultEnsures(target, condition, input, decoded.output, events);
-            return ensured instanceof Failed ? ensured : passes(ensured);
-          },
-          ensuresOf(r.st.structure, target),
-        );
+      : firstFalse((condition) => {
+          const ensured = r.functions.resultEnsures(target, condition, input, decoded.output, events);
+          return ensured instanceof Failed ? ensured : passes(ensured);
+        }, conditions.ensures);
   if (failedEnsures instanceof Failed) halt(issueViolation(target, failedEnsures));
   const broken = brokenAssumption(x.id, target, a, failedRequires, failedEnsures);
   if (broken !== undefined) report(r.state, broken);

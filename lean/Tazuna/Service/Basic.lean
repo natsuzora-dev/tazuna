@@ -113,8 +113,6 @@ def changeOf (st : Service) (r : Spec.Ref) : Option Change :=
 
 def uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
 
-def requirementsOf (st : Service) (name : String) : Requirements := (st.requirements.lookup name).getD {}
-
 open Tazuna.Spec in
 /-- The service named `service`, or the reason why it has a definition that the Lean model does not cover. -/
 def ofStructure (j : Spec.Structure) (service : String) : Except String Service := do
@@ -122,16 +120,16 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
   let entity (r : Ref) : Except String (String × List String) :=
     match j.definitions.findSome? fun d =>
       match d.body with
-      | .entity (some key) fields _ _ _ => if d.ref == r then some (key, fields) else none
+      | .entity { key := some key, fields, .. } => if d.ref == r then some (key, fields) else none
       | _ => none with
     | some found => pure found
     | none => throw s!"the entity {r.name} has no key"
   let single (r : Ref) : Bool := j.definitions.any fun d =>
     d.ref == r && match d.body with
-      | .entity none .. => true
+      | .entity { key := none, .. } => true
       | _ => false
-  let charts ← (own.filterMap fun (d, order) => d.chart?.map (d, ·, order)).mapM fun (d, c, order) =>
-    Chart.ofSpec c d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref)
+  let charts := own.filterMap fun (d, order) =>
+    d.chart?.map (Chart.ofSpec · d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref))
   let mut commands := []
   let mut queries := []
   let mut events : List (String × Change) := []
@@ -142,44 +140,40 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
     let name := d.name
     match d.body with
     | .entity .. => pure ()
-    | .event change entityRef payload =>
+    | .event { change, payload } =>
       schemas := schemas ++ [(.payload d.ref, payload)]
-      match change, entityRef with
-      | .none, _ => events := events ++ [(name, .none)]
-      | .create, some e =>
+      match change with
+      | none => events := events ++ [(name, .none)]
+      | some { kind := .create, entity := e } =>
         let (key, fields) ← entity e
         events := events ++ [(name, .create e.name key fields)]
-      | .update, some e =>
+      | some { kind := .update, entity := e } =>
         if single e then events := events ++ [(name, .set e.name (schemaProperties payload))]
         else
           let (key, _) ← entity e
           events := events ++ [(name, .update e.name key ((schemaProperties payload).filter (· != key)))]
-      | .delete, some e =>
+      | some { kind := .delete, entity := e } =>
         let (key, fields) ← entity e
         events := events ++ [(name, .delete e.name key fields)]
-      | _, none => throw s!"the event {name} changes records without an entity"
-    | .command _ input _ _ references binds conditions _ =>
-      let refs ← references.mapM fun r =>
-        match r.entity with
-        | some e => pure (r.field, e)
-        | none => throw s!"the ref field {r.field} of {name} points to no entity"
+    | .command c =>
       commands := commands ++ [name]
-      schemas := schemas ++ [(.input d.ref, input)]
-      requirements := requirements ++ [(name, { refs, binds, requires := conditions })]
-    | .query _ input output conditions _ =>
+      schemas := schemas ++ [(.input d.ref, c.input)]
+      requirements := requirements ++
+        [(name, { refs := c.references.map fun r => (r.field, r.entity), binds := c.binds, requires := c.requires })]
+    | .query q =>
       queries := queries ++ [name]
-      schemas := schemas ++ [(.input d.ref, input)] ++ (output.map fun o => [(.output d.ref, o)]).getD []
-      requirements := requirements ++ [(name, { requires := conditions })]
-    | .automation (some receives) (some command) binds guard =>
-      let sends := Activity.sends name command
-      automations := automations ++ [({ name, order, receives, sends, binds, guard } : Automation)]
-      if command.service != service then
+      schemas := schemas ++ [(.input d.ref, q.input)] ++ (q.output.map fun o => [(.output d.ref, o)]).getD []
+      requirements := requirements ++ [(name, { requires := q.requires })]
+    | .automation a =>
+      let sends := Activity.sends name a.command
+      automations := automations ++
+        [({ name, order, receives := a.receives, sends, binds := a.binds, guard := a.guard } : Automation)]
+      if a.command.service != service then
         if let some input := j.definitions.findSome? fun d =>
             match d.body with
-            | .command _ input .. => if d.ref == command then some input else none
+            | .command c => if d.ref == a.command then some c.input else none
             | _ => none then
-          schemas := schemas ++ [(.input command, input)]
-    | .automation .. => throw s!"the automation {name} has no event or command"
+          schemas := schemas ++ [(.input a.command, input)]
     | .machine _ => pure ()
     | .screen c =>
       schemas := schemas ++ c.controls.filterMap fun (control, payload) => payload.map ((.control d.ref control, ·))
@@ -189,29 +183,29 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
       if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some r else none
   let heard := own.flatMap fun (d, _) =>
     match d.body with
-    | .automation (some e) .. => [e]
-    | .machine c | .screen c => c.receives.filterMap (·.2)
+    | .automation a => [a.receives]
+    | .machine c | .screen c => c.receives.map (·.2)
     | _ => []
   let sent := own.flatMap fun (d, _) =>
     match d.body with
-    | .automation _ (some c) .. => [c]
-    | .machine c | .screen c => c.commands.filterMap (·.2)
+    | .automation a => [a.command]
+    | .machine c | .screen c => c.commands.map (·.2)
     | _ => []
   let results := j.definitions.flatMap fun d =>
     match d.body with
-    | .command _ _ _ emits .. => if sent.contains d.ref then emits.filterMap id else []
+    | .command c => if sent.contains d.ref then c.emits else []
     | _ => []
   let receives := listed.filter (heard ++ results).contains
   let entities := ((j.services.find? (·.name == service)).map (·.entities)).getD []
   let references := entities.flatMap fun e =>
     ((j.definitions.findSome? fun d =>
       match d.body with
-      | .entity _ _ _ references _ => if d.service == service && d.name == e then some references else none
-      | _ => none).getD []).filterMap fun r => r.entity.map fun target => (e, r.field, target.name)
+      | .entity body => if d.service == service && d.name == e then some body.references else none
+      | _ => none).getD []).map fun r => (e, r.field, r.entity.name)
   let uniques := entities.filterMap fun e =>
     j.definitions.findSome? fun d =>
       match d.body with
-      | .entity _ _ unique _ _ => if d.service == service && d.name == e then some (e, unique) else none
+      | .entity body => if d.service == service && d.name == e then some (e, body.unique) else none
       | _ => none
   let singles := entities.filter fun e => single { service, name := e }
   pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities, singles,

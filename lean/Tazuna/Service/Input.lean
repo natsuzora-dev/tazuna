@@ -214,7 +214,7 @@ The state after the answer `a` of the request `x` to an assumed peer, whose inpu
 rejection kind or output, the target's requires over the input alone, and its ensures, a command's with all the result
 events `events`.
 -/
-def checkAssumedAnswer [Monad m] (st : Service) (fs : Functions m) (x : Exchange) (input : Value) (events : List Emit)
+def checkAssumedAnswer [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (x : Exchange) (input : Value) (events : List Emit)
     (s : State) (a : Answer) : m State := do
   if s.halted.isSome then return s
   let target := x.target
@@ -222,13 +222,13 @@ def checkAssumedAnswer [Monad m] (st : Service) (fs : Functions m) (x : Exchange
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok (.error f) => return s.report f
   | .ok (.ok decoded) =>
-  match ← firstFalse (fs.inputRequirement target · input) (st.«structure».requiresOf target) with
+  let (requires, ensures) ← expectFound s!"conditions of {target.name}" (st.«structure».conditionsOf? target)
+  match ← firstFalse (fs.inputRequirement target · input) requires with
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok failedRequires =>
   let ensured : Except Issue (Option String) ←
     if decoded matches .rejected _ || failedRequires.isSome then pure (.ok none) else
-      firstFalse (fun n => (·.map Ensured.passes) <$> fs.resultEnsures target n input decoded.output? events)
-        (st.«structure».ensuresOf target)
+      firstFalse (fun n => (·.map Ensured.passes) <$> fs.resultEnsures target n input decoded.output? events) ensures
   match ensured with
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok failedEnsures =>
@@ -242,7 +242,7 @@ as invalid, and, for an assumed peer, its input against the target's input schem
 also when no answer arrived, and each answer (checkAssumedAnswer). Each answer counts, also one that arrived when the
 request no longer waited.
 -/
-def checkExchange [Monad m] (st : Service) (fs : Functions m) (s : State) (x : Exchange) : m State := do
+def checkExchange [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (x : Exchange) : m State := do
   if s.halted.isSome then return s
   if !st.«structure».isAssumed x.target then
     if let some f := x.answers.findSome? (rejectedInput? st x.sender x.target) then return s.report (.fault f)
@@ -260,7 +260,7 @@ def checkExchange [Monad m] (st : Service) (fs : Functions m) (s : State) (x : E
 The state after the run ends: each request that the service sent is checked once against what its lines record of it
 (checkExchange), as a Pact provider verification replays the recorded interactions.
 -/
-def checkExchanges [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
+def checkExchanges [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.exchanges.foldlM (checkExchange st fs) s
 
 def startInstance [Monad m] (st : Service) (fs : Functions m) (s : State) (c : Chart) : m State := do

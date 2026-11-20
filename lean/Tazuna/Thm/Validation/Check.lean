@@ -22,7 +22,7 @@ structure Checked (s : Structure) : Prop where
   parentsOpened : ∀ d ∈ s.definitions, ∀ c, d.body = .screen c → (Charts.parentKeys c).isEmpty = false →
     s.isOpenedByScreen d.ref = true
   /-- A chart queries only other services. -/
-  noOwnQuery : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ key q, (key, some q) ∈ c.queries →
+  noOwnQuery : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ key q, (key, q) ∈ c.queries →
     q.service ≠ d.service
   /-- Each control of a chart is one that it offers. -/
   controlsListed : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ k x, (k, x) ∈ c.controls →
@@ -31,8 +31,7 @@ structure Checked (s : Structure) : Prop where
   alwaysEnds : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states, ∀ t ∈ st.transitions,
     t.trigger = .always → t.guarded = false → ¬ Charts.Reaches c (Charts.lands c st.name t) st.name
   /-- A command emits only events of its own service. -/
-  ownEvents : ∀ d ∈ s.definitions, ∀ rj i o em rf b rq en,
-    d.body = .command rj i o em rf b rq en → ∀ e, some e ∈ em → e.service = d.service
+  ownEvents : ∀ d ∈ s.definitions, ∀ c, d.body = .command c → ∀ e ∈ c.emits, e.service = d.service
   /-- No rejection reason is an array index, which a JavaScript object would reorder. -/
   reasonsNotIndices : ∀ d ∈ s.definitions, ∀ r ∈ s.rejectionReasons d.ref, Commands.isArrayIndex r = false
   /-- No history state restores a state with parameters, which a restore would enter without filling them. -/

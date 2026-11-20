@@ -42,13 +42,9 @@ export type Encode = (schema: Schema, value: unknown) => Json;
 /** Lean's Outcome.halted?. */
 const haltedOf = (o: Outcome): ViolationValue | null => ("halted" in o ? o.halted : null);
 
-/** Lean's refsAt: each key position that names a definition, its path as JSON text, with that definition's domain. */
+/** Lean's refsAt: each key position, its path as JSON text, with its entity's domain. */
 const refsAt = (keys: readonly KeyPosition[] | undefined): ReadonlyMap<string, string> =>
-  new Map(
-    (keys ?? []).flatMap((k) =>
-      k.entity === null ? [] : [[JSON.stringify(k.path), `${k.entity.service}/${k.entity.name}`] as const],
-    ),
-  );
+  new Map((keys ?? []).map((k) => [JSON.stringify(k.path), `${k.entity.service}/${k.entity.name}`] as const));
 
 /** Lean's keyPaths. */
 function keyPaths(st: Service, e: string): ReadonlyMap<string, string> {

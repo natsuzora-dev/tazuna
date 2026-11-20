@@ -76,4 +76,12 @@ class MonadNote (m : Type → Type) where
 instance : MonadNote Id where
   note _ := pure ()
 
+/--
+The value that a lookup in the structure or the service finds, which a checked spec guarantees: a lookup that finds
+nothing notes a bug and goes on with `default`.
+-/
+def expectFound {m : Type → Type} {α : Type} [Monad m] [MonadNote m] [Inhabited α] (what : String) : Option α → m α
+  | some a => pure a
+  | none => do MonadNote.note (.bug s!"no {what}"); pure default
+
 end Tazuna.Service

@@ -11,7 +11,7 @@ import { keyEntity, noteTo, type Role, type RunningService, type World } from ".
 
 /** Lean's staticPeers. */
 function staticPeers(structure: Structure, own: string): string[] {
-  const named = (d: Structure["definitions"][number]): (DefinitionRef | null)[] => {
+  const named = (d: Structure["definitions"][number]): DefinitionRef[] => {
     switch (d.kind) {
       case "automation":
         return [d.receives, d.command];
@@ -31,7 +31,7 @@ function staticPeers(structure: Structure, own: string): string[] {
   const found = new Set<string>();
   for (const d of structure.definitions)
     for (const r of named(d)) {
-      if (r === null || r.service === d.service) continue;
+      if (r.service === d.service) continue;
       if (d.service === own) found.add(r.service);
       else if (r.service === own && !external.has(d.service)) found.add(d.service);
     }

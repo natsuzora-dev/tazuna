@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import { loadSpec, type Spec } from "../src/load/load.ts";
+import type { Spec } from "../src/load/load.ts";
 import { type ChartStructure, chartStructure, stateNamed } from "../src/spec/structure.ts";
 import { isDescendant, parallelBetween } from "../src/spec/tree.ts";
-import { serviceRoot } from "./examples.ts";
+import { loadedSpec, serviceRoot } from "./examples.ts";
 
-const subject = async (path: string) => (await loadSpec(join(serviceRoot, path))).spec;
+const subject = async (path: string) => await loadedSpec(join(serviceRoot, path));
 const chartOf = (spec: Spec, service: string, name: string): ChartStructure => {
   const chart = chartStructure(spec.structure, service, name);
   assert.ok(chart);
@@ -109,8 +109,7 @@ test("Commands and events have the JSON Schema of their input and payload and re
   });
   const renamed = byName("taskRenamed");
   assert.ok(renamed?.kind === "event");
-  assert.equal(renamed.change, "update");
-  assert.deepEqual(renamed.entity, { service: "todo", name: "Task" });
+  assert.deepEqual(renamed.change, { kind: "update", entity: { service: "todo", name: "Task" } });
   assert.deepEqual(Object.keys((renamed.payload as { properties: object }).properties), ["id", "title"]);
   const rename = byName("renameTask");
   assert.ok(rename?.kind === "command");
