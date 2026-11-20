@@ -58,6 +58,7 @@
     "lean:write": "(cd lean && PATH=\"$HOME/.elan/bin:$PATH\" lake build) && lean/.lake/build/bin/tazuna-generate --write .",
     "lint": "biome check . && depcruise src -T err-long && knip --no-progress",
     "lint:write": "biome check --write .",
+    "fuzz": "node scripts/fuzz.ts",
     "explain:write": "node scripts/explain.ts --write",
     "prepack": "node scripts/explain.ts && rm -rf dist && tsc -p tsconfig.build.json && vite build viewer",
     "samples:check": "npm run check --workspace todo",

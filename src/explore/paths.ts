@@ -12,6 +12,7 @@ import { serviceOf } from "../service/basic.ts";
 import { idKey, sameLineId } from "../service/message.ts";
 import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
+import type { Cache } from "../sim/spec/cache.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { fingerprint } from "../sim/spec/fingerprint.ts";
 import type { Listener } from "../sim/spec/listener.ts";
@@ -249,8 +250,8 @@ export function enabledLines(
   };
 }
 
-export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[]): Executed =>
-  executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] });
+export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[], cache?: () => Cache): Executed =>
+  executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] }, [], cache);
 
 const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
 

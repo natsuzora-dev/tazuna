@@ -1,28 +1,14 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
-import type { Line, Scenario } from "../src/data/scenario.generated.ts";
-import { canonicalJson, type Json, plain } from "../src/data/values.ts";
-import type { Violation } from "../src/data/violation.ts";
-import { stateValue } from "../src/explore/choiceDependent.ts";
-import { enabled } from "../src/explore/enabled.ts";
-import {
-  type Executed,
-  enabledLines,
-  executeAppended,
-  type Move,
-  seenLines,
-  valuesPerPayload,
-} from "../src/explore/paths.ts";
+import { type Line, scenario } from "../src/data/scenario.generated.ts";
+import { type Executed, enabledLines, type Move, seenLines, valuesPerPayload } from "../src/explore/paths.ts";
 import { search } from "../src/explore/search.ts";
-import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
-import type { RunningService } from "../src/sim/network.ts";
-import { SpecFunctions } from "../src/sim/spec/functions.ts";
-import { outcomeOf } from "../src/sim/spec/simulate.ts";
-import { checkedRoot, depth, runExamples } from "./examples.ts";
-import { SimFunctions } from "./lean/functions.ts";
+import { checkedRoot, depth, fuzzFoundRoot, runExamples } from "./examples.ts";
+import { executeEach, invalidLines } from "./executed.ts";
 import { Lean } from "./lean/lean.ts";
 
 const tazuna = join(import.meta.dirname, "..");
@@ -36,79 +22,19 @@ const specs = await Promise.all(
   roots.map(async (root) => ({ name: relative(tazuna, root), spec: await checkedRoot(root) })),
 );
 
-/** What an execution shows, as Lean's reply to `simulate` with `execute` gives it. */
-function executedOutcome(spec: Spec, executed: Executed) {
-  const { world } = executed;
-  return {
-    ...outcomeOf(executed),
-    services: outcomeOf(executed).services.map((p) => {
-      const { processing, halted } = world.services.get(p.service) as RunningService;
-      if (halted !== undefined) return p;
-      const functions = new SpecFunctions(spec, p.service);
-      const state = plain(stateValue(processing.st, processing.state, (schema, v) => functions.encode(schema, v)));
-      try {
-        return { ...p, enabled: enabled(processing), state };
-      } catch (error) {
-        if (!(error instanceof Halt)) throw error;
-        return { ...p, fault: violationValue(error.violation), state };
-      }
-    }),
-  };
-}
-
-const violationValue = ({ kind, definition, data }: Violation) => ({ kind, definition, data });
-
-/**
- * Returns lines that no one could write after an execution, each placed only at the end of a path: a clock line before now, a
- * request and an operation whose value its schema rejects, an answer to the first awaited request with a rejection
- * reason its target never gives, and a subscription's end of a line that opened none.
- */
-function invalidLines(spec: Spec, sc: Scenario, executed: Executed, enabledLines: readonly Line[]): Move[] {
-  const malformed = { value: "not an object", holes: [] };
-  const command = spec.structure.definitions.find((d) => d.kind === "command" && d.service === sc.service);
-  const answer = enabledLines.find((l) => l.type === "answer");
-  const operate = enabledLines.find((l) => l.type === "operate");
-  const lines: Line[] = [
-    { type: "at", time: executed.world.now.subtract({ milliseconds: 1 }).toString() },
-    { type: "unsubscribe", subscription: 0 },
-    ...(command === undefined
-      ? []
-      : [
-          {
-            type: "request",
-            kind: "command",
-            target: { service: command.service, name: command.name },
-            input: malformed,
-          } as const,
-        ]),
-    ...(answer?.type === "answer"
-      ? [
-          {
-            ...answer,
-            answer: { value: { result: "rejected", rejection: { kind: "requires", reason: "unlisted" } }, holes: [] },
-          },
-        ]
-      : []),
-    ...(operate?.type === "operate" ? [{ ...operate, payload: malformed }] : []),
-  ];
-  return lines.map((line) => [line]);
-}
-
 for (const { name, spec } of specs) {
   const seen = seenLines(spec);
   for (const named of spec.scenarios)
     test(`${name}: ${named.service}/${named.name} and every path of up to ${depth} moves after it execute alike in TS and Lean`, (t) => {
       const sc = (named.definition as LoadedScenario).scenario;
-      const functions = () => new SimFunctions(spec, (part) => lean.read(part));
       const appendedOf = new Map<Executed, readonly Line[]>();
       const both = (appended: readonly Line[]): Executed => {
-        const executed = executeAppended(spec, sc, appended);
+        const { executed, difference } = executeEach(lean, spec, sc, appended);
         appendedOf.set(executed, appended);
-        const fromLean = lean.simulate(spec, { ...sc, lines: [...sc.lines, ...appended] }, functions(), true);
         assert.equal(
-          canonicalJson(fromLean as Json),
-          canonicalJson(executedOutcome(spec, executed) as unknown as Json),
-          `the executions differ after appending ${JSON.stringify(appended)}`,
+          difference?.other,
+          difference?.ts,
+          `the executions differ from ${difference?.against} after appending ${JSON.stringify(appended)}`,
         );
         return executed;
       };
@@ -154,3 +80,15 @@ for (const { name, spec } of specs) {
       t.diagnostic(`${paths} paths`);
     });
 }
+
+const specOf = new Map(specs.map(({ name, spec }) => [name, spec]));
+
+const fuzzFound = existsSync(fuzzFoundRoot) ? readdirSync(fuzzFoundRoot).filter((f) => f.endsWith(".json")) : [];
+
+for (const file of fuzzFound.sort())
+  test(`fuzz-found/${file} executes alike in TS with and without the evaluation cache and in Lean`, async () => {
+    const found = JSON.parse(readFileSync(join(fuzzFoundRoot, file), "utf8")) as { spec: string; scenario: unknown };
+    const spec = specOf.get(found.spec) ?? (await checkedRoot(join(tazuna, found.spec)));
+    const { difference } = executeEach(lean, spec, scenario.parse(found.scenario), []);
+    assert.equal(difference?.other, difference?.ts, `the execution differs from ${difference?.against}`);
+  });

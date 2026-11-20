@@ -18,6 +18,11 @@ export class Coverage {
     this.reached.add(canonicalJson(obligation));
   }
 
+  /** The canonical JSON of each reached obligation, sorted. */
+  keys(): string[] {
+    return [...this.reached].sort();
+  }
+
   has(obligation: Obligation): boolean {
     return this.reached.has(canonicalJson(obligation));
   }

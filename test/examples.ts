@@ -8,6 +8,11 @@ import { loadSpec, type Spec } from "../src/load/load.ts";
 export const serviceRoot = join(import.meta.dirname, "service");
 export const runRoot = join(import.meta.dirname, "run");
 export const simRoot = join(import.meta.dirname, "sim");
+/**
+ * The scenarios that `npm run fuzz` shrank from a mismatch, each `{ spec, scenario }` with the spec's root relative to
+ * the repository.
+ */
+export const fuzzFoundRoot = join(import.meta.dirname, "fuzz-found");
 export const leanRoot = join(import.meta.dirname, "../lean/Tazuna");
 
 export const folders = (dir: string): string[] =>

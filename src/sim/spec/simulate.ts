@@ -11,6 +11,7 @@ import { encodedGivenRecords, start } from "../given.ts";
 import type { StepOrder, World } from "../network.ts";
 import { execute, simulate } from "../run.ts";
 import { snapshotLines, traceLineOf } from "../trace.ts";
+import { Cache } from "./cache.ts";
 import { instrumented, Listener } from "./listener.ts";
 import { newProcessing } from "./processing.ts";
 
@@ -36,10 +37,11 @@ function made(
   sc: Scenario,
   run: (structure: Structure, w: World, sc: Scenario) => World,
   stepOrders: readonly StepOrder[],
+  cache: () => Cache = () => new Cache(),
 ): Made {
   const listeners = new Map<string, Listener>();
   const w = start(sc, (service) => {
-    const listener = new Listener(spec, new Collect());
+    const listener = new Listener(spec, new Collect(), cache());
     listeners.set(service, listener);
     return processingFor(spec, service, listener);
   });
@@ -51,9 +53,16 @@ function made(
 export const simulateSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
   made(spec, sc, simulate, stepOrders);
 
-/** Runs the lines of the scenario on the spec's services as explore does (execute). */
-export const executeSpec = (spec: Spec, sc: Scenario, stepOrders: readonly StepOrder[] = []): Made =>
-  made(spec, sc, execute, stepOrders);
+/**
+ * Runs the lines of the scenario on the spec's services as explore does (execute), each service's listener with an
+ * evaluation cache from `cache`.
+ */
+export const executeSpec = (
+  spec: Spec,
+  sc: Scenario,
+  stepOrders: readonly StepOrder[] = [],
+  cache?: () => Cache,
+): Made => made(spec, sc, execute, stepOrders, cache);
 
 /** Each running service's trace as its snapshot holds it. */
 export const snapshotsOf = ({ world }: Made): ReadonlyMap<string, readonly TraceLine[]> =>

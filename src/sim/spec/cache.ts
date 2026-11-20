@@ -83,3 +83,10 @@ export class Cache {
     return this.versions.get(name) ?? 0;
   }
 }
+
+/** The plain method that the cache must agree with: no evaluation is ever fresh, so each one runs again. */
+export class NoCache extends Cache {
+  override freshReads(): undefined {
+    return undefined;
+  }
+}
