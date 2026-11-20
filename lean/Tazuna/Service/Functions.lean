@@ -160,8 +160,8 @@ def Ensured.passes : Ensured → Bool
 
 /--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
-value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks, whether
-it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
+value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks at any
+depth, whether it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
 dropped.
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and
   written back as JSON (only its codecs run, encoding) if it matches the schema (the canonical value), or none otherwise.

@@ -5,6 +5,7 @@ import { bag, bagged, defaultRow, sorted, toJson, written } from "../../data/col
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
 import { expectFound, InternalError } from "../../data/internalError.ts";
+import { strict } from "../../data/schemaNode.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
@@ -788,7 +789,7 @@ export class SpecFunctions implements Functions {
       const fill = named(fills, name, "with parameter");
       const value = attempt(() => fill(args));
       if (value instanceof Failed) return value;
-      const checked = matching({ kind: "held", chart: ref, state, name }, schema as z.ZodType, value);
+      const checked = matching({ kind: "held", chart: ref, state, name }, strict(schema as z.ZodType), value);
       if (checked instanceof Failed) return checked;
       values[name] = checked.value;
     }
@@ -847,7 +848,7 @@ export class SpecFunctions implements Functions {
     const given = attempt(() => node.items(this.args(scope, records, access) as never));
     if (given instanceof Failed) return given;
     const chart = this.chartOf(chartOf(scope.id)).ref;
-    const element = objectOf(node.key);
+    const element = strictObjectOf(node.key);
     const keys = matching({ kind: "mapKey", chart, map }, bag(element), given);
     if (keys instanceof Failed) return keys;
     // Each key is decoded from its encoding, because the Bag of keys visits them in reverse order inside reversedBags.

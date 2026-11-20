@@ -6,7 +6,7 @@ export const { query, contract } = externalService({
   description: "Answer questions about numbered items",
 });
 
-export const Item = z.strictObject({ n: z.int(), name: z.string() });
+export const Item = z.object({ n: z.int(), name: z.string() });
 
 export const numbers = query({
   output: { items: sortedBy(Item, "n") },

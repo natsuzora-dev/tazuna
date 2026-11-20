@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { strict } from "./schemaNode.ts";
 
 export type Shape = Readonly<Record<string, z.ZodType>>;
 export type Fields = Record<string, unknown>;
@@ -21,7 +22,8 @@ function cached(
 
 export const objectOf = (shape: Shape): z.ZodObject => cached(objects, shape, z.object);
 
-export const strictObjectOf = (shape: Shape): z.ZodObject => cached(strictObjects, shape, z.strictObject);
+export const strictObjectOf = (shape: Shape): z.ZodObject =>
+  cached(strictObjects, shape, (s) => strict(z.object(s)) as z.ZodObject);
 
 /** Orders strings by code point, as Lean's String order does; `<` on strings compares UTF-16 code units. */
 export function byCodePoint(a: string, b: string): number {

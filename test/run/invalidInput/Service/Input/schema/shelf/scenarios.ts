@@ -30,3 +30,16 @@ export const pickTwice = scenario({
   },
   then: () => [],
 });
+
+export const answerItemWithUnknownField = scenario({
+  description:
+    "Answer an item with a field that Item does not have; an unknown field fails at any depth, so test reports answerOutputSchema",
+  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(catalog)] },
+  when: (w) => {
+    w.net.deliver(w.startup.request(catalog.numbers));
+    w.net.deliver(
+      w.peer.catalog.answer(w.startup.request(catalog.numbers), fulfilled({ items: [{ n: 1, name: "a", note: "x" }] })),
+    );
+  },
+  then: () => [],
+});
