@@ -256,7 +256,7 @@ function workBody(r: Processing, work: Work, step: number): void {
       const reacted = r.functions.react(automation.name, event.payload, records, now, nextKeys(r.state));
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
       createKeys(r.state, reacted.created);
-      const input = reacted.written;
+      const { input } = reacted;
       const activity = automation.sends;
       const requester: Requester = { kind: "automation", automation: automation.name };
       if (isOwn(activity, r.st.service))

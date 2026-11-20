@@ -31,7 +31,7 @@ export function requirementsRejection(
   }
   const definition = ref(r.st, name);
   const { now } = r.state;
-  const unbound = firstFalse((b) => r.functions.binding(name, b, input, records, now), rq.binds);
+  const unbound = firstFalse((binding) => r.functions.binding(name, binding, input, records, now), rq.binds);
   if (unbound instanceof Failed) return halt(issueViolation(definition, unbound));
   if (unbound !== undefined) return { rejection: { kind: "requires", reason: unbound }, unmet: { binding: unbound } };
   const failed = firstFalse((c) => r.functions.requirement(name, c, input, records, now), rq.requires);

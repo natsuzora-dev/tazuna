@@ -246,7 +246,7 @@ export interface Functions {
     records: RecordSource,
     now: Temporal.Instant,
     keys: Keys,
-  ): { readonly written: Json; readonly created: readonly string[] } | Failed;
+  ): { readonly input: Json; readonly created: readonly string[] } | Failed;
   /**
    * Returns a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements with
    * equal keys.
@@ -289,7 +289,7 @@ export interface Functions {
     activity: Activity,
     keys: Keys,
     access: Access,
-  ): { readonly written: Json; readonly created: readonly string[] } | Failed;
+  ): { readonly input: Json; readonly created: readonly string[] } | Failed;
   /**
    * Returns the parameters of `state`, which `edge` enters and its `with` computes, checked against the held schema of
    * `state`. A transition's `with` reads what its assign reads.

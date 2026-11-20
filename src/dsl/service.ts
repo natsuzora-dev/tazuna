@@ -21,7 +21,6 @@ import type {
   Payload,
   Query,
   ServiceDefinition,
-  Written,
 } from "./definition.ts";
 import type { Entities, MadeRow, Records, Row } from "./entity.ts";
 import {
@@ -349,15 +348,6 @@ function register(owner: ServiceDefinition, definers: readonly object[]): void {
   for (const definer of definers) definerOwners.set(definer, owner);
 }
 
-/** Returns the one entry of `record`, which OneKey makes the only one that types accept. */
-function only<D>(field: string, record: Readonly<Record<string, D>>): Written<D> {
-  const entries = Object.entries(record);
-  const [entry] = entries;
-  if (entries.length !== 1 || entry === undefined)
-    throw new Error(`an automation's ${field} holds ${entries.length} entries, where its type allows one`);
-  return { key: entry[0], definition: entry[1] };
-}
-
 function definers(owner: ServiceDefinition): Definers<Entities, string> {
   const command = (d: CommandOptions) => ({
     decide: (decide: (args: never) => Emits) => commandOf(owner, d, decide),
@@ -375,8 +365,8 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
     }): Automation => ({
       kind: "automation",
       service: owner,
-      receives: only("receives", setup.receives),
-      command: only("commands", setup.commands),
+      receives: setup.receives,
+      commands: setup.commands,
       binds: d.binds ?? {},
       guard: d.guard ?? {},
       input: d.input,

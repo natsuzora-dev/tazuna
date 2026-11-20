@@ -63,7 +63,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
   createKeys(r.state, given.created);
-  const input = given.written;
+  const { input } = given;
   const requester: Requester = { kind: "state", machine: instance.id, state };
   if (isOwn(a, r.st.service)) {
     r.queue.round.push({
@@ -90,7 +90,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
-  const parsed = r.functions.parse({ kind: "input", definition: screen }, given.written);
+  const parsed = r.functions.parse({ kind: "input", definition: screen }, given.input);
   if (parsed instanceof Failed) halt(issueViolation(screen, parsed));
   if ("error" in parsed)
     halt(withExtra({ kind: "Fault.inputSchema", definition, data: { target: screen } }, { error: parsed.error }));

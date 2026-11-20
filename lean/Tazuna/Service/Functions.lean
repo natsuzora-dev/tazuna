@@ -194,6 +194,7 @@ at load) always answer.
   with equal keys.
 - initialContext: the initial context of a machine or screen started with the input (the parsed input of a screen that
   opens opened, or `{}` when nothing opens it).
+- guard: whether one guard condition of a transition holds.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
   encoded.
 - showInput: the query input of a shows slot, as the sender writes it (only its codecs run, encoding).
@@ -211,7 +212,6 @@ at load) always answer.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
   of `n` and encoded. A transition's `with` reads what its assign reads.
 - deadlines: a state's `after` deadline names, in declaration order.
-- guard: whether one guard condition of a transition holds.
 - deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes, as
   Temporal.Instant.prototype.toString writes it, or none when `at` computes no Instant.
 -/

@@ -4,7 +4,7 @@ import { z } from "zod";
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
 export const { automation, command, createEvent } = service({
-  name: "backlog",
+  name: "worklist",
   description: "Send two commands from one automation past the types",
   entities: { Task },
 });
@@ -19,6 +19,8 @@ export const addCopy = command({ input: { id: z.string(), title: z.string() }, e
   ({ input }) => [emit(taskAdded, input)],
 );
 
-export const copyTask = automation({ receives: { taskAdded }, commands: { addTask, addCopy } as any }).send({
-  input: ({ payload }: any) => payload,
+const twoCommands: any = { addTask, addCopy };
+
+export const copyTask = automation({ receives: { taskAdded }, commands: twoCommands }).send({
+  input: ({ payload }) => payload,
 });

@@ -3,6 +3,7 @@ import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, fromJson, written } from "../../src/data/collections.ts";
 import { type DefinitionRef, sameRef } from "../../src/data/definitionRef.ts";
+import { InternalError } from "../../src/data/internalError.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import {
   canonicalJson,
@@ -312,7 +313,9 @@ export class RunFunctions implements Answering {
   /** Returns the payload of the event that the automation receives, as spec code receives it. */
   private receivedOf(automation: string, payload: Json): Fields {
     const a = this.functions.definition<Automation>(["automation"], { service: this.service, name: automation });
-    return decode(a.definition.receives.definition.payload, payload);
+    const [event] = Object.values(a.definition.receives);
+    if (event === undefined) throw new InternalError(`the automation ${automation} receives no event`);
+    return decode(event.payload, payload);
   }
 
   private answered(q: Question): Replied {
@@ -453,7 +456,7 @@ export class RunFunctions implements Answering {
             now(q),
             keysOf(q.keys),
           ),
-          ({ written, created }) => ({ type: "react", input: written, created: [...created] }),
+          ({ input, created }) => ({ type: "react", input, created: [...created] }),
         );
       case "comparable":
         return this.replied(this.functions.comparable(q.query, q.answer), (compared) => ({
@@ -512,7 +515,7 @@ export class RunFunctions implements Answering {
         return this.scoped(q.scope, (scope, access) =>
           this.replied(
             this.functions.input(scope, this.records, q.activity, keysOf(q.keys), access),
-            ({ written, created }) => ({ type: "input", input: written, created: [...created] }),
+            ({ input, created }) => ({ type: "input", input, created: [...created] }),
           ),
         );
       case "held": {

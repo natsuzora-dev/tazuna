@@ -103,10 +103,6 @@ function matching<T>(
   return new Failed({ kind: "schema", schema }, zodError(checked.error.issues));
 }
 
-/** Returns the binds values, which Lean asks for only once every binding is non-null. */
-const bound = (binds: Binds<never>, args: Fields): Fields =>
-  Object.fromEntries(Object.entries(binds as Binds<Fields>).map(([name, f]) => [name, f(args)]));
-
 const nonNull = (value: unknown): boolean => value !== null && value !== undefined;
 
 /** Returns the function `name` of `functions`, which Lean names from the structure, so that it always exists. */
@@ -425,9 +421,31 @@ export class SpecFunctions implements Functions {
     return attempt(() => written(objectOf(shape), f?.(args() as never) ?? {}));
   }
 
-  /** Returns the binds values, which every binding answered non-null before. */
+  /** Returns the binds values, which Lean asks for only once every binding is non-null. */
   private bound(binds: Binds<never>, args: Fields): Fields | Failed {
-    return attempt(() => bound(binds, args));
+    return attempt(() =>
+      Object.fromEntries(Object.entries(binds as Binds<Fields>).map(([name, f]) => [name, f(args)])),
+    );
+  }
+
+  /** Returns whether the binds value `binding` is non-null. */
+  private nonNullBinding(binds: Binds<never>, binding: string, args: Fields): boolean | Failed {
+    const f = named(binds as Binds<Fields>, binding, "binding");
+    const value = attempt(() => f(args));
+    return value instanceof Failed ? value : nonNull(value);
+  }
+
+  /** Returns whether `condition` holds once every binds value is non-null, with the values as `bound`. */
+  private boundHolds(
+    binds: Binds<never>,
+    conditions: Conditions<never>,
+    condition: string,
+    args: Fields,
+  ): boolean | Failed {
+    const values = this.bound(binds, args);
+    if (values instanceof Failed) return values;
+    const f = named(conditions as Conditions<Fields>, condition, "condition");
+    return attempt(() => Boolean(f({ ...args, bound: values })));
   }
 
   parse(schema: Schema, value: unknown): Checked | Failed {
@@ -455,10 +473,14 @@ export class SpecFunctions implements Functions {
     return { error: zodError(checked.error.issues) };
   }
 
-  binding(name: string, b: string, input: Fields, records: RecordSource, now: Temporal.Instant): boolean | Failed {
-    const f = named(this.command(name).binds as Binds<Fields>, b, "binding");
-    const value = attempt(() => f({ input, records: this.view(records), now }));
-    return value instanceof Failed ? value : nonNull(value);
+  binding(
+    name: string,
+    binding: string,
+    input: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): boolean | Failed {
+    return this.nonNullBinding(this.command(name).binds, binding, { input, records: this.view(records), now });
   }
 
   requirement(
@@ -469,11 +491,7 @@ export class SpecFunctions implements Functions {
     now: Temporal.Instant,
   ): boolean | Failed {
     const command = this.command(name);
-    const args = { input, records: this.view(records), now };
-    const bound = this.bound(command.binds, args);
-    if (bound instanceof Failed) return bound;
-    const f = named(command.requires as Conditions<Fields>, condition, "requires condition");
-    return attempt(() => Boolean(f({ ...args, bound })));
+    return this.boundHolds(command.binds, command.requires, condition, { input, records: this.view(records), now });
   }
 
   inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed {
@@ -597,14 +615,12 @@ export class SpecFunctions implements Functions {
 
   automationBinding(
     name: string,
-    b: string,
+    binding: string,
     payload: Fields,
     records: RecordSource,
     now: Temporal.Instant,
   ): boolean | Failed {
-    const f = named(this.automation(name).binds as Binds<Fields>, b, "binding");
-    const value = attempt(() => f({ payload, records: this.view(records), now }));
-    return value instanceof Failed ? value : nonNull(value);
+    return this.nonNullBinding(this.automation(name).binds, binding, { payload, records: this.view(records), now });
   }
 
   automationGuard(
@@ -615,11 +631,7 @@ export class SpecFunctions implements Functions {
     now: Temporal.Instant,
   ): boolean | Failed {
     const a = this.automation(name);
-    const args = { payload, records: this.view(records), now };
-    const values = this.bound(a.binds, args);
-    if (values instanceof Failed) return values;
-    const f = named(a.guard as Conditions<Fields>, condition, "guard condition");
-    return attempt(() => Boolean(f({ ...args, bound: values })));
+    return this.boundHolds(a.binds, a.guard, condition, { payload, records: this.view(records), now });
   }
 
   react(
@@ -628,15 +640,17 @@ export class SpecFunctions implements Functions {
     records: RecordSource,
     now: Temporal.Instant,
     keys: Keys,
-  ): { readonly written: Json; readonly created: readonly string[] } | Failed {
+  ): { readonly input: Json; readonly created: readonly string[] } | Failed {
     const a = this.automation(name);
     const { createKey, created } = this.keysFrom(keys);
     const args = { payload, records: this.view(records), now };
     const values = this.bound(a.binds, args);
     if (values instanceof Failed) return values;
-    const shape = objectOf(a.command.definition.input);
+    const [command, ...more] = Object.values(a.commands);
+    if (command === undefined || more.length > 0) throw new InternalError(`the automation ${name} has no one command`);
+    const shape = objectOf(command.input);
     const given = attempt(() => written(shape, a.input?.({ ...args, bound: values, createKey } as never) ?? {}));
-    return given instanceof Failed ? given : { written: given, created };
+    return given instanceof Failed ? given : { input: given, created };
   }
 
   comparable(name: string, answer: Answer): unknown {
@@ -732,7 +746,7 @@ export class SpecFunctions implements Functions {
     activity: Activity,
     keys: Keys,
     access: Access,
-  ): { readonly written: Json; readonly created: readonly string[] } | Failed {
+  ): { readonly input: Json; readonly created: readonly string[] } | Failed {
     const chart = this.chartOf(chartOf(scope.id)).named.definition;
     const node = this.node(chartOf(scope.id), this.stateOf(scope));
     const { createKey, created } = this.keysFrom(keys);
@@ -742,7 +756,7 @@ export class SpecFunctions implements Functions {
     switch (activity.keyword) {
       case "shows": {
         const shown = this.showInput(scope, records, activity, access);
-        return shown instanceof Failed ? shown : { written: shown, created };
+        return shown instanceof Failed ? shown : { input: shown, created };
       }
       case "calls": {
         given = this.writtenInput(named(chart.queries, key, "query").input, node.calls?.[key]?.input, args);
@@ -757,7 +771,7 @@ export class SpecFunctions implements Functions {
         given = this.writtenInput(named(chart.screens, key, "screen").input ?? {}, node.opens?.[key]?.input, args);
       }
     }
-    return given instanceof Failed ? given : { written: given, created };
+    return given instanceof Failed ? given : { input: given, created };
   }
 
   /** Returns the parameters of `state` that `edge`'s `with` fills, each checked against its held schema. */

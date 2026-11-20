@@ -417,18 +417,17 @@ elab "groupSamples% " t:ident : term => do
   mkListLit (mkConst group) values
 
 /--
-The TS constant `halting<type>Kinds`: the kinds, in declaration order, whose violations halt the run. `halts` depends
-only on the kind, so one sample per kind decides it.
+The TS constant `name`, documented as `doc`: the kinds of one group, in declaration order, whose flag holds. Each flag
+depends only on the kind, so the group's one sample per kind decides it.
 -/
-def halting (type : String) (kinds : List String) : String :=
-  "\n/** The kinds whose violations halt the run. */\n" ++ constArray s!"halting{type}Kinds" kinds
+def kindList (name doc : String) (kinds : List String) : String :=
+  s!"\n/** {doc} */\n" ++ constArray name kinds
 
-/--
-The TS constant `internal<type>Kinds`: the kinds, in declaration order, that no spec that check passes can produce.
-`internal` depends only on the kind, so one sample per kind decides it.
--/
-def internal (type : String) (kinds : List String) : String :=
-  "\n/** The kinds that no spec that check passes can produce. */\n" ++ constArray s!"internal{type}Kinds" kinds
+def halting (type : String) : List String → String :=
+  kindList s!"halting{type}Kinds" "The kinds whose violations halt the run."
+
+def internal (type : String) : List String → String :=
+  kindList s!"internal{type}Kinds" "The kinds that no spec that check passes can produce."
 
 /-- `doc% c` elaborates to the docstring of `c`. -/
 elab "doc% " c:ident : term => do
@@ -475,11 +474,13 @@ def files : List (String × String) :=
    typescript% "src/data/mismatch.generated.ts",
    typescript% "src/data/uncomparable.generated.ts",
    appended (typescript% "src/data/invalidInput.generated.ts")
-     (halting "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind)) ++
-      internal "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.internal)).map (·.kind))),
+     (let samples := groupSamples% Tazuna.Service.InvalidInput
+      halting "InvalidInput" ((samples.filter (·.halts)).map (·.kind)) ++
+        internal "InvalidInput" ((samples.filter (·.internal)).map (·.kind))),
    appended (typescript% "src/data/invalidScenario.generated.ts")
-     (halting "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind)) ++
-      internal "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.internal)).map (·.kind))),
+     (let samples := groupSamples% Tazuna.Sim.InvalidScenario
+      halting "InvalidScenario" ((samples.filter (·.halts)).map (·.kind)) ++
+        internal "InvalidScenario" ((samples.filter (·.internal)).map (·.kind))),
    zod% "src/data/scenario.generated.ts",
    appended (typescript% "src/data/fault.generated.ts")
      (halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),

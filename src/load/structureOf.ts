@@ -31,6 +31,15 @@ export interface ThrownDefault {
 }
 
 /**
+ * Returns the one value of an automation's `receives` or `commands`, or undefined (a null ref) for any other count, which
+ * only `any` gets past OneKey and check reports as Restricted.any.
+ */
+function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
+  const values = Object.values(record);
+  return values.length === 1 ? values[0] : undefined;
+}
+
+/**
  * Computes state trees and definition refs, which every other part reads from this JSON. A
  * schema whose conversion throws is {} in the structure; check stops at the Malformed.defaultSchema that the throw
  * becomes, before anything reads it.
@@ -121,8 +130,8 @@ export function structureOf(
           kind: d.kind,
           service,
           name,
-          receives: ref(d.receives.definition),
-          command: ref(d.command.definition),
+          receives: ref(oneEntry(d.receives)),
+          command: ref(oneEntry(d.commands)),
           binds: Object.keys(d.binds),
           guard: Object.keys(d.guard),
         };
