@@ -278,13 +278,15 @@ def starting (st : Service) : List Chart := st.charts.filter (!·.opened)
 def startInstances [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
   st.starting.foldlM (startInstance st fs) s
 
-/-- Writes the record of each single entity that Given left out, as the defaults of its fields. -/
-def startRecords [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
+/--
+Writes the record of each single entity that Given left out, as the defaults of its fields, which load checks
+(Malformed.defaultSchema).
+-/
+def startRecords [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   st.singles.foldlM (fun s e => do
     if s.records.any (·.entity == e) then pure s else
-    match ← fs.defaults (.record (st.ref e)) with
-    | .error issue => pure (s.report (.fault (issueViolation (st.ref e) issue)))
-    | .ok value => pure { s with records := s.records ++ [{ entity := e, key := none, value }] }) s
+    let value ← expectFound s!"defaults of the single entity {e}" (← fs.defaults (.record (st.ref e))).toOption
+    pure { s with records := s.records ++ [{ entity := e, key := none, value }] }) s
 
 def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
   if s.started then pure s else

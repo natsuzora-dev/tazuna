@@ -16,7 +16,7 @@ theorem leaf_selects_innermost (s : State) (extra : Extra) (i : Instance) (ts : 
   simp [firstLevel, h]
 
 theorem keyed_payload_reaches_matching (chart : Chart) (map : String) (payload : Value) (k : Value)
-    (hk : copyKey fs st chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs) :
+    (hk : copyKey fs st chart map payload = .ok (.copy k)) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) =
       cs.filter (fun c => c.id.key? == some k) := by
   refine List.filter_congr (fun c hc => ?_)
@@ -25,14 +25,14 @@ theorem keyed_payload_reaches_matching (chart : Chart) (map : String) (payload :
   cases c.id.key? == some k <;> rfl
 
 theorem keyless_payload_reaches_all (chart : Chart) (map : String) (payload : Value)
-    (hk : copyKey fs st chart map payload = .ok none) (cs : List Instance) (hcs : CopiesOf chart map cs) :
+    (hk : copyKey fs st chart map payload = .ok .everyCopy) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) = cs := by
   refine List.filter_eq_self.mpr (fun c hc => ?_)
   obtain ⟨hn, hm⟩ := hcs c hc
   simp [reaches, hn, hm, hk]
 
 theorem keyed_payload_reaches_at_most_one (chart : Chart) (map : String) (payload : Value) (k : Value)
-    (hk : copyKey fs st chart map payload = .ok (some (some k))) (cs : List Instance) (hcs : CopiesOf chart map cs)
+    (hk : copyKey fs st chart map payload = .ok (.copy k)) (cs : List Instance) (hcs : CopiesOf chart map cs)
     (hd : (cs.map (·.id.key?)).Nodup) :
     (cs.filter fun c => reaches fs st c payload matches .ok true).length ≤ 1 := by
   rw [keyed_payload_reaches_matching chart map payload k hk cs hcs]

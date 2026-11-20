@@ -569,9 +569,8 @@ theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (ch
   unfold checkExchanges checkExchange
   agree [h.parse, decodedEvents_agrees h, checkAssumedAnswer_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
-  unfold startRecords; agree [h.defaults]
+  unfold startRecords; agree [h.defaults, expectFound_agrees]
 
 theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
   unfold begin startInstances; agree [startRecords_agrees h, startInstance_agrees h, message_agrees h]

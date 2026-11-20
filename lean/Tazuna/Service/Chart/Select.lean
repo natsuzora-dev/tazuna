@@ -31,31 +31,35 @@ def firstLevel (st : Service) (s : State) (extra : Extra) : List (Instance × Li
     | .ok (some t) => pure (.ok (some (i.id, t)))
     | .ok none => firstLevel st s extra rest
 
-/--
-The item key that `payload` names for the copies of the map state `map` of `chart`: none when the payload lacks one of
-the key fields, so that it reaches every copy; `some none` when its key fields fail the key schema; and otherwise the
-key fields as normalize writes them, which is how `items` writes a copy's key.
--/
-def copyKey (st : Service) (chart : Chart) (map : String) (payload : Value) :
-    m (Except Issue (Option (Option Value))) := do
+/-- The copies of a map state that an event reaches by the key fields of its payload, as in BPMN correlation. -/
+inductive CopyTarget where
+  /-- The payload lacks one of the key fields, so it reaches every copy. -/
+  | everyCopy
+  /-- The key fields fail the key schema, so it reaches no copy. -/
+  | noCopy
+  /-- The copy whose item key is `key`: the key fields as normalize writes them, as `items` writes a copy's key. -/
+  | copy (key : Value)
+
+/-- The copies of the map state `map` of `chart` that an event with `payload` reaches. -/
+def copyKey (st : Service) (chart : Chart) (map : String) (payload : Value) : m (Except Issue CopyTarget) := do
   let state ← expectFound s!"map state {map} of {chart.name}" ((chart.state? map).bind (·.spec.map))
   match (Spec.schemaProperties state.key).mapM fun f => (payload.field? f).map (f, ·) with
-  | none => pure (.ok none)
-  | some fields => pure ((← fs.normalize (.mapKey (st.ref chart.name) map) (.obj fields)).map some)
+  | none => pure (.ok .everyCopy)
+  | some fields =>
+    pure ((← fs.normalize (.mapKey (st.ref chart.name) map) (.obj fields)).map fun
+      | none => .noCopy
+      | some key => .copy key)
 
-/--
-Whether an event with `payload` reaches copy `c`. As in BPMN correlation, the payload's key fields choose the copies
-that an event reaches.
--/
+/-- Whether an event with `payload` reaches copy `c`. -/
 def reaches (st : Service) (c : Instance) (payload : Value) : m (Except Fault Bool) := do
   match c.id.map? with
   | none => pure (.ok true)
   | some map =>
     match ← copyKey fs st c.chart map payload with
     | .error e => pure (.error (issueViolation (st.ref c.chart.name) e))
-    | .ok none => pure (.ok true)
-    | .ok (some none) => pure (.ok false)
-    | .ok (some (some k)) => pure (.ok (c.id.key? == some k))
+    | .ok .everyCopy => pure (.ok true)
+    | .ok .noCopy => pure (.ok false)
+    | .ok (.copy k) => pure (.ok (c.id.key? == some k))
 
 def reachedCopies (st : Service) (s : State) (top : Instance) (payload : Value) :
     m (Except Fault (List InstanceId)) :=

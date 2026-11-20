@@ -127,20 +127,20 @@ export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promi
     return { kind: "unloadable", reason: reason(error) };
   }
   const { spec } = loaded;
-  const malformed = [...unlistedFiles(spec, typeChecked), ...(loaded.kind === "malformed" ? loaded.malformed : [])];
-  const loading = [...malformed, ...syntaxChecks.flatMap((c) => c.check(spec))];
+  const unlisted = unlistedFiles(spec, typeChecked);
+  const syntax = syntaxChecks.flatMap((c) => c.check(spec));
   const found: Found<Malformed | NonCanonical | Restricted | Illegal>[] =
-    loaded.kind === "malformed" || malformed.length > 0
-      ? loading
-      : [
-          ...loading,
+    loaded.kind === "structured" && unlisted.length === 0
+      ? [
+          ...syntax,
           ...structureChecks.flatMap((c) => c.check(loaded.spec)),
           ...validate(loaded.spec.structure).map((violation) => ({
             violation,
             place: placeOfIllegal(loaded.spec, violation),
           })),
-        ];
-  if (found.length === 0 && loaded.kind === "structured") return { kind: "checked", spec: loaded.spec as CheckedSpec };
+        ]
+      : [...unlisted, ...(loaded.kind === "malformed" ? loaded.malformed : []), ...syntax];
+  if (found.length === 0) return { kind: "checked", spec: loaded.spec as CheckedSpec };
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
   return { kind: "violations", files: spec.sources.length, violations };
 }

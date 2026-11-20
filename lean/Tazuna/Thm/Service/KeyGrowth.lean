@@ -696,7 +696,7 @@ theorem keeps_begin (s : State) : KeepsKeys s (begin st fs s) := by
       all_goals first | exact .refl _ | keys_leaf) _ _)
     refine KeepsKeys.trans ?_ (keeps_foldlM _ (fun t e => by
       simp only [id_bind]; repeat' split
-      all_goals first | exact .refl _ | keys_leaf) _ _)
+      all_goals exact .refl _) _ _)
     keys_leaf
 
 theorem keeps_operate (screen : InstanceId) (control : String) (payload : Value) (s : State) :

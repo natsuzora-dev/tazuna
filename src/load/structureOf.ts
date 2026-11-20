@@ -30,7 +30,6 @@ type Path = readonly (string | number)[];
 /** Returns the ref of the definition `value` at `path`, which must be `expected`. */
 type RefOf = (value: unknown, path: Path, expected: Expected) => DefinitionRef;
 
-/** The value that a default function threw while a schema that `definition` declares was converted to JSON Schema. */
 /** A schema whose conversion threw: one of `definition`, or the copy context of its map state `map`. */
 export interface ThrownDefault {
   readonly definition: Definition;
@@ -51,17 +50,19 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
 }
 
 /**
- * The structure, with the unresolved references and the throwing defaults found on the way. A reference that is
- * missing or names a definition of another kind is Malformed.unresolvedReference. A value that no export names is left
- * to unexportedDefinitions and owners, which report it; `unnamed` lists where, so that load can tell when neither did.
- * The structure is undefined when anything was found, because it would hold a placeholder where it was found.
+ * The structure, or the unresolved references and the throwing defaults found on the way, where the structure would
+ * hold a placeholder. A reference that is missing or names a definition of another kind is
+ * Malformed.unresolvedReference. A value that no export names is left to unexportedDefinitions and owners, which report
+ * it; `unnamed` lists where, so that load can tell when neither did.
  */
-export interface StructureOf {
-  readonly structure: Structure | undefined;
-  readonly thrownDefaults: readonly ThrownDefault[];
-  readonly malformed: readonly Found<Malformed>[];
-  readonly unnamed: readonly string[];
-}
+export type StructureOf =
+  | { readonly kind: "built"; readonly structure: Structure }
+  | {
+      readonly kind: "found";
+      readonly thrownDefaults: readonly ThrownDefault[];
+      readonly malformed: readonly Found<Malformed>[];
+      readonly unnamed: readonly string[];
+    };
 
 /** Computes state trees and definition refs, which every other part reads from this JSON. */
 export function structureOf(
@@ -125,8 +126,9 @@ export function structureOf(
       return definitionStructure(named, ref, schemaOf, unreadableDeadline);
     }),
   };
-  const found = thrownDefaults.length > 0 || malformed.length > 0 || unnamed.length > 0;
-  return { structure: found ? undefined : structure, thrownDefaults, malformed, unnamed };
+  return thrownDefaults.length > 0 || malformed.length > 0 || unnamed.length > 0
+    ? { kind: "found", thrownDefaults, malformed, unnamed }
+    : { kind: "built", structure };
 }
 
 function definitionStructure(

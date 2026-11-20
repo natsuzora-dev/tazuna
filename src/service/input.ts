@@ -375,15 +375,19 @@ function startInstances(r: Processing): void {
   for (const c of starting(r.st)) startInstance(r, c);
 }
 
-/** Lean's startRecords: writes the record of each single entity that Given left out, as the defaults of its fields. */
+/**
+ * Lean's startRecords: writes the record of each single entity that Given left out, as the defaults of its fields, which
+ * load checks (Malformed.defaultSchema).
+ */
 function startRecords(r: Processing): void {
   const { singles } = r.state.records;
   for (const name of r.st.singles) {
     if (singles.has(name)) continue;
-    const entity = ref(r.st, name);
-    const record = r.functions.defaults({ kind: "record", entity });
-    if (record instanceof Failed) halt(issueViolation(entity, record));
-    singles.set(name, record);
+    const record = r.functions.defaults({ kind: "record", entity: ref(r.st, name) });
+    singles.set(
+      name,
+      expectFound(`defaults of the single entity ${name}`, record instanceof Failed ? undefined : record),
+    );
   }
 }
 

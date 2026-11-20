@@ -38,9 +38,12 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
   const schema = { kind: "context", chart: definition } as const;
   const defaults = r.functions.defaults(schema);
   if (defaults instanceof Failed) return fault(defaults);
-  // Lean merges JSON, which has no undefined field.
-  const written = Object.entries(given).filter(([, value]) => value !== undefined);
-  const context = r.functions.normalize(schema, { ...defaults.value, ...Object.fromEntries(written) });
+  // Lean's Value.merge: JSON has no undefined field, and a value that is no object replaces the defaults.
+  const isObject = (given as unknown) !== null && typeof given === "object" && !Array.isArray(given);
+  const merged = isObject
+    ? { ...defaults.value, ...Object.fromEntries(Object.entries(given).filter(([, value]) => value !== undefined)) }
+    : given;
+  const context = r.functions.normalize(schema, merged);
   if (context instanceof Failed) return fault(context);
   if ("error" in context)
     return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: context.error }));

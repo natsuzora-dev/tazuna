@@ -68,7 +68,11 @@ export interface Spec extends LoadedSpec {
 /** The spec in a folder: with its structure when loading found no Malformed violation, else with the violations. */
 export type Loaded =
   | { readonly kind: "structured"; readonly spec: Spec }
-  | { readonly kind: "malformed"; readonly spec: LoadedSpec; readonly malformed: readonly Found<Malformed>[] };
+  | {
+      readonly kind: "malformed";
+      readonly spec: LoadedSpec;
+      readonly malformed: readonly [Found<Malformed>, ...Found<Malformed>[]];
+    };
 
 const skippedFolders = new Set(["__snapshots__", "node_modules"]);
 
@@ -298,12 +302,13 @@ export async function loadSpec(root: string): Promise<Loaded> {
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),
-    ...defaultSchemas(definitions, opaque, built.thrownDefaults),
-    ...built.malformed,
+    ...defaultSchemas(definitions, opaque, built.kind === "found" ? built.thrownDefaults : []),
+    ...(built.kind === "found" ? built.malformed : []),
     ...loaded.malformed,
   ];
-  if (malformed.length > 0) return { kind: "malformed", spec, malformed };
-  if (built.structure === undefined)
+  const [first, ...rest] = malformed;
+  if (first !== undefined) return { kind: "malformed", spec, malformed: [first, ...rest] };
+  if (built.kind === "found")
     throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
   return { kind: "structured", spec: { ...spec, structure: built.structure } };
 }

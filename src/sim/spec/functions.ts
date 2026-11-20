@@ -668,7 +668,7 @@ export class SpecFunctions implements Functions {
   initialContext(machine: string, input: Fields): Fields | Failed {
     const chart = this.chartOf(machine).named.definition;
     const f = chart.initialContext;
-    return attempt(() => sortedFields(chart.context, f === undefined ? {} : f({ input })) as Fields);
+    return attempt(() => (f === undefined ? {} : f({ input })) as Fields);
   }
 
   defaults(schema: Schema): Row | Failed {
