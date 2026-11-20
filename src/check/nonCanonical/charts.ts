@@ -5,6 +5,7 @@ import { charts, type Spec } from "../../load/load.ts";
 import {
   type ChartStructure,
   isAnswerTransition,
+  schemaProperties,
   type TransitionStructure,
   transitionRef,
 } from "../../spec/structure.ts";
@@ -23,7 +24,7 @@ function statelessMachine(chart: ChartStructure, definition: DefinitionRef): Non
     Object.keys(chart.receives).length === 1 &&
     Object.keys(chart.commands).length === 1 &&
     Object.keys(chart.queries).length === 0;
-  if (!oneToOne || chart.states.length > 1 || chart.context.length > 0 || waits) return [];
+  if (!oneToOne || chart.states.length > 1 || schemaProperties(chart.context).length > 0 || waits) return [];
   return [{ kind: "NonCanonical.statelessMachine", definition, data: {} }];
 }
 

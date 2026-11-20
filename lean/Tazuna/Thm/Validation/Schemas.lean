@@ -1,0 +1,23 @@
+import Tazuna.Validation.Schemas
+
+namespace Tazuna.Thm.Validation.Schemas
+
+open Tazuna.Spec Tazuna.Validation Tazuna.Validation.Schemas
+
+/-- check's schema rules report nothing exactly when no schema of any definition has either issue at any path. -/
+theorem schemas_ordered (s : Structure) : Schemas.check s = [] ↔
+    (∀ d ∈ s.definitions, ∀ x ∈ schemasOf d, ∀ path key, (path, .unorderedSortKey key) ∉ issues x.1 x.2) ∧
+    (∀ d ∈ s.definitions, ∀ x ∈ schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ issues x.1 x.2) := by
+  simp only [Schemas.check, List.flatMap_eq_nil_iff, List.map_eq_nil_iff]
+  constructor
+  · intro h
+    exact ⟨fun d hd x hx path key hm => by simp [h d hd x hx] at hm,
+      fun d hd x hx path hm => by simp [h d hd x hx] at hm⟩
+  · intro ⟨h1, h2⟩ d hd x hx
+    apply List.eq_nil_iff_forall_not_mem.mpr
+    intro ⟨path, i⟩ hm
+    cases i with
+    | unorderedSortKey key => exact h1 d hd x hx path key hm
+    | ambiguousUnion => exact h2 d hd x hx path hm
+
+end Tazuna.Thm.Validation.Schemas

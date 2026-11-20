@@ -39,6 +39,9 @@ export const jsonSchema = (schema: z.ZodType): JsonSchema =>
     // `format` already states the date, date-time and duration forms; Zod's regex `pattern` would repeat it.
     override: (ctx) => {
       if (["date-time", "date", "duration"].includes(String(ctx.jsonSchema.format))) delete ctx.jsonSchema.pattern;
+      // Parsing rejects a field that an object without a catchall does not name, at any depth.
+      const node = schemaNode(ctx.zodSchema as unknown as z.ZodType);
+      if (node.type === "object" && node.catchall === undefined) ctx.jsonSchema.additionalProperties = false;
       const collection = collectionOf(ctx.zodSchema);
       if (collection?.kind === "bag") ctx.jsonSchema["x-tazuna-bag"] = true;
       if (collection?.kind === "set") Object.assign(ctx.jsonSchema, { uniqueItems: true, "x-tazuna-set": true });

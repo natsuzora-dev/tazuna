@@ -71,6 +71,8 @@ tazuna removes some of these orders by construction and searches the rest.
 
 Records have no order, because a database returns rows in an order that the spec does not control.
 Spec functions receive the records of an entity as a `Bag`, and a spec that needs an order sorts by a key with `sortedBy`.
+tazuna writes the elements of a bag, set, or `sortedBy` array in the order of their encoded values, which the trace holds, whatever a codec decodes them to.
+For that reason `check` reports a `sortedBy` key whose encoded value is no number, instant, or date, and a union that holds a collection when one value can fit two of its options, since either would leave the order to a guess.
 
 Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one group that `decide` returns.
 `test` runs all of these orders in one search and reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, as Concuerror, loom, and shuttle stop at the first failing schedule.

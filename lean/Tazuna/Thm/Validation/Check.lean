@@ -3,6 +3,7 @@ import Tazuna.Thm.Validation.Automations
 import Tazuna.Thm.Validation.Charts
 import Tazuna.Thm.Validation.Commands
 import Tazuna.Thm.Validation.Contracts
+import Tazuna.Thm.Validation.Schemas
 
 /-!
 The verdict of check's structural part (Illegal): the rules that a spec without such a violation keeps.
@@ -44,6 +45,11 @@ structure Checked (s : Structure) : Prop where
   /-- No deadline's delay is below zero. -/
   delaysNonNegative : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states, ∀ t ∈ st.deadlines,
     t.time.isNegative = false
+  /-- Every sortedBy array of a schema sorts by a key whose encoded value SortKey orders. -/
+  sortKeysOrdered : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path key,
+    (path, .unorderedSortKey key) ∉ Schemas.issues x.1 x.2
+  /-- No union of a schema that holds a collection has two options that one value fits, so sortCollections picks one. -/
+  unionsApart : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ Schemas.issues x.1 x.2
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -134,12 +140,13 @@ theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s
         intro st hst t ht
         simpa using h d hd c hc st hst t ht
       · rfl
-  rw [parents, controls, reasons, restored, delays, negative]
+  have schemas := Tazuna.Thm.Validation.Schemas.schemas_ordered s
+  rw [parents, controls, reasons, restored, delays, negative, schemas]
   simp only [and_assoc]
   constructor
-  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m⟩
-    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng⟩
+  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m, sk, ua⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua⟩
   · intro h
-    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9⟩
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9, h.12, h.13⟩
 
 end Tazuna.Thm.Validation.Check

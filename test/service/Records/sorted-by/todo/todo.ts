@@ -30,6 +30,15 @@ export const listTasks = command({ emits: [tasksListed] }).decide(() => [
   }),
 ]);
 
+const cents = z.codec(z.string(), z.int(), {
+  decode: (text) => Math.round(Number(text) * 100),
+  encode: (n) => (n / 100).toFixed(2),
+});
+
+export const pricesListed = event({ payload: { prices: bag(cents) } });
+
+export const listPrices = command({ emits: [pricesListed] }).decide(() => [emit(pricesListed, { prices: [150, 20] })]);
+
 export const tasksPlanned = event({ payload: { entries: sortedBy(Entry, "day") } });
 
 export const planTasks = command({

@@ -6,7 +6,8 @@ open Tazuna.Data
 open Tazuna.Spec
 
 def parentKeys (c : Chart) : List String :=
-  [("input", c.input), ("requires", c.requires), ("output", c.output), ("ensures", c.ensures)].filterMap
+  [("input", schemaProperties c.input), ("requires", c.requires), ("output", schemaProperties c.output),
+    ("ensures", c.ensures)].filterMap
     fun (key, names) => if names.isEmpty then none else some key
 
 def missingParents (s : Structure) : List Illegal :=

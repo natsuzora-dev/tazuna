@@ -142,7 +142,7 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
       | _ => none)
   let keyed (r : Ref) : m (String × List String) := do
     let body ← entityBody r
-    pure ((← expectFound s!"key of the entity {r.name}" body.key), body.fields)
+    pure ((← expectFound s!"key of the entity {r.name}" body.key), schemaProperties body.fields)
   let charts := own.filterMap fun (d, order) =>
     d.chart?.map (Chart.ofSpec · d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref))
   let mut commands := []

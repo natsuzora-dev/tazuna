@@ -1,4 +1,14 @@
-import { checkPlan, given, listTasks, listVisits, pickScreen, planScreen, planTasks, scenario } from "./todo.ts";
+import {
+  checkPlan,
+  given,
+  listPrices,
+  listTasks,
+  listVisits,
+  pickScreen,
+  planScreen,
+  planTasks,
+  scenario,
+} from "./todo.ts";
 
 const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
 
@@ -63,6 +73,16 @@ export const nullableSorted = scenario({
   when: (w) => {
     w.client.send(checkPlan, { isFilled: false });
     w.client.send(checkPlan, { isFilled: true });
+  },
+  then: () => [],
+});
+
+export const listedPrices = scenario({
+  description:
+    'List the prices; decide writes 150 and 20 cents, and tazuna sorts the prices bag by the canonical JSON of the encoded values, so "0.20" comes before "1.50"',
+  given: arranged,
+  when: (w) => {
+    w.client.send(listPrices, {});
   },
   then: () => [],
 });

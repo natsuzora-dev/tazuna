@@ -132,6 +132,31 @@ export type Illegal =
         readonly state: string;
         readonly deadline: string;
       };
+    }
+  /**
+   * The sortedBy array at `path` of the definition's schemas sorts by `key`, whose encoded value is no number, instant, or
+   * date, so its order would not be the order of the values. `check` reports none exactly when every sort key is encoded
+   * as one of these (`Checked.sortKeysOrdered`).
+   */
+  | {
+      readonly kind: "Illegal.unorderedSortKey";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly path: readonly string[];
+        readonly key: string;
+      };
+    }
+  /**
+   * The union at `path` of the definition's schemas holds a collection, and one value can fit two of its options by type,
+   * const, and required fields, so the option whose order sorts the value would be a guess. `check` reports none exactly
+   * when every such union tells its options apart (`Checked.unionsApart`).
+   */
+  | {
+      readonly kind: "Illegal.ambiguousUnion";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly path: readonly string[];
+      };
     };
 
 export const illegalKinds = [
@@ -146,4 +171,6 @@ export const illegalKinds = [
   "Illegal.restoredHeld",
   "Illegal.inexactDelay",
   "Illegal.negativeDelay",
+  "Illegal.unorderedSortKey",
+  "Illegal.ambiguousUnion",
 ] as const;

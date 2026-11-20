@@ -77,17 +77,19 @@ export type Deadline = {
 } & DeadlineTime;
 
 /**
- * What a map state adds to a state: the JSON Schema of its item key, and the key positions of its item key and of its
- * own context, which each copy holds.
+ * What a map state adds to a state: the JSON Schemas of its item key and of its own context, which each copy holds, and
+ * the key positions of both.
  */
 export type MapState = {
   readonly key: Json;
+  readonly context: Json;
   readonly itemKeys: readonly KeyPosition[];
   readonly contextKeys: readonly KeyPosition[];
 };
 
-/** The key positions of a state's parameters. */
-export type HeldKeys = {
+/** The JSON Schema of a state's parameters and their key positions. */
+export type Held = {
+  readonly schema: Json;
   readonly keys: readonly KeyPosition[];
 };
 
@@ -108,21 +110,19 @@ export type State = {
   readonly deadlines: readonly Deadline[];
   /** What a map state adds; null for any other state. */
   readonly map: MapState | null;
-  /**
-   * The key positions of the state's parameters (`held`), which the edge that enters the state fills; null for a state
-   * without parameters.
-   */
-  readonly held: HeldKeys | null;
+  /** The state's parameters (`held`), which the edge that enters the state fills; null for a state without them. */
+  readonly held: Held | null;
 };
 
 export type ChartFields = {
   readonly initial: string;
-  readonly context: readonly string[];
+  /** The JSON Schema of the context. */
+  readonly context: Json;
   /** The key positions of the context. */
   readonly contextKeys: readonly KeyPosition[];
-  /** The input fields. A machine has none, and no `output`, `requires`, or `ensures`. */
-  readonly input: readonly string[];
-  readonly output: readonly string[];
+  /** The JSON Schema of the input. A machine has no fields in it or in `output`, and no `requires` or `ensures`. */
+  readonly input: Json;
+  readonly output: Json;
   readonly requires: readonly string[];
   readonly ensures: readonly string[];
   readonly on: readonly Transition[];
@@ -166,7 +166,8 @@ export type Change = {
 /** An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. */
 export type EntityBody = {
   readonly key: string | null;
-  readonly fields: readonly string[];
+  /** The JSON Schema of the fields. */
+  readonly fields: Json;
   readonly unique: readonly string[];
   readonly references: readonly Reference[];
   /** The key positions of the fields. */

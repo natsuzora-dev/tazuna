@@ -165,23 +165,25 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Deadline flatten time
 
 /--
-What a map state adds to a state: the JSON Schema of its item key, and the key positions of its item key and of its
-own context, which each copy holds.
+What a map state adds to a state: the JSON Schemas of its item key and of its own context, which each copy holds, and
+the key positions of both.
 -/
 structure MapState where
   key : Value
+  context : Value
   itemKeys : List KeyPosition
   contextKeys : List KeyPosition
 deriving Repr, Inhabited
 
 derive_wire MapState
 
-/-- The key positions of a state's parameters. -/
-structure HeldKeys where
+/-- The JSON Schema of a state's parameters and their key positions. -/
+structure Held where
+  schema : Value
   keys : List KeyPosition
 deriving Repr, Inhabited
 
-derive_wire HeldKeys
+derive_wire Held
 
 structure State where
   name : String
@@ -200,11 +202,8 @@ structure State where
   deadlines : List Deadline
   /-- What a map state adds; null for any other state. -/
   map : Option MapState
-  /--
-  The key positions of the state's parameters (`held`), which the edge that enters the state fills; null for a state
-  without parameters.
-  -/
-  held : Option HeldKeys
+  /-- The state's parameters (`held`), which the edge that enters the state fills; null for a state without them. -/
+  held : Option Held
 deriving Repr, Inhabited
 
 derive_wire State
@@ -217,12 +216,13 @@ def State.shape (st : State) : Shape :=
 
 structure ChartFields where
   initial : String
-  context : List String
+  /-- The JSON Schema of the context. -/
+  context : Value
   /-- The key positions of the context. -/
   contextKeys : List KeyPosition
-  /-- The input fields. A machine has none, and no `output`, `requires`, or `ensures`. -/
-  input : List String
-  output : List String
+  /-- The JSON Schema of the input. A machine has no fields in it or in `output`, and no `requires` or `ensures`. -/
+  input : Value
+  output : Value
   «requires» : List String
   ensures : List String
   on : List Transition
@@ -282,7 +282,8 @@ derive_wire Change
 /-- An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. -/
 structure EntityBody where
   key : Option String
-  fields : List String
+  /-- The JSON Schema of the fields. -/
+  fields : Value
   unique : List String
   references : List Reference
   /-- The key positions of the fields. -/

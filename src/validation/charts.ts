@@ -6,13 +6,20 @@ import {
   isExact,
   isNegative,
   isOpenedByScreen,
+  schemaProperties,
   stateNamed,
   type TransitionStructure,
 } from "../spec/structure.ts";
 import { addEntrySet, domainDepth, enterable, entryOrder, historyTargets, kindOf, pathOf } from "../spec/tree.ts";
 
 function parentKeys(chart: ChartStructure): string[] {
-  return (["input", "requires", "output", "ensures"] as const).filter((key) => chart[key].length > 0);
+  const names = {
+    input: schemaProperties(chart.input),
+    requires: chart.requires,
+    output: schemaProperties(chart.output),
+    ensures: chart.ensures,
+  };
+  return (["input", "requires", "output", "ensures"] as const).filter((key) => names[key].length > 0);
 }
 
 function missingParents(structure: Structure): Illegal[] {

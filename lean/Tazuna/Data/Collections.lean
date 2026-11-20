@@ -68,17 +68,61 @@ theorem Value.field?_lt {v : Value} {k : String} {x : Value} (h : v.field? k = s
     omega
   | _ => simp [Value.field?] at h
 
+/-- The options of a union schema: its `anyOf`, which Zod writes for z.union, or its `oneOf`, for z.discriminatedUnion. -/
+def unionOptions (schema : Value) : Option (List Value) :=
+  match schema.field? "anyOf" with
+  | some (.arr options) => some options
+  | _ =>
+    match schema.field? "oneOf" with
+    | some (.arr options) => some options
+    | _ => none
+
+theorem unionOptions_lt {schema : Value} {options : List Value} (h : unionOptions schema = some options) :
+    sizeOf options < sizeOf schema := by
+  unfold unionOptions at h
+  split at h
+  · rename_i ha
+    cases h
+    have := Value.field?_lt ha
+    simp only [Value.arr.sizeOf_spec] at this
+    omega
+  · split at h
+    · rename_i ho
+      cases h
+      have := Value.field?_lt ho
+      simp only [Value.arr.sizeOf_spec] at this
+      omega
+    · cases h
+
 /--
-The value with each array sorted as its schema says. The recursion follows the schema (anyOf options, items,
+Whether `v` fits a union option on its surface: its `type`, its own `const`, the `const` of each property that `v` has,
+and its `required` fields. Check reports a union that holds a collection and has two options that one value can fit
+this way (Illegal.ambiguousUnion), so the option that fits first is the only one.
+-/
+def fits (option v : Value) : Bool :=
+  fitsType option v &&
+  (option.field? "const").all (· == v) &&
+  (match option.field? "properties", v with
+    | some (.obj properties), .obj _ =>
+      properties.all fun (k, p) => ((p.field? "const").bind fun c => (v.field? k).map (· == c)).getD true
+    | _, _ => true) &&
+  (match option.field? "required", v with
+    | some (.arr required), .obj _ => required.all fun
+      | .str k => (v.field? k).isSome
+      | _ => true
+    | _, _ => true)
+
+/--
+The value with each array sorted as its schema says. The recursion follows the schema (union options, items,
 properties, additionalProperties), so it terminates.
 -/
 def sortCollections (schema v : Value) : Value :=
-  match _ha : schema.field? "anyOf" with
-  | some (.arr options) =>
-    match _hf : options.find? (fitsType · v) with
+  match _ha : unionOptions schema with
+  | some options =>
+    match _hf : options.find? (fits · v) with
     | some option => sortCollections option v
     | none => v
-  | _ =>
+  | none =>
     match v with
     | .arr xs =>
       let items := match (schema.field? "items").attach with
@@ -105,9 +149,8 @@ def sortCollections (schema v : Value) : Value :=
     | v => v
 termination_by sizeOf schema
 decreasing_by
-  · have h1 := Value.field?_lt _ha
+  · have h1 := unionOptions_lt _ha
     have h2 := List.sizeOf_lt_of_mem (List.mem_of_find?_eq_some _hf)
-    simp only [Value.arr.sizeOf_spec] at h1
     omega
   · exact Value.field?_lt (Option.mem_def.mp _hi)
   · exact Nat.lt_trans (Value.field?_lt _hk) (Value.field?_lt _hp)

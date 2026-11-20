@@ -100,8 +100,9 @@ function unbagged(collection: Collection | undefined, value: unknown): unknown {
 }
 
 /**
- * Returns the value with the elements of each bag and set in canonical JSON order, and each sortedBy array in key order
- * with equal keys in canonical JSON order, so that the order in which spec code built them leaves no trace. A Bag in a
+ * Returns the value with the elements of each bag and set in the canonical JSON order of their encoded values, and each
+ * sortedBy array in key order with equal keys in that order, as Lean's sortCollections orders the encoded value, so
+ * that the order in which spec code built them leaves no trace. A Bag in a
  * bag or set, and a Bag or a run of Bags in a sortedBy array, become arrays.
  */
 export function sorted(schema: z.ZodType, value: unknown): unknown {
@@ -113,7 +114,8 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
       if (!Array.isArray(array)) return array;
       const items = array.map((v) => sorted(node.element, v));
       if (collection === undefined) return items;
-      const canonical = items.toSorted((a, b) => byCodePoint(canonicalJson(a), canonicalJson(b)));
+      const text = new Map(items.map((v) => [v, canonicalJson(toJson(node.element, v))]));
+      const canonical = items.toSorted((a, b) => byCodePoint(text.get(a) as string, text.get(b) as string));
       return collection.kind === "sortedBy" ? canonical.toSorted(byKey(collection.key)) : canonical;
     }
     case "object":

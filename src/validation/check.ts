@@ -4,6 +4,7 @@ import * as automations from "./automations.ts";
 import * as charts from "./charts.ts";
 import * as commands from "./commands.ts";
 import * as contracts from "./contracts.ts";
+import * as schemas from "./schemas.ts";
 
 export function check(structure: Structure): Illegal[] {
   return [
@@ -11,5 +12,6 @@ export function check(structure: Structure): Illegal[] {
     ...charts.check(structure),
     ...commands.check(structure),
     ...contracts.check(structure),
+    ...schemas.check(structure),
   ];
 }

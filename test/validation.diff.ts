@@ -8,6 +8,7 @@ import {
   type ChartStructure,
   type DefinitionStructure,
   definitionKinds,
+  schemaProperties,
   type TransitionStructure,
 } from "../src/spec/structure.ts";
 import { kindOf, pathOf } from "../src/spec/tree.ts";
@@ -45,6 +46,26 @@ for (const { name, structure } of bases)
   });
 
 type Pick3 = readonly [number, number, number];
+
+const bagOf = (items: object) => ({ type: "array", items, "x-tazuna-bag": true });
+const rows = (key: object) => ({
+  type: "object",
+  properties: { k: key },
+  required: ["k"],
+  additionalProperties: false,
+});
+// Context schemas for Schemas.check: sort keys that the encoded value orders or not, and unions told apart or not.
+const contexts = [
+  { type: "object", properties: { s: { type: "array", items: rows({ type: "integer" }), "x-tazuna-sorted-by": "k" } } },
+  { type: "object", properties: { s: { type: "array", items: rows({ type: "string" }), "x-tazuna-sorted-by": "k" } } },
+  { type: "object", properties: { u: { anyOf: [bagOf({ type: "number" }), { type: "null" }] } } },
+  { type: "object", properties: { u: { anyOf: [rows({ type: "string" }), rows({ type: "string", const: "x" })] } } },
+  { type: "object", properties: { u: { anyOf: [bagOf({ type: "number" }), bagOf({ type: "string" })] } } },
+  {
+    type: "object",
+    properties: { u: { oneOf: [rows({ const: "a" }), { ...rows({ const: "b" }), items: bagOf({}) }] } },
+  },
+];
 
 const pick = <T>(items: readonly T[], k: number): T | undefined => items[k % Math.max(items.length, 1)];
 const charts = (s: Structure) =>
@@ -128,7 +149,15 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
   },
   input(s, [a]) {
     const chart = pick(charts(s), a);
-    if (chart) (chart as { input: readonly string[] }).input = chart.input.length > 0 ? [] : ["x"];
+    if (chart)
+      (chart as { input: unknown }).input = {
+        type: "object",
+        properties: schemaProperties(chart.input).length > 0 ? {} : { x: { type: "string" } },
+      };
+  },
+  context(s, [a, b]) {
+    const chart = pick(charts(s), a);
+    if (chart) (chart as { context: unknown }).context = pick(contexts, b);
   },
   emits(s, [a, b, c]) {
     const command = pick(

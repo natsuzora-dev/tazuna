@@ -31,8 +31,10 @@ type Path = readonly (string | number)[];
 type RefOf = (value: unknown, path: Path, expected: Expected) => DefinitionRef;
 
 /** The value that a default function threw while a schema that `definition` declares was converted to JSON Schema. */
+/** A schema whose conversion threw: one of `definition`, or the copy context of its map state `map`. */
 export interface ThrownDefault {
   readonly definition: Definition;
+  readonly map?: string;
   readonly error: unknown;
 }
 
@@ -107,11 +109,11 @@ export function structureOf(
         else unnamed.push(`the ${definition.kind} ${service}.${name} at ${path.join(".")}`);
         return unresolved;
       };
-      const schemaOf = (owner: Definition, shape: Shape): JsonSchema => {
+      const schemaOf = (owner: Definition, shape: Shape, map?: string): JsonSchema => {
         try {
           return objectSchema(shape);
         } catch (error) {
-          thrownDefaults.push({ definition: owner, error });
+          thrownDefaults.push({ definition: owner, ...(map === undefined ? {} : { map }), error });
           return {};
         }
       };
@@ -130,7 +132,7 @@ export function structureOf(
 function definitionStructure(
   { service, name, definition: d }: Named<Definition>,
   ref: RefOf,
-  schemaOf: (owner: Definition, shape: Shape) => JsonSchema,
+  schemaOf: (owner: Definition, shape: Shape, map?: string) => JsonSchema,
   unreadableDeadline: (path: Path) => void,
 ): DefinitionStructure {
   const references = (shape: Shape, key: string) =>
@@ -144,7 +146,7 @@ function definitionStructure(
       service,
       name,
       key: d.single ? null : d.key,
-      fields: Object.keys(d.fields),
+      fields: schemaOf(d, d.fields as Shape),
       unique: d.single ? [] : [...d.unique],
       references: references(d.fields as Shape, "fields"),
       keys: keysOf(d.fields as Shape, ref, ["fields"]),
@@ -202,7 +204,7 @@ function definitionStructure(
     kind: chart.kind,
     service,
     name,
-    ...structureOfChart(chart, ref, (shape) => schemaOf(d, shape), unreadableDeadline),
+    ...structureOfChart(chart, ref, (shape, map) => schemaOf(d, shape, map), unreadableDeadline),
   };
 }
 
@@ -238,7 +240,7 @@ const offerKinds = (offers: StateSpec["offers"]): Record<string, StateStructure[
 function structureOfChart(
   chart: ChartSpec,
   ref: RefOf,
-  schemaOf: (shape: Shape) => JsonSchema,
+  schemaOf: (shape: Shape, map?: string) => JsonSchema,
   unreadableDeadline: (path: Path) => void,
 ): Omit<ChartStructure, "kind" | "service" | "name"> {
   const byKey = (keyword: string, record: Readonly<Record<string, unknown>> | undefined, expected: Expected) =>
@@ -322,11 +324,15 @@ function structureOfChart(
           node.type === "map"
             ? {
                 key: schemaOf(node.key),
+                context: schemaOf(node.context ?? {}, name),
                 itemKeys: keysOf(node.key, ref, [...at, "key"]),
                 contextKeys: keysOf(node.context ?? {}, ref, [...at, "context"]),
               }
             : null,
-        held: node.held === undefined ? null : { keys: keysOf(node.held, ref, [...at, "held"]) },
+        held:
+          node.held === undefined
+            ? null
+            : { schema: schemaOf(node.held), keys: keysOf(node.held, ref, [...at, "held"]) },
       };
       states.push(state);
       visit(node.states ?? {}, state, at);
@@ -335,10 +341,10 @@ function structureOfChart(
   visit(chart.states, undefined, []);
   return {
     initial: chart.initial,
-    context: Object.keys(chart.context),
+    context: schemaOf(chart.context),
     contextKeys: keysOf(chart.context, ref, ["context"]),
-    input: Object.keys(chart.input ?? {}),
-    output: Object.keys(chart.output ?? {}),
+    input: schemaOf(chart.input ?? {}),
+    output: schemaOf(chart.output ?? {}),
     requires: Object.keys(chart.requires ?? {}),
     ensures: Object.keys(chart.ensures ?? {}),
     on: transitions({ on: chart.on }, null),

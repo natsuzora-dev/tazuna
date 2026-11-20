@@ -535,6 +535,19 @@
         "violation": "{\"kind\":\"Illegal.alwaysCycle\",\"definition\":{\"service\":\"todo\",\"name\":\"flow\"},\"data\":{\"statePath\":[\"a\",\"b\",\"a\"]},\"location\":{\"file\":\"todo/todo.ts\",\"line\":47}}"
       }
     },
+    "Illegal.ambiguousUnion": {
+      "meaning": "The union at `path` of the definition's schemas holds a collection, and one value can fit two of its options by type, const, and required fields, so the option whose order sorts the value would be a guess. `check` reports none exactly when every such union tells its options apart (`Checked.unionsApart`).",
+      "example": {
+        "excerpt": {
+          "file": "shelf/shelf.ts",
+          "from": 11,
+          "to": 11,
+          "line": 11,
+          "text": "export const grouped = event({ payload: { group } });"
+        },
+        "violation": "{\"kind\":\"Illegal.ambiguousUnion\",\"definition\":{\"service\":\"shelf\",\"name\":\"grouped\"},\"data\":{\"path\":[\"payload\",\"group\"]},\"location\":{\"file\":\"shelf/shelf.ts\",\"line\":11}}"
+      }
+    },
     "Illegal.automationCycle": {
       "meaning": "The automation `definition` commands its own service and leads back to itself through the automations `chain`, empty when `definition` receives an event of its own command. `check` reports none exactly when no automation that commands its own service leads back to itself (`no_automation_returns`).",
       "example": {
@@ -663,6 +676,19 @@
           "text": "export const listScreen = screen({\n  description: \"A list whose own offers leave out the control close\",\n  controls: { refresh: { label: \"Refresh\" }, close: { label: \"Close\" } },\n  initial: \"shown\",\n  states: { shown: {}, closed: { type: \"final\" } },\n}).chart({\n  offers: unchecked({ refresh: any }),\n  states: { shown: { on: { refresh: [], close: [{ target: \"closed\" }] } } },\n});"
         },
         "violation": "{\"kind\":\"Illegal.unlistedControl\",\"definition\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"data\":{\"control\":\"close\"},\"location\":{\"file\":\"screens/screens.ts\",\"line\":5}}"
+      }
+    },
+    "Illegal.unorderedSortKey": {
+      "meaning": "The sortedBy array at `path` of the definition's schemas sorts by `key`, whose encoded value is no number, instant, or date, so its order would not be the order of the values. `check` reports none exactly when every sort key is encoded as one of these (`Checked.sortKeysOrdered`).",
+      "example": {
+        "excerpt": {
+          "file": "shelf/shelf.ts",
+          "from": 11,
+          "to": 13,
+          "line": 11,
+          "text": "export const itemsListed = event({\n  payload: { items: sortedBy(z.object({ name: z.string(), price: cents }), \"price\") },\n});"
+        },
+        "violation": "{\"kind\":\"Illegal.unorderedSortKey\",\"definition\":{\"service\":\"shelf\",\"name\":\"itemsListed\"},\"data\":{\"path\":[\"payload\",\"items\"],\"key\":\"price\"},\"location\":{\"file\":\"shelf/shelf.ts\",\"line\":11}}"
       }
     },
     "InvalidInput.answerOutputSchema": {

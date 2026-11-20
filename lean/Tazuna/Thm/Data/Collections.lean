@@ -45,7 +45,7 @@ theorem sortByKey_keeps_equal_keys (key : String) (k : SortKey) (xs : List Value
       rw [this, ih, List.filter_cons_of_neg (by simpa using hc)]
 
 theorem bag_or_set_array_sorted (schema item : Value) (xs : List Value)
-    (ha : schema.field? "anyOf" = none) (hi : schema.field? "items" = some item)
+    (ha : unionOptions schema = none) (hi : schema.field? "items" = some item)
     (hk : schema.field? "x-tazuna-sorted-by" = none)
     (hb : schema.field? "x-tazuna-bag" = some (.bool true) ∨ schema.field? "x-tazuna-set" = some (.bool true)) :
     sortCollections schema (.arr xs) = .arr (sortCanonical (xs.map (sortCollections item))) := by

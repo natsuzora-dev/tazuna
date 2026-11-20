@@ -121,7 +121,10 @@ export function serviceOf(structure: Structure, service: string): Service {
     );
   const keyed = (r: DefinitionRef) => {
     const body = entityBody(r);
-    return { key: expectFound(`key of the entity ${r.name}`, body.key ?? undefined), fields: body.fields };
+    return {
+      key: expectFound(`key of the entity ${r.name}`, body.key ?? undefined),
+      fields: schemaProperties(body.fields),
+    };
   };
   const charts = new Map<string, Chart>();
   const commands: string[] = [];

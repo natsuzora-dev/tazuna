@@ -34,9 +34,10 @@ const mapStates = (
 
 /**
  * Returns the declared defaults that fail their schemas or throw: a single entity's fields, a map state's copy context,
- * and the schemas whose conversion in structureOf threw. A definition gets one finding for its conversions; for an
- * entity it replaces the check of the same fields. A definition that an opaqueCollection finding names is skipped: the
- * opaque collection is the cause.
+ * and the schemas whose conversion in structureOf threw. A definition gets one finding for the conversions of its own
+ * schemas, and one for each map state whose copy context's conversion threw, which replaces the check of the same
+ * fields, as the conversion of an entity's fields does. A definition that an opaqueCollection finding names is skipped:
+ * the opaque collection is the cause.
  */
 export function defaultSchemas(
   definitions: readonly Named<Definition>[],
@@ -46,31 +47,31 @@ export function defaultSchemas(
   return definitions.flatMap(({ service, name, place, definition }): Found<Malformed>[] => {
     const ref = { service, name };
     if (opaque.some((f) => sameRef(f.violation.definition, ref))) return [];
-    const converted = thrownDefaults.find((t) => t.definition === definition);
-    const conversion: Found<Malformed>[] =
-      converted === undefined
-        ? []
-        : [
-            {
-              violation: { kind: "Malformed.defaultSchema", definition: ref, data: {} },
-              place,
-              error: thrown(converted.error),
-            },
-          ];
+    const thrownOf = (map: string | undefined) =>
+      thrownDefaults.find((t) => t.definition === definition && t.map === map);
+    const finding = (map: string | undefined, error: ViolationError): Found<Malformed> => ({
+      violation:
+        map === undefined
+          ? { kind: "Malformed.defaultSchema", definition: ref, data: {} }
+          : { kind: "Malformed.defaultSchema", definition: ref, data: { map } },
+      place,
+      error,
+    });
+    const converted = thrownOf(undefined);
+    const conversion = converted === undefined ? [] : [finding(undefined, thrown(converted.error))];
     if (definition.kind === "entity") {
       if (converted !== undefined || !definition.single) return conversion;
       const error = defaultsError(definition.fields);
-      if (error === undefined) return [];
-      return [{ violation: { kind: "Malformed.defaultSchema", definition: ref, data: {} }, place, error }];
+      return error === undefined ? [] : [finding(undefined, error)];
     }
     const chart = chartOf(definition);
     if (chart === undefined) return conversion;
     return [
       ...conversion,
       ...mapStates(chart.states).flatMap(([map, node]): Found<Malformed>[] => {
-        const error = defaultsError(node.context ?? {});
-        if (error === undefined) return [];
-        return [{ violation: { kind: "Malformed.defaultSchema", definition: ref, data: { map } }, place, error }];
+        const mapConverted = thrownOf(map);
+        const error = mapConverted === undefined ? defaultsError(node.context ?? {}) : thrown(mapConverted.error);
+        return error === undefined ? [] : [finding(map, error)];
       }),
     ];
   });

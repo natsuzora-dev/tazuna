@@ -1,0 +1,1 @@
+{"kind":"Illegal.unorderedSortKey","definition":{"service":"shelf","name":"itemsListed"},"data":{"path":["payload","items"],"key":"price"},"location":{"file":"shelf/shelf.ts","line":11}}

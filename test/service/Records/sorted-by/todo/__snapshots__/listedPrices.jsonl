@@ -1,0 +1,3 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"listPrices#1","name":"listPrices","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"listPrices#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"pricesListed#1","name":"pricesListed","payload":{"prices":["0.20","1.50"]},"resultOf":"listPrices#1"}
