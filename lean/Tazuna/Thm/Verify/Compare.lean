@@ -619,38 +619,31 @@ line, as `groups` makes them.
 -/
 theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (relation : Bool) (inputs : List Line)
     (outs : List Numbered)
-    {root : Binding} : ∀ (expected actual : List Group) (fuel : Nat) (v : Values) (set : List (From root)),
-      expected.length ≤ fuel → actual.length ≤ fuel → set ≠ [] → (∀ e ∈ expected, (e.outs.map (·.index)).Nodup) →
+    {root : Binding} : ∀ (expected actual : List Group) (v : Values) (set : List (From root)),
+      set ≠ [] → (∀ e ∈ expected, (e.outs.map (·.index)).Nodup) →
       (∀ a ∈ actual, (a.outs.map (·.index)).Nodup) →
       (expected = [] → ∀ a ∈ actual, a.input.isSome) → (actual = [] → ∀ e ∈ expected, e.input.isSome) →
       (∀ e ∈ expected.drop 1, e.input.isSome) → (∀ a ∈ actual.drop 1, a.input.isSome) →
-      (compareGroups lineCount internal relation inputs outs expected actual false fuel v set).1 = [] →
-      (compareGroups lineCount internal relation inputs outs expected actual false fuel v set).2 ≠ [] ∧
-      ∀ c ∈ (compareGroups lineCount internal relation inputs outs expected actual false fuel v set).2,
+      (compareGroups lineCount internal relation inputs outs false expected actual v set).1 = [] →
+      (compareGroups lineCount internal relation inputs outs false expected actual v set).2 ≠ [] ∧
+      ∀ c ∈ (compareGroups lineCount internal relation inputs outs false expected actual v set).2,
         (∃ c₀ ∈ set, c₀.val.Extends c.val) ∧ GroupsMatch v.domain internal relation c.val expected actual
-  | [], [], fuel, v, set, _, _, hset, _, _, _, _, _, _, _ => by
-    cases fuel <;> exact ⟨hset, fun c hc => ⟨⟨c, hc, .refl _⟩, trivial⟩⟩
-  | [], a :: as, fuel, v, set, _, hfuel, _, _, _, hE, _, _, _, h => by
+  | [], [], v, set, hset, _, _, _, _, _, _, _ => by
+    exact ⟨by simpa [compareGroups] using hset, fun c hc => ⟨⟨c, by simpa [compareGroups] using hc, .refl _⟩, trivial⟩⟩
+  | [], a :: as, v, set, _, _, _, hE, _, _, _, h => by
     have ha := hE rfl a List.mem_cons_self
-    cases fuel with
-    | zero => simp at hfuel
-    | succ fuel =>
-      simp only [compareGroups] at h
-      split at h
-      · cases h
-      · rename_i hn; rw [hn] at ha; cases ha
-  | e :: es, [], fuel, v, set, hfuel, _, _, _, _, _, hA, _, _, h => by
+    simp only [compareGroups] at h
+    split at h
+    · cases h
+    · rename_i hn; rw [hn] at ha; cases ha
+  | e :: es, [], v, set, _, _, _, _, hA, _, _, h => by
     have he := hA rfl e List.mem_cons_self
-    cases fuel with
-    | zero => simp at hfuel
-    | succ fuel =>
-      simp only [compareGroups] at h
-      split at h
-      · cases h
-      · rename_i hn; rw [hn] at he; cases he
-  | _ :: _, _, 0, _, _, hfuel, _, _, _, _, _, _, _, _, _ => by simp at hfuel
-  | e :: es, a :: as, fuel + 1, v, set, hfuel, hfuel', hset, hen, han, _, _, hes, has, h => by
-    generalize hr : compareGroups lineCount internal relation inputs outs (e :: es) (a :: as) false (fuel + 1) v set = r at h ⊢
+    simp only [compareGroups] at h
+    split at h
+    · cases h
+    · rename_i hn; rw [hn] at he; cases he
+  | e :: es, a :: as, v, set, hset, hen, han, _, _, hes, has, h => by
+    generalize hr : compareGroups lineCount internal relation inputs outs false (e :: es) (a :: as) v set = r at h ⊢
     rw [compareGroups] at hr
     have hin : ∀ set₁ : List (From root),
         (match e.input, a.input with
@@ -707,7 +700,7 @@ theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (relati
         (e.outs.filter fun o => !internal o.line) (a.outs.filter fun o => !internal o.line)
         ((a.input.map (·.index)).getD 1) = cg at hr
       obtain ⟨found, set₂, stop⟩ := cg
-      generalize hrest : compareGroups lineCount internal relation inputs outs es as false fuel
+      generalize hrest : compareGroups lineCount internal relation inputs outs false es as
         { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) } set₂ = rest at hr
       subst hr
       by_cases hstop : stop = true
@@ -724,9 +717,8 @@ theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (relati
         have hen' := hen e List.mem_cons_self
         have han' := han a List.mem_cons_self
         obtain ⟨-, hne₂, hset₂⟩ := compareGroup_paired (filter_nodup hen' _) (filter_nodup han' _) hne₁ hcg
-        have ih := compareGroups_match lineCount internal relation inputs outs es as fuel
-          { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) } set₂ (by simpa using hfuel)
-          (by simpa using hfuel') hne₂ (fun g hg => hen g (List.mem_cons_of_mem _ hg))
+        have ih := compareGroups_match lineCount internal relation inputs outs es as
+          { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) } set₂ hne₂ (fun g hg => hen g (List.mem_cons_of_mem _ hg))
           (fun g hg => han g (List.mem_cons_of_mem _ hg))
           (fun hnil g hg => has g (by simpa using hg)) (fun hnil g hg => hes g (by simpa using hg))
           (fun g hg => hes g (by simpa using List.mem_of_mem_drop hg))
@@ -779,8 +771,8 @@ theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Unco
   simp only [Option.isSome_none] at hfound ⊢
   obtain ⟨hes, hes'⟩ := groups_shape snapshot
   obtain ⟨has, has'⟩ := groups_shape lines
-  have := compareGroups_match lines.length internal relation _ _ (groups snapshot) (groups lines) _ _
-    [⟨Binding.empty, .refl _⟩] (by omega) (by omega) (by simp) (groups_nodup snapshot) (groups_nodup lines)
+  have := compareGroups_match lines.length internal relation _ _ (groups snapshot) (groups lines) _
+    [⟨Binding.empty, .refl _⟩] (by simp) (groups_nodup snapshot) (groups_nodup lines)
     (fun e => absurd e hes) (fun e => absurd e has) hes' has' hfound
   obtain ⟨hne, hall⟩ := this
   refine ⟨trivial, fun e => hne (List.map_eq_nil_iff.mp e), fun b hb => ?_⟩

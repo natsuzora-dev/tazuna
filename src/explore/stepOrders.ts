@@ -161,7 +161,11 @@ function stepOrderSearch(
   const reached = new Set([stepsKey(taken(base, baseSpan).map(([, name]) => name))]);
   const queue: { readonly executed: Made; readonly order: readonly StepName[] }[] = [{ executed: base, order: [] }];
   let first: StepName | undefined;
+  let executions = 0;
   for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    executions += 1;
+    if (executions > stepOrderLimit + 1)
+      throw new Error("the step-order queue holds more than stepOrderLimit + 1 executions");
     const { executed, order: parentOrder } = next;
     const span = spanOf(executed, origin, service);
     if (span === undefined) continue;

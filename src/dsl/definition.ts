@@ -100,12 +100,17 @@ export type InputOf<D, Args> = keyof InputShape<D> extends never
 /** Named expressions whose values later expressions read as `bound`. */
 export type Binds<Args, B = Record<string, unknown>> = { readonly [K in keyof B]: (args: Args) => B[K] };
 
+export interface Written<D> {
+  readonly key: string;
+  readonly definition: D;
+}
+
 export interface Automation {
   readonly kind: "automation";
   readonly service: ServiceDefinition;
-  /** The received event. `receives` and `commands` each hold one entry, as written. */
-  readonly receives: Readonly<Record<string, AnyEvent>>;
-  readonly commands: Readonly<Record<string, AnyCommand>>;
+  /** The received event and the sent command, each with the key that `receives` or `commands` writes it under. */
+  readonly receives: Written<AnyEvent>;
+  readonly command: Written<AnyCommand>;
   readonly binds: Binds<never>;
   readonly guard: Conditions<never>;
   readonly input: ((args: never) => unknown) | undefined;

@@ -119,8 +119,8 @@ export function structureOf(
           kind: d.kind,
           service,
           name,
-          receives: ref(Object.values(d.receives)[0]),
-          command: ref(Object.values(d.commands)[0]),
+          receives: ref(d.receives.definition),
+          command: ref(d.command.definition),
           binds: Object.keys(d.binds),
           guard: Object.keys(d.guard),
         };

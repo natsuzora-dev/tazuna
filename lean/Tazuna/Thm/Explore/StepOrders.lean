@@ -189,7 +189,9 @@ theorem searchPair_inv (parent : Execution) (parentOrder : List StepName) (taken
 
 theorem searchQueue_inv : ∀ (fuel : Nat) (r : Searching), SearchInv compare executeWith o st r →
     SearchInv compare executeWith o st (searchQueue compare executeWith o st fuel r : Id _)
-  | 0, _, h => h
+  | 0, r, h => by
+    unfold searchQueue
+    split <;> exact h
   | fuel + 1, r, h => by
     unfold searchQueue
     split

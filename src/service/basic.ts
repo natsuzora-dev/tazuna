@@ -105,8 +105,8 @@ export const requirementsOf = (st: Service, name: string): Requirements =>
   st.requirements.get(name) ?? { refs: [], binds: [], requires: [] };
 
 /**
- * Returns the service `service` of the structure. An automation without its event or command adds nothing, and an
- * event that changes records of no entity changes none.
+ * Returns the service `service` of the structure, or throws, as Lean's ofStructure, on a definition that the types
+ * forbid.
  */
 export function serviceOf(structure: Structure, service: string): Service {
   const own = structure.definitions.map((d, order) => ({ d, order })).filter(({ d }) => d.service === service);
@@ -131,9 +131,13 @@ export function serviceOf(structure: Structure, service: string): Service {
         break;
       }
       case "event": {
+        if (d.change === "none") {
+          events.set(name, { kind: "none" });
+          break;
+        }
         const e = d.entity === null ? undefined : entity(d.entity);
-        if (d.change === "none" || e === undefined) events.set(name, { kind: "none" });
-        else if (d.change === "update")
+        if (e === undefined) throw new Error(`the event ${name} changes records without an entity`);
+        if (d.change === "update")
           events.set(
             name,
             e.key === null
@@ -145,14 +149,17 @@ export function serviceOf(structure: Structure, service: string): Service {
                   writes: schemaProperties(d.payload).filter((f) => f !== e.key),
                 },
           );
-        else if (e.key === null) events.set(name, { kind: "none" });
+        else if (e.key === null) throw new Error(`the entity ${e.name} has no key`);
         else events.set(name, { kind: d.change, entity: e.name, key: e.key, fields: e.fields });
         break;
       }
       case "command":
         commands.push(name);
         requirements.set(name, {
-          refs: d.references.flatMap((r) => (r.entity === null ? [] : [[r.field, r.entity] as const])),
+          refs: d.references.map(({ field, entity }) => {
+            if (entity === null) throw new Error(`the ref field ${field} of ${name} points to no entity`);
+            return [field, entity] as const;
+          }),
           binds: d.binds,
           requires: d.requires,
         });
@@ -163,7 +170,7 @@ export function serviceOf(structure: Structure, service: string): Service {
         break;
       case "automation": {
         const { receives, command } = d;
-        if (receives === null || command === null) break;
+        if (receives === null || command === null) throw new Error(`the automation ${name} has no event or command`);
         const sends: Activity = { keyword: "sends", key: name, target: command };
         automations.push({ name, order, receives, sends });
         break;

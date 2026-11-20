@@ -242,6 +242,12 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (Strin
         reversed := functions stdin stdout reads memo true (some service) }
       (instrument st fs ifs).hoist (focus service)
 
+/-- The notes of a run outside a simulation, of which tazuna-lean hears only a bug, and stops on it. -/
+instance : MonadNote IO where
+  note
+    | .bug message => throw (IO.userError message)
+    | _ => pure ()
+
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do
   let start ← IO.ofExcept (Sim.World.start spec sc)

@@ -181,10 +181,16 @@ def searchPair (compare : Compare m) (executeWith : List StepName → m Executio
   if r.reached.contains sequence then return r
   return { r with reached := r.reached ++ [sequence], queue := r.queue ++ [(alternative, order)] }
 
-/-- The search after the executions of its queue, at most `fuel` of them. -/
-def searchQueue (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin) (st : Service) :
-    Nat → Searching → m Searching
-  | 0, r => pure r
+/--
+The search after the executions of its queue, at most `fuel` of them. stepOrderSearch gives fuel for every execution that
+the queue can hold, so running out with executions left is a bug.
+-/
+def searchQueue [MonadNote m] (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin)
+    (st : Service) : Nat → Searching → m Searching
+  | 0, r => do
+    if r.search.found.isNone && !r.queue.isEmpty then
+      MonadNote.note (.bug "the step-order queue holds more than stepOrderLimit + 1 executions")
+    pure r
   | fuel + 1, r =>
     match r.queue with
     | [] => pure r
@@ -206,7 +212,7 @@ every order of dependent steps (dynamic partial-order reduction, Flanagan and Go
 stepOrderLimit orders or its first violation. Each queued execution follows a new order, so stepOrderLimit + 1
 executions bound the queue.
 -/
-def stepOrderSearch (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin)
+def stepOrderSearch [MonadNote m] (compare : Compare m) (executeWith : List StepName → m Execution) (o : Origin)
     (st : Service) (base : Execution) : m Search := do
   let some span := base.span? o st.service | return {}
   if (base.candidatesOf span).isEmpty then return {}
@@ -226,7 +232,7 @@ is 0) or a line from `from` on, each processing once, that have candidates: each
 scenario executed up to its line (`executeWith` executes a scenario with step orders), so a later halt hides none.
 `compareFor` compares the trace lines of a service.
 -/
-def stepOrderChanges (compareFor : String → Compare m)
+def stepOrderChanges [MonadNote m] (compareFor : String → Compare m)
     (executeWith : Scenario → List (Origin × String × List StepName) → m Execution) (sc : Scenario) (executed : Execution)
     («from» : Nat) : m (List Searched) := do
   let spans := executed.world.spans.foldl (fun (seen : List Sim.Span) span =>

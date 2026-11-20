@@ -537,10 +537,9 @@ and only its input is compared. `internal` selects the `out` lines that are not 
 `in` lines, and `outs` the trace's `out` lines. `relation` is compareGroup's.
 -/
 def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool) (inputs : List Line) (outs : List Numbered)
-    (expected actual : List Group) (cut : Bool) {root : Binding} :
-    Nat → Values → List (From root) → List Finding × List (From root)
-  | 0, _, set => ([], set)
-  | fuel + 1, v, set =>
+    (cut : Bool) {root : Binding} :
+    (expected actual : List Group) → Values → List (From root) → List Finding × List (From root)
+  | expected, actual, v, set =>
     match expected, actual with
     | [], [] => ([], set)
     | e :: es, a :: as =>
@@ -572,7 +571,7 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool)
           let (found, set₂, stop) := compareGroup set₁ v relation (compared e.outs) (compared a.outs) place
           if stop then (found, set₂)
           else
-            let (rest, set₃) := compareGroups lineCount internal relation inputs outs es as cut fuel v set₂
+            let (rest, set₃) := compareGroups lineCount internal relation inputs outs cut es as v set₂
             (found ++ rest, set₃)
     | e :: _, [] =>
       match e.input with
@@ -597,8 +596,8 @@ def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (i
   let actual := groups lines
   let inputs := expected.filterMap fun g => g.input.map (·.line)
   let (found, set) :=
-    compareGroups lines.length internal relation inputs (actual.flatMap (·.outs)) expected actual cut.isSome
-      (expected.length + actual.length) (renamed { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true })
+    compareGroups lines.length internal relation inputs (actual.flatMap (·.outs)) cut.isSome expected actual
+      (renamed { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true })
       [⟨Binding.empty, .refl _⟩]
   { findings := found ++ (cut.map Finding.uncomparable).toList, bindings := set.map (·.val) }
 

@@ -14,7 +14,7 @@ import {
   strictObjectOf,
 } from "../../src/data/values.ts";
 import { thrown } from "../../src/data/violation.ts";
-import type { AnyCommand, AnyEvent, AnyQuery, Automation, Named, ServiceDefinition } from "../../src/dsl/definition.ts";
+import type { AnyCommand, AnyEvent, AnyQuery, Automation, ServiceDefinition } from "../../src/dsl/definition.ts";
 import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
 import { refOfDefinition } from "../../src/load/traceName.ts";
@@ -418,8 +418,7 @@ export class RunFunctions implements Answering {
           service: this.service,
           name: q.automation,
         }).definition;
-        const event = this.spec.names.get(Object.values(a.receives)[0]) as Named<AnyEvent>;
-        const payload = decode(event.definition.payload, q.payload);
+        const payload = decode(a.receives.definition.payload, q.payload);
         return this.replied(
           this.functions.react(q.automation, payload, this.records, now(q), keysOf(q.keys)),
           ({ written, created }) =>

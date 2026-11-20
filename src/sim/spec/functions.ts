@@ -115,6 +115,13 @@ function bind(
   return { bound };
 }
 
+/** Returns the function `name` of `functions`, which Lean names from the structure, so that it always exists. */
+function named<F>(functions: Readonly<Record<string, F>> | undefined, name: string, what: string): F {
+  const f = functions?.[name];
+  if (f === undefined) throw new Error(`the definition has no ${what} ${name}`);
+  return f;
+}
+
 /** Returns `target` with each property that an expression reads told to `read`. */
 function readTracked<T extends object>(target: T, read: (property: string) => void): T {
   return new Proxy(target, {
@@ -175,7 +182,7 @@ interface ChartOf {
   readonly named: Named<ChartSpec>;
   readonly ref: DefinitionRef;
   readonly structure: ChartStructure;
-  readonly nodes: Map<string, StateSpec | undefined>;
+  readonly nodes: Map<string, StateSpec>;
 }
 
 /**
@@ -262,10 +269,11 @@ export class SpecFunctions implements Functions {
       case "context":
         return this.chartOf(schema.chart.name).named.definition.context;
       case "mapContext":
-        return this.node(schema.chart.name, schema.map)?.context ?? {};
+        return this.node(schema.chart.name, schema.map).context ?? {};
       case "held": {
-        const field = this.node(schema.chart.name, schema.state)?.held?.[schema.name];
-        return field === undefined ? {} : { [schema.name]: field };
+        const field = this.node(schema.chart.name, schema.state).held?.[schema.name];
+        if (field === undefined) throw new Error(`the state ${schema.state} has no parameter ${schema.name}`);
+        return { [schema.name]: field };
       }
       default:
         throw new Error(`no question checks a value of the ${schema.kind} schema`);
@@ -292,13 +300,16 @@ export class SpecFunctions implements Functions {
     return chart;
   }
 
-  node(machine: string, state: string): StateSpec | undefined {
+  /** Returns the state `state` of the machine or screen `machine`, which every question names from the structure. */
+  node(machine: string, state: string): StateSpec {
     const { named, structure, nodes } = this.chartOf(machine);
-    if (!nodes.has(state)) {
-      const found = stateNamed(structure, state);
-      nodes.set(state, found === undefined ? undefined : stateAt(named.definition, found.path));
-    }
-    return nodes.get(state);
+    const known = nodes.get(state);
+    if (known !== undefined) return known;
+    const found = stateNamed(structure, state);
+    if (found === undefined) throw new Error(`the chart ${machine} has no state ${state}`);
+    const node = stateAt(named.definition, found.path);
+    nodes.set(state, node);
+    return node;
   }
 
   /** Returns the state that declares the expressions of a question that Lean always asks about a state. */
@@ -317,18 +328,26 @@ export class SpecFunctions implements Functions {
       case "transition":
         return this.transition(machine, assignment.transition).assign as Assignments | undefined;
       case "entry":
-        return this.node(machine, assignment.state)?.entry?.assign as Assignments | undefined;
+        return this.node(machine, assignment.state).entry?.assign as Assignments | undefined;
       case "exit":
-        return this.node(machine, assignment.state)?.exit?.assign as Assignments | undefined;
+        return this.node(machine, assignment.state).exit?.assign as Assignments | undefined;
     }
   }
 
   private entity(name: string): AnyEntity {
-    return this.owner?.entities[name] as AnyEntity;
+    const found = this.ownerDefinition().entities[name];
+    if (found === undefined) throw new Error(`the service ${this.service} has no entity ${name}`);
+    return found as AnyEntity;
+  }
+
+  /** Returns the service definition, which every question that reads records or entities has. */
+  private ownerDefinition(): ServiceDefinition {
+    if (this.owner === undefined) throw new Error(`the spec has no service ${this.service}`);
+    return this.owner;
   }
 
   private view(records: RecordSource): Record<string, unknown> {
-    return recordsView(this.owner?.entities ?? {}, records);
+    return recordsView(this.ownerDefinition().entities, records);
   }
 
   /** Returns createKey over `keys`, what it returns next, and the entities that it was called for, in call order. */
@@ -432,8 +451,8 @@ export class SpecFunctions implements Functions {
   }
 
   binding(name: string, b: string, input: Fields, records: RecordSource, now: Temporal.Instant): boolean | Failed {
-    const f = (this.command(name).binds as Binds<Fields>)[b];
-    const value = attempt(() => f?.({ input, records: this.view(records), now }));
+    const f = named(this.command(name).binds as Binds<Fields>, b, "binding");
+    const value = attempt(() => f({ input, records: this.view(records), now }));
     return value instanceof Failed ? value : value !== null && value !== undefined;
   }
 
@@ -448,14 +467,15 @@ export class SpecFunctions implements Functions {
     const args = { input, records: this.view(records), now };
     const bound = this.bound(command, args);
     if (bound instanceof Failed) return bound;
-    const f = (command.requires as Conditions<Fields>)[condition];
-    return attempt(() => Boolean(f?.({ ...args, bound })));
+    const f = named(command.requires as Conditions<Fields>, condition, "requires condition");
+    return attempt(() => Boolean(f({ ...args, bound })));
   }
 
   inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed {
     type Requiring = { readonly requires?: Conditions<{ input: Fields }> };
-    const f = this.definition<Requiring>(["command", "query", "screen"], target).definition.requires?.[condition];
-    return attempt(() => Boolean(f?.({ input })));
+    const conditions = this.definition<Requiring>(["command", "query", "screen"], target).definition.requires;
+    const f = named(conditions, condition, "requires condition");
+    return attempt(() => Boolean(f({ input })));
   }
 
   /**
@@ -478,8 +498,9 @@ export class SpecFunctions implements Functions {
     const bound = this.bound(command, args);
     if (bound instanceof Failed) return bound;
     const f = command.decide as ((a: Fields) => readonly (DefinedEmit | Bag<DefinedEmit>)[]) | undefined;
+    if (f === undefined) throw new Error(`the command ${name} of an external service has no decide`);
     return attempt(() =>
-      (f?.({ ...args, bound }) ?? []).map((item) =>
+      f({ ...args, bound }).map((item) =>
         ((bagValues(item) ?? [item]) as readonly DefinedEmit[]).map((e) => ({
           event: this.emittedRef(e.event),
           payload: sortedFields(e.event.payload, e.payload) as Fields,
@@ -544,7 +565,7 @@ export class SpecFunctions implements Functions {
   }
 
   serviceInvariant(records: RecordSource): string | undefined | Failed {
-    const conditions = this.owner?.invariants as Conditions<{ records: unknown }>;
+    const conditions = this.ownerDefinition().invariants as Conditions<{ records: unknown }>;
     return attempt(() => firstFailing(conditions, () => ({ records: this.view(records) })));
   }
 
@@ -590,8 +611,9 @@ export class SpecFunctions implements Functions {
         this.note?.reached({ kind: "automationGuard", definition, data: { condition, met } });
         if (!met) return undefined;
       }
-      const command = Object.values(a.commands)[0];
-      return { written: written(objectOf(command?.input ?? {}), a.input?.({ ...args, createKey } as never) ?? {}) };
+      return {
+        written: written(objectOf(a.command.definition.input), a.input?.({ ...args, createKey } as never) ?? {}),
+      };
     });
     if (reacted instanceof Failed) return reacted;
     return reacted === undefined ? { created } : { written: reacted.written, created };
@@ -666,7 +688,7 @@ export class SpecFunctions implements Functions {
     const assigned = attempt(() => Object.entries(assignments).map(([field, f]) => [field, f(args)] as const));
     if (assigned instanceof Failed) return assigned;
     const map = mapOf(scope.id);
-    const shape = map === undefined ? {} : (this.node(chartOf(scope.id), map)?.context ?? {});
+    const shape = map === undefined ? {} : (this.node(chartOf(scope.id), map).context ?? {});
     const [own, outer] = [assigned.filter(([f]) => f in shape), assigned.filter(([f]) => !(f in shape))];
     let copyContext = copy?.context;
     if (copy !== undefined && own.length > 0) {
@@ -712,16 +734,16 @@ export class SpecFunctions implements Functions {
       }
       case "calls": {
         const query = chart.queries?.[key] as AnyQuery;
-        given = this.writtenInput(query.input, node?.calls?.[key]?.input, args);
+        given = this.writtenInput(query.input, node.calls?.[key]?.input, args);
         break;
       }
       case "sends":
-        given = this.writtenInput((chart.commands[key] as AnyCommand).input, node?.sends?.[key]?.input, () =>
+        given = this.writtenInput((chart.commands[key] as AnyCommand).input, node.sends?.[key]?.input, () =>
           this.args(scope, records, access, { createKey }),
         );
         break;
       case "opens": {
-        given = this.writtenInput(chart.screens?.[key]?.input ?? {}, node?.opens?.[key]?.input, args);
+        given = this.writtenInput(chart.screens?.[key]?.input ?? {}, node.opens?.[key]?.input, args);
       }
     }
     return given instanceof Failed ? given : { written: given, created };
@@ -733,12 +755,12 @@ export class SpecFunctions implements Functions {
     const fills = (
       edge.kind === "transition"
         ? this.transition(machine, edge.transition).with
-        : this.node(machine, edge.parent)?.initialWith
+        : this.node(machine, edge.parent).initialWith
     ) as Assignments | undefined;
     const ref = this.chartOf(machine).ref;
     const args = this.args(scope, records, access, extra);
     const values: Record<string, unknown> = {};
-    for (const [name, schema] of Object.entries(this.node(machine, state)?.held ?? {})) {
+    for (const [name, schema] of Object.entries(this.node(machine, state).held ?? {})) {
       const value = attempt(() => fills?.[name]?.(args));
       if (value instanceof Failed) return value;
       const checked = matching({ kind: "held", chart: ref, state, name }, schema as z.ZodType, value);
@@ -749,7 +771,7 @@ export class SpecFunctions implements Functions {
   }
 
   deadlines(machine: string, state: string): readonly string[] {
-    return Object.keys(this.node(machine, state)?.after ?? {});
+    return Object.keys(this.node(machine, state).after ?? {});
   }
 
   deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed {
@@ -771,8 +793,10 @@ export class SpecFunctions implements Functions {
     const f =
       scope.state === null
         ? named.definition.offers?.[control]
-        : this.node(chartOf(scope.id), scope.state)?.offers?.[control];
-    const given = attempt(() => (typeof f === "function" ? f(this.args(scope, records, access) as never) : []));
+        : this.node(chartOf(scope.id), scope.state).offers?.[control];
+    // Lean asks only for the offers that a function lists.
+    if (typeof f !== "function") throw new Error(`the offers of ${control} list no payloads`);
+    const given = attempt(() => f(this.args(scope, records, access) as never));
     if (given instanceof Failed) return given;
     const payloads = bagValues(given) ?? (given as readonly unknown[]);
     const row = strictObjectOf(named.definition.controls?.[control]?.payload ?? {});
@@ -787,7 +811,7 @@ export class SpecFunctions implements Functions {
 
   showInput(scope: Scope, records: RecordSource, { key }: Activity, access: Access): Json | Failed {
     const query = this.chartOf(chartOf(scope.id)).named.definition.queries?.[key] as AnyQuery;
-    const f = this.node(chartOf(scope.id), this.stateOf(scope))?.shows?.[key]?.input;
+    const f = this.node(chartOf(scope.id), this.stateOf(scope)).shows?.[key]?.input;
     return this.writtenInput(query.input, f, () => this.args(scope, records, access));
   }
 
@@ -798,10 +822,12 @@ export class SpecFunctions implements Functions {
   ): readonly { readonly key: unknown; readonly encoded: unknown; readonly encodedKey: string }[] | Failed {
     const map = this.stateOf(scope);
     const node = this.node(chartOf(scope.id), map);
-    const given = attempt(() => node?.items?.(this.args(scope, records, access) as never) ?? []);
+    const items = node.items;
+    if (items === undefined) throw new Error(`the map state ${map} has no items`);
+    const given = attempt(() => items(this.args(scope, records, access) as never));
     if (given instanceof Failed) return given;
     const chart = this.chartOf(chartOf(scope.id)).ref;
-    const element = objectOf(node?.key ?? {});
+    const element = objectOf(node.key ?? {});
     const keys = matching({ kind: "mapKey", chart, map }, bag(element), given);
     if (keys instanceof Failed) return keys;
     // Each key is decoded from its encoding, because the Bag of keys visits them in reverse order inside reversedBags.
@@ -814,7 +840,7 @@ export class SpecFunctions implements Functions {
 
   /** Returns the defaults of the map state's copy context, which load checks against the schema. */
   copyContext(machine: string, map: string): Fields {
-    const shape = this.node(machine, map)?.context ?? {};
+    const shape = this.node(machine, map).context ?? {};
     return bagged(objectOf(shape), defaultRow(shape)) as Fields;
   }
 
@@ -826,7 +852,7 @@ export class SpecFunctions implements Functions {
   }
 
   copyKey(machine: string, map: string, payload: unknown): string | null | undefined | Failed {
-    const shape = this.node(machine, map)?.key ?? {};
+    const shape = this.node(machine, map).key ?? {};
     const fields = Object.keys(shape);
     const row = payload as Fields;
     if (!fields.every((f) => row[f] !== undefined)) return undefined;

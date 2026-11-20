@@ -54,7 +54,10 @@ function nonSchemaReferences(definition: Definition): Reference[] {
     case "command":
       return elements("emits", definition.emits);
     case "automation":
-      return [...entries("receives", definition.receives), ...entries("commands", definition.commands)];
+      return [
+        { path: ["receives", definition.receives.key], target: definition.receives.definition },
+        { path: ["commands", definition.command.key], target: definition.command.definition },
+      ];
     case "machine":
     case "screen":
       return chartReferences(chartOf(definition) as ChartSpec);
