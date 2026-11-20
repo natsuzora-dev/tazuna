@@ -59,12 +59,11 @@ export type Fault =
         readonly condition: string;
       };
     }
-  /** The edge that enters `state` fills its parameter `held` with null or a value off its schema. */
+  /** The edge that enters `state` fills its parameters with a value off the state's held schema. */
   | {
       readonly kind: "Fault.heldSchema";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly held: string;
         readonly state: string;
       };
     }

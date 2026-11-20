@@ -28,7 +28,6 @@ def closeFinal (st : Service) (step : Nat) (name : InstanceId) : Processing → 
       pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun _ =>
         .screenOutputSchema (st.ref i.chart.name))))
     | .ok output =>
-      let output ← st.sorted (.output (st.ref i.chart.name)) output
       match ← fs.closeEnsures i.chart.name i.input output with
       | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok failed =>

@@ -9,7 +9,7 @@ variable {m : Type → Type}
 
 /--
 The initial context of `chart` started with `input`: what its initialContext computes, with each field that it leaves
-out taking its default, sorted and parsed, or the fault that an Issue means.
+out taking its default, parsed, or the fault that an Issue means.
 -/
 def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (chart : String) (input : Value) :
     m (Except Fault Value) := do
@@ -21,7 +21,7 @@ def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (
     match ← fs.defaults (.context definition) with
     | .error e => pure (.error (fault e))
     | .ok defaults =>
-      match ← fs.parseSorted st (.context definition) (defaults.merge given) with
+      match ← fs.parse (.context definition) (defaults.merge given) with
       | .error e => pure (.error (fault e))
       | .ok none => pure (.error (.initialContextSchema definition))
       | .ok (some context) => pure (.ok context)
@@ -41,7 +41,6 @@ def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a 
     match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
     | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
     | .ok (input, keys) =>
-      let input ← st.sorted (.input a.ref) input
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
       if a.isOwn st.service then
         let (s, serial) := r.state.startQueued name state
@@ -59,7 +58,7 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
       | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok (raw, _) =>
-      match ← fs.parseSorted st (.input (st.ref c.name)) raw with
+      match ← fs.parse (.input (st.ref c.name)) raw with
       | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok none => pure (r.report (.fault (.inputSchema (st.ref i.chart.name) (st.ref c.name))))
       | .ok (some input) =>

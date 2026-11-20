@@ -354,7 +354,7 @@
       }
     },
     "Fault.heldSchema": {
-      "meaning": "The edge that enters `state` fills its parameter `held` with null or a value off its schema.",
+      "meaning": "The edge that enters `state` fills its parameters with a value off the state's held schema.",
       "example": {
         "excerpt": {
           "file": "noTaskWatcher/watcher.ts",
@@ -363,7 +363,7 @@
           "line": 19,
           "text": "export const watcher = machine({\n  description: \"Watch the first task\",\n  receives: { taskAdded },\n  initial: \"running\",\n  states: {\n    running: { initial: \"watching\", states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } } },\n  },\n}).chart({\n  states: {\n    running: { initial: { with: { task: ({ records }) => records.Task.only() } } },\n    watching: { on: { taskAdded: [{ target: \"idle\" }] } },\n  },\n});"
         },
-        "violation": "{\"kind\":\"Fault.heldSchema\",\"definition\":{\"service\":\"noTaskWatcher\",\"name\":\"watcher\"},\"data\":{\"held\":\"task\",\"state\":\"watching\"},\"location\":{\"file\":\"noTaskWatcher/watcher.ts\",\"line\":19},\"scenario\":{\"service\":\"noTaskWatcher\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[],\"message\":\"Invalid input: expected object, received undefined\"}]}}"
+        "violation": "{\"kind\":\"Fault.heldSchema\",\"definition\":{\"service\":\"noTaskWatcher\",\"name\":\"watcher\"},\"data\":{\"state\":\"watching\"},\"location\":{\"file\":\"noTaskWatcher/watcher.ts\",\"line\":19},\"scenario\":{\"service\":\"noTaskWatcher\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[\"task\"],\"message\":\"Invalid input: expected object, received undefined\"}]}}"
       }
     },
     "Fault.initialContextSchema": {

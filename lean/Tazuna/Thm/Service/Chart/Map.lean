@@ -64,10 +64,10 @@ theorem syncMap_unchanged (step : Nat) (owner : InstanceId) (r : Processing) (ma
       cases hi : fs.items (r.state.scopeOf o (some map)) r.state.records with
       | error v => simp [syncMap, hr, ho, hi] at h
       | ok keys =>
-        cases hd : firstDuplicate (·.2) (sortItemKeys (sortedItems (m := Id) st o.chart.name map keys)) with
+        cases hd : firstDuplicate (·.2) (sortItemKeys keys) with
         | some k => simp [syncMap, hr, ho, hi, hd] at h
         | none =>
-        by_cases he : o.copyKeysOf map = (sortItemKeys (sortedItems (m := Id) st o.chart.name map keys)).map (·.2)
+        by_cases he : o.copyKeysOf map = (sortItemKeys keys).map (·.2)
         · simp [syncMap, hr, ho, hi, hd, he]
         · simp [syncMap, hr, ho, hi, hd, he] at h
 

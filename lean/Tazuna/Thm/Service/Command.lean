@@ -116,12 +116,6 @@ theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : St
     simp only [evaluate, id_bind, hp, hr, hd, hf]
     exact ⟨_, rfl, rfl, _, rfl⟩
 
-theorem decide_payloads_sorted (emits : List Emit) :
-    sortEmits (m := Id) st emits = emits.map fun e => { e with payload := st.sorted (m := Id) (.payload e.event) e.payload } := by
-  induction emits with
-  | nil => rfl
-  | cons e es ih => simp only [sortEmits, List.mapM_cons, List.map_cons] at *; rw [← ih]; rfl
-
 theorem mem_chunks {α : Type} : ∀ (ns : List Nat) (xs : List α) (x : α), x ∈ (chunks ns xs).flatten → x ∈ xs
   | [], _, _, h => by simp [chunks] at h
   | n :: ns, xs, x, h => by
@@ -141,7 +135,7 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
     ∃ input decided, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
       (∀ e ∈ decided.flatten, st.lists name e = true) ∧
-      groups = orderedGroups decided (sortEmits (m := Id) st decided.flatten) := by
+      groups = orderedGroups decided decided.flatten := by
   simp only [evaluate, id_bind] at h
   split at h
   · cases h

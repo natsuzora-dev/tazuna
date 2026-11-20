@@ -69,4 +69,17 @@ theorem sortByKey_equal_keys_in_canonical_order (key : String) (k : SortKey) (xs
   rw [sortByKey_keeps_equal_keys]
   exact (sortCanonical_in_order xs).filter _
 
+/--
+The canonical texts of the sorted elements of a bag or set do not depend on the order of its elements, so the order
+in which spec code builds a bag leaves no trace in the values that tazuna keeps.
+-/
+theorem sortCanonical_perm {xs ys : List Value} (h : xs.Perm ys) :
+    (sortCanonical xs).map Value.canonical = (sortCanonical ys).map Value.canonical := by
+  have sorted (zs : List Value) : ((sortCanonical zs).map Value.canonical).Pairwise (· ≤ ·) :=
+    List.pairwise_map.mpr (sortCanonical_in_order zs)
+  have perm (zs : List Value) : ((sortCanonical zs).map Value.canonical).Perm (zs.map Value.canonical) :=
+    (List.mergeSort_perm _ _).map _
+  exact List.Perm.eq_of_pairwise (fun _ _ _ _ hab hba => String.le_antisymm hab hba) (sorted xs) (sorted ys)
+    ((perm xs).trans ((h.map _).trans (perm ys).symm))
+
 end Tazuna.Thm.Data.Collections

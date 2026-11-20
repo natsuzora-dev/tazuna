@@ -26,7 +26,6 @@ def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
       match ← fs.resolve name input s.records s.now with
       | .error e => pure (.halted (issueViolation definition e fun _ => .outputSchema definition))
       | .ok output =>
-        let output ← st.sorted (.output definition) output
         match ← fs.queryEnsures name input output s.records with
         | .error e => pure (.halted (issueViolation definition e))
         | .ok (some c) => pure (.answered (.fulfilled output) [st.failedEnsures name c])

@@ -2,7 +2,7 @@ import { expectFound } from "../data/internalError.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { ref } from "./basic.ts";
-import { Failed, firstFalse, issueViolation, parseOutside, sorted } from "./functions.ts";
+import { Failed, firstFalse, issueViolation, parseOutside } from "./functions.ts";
 import { recordSource } from "./records.ts";
 import { failedEnsures, halt, type Run, reportAll, write } from "./state.ts";
 
@@ -31,9 +31,13 @@ export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
   const resolved = r.functions.resolve(name, input, records, r.state.now);
   if (resolved instanceof Failed)
     return halt(issueViolation(definition, resolved, () => ({ kind: "Fault.outputSchema", definition, data: {} })));
-  const schema = { kind: "output", definition } as const;
-  const output = sorted(r.st, schema, resolved);
-  const failed = r.functions.queryEnsures(name, input, r.functions.decode(schema, output), records);
+  const output = resolved;
+  const failed = r.functions.queryEnsures(
+    name,
+    input,
+    r.functions.decode({ kind: "output", definition }, output),
+    records,
+  );
   if (failed instanceof Failed) return halt(issueViolation(definition, failed));
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
   return done({ result: "fulfilled", output }, { kind: "successAnswer", definition, data: {} });

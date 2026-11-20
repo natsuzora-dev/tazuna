@@ -22,7 +22,7 @@ import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
 import { processCommand } from "./command.ts";
-import { Failed, firstFalse, issueViolation, parseOutside, passes, sorted } from "./functions.ts";
+import { Failed, firstFalse, issueViolation, parseOutside, passes } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
 import { type Emitted, idKey, type Line, sameLineId } from "./message.ts";
@@ -389,8 +389,7 @@ function startRecords(r: Processing): void {
       `defaults of the single entity ${name}`,
       record instanceof Failed ? undefined : record,
     );
-    const encoded = sorted(r.st, schema, defaults);
-    singles.set(name, { value: r.functions.decode(schema, encoded), encoded: encoded as Fields });
+    singles.set(name, { value: r.functions.decode(schema, defaults), encoded: defaults as Fields });
   }
 }
 

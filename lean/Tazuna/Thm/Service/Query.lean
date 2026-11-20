@@ -110,13 +110,13 @@ theorem query_invalid_input_rejected (name : String) (raw : Value)
     resolveChecked st fs s name raw = .answered (.rejected { kind := .invalidInput }) [] := by
   simp [resolveChecked, hp]
 
-theorem resolve_output_sorted (name : String) (raw input output : Value)
+theorem resolve_output_answered (name : String) (raw input output : Value)
     (failed : Option String) (rq : Requirements) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hq : st.requirements.lookup name = some rq)
     (hr : firstFalse (fs.inputRequirement (st.ref name) · input) rq.requires = .ok none)
     (hv : fs.resolve name input s.records s.now = .ok output)
-    (he : fs.queryEnsures name input (st.sorted (m := Id) (.output (st.ref name)) output) s.records = .ok failed) :
-    ∃ vs, resolveChecked st fs s name raw = .answered (.fulfilled (st.sorted (m := Id) (.output (st.ref name)) output)) vs := by
+    (he : fs.queryEnsures name input output s.records = .ok failed) :
+    ∃ vs, resolveChecked st fs s name raw = .answered (.fulfilled output) vs := by
   cases failed <;> simp [resolveChecked, expectFound, hp, hq, hr, hv, he] <;> exact ⟨_, rfl⟩
 
 end Tazuna.Thm.Service.Query

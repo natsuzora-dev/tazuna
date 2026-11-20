@@ -1,7 +1,7 @@
 import { expectFound } from "../../data/internalError.ts";
 import { byCodePoint, canonicalJson, type Fields, plain } from "../../data/values.ts";
 import { ref } from "../basic.ts";
-import { Failed, type Functions, issueViolation, sorted, sortedDecoded } from "../functions.ts";
+import { Failed, type Functions, issueViolation } from "../functions.ts";
 import { copyId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import { copyKeysOf, halt, type Instance, inStep, NoteAccess, newStep, report, scopeOf } from "../state.ts";
@@ -17,9 +17,7 @@ function startCopy(r: Processing, owner: Instance, map: string, key: Fields, enc
   const chart = ref(r.st, owner.chart.name);
   const schema = { kind: "mapContext", chart, map } as const;
   const defaults = r.functions.defaults(schema);
-  const context = sortedDecoded(
-    r.st,
-    r.functions,
+  const context = r.functions.decode(
     schema,
     expectFound(`defaults of the copy context of ${map}`, defaults instanceof Failed ? undefined : defaults),
   );
@@ -67,10 +65,7 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
       );
     const schema = { kind: "mapKey", chart: definition, map } as const;
     const keys = checked
-      .map((k) => {
-        const encoded = sorted(r.st, schema, k);
-        return { key: r.functions.decode(schema, encoded), encoded, encodedKey: canonicalJson(encoded) };
-      })
+      .map((encoded) => ({ key: r.functions.decode(schema, encoded), encoded, encodedKey: canonicalJson(encoded) }))
       .toSorted((a, b) => byCodePoint(a.encodedKey, b.encodedKey));
     const duplicate = keys.find((k, i) => keys.findIndex((other) => other.encodedKey === k.encodedKey) < i);
     if (duplicate !== undefined)

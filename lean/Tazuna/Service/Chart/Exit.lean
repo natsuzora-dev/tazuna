@@ -55,11 +55,9 @@ def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Optio
         | _ => .contextSchema (st.ref i.chart.name))))
     | .ok (context, copyContext, keys) =>
       let s := r.state.createKeys keys
-      let chart := st.ref i.chart.name
-      let context ← st.sorted (.context chart) context
       match i.id.map? with
       | some map =>
-        let copyContext ← st.sorted (.mapContext chart map) (← expectFound s!"the copy context of {map}" copyContext)
+        let copyContext ← expectFound s!"the copy context of {map}" copyContext
         pure ⟨(s.setMachine name.owner fun o => { o with context }).setMachine name fun i =>
           { i with context := copyContext }, r.queue⟩
       | none => pure ⟨s.setMachine name fun i => { i with context }, r.queue⟩

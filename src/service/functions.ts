@@ -1,14 +1,16 @@
 import { keyOrderIssue, sortCollections } from "../data/collections.ts";
-import type { DefinitionRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Ensured } from "../data/ensured.generated.ts";
 import type { Fault } from "../data/fault.generated.ts";
+import { expectFound } from "../data/internalError.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra, zodError } from "../data/violation.ts";
-import { type Schema, type Service, schemaOf, schemaOwner } from "./basic.ts";
-import { type InstanceId, ownerId } from "./instance.ts";
+import { emitsOf } from "../spec/structure.ts";
+import { ref, type Schema, type Service, schemaOf, schemaOwner } from "./basic.ts";
+import { chartOf, type InstanceId, mapOf, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource } from "./records.ts";
 
@@ -58,7 +60,7 @@ export function issueViolation(
       const { schema } = issue;
       const fault: Fault =
         schema.kind === "held"
-          ? { kind: "Fault.heldSchema", definition: owner, data: { held: schema.name, state: schema.state } }
+          ? { kind: "Fault.heldSchema", definition: owner, data: { state: schema.state } }
           : mismatch(schema);
       return withExtra(fault, { error });
     }
@@ -66,15 +68,130 @@ export function issueViolation(
 }
 
 /** Lean's Service.sorted: an encoded answer with its collections sorted by the structure's schema. */
-export const sorted = (st: Service, schema: Schema, json: Json): Json => sortCollections(schemaOf(st, schema), json);
-
-/** Lean's Service.sorted, then the decode that the TS engine keeps: an encoded answer as spec code receives it. */
-export const sortedDecoded = (st: Service, fs: Functions, schema: Schema, json: Json): Fields =>
-  fs.decode(schema, sorted(st, schema, json));
+const sorted = (st: Service, schema: Schema, json: Json): Json => sortCollections(schemaOf(st, schema), json);
 
 /** Lean's Functions.parseSorted: a value that spec code made, sorted and then parsed. */
 export const parseSorted = (st: Service, fs: Functions, schema: Schema, json: Json): Checked | Failed =>
   fs.parse(schema, sorted(st, schema, json));
+
+/** Lean's lists: whether the command `command` lists the event of `e` in its emits. */
+export function lists(st: Service, command: string, e: { readonly event: DefinitionRef }): boolean {
+  return emitsOf(st.structure, ref(st, command)).some((l) => sameRef(l, e.event));
+}
+
+/** Lean's Functions.checked: a value that spec code made, sorted and parsed, or a schema Issue. */
+function checked(st: Service, fs: Functions, schema: Schema, json: Json): Json | Failed {
+  const parsed = parseSorted(st, fs, schema, json);
+  if (parsed instanceof Failed) return parsed;
+  return "error" in parsed ? new Failed({ kind: "schema", schema }, parsed.error) : (parsed.encoded as Json);
+}
+
+/** Lean's mapChecked: each of `xs` through `f`, in order, or the first Failed. */
+function mapChecked<A, B>(xs: readonly A[], f: (x: A) => B | Failed): B[] | Failed {
+  const ys: B[] = [];
+  for (const x of xs) {
+    const y = f(x);
+    if (y instanceof Failed) return y;
+    ys.push(y);
+  }
+  return ys;
+}
+
+/** Lean's Functions.sorting. */
+export function sorting(st: Service, fs: Functions): Functions {
+  const sortedInput = <T extends { readonly input: Json }>(schema: Schema, answer: T | Failed): T | Failed =>
+    answer instanceof Failed ? answer : { ...answer, input: sorted(st, schema, answer.input) };
+  return {
+    parse: (...a) => fs.parse(...a),
+    unordered: (...a) => fs.unordered(...a),
+    decode: (...a) => fs.decode(...a),
+    binding: (...a) => fs.binding(...a),
+    requirement: (...a) => fs.requirement(...a),
+    inputRequirement: (...a) => fs.inputRequirement(...a),
+    decide: (name, input, records, now) => {
+      const groups = fs.decide(name, input, records, now);
+      if (groups instanceof Failed) return groups;
+      return mapChecked(groups, (g) =>
+        mapChecked(g, (e) => {
+          if (!lists(st, name, e)) return e;
+          const payload = checked(st, fs, { kind: "payload", event: e.event }, e.payload);
+          return payload instanceof Failed ? payload : { ...e, payload };
+        }),
+      );
+    },
+    ensures: (...a) => fs.ensures(...a),
+    queryEnsures: (...a) => fs.queryEnsures(...a),
+    resultEnsures: (...a) => fs.resultEnsures(...a),
+    invariant: (...a) => fs.invariant(...a),
+    serviceInvariant: (...a) => fs.serviceInvariant(...a),
+    chartInvariant: (...a) => fs.chartInvariant(...a),
+    resolve: (name, input, records, now) => {
+      const output = fs.resolve(name, input, records, now);
+      return output instanceof Failed ? output : checked(st, fs, { kind: "output", definition: ref(st, name) }, output);
+    },
+    automationBinding: (...a) => fs.automationBinding(...a),
+    automationGuard: (...a) => fs.automationGuard(...a),
+    react: (name, payload, records, now, keys) => {
+      const a = expectFound(
+        `automation ${name}`,
+        st.automations.find((x) => x.name === name),
+      );
+      return sortedInput({ kind: "input", definition: a.sends.target }, fs.react(name, payload, records, now, keys));
+    },
+    comparable: (...a) => fs.comparable(...a),
+    initialContext: (machine, input) => {
+      const context = fs.initialContext(machine, input);
+      return context instanceof Failed ? context : sorted(st, { kind: "context", chart: ref(st, machine) }, context);
+    },
+    guard: (...a) => fs.guard(...a),
+    assign: (scope, records, assignment, extra, keys, access) => {
+      const answer = fs.assign(scope, records, assignment, extra, keys, access);
+      if (answer instanceof Failed) return answer;
+      const chart = ref(st, chartOf(scope.id));
+      const context = checked(st, fs, { kind: "context", chart }, answer.context);
+      if (context instanceof Failed || answer.copyContext === undefined)
+        return context instanceof Failed ? context : { ...answer, context };
+      const map = expectFound("the map state of a copy", mapOf(scope.id));
+      const copyContext = checked(st, fs, { kind: "mapContext", chart, map }, answer.copyContext);
+      return copyContext instanceof Failed ? copyContext : { ...answer, context, copyContext };
+    },
+    input: (scope, records, activity, keys, access) =>
+      sortedInput({ kind: "input", definition: activity.target }, fs.input(scope, records, activity, keys, access)),
+    held: (scope, records, state, edge, extra, access) => {
+      const held = fs.held(scope, records, state, edge, extra, access);
+      return held instanceof Failed
+        ? held
+        : checked(st, fs, { kind: "held", chart: ref(st, chartOf(scope.id)), state }, held);
+    },
+    deadlineAt: (...a) => fs.deadlineAt(...a),
+    offers: (scope, records, control, access) => {
+      const payloads = fs.offers(scope, records, control, access);
+      const schema = { kind: "control", screen: ref(st, chartOf(scope.id)), control } as const;
+      return payloads instanceof Failed ? payloads : mapChecked(payloads, (p) => checked(st, fs, schema, p));
+    },
+    showInput: (scope, records, activity, access) => {
+      const input = fs.showInput(scope, records, activity, access);
+      return input instanceof Failed ? input : sorted(st, { kind: "input", definition: activity.target }, input);
+    },
+    items: (scope, records, access) => {
+      const keys = fs.items(scope, records, access);
+      if (keys instanceof Failed) return keys;
+      const map = expectFound("the map state of an items question", scope.state ?? undefined);
+      const schema = { kind: "mapKey", chart: ref(st, chartOf(scope.id)), map } as const;
+      return mapChecked(keys, (k) => checked(st, fs, schema, k));
+    },
+    defaults: (schema) => {
+      const row = fs.defaults(schema);
+      return row instanceof Failed ? row : sorted(st, schema, row);
+    },
+    close: (scope, records, access) => {
+      const output = fs.close(scope, records, access);
+      const schema = { kind: "output", definition: ref(st, chartOf(scope.id)) } as const;
+      return output instanceof Failed ? output : checked(st, fs, schema, output);
+    },
+    closeEnsures: (...a) => fs.closeEnsures(...a),
+  };
+}
 
 /** Lean's Functions.parseOutside, with the out-of-order element as the Zod issue that only TS reports. */
 export function parseOutside(st: Service, fs: Functions, schema: Schema, value: unknown): Checked | Failed {
@@ -213,8 +330,8 @@ export interface Functions {
   ): boolean | Failed;
   inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed;
   /**
-   * Lean's decide: the events in groups, the groups in order and the events of one group in none. Each payload is
-   * encoded by its event's schema in the order it was built; that of an event that the spec lacks is written as is.
+   * Lean's decide: the events in groups, the groups in order and the events of one group in none. Each payload of an
+   * event that the command lists is encoded by its event's schema in the order it was built; any other payload is null.
    */
   decide(
     command: string,

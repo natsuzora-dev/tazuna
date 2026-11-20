@@ -6,7 +6,7 @@ import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
 import { ref } from "../basic.ts";
 import { processCommand } from "../command.ts";
-import { Failed, firstFalse, issueViolation, sorted } from "../functions.ts";
+import { Failed, firstFalse, issueViolation } from "../functions.ts";
 import { chartOf, type InstanceId } from "../instance.ts";
 import { byCaller, type Emitted } from "../message.ts";
 import { recordSource } from "../records.ts";
@@ -264,7 +264,7 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
       createKeys(r.state, reacted.created);
       const activity = automation.sends;
-      const input = sorted(r.st, { kind: "input", definition: activity.target }, reacted.input);
+      const { input } = reacted;
       const requester: Requester = { kind: "automation", automation: automation.name };
       if (isOwn(activity, r.st.service))
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });

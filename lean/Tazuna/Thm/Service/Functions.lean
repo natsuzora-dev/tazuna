@@ -25,4 +25,83 @@ theorem not_issue_of_not_halts {owner : Spec.Ref} {e : Issue} {mismatch : Schema
   rw [← h, hr] at hh
   cases hh
 
+theorem mapChecked_mem {α β : Type} (f : α → Id (Except Issue β)) :
+    ∀ (xs : List α) (ys : List β), mapChecked f xs = .ok ys → ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y
+  | [], ys, h, y, hy => by
+    simp only [mapChecked, pure] at h
+    injection h with h
+    subst h
+    cases hy
+  | x :: xs, ys, h, y, hy => by
+    simp only [mapChecked, bind] at h
+    split at h
+    · cases h
+    · rename_i z hz
+      split at h
+      · cases h
+      · rename_i zs hzs
+        injection h with h
+        subst h
+        rcases List.mem_cons.mp hy with rfl | hy
+        · exact ⟨x, List.mem_cons_self, hz⟩
+        · obtain ⟨x', hx', hf⟩ := mapChecked_mem f xs zs hzs y hy
+          exact ⟨x', List.mem_cons_of_mem _ hx', hf⟩
+
+/-- What the sorting functions keep of a value that spec code made: the sorted value, as its schema parses it. -/
+theorem checked_parses (schema : Schema) (v x : Value) (h : fs.checked st schema v = .ok x) :
+    fs.parse schema (st.sorted (m := Id) schema v) = .ok (some x) := by
+  simp only [Functions.checked, Functions.parseSorted, bind] at h
+  split at h
+  · rename_i hp
+    injection h with h
+    subst h
+    exact hp
+  · cases h
+  · cases h
+
+/--
+Each event that the sorting decide answers is one that decide wrote. One that the command lists has its payload sorted,
+as its event's schema parses it; an unlisted one keeps the payload that decide wrote.
+-/
+theorem sorting_decide_parsed (name : String) (input : Value) (records : Records) (now : Time)
+    (groups : List (List Emit)) (h : (fs.sorting st).decide name input records now = .ok groups) :
+    ∃ decided, fs.decide name input records now = .ok decided ∧
+      ∀ g ∈ groups, ∀ o ∈ g, ∃ d ∈ decided, ∃ e ∈ d,
+        if st.lists name e then
+          o.event = e.event ∧ fs.parse (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) = .ok (some o.payload)
+        else o = e := by
+  simp only [Functions.sorting, bind] at h
+  split at h
+  · cases h
+  · rename_i decided hd
+    refine ⟨decided, hd, fun g hg o ho => ?_⟩
+    obtain ⟨d, hd', hdg⟩ := mapChecked_mem _ _ _ h g hg
+    obtain ⟨e, he, heo⟩ := mapChecked_mem _ _ _ hdg o ho
+    refine ⟨d, hd', e, he, ?_⟩
+    split at heo
+    · rename_i hl
+      simp only [hl, ↓reduceIte]
+      simp only [Except.map, pure] at heo
+      split at heo
+      · cases heo
+      · rename_i payload hc
+        injection heo with heo
+        subst heo
+        exact ⟨rfl, checked_parses _ _ _ hc⟩
+    · rename_i hl
+      simp only [hl, Bool.false_eq_true, ↓reduceIte]
+      injection heo with heo
+      exact heo.symm
+
+/-- A query's output is the sorted output of resolve, as its output schema parses it. -/
+theorem sorting_resolve_parsed (name : String) (input : Value) (records : Records) (now : Time) (output : Value)
+    (h : (fs.sorting st).resolve name input records now = .ok output) :
+    ∃ raw, fs.resolve name input records now = .ok raw ∧
+      fs.parse (.output (st.ref name)) (st.sorted (m := Id) (.output (st.ref name)) raw) = .ok (some output) := by
+  simp only [Functions.sorting, bind] at h
+  split at h
+  · rename_i raw hr
+    exact ⟨raw, hr, checked_parses _ _ _ h⟩
+  · cases h
+
 end Tazuna.Thm.Service.Functions

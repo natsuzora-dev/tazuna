@@ -121,12 +121,7 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
       [...i.held]
         .toSorted(([a], [b]) => byCodePoint(a, b))
         .map(([state, fields]) => {
-          const encoded = Object.fromEntries(
-            Object.entries(fields).map(([name, v]) => [
-              name,
-              (encode({ kind: "held", chart, state, name }, { [name]: v }) as Fields)[name],
-            ]),
-          );
+          const encoded = encode({ kind: "held", chart, state }, fields) as Fields;
           const c = chartStructure(st.structure, st.service, chart.name);
           return [state, keyed(refsAt(c === undefined ? undefined : stateNamed(c, state)?.held?.keys), [], encoded)];
         }),

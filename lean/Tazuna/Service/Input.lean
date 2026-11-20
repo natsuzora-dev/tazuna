@@ -286,7 +286,7 @@ def startRecords [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : 
   st.singles.foldlM (fun s e => do
     if s.records.any (·.entity == e) then pure s else
     let schema := .record (st.ref e)
-    let value ← st.sorted schema (← expectFound s!"defaults of the single entity {e}" (← fs.defaults schema).toOption)
+    let value ← expectFound s!"defaults of the single entity {e}" (← fs.defaults schema).toOption
     pure { s with records := s.records ++ [{ entity := e, key := none, value }] }) s
 
 def begin [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do

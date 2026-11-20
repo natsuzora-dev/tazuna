@@ -3,7 +3,7 @@ import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { ref } from "../basic.ts";
-import { Failed, firstFalse, issueViolation, parseSorted, sorted } from "../functions.ts";
+import { Failed, firstFalse, issueViolation } from "../functions.ts";
 import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
@@ -27,7 +27,7 @@ import type { Processing } from "./queue.ts";
 
 /**
  * Lean's initialContextOf: what the initialContext of `chart` computes from `input`, with each field that it leaves out
- * taking its default, sorted and parsed, or a halt with what an Issue means.
+ * taking its default, parsed, or a halt with what an Issue means.
  */
 export function initialContextOf(r: Processing, chart: string, input: Fields): Fields {
   const definition = ref(r.st, chart);
@@ -38,7 +38,7 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
   const schema = { kind: "context", chart: definition } as const;
   const defaults = r.functions.defaults(schema);
   if (defaults instanceof Failed) return fault(defaults);
-  const parsed = parseSorted(r.st, r.functions, schema, merged(defaults, given));
+  const parsed = r.functions.parse(schema, merged(defaults, given));
   if (parsed instanceof Failed) return fault(parsed);
   if ("error" in parsed)
     return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: parsed.error }));
@@ -80,7 +80,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
   createKeys(r.state, given.created);
-  const input = sorted(r.st, { kind: "input", definition: target }, given.input);
+  const { input } = given;
   const requester: Requester = { kind: "state", machine: instance.id, state };
   if (isOwn(a, r.st.service)) {
     r.queue.round.push({
@@ -108,7 +108,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
   const schema = { kind: "input", definition: screen } as const;
-  const parsed = parseSorted(r.st, r.functions, schema, given.input);
+  const parsed = r.functions.parse(schema, given.input);
   if (parsed instanceof Failed) halt(issueViolation(screen, parsed));
   if ("error" in parsed)
     halt(withExtra({ kind: "Fault.inputSchema", definition, data: { target: screen } }, { error: parsed.error }));

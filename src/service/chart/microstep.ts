@@ -1,6 +1,4 @@
-import { sortCollections } from "../../data/collections.ts";
-import { expectFound } from "../../data/internalError.ts";
-import type { Fields, Json } from "../../data/values.ts";
+import type { Fields } from "../../data/values.ts";
 import { hasParameters, transitionRef } from "../../spec/structure.ts";
 import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
@@ -75,17 +73,7 @@ function fillHeld(
   const filled = r.functions.held(scope, records, n, edge, extra, new NoteAccess(r, scope));
   const chart = ref(r.st, instance.chart.name);
   if (filled instanceof Failed) halt(issueViolation(chart, filled));
-  const schema = expectFound(`held schema of ${n}`, instance.chart.states.get(n)?.spec.held?.schema);
-  const sorted = sortCollections(schema, filled) as Readonly<Record<string, Json>>;
-  instance.held.set(
-    n,
-    Object.fromEntries(
-      Object.entries(sorted).map(([name, v]) => [
-        name,
-        r.functions.decode({ kind: "held", chart, state: n, name }, { [name]: v })[name],
-      ]),
-    ),
-  );
+  instance.held.set(n, r.functions.decode({ kind: "held", chart, state: n }, filled));
 }
 
 /**

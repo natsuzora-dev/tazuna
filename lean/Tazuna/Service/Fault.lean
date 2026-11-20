@@ -26,8 +26,8 @@ inductive Fault where
   | inputSchema (definition : Spec.Ref) (target : Spec.Ref)
   /-- The input that the chart gives the screen it opens fails the screen's requires `condition`. -/
   | failedRequires (definition : Spec.Ref) (screen : Spec.Ref) (condition : String)
-  /-- The edge that enters `state` fills its parameter `held` with null or a value off its schema. -/
-  | heldSchema (definition : Spec.Ref) (held state : String)
+  /-- The edge that enters `state` fills its parameters with a value off the state's held schema. -/
+  | heldSchema (definition : Spec.Ref) (state : String)
   /--
   An offers entry of the control `control` returns a payload that does not match the control's payload schema. `state`
   is null for the offers of the chart's own `on`.

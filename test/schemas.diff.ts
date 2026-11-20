@@ -45,9 +45,7 @@ function schemasOf(structure: Structure, service: string): Schema[] {
               )
             : []),
           ...d.states.flatMap((s): Schema[] => [
-            ...Object.keys((s.held?.schema as { properties?: object } | undefined)?.properties ?? {}).map(
-              (name): Schema => ({ kind: "held", chart: definition, state: s.name, name }),
-            ),
+            ...(s.held === undefined ? [] : [{ kind: "held", chart: definition, state: s.name } as const]),
             ...(mapStateOf(s) === undefined
               ? []
               : [

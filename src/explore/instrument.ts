@@ -2,9 +2,7 @@ import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag, Ref } from "../data/canonical.ts";
-import { sortCollections } from "../data/collections.ts";
-import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import { expectFound } from "../data/internalError.ts";
+import type { DefinitionRef } from "../data/definitionRef.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
@@ -12,7 +10,7 @@ import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Undecided } from "../data/undecided.generated.ts";
 import { byCodePoint, canonicalJson, type Fields, type Json, plain, sameJson } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
-import { ref, type Schema, type Service, schemaOf } from "../service/basic.ts";
+import { ref, type Schema, type Service } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
@@ -25,9 +23,8 @@ import {
   holderId,
   type Keys,
   type Scope,
-  sorted,
 } from "../service/functions.ts";
-import { chartOf, type InstanceId, mapOf, within } from "../service/instance.ts";
+import { chartOf, type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import type { RecordSource } from "../service/records.ts";
@@ -497,30 +494,11 @@ export class InstrumentedFunctions implements Functions {
     );
   }
 
-  /** What Lean's assign audit compares of an answer: both contexts with their collections sorted, and the created keys. */
-  private assignedMade(
-    scope: Scope,
-    {
-      context,
-      copyContext,
-      created,
-    }: { readonly context: Json; readonly copyContext: Json | undefined; readonly created: readonly string[] },
-  ): readonly [unknown, readonly string[]] {
-    const chart = ref(this.st, chartOf(scope.id));
-    const map = mapOf(scope.id);
-    const copy =
-      copyContext === undefined || map === undefined
-        ? null
-        : sortCollections(schemaOf(this.st, { kind: "mapContext", chart, map }), copyContext);
-    return [[sortCollections(schemaOf(this.st, { kind: "context", chart }), context), copy], created];
-  }
-
   /** Lean's resolveCollect. */
   private resolveAudit(name: string, input: Fields, records: RecordSource, now: Temporal.Instant, resolved: Json) {
     const definition = ref(this.st, name);
     if (this.c.hasReportedOrder(definition)) return;
-    const schema = { kind: "output", definition } as const;
-    const original = this.fs.comparable(name, { result: "fulfilled", output: sorted(this.st, schema, resolved) });
+    const original = this.fs.comparable(name, { result: "fulfilled", output: resolved });
     if (original instanceof Failed) return;
     const data = { function: "resolve" };
     const exception = (error: ViolationError | undefined) =>
@@ -530,7 +508,7 @@ export class InstrumentedFunctions implements Functions {
       );
     const reversed = this.ifs.reversed((fs) => fs.resolve(name, input, records, now));
     if (reversed instanceof Failed) return exception(reversed.error);
-    const reordered = this.fs.comparable(name, { result: "fulfilled", output: sorted(this.st, schema, reversed) });
+    const reordered = this.fs.comparable(name, { result: "fulfilled", output: reversed });
     if (reordered instanceof Failed) return exception(reordered.error);
     if (!sameJson(original, reordered))
       this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
@@ -559,15 +537,8 @@ export class InstrumentedFunctions implements Functions {
   }
   decide(command: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
     const call = (fs: Functions) => fs.decide(command, input, records, now);
-    // An event that the spec lacks has no schema; the run reports it before it sorts.
-    const payloadOf = ({ event, payload }: Decided) =>
-      this.st.structure.definitions.some((d) => d.kind === "event" && sameRef(d, event))
-        ? sorted(this.st, { kind: "payload", event }, payload)
-        : payload;
     const groupTexts = (groups: readonly (readonly Decided[])[]) =>
-      canonicalJson(
-        groups.map((g) => g.map((e) => text({ event: e.event, payload: payloadOf(e) })).toSorted(byCodePoint)),
-      );
+      canonicalJson(groups.map((g) => g.map((e) => text(e)).toSorted(byCodePoint)));
     return this.audited(ref(this.st, command), "decide", () => call(this.fs), call, groupTexts);
   }
   ensures(command: string, input: Fields, before: RecordSource, after: RecordSource, now: Temporal.Instant) {
@@ -627,14 +598,8 @@ export class InstrumentedFunctions implements Functions {
   }
   react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: Keys) {
     const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
-    const found = expectFound(
-      `automation ${automation}`,
-      this.st.automations.find((a) => a.name === automation),
-    );
-    const schema = { kind: "input", definition: found.sends.target } as const;
-    const input = (x: { readonly input: Json }) => sorted(this.st, schema, x.input);
     return this.audited(ref(this.st, automation), "react", () => call(this.fs), call, {
-      same: (x, y) => sameMade(keys, [input(x), x.created], [input(y), y.created]),
+      same: (x, y) => sameMade(keys, [x.input, x.created], [y.input, y.created]),
     });
   }
   comparable(query: string, answer: Answer): unknown {
@@ -642,14 +607,7 @@ export class InstrumentedFunctions implements Functions {
   }
   initialContext(machine: string, input: Fields) {
     const call = (fs: Functions) => fs.initialContext(machine, input);
-    const schema = schemaOf(this.st, { kind: "context", chart: ref(this.st, machine) });
-    return this.audited(
-      ref(this.st, machine),
-      "initialContext",
-      () => call(this.fs),
-      call,
-      (answer) => text(sortCollections(schema, answer)),
-    );
+    return this.audited(ref(this.st, machine), "initialContext", () => call(this.fs), call, text);
   }
   guard(
     scope: Scope,
@@ -673,28 +631,23 @@ export class InstrumentedFunctions implements Functions {
       access,
       "assign",
       (fs, a) => fs.assign(scope, records, assignment, extra, keys, a),
-      { same: (x, y) => sameMade(keys, this.assignedMade(scope, x), this.assignedMade(scope, y)) },
+      {
+        same: (x, y) =>
+          sameMade(
+            keys,
+            [[x.context, x.copyContext ?? null], x.created],
+            [[y.context, y.copyContext ?? null], y.created],
+          ),
+      },
     );
   }
   input(scope: Scope, records: RecordSource, activity: Activity, keys: Keys, access: Access) {
-    const input = (x: { readonly input: Json }) =>
-      sorted(this.st, { kind: "input", definition: activity.target }, x.input);
     return this.chartAudited(scope, access, "input", (fs, a) => fs.input(scope, records, activity, keys, a), {
-      same: (x, y) => sameMade(keys, [input(x), x.created], [input(y), y.created]),
+      same: (x, y) => sameMade(keys, [x.input, x.created], [y.input, y.created]),
     });
   }
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access) {
-    const schema = expectFound(
-      `held schema of ${state}`,
-      this.st.charts.get(chartOf(scope.id))?.states.get(state)?.spec.held?.schema,
-    );
-    return this.chartAudited(
-      scope,
-      access,
-      "held",
-      (fs, a) => fs.held(scope, records, state, edge, extra, a),
-      (held) => text(sortCollections(schema, held)),
-    );
+    return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, state, edge, extra, a), text);
   }
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access) {
     return this.chartAudited(scope, access, "deadlineAt", (fs, a) => fs.deadlineAt(scope, records, name, a), String);
@@ -705,10 +658,7 @@ export class InstrumentedFunctions implements Functions {
       access,
       "offers",
       (fs, a) => fs.offers(scope, records, control, a),
-      (payloads) => {
-        const schema = { kind: "control", screen: ref(this.st, chartOf(scope.id)), control } as const;
-        return textSet(payloads.map((p) => canonicalJson(sorted(this.st, schema, p))));
-      },
+      (payloads) => textSet(payloads.map(canonicalJson)),
     );
   }
   showInput(scope: Scope, records: RecordSource, activity: Activity, access: Access) {
@@ -717,7 +667,7 @@ export class InstrumentedFunctions implements Functions {
       access,
       "showInput",
       (fs, a) => fs.showInput(scope, records, activity, a),
-      (written) => canonicalJson(sorted(this.st, { kind: "input", definition: activity.target }, written)),
+      canonicalJson,
     );
   }
   items(scope: Scope, records: RecordSource, access: Access) {
@@ -726,24 +676,14 @@ export class InstrumentedFunctions implements Functions {
       access,
       "items",
       (fs, a) => fs.items(scope, records, a),
-      (keys) => {
-        const map = expectFound("the map state of an items question", scope.state ?? undefined);
-        const schema = { kind: "mapKey", chart: ref(this.st, chartOf(scope.id)), map } as const;
-        return textSet(keys.map((k) => canonicalJson(sorted(this.st, schema, k))));
-      },
+      (keys) => textSet(keys.map(canonicalJson)),
     );
   }
   defaults(schema: Schema) {
     return this.fs.defaults(schema);
   }
   close(scope: Scope, records: RecordSource, access: Access) {
-    return this.chartAudited(
-      scope,
-      access,
-      "close",
-      (fs, a) => fs.close(scope, records, a),
-      (output) => text(sorted(this.st, { kind: "output", definition: ref(this.st, chartOf(scope.id)) }, output)),
-    );
+    return this.chartAudited(scope, access, "close", (fs, a) => fs.close(scope, records, a), text);
   }
   closeEnsures(screen: string, input: Fields, output: Fields) {
     const call = (fs: Functions) => fs.closeEnsures(screen, input, output);

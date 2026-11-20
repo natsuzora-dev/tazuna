@@ -45,7 +45,7 @@ inductive Schema where
   | payload (event : Spec.Ref)
   | output (definition : Spec.Ref)
   | control (screen : Spec.Ref) (control : String)
-  | held (chart : Spec.Ref) (state name : String)
+  | held (chart : Spec.Ref) (state : String)
   | context (chart : Spec.Ref)
   | mapContext (chart : Spec.Ref) (map : String)
   | mapKey (chart : Spec.Ref) (map : String)
@@ -107,8 +107,8 @@ def state? (st : Service) (chart : Spec.Ref) (state : String) : Option Spec.Stat
 
 open Tazuna.Spec in
 /--
-The JSON Schema that `schema` names, read from the structure: a held parameter's as an object of that one field, and a
-control without a payload's as an object without fields. None when the structure has no such schema.
+The JSON Schema that `schema` names, read from the structure: a control without a payload's as an object without
+fields. None when the structure has no such schema.
 -/
 def schemaOf (st : Service) : Schema → Option Value
   | .input d => (st.body? d).bind fun
@@ -127,8 +127,7 @@ def schemaOf (st : Service) : Schema → Option Value
   | .control screen control => (st.body? screen).bind fun
     | .screen c => (c.controls.lookup control).map (·.getD (.obj []))
     | _ => none
-  | .held chart state name => ((st.state? chart state).bind (·.held)).bind fun h =>
-    (propertyOf h.schema name).map fun p => .obj [("type", .str "object"), ("properties", .obj [(name, p)])]
+  | .held chart state => ((st.state? chart state).bind (·.held)).map (·.schema)
   | .context chart => (st.body? chart).bind fun
     | .machine c | .screen c => some c.context
     | _ => none

@@ -105,16 +105,19 @@ def answer {α : Type} (question : Question) (reply : Reply) (read : Reply → O
 
 /--
 The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set, about the service
-`service` when given, or else the request's service.
+`service` when given, or else the request's service. A parse logs into `parses`, not `reads`: Functions.sorting asks it
+inside another answer, whose reads Instrument then reads.
 -/
-def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool)
+def functions (stdin stdout : IO.FS.Stream) (reads parses : Reads) (memo : Memo) (reversed : Bool)
     (service : Option String := none) : Functions IO :=
   let asking (records : Records) (question : Question) (before : Records := []) :=
     ask stdin stdout reads memo reversed service records question before
   let answered {α : Type} (question : Question) (read : Reply → Option α) (records : Records := [])
       (before : Records := []) : IO (Except Issue α) := do
     answer question (← asking records question before) read
-  { parse := fun schema value => answered (.parse schema value) fun | .parse v => some v | _ => none
+  { parse := fun schema value => do
+      answer (.parse schema value) (← ask stdin stdout parses memo reversed service [] (.parse schema value)) fun
+        | .parse v => some v | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     binding := fun name binding input records now =>
       answered (.binding name binding input now) (records := records) fun | .binding b => some b | _ => none
@@ -227,14 +230,15 @@ instance : MonadNote IO where
     | _ => pure ()
 
 /--
-The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
-Collect. Each question to TS names its service.
+The functions of each running service of `start`, sorted as Functions.sorting sorts them and instrumented as Instrument
+does, which collect into that service's Collect. Each question to TS names its service.
 -/
 def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (String → Functions ActingIO) := do
   let reads ← IO.mkRef {}
+  let parses ← IO.mkRef {}
   let memo ← IO.mkRef {}
   pure fun service =>
-    let fs := functions stdin stdout reads memo false (some service)
+    let fs := functions stdin stdout reads parses memo false (some service)
     match start.services.lookup service with
     | none => liftFunctions fs
     | some st =>
@@ -242,8 +246,8 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (Strin
         lastReads := do pure (← reads.get).parts
         lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {})
         lastEnumerated := do pure (((← reads.get).replied.bind (·.enumerated)) == some true)
-        reversed := functions stdin stdout reads memo true (some service) }
-      (instrument st fs ifs).hoist (focus service)
+        reversed := (functions stdin stdout reads parses memo true (some service)).sorting st }
+      (instrument st (fs.sorting st) ifs).hoist (focus service)
 
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do

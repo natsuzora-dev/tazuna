@@ -41,7 +41,6 @@ export type Schema =
       readonly kind: "held";
       readonly chart: DefinitionRef;
       readonly state: string;
-      readonly name: string;
     }
   | {
       readonly kind: "context";

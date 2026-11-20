@@ -1,20 +1,14 @@
-import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import { sameRef } from "../data/definitionRef.ts";
 import type { Answer, LineId } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
-import { emitsOf } from "../spec/structure.ts";
 import { ref, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
-import { Failed, issueViolation, parseOutside, sorted } from "./functions.ts";
+import { Failed, issueViolation, lists, parseOutside } from "./functions.ts";
 import { applyAll, type Encoded, integrityViolations, writtenRecord } from "./integrity.ts";
 import type { Emitted } from "./message.ts";
 import { recordSource } from "./records.ts";
 import { halt, type Run, report, reportAll, write } from "./state.ts";
-
-/** Returns whether the command `command` lists the event of `e` in its emits. */
-function lists(st: Service, command: string, e: { readonly event: DefinitionRef }): boolean {
-  return emitsOf(st.structure, ref(st, command)).some((l) => sameRef(l, e.event));
-}
 
 /** Lean's orderedGroups: the groups of `decided` with the events of `events`, each group in canonical JSON order. */
 function orderedGroups(decided: readonly (readonly unknown[])[], events: readonly Encoded[]): Encoded[][] {
@@ -93,12 +87,11 @@ export function processCommand(
       data: { event: event === undefined ? null : { service: event.service, name: event.name } },
     });
   }
-  const sortedEmits = decided.flat().map(({ event, payload }): Encoded => {
-    const schema = { kind: "payload", event } as const;
-    const encoded = sorted(r.st, schema, payload);
-    return { emit: { event, payload: r.functions.decode(schema, encoded), encoded }, encoded: encoded as Fields };
+  const emits = decided.flat().map(({ event, payload }): Encoded => {
+    const decoded = r.functions.decode({ kind: "payload", event }, payload);
+    return { emit: { event, payload: decoded, encoded: payload }, encoded: payload as Fields };
   });
-  const groups = orderedGroups(decided, sortedEmits);
+  const groups = orderedGroups(decided, emits);
   const twice = twiceWritten(r.st, groups);
   if (twice !== undefined)
     return report(s, {

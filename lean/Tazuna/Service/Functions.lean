@@ -135,7 +135,7 @@ def issueViolation (owner : Spec.Ref) (e : Issue)
   | .thrown (some s) => .exception (some s.owner)
   | .unheld held => .unheld owner held
   | .notOnly => .notOnly owner
-  | .schema (.held _ state name) => .heldSchema owner name state
+  | .schema (.held _ state) => .heldSchema owner state
   | .schema s => mismatch s
 
 /--
@@ -174,8 +174,9 @@ dropped.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
   read only the input, or for an external peer's answer to the service's command or query.
 - decide: the events of a command whose binds are all non-null and whose requires all hold, in groups: the groups are in
-  order, and the events of one group have none. Each payload is encoded by its event's schema in the order it was
-  built, and one that does not match is a schema Issue; the payload of an event that the spec lacks is written as is.
+  order, and the events of one group have none. Each payload of an event that the command lists is encoded by its
+  event's schema in the order it was built, and one that does not match is a schema Issue; any other payload is null,
+  since the run halts on its event (unlistedEmittedEvent) first.
 - ensures: the name of the first failing ensures of an accepted command. Binds read the records before the event write
   (the third argument), and `records` in ensures reads those after it (the fourth argument).
 - queryEnsures: the name of the first failing ensures of a fulfilled query; `output` is the answer's output.
@@ -196,7 +197,7 @@ dropped.
 - initialContext: the context that the initialContext of a machine or screen computes from the input (the parsed input of
   a screen that opens opened, or `{}` when nothing opens it), encoded and in the order it was built, `{}` without one.
   A field that its schema does not encode is a schema Issue. initialContextOf fills in the defaults of the fields that
-  it leaves out and parses it sorted (parseSorted).
+  it leaves out and parses it.
 - guard: whether one guard condition of a transition holds.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked,
   encoded and in the order they were built.
@@ -210,13 +211,13 @@ dropped.
   order it was built.
 - closeEnsures: the name of the first failing ensures of a screen that closed with the input and the sorted output.
 - assign: the context after the assign, unchanged where there is none, checked, encoded and in the order it was built,
-  which runAssign sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign returns
+  which Functions.sorting sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign returns
   both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
-  of `n`, encoded and in the order they were built, which fillHeld sorts. A transition's `with` reads what its assign
-  reads.
+  of `n`, encoded and in the order they were built, which Functions.sorting sorts. A transition's `with` reads what its
+  assign reads.
 - deadlineAt: what the `at` of a state's `after` deadline computes on entering it, as
   Temporal.Instant.prototype.toString writes it, or none when it computes no Instant.
 -/
@@ -268,6 +269,106 @@ def Functions.parseOutside {m : Type → Type} [Monad m] [MonadNote m] (fs : Fun
     let json ← expectFound s!"schema {repr schema}" (st.schemaOf schema)
     pure (.ok (if keyOrdered json x then some x else none))
   | r => pure r
+
+/-- Whether the command `command` lists the event of `e` in its emits. -/
+def lists (st : Service) (command : String) (e : Emit) : Bool :=
+  (st.«structure».emitsOf (st.ref command)).contains e.event
+
+/-- Each of `xs` through `f`, in order, or the first Issue. -/
+def mapChecked {m : Type → Type} [Monad m] {α β : Type} (f : α → m (Except Issue β)) :
+    List α → m (Except Issue (List β))
+  | [] => pure (.ok [])
+  | x :: xs => do
+    match ← f x with
+    | .error e => pure (.error e)
+    | .ok y =>
+      match ← mapChecked f xs with
+      | .error e => pure (.error e)
+      | .ok ys => pure (.ok (y :: ys))
+
+/-- A value that spec code made for `schema`, sorted and parsed (parseSorted), or a schema Issue when it does not match. -/
+def Functions.checked {m : Type → Type} [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (schema : Schema)
+    (v : Value) : m (Except Issue Value) := do
+  match ← fs.parseSorted st schema v with
+  | .ok (some x) => pure (.ok x)
+  | .ok none => pure (.error (.schema schema))
+  | .error e => pure (.error e)
+
+/--
+The functions that answer as `fs` does, with each value that spec code made sorted by its schema, as the run keeps it.
+A value that its own service keeps is also parsed (`checked`), so that its checks read the sorted order. An event that
+the command does not list keeps its payload as decide wrote it, since the run halts on it (unlistedEmittedEvent) before
+it reads a payload. An input goes to its receiver, which parses it, and initialContextOf parses an initial context
+merged with its defaults.
+-/
+def Functions.sorting {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (fs : Functions m) : Functions m :=
+  let sortedInput (schema : Option Schema) (x : Except Issue (Value × List String)) : m (Except Issue (Value × List String)) :=
+    match x with
+    | .ok (input, keys) => do
+      pure (.ok (← st.sorted (← expectFound "the receiver of an input" schema) input, keys))
+    | .error e => pure (.error e)
+  { fs with
+    decide := fun name input records now => do
+      match ← fs.decide name input records now with
+      | .error e => pure (.error e)
+      | .ok groups =>
+        mapChecked (mapChecked fun e =>
+          if st.lists name e then do
+            pure ((← fs.checked st (.payload e.event) e.payload).map fun payload => { e with payload })
+          else pure (.ok e)) groups
+    resolve := fun name input records now => do
+      match ← fs.resolve name input records now with
+      | .ok output => fs.checked st (.output (st.ref name)) output
+      | .error e => pure (.error e)
+    react := fun name payload records now keys => do
+      sortedInput ((st.automations.find? (·.name == name)).map (.input ·.sends.ref))
+        (← fs.react name payload records now keys)
+    initialContext := fun machine input => do
+      match ← fs.initialContext machine input with
+      | .ok context => pure (.ok (← st.sorted (.context (st.ref machine)) context))
+      | .error e => pure (.error e)
+    assign := fun scope records a extra keys => do
+      let chart := st.ref scope.machine
+      match ← fs.assign scope records a extra keys with
+      | .error e => pure (.error e)
+      | .ok (context, copy, keys) =>
+        match ← fs.checked st (.context chart) context with
+        | .error e => pure (.error e)
+        | .ok context =>
+          match copy with
+          | none => pure (.ok (context, none, keys))
+          | some c =>
+            let map ← expectFound "the map state of a copy" scope.id.map?
+            pure ((← fs.checked st (.mapContext chart map) c).map fun c => (context, some c, keys))
+    input := fun scope records a keys => do sortedInput (some (.input a.ref)) (← fs.input scope records a keys)
+    held := fun scope records n edge extra => do
+      match ← fs.held scope records n edge extra with
+      | .ok v => fs.checked st (.held (st.ref scope.machine) n) v
+      | .error e => pure (.error e)
+    offers := fun scope records control => do
+      match ← fs.offers scope records control with
+      | .ok payloads => mapChecked (fs.checked st (.control (st.ref scope.machine) control)) payloads
+      | .error e => pure (.error e)
+    showInput := fun scope records a => do
+      match ← fs.showInput scope records a with
+      | .ok input => pure (.ok (← st.sorted (.input a.ref) input))
+      | .error e => pure (.error e)
+    items := fun scope records => do
+      match ← fs.items scope records with
+      | .error e => pure (.error e)
+      | .ok items =>
+        let schema := .mapKey (st.ref scope.machine) (← expectFound "the map state of an items question" scope.state)
+        mapChecked (fun (key, canonical) => do
+          let canonical ← st.sorted schema canonical
+          pure ((← fs.checked st schema key).map (·, canonical))) items
+    defaults := fun schema => do
+      match ← fs.defaults schema with
+      | .ok v => pure (.ok (← st.sorted schema v))
+      | .error e => pure (.error e)
+    close := fun scope records => do
+      match ← fs.close scope records with
+      | .ok output => fs.checked st (.output (st.ref scope.machine)) output
+      | .error e => pure (.error e) }
 
 /--
 The first of `names` that `test` finds false, in order: the semantics evaluates binds, requires and guards one by one

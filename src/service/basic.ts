@@ -41,7 +41,7 @@ export type Schema =
   | { readonly kind: "payload"; readonly event: DefinitionRef }
   | { readonly kind: "output"; readonly definition: DefinitionRef }
   | { readonly kind: "control"; readonly screen: DefinitionRef; readonly control: string }
-  | { readonly kind: "held"; readonly chart: DefinitionRef; readonly state: string; readonly name: string }
+  | { readonly kind: "held"; readonly chart: DefinitionRef; readonly state: string }
   | { readonly kind: "context"; readonly chart: DefinitionRef }
   | { readonly kind: "mapContext"; readonly chart: DefinitionRef; readonly map: string }
   | { readonly kind: "mapKey"; readonly chart: DefinitionRef; readonly map: string }
@@ -104,8 +104,7 @@ export function schemaOwner(schema: Schema): DefinitionRef {
 }
 
 /**
- * Lean's Service.schemaOf: the JSON Schema that `schema` names, read from the structure, a held parameter's as an
- * object of that one field. The loader builds every schema that a run names, so a missing one is an InternalError.
+ * Lean's Service.schemaOf: the JSON Schema that `schema` names, read from the structure. The loader builds every schema that a run names, so a missing one is an InternalError.
  */
 export function schemaOf(st: Service, schema: Schema): unknown {
   const body = (r: DefinitionRef) => st.structure.definitions.find((d) => sameRef(d, r));
@@ -130,12 +129,8 @@ export function schemaOf(st: Service, schema: Schema): unknown {
         if (d?.kind !== "screen" || !Object.hasOwn(d.controls, schema.control)) return undefined;
         return d.controls[schema.control] ?? {};
       }
-      case "held": {
-        const p = (
-          state(schema.chart, schema.state)?.held?.schema as { properties?: Record<string, unknown> } | undefined
-        )?.properties?.[schema.name];
-        return p === undefined ? undefined : { type: "object", properties: { [schema.name]: p } };
-      }
+      case "held":
+        return state(schema.chart, schema.state)?.held?.schema;
       case "context": {
         const d = body(schema.chart);
         return d?.kind === "machine" || d?.kind === "screen" ? d.context : undefined;

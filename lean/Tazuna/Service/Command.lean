@@ -7,10 +7,6 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-/-- The events with their payloads sorted, as the run keeps what decide wrote. -/
-def sortEmits [Monad m] [MonadNote m] (st : Service) (emits : List Emit) : m (List Emit) :=
-  emits.mapM fun e => do pure { e with payload := ← st.sorted (.payload e.event) e.payload }
-
 /-- `xs` cut into consecutive lists of the lengths `lengths`. -/
 def chunks {α : Type} : List Nat → List α → List (List α)
   | [], _ => []
@@ -33,10 +29,6 @@ def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) 
   groups.findSome? fun g =>
     let rows := g.filterMap fun e => (evolve st records e).map fun ev => (ev.entity, ev.key)
     firstDuplicate id rows
-
-/-- Whether the command `command` lists the event of `e` in its emits. -/
-def lists (st : Service) (command : String) (e : Emit) : Bool :=
-  (st.«structure».emitsOf (st.ref command)).contains e.event
 
 inductive Outcome where
   | rejected (rejection : Rejection)
@@ -72,7 +64,7 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
         let event := (st.«structure».definitions.find? fun d => d.kind == "event" && d.ref == e.event).map (·.ref)
         pure (.halted [.unlistedEmittedEvent (st.ref name) event])
       | none =>
-      let groups := orderedGroups decided (← sortEmits st decided.flatten)
+      let groups := orderedGroups decided decided.flatten
       match twiceWritten st records groups with
       | some (entity, key) => pure (.halted [.sameRecordInBag (st.ref name) (st.ref entity) key])
       | none =>

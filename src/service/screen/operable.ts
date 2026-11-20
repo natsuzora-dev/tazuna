@@ -4,7 +4,7 @@ import type { StateStructure } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { reaches } from "../chart/select.ts";
-import { Failed, issueViolation, sorted } from "../functions.ts";
+import { Failed, issueViolation } from "../functions.ts";
 import type { InstanceId } from "../instance.ts";
 import { copyId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -101,10 +101,7 @@ function offered(
       const schema = { kind: "control", screen: definition, control: key } as const;
       return {
         state,
-        offered: payloads.map((p) => {
-          const encoded = sorted(r.st, schema, p);
-          return { value: r.functions.decode(schema, encoded), encoded };
-        }),
+        offered: payloads.map((encoded) => ({ value: r.functions.decode(schema, encoded), encoded })),
       };
     }
     return halt(

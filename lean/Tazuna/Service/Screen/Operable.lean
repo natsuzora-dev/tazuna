@@ -124,7 +124,6 @@ def offered (st : Service) (s : State) (top : Instance) (control : String) (payl
           pure (.error (issueViolation (st.ref top.chart.name) e fun _ =>
             .offersSchema (st.ref top.chart.name) control state))
         | .ok payloads =>
-          let payloads ← payloads.mapM (st.sorted (.control (st.ref top.chart.name) control))
           pure (.ok (done ++ [(state, .listed payloads)]))
 
 /--
@@ -155,7 +154,7 @@ def operationsOf (st : Service) (s : State) (resource : InstanceId) :
   | .ok top =>
     let screen := top.chart.name
     let copies := top.copyKeys.flatMap fun (map, cs) =>
-      if top.isIn map then cs.filterMap fun k => (s.machine? (.copy top.id map k)).bind (·.itemKey) else []
+      if top.isIn map then cs.filter fun k => (s.machine? (.copy top.id map k)).isSome else []
     top.chart.controls.foldlM (init := (.ok [] : Except Fault (List Operation)))
       fun acc control => do
       match acc with

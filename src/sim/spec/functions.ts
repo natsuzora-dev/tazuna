@@ -5,7 +5,6 @@ import { bag, bagged, decoded, defaultRow, encodedAs, toJson, written } from "..
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
 import { expectFound, InternalError } from "../../data/internalError.ts";
-import { strict } from "../../data/schemaNode.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
@@ -42,6 +41,7 @@ import {
   givenKeys,
   type Holder,
   type Keys,
+  lists,
   type Scope,
 } from "../../service/functions.ts";
 import { chartOf, mapOf } from "../../service/instance.ts";
@@ -240,9 +240,9 @@ export class SpecFunctions implements Functions {
       case "mapKey":
         return this.mapNode(schema.chart.name, schema.map).key;
       case "held": {
-        const field = this.node(schema.chart.name, schema.state).held?.[schema.name];
-        if (field === undefined) throw new InternalError(`the state ${schema.state} has no parameter ${schema.name}`);
-        return { [schema.name]: field };
+        const held = this.node(schema.chart.name, schema.state).held;
+        if (held === undefined) throw new InternalError(`the state ${schema.state} has no parameters`);
+        return held as Shape;
       }
     }
   }
@@ -508,10 +508,9 @@ export class SpecFunctions implements Functions {
       const encoded: Decided[] = [];
       for (const e of group) {
         const event = this.emittedRef(e.event);
-        const listed = this.spec.names.has(e.event);
-        const payload = listed
+        const payload = lists(this.st, name, { event })
           ? encodedAnswer({ kind: "payload", event }, strictObjectOf(e.event.payload), e.payload)
-          : attempt(() => written(objectOf(e.event.payload), e.payload));
+          : null;
         if (payload instanceof Failed) return payload;
         encoded.push({ event, payload });
       }
@@ -594,7 +593,7 @@ export class SpecFunctions implements Functions {
     );
     if (resolved instanceof Failed) return resolved;
     const schema: Schema = { kind: "output", definition: { service, name } };
-    return encodedAnswer(schema, strictObjectOf(query.output ?? {}), resolved);
+    return encodedAnswer(schema, strictObjectOf(expectFound(`the output of ${name}`, query.output)), resolved);
   }
 
   private automation(name: string): Automation {
@@ -753,7 +752,7 @@ export class SpecFunctions implements Functions {
     return given instanceof Failed ? given : { input: given, created };
   }
 
-  /** Returns the parameters of `state` that `edge`'s `with` fills, each checked against its held schema and encoded. */
+  /** Returns the parameters of `state` that `edge`'s `with` fills, encoded by the state's held schema. */
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Json | Failed {
     const machine = chartOf(scope.id);
     const fills = (
@@ -763,16 +762,12 @@ export class SpecFunctions implements Functions {
     ) as Assignments | undefined;
     const ref = this.chartOf(machine).ref;
     const args = this.args(scope, records, access, extra);
-    const values: Record<string, Json> = {};
-    for (const [name, schema] of Object.entries(this.node(machine, state).held ?? {})) {
-      const fill = named(fills, name, "with parameter");
-      const value = attempt(() => fill(args));
-      if (value instanceof Failed) return value;
-      const checked = encodedAnswer({ kind: "held", chart: ref, state, name }, strict(schema as z.ZodType), value);
-      if (checked instanceof Failed) return checked;
-      values[name] = checked;
-    }
-    return values;
+    const shape = this.shape({ kind: "held", chart: ref, state });
+    const values = attempt(() =>
+      Object.fromEntries(Object.keys(shape).map((name) => [name, named(fills, name, "with parameter")(args)])),
+    );
+    if (values instanceof Failed) return values;
+    return encodedAnswer({ kind: "held", chart: ref, state }, strictObjectOf(shape), values);
   }
 
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed {

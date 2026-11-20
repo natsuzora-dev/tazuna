@@ -1,2 +1,3 @@
 {"kind":"Fault.unlistedEmittedEvent","definition":{"service":"notes","name":"addNote"},"data":{"event":null},"location":{"file":"notes/notes.ts","line":9},"scenario":{"service":"notes","name":"addOne"}}
 {"kind":"Fault.unlistedEmittedEvent","definition":{"service":"todo","name":"addTask"},"data":{"event":{"service":"todo","name":"taskRemoved"}},"location":{"file":"todo/todo.ts","line":9},"scenario":{"service":"todo","name":"addOne"}}
+{"kind":"Fault.unlistedEmittedEvent","definition":{"service":"untypedDrafts","name":"saveDraft"},"data":{"event":{"service":"untypedDrafts","name":"draftDropped"}},"location":{"file":"untypedDrafts/drafts.ts","line":11},"scenario":{"service":"untypedDrafts","name":"saveOne"}}
