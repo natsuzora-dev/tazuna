@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { BagValue } from "../src/data/bag.ts";
-import { bag, written } from "../src/data/collections.ts";
+import { bag, encoded } from "../src/data/collections.ts";
 import { strict } from "../src/data/schemaNode.ts";
 import { canonicalJson } from "../src/data/values.ts";
 
@@ -13,7 +13,7 @@ test("canonicalJson of a copy key sorts object keys in UTF-16 order", () => {
   );
 });
 
-test("written encodes a codec's part that fails its check, inside a discriminated union by the option that its tag names", () => {
+test("encoded reports a codec's part that fails its check, inside a discriminated union by the option that its tag names", () => {
   const cents = z.codec(z.string(), z.number().min(10), { decode: Number, encode: String });
   const schema = z.object({
     alone: cents,
@@ -22,15 +22,20 @@ test("written encodes a codec's part that fails its check, inside a discriminate
       z.object({ unit: z.literal("count"), amount: z.number() }),
     ]),
   });
-  assert.deepEqual(written(schema, { alone: 5, tagged: { unit: "cents", amount: 5 } }), {
-    alone: "5",
-    tagged: { unit: "cents", amount: "5" },
+  const json = encoded(schema, { alone: 5, tagged: { unit: "cents", amount: 5 } });
+  assert.ok("error" in json);
+  assert.deepEqual(
+    json.error.issues.map((i) => i.path),
+    [["alone"], ["tagged", "amount"]],
+  );
+  assert.deepEqual(encoded(schema, { alone: 15, tagged: { unit: "cents", amount: 15 } }), {
+    encoded: { alone: "15", tagged: { unit: "cents", amount: "15" } },
   });
 });
 
-test("written writes a bag that fails its check inside a plain union as its elements, in the order it holds them", () => {
+test("encoded writes a bag that fails its check inside a plain union as its elements, in the order it holds them", () => {
   const schema = z.object({ x: z.union([bag(z.string().min(3)), z.null()]) });
-  assert.deepEqual(written(schema, { x: new BagValue(() => ["bb", "a"]) }), { x: ["bb", "a"] });
+  assert.deepEqual(encoded(schema, { x: new BagValue(() => ["bb", "a"]) }), { encoded: { x: ["bb", "a"] } });
 });
 
 test("strict rejects a field that no object names, at any depth, and picks the union option that names every field", () => {

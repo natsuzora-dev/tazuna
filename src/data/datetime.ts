@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** Lean's Time.inRange: whether the run's time can hold `ms`, an instant from year 0000 through year 9999. */
+export const inRange = (ms: bigint): boolean => -62_167_219_200_000n <= ms && ms < 253_402_300_800_000n;
+
 /** An instant. For dates, convert to a `Temporal.ZonedDateTime` with an explicit time zone. */
 export const datetime = z.codec(z.iso.datetime({ offset: true }), z.instanceof(Temporal.Instant), {
   decode: (text) => Temporal.Instant.from(text),

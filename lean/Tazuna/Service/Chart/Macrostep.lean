@@ -181,7 +181,8 @@ def Work.settledMachine? : Work → Option InstanceId
 def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : Nat) : Work → Processing → m Processing
   | .reaction _ [] _ _, r | .reaction _ ([] :: _) _ _, r => pure r
   | .reaction a ((e :: _) :: _) _ _, ⟨s, q⟩ => do
-    let faulted (issue : Issue) : Processing := ⟨s.report (.fault (issueViolation (st.ref a.name) issue)), q⟩
+    let faulted (issue : Issue) : Processing :=
+      ⟨s.report (.fault (issueViolation (st.ref a.name) issue fun _ => .inputSchema (st.ref a.name) a.sends.ref)), q⟩
     match ← firstFalse (fs.automationBinding a.name · e.payload s.records s.now) a.binds with
     | .error issue => pure (faulted issue)
     | .ok (some _) => pure ⟨s, q⟩

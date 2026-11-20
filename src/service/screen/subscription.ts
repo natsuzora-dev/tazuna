@@ -34,7 +34,14 @@ function refresh(r: Processing, instance: Instance): boolean {
     const scope = scopeOf(r.state, instance, state);
     const records = new LazyRecordSource(r.state.records, r.note);
     const input = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
-    if (input instanceof Failed) return halt(issueViolation(definition, input));
+    if (input instanceof Failed)
+      return halt(
+        issueViolation(definition, input, () => ({
+          kind: "Fault.inputSchema",
+          definition,
+          data: { target: activity.target },
+        })),
+      );
     wanted.set(slot, { activity, input, text: canonicalJson(input) });
   }
   const open = openShows(r.state, instance.id);

@@ -162,7 +162,9 @@ def Ensured.passes : Ensured → Bool
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks at any
 depth, whether it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
-dropped.
+dropped. A spec function's value is encoded by one rule: each codec encodes its part and checks what it takes, a part
+that it does not encode is a schema Issue, and no other check runs, since the run checks the value after it sorts it
+(Functions.sorting).
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), or one that a
   spec function wrote, decoded and written back as JSON (only its codecs run, encoding) if it matches the schema (the
   canonical value), or none otherwise. It does not read a sortedBy array's key order (parseOutside).
@@ -190,7 +192,7 @@ dropped.
 - automationGuard: whether one guard condition of an automation holds for the received payload, once every binds value
   is non-null.
 - react: the input of the command that an automation sends for an event, once its guard holds, as the sender writes it
-  (only its codecs run, encoding). `keys` holds what createKey returns next per entity (an entity that `keys` lacks has
+  by the command's input schema. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has
   none so far), and react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
@@ -201,7 +203,7 @@ dropped.
 - guard: whether one guard condition of a transition holds.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked,
   encoded and in the order they were built.
-- showInput: the query input of a shows slot, as the sender writes it (only its codecs run, encoding).
+- showInput: the query input of a shows slot, as the sender writes it.
 - items: the keys that a map state's items return, encoded in the order they were built and as canonical values. The
   map state takes them as a set.
 - defaults: the default value of each field of the schema that declares one, encoded and in the order it was built.
@@ -214,7 +216,7 @@ dropped.
   which Functions.sorting sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign returns
   both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
-  it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
+  it: only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
   of `n`, encoded and in the order they were built, which Functions.sorting sorts. A transition's `with` reads what its
   assign reads.

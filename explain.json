@@ -402,7 +402,7 @@
           "line": 6,
           "text": "export const tagWatcher = machine({\n  description: \"Watch each tag, one of which is empty\",\n  initial: \"watching\",\n  states: { watching: { type: \"map\", key: { tag: z.string().min(1) }, initial: \"idle\", states: { idle: {} } } },\n}).chart({ states: { watching: { items: () => [{ tag: \"home\" }, { tag: \"\" }] } } });"
         },
-        "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[1,\"tag\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"tag\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
     },
     "Fault.notOnly": {
@@ -441,7 +441,7 @@
           "line": 12,
           "text": "export const item = query({\n  input: { itemId: z.string() },\n  output: Item.fields,\n}).resolve(({ input, records }) => Reflect.get(records.Item, input.itemId));"
         },
-        "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[],\"message\":\"Invalid input: expected object, received undefined\"}]}}"
+        "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[],\"message\":\"Invalid input: expected object, received null\"}]}}"
       }
     },
     "Fault.rejectedAutomationCommand": {

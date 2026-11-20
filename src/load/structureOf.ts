@@ -1,7 +1,7 @@
-import { defaultRow, encodedAs } from "../data/collections.ts";
+import { defaultRow, encoded, sortCollections } from "../data/collections.ts";
 import type { Delay } from "../data/datetime.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
+import { type JsonSchema, jsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import type { Expected, Malformed } from "../data/malformed.ts";
 import { type Shape, sameJson, strictObjectOf } from "../data/values.ts";
 import { thrown, type ViolationError, zodError } from "../data/violation.ts";
@@ -57,12 +57,16 @@ export type StructureOf =
 
 /**
  * Returns the error of the defaults of a shape whose every field gets its value from its default: Zod's issues, or what
- * a default function or a refinement threw. Zod does not validate default values itself.
+ * a default function or a refinement threw. Zod does not validate default values itself, so they are encoded, sorted and
+ * parsed as the run checks a value that spec code made.
  */
 function defaultsError(shape: Shape): ViolationError | undefined {
   try {
-    const checked = encodedAs(strictObjectOf(shape), defaultRow(shape));
-    return "error" in checked ? zodError(checked.error.issues) : undefined;
+    const object = strictObjectOf(shape);
+    const json = encoded(object, defaultRow(shape));
+    if ("error" in json) return zodError(json.error.issues);
+    const parsed = object.safeParse(sortCollections(jsonSchema(object), json.encoded));
+    return parsed.success ? undefined : zodError(parsed.error.issues);
   } catch (error) {
     return thrown(error);
   }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
 import type { date as dateSchema, datetime as datetimeSchema } from "./datetime.ts";
+import { InternalError } from "./internalError.ts";
 import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
 import { type Collection, collectionOf, mark } from "./marks.ts";
 import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
@@ -207,15 +208,69 @@ function arrayed(schema: z.ZodType, value: unknown): unknown {
 }
 
 /**
- * Returns a value that spec code made for `schema` encoded by Zod, in the order it was built, or why it does not match:
- * a part that its codec cannot encode fails, unlike toJson.
+ * Returns a value that spec code made for `schema` as JSON holds it, in the order it was built, or why a part does not
+ * encode. Each codec encodes its part as Zod does, checking what it takes; no other check runs, since the run checks a
+ * value after it sorts it (Lean's Functions.sorting).
  */
-export function encodedAs(
+export function encoded(
   schema: z.ZodType,
   value: unknown,
 ): { readonly encoded: Json } | { readonly error: z.ZodError } {
-  const encoded = z.safeEncode(schema, arrayed(schema, value) as never);
-  return encoded.success ? { encoded: plain(encoded.data) } : { error: encoded.error };
+  const issues: z.core.$ZodIssue[] = [];
+  const json = codecsEncoded(schema, arrayed(schema, value), [], issues);
+  return issues.length === 0 ? { encoded: plain(json) } : { error: new z.ZodError(issues) };
+}
+
+/** toJson with each codec encoding as Zod does, which adds to `issues`, at `path`, what its part fails. */
+function codecsEncoded(
+  schema: z.ZodType,
+  value: unknown,
+  path: readonly PropertyKey[],
+  issues: z.core.$ZodIssue[],
+): unknown {
+  const node = schemaNode(schema);
+  const at = (child: z.ZodType, v: unknown, key: PropertyKey) => codecsEncoded(child, v, [...path, key], issues);
+  switch (node.type) {
+    case "codec": {
+      const wire = z.safeEncode(schema, value as never);
+      if (wire.success) return wire.data;
+      issues.push(...wire.error.issues.map((issue) => ({ ...issue, path: [...path, ...issue.path] })));
+      return value;
+    }
+    case "pipe":
+      return codecsEncoded(node.in, codecsEncoded(node.out, value, path, issues), path, issues);
+    case "array":
+      return Array.isArray(value) ? value.map((v, i) => at(node.element, v, i)) : value;
+    case "tuple":
+      if (!Array.isArray(value)) return value;
+      return value.map((v, i) => {
+        const item = node.items[i] ?? node.rest;
+        return item === undefined ? v : at(item, v, i);
+      });
+    case "object":
+      if (!isRecord(value)) return value;
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => {
+          const field = fieldSchema(node, k);
+          return [k, field === undefined ? v : at(field, v, k)];
+        }),
+      );
+    case "record":
+      if (!isRecord(value)) return value;
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, at(node.value, v, k)]));
+    case "union": {
+      const option = unionOption(node, value);
+      return option === undefined ? value : codecsEncoded(option, value, path, issues);
+    }
+    case "intersection":
+      return codecsEncoded(node.right, codecsEncoded(node.left, value, path, issues), path, issues);
+    case "lazy":
+      return codecsEncoded(node.inner, value, path, issues);
+    case "opaque":
+      return value == null || node.inner === undefined ? value : codecsEncoded(node.inner, value, path, issues);
+    default:
+      return value == null ? value : codecsEncoded(node.inner, value, path, issues);
+  }
 }
 
 /** Returns a value of `schema` from its checked encoding, as spec code receives it. */
@@ -241,21 +296,16 @@ export function unionOption(node: Extract<SchemaNode, { type: "union" }>, value:
 }
 
 /**
- * Returns a value that spec code made for `schema` as its sender writes it to a message, encoded by toJson in the order
- * it was built, so that only the receiver parses the value.
- */
-export const written = (schema: z.ZodType, value: unknown): Json => plain(toJson(schema, arrayed(schema, value)));
-
-/**
- * Returns a value of `schema` as JSON holds it: each codec at any depth encodes its part, and no check or other
- * transform runs. A part that its codec cannot encode stays as it is.
+ * Returns a value of `schema` that a parse took as JSON holds it: each codec at any depth encodes its part, and no check
+ * or other transform runs.
  */
 export function toJson(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
   switch (node.type) {
     case "codec": {
       const wire = node.encode(toJson(node.out, value));
-      return wire === undefined ? value : toJson(node.in, wire.value);
+      if (wire === undefined) throw new InternalError("a codec did not encode a value that parse took");
+      return toJson(node.in, wire.value);
     }
     case "pipe":
       return toJson(node.in, toJson(node.out, value));
@@ -302,7 +352,8 @@ export function fromJson(schema: z.ZodType, json: unknown): unknown {
   switch (node.type) {
     case "codec": {
       const value = node.decode(fromJson(node.in, json));
-      return value === undefined ? json : fromJson(node.out, value.value);
+      if (value === undefined) throw new InternalError("a codec did not decode a checked encoding");
+      return fromJson(node.out, value.value);
     }
     case "pipe":
       return fromJson(node.out, fromJson(node.in, json));

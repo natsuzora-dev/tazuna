@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
 import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
-import { bag, bagged, decoded, defaultRow, encodedAs, toJson, written } from "../../data/collections.ts";
+import { bag, bagged, decoded, defaultRow, encoded, toJson } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
 import { expectFound, InternalError } from "../../data/internalError.ts";
@@ -75,7 +75,7 @@ function attempt<T>(f: () => T, schema?: Schema): T | Failed {
  * not match `schema`.
  */
 function encodedAnswer(schema: Schema, zod: z.ZodType, value: unknown): Json | Failed {
-  const checked = attempt(() => encodedAs(zod, value), schema);
+  const checked = attempt(() => encoded(zod, value), schema);
   if (checked instanceof Failed) return checked;
   return "error" in checked ? new Failed({ kind: "schema", schema }, zodError(checked.error.issues)) : checked.encoded;
 }
@@ -396,9 +396,17 @@ export class SpecFunctions implements Functions {
     return extended(base, { held: heldOf(scope.held, read), ...extra });
   }
 
-  /** Returns the input that `f` gives a request or screen of the input shape `shape`, as the sender writes it. */
-  private writtenInput(shape: Shape, f: ((args: never) => unknown) | undefined, args: () => Fields): Json | Failed {
-    return attempt(() => written(objectOf(shape), f === undefined ? {} : f(args() as never)));
+  /** Returns the input that `f` gives `target`, of the input shape `shape`, encoded as the sender writes it. */
+  private writtenInput(
+    target: DefinitionRef,
+    shape: Shape,
+    f: ((args: never) => unknown) | undefined,
+    args: () => Fields,
+  ): Json | Failed {
+    const given = attempt(() => (f === undefined ? {} : f(args() as never)));
+    return given instanceof Failed
+      ? given
+      : encodedAnswer({ kind: "input", definition: target }, strictObjectOf(shape), given);
   }
 
   /** Returns the binds values, which Lean asks for only once every binding is non-null. */
@@ -438,7 +446,9 @@ export class SpecFunctions implements Functions {
 
   /** Returns a decoded value of `schema` as JSON holds it, as Lean holds it (ChoiceDependent's Encode). */
   encode(schema: Schema, value: unknown): Json {
-    return written(objectOf(this.shape(schema)), value);
+    const json = encoded(objectOf(this.shape(schema)), value);
+    if ("error" in json) throw new InternalError(`a value of ${schema.kind} that the run holds does not encode`);
+    return json.encoded;
   }
 
   unordered(schema: Schema, value: unknown): unknown {
@@ -635,12 +645,15 @@ export class SpecFunctions implements Functions {
     if (values instanceof Failed) return values;
     const [command, ...more] = Object.values(a.commands);
     if (command === undefined || more.length > 0) throw new InternalError(`the automation ${name} has no one command`);
-    const shape = objectOf(command.input);
     const input = a.input;
-    const given = attempt(() =>
-      written(shape, input === undefined ? {} : input({ ...args, bound: values, createKey } as never)),
-    );
-    return given instanceof Failed ? given : { input: given, created };
+    const given = attempt(() => (input === undefined ? {} : input({ ...args, bound: values, createKey } as never)));
+    if (given instanceof Failed) return given;
+    const target = expectFound(
+      `automation ${name}`,
+      this.st.automations.find((x) => x.name === name),
+    ).sends.target;
+    const json = encodedAnswer({ kind: "input", definition: target }, strictObjectOf(command.input), given);
+    return json instanceof Failed ? json : { input: json, created };
   }
 
   comparable(name: string, answer: Answer): unknown {
@@ -659,7 +672,8 @@ export class SpecFunctions implements Functions {
 
   defaults(schema: Schema): Json | Failed {
     const shape = this.shape(schema);
-    return attempt(() => written(objectOf(shape), defaultRow(shape)), schema);
+    const row = attempt(() => defaultRow(shape), schema);
+    return row instanceof Failed ? row : encodedAnswer(schema, strictObjectOf(shape), row);
   }
 
   guard(
@@ -737,16 +751,29 @@ export class SpecFunctions implements Functions {
         return shown instanceof Failed ? shown : { input: shown, created };
       }
       case "calls": {
-        given = this.writtenInput(named(chart.queries, key, "query").input, node.calls?.[key]?.input, args);
+        given = this.writtenInput(
+          activity.target,
+          named(chart.queries, key, "query").input,
+          node.calls?.[key]?.input,
+          args,
+        );
         break;
       }
       case "sends":
-        given = this.writtenInput(named(chart.commands, key, "command").input, node.sends?.[key]?.input, () =>
-          this.args(scope, records, access, { createKey }),
+        given = this.writtenInput(
+          activity.target,
+          named(chart.commands, key, "command").input,
+          node.sends?.[key]?.input,
+          () => this.args(scope, records, access, { createKey }),
         );
         break;
       case "opens": {
-        given = this.writtenInput(named(chart.screens, key, "screen").input ?? {}, node.opens?.[key]?.input, args);
+        given = this.writtenInput(
+          activity.target,
+          named(chart.screens, key, "screen").input ?? {},
+          node.opens?.[key]?.input,
+          args,
+        );
       }
     }
     return given instanceof Failed ? given : { input: given, created };
@@ -801,10 +828,10 @@ export class SpecFunctions implements Functions {
     return checked;
   }
 
-  showInput(scope: Scope, records: RecordSource, { key }: Activity, access: Access): Json | Failed {
+  showInput(scope: Scope, records: RecordSource, { key, target }: Activity, access: Access): Json | Failed {
     const query = named(this.chartOf(chartOf(scope.id)).named.definition.queries, key, "query");
     const f = this.node(chartOf(scope.id), this.stateOf(scope)).shows?.[key]?.input;
-    return this.writtenInput(query.input, f, () => this.args(scope, records, access));
+    return this.writtenInput(target, query.input, f, () => this.args(scope, records, access));
   }
 
   items(scope: Scope, records: RecordSource, access: Access): readonly Json[] | Failed {

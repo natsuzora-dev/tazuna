@@ -33,7 +33,7 @@ def wantedShows [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : S
     | .error v => pure (.error v)
     | .ok wanted =>
       match ← fs.showInput (s.scopeOf i (some n)) s.records a with
-      | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
+      | .error e => pure (.error (issueViolation (st.ref i.chart.name) e fun _ => .inputSchema (st.ref i.chart.name) a.ref))
       | .ok input =>
         pure (.ok (setWanted wanted { slot := a.key, activity := a, input }))) (.ok [])
 

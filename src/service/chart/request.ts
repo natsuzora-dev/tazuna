@@ -78,7 +78,10 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
-  if (given instanceof Failed) halt(issueViolation(definition, given));
+  if (given instanceof Failed)
+    halt(
+      issueViolation(definition, given, () => ({ kind: "Fault.inputSchema", definition, data: { target: a.target } })),
+    );
   createKeys(r.state, given.created);
   const { input } = given;
   const requester: Requester = { kind: "state", machine: instance.id, state };
@@ -106,7 +109,10 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const scope = scopeOf(r.state, instance, state);
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
-  if (given instanceof Failed) halt(issueViolation(definition, given));
+  if (given instanceof Failed)
+    halt(
+      issueViolation(definition, given, () => ({ kind: "Fault.inputSchema", definition, data: { target: a.target } })),
+    );
   const schema = { kind: "input", definition: screen } as const;
   const parsed = r.functions.parse(schema, given.input);
   if (parsed instanceof Failed) halt(issueViolation(screen, parsed));

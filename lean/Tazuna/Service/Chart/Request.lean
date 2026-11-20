@@ -39,7 +39,7 @@ variable [Monad m] [MonadNote m] (fs : Functions m)
 def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do
     match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
-    | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
+    | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun _ => .inputSchema (st.ref i.chart.name) a.ref)))
     | .ok (input, keys) =>
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
       if a.isOwn st.service then
@@ -56,7 +56,7 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
     | none => pure r
     | some c =>
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
-      | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
+      | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun _ => .inputSchema (st.ref i.chart.name) a.ref)))
       | .ok (raw, _) =>
       match ← fs.parse (.input (st.ref c.name)) raw with
       | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))

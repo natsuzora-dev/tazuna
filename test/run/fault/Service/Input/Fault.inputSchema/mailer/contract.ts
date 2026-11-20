@@ -1,3 +1,3 @@
-import { contract, sendMail } from "./mailer.ts";
+import { contract, scheduleMail, sendMail } from "./mailer.ts";
 
-export const mailer = contract({ sendMail });
+export const mailer = contract({ scheduleMail, sendMail });

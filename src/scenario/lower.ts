@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { inRange } from "../data/datetime.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { collectionOf } from "../data/marks.ts";
 import type {
@@ -77,23 +78,17 @@ export interface Lowered {
 }
 
 const documentedInstant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:[0-5]\d(?:\.(?=\d)\d{0,3}0{0,6})?(?:Z|[+-]\d{2}:\d{2})$/;
-const [earliest, end] = [
-  Temporal.Instant.from("0000-01-01T00:00:00Z"),
-  Temporal.Instant.from("+010000-01-01T00:00:00Z"),
-];
 
 /**
  * Lean's scenarioTime?, as Temporal.Instant.prototype.toString writes it: the time of a start or clock line in the form
  * that tazuna documents, with seconds, a fraction of up to nine digits, and `Z` or an offset `±HH:MM`. A fraction below
  * a millisecond, or a time outside years 0000 to 9999, has none.
  */
-export function instant(time: string): string | undefined {
+export function scenarioTime(time: string): string | undefined {
   if (!documentedInstant.test(time)) return undefined;
   try {
     const t = Temporal.Instant.from(time);
-    return Temporal.Instant.compare(t, earliest) >= 0 && Temporal.Instant.compare(t, end) < 0
-      ? t.toString()
-      : undefined;
+    return inRange(t.epochNanoseconds / 1_000_000n) ? t.toString() : undefined;
   } catch (error) {
     if (error instanceof RangeError) return undefined;
     throw error;
@@ -431,7 +426,7 @@ export function lower(
     },
     clock: {
       at: (time: string) => {
-        const t = instant(time);
+        const t = scenarioTime(time);
         if (t === undefined) violations.push({ kind: "unparsableTime", line: lines.length });
         return processing({ type: "at", time: t ?? time });
       },

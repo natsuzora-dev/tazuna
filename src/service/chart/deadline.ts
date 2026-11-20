@@ -1,3 +1,4 @@
+import { inRange } from "../../data/datetime.ts";
 import { expectFound } from "../../data/internalError.ts";
 import type { Delay } from "../../spec/structure.generated.ts";
 import { delayMs, type StateStructure } from "../../spec/structure.ts";
@@ -6,9 +7,6 @@ import { Failed, issueViolation } from "../functions.ts";
 import { LazyRecordSource } from "../records.ts";
 import { type Deadline, halt, type Instance, NoteAccess, type State, scopeOf } from "../state.ts";
 import type { Processing } from "./queue.ts";
-
-/** Lean's Time.inRange: whether the run's time can hold `ms`, an instant from year 0000 through year 9999. */
-const inRange = (ms: bigint): boolean => -62_167_219_200_000n <= ms && ms < 253_402_300_800_000n;
 
 /**
  * Lean's instantTime?: the instant that `text` writes, when the run's time can hold it and renderTime writes it back

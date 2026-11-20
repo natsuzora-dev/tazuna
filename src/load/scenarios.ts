@@ -8,7 +8,7 @@ import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
-import { instant, type LoweringViolation, lower } from "../scenario/lower.ts";
+import { type LoweringViolation, lower, scenarioTime } from "../scenario/lower.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 
@@ -117,7 +117,7 @@ export function loadScenarios(
       if (entry.role === "skip") return [{ service, role: "skip", because: entry.because }];
       return [{ service, role: "run", records: givenRecords(entitiesOf(service), entry.records) }];
     });
-    const start = instant(definition.given.start);
+    const start = scenarioTime(definition.given.start);
     if (start === undefined) report({ kind: "Malformed.unparsableTime", definition: null, scenario: ref, data: {} });
     const lowered = lower(definition, refOf, (contract) => {
       const owner = contractService(contract);

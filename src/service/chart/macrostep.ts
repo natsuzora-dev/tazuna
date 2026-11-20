@@ -261,7 +261,14 @@ function workBody(r: Processing, work: Work, step: number): void {
       if (failing instanceof Failed) halt(issueViolation(definition, failing));
       if (failing !== undefined) return;
       const reacted = r.functions.react(automation.name, event.payload, records, now, nextKeys(r.state));
-      if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
+      if (reacted instanceof Failed)
+        halt(
+          issueViolation(definition, reacted, () => ({
+            kind: "Fault.inputSchema",
+            definition,
+            data: { target: automation.sends.target },
+          })),
+        );
       createKeys(r.state, reacted.created);
       const activity = automation.sends;
       const { input } = reacted;
