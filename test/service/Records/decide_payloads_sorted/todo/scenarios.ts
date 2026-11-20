@@ -7,6 +7,7 @@ import {
   listTasks,
   listVisits,
   pickScreen,
+  plan,
   planScreen,
   planTasks,
   scenario,
@@ -21,6 +22,16 @@ export const listed = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(listTasks, {});
+  },
+  then: () => [],
+});
+
+export const queried = scenario({
+  description:
+    "Ask for the plan; resolve writes the titles and the entries out of order, and tazuna answers with the titles bag sorted by canonical JSON and the entries sorted by day",
+  given: arranged,
+  when: (w) => {
+    w.client.call(plan, {});
   },
   then: () => [],
 });

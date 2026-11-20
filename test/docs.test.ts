@@ -8,6 +8,7 @@ import { main } from "../src/cli/main.ts";
 import { groups as groupInfos } from "../src/data/groups.ts";
 import { groupNames, isUserKind, parseKind } from "../src/data/kinds.ts";
 import { leanRoot, typeChecked } from "./examples.ts";
+import { guarantees as tagged } from "./guarantees.generated.ts";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -27,7 +28,10 @@ const shipped = packed
   .map((path) => ({ path, text: read(path) }));
 /** The shipped markdown for people: every shipped file but the agent skills. */
 const docs = shipped.filter(({ path }) => !path.startsWith("skills/"));
+
 const guarantees = read("docs/guarantees.md");
+const isGuarantee = (name: string) => tagged.some((g) => g === name);
+const namesIn = (list: string) => [...list.matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? "");
 
 /** The declarations of lean/Tazuna outside comments: each name as written, its keyword, and its file. */
 const declarations = readdirSync(leanRoot, { recursive: true, encoding: "utf8" })
@@ -42,34 +46,18 @@ const declarations = readdirSync(leanRoot, { recursive: true, encoding: "utf8" }
       ),
     ].map(([, keyword = "", name = ""]) => ({ keyword, name, file: `lean/Tazuna/${file}` }));
   });
-const isTheorem = (name: string) =>
-  declarations.some((d) => d.keyword === "theorem" && d.name === name && d.file.startsWith("lean/Tazuna/Thm/"));
 
-const proven = guarantees.slice(guarantees.indexOf("## Proven properties"));
-const namesIn = (list: string) => [...list.matchAll(/`([^`]+)`/g)].map((n) => n[1] ?? "");
-/** The last cell of each body row of the tables under Proven properties: the theorems that prove the row. */
-const theoremCells = proven
-  .split("\n")
-  .filter((line) => line.startsWith("| ") && !line.startsWith("| Property |"))
-  .map((line) => line.slice(0, -" |".length).split(" | ").at(-1) ?? "");
+/**
+ * The names with an underscore that a doc writes in backticks and that name no guarantee, each with what it names. Any
+ * other such name is a guarantee, which test/guarantees.test.ts ties to its theorem.
+ */
+const notGuarantees: Readonly<Record<string, string>> = {};
 
-test("Proven properties is the last section of docs/guarantees.md, and each of its rows cites the theorems that prove it", () => {
-  assert.ok(!proven.includes("\n## "));
-  assert.ok(theoremCells.length > 0);
+test("Each name with an underscore that a doc writes in backticks is a guarantee or listed in notGuarantees", () => {
+  const written = docs.flatMap(({ text }) => [...text.matchAll(/`([a-z][A-Za-z0-9]*_\w*)`/g)].map((m) => m[1] ?? ""));
+  assert.ok(written.length > 0);
   assert.deepEqual(
-    theoremCells.filter((cell) => !/^`[\w.]+`(?:, `[\w.]+`)*$/.test(cell)),
-    [],
-  );
-});
-
-test("Each theorem that a doc cites is a theorem stated in lean/Tazuna/Thm: every name in a Theorems cell under Proven properties, and every name with an underscore elsewhere", () => {
-  const cited = [
-    ...theoremCells.flatMap(namesIn),
-    ...docs.flatMap(({ text }) => [...text.matchAll(/`([a-z][A-Za-z0-9]*_\w*)`/g)].map((m) => m[1] ?? "")),
-  ];
-  assert.ok(cited.length > 0);
-  assert.deepEqual(
-    [...new Set(cited)].filter((name) => !isTheorem(name)),
+    [...new Set(written)].filter((name) => !isGuarantee(name) && !(name in notGuarantees)),
     [],
   );
 });

@@ -74,7 +74,11 @@ test("A transition has the state it is written in, the key and index in its tran
 });
 
 test("A screen has the JSON Schema of each control payload, the controls that each state offers, and the child screens it opens", async () => {
-  const taskScreen = chartOf(await subject("Screen/Operable/accepted-operations"), "screens", "taskScreen");
+  const taskScreen = chartOf(
+    await subject("Screen/Operable/untaken_operation_changes_nothing"),
+    "screens",
+    "taskScreen",
+  );
   assert.deepEqual(taskScreen.controls, {
     complete: null,
     remind: {

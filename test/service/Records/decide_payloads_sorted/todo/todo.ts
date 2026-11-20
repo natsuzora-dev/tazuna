@@ -1,7 +1,7 @@
 import { any, bag, date, datetime, emit, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, event, screen, contract, given, scenario } = service({
+export const { command, event, query, screen, contract, given, scenario } = service({
   name: "todo",
   description: "Keep tasks",
 });
@@ -122,6 +122,10 @@ const unsorted = () => [
   { day: 2, title: "Buy eggs" },
   { day: 1, title: "Buy milk" },
 ];
+
+export const plan = query({
+  output: { titles: bag(z.string()), entries: sortedBy(Entry, "day") },
+}).resolve(() => ({ titles: ["Buy milk", "Buy eggs"], entries: unsorted() }));
 
 export const pickScreen = screen({
   description: "A screen that picks a plan",

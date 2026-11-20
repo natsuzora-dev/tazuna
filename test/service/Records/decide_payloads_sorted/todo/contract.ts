@@ -9,6 +9,7 @@ import {
   listPrices,
   listTasks,
   listVisits,
+  plan,
   planChecked,
   planTasks,
   pricesListed,
@@ -39,4 +40,5 @@ export const todo = contract({
   shelved,
   link,
   linked,
+  plan,
 });

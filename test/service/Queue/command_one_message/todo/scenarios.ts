@@ -2,11 +2,10 @@ import { addTask, scenario } from "./todo.ts";
 
 export const addTwice = scenario({
   description:
-    "Add a task at 10:00 and another at 10:30; todo sends every output of the first addTask at 10:00, including the events of log that logAdded sends, before it processes the second addTask. The now that the decide of log reads is also the time at which addTask arrived",
+    "Add two tasks with one line each at 10:00; todo sends every output of the first addTask, including the logged event of the log command that logAdded sends, before it processes the second addTask, so the work of the two commands never interleaves although they arrive at one time",
   given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] },
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1" });
-    w.clock.at("2026-10-25T10:30:00+09:00");
     w.client.send(addTask, { taskId: "task-2" });
   },
   then: () => [],
