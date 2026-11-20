@@ -5,6 +5,14 @@ export const { event, contract } = service({ name: "todo", description: "Keep th
 
 const box = z.object({ size: z.bigint() });
 
+type Tree = { readonly name: string; readonly children: readonly Tree[] };
+const tree: z.ZodType<Tree> = z.object({
+  name: z.string(),
+  get children() {
+    return z.array(tree);
+  },
+});
+
 export const taskAdded = event({
   payload: {
     at: datetime,
@@ -20,6 +28,7 @@ export const taskAdded = event({
     first: box,
     second: box,
     sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),
+    tree,
   },
 });
 

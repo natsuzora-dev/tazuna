@@ -167,11 +167,14 @@ export function keyOrderIssue(
   return undefined;
 }
 
-/** Returns a value from outside parsed by `schema`, which also lists each sortedBy array in key order (keyOrderIssue). */
+/**
+ * Returns a value from outside parsed by `schema`, which also lists each sortedBy array in key order as written
+ * (keyOrderIssue), as Lean's Functions.parseOutside reads it.
+ */
 export function parsedOutside<T extends z.ZodType>(schema: T, value: unknown): z.ZodSafeParseResult<z.output<T>> {
   const parsed = schema.safeParse(value);
   if (!parsed.success) return parsed;
-  const issue = keyOrderIssue(jsonSchema(schema), plain(toJson(schema, parsed.data)));
+  const issue = keyOrderIssue(jsonSchema(schema), value as Json);
   return issue === undefined ? parsed : { success: false, error: new z.ZodError([issue]) as z.ZodError<z.output<T>> };
 }
 

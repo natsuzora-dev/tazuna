@@ -2,11 +2,18 @@
 import type { DefinitionRef } from "./definitionRef.ts";
 import type { TransitionRef, Trigger } from "./transitionRef.generated.ts";
 
-/** The `onRejected` of a state's request: the state, and the trigger of that `onRejected`. */
-export type OnRejectedAt = {
-  readonly state: string;
-  readonly trigger: Trigger;
-};
+/** Where an `onRejected` is written or left out. */
+export type OnRejectedAt =
+  /** The automation's own, whose command may be rejected only with `unavailable`. */
+  | {
+      readonly kind: "automation";
+    }
+  /** The `onRejected` with `trigger` of a request of `state`. */
+  | {
+      readonly kind: "request";
+      readonly state: string;
+      readonly trigger: Trigger;
+    };
 
 /**
  * A form that changes no meaning but is not the one canonical way to write that meaning, which `Canonical.check` finds
@@ -43,23 +50,20 @@ export type NonCanonical =
       readonly definition: DefinitionRef;
       readonly data: Readonly<Record<string, never>>;
     }
-  /**
-   * An answer may be rejected, but the request has no `onRejected`. `request` is null for an automation, which may be
-   * rejected only with `unavailable`.
-   */
+  /** An answer may be rejected, but the automation or the request `at` has no `onRejected`. */
   | {
       readonly kind: "NonCanonical.missingOnRejected";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly request: OnRejectedAt | null;
+        readonly at: OnRejectedAt;
       };
     }
-  /** The request has an `onRejected`, but no answer can be rejected. `request` is null for an automation. */
+  /** The automation or the request `at` has an `onRejected`, but no answer can be rejected. */
   | {
       readonly kind: "NonCanonical.unreachableOnRejected";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly request: OnRejectedAt | null;
+        readonly at: OnRejectedAt;
       };
     };
 

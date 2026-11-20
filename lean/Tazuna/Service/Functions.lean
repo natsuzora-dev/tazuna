@@ -263,7 +263,8 @@ def Functions.parseSorted {m : Type → Type} [Monad m] [MonadNote m] (fs : Func
 /--
 `fs.parse` of a value from outside, which also lists each sortedBy array in key order (keyOrdered): tazuna sorts the
 values that spec code makes, so only a value from outside can break the order. The order is read from `v` as written,
-since parse may sort what it returns and fills a missing field with a default that the outside did not write.
+since parse may sort what it returns; a sort key is required with no default (Illegal.unorderedSortKey), so every
+written element has one.
 -/
 def Functions.parseOutside {m : Type → Type} [Monad m] [MonadNote m] (fs : Functions m) (st : Service)
     (schema : Schema) (v : Value) : m (Except Issue (Option Value)) := do

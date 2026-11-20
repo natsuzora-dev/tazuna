@@ -47,8 +47,8 @@ def reenters (s : Structure) : List NonCanonical :=
       (c.on ++ c.states.flatMap (·.transitions)).filterMap fun t =>
         if t.reenter.isSome == withinSource c t then none else some (reenterOf d.ref t)
 
-def onRejected (definition : Ref) (arrives : Bool) (request : Option OnRejectedAt) : NonCanonical :=
-  if arrives then .missingOnRejected definition request else .unreachableOnRejected definition request
+def onRejected (definition : Ref) (arrives : Bool) («at» : OnRejectedAt) : NonCanonical :=
+  if arrives then .missingOnRejected definition «at» else .unreachableOnRejected definition «at»
 
 /-- Whether an automation's command may be rejected with `unavailable`, which `onRejected: []` ignores. -/
 def automationArrives (s : Structure) (service : String) (a : AutomationBody) : Bool :=
@@ -59,7 +59,7 @@ def automations (s : Structure) : List NonCanonical :=
     match d.body with
     | .automation a =>
       if automationArrives s d.service a == a.onRejected then none
-      else some (onRejected d.ref (automationArrives s d.service a) none)
+      else some (onRejected d.ref (automationArrives s d.service a) .automation)
     | _ => none
 
 /-- A calls or sends of a state: the trigger of its `onRejected`, its target, and whether it writes `onRejected`. -/
@@ -78,7 +78,7 @@ def states (s : Structure) : List NonCanonical :=
         st.activities.filterMap fun a =>
           (requestOf a).bind fun (trigger, r, written) =>
             let arrives := !(s.rejectionKinds d.service r).isEmpty
-            if arrives == written then none else some (onRejected d.ref arrives (some { state := st.name, trigger }))
+            if arrives == written then none else some (onRejected d.ref arrives (.request st.name trigger))
 
 /-- The NonCanonical violations that the structure shows. -/
 def check (s : Structure) : List NonCanonical :=

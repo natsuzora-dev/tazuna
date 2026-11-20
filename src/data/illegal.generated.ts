@@ -134,10 +134,11 @@ export type Illegal =
       };
     }
   /**
-   * The sortedBy array at `path` of the definition's schemas sorts by `key`, whose encoded value is no number, instant, or
+   * The sortedBy array at `path` of the definition's schemas sorts by `key`, which is optional or has a default, so an
+   * element from outside may leave it out and have no place in the order, or whose encoded value is no number, instant, or
    * date, or which has a codec other than tazuna's datetime and date, so the order of the encoded values, which tazuna
-   * sorts by, may not be the order of the values. `check` reports none exactly when every sort key is encoded as one of
-   * these with no other codec (`Checked.sortKeysOrdered`).
+   * sorts by, may not be the order of the values. `check` reports none exactly when every sort key is required with no
+   * default and encoded as one of these with no other codec (`Checked.sortKeysOrdered`).
    */
   | {
       readonly kind: "Illegal.unorderedSortKey";

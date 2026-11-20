@@ -1,4 +1,4 @@
-{"kind":"NonCanonical.missingOnRejected","definition":{"service":"notifier","name":"addTaskForFollowUp"},"data":{"request":null},"location":{"file":"notifier/notifier.ts","line":14}}
-{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"countAdded"},"data":{"request":null},"location":{"file":"todo/todo.ts","line":20}}
-{"kind":"NonCanonical.missingOnRejected","definition":{"service":"todo","name":"notifyAdded"},"data":{"request":null},"location":{"file":"todo/todo.ts","line":25}}
-{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"beepCounted"},"data":{"request":null},"location":{"file":"todo/todo.ts","line":30}}
+{"kind":"NonCanonical.missingOnRejected","definition":{"service":"notifier","name":"addTaskForFollowUp"},"data":{"at":{"kind":"automation"}},"location":{"file":"notifier/notifier.ts","line":14}}
+{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"countAdded"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":20}}
+{"kind":"NonCanonical.missingOnRejected","definition":{"service":"todo","name":"notifyAdded"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":25}}
+{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"beepCounted"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":30}}

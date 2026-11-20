@@ -1,12 +1,13 @@
 import type { Illegal } from "../data/illegal.generated.ts";
-import { allApart, field, propertyOf, unionOptions } from "../data/unionOptions.ts";
+import { allApart, field, propertyOf, requiredOf, unionOptions } from "../data/unionOptions.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import { type DefinitionStructure, schemaProperties } from "../spec/structure.ts";
 
 /** Lean's orderedKey. */
 function orderedKey(item: unknown, key: string): boolean {
   const p = propertyOf(item, key);
-  if (p === undefined || field(p, "x-tazuna-codec") !== undefined) return false;
+  if (p === undefined || !requiredOf(item).includes(key)) return false;
+  if (field(p, "default") !== undefined || field(p, "x-tazuna-codec") !== undefined) return false;
   const [type, format] = [field(p, "type"), field(p, "format")];
   return (
     type === "number" || type === "integer" || (type === "string" && (format === "date-time" || format === "date"))

@@ -1,1 +1,1 @@
-{"kind":"NonCanonical.missingOnRejected","definition":{"service":"todo","name":"notifyAdded"},"data":{"request":null},"location":{"file":"todo/todo.ts","line":14}}
+{"kind":"NonCanonical.missingOnRejected","definition":{"service":"todo","name":"notifyAdded"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":14}}

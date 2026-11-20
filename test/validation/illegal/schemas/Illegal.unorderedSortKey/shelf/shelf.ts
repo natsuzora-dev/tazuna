@@ -14,4 +14,10 @@ export const itemsListed = event({
   payload: { items: sortedBy(z.object({ name: z.string(), expiresAt: expiry }), "expiresAt") },
 });
 
-export const listItems = command({ emits: [itemsListed] }).decide(() => [emit(itemsListed, { items: [] })]);
+export const shelvesListed = event({
+  payload: { shelves: sortedBy(z.object({ name: z.string(), rank: z.number().default(0) }), "rank") },
+});
+
+export const listItems = command({ emits: [itemsListed, shelvesListed] }).decide(() => [
+  emit(itemsListed, { items: [] }),
+]);

@@ -61,10 +61,10 @@ function reenters(structure: Structure): NonCanonical[] {
   });
 }
 
-const onRejected = (definition: DefinitionRef, arrives: boolean, request: OnRejectedAt | null): NonCanonical => ({
+const onRejected = (definition: DefinitionRef, arrives: boolean, at: OnRejectedAt): NonCanonical => ({
   kind: arrives ? "NonCanonical.missingOnRejected" : "NonCanonical.unreachableOnRejected",
   definition,
-  data: { request },
+  data: { at },
 });
 
 /** An automation ignores an unavailable rejection with `onRejected: []`; every other kind is a fault of the automation. */
@@ -72,7 +72,9 @@ const automations = (structure: Structure): NonCanonical[] =>
   structure.definitions.flatMap((d): NonCanonical[] => {
     if (d.kind !== "automation") return [];
     const arrives = rejectionKinds(structure, d.service, d.command).includes("unavailable");
-    return arrives === d.onRejected ? [] : [onRejected({ service: d.service, name: d.name }, arrives, null)];
+    return arrives === d.onRejected
+      ? []
+      : [onRejected({ service: d.service, name: d.name }, arrives, { kind: "automation" })];
   });
 
 /** A state that calls or sends writes `onRejected` exactly when an answer may be rejected. */
@@ -84,7 +86,8 @@ const states = (structure: Structure): NonCanonical[] =>
         const arrives = rejectionKinds(structure, chart.service, a.definition).length > 0;
         if (arrives === a.onRejected) return [];
         const trigger: Trigger = { type: a.keyword, key: a.name, outcome: "onRejected" };
-        return [onRejected({ service: chart.service, name: chart.name }, arrives, { state: state.name, trigger })];
+        const at: OnRejectedAt = { kind: "request", state: state.name, trigger };
+        return [onRejected({ service: chart.service, name: chart.name }, arrives, at)];
       }),
     ),
   );

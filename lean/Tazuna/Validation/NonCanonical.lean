@@ -5,13 +5,15 @@ namespace Tazuna.Validation
 
 open Tazuna.Data
 
-/-- The `onRejected` of a state's request: the state, and the trigger of that `onRejected`. -/
-structure OnRejectedAt where
-  state : String
-  trigger : Spec.Trigger
+/-- Where an `onRejected` is written or left out. -/
+inductive OnRejectedAt where
+  /-- The automation's own, whose command may be rejected only with `unavailable`. -/
+  | automation
+  /-- The `onRejected` with `trigger` of a request of `state`. -/
+  | request (state : String) (trigger : Spec.Trigger)
 deriving Repr, Inhabited
 
-derive_wire OnRejectedAt
+derive_wire OnRejectedAt tag "kind"
 
 /--
 A form that changes no meaning but is not the one canonical way to write that meaning, which `Canonical.check` finds
@@ -26,13 +28,10 @@ inductive NonCanonical where
   | reenterOutsideSource (definition : Spec.Ref) (transition : Spec.TransitionRef)
   /-- A machine with one state, no context, and nothing to wait for, which turns one event into one command. -/
   | statelessMachine (definition : Spec.Ref)
-  /--
-  An answer may be rejected, but the request has no `onRejected`. `request` is null for an automation, which may be
-  rejected only with `unavailable`.
-  -/
-  | missingOnRejected (definition : Spec.Ref) (request : Option OnRejectedAt)
-  /-- The request has an `onRejected`, but no answer can be rejected. `request` is null for an automation. -/
-  | unreachableOnRejected (definition : Spec.Ref) (request : Option OnRejectedAt)
+  /-- An answer may be rejected, but the automation or the request `at` has no `onRejected`. -/
+  | missingOnRejected (definition : Spec.Ref) («at» : OnRejectedAt)
+  /-- The automation or the request `at` has an `onRejected`, but no answer can be rejected. -/
+  | unreachableOnRejected (definition : Spec.Ref) («at» : OnRejectedAt)
 
 derive_group NonCanonical
 

@@ -679,7 +679,7 @@
       }
     },
     "Illegal.unorderedSortKey": {
-      "meaning": "The sortedBy array at `path` of the definition's schemas sorts by `key`, whose encoded value is no number, instant, or date, or which has a codec other than tazuna's datetime and date, so the order of the encoded values, which tazuna sorts by, may not be the order of the values. `check` reports none exactly when every sort key is encoded as one of these with no other codec (`Checked.sortKeysOrdered`).",
+      "meaning": "The sortedBy array at `path` of the definition's schemas sorts by `key`, which is optional or has a default, so an element from outside may leave it out and have no place in the order, or whose encoded value is no number, instant, or date, or which has a codec other than tazuna's datetime and date, so the order of the encoded values, which tazuna sorts by, may not be the order of the values. `check` reports none exactly when every sort key is required with no default and encoded as one of these with no other codec (`Checked.sortKeysOrdered`).",
       "example": {
         "excerpt": {
           "file": "shelf/shelf.ts",
@@ -1472,16 +1472,16 @@
       }
     },
     "Malformed.unrepresentableSchema": {
-      "meaning": "The schema at `path` has a value that tazuna cannot write back as JSON, of the Zod type `type`: one that JSON cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), a `union` that holds a codec at some depth, or an `intersection`. Writing a value as JSON runs its codecs and no check, and picks a union's option by the written form, which a codec in a `z.union` changes; a `z.discriminatedUnion`'s tag is no codec. A codec or null is written `.nullable()`. An intersection's JSON Schema cannot reject a field that neither side names, so objects are joined with `.extend()`.",
+      "meaning": "The schema at `path` has a value that tazuna cannot write back as JSON, of the Zod type `type`: one that JSON cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), a `union` that holds a codec at some depth, or an `intersection`. Writing a value as JSON runs its codecs and no check, and picks a union's option by the written form, which a codec in a `z.union` changes; a `z.discriminatedUnion`'s tag is no codec. A codec or null is written `.nullable()`. An intersection's JSON Schema cannot reject a field that neither side names, so objects are joined with `.extend()`. A `getter` is an object that names itself in a getter of its shape, which tazuna cannot walk to its end; a recursion is written with `z.lazy`.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 8,
-          "to": 24,
-          "line": 8,
-          "text": "export const taskAdded = event({\n  payload: {\n    at: datetime,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    length: z.string().transform((s) => s.length),\n    trimmed: z.string().pipe(z.string().trim()),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),\n  },\n});"
+          "from": 16,
+          "to": 33,
+          "line": 16,
+          "text": "export const taskAdded = event({\n  payload: {\n    at: datetime,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    length: z.string().transform((s) => s.length),\n    trimmed: z.string().pipe(z.string().trim()),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),\n    tree,\n  },\n});"
         },
-        "violation": "{\"kind\":\"Malformed.unrepresentableSchema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"count\"],\"type\":\"bigint\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8}}"
+        "violation": "{\"kind\":\"Malformed.unrepresentableSchema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"count\"],\"type\":\"bigint\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":16}}"
       }
     },
     "Malformed.unresolvedReference": {
@@ -1901,7 +1901,7 @@
       }
     },
     "NonCanonical.missingOnRejected": {
-      "meaning": "An answer may be rejected, but the request has no `onRejected`. `request` is null for an automation, which may be rejected only with `unavailable`.",
+      "meaning": "An answer may be rejected, but the automation or the request `at` has no `onRejected`.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
@@ -1910,7 +1910,7 @@
           "line": 14,
           "text": "export const notifyAdded = automation({\n  receives: { taskAdded },\n  commands: { notify: device.notify },\n}).send({ input: () => ({ text: \"A task was added\" }) });"
         },
-        "violation": "{\"kind\":\"NonCanonical.missingOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"notifyAdded\"},\"data\":{\"request\":null},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
+        "violation": "{\"kind\":\"NonCanonical.missingOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"notifyAdded\"},\"data\":{\"at\":{\"kind\":\"automation\"}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
       }
     },
     "NonCanonical.missingReenter": {
@@ -2005,7 +2005,7 @@
       }
     },
     "NonCanonical.unreachableOnRejected": {
-      "meaning": "The request has an `onRejected`, but no answer can be rejected. `request` is null for an automation.",
+      "meaning": "The automation or the request `at` has an `onRejected`, but no answer can be rejected.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
@@ -2014,7 +2014,7 @@
           "line": 19,
           "text": "export const countAdded = automation({\n  receives: { taskAdded },\n  commands: { countTask },\n}).send({ input: ({ payload }) => ({ taskId: payload.taskId }), onRejected: [] });"
         },
-        "violation": "{\"kind\":\"NonCanonical.unreachableOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"countAdded\"},\"data\":{\"request\":null},\"location\":{\"file\":\"todo/todo.ts\",\"line\":19}}"
+        "violation": "{\"kind\":\"NonCanonical.unreachableOnRejected\",\"definition\":{\"service\":\"todo\",\"name\":\"countAdded\"},\"data\":{\"at\":{\"kind\":\"automation\"}},\"location\":{\"file\":\"todo/todo.ts\",\"line\":19}}"
       }
     },
     "NonCanonical.unreadBinding": {

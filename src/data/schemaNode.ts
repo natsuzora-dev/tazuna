@@ -148,45 +148,74 @@ export function holdsCodec(schema: z.ZodType, seen = new Set<z.ZodType>()): bool
 }
 
 const strictSchemas = new WeakMap<z.ZodType, z.ZodType>();
+const strictening = new Set<z.ZodType>();
+
+/**
+ * Whether `schema` is its own descendant without a z.lazy on the way, as an object that names itself in a getter is.
+ * Load reports it (Malformed.unrepresentableSchema): a walk of its children never ends, while z.lazy defers it.
+ */
+export function recursesEagerly(schema: z.ZodType): boolean {
+  const seen = new Set<z.ZodType>();
+  const reaches = (s: z.ZodType): boolean => {
+    const node = schemaNode(s);
+    if (node.type === "lazy") return false;
+    return childrenOf(node).some((child) => {
+      if (child === schema) return true;
+      if (seen.has(child)) return false;
+      seen.add(child);
+      return reaches(child);
+    });
+  };
+  return reaches(schema);
+}
 
 /**
  * Returns `schema` with every object at any depth rejecting a field that it does not name, as z.strictObject does; a
- * catchall stays. Load reports an intersection (Malformed.unrepresentableSchema), whose sides each see every field.
+ * catchall stays. Load reports an intersection (Malformed.unrepresentableSchema), whose sides each see every field, and a
+ * schema that recursesEagerly, which this returns as it is where it recurs.
  */
 export function strict(schema: z.ZodType): z.ZodType {
   const known = strictSchemas.get(schema);
   if (known !== undefined) return known;
+  if (strictening.has(schema)) return schema;
+  strictening.add(schema);
+  try {
+    const result = strictened(schema);
+    strictSchemas.set(schema, result);
+    return result;
+  } finally {
+    strictening.delete(schema);
+  }
+}
+
+function strictened(schema: z.ZodType): z.ZodType {
   const node = schemaNode(schema);
   const rebuilt = (changes: Record<string, unknown>) => schema.clone({ ...schema.def, ...changes } as never);
-  const result = ((): z.ZodType => {
-    switch (node.type) {
-      case "object": {
-        const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, strict(v)]));
-        return rebuilt({ shape, catchall: node.catchall === undefined ? z.never() : strict(node.catchall) });
-      }
-      case "union":
-        return rebuilt({ options: node.options.map(strict) });
-      case "array":
-        return rebuilt({ element: strict(node.element) });
-      case "optional":
-      case "nullable":
-      case "default":
-        return rebuilt({ innerType: strict(node.inner) });
-      case "codec":
-      case "pipe":
-        return rebuilt({ in: strict(node.in), out: strict(node.out) });
-      case "tuple":
-        return rebuilt({ items: node.items.map(strict), rest: node.rest === undefined ? null : strict(node.rest) });
-      case "record":
-        return rebuilt({ valueType: strict(node.value) });
-      case "intersection":
-        return rebuilt({ left: strict(node.left), right: strict(node.right) });
-      case "lazy":
-        return rebuilt({ getter: () => strict(node.inner) });
-      case "opaque":
-        return node.inner === undefined ? schema : rebuilt({ innerType: strict(node.inner) });
+  switch (node.type) {
+    case "object": {
+      const shape = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, strict(v)]));
+      return rebuilt({ shape, catchall: node.catchall === undefined ? z.never() : strict(node.catchall) });
     }
-  })();
-  strictSchemas.set(schema, result);
-  return result;
+    case "union":
+      return rebuilt({ options: node.options.map(strict) });
+    case "array":
+      return rebuilt({ element: strict(node.element) });
+    case "optional":
+    case "nullable":
+    case "default":
+      return rebuilt({ innerType: strict(node.inner) });
+    case "codec":
+    case "pipe":
+      return rebuilt({ in: strict(node.in), out: strict(node.out) });
+    case "tuple":
+      return rebuilt({ items: node.items.map(strict), rest: node.rest === undefined ? null : strict(node.rest) });
+    case "record":
+      return rebuilt({ valueType: strict(node.value) });
+    case "intersection":
+      return rebuilt({ left: strict(node.left), right: strict(node.right) });
+    case "lazy":
+      return rebuilt({ getter: () => strict(node.inner) });
+    case "opaque":
+      return node.inner === undefined ? schema : rebuilt({ innerType: strict(node.inner) });
+  }
 }

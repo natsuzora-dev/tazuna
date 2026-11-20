@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { date, datetime } from "./datetime.ts";
 import { collectionOf } from "./marks.ts";
-import { holdsCodec, schemaNode, strict } from "./schemaNode.ts";
+import { holdsCodec, recursesEagerly, schemaNode, strict } from "./schemaNode.ts";
 import type { Json, Shape } from "./values.ts";
 
 export type JsonSchema = { readonly [key: string]: Json };
@@ -24,14 +24,16 @@ export const unrepresentableTypes = [
 ] as const;
 
 /**
- * A Zod type that JSON cannot hold, `union` for a plain union that holds a codec, whose option no tag names, or
- * `intersection`, whose JSON Schema `allOf` cannot reject a field that neither side names.
+ * A Zod type that JSON cannot hold, `union` for a plain union that holds a codec, whose option no tag names,
+ * `intersection`, whose JSON Schema `allOf` cannot reject a field that neither side names, or `getter` for an object
+ * that recursesEagerly.
  */
-export type UnrepresentableType = (typeof unrepresentableTypes)[number] | "union" | "intersection";
+export type UnrepresentableType = (typeof unrepresentableTypes)[number] | "union" | "intersection" | "getter";
 
 export function unrepresentableType(schema: z.ZodType): UnrepresentableType | undefined {
   const node = schemaNode(schema);
   if (node.type === "intersection") return "intersection";
+  if (node.type === "object" && recursesEagerly(schema)) return "getter";
   if (node.type === "union")
     return node.discriminator === undefined && node.options.some((o) => holdsCodec(o)) ? "union" : undefined;
   return node.type === "opaque" ? unrepresentableTypes.find((type) => type === node.kind) : undefined;
@@ -47,9 +49,12 @@ const isSchema = (value: unknown): value is JsonSchema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * Returns `schema` with each union option that is a `$ref` replaced by the schema that it names, once: Zod writes a
+ * Returns `schema` with each union option that is a `$ref` written out as the schema that it names: Zod writes a
  * recursive schema as a `$ref`, which states no type or field, so Lean's `fits` would take any value for the option.
- * The inlined schema keeps its own references, so a recursion is inlined only where a union names it.
+ * Only a union that sorts a value or holds a collection reads its options (sortCollections, Illegal.ambiguousUnion),
+ * and such a union is outside every recursion, since a recursion holds no collection (Malformed.opaqueCollection). So
+ * its `$ref` options enter a recursion from outside, and writing each out once gives every option that is read a type;
+ * the written-out schema keeps its own references.
  */
 function inlineOptions(schema: JsonSchema): JsonSchema {
   const named = (ref: Json): Json | undefined => {
@@ -59,11 +64,12 @@ function inlineOptions(schema: JsonSchema): JsonSchema {
     return name !== undefined && isSchema(defs) ? defs[name] : undefined;
   };
   const option = (o: Json): Json => {
-    if (!isSchema(o) || Object.keys(o).length !== 1 || o["$ref"] === undefined) return o;
+    if (!isSchema(o) || o["$ref"] === undefined) return o;
     const target = named(o["$ref"]);
     if (!isSchema(target)) return o;
     const { $defs: _, $schema: __, ...inlined } = target;
-    return inlined;
+    const { $ref: ___, ...own } = o;
+    return { ...inlined, ...own };
   };
   const walk = (value: Json): Json => {
     if (Array.isArray(value)) return value.map(walk);

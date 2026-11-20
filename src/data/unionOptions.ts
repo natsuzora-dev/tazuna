@@ -50,7 +50,7 @@ function allowed(schema: unknown): readonly unknown[] | undefined {
 
 const admits = (schema: unknown, v: unknown): boolean => allowed(schema)?.some((c) => sameJson(c, v)) ?? true;
 
-const requiredOf = (schema: unknown): string[] => {
+export const requiredOf = (schema: unknown): string[] => {
   const required = field(schema, "required");
   return Array.isArray(required) ? required.filter((k): k is string => typeof k === "string") : [];
 };
