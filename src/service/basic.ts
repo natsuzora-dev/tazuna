@@ -1,6 +1,8 @@
+import { sortCollections } from "../data/collections.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { expectFound } from "../data/internalError.ts";
 import type { Activity } from "../data/step.generated.ts";
+import type { Json } from "../data/values.ts";
 import type { KeyPosition, Structure } from "../spec/structure.generated.ts";
 import { type DefinitionStructure, isOpenedByScreen, mapStateOf, schemaProperties } from "../spec/structure.ts";
 import { type Chart, executableChart } from "./chart/basic.ts";
@@ -147,6 +149,9 @@ export function schemaOf(st: Service, schema: Schema): unknown {
   })();
   return expectFound(`schema ${JSON.stringify(schema)}`, found);
 }
+
+/** Lean's Service.sorted: an encoded value with its collections sorted by the structure's schema. */
+export const sorted = (st: Service, schema: Schema, json: Json): Json => sortCollections(schemaOf(st, schema), json);
 
 export const uniqueOf = (st: Service, entity: string): readonly string[] => st.uniques.get(entity) ?? [];
 

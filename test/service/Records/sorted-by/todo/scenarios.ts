@@ -9,6 +9,7 @@ import {
   planScreen,
   planTasks,
   scenario,
+  shelve,
 } from "./todo.ts";
 
 const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
@@ -94,6 +95,16 @@ export const listedGroups = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(listGroups, {});
+  },
+  then: () => [],
+});
+
+export const defaultedInput = scenario({
+  description:
+    "Shelve without names or entries; parse fills both with defaults that the spec writes out of order. The client wrote no entries, so their day order is not checked, and tazuna sorts the names and the entries",
+  given: arranged,
+  when: (w) => {
+    w.client.send(shelve, {});
   },
   then: () => [],
 });

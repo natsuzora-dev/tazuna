@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { InternalError } from "../src/data/internalError.ts";
 import { invalidScenarioKinds } from "../src/data/invalidScenario.generated.ts";
 import { scenario } from "../src/data/scenario.generated.ts";
+import { serviceOf } from "../src/service/basic.ts";
+import { Failed, sorting } from "../src/service/functions.ts";
 import type { RecordSource } from "../src/service/records.ts";
 import { SpecFunctions } from "../src/sim/spec/functions.ts";
 import { outcomeOf, simulateSpec } from "../src/sim/spec/simulate.ts";
@@ -98,4 +100,18 @@ test("An InternalError raised inside author code stops the question instead of b
   };
   const now = Temporal.Instant.from("2026-10-25T00:00:00Z");
   assert.throws(() => functions.binding("completeTask", "task", { taskId: "task-1" }, records, now), broken);
+});
+
+test("The sorting functions sort what parse fills with a default that the spec writes out of order", async () => {
+  const spec = await loadedSpec(join(tests, "service/Records/sorted-by"));
+  const fs = sorting(serviceOf(spec.structure, "todo"), new SpecFunctions(spec, "todo"));
+  const parsed = fs.parse({ kind: "input", definition: { service: "todo", name: "shelve" } }, {});
+  assert.ok(!(parsed instanceof Failed) && "encoded" in parsed);
+  assert.deepEqual(parsed.encoded, {
+    names: ["home", "shop"],
+    entries: [
+      { day: 1, title: "Buy milk" },
+      { day: 2, title: "Buy eggs" },
+    ],
+  });
 });

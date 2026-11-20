@@ -257,8 +257,8 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 
 | Property | Theorems |
 |---|---|
-| An accepted command emits exactly the events that its `decide` returned, each once, in the groups that `decide` returned, each payload with its collections sorted by the declared schema and then parsed by it. Every event is one that `emits` lists, and an unlisted event halts the run. | `accepted_emits_decided`, `sorting_decide_parsed`, `unlisted_emitted_event_halts` |
-| The service answers a query with the output of its `resolve`, its collections sorted by the declared schema and then parsed by it. | `resolve_output_answered`, `sorting_resolve_parsed`, `requirements_lookup` |
+| An accepted command emits exactly the events that its `decide` returned, each once, in the groups that `decide` returned, each payload with its collections sorted by the declared schema, parsed by it, and sorted again, since parsing fills defaults as the schema writes them. Every event is one that `emits` lists, and an unlisted event halts the run. | `accepted_emits_decided`, `sorting_decide_parsed`, `unlisted_emitted_event_halts` |
+| The service answers a query with the output of its `resolve`, its collections sorted by the declared schema, parsed by it, and sorted again. | `resolve_output_answered`, `sorting_resolve_parsed`, `requirements_lookup` |
 | When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`. | `command_invalid_input_rejected`, `query_invalid_input_rejected` |
 
 ### Statecharts
@@ -323,6 +323,7 @@ The other rows are tazuna's own.
 |---|---|
 | The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of the canonical JSON of their encoded values. | `bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order` |
 | The elements of a bag or set sort to the same canonical JSON in whatever order spec code built them. | `sortCanonical_perm` |
+| The elements of a `sortedBy` array sort to the same list in whatever order spec code built them, unless two of its elements differ only in field order. | `sortByKey_perm` |
 | In a union that holds a collection and that `check` accepts, a value fits at most one option, so the option that sorts it is never a guess. | `apart_disjoint` |
 | A snapshot orders two `out` lines after one `in` line only when they travel on one channel. | `ordered_same_channel` |
 | A snapshot never orders two events at one time of one group that `decide` returns. | `group_lines_unordered` |

@@ -58,6 +58,19 @@ export const listGroups = command({ emits: [groupsListed] }).decide(() => [
   }),
 ]);
 
+export const shelved = event({ payload: { names: bag(z.string()), entries: sortedBy(Entry, "day") } });
+
+export const shelve = command({
+  input: {
+    names: bag(z.string()).default(["shop", "home"]),
+    entries: sortedBy(Entry, "day").default([
+      { day: 2, title: "Buy eggs" },
+      { day: 1, title: "Buy milk" },
+    ]),
+  },
+  emits: [shelved],
+}).decide(({ input }) => [emit(shelved, { names: input.names, entries: input.entries })]);
+
 export const tasksPlanned = event({ payload: { entries: sortedBy(Entry, "day") } });
 
 export const planTasks = command({

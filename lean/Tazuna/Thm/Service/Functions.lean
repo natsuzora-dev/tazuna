@@ -60,15 +60,32 @@ theorem checked_parses (schema : Schema) (v x : Value) (h : fs.checked st schema
   · cases h
 
 /--
+What the sorting functions keep of a value that spec code made: the sorted value as its schema parses it, sorted again,
+since parse may fill a default that the schema writes out of order.
+-/
+theorem sortingParse_checked (schema : Schema) (v x : Value) (h : (fs.sortingParse st).checked st schema v = .ok x) :
+    ∃ y, fs.parse schema (st.sorted (m := Id) schema v) = .ok (some y) ∧ x = st.sorted (m := Id) schema y := by
+  have hp := checked_parses (fs := fs.sortingParse st) schema v x h
+  simp only [Functions.sortingParse, bind] at hp
+  split at hp
+  · rename_i y hy
+    injection hp with hp
+    injection hp with hp
+    exact ⟨y, hy, hp.symm⟩
+  · rename_i hn
+    exact absurd hp (by simpa [pure] using hn x)
+
+/--
 Each event that the sorting decide answers is one that decide wrote. One that the command lists has its payload sorted,
-as its event's schema parses it; an unlisted one keeps the payload that decide wrote.
+as its event's schema parses it, and sorted again; an unlisted one keeps the payload that decide wrote.
 -/
 theorem sorting_decide_parsed (name : String) (input : Value) (records : Records) (now : Time)
     (groups : List (List Emit)) (h : (fs.sorting st).decide name input records now = .ok groups) :
     ∃ decided, fs.decide name input records now = .ok decided ∧
       ∀ g ∈ groups, ∀ o ∈ g, ∃ d ∈ decided, ∃ e ∈ d,
         if st.lists name e then
-          o.event = e.event ∧ fs.parse (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) = .ok (some o.payload)
+          o.event = e.event ∧ ∃ y, fs.parse (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) =
+            .ok (some y) ∧ o.payload = st.sorted (m := Id) (.payload e.event) y
         else o = e := by
   simp only [Functions.sorting, bind] at h
   split at h
@@ -87,21 +104,22 @@ theorem sorting_decide_parsed (name : String) (input : Value) (records : Records
       · rename_i payload hc
         injection heo with heo
         subst heo
-        exact ⟨rfl, checked_parses _ _ _ hc⟩
+        exact ⟨rfl, sortingParse_checked _ _ _ hc⟩
     · rename_i hl
       simp only [hl, Bool.false_eq_true, ↓reduceIte]
       injection heo with heo
       exact heo.symm
 
-/-- A query's output is the sorted output of resolve, as its output schema parses it. -/
+/-- A query's output is the sorted output of resolve, as its output schema parses it, sorted again. -/
 theorem sorting_resolve_parsed (name : String) (input : Value) (records : Records) (now : Time) (output : Value)
     (h : (fs.sorting st).resolve name input records now = .ok output) :
     ∃ raw, fs.resolve name input records now = .ok raw ∧
-      fs.parse (.output (st.ref name)) (st.sorted (m := Id) (.output (st.ref name)) raw) = .ok (some output) := by
+      ∃ y, fs.parse (.output (st.ref name)) (st.sorted (m := Id) (.output (st.ref name)) raw) = .ok (some y) ∧
+        output = st.sorted (m := Id) (.output (st.ref name)) y := by
   simp only [Functions.sorting, bind] at h
   split at h
   · rename_i raw hr
-    exact ⟨raw, hr, checked_parses _ _ _ h⟩
+    exact ⟨raw, hr, sortingParse_checked _ _ _ h⟩
   · cases h
 
 end Tazuna.Thm.Service.Functions

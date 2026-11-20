@@ -82,4 +82,19 @@ theorem sortCanonical_perm {xs ys : List Value} (h : xs.Perm ys) :
   exact List.Perm.eq_of_pairwise (fun _ _ _ _ hab hba => String.le_antisymm hab hba) (sorted xs) (sorted ys)
     ((perm xs).trans ((h.map _).trans (perm ys).symm))
 
+/--
+When no two elements have the same canonical text unless they are equal, the canonical sort of a permutation is the
+same list, and so is the sort by a key that follows it: a sortedBy array keeps no trace of the order in which spec code
+built it. Two distinct values have the same canonical text only when they differ in field order.
+-/
+theorem sortByKey_perm (key : String) {xs ys : List Value} (h : xs.Perm ys)
+    (hc : ∀ a ∈ xs, ∀ b ∈ xs, a.canonical = b.canonical → a = b) :
+    sortByKey key (sortCanonical xs) = sortByKey key (sortCanonical ys) := by
+  have perm (zs : List Value) : (sortCanonical zs).Perm zs := List.mergeSort_perm _ _
+  have same : sortCanonical xs = sortCanonical ys := by
+    refine List.Perm.eq_of_pairwise (le := fun a b => a.canonical ≤ b.canonical) (fun a b ha hb hab hba => ?_)
+      (sortCanonical_in_order xs) (sortCanonical_in_order ys) ((perm xs).trans (h.trans (perm ys).symm))
+    exact hc a ((perm xs).mem_iff.mp ha) b (h.mem_iff.mpr ((perm ys).mem_iff.mp hb)) (String.le_antisymm hab hba)
+  rw [same]
+
 end Tazuna.Thm.Data.Collections

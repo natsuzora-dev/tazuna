@@ -65,8 +65,4 @@ def evolve (st : Service) (records : Records) (e : Emit) : Option Evolved :=
     some { records := records.filter fun r => !isRow entity key r, change := .delete, entity, key }
   | _ => none
 
-/-- The value with its collections sorted by `schema`, which the structure holds for each own event and query. -/
-def sorted {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (schema : Schema) (v : Value) : m Value := do
-  pure (sortCollections (← expectFound s!"schema {repr schema}" (st.schemaOf schema)) v)
-
 end Tazuna.Service

@@ -262,14 +262,15 @@ def Functions.parseSorted {m : Type → Type} [Monad m] [MonadNote m] (fs : Func
 
 /--
 `fs.parse` of a value from outside, which also lists each sortedBy array in key order (keyOrdered): tazuna sorts the
-values that spec code makes, so only a value from outside can break the order.
+values that spec code makes, so only a value from outside can break the order. The order is read from `v` as written,
+since parse may sort what it returns and fills a missing field with a default that the outside did not write.
 -/
 def Functions.parseOutside {m : Type → Type} [Monad m] [MonadNote m] (fs : Functions m) (st : Service)
     (schema : Schema) (v : Value) : m (Except Issue (Option Value)) := do
   match ← fs.parse schema v with
   | .ok (some x) =>
     let json ← expectFound s!"schema {repr schema}" (st.schemaOf schema)
-    pure (.ok (if keyOrdered json x then some x else none))
+    pure (.ok (if keyOrdered json v then some x else none))
   | r => pure r
 
 /-- Whether the command `command` lists the event of `e` in its emits. -/
@@ -297,13 +298,25 @@ def Functions.checked {m : Type → Type} [Monad m] [MonadNote m] (fs : Function
   | .error e => pure (.error e)
 
 /--
-The functions that answer as `fs` does, with each value that spec code made sorted by its schema, as the run keeps it.
-A value that its own service keeps is also parsed (`checked`), so that its checks read the sorted order. An event that
-the command does not list keeps its payload as decide wrote it, since the run halts on it (unlistedEmittedEvent) before
-it reads a payload. An input goes to its receiver, which parses it, and initialContextOf parses an initial context
-merged with its defaults.
+The functions that answer as `fs` does, with each parsed value sorted by its schema: parse fills a missing field with
+its default as the schema writes it, so the order that the run keeps must not depend on how a value was built.
+-/
+def Functions.sortingParse {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (fs : Functions m) : Functions m :=
+  { fs with
+    parse := fun schema v => do
+      match ← fs.parse schema v with
+      | .ok (some x) => pure (.ok (some (← st.sorted schema x)))
+      | r => pure r }
+
+/--
+The functions that answer as `fs` does, with each value that spec code made sorted by its schema, as the run keeps it,
+and each parsed value sorted again (sortingParse). A value that its own service keeps is also parsed (`checked`), so
+that its checks read the sorted order. An event that the command does not list keeps its payload as decide wrote it,
+since the run halts on it (unlistedEmittedEvent) before it reads a payload. An input goes to its receiver, which parses
+it, and initialContextOf parses an initial context merged with its defaults.
 -/
 def Functions.sorting {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (fs : Functions m) : Functions m :=
+  let fs := fs.sortingParse st
   let sortedInput (schema : Option Schema) (x : Except Issue (Value × List String)) : m (Except Issue (Value × List String)) :=
     match x with
     | .ok (input, keys) => do

@@ -1,6 +1,7 @@
 import Tazuna.Service.Chart.Basic
 import Tazuna.Service.Note
 import Tazuna.Data.UnionOptions
+import Tazuna.Data.Collections
 
 namespace Tazuna.Service
 
@@ -136,6 +137,10 @@ def schemaOf (st : Service) : Schema → Option Value
   | .record entity => (st.body? entity).bind fun
     | .entity b => some b.fields
     | _ => none
+
+/-- The value with its collections sorted by `schema`, which the structure holds (schemaOf). -/
+def sorted {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (schema : Schema) (v : Value) : m Value := do
+  pure (sortCollections (← expectFound s!"schema {repr schema}" (st.schemaOf schema)) v)
 
 def chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
 
