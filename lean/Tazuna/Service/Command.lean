@@ -53,7 +53,7 @@ def Outcome.answer : Outcome → Answer
 
 def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records : Records) (now : Time) (name : String)
     (raw : Value) : m Outcome := do
-  match ← fs.parse (.input (st.ref name)) raw with
+  match ← fs.parseOutside st (.input (st.ref name)) raw with
   | .error e => pure (.halted [issueViolation (st.ref name) e])
   | .ok none => pure (.rejected { kind := .invalidInput })
   | .ok (some input) =>

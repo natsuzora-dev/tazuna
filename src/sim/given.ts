@@ -4,7 +4,7 @@ import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generate
 import { byCodePoint, type Fields, sameJson, stringsOf } from "../data/values.ts";
 import { ref, type Service, uniqueOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
-import { Failed } from "../service/functions.ts";
+import { Failed, parseOutside } from "../service/functions.ts";
 import { type Row, recordSource } from "../service/records.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import { keyEntity, noteTo, type Role, type RunningService, type World } from "./network.ts";
@@ -150,7 +150,7 @@ function givenRows(
       });
       continue;
     }
-    const checked = r.functions.parse({ kind: "record", entity: ref(r.st, g.entity) }, g.value);
+    const checked = parseOutside(r.st, r.functions, { kind: "record", entity: ref(r.st, g.entity) }, g.value);
     if (checked instanceof Failed || "error" in checked) {
       invalid();
       continue;

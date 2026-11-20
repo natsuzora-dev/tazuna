@@ -52,6 +52,8 @@ inductive Request where
   | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
   /-- sortCollections of an encoded value by its JSON Schema. -/
   | sort (schema value : Value)
+  /-- keyOrdered of an encoded value by its JSON Schema. -/
+  | keyOrdered (schema value : Value)
   /-- scenarioTime? of a text, as renderTime writes the time. -/
   | scenarioTime (text : String)
   /-- Service.schemaOf of the service `service` of the structure. -/
@@ -223,6 +225,7 @@ inductive Response where
       (halted : Option Sim.InvalidScenario)
   | stepOrderChanges (searched : List SearchedProcessing)
   | sorted (value : Value)
+  | keyOrdered (ordered : Bool)
   | scenarioTime (time : Option String)
   | schemaOf (schema : Option Value)
   | error (message : String)

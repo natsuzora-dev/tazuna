@@ -83,7 +83,7 @@ running service creates, with the entity.
 def World.writtenKey? (w : World) (v : Value) : Option (String × Spec.Ref) :=
   v.strings.findSome? fun x => (w.keyEntity? x).map (x, ·)
 
-variable {m : Type → Type} [Monad m]
+variable {m : Type → Type} [Monad m] [MonadNote m]
 
 /--
 Given's records of `service` as rows, each parsed by its entity's schema, with a violation for each that is invalid,
@@ -96,7 +96,7 @@ def givenRows (st : Service) (fs : Functions m) (written : Value → Option (Str
     if !st.entities.contains g.entity || st.singles.contains g.entity != g.key.isNone then return invalid
     if let some (key, e) := written (.arr ((g.key.map Value.str).toList ++ [g.value])) then
       return (rows, found ++ [.writtenGivenKey service g.entity g.key key e])
-    match ← fs.parse (.record (st.ref g.entity)) g.value with
+    match ← fs.parseOutside st (.record (st.ref g.entity)) g.value with
     | .ok (some value) =>
       let row : Row := { entity := g.entity, key := g.key, value }
       if rows.any (clash st · row) then return (rows, found ++ [.duplicateRecord service g.entity g.key])

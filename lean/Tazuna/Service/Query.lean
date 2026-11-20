@@ -14,7 +14,7 @@ deriving Repr, Inhabited
 def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value) :
     m Resolution := do
   let definition := st.ref name
-  match ← fs.parse (.input definition) raw with
+  match ← fs.parseOutside st (.input definition) raw with
   | .error e => pure (.halted (issueViolation definition e))
   | .ok none => pure (.answered (.rejected { kind := .invalidInput }) [])
   | .ok (some input) =>

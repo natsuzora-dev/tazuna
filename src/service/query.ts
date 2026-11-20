@@ -2,7 +2,7 @@ import { expectFound } from "../data/internalError.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { ref } from "./basic.ts";
-import { Failed, firstFalse, issueViolation, sorted } from "./functions.ts";
+import { Failed, firstFalse, issueViolation, parseOutside, sorted } from "./functions.ts";
 import { recordSource } from "./records.ts";
 import { failedEnsures, halt, type Run, reportAll, write } from "./state.ts";
 
@@ -13,7 +13,7 @@ export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
     r.note.reached(reached);
     return answer;
   };
-  const parsed = r.functions.parse({ kind: "input", definition }, encoded ?? {});
+  const parsed = parseOutside(r.st, r.functions, { kind: "input", definition }, encoded ?? {});
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
   if ("error" in parsed) return { result: "rejected", rejection: { kind: "invalid-input" } };
   const input = parsed.value;

@@ -7,7 +7,7 @@ import { lineIdText } from "../data/trace.ts";
 import { byCodePoint, canonicalJson, sameJson } from "../data/values.ts";
 import { ref, type Schema } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
-import { Failed } from "../service/functions.ts";
+import { Failed, parseOutside } from "../service/functions.ts";
 import { begin, call, checkExchanges, endSubscription, operate, send, subscribe } from "../service/input.ts";
 import { chartOf } from "../service/instance.ts";
 import { type LineBody, sameLineId } from "../service/message.ts";
@@ -367,7 +367,12 @@ function requestIds(w: World, i: number, peer: string, fact: Fact): LineId[] {
 
 /** Lean's offeredAt. */
 function offeredAt(r: Processing, o: Opened, control: string, payload: unknown): boolean {
-  const parsed = r.functions.parse({ kind: "control", screen: ref(r.st, chartOf(o.id)), control }, payload);
+  const parsed = parseOutside(
+    r.st,
+    r.functions,
+    { kind: "control", screen: ref(r.st, chartOf(o.id)), control },
+    payload,
+  );
   if (parsed instanceof Failed || "error" in parsed) return false;
   try {
     return "top" in accepting(r, o.id, control, parsed);

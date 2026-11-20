@@ -160,6 +160,14 @@ section
 variable (h : FunctionsAgree fsI fs)
 include h
 
+theorem parseSorted_agrees (schema : Schema) (v : Value) :
+    Agrees (fsI.parseSorted st schema v) (fs.parseSorted st schema v) := by
+  unfold Functions.parseSorted; agree [h.parse, sorted_agrees]
+
+theorem parseOutside_agrees (schema : Schema) (v : Value) :
+    Agrees (fsI.parseOutside st schema v) (fs.parseOutside st schema v) := by
+  unfold Functions.parseOutside; agree [h.parse, expectFound_agrees]
+
 theorem runAssign_agrees (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
     (held : Option Value) (r : Processing) :
     Agrees (runAssign fsI st name a scope extra held r) (runAssign fs st name a scope extra held r) := by
@@ -190,11 +198,11 @@ theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Ac
 
 theorem initialContextOf_agrees (chart : String) (input : Value) :
     Agrees (initialContextOf fsI st chart input) (initialContextOf fs st chart input) := by
-  unfold initialContextOf; agree [h.initialContext, h.defaults, h.parse, sorted_agrees]
+  unfold initialContextOf; agree [h.initialContext, h.defaults, h.parse, parseSorted_agrees h, parseOutside_agrees h, sorted_agrees]
 
 theorem openScreen_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
-  unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, sorted_agrees, h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
+  unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, sorted_agrees, h.parse, parseSorted_agrees h, parseOutside_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
 
 theorem activate_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (activate fsI st step name state a r) (activate fs st step name state a r) := by
@@ -260,7 +268,7 @@ theorem firstLevel_agrees (s : State) (extra : Extra) (levels : List (Instance �
   | cons l rest ih => unfold firstLevel; agree [choose_agrees h, ih]
 
 theorem reaches_agrees (c : Instance) (payload : Value) : Agrees (reaches fsI st c payload) (reaches fs st c payload) := by
-  unfold reaches copyKey; agree [h.parse, sorted_agrees]
+  unfold reaches copyKey; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, sorted_agrees]
 
 theorem reachedCopies_agrees (s : State) (top : Instance) (payload : Value) :
     Agrees (reachedCopies fsI st s top payload) (reachedCopies fs st s top payload) := by
@@ -386,7 +394,7 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
 
 theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :
     Agrees (resolveChecked st fsI s name raw) (resolveChecked st fs s name raw) := by
-  unfold resolveChecked; agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve,
+  unfold resolveChecked; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve,
     h.queryEnsures, sorted_agrees]
 
 theorem publishOne_agrees (s : State) (sub : Subscription) :
@@ -461,7 +469,7 @@ theorem requirementsRejection_agrees (records : Records) (now : Time) (name : St
 theorem evaluate_agrees (records : Records) (now : Time) (name : String) (raw : Value) :
     Agrees (evaluate st fsI records now name raw) (evaluate st fs records now name raw) := by
   unfold evaluate
-  agree [h.parse, requirementsRejection_agrees h, h.decide, sortEmits_agrees, commandEnsures_agrees h,
+  agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, requirementsRejection_agrees h, h.decide, sortEmits_agrees, commandEnsures_agrees h,
     integrityViolations_agrees h]
 
 theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Option LineId) (step : Nat) :
@@ -520,21 +528,18 @@ theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Valu
 
 theorem receive_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
-  unfold receive; agree [h.parse, deliver_agrees h, redeliver_agrees h]
+  unfold receive; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, deliver_agrees h, redeliver_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem decodedOutput_agrees (target : Spec.Ref) (answer : Answer) :
     Agrees (decodedOutput st fsI target answer) (decodedOutput st fs target answer) := by
-  unfold decodedOutput; agree [h.parse]
+  unfold decodedOutput; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem decodedAnswer_agrees (id : LineId) (target : Spec.Ref) (answer : Answer) :
     Agrees (decodedAnswer st fsI id target answer) (decodedAnswer st fs id target answer) := by
   unfold decodedAnswer
   dsimp only
   agree [decodedOutput_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem checkAnswer_agrees (p : Pending) (answer : Answer) :
     Agrees (checkAnswer st fsI p answer) (checkAnswer st fs p answer) := by
   unfold checkAnswer
@@ -550,9 +555,8 @@ theorem answerIn_agrees (s : State) (id to : LineId) (answer : Answer) :
     Agrees (answerIn st fsI s id to answer) (answerIn st fs s id to answer) := by
   unfold answerIn; agree [message_agrees h, answerRequest_agrees h]
 
-omit [MonadNote (StateT C Id)] in
-theorem decodedEvents_agrees (x : Exchange) : Agrees (decodedEvents fsI x) (decodedEvents fs x) := by
-  unfold decodedEvents; agree [h.parse]
+theorem decodedEvents_agrees (x : Exchange) : Agrees (decodedEvents st fsI x) (decodedEvents st fs x) := by
+  unfold decodedEvents; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h]
 
 theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List Emit) (s : State) (a : Answer) :
     Agrees (checkAssumedAnswer st fsI x input events s a) (checkAssumedAnswer st fs x input events s a) := by
@@ -562,7 +566,7 @@ theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List 
 
 theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by
   unfold checkExchanges checkExchange
-  agree [h.parse, decodedEvents_agrees h, checkAssumedAnswer_agrees h]
+  agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, decodedEvents_agrees h, checkAssumedAnswer_agrees h]
 
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.defaults, expectFound_agrees]
@@ -578,7 +582,7 @@ theorem operate_agrees (s : State) (screen : InstanceId) (control : String) (pay
   · exact Agrees.pure _
   split
   · exact Agrees.pure _
-  refine Agrees.bind (h.parse _ _) (fun _ => ?_)
+  refine Agrees.bind (parseOutside_agrees h _ _) (fun _ => ?_)
   split
   · exact Agrees.pure _
   · exact Agrees.pure _

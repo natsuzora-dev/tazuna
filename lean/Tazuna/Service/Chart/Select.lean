@@ -47,7 +47,7 @@ def copyKey (st : Service) (chart : Chart) (map : String) (payload : Value) : m 
   | none => pure (.ok .everyCopy)
   | some fields =>
     let schema := .mapKey (st.ref chart.name) map
-    pure ((← fs.parse schema (← st.sorted schema (.obj fields))).map fun
+    pure ((← fs.parseSorted st schema (.obj fields)).map fun
       | none => .noCopy
       | some key => .copy key)
 

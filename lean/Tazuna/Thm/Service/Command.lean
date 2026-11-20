@@ -33,7 +33,7 @@ theorem evaluate_accepted_applies (records : Records) (now : Time) (name : Strin
     (groups : List (List Emit)) (vs : List Fault)
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
     applyAll st records groups.flatten = written ∧ duplicated st written = false ∧
-      ∃ input, fs.parse (.input (st.ref name)) raw = .ok (some input) ∧
+      ∃ input, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧
         vs = (commandEnsures st fs name input records written now).run ++ (integrityViolations st fs written name).run := by
   simp only [evaluate, id_bind] at h
   split at h
@@ -98,12 +98,12 @@ theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Val
   · simp [processCommand, h]
 
 theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value)
-    (hp : fs.parse (.input (st.ref name)) raw = .ok none) :
+    (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok none) :
     evaluate st fs records now name raw = .rejected { kind := .invalidInput } := by
   simp [evaluate, hp]
 
 theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value)
-    (decided : List (List Emit)) (hp : fs.parse (.input (st.ref name)) raw = .ok (some input))
+    (decided : List (List Emit)) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hr : requirementsRejection st fs records now name input = .ok none)
     (hd : fs.decide name input records now = .ok decided) (hu : ∃ e ∈ decided.flatten, st.lists name e = false) :
     ∃ v, evaluate st fs records now name raw = .halted [v] ∧ v.halts = true ∧
@@ -139,7 +139,7 @@ theorem mem_orderedGroups (decided : List (List Emit)) (sorted : List Emit) (e :
 theorem accepted_emits_decided (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
     (groups : List (List Emit)) (vs : List Fault)
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
-    ∃ input decided, fs.parse (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
+    ∃ input decided, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
       (∀ e ∈ decided.flatten, st.lists name e = true) ∧
       groups = orderedGroups decided (sortEmits (m := Id) st decided.flatten) := by
   simp only [evaluate, id_bind] at h

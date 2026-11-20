@@ -1,4 +1,4 @@
-import { sortCollections } from "../data/collections.ts";
+import { keyOrderIssue, sortCollections } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Ensured } from "../data/ensured.generated.ts";
 import type { Fault } from "../data/fault.generated.ts";
@@ -6,7 +6,7 @@ import type { Activity } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
-import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
+import { type Located, type ViolationError, withExtra, zodError } from "../data/violation.ts";
 import { type Schema, type Service, schemaOf, schemaOwner } from "./basic.ts";
 import { type InstanceId, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
@@ -71,6 +71,18 @@ export const sorted = (st: Service, schema: Schema, json: Json): Json => sortCol
 /** Lean's Service.sorted, then the decode that the TS engine keeps: an encoded answer as spec code receives it. */
 export const sortedDecoded = (st: Service, fs: Functions, schema: Schema, json: Json): Fields =>
   fs.decode(schema, sorted(st, schema, json));
+
+/** Lean's Functions.parseSorted: a value that spec code made, sorted and then parsed. */
+export const parseSorted = (st: Service, fs: Functions, schema: Schema, json: Json): Checked | Failed =>
+  fs.parse(schema, sorted(st, schema, json));
+
+/** Lean's Functions.parseOutside, with the out-of-order element as the Zod issue that only TS reports. */
+export function parseOutside(st: Service, fs: Functions, schema: Schema, value: unknown): Checked | Failed {
+  const parsed = fs.parse(schema, value);
+  if (parsed instanceof Failed || "error" in parsed) return parsed;
+  const issue = keyOrderIssue(schemaOf(st, schema), parsed.encoded as Json);
+  return issue === undefined ? parsed : { error: zodError([issue]) };
+}
 
 /** Lean's firstFalse: the first of `names` that `test` finds false, in order. */
 export function firstFalse<N, R extends boolean | Failed>(

@@ -4,7 +4,7 @@ import { canonicalJson, type Fields, type Json } from "../../data/values.ts";
 import { mapStateOf, schemaProperties, transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
-import { Failed, firstFalse, issueViolation, sorted } from "../functions.ts";
+import { Failed, firstFalse, issueViolation, parseSorted } from "../functions.ts";
 import { copyId, type InstanceId, mapOf } from "../instance.ts";
 import { valueName } from "../note.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -68,7 +68,7 @@ function copyKey(r: Run, chart: Chart, map: string, payload: Readonly<Record<str
   if (!fields.every((f) => Object.hasOwn(payload, f))) return { kind: "everyCopy" };
   const schema = { kind: "mapKey", chart: ref(r.st, chart.name), map } as const;
   const fieldsOf: Readonly<Record<string, Json>> = Object.fromEntries(fields.map((f) => [f, payload[f] as Json]));
-  const key = r.functions.parse(schema, sorted(r.st, schema, fieldsOf));
+  const key = parseSorted(r.st, r.functions, schema, fieldsOf);
   if (key instanceof Failed) return key;
   return "error" in key ? { kind: "noCopy" } : { kind: "copy", key: canonicalJson(key.encoded) };
 }

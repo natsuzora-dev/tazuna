@@ -106,7 +106,7 @@ theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : Strin
     (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : st.chart? a.ref.name = some c)
     (raw : Value) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (raw, keys))
-    (hq : fs.parse (.input (st.ref c.name)) (st.sorted (m := Id) (.input (st.ref c.name)) raw) = .ok (some given))
+    (hq : fs.parseSorted st (.input (st.ref c.name)) raw = .ok (some given))
     (rq : Requirements)
     (hl : st.requirements.lookup c.name = some rq)
     (hr : firstFalse (fs.inputRequirement (st.ref c.name) · given) rq.requires = .ok none)

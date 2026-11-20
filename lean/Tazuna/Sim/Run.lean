@@ -186,7 +186,7 @@ def World.requestIds (w : World) (fsOf : String → Functions m) (i : Nat) (peer
 
 def offeredAt (st : Service) (fs : Functions m) (s : State) (o : Opened) (control : String) (payload : Value) :
     m Bool := do
-  match ← fs.parse (.control (st.ref o.id.chart) control) payload with
+  match ← fs.parseOutside st (.control (st.ref o.id.chart) control) payload with
   | .ok (some decoded) =>
     match ← acceptsOperation fs st s o.id control decoded with
     | .ok (.ok _) => pure true

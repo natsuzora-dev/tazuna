@@ -40,6 +40,7 @@ const responses = {
   simulate: "simulated",
   stepOrderChanges: "stepOrderChanges",
   sort: "sorted",
+  keyOrdered: "keyOrdered",
   scenarioTime: "scenarioTime",
   schemaOf: "schemaOf",
 } as const satisfies Record<Request["type"], Response["type"]>;
@@ -208,6 +209,10 @@ export class Lean {
 
   sort(schema: Json, value: Json): Json {
     return this.exchange({ type: "sort", schema, value }).value as Json;
+  }
+
+  keyOrdered(schema: Json, value: Json): boolean {
+    return this.exchange({ type: "keyOrdered", schema, value }).ordered;
   }
 
   scenarioTime(text: string): string | undefined {

@@ -221,13 +221,13 @@ theorem sameValue_agrees (w : World) (q : String) (schema : Schema) (peer : Stri
     Agrees (w.sameValue (fsOfI q) schema peer t e a) (w.sameValue (fsOf q) schema peer t e a) := by
   unfold World.sameValue; agreeE [comparedOr_agrees h]
 
-theorem given_agrees (w : World) (j : Spec.Structure) (sc : Scenario) :
+theorem given_agrees [MonadNote (StateT C Id)] (w : World) (j : Spec.Structure) (sc : Scenario) :
     Agrees (w.given j fsOfI sc) (w.given j fsOf sc) := by
-  unfold World.given givenRows givenInvariants; agreeE [(h _).parse, (h _).invariant, (h _).serviceInvariant]
+  unfold World.given givenRows givenInvariants; agreeE [parseOutside_agrees (h _), (h _).invariant, (h _).serviceInvariant]
 
 theorem offeredAt_agrees [MonadNote (StateT C Id)] (q : String) (st : Service) (s : State) (o : Opened) (control : String) (payload : Value) :
     Agrees (offeredAt st (fsOfI q) s o control payload) (offeredAt st (fsOf q) s o control payload) := by
-  unfold offeredAt; agreeE [(h q).parse, acceptsOperation_agrees (h q)]
+  unfold offeredAt; agreeE [parseOutside_agrees (h q), acceptsOperation_agrees (h q)]
 
 omit h in
 theorem peerMessage_agrees (w : World) (i : Nat) (peer : String) {f : Message → StateT C Id Bool}

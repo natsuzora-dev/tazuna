@@ -5,7 +5,7 @@ import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
 import { emitsOf } from "../spec/structure.ts";
 import { ref, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
-import { Failed, issueViolation, sorted } from "./functions.ts";
+import { Failed, issueViolation, parseOutside, sorted } from "./functions.ts";
 import { applyAll, type Encoded, integrityViolations, writtenRecord } from "./integrity.ts";
 import type { Emitted } from "./message.ts";
 import { recordSource } from "./records.ts";
@@ -64,7 +64,7 @@ export function processCommand(
     if (reached !== undefined) r.note.reached(reached);
     return { answer, groups: groups.map((g) => g.map((e) => e.emit)) };
   };
-  const parsed = r.functions.parse({ kind: "input", definition }, encoded);
+  const parsed = parseOutside(r.st, r.functions, { kind: "input", definition }, encoded);
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
   if ("error" in parsed) return done({ result: "rejected", rejection: { kind: "invalid-input" } });
   const input = parsed.value;

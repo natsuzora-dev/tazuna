@@ -9,7 +9,7 @@ variable {m : Type → Type}
 
 /--
 The initial context of `chart` started with `input`: what its initialContext computes, with each field that it leaves
-out taking its default, parsed and with its collections sorted, or the fault that an Issue means.
+out taking its default, sorted and parsed, or the fault that an Issue means.
 -/
 def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (chart : String) (input : Value) :
     m (Except Fault Value) := do
@@ -21,11 +21,10 @@ def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (
     match ← fs.defaults (.context definition) with
     | .error e => pure (.error (fault e))
     | .ok defaults =>
-      -- Parsing reads a sortedBy array's key order, and it fills in nested defaults in the order they were built.
-      match ← fs.parse (.context definition) (← st.sorted (.context definition) (defaults.merge given)) with
+      match ← fs.parseSorted st (.context definition) (defaults.merge given) with
       | .error e => pure (.error (fault e))
       | .ok none => pure (.error (.initialContextSchema definition))
-      | .ok (some context) => pure (.ok (← st.sorted (.context definition) context))
+      | .ok (some context) => pure (.ok context)
 
 /-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`. -/
 def Activity.requestLine (a : Activity) (input : Value) : LineBody :=
@@ -60,7 +59,7 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
       | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok (raw, _) =>
-      match ← fs.parse (.input (st.ref c.name)) (← st.sorted (.input (st.ref c.name)) raw) with
+      match ← fs.parseSorted st (.input (st.ref c.name)) raw with
       | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok none => pure (r.report (.fault (.inputSchema (st.ref i.chart.name) (st.ref c.name))))
       | .ok (some input) =>

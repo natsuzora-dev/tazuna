@@ -22,7 +22,7 @@ import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
 import { processCommand } from "./command.ts";
-import { Failed, firstFalse, issueViolation, passes, sorted } from "./functions.ts";
+import { Failed, firstFalse, issueViolation, parseOutside, passes, sorted } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
 import { type Emitted, idKey, type Line, sameLineId } from "./message.ts";
@@ -126,7 +126,7 @@ export function receive(r: Processing, event: DefinitionRef, payload: unknown, i
     redeliver(r, event, payload, id, resultOf);
     return;
   }
-  const parsed = r.functions.parse({ kind: "payload", event }, payload);
+  const parsed = parseOutside(r.st, r.functions, { kind: "payload", event }, payload);
   if (parsed instanceof Failed) halt(issueViolation(event, parsed));
   if ("error" in parsed)
     report(
@@ -179,7 +179,7 @@ function decodedAnswer(r: Run, id: LineId, target: DefinitionRef, answer: Answer
     return { decoded: answer };
   }
   if (!hasOutput(structure, target)) return { decoded: answer };
-  const parsed = r.functions.parse({ kind: "output", definition: target }, answer.output);
+  const parsed = parseOutside(r.st, r.functions, { kind: "output", definition: target }, answer.output);
   if (parsed instanceof Failed) return halt(issueViolation(target, parsed));
   if ("error" in parsed)
     return {
@@ -346,7 +346,7 @@ function checkExchange(r: Run, x: Exchange): void {
   const found = resultOfFinding(r, x);
   if (found !== undefined) report(r.state, found);
   const events = x.events.flatMap(({ event, payload }): Emitted[] => {
-    const e = r.functions.parse({ kind: "payload", event }, payload);
+    const e = parseOutside(r.st, r.functions, { kind: "payload", event }, payload);
     if (e instanceof Failed) return halt(issueViolation(target, e));
     return "error" in e ? [] : [{ event, payload: e.value, encoded: e.encoded as Json }];
   });
@@ -456,7 +456,7 @@ function writeOperation(r: Processing, resource: InstanceId, screen: string, key
     ...(nth === undefined ? {} : { nth }),
     ...(control.hasPayload ? { payload } : {}),
   });
-  const parsed = r.functions.parse({ kind: "control", screen: definition, control: key }, payload);
+  const parsed = parseOutside(r.st, r.functions, { kind: "control", screen: definition, control: key }, payload);
   if (parsed instanceof Failed) return halt(issueViolation(definition, parsed));
   if ("error" in parsed)
     return report(

@@ -78,7 +78,7 @@ def receive [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   if s.deliveries.contains id then
     redeliver st fs s event id raw resultOf
   else
-    match ← fs.parse (.payload event) raw with
+    match ← fs.parseOutside st (.payload event) raw with
     | .error e =>
       pure (s.report (.fault (issueViolation event e)))
     | .ok none => pure (s.report (.invalidInput (.eventPayloadSchema event)))
@@ -91,17 +91,17 @@ def brokenAssumption (requestId : LineId) (target : Spec.Ref) (answer : Answer)
     (.invalidInput ∘ .assumption requestId.text target)
 
 /-- The answer with its output decoded, or none when the output does not match the output schema of `target`. -/
-def decodedOutput [Monad m] (st : Service) (fs : Functions m) (target : Spec.Ref) (answer : Answer) :
+def decodedOutput [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (target : Spec.Ref) (answer : Answer) :
     m (Except Issue (Option Answer)) := do
   if !st.«structure».hasOutput target then return .ok (some answer)
   match answer with
   | .rejected _ => return .ok (some answer)
   | .accepted none => return .ok none
-  | .accepted (some output) => return (← fs.parse (.output target) output).map (·.map (.accepted ∘ some))
-  | .fulfilled output => return (← fs.parse (.output target) output).map (·.map .fulfilled)
+  | .accepted (some output) => return (← fs.parseOutside st (.output target) output).map (·.map (.accepted ∘ some))
+  | .fulfilled output => return (← fs.parseOutside st (.output target) output).map (·.map .fulfilled)
 
 /-- The answer to the request `id` to `target` decoded, or why its rejection kind or output does not match `target`. -/
-def decodedAnswer [Monad m] (st : Service) (fs : Functions m) (id : LineId) (target : Spec.Ref) (answer : Answer) :
+def decodedAnswer [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (id : LineId) (target : Spec.Ref) (answer : Answer) :
     m (Except Issue (Except Finding Answer)) := do
   let j := st.«structure»
   match answer with
@@ -122,7 +122,7 @@ The answer to the request `p` decoded for its requester, or why it cannot be del
 itself, so its rejection as invalid is the requester's fault. What an assumed peer's answer assumes is checked at the
 end of the run (checkExchanges).
 -/
-def checkAnswer [Monad m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
+def checkAnswer [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (p : Pending) (answer : Answer) :
     m (Except Issue (Except Finding Answer)) :=
   let target := p.activity.ref
   match (if st.«structure».isAssumed target then none else rejectedInput? st p.requester.sender target answer) with
@@ -190,12 +190,12 @@ def State.exchanges (s : State) : List Exchange :=
 /--
 The result events of `x` decoded. Each was decoded when it arrived, so an event that does not decode now is left out.
 -/
-def decodedEvents [Monad m] (fs : Functions m) (x : Exchange) : m (Except Issue (List Emit)) :=
+def decodedEvents [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (x : Exchange) : m (Except Issue (List Emit)) :=
   x.events.foldlM (init := .ok []) fun acc (event, raw) => do
     match acc with
     | .error e => pure (.error e)
     | .ok emits =>
-      match ← fs.parse (.payload event) raw with
+      match ← fs.parseOutside st (.payload event) raw with
       | .error e => pure (.error e)
       | .ok none => pure (.ok emits)
       | .ok (some payload) => pure (.ok (emits ++ [{ event, payload }]))
@@ -252,7 +252,7 @@ def checkExchange [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s :
   | .ok none => return s.report (.fault (.inputSchema (st.ref x.sender) x.target))
   | .ok (some input) =>
   if let some f := resultOfFinding st x then return s.report f
-  match ← decodedEvents fs x with
+  match ← decodedEvents st fs x with
   | .error e => return s.report (.fault (issueViolation x.target e))
   | .ok events => x.answers.foldlM (checkAssumedAnswer st fs x input events) s
 
@@ -317,7 +317,7 @@ def operate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
   | some ctl =>
     let s := (s.write .in none
       (.operation (st.ref screen) control (s.nthOpen resource) (if ctl.hasPayload then some payload else none))).1
-    match ← fs.parse (.control (st.ref screen) control) payload with
+    match ← fs.parseOutside st (.control (st.ref screen) control) payload with
     | .error e =>
       pure (s.report (.fault (issueViolation (st.ref screen) e)))
     | .ok none => pure (s.report (.invalidInput (.controlPayloadSchema (st.ref screen) control)))

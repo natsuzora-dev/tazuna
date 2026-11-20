@@ -106,12 +106,12 @@ theorem ended_subscription_not_answered (id : LineId) (hid : ∀ sub ∈ s.subsc
   exact hid sub hsub h.symm
 
 theorem query_invalid_input_rejected (name : String) (raw : Value)
-    (hp : fs.parse (.input (st.ref name)) raw = .ok none) :
+    (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok none) :
     resolveChecked st fs s name raw = .answered (.rejected { kind := .invalidInput }) [] := by
   simp [resolveChecked, hp]
 
 theorem resolve_output_sorted (name : String) (raw input output : Value)
-    (failed : Option String) (rq : Requirements) (hp : fs.parse (.input (st.ref name)) raw = .ok (some input))
+    (failed : Option String) (rq : Requirements) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hq : st.requirements.lookup name = some rq)
     (hr : firstFalse (fs.inputRequirement (st.ref name) · input) rq.requires = .ok none)
     (hv : fs.resolve name input s.records s.now = .ok output)

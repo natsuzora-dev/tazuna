@@ -322,6 +322,12 @@ export type Request =
       readonly schema: Json;
       readonly value: Json;
     }
+  /** keyOrdered of an encoded value by its JSON Schema. */
+  | {
+      readonly type: "keyOrdered";
+      readonly schema: Json;
+      readonly value: Json;
+    }
   /** scenarioTime? of a text, as renderTime writes the time. */
   | {
       readonly type: "scenarioTime";
@@ -766,6 +772,10 @@ export type Response =
   | {
       readonly type: "sorted";
       readonly value: Json;
+    }
+  | {
+      readonly type: "keyOrdered";
+      readonly ordered: boolean;
     }
   | {
       readonly type: "scenarioTime";

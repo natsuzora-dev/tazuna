@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import fc from "fast-check";
 import { z } from "zod";
-import { bag, fromJson, set, sortCollections, sortedBy, toJson } from "../src/data/collections.ts";
+import { bag, fromJson, keyOrderIssue, set, sortCollections, sortedBy, toJson } from "../src/data/collections.ts";
 import { date, datetime } from "../src/data/datetime.ts";
 import { jsonSchema } from "../src/data/jsonSchema.ts";
 import { canonicalJson, type Json, plain } from "../src/data/values.ts";
@@ -111,6 +111,20 @@ test("The TS engine's sortCollections sorts an encoded value as Lean's sortColle
       ([n, json]) => {
         const encoded = plain(toJson(n.schema, fromJson(n.schema, json)));
         assert.deepEqual(sortCollections(jsonSchema(n.schema), encoded), lean.sort(jsonSchema(n.schema), encoded));
+      },
+    ),
+    { numRuns: 400 },
+  );
+});
+
+test("The TS engine's keyOrderIssue finds an encoded value out of key order where Lean's keyOrdered does", () => {
+  fc.assert(
+    fc.property(
+      node.chain((n) => n.value.map((json) => [n, json] as const)),
+      ([n, json]) => {
+        const encoded = plain(toJson(n.schema, fromJson(n.schema, json)));
+        const schema = jsonSchema(n.schema);
+        assert.equal(keyOrderIssue(schema, encoded) === undefined, lean.keyOrdered(schema, encoded));
       },
     ),
     { numRuns: 400 },

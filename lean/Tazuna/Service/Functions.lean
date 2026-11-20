@@ -164,9 +164,8 @@ value or the Issue that stopped the code. A value matches its schema only withou
 depth, whether it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
 dropped.
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), or one that a
-  spec function wrote and the run sorted, decoded and written back as JSON (only its codecs run, encoding) if it
-  matches the schema (the canonical value), or none otherwise. Parsing reads a sortedBy array's key order; encoding
-  does not, since the run sorts what a spec function writes.
+  spec function wrote, decoded and written back as JSON (only its codecs run, encoding) if it matches the schema (the
+  canonical value), or none otherwise. It does not read a sortedBy array's key order (parseOutside).
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.
@@ -197,7 +196,7 @@ dropped.
 - initialContext: the context that the initialContext of a machine or screen computes from the input (the parsed input of
   a screen that opens opened, or `{}` when nothing opens it), encoded and in the order it was built, `{}` without one.
   A field that its schema does not encode is a schema Issue. initialContextOf fills in the defaults of the fields that
-  it leaves out, parses it, and sorts its collections.
+  it leaves out and parses it sorted (parseSorted).
 - guard: whether one guard condition of a transition holds.
 - offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked,
   encoded and in the order they were built.
@@ -252,6 +251,23 @@ structure Functions (m : Type → Type) where
   defaults : Schema → m (Except Issue Value)
   close : Scope → Records → m (Except Issue Value)
   closeEnsures : String → Value → Value → m (Except Issue (Option String))
+
+/-- `fs.parse` of a value that spec code made, sorted first (sortCollections), so that its checks read the order that the run keeps. -/
+def Functions.parseSorted {m : Type → Type} [Monad m] [MonadNote m] (fs : Functions m) (st : Service)
+    (schema : Schema) (v : Value) : m (Except Issue (Option Value)) := do
+  fs.parse schema (← st.sorted schema v)
+
+/--
+`fs.parse` of a value from outside, which also lists each sortedBy array in key order (keyOrdered): tazuna sorts the
+values that spec code makes, so only a value from outside can break the order.
+-/
+def Functions.parseOutside {m : Type → Type} [Monad m] [MonadNote m] (fs : Functions m) (st : Service)
+    (schema : Schema) (v : Value) : m (Except Issue (Option Value)) := do
+  match ← fs.parse schema v with
+  | .ok (some x) =>
+    let json ← expectFound s!"schema {repr schema}" (st.schemaOf schema)
+    pure (.ok (if keyOrdered json x then some x else none))
+  | r => pure r
 
 /--
 The first of `names` that `test` finds false, in order: the semantics evaluates binds, requires and guards one by one

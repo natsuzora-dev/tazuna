@@ -3,7 +3,7 @@ import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { ref } from "../basic.ts";
-import { Failed, firstFalse, issueViolation, sorted, sortedDecoded } from "../functions.ts";
+import { Failed, firstFalse, issueViolation, parseSorted, sorted } from "../functions.ts";
 import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
@@ -27,7 +27,7 @@ import type { Processing } from "./queue.ts";
 
 /**
  * Lean's initialContextOf: what the initialContext of `chart` computes from `input`, with each field that it leaves out
- * taking its default, parsed and with its collections sorted, or a halt with what an Issue means.
+ * taking its default, sorted and parsed, or a halt with what an Issue means.
  */
 export function initialContextOf(r: Processing, chart: string, input: Fields): Fields {
   const definition = ref(r.st, chart);
@@ -38,12 +38,11 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
   const schema = { kind: "context", chart: definition } as const;
   const defaults = r.functions.defaults(schema);
   if (defaults instanceof Failed) return fault(defaults);
-  // Parsing reads a sortedBy array's key order, and it fills in nested defaults in the order they were built.
-  const parsed = r.functions.parse(schema, sorted(r.st, schema, merged(defaults, given)));
+  const parsed = parseSorted(r.st, r.functions, schema, merged(defaults, given));
   if (parsed instanceof Failed) return fault(parsed);
   if ("error" in parsed)
     return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: parsed.error }));
-  return sortedDecoded(r.st, r.functions, schema, parsed.encoded as Json);
+  return parsed.value;
 }
 
 /** Lean's Value.merge: the fields of `a` with those of `b` over them, or `b` when either is no object. */
@@ -109,7 +108,7 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
   const schema = { kind: "input", definition: screen } as const;
-  const parsed = r.functions.parse(schema, sorted(r.st, schema, given.input));
+  const parsed = parseSorted(r.st, r.functions, schema, given.input);
   if (parsed instanceof Failed) halt(issueViolation(screen, parsed));
   if ("error" in parsed)
     halt(withExtra({ kind: "Fault.inputSchema", definition, data: { target: screen } }, { error: parsed.error }));

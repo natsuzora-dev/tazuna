@@ -1,3 +1,4 @@
+import { parsedOutside } from "../data/collections.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { type FileLine, subjectOf } from "../data/trace.ts";
@@ -243,7 +244,7 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
   const emitted = new Map<number, Emit>();
   for (const { at, event, payload } of events) {
     if (flagged.has(at)) continue;
-    const parsed = strictObjectOf(event.payload).safeParse(payload);
+    const parsed = parsedOutside(strictObjectOf(event.payload), payload);
     if (parsed.success) emitted.set(at, emit(event, parsed.data as never));
     else
       violations.push({
@@ -257,13 +258,13 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
   for (const x of exchanges) {
     const { definition } = x;
     const ref = { requestId: x.id, target: refOfDefinition(spec, definition) };
-    const input = strictObjectOf(definition.input).safeParse(x.input);
+    const input = parsedOutside(strictObjectOf(definition.input), x.input);
     for (const { at: line, answer, answersSend } of answeringSends(x)) {
       if (!answersSend || flagged.has(line)) continue;
       const out =
         answer.result === "rejected" || definition.output === undefined
           ? undefined
-          : strictObjectOf(definition.output).safeParse(answer.output);
+          : parsedOutside(strictObjectOf(definition.output), answer.output);
       if (!input.success && answer.result !== "rejected")
         violations.push({
           kind: "Mismatch.requestInputSchema",

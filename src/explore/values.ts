@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parsedOutside } from "../data/collections.ts";
 import { date, datetime } from "../data/datetime.ts";
 import { collectionOf } from "../data/marks.ts";
 import { canonicalJson, objectOf, type Shape } from "../data/values.ts";
@@ -63,7 +64,7 @@ export function valuesFor(shape: Shape, listed: readonly unknown[], words: reado
   for (const v of listed) found.set(canonicalJson(v), v);
   for (let i = 0; found.size < n && i < n + 2; i += 1) {
     const v = objectRepresentative(shape, words, i);
-    if (v !== none && objectOf(shape).safeParse(v).success) found.set(canonicalJson(v), v);
+    if (v !== none && parsedOutside(objectOf(shape), v).success) found.set(canonicalJson(v), v);
   }
   return [...found.values()].slice(0, n);
 }
