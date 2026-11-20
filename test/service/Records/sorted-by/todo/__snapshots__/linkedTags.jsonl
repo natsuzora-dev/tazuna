@@ -1,0 +1,3 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"link#1","name":"link","input":{}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"link#1","answer":{"result":"accepted"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"linked#1","name":"linked","payload":{"link":{"tags":["home","shop"]}},"resultOf":"link#1"}

@@ -58,6 +58,13 @@ export const listGroups = command({ emits: [groupsListed] }).decide(() => [
   }),
 ]);
 
+type Chain = { readonly name: string; readonly next: Chain | null };
+const Chain: z.ZodType<Chain> = z.lazy(() => z.object({ name: z.string(), next: Chain.nullable() }));
+
+export const linked = event({ payload: { link: z.union([Chain, z.object({ tags: bag(z.string()) })]) } });
+
+export const link = command({ emits: [linked] }).decide(() => [emit(linked, { link: { tags: ["shop", "home"] } })]);
+
 export const shelved = event({ payload: { names: bag(z.string()), entries: sortedBy(Entry, "day") } });
 
 export const shelve = command({

@@ -3,6 +3,8 @@ import {
   contract,
   Entry,
   groupsListed,
+  link,
+  linked,
   listGroups,
   listPrices,
   listTasks,
@@ -35,4 +37,6 @@ export const todo = contract({
   groupsListed,
   shelve,
   shelved,
+  link,
+  linked,
 });

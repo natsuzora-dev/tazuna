@@ -1,6 +1,7 @@
 import {
   checkPlan,
   given,
+  link,
   listGroups,
   listPrices,
   listTasks,
@@ -105,6 +106,16 @@ export const defaultedInput = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(shelve, {});
+  },
+  then: () => [],
+});
+
+export const linkedTags = scenario({
+  description:
+    "Link with tags; one option of link is a recursive schema, which its JSON Schema names by $ref, and tazuna tells it apart from the tags option and sorts the tags",
+  given: arranged,
+  when: (w) => {
+    w.client.send(link, {});
   },
   then: () => [],
 });
