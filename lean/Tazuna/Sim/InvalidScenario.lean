@@ -137,4 +137,19 @@ def InvalidScenario.halts : InvalidScenario → Bool
   | .missingRecord .. | .writtenGivenKey .. => false
   | _ => true
 
+/--
+Whether no spec that `tazuna check` passes can produce the violation: the DSL's types reject what it reports, check
+reports it first as a Malformed kind, or only test's own step-order search writes the input that it checks. The
+simulation keeps such kinds as the validation of its input, which tazuna's own data scenarios reach without types or
+check. Explain leaves them out.
+-/
+def InvalidScenario.internal : InvalidScenario → Bool
+  | .repeatedPeer .. | .missingRecord .. | .malformedValue .. | .unrefusable .. | .notALook .. | .misplacedCreated ..
+  | .writtenKey .. | .writtenGivenKey .. => true
+  | .unlistedPeer .. | .invalidRecord .. | .duplicateRecord .. | .brokenGivenInvariant .. | .unresolvedReference ..
+  | .ambiguousReference .. | .missingOutput .. | .missingField .. | .unlistedService .. | .unreceivedEvent ..
+  | .wrongRole .. | .notInFlight .. | .notDelivered .. | .repeatedAnswer .. | .unreceivedRequest .. | .overtaking ..
+  | .unpairedPeerLine .. | .notLater .. | .differentPeerAnswer .. | .leftInFlight .. | .unusedInFlight ..
+  | .repeatedInFlight .. | .awaitingAnswer .. | .vacuousExpectation .. | .unmetExpectation .. => false
+
 end Tazuna.Sim

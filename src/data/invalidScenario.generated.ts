@@ -409,3 +409,15 @@ export const haltingInvalidScenarioKinds = [
   "InvalidScenario.misplacedCreated",
   "InvalidScenario.repeatedInFlight",
 ] as const;
+
+/** The kinds that no spec that check passes can produce. */
+export const internalInvalidScenarioKinds = [
+  "InvalidScenario.repeatedPeer",
+  "InvalidScenario.writtenGivenKey",
+  "InvalidScenario.malformedValue",
+  "InvalidScenario.missingRecord",
+  "InvalidScenario.unrefusable",
+  "InvalidScenario.writtenKey",
+  "InvalidScenario.misplacedCreated",
+  "InvalidScenario.notALook",
+] as const;

@@ -61,4 +61,10 @@ def InvalidInput.halts : InvalidInput → Bool
   | .reusedSubscriptionId .. | .unopenedSubscription .. | .assumption _ _ .rejectedAssumedRequires
   | .assumption _ _ (.failedAssumedRequires _) | .assumption _ _ (.failedAssumedEnsures _) => false
 
+/-- Whether no spec that `tazuna check` passes can produce the violation, as InvalidScenario.internal says. -/
+def InvalidInput.internal : InvalidInput → Bool
+  | .unownedTarget .. | .unlistedRejectionReason .. | .unknownControl .. | .unreadyStep .. | .unusedStepOrder .. => true
+  | .eventPayloadSchema .. | .controlPayloadSchema .. | .reusedSubscriptionId .. | .unopenedSubscription ..
+  | .assumption .. | .resultOf .. | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. => false
+
 end Tazuna.Service

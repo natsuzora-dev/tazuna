@@ -2,8 +2,8 @@ import { bagOrderDependentKinds } from "./bagOrderDependent.generated.ts";
 import { choiceDependentKinds } from "./choiceDependent.generated.ts";
 import { faultKinds } from "./fault.generated.ts";
 import { illegalKinds } from "./illegal.generated.ts";
-import { invalidInputKinds } from "./invalidInput.generated.ts";
-import { invalidScenarioKinds } from "./invalidScenario.generated.ts";
+import { internalInvalidInputKinds, invalidInputKinds } from "./invalidInput.generated.ts";
+import { internalInvalidScenarioKinds, invalidScenarioKinds } from "./invalidScenario.generated.ts";
 import type { Malformed } from "./malformed.ts";
 import { mismatchKinds } from "./mismatch.generated.ts";
 import type { NonCanonical } from "./nonCanonical.ts";
@@ -134,26 +134,10 @@ const parsed: ReadonlyMap<string, { readonly kind: Kind; readonly group: Group }
 /** Every violation kind. */
 export const kinds: readonly Kind[] = [...parsed.values()].map((p) => p.kind);
 
-/**
- * The kinds that no spec that `tazuna check` passes can produce: the DSL's types reject what they report, check reports
- * it first as a Malformed kind, or only test's own step-order search writes the input that they check. The simulation
- * keeps them as the validation of its input, which tazuna's own data scenarios reach without types or check. Explain
- * leaves them out.
- */
+/** The kinds that no spec that `tazuna check` passes can produce (Lean's `internal`). Explain leaves them out. */
 export const internalKinds = [
-  "InvalidScenario.repeatedPeer",
-  "InvalidScenario.missingRecord",
-  "InvalidScenario.malformedValue",
-  "InvalidScenario.unrefusable",
-  "InvalidScenario.notALook",
-  "InvalidScenario.misplacedCreated",
-  "InvalidScenario.writtenKey",
-  "InvalidScenario.writtenGivenKey",
-  "InvalidInput.unownedTarget",
-  "InvalidInput.unlistedRejectionReason",
-  "InvalidInput.unknownControl",
-  "InvalidInput.unreadyStep",
-  "InvalidInput.unusedStepOrder",
+  ...internalInvalidScenarioKinds,
+  ...internalInvalidInputKinds,
 ] as const satisfies readonly Kind[];
 
 /** A kind that a user meets: one of the kinds except internalKinds. */

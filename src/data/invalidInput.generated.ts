@@ -236,3 +236,12 @@ export const haltingInvalidInputKinds = [
   "InvalidInput.unreadyStep",
   "InvalidInput.unusedStepOrder",
 ] as const;
+
+/** The kinds that no spec that check passes can produce. */
+export const internalInvalidInputKinds = [
+  "InvalidInput.unownedTarget",
+  "InvalidInput.unlistedRejectionReason",
+  "InvalidInput.unknownControl",
+  "InvalidInput.unreadyStep",
+  "InvalidInput.unusedStepOrder",
+] as const;

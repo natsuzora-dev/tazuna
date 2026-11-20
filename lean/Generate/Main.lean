@@ -422,6 +422,13 @@ only on the kind, so one sample per kind decides it.
 def halting (type : String) (kinds : List String) : String :=
   "\n/** The kinds whose violations halt the run. */\n" ++ constArray s!"halting{type}Kinds" kinds
 
+/--
+The TS constant `internal<type>Kinds`: the kinds, in declaration order, that no spec that check passes can produce.
+`internal` depends only on the kind, so one sample per kind decides it.
+-/
+def internal (type : String) (kinds : List String) : String :=
+  "\n/** The kinds that no spec that check passes can produce. */\n" ++ constArray s!"internal{type}Kinds" kinds
+
 /-- `doc% c` elaborates to the docstring of `c`. -/
 elab "doc% " c:ident : term => do
   let name ← realizeGlobalConstNoOverloadWithInfo c
@@ -467,9 +474,11 @@ def files : List (String × String) :=
    typescript% "src/data/mismatch.generated.ts",
    typescript% "src/data/uncomparable.generated.ts",
    appended (typescript% "src/data/invalidInput.generated.ts")
-     (halting "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind))),
+     (halting "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.halts)).map (·.kind)) ++
+      internal "InvalidInput" (((groupSamples% Tazuna.Service.InvalidInput).filter (·.internal)).map (·.kind))),
    appended (typescript% "src/data/invalidScenario.generated.ts")
-     (halting "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind))),
+     (halting "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.halts)).map (·.kind)) ++
+      internal "InvalidScenario" (((groupSamples% Tazuna.Sim.InvalidScenario).filter (·.internal)).map (·.kind))),
    zod% "src/data/scenario.generated.ts",
    appended (typescript% "src/data/fault.generated.ts")
      (halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
