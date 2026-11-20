@@ -1,3 +1,4 @@
+import { InternalError } from "../../data/internalError.ts";
 import type { InstanceId } from "../../service/instance.ts";
 
 /**
@@ -20,7 +21,9 @@ export class Cache {
   private quietDepth = 0;
   private readonly evaluations = new Map<InstanceId, Map<string, Evaluation>>();
 
+  /** A copy for the next input, which is taken while no evaluation is tracked and no read is quiet. */
   clone(): Cache {
+    if (this.tracked.length > 0 || this.quietDepth > 0) throw new InternalError("copying a Cache inside an evaluation");
     const copy = new Cache();
     for (const [name, version] of this.versions) copy.versions.set(name, version);
     for (const [id, byPart] of this.evaluations) copy.evaluations.set(id, new Map(byPart));

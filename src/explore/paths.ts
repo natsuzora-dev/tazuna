@@ -55,7 +55,9 @@ const awaits = (w: World, own: string, id: LineId, m: Message): boolean =>
 
 /** Lean's ended. */
 const ended = (w: World, own: string, id: LineId): boolean =>
-  (stateOf(w, own)?.lines ?? []).some((l) => l.dir === "out" && l.type === "unsubscribe" && sameLineId(l.to, id));
+  expectFound(`own service ${own}`, stateOf(w, own)).lines.some(
+    (l) => l.dir === "out" && l.type === "unsubscribe" && sameLineId(l.to, id),
+  );
 
 /** Lean's openSubscription. */
 const openSubscription = (own: string, lines: readonly Line[], l: Line, i: number): boolean =>
@@ -243,8 +245,7 @@ function fill(
 export const enabledLines =
   (spec: Spec, sc: Scenario, seen: Seen, n: number) =>
   (lines: readonly Line[], { world: w }: Executed): Move[] => {
-    const r = w.services.get(sc.service)?.processing;
-    if (r === undefined) return [];
+    const r = expectFound(`own service ${sc.service}`, w.services.get(sc.service)).processing;
     const e = enabled(r);
     return r.evaluations.quietly(() =>
       slots(spec, r.st, sc, lines, w, e).flatMap((slot) => fill(spec, r, sc, lines, seen, n, w, slot)),
@@ -320,8 +321,6 @@ interface FoundOnPath {
 
 export interface ExploredLines {
   readonly found: readonly FoundOnPath[];
-  /** The lines each path appended, breadth-first. */
-  readonly paths: readonly (readonly Line[])[];
   /** What the scenario's execution and every path reached, except an execution that halted. */
   readonly reached: Coverage;
   /** How many worlds the search visited, by fingerprint. */
@@ -343,38 +342,30 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   const sc = named.definition.scenario;
   const base = executeAppended(spec, sc, []);
   const found: FoundOnPath[] = [];
-  const paths: (readonly Line[])[] = [];
   const reached = new Coverage();
   coverageOf(base, reached);
-  if (halted(base.world) || base.world.violations.length > 0) return { found, paths, reached, visited: 0 };
+  if (halted(base.world) || base.world.violations.length > 0) return { found, reached, visited: 0 };
   const enabledAfter = enabledLines(spec, sc, seen, bounds.valuesPerPayload);
-  const children = new Map<Executed, Map<Move, Executed>>();
   const next = (path: readonly Move[], executed: Executed): Move[] => {
     if (halted(executed.world)) return [];
-    const appended = path.flat();
-    const made = new Map<Move, Executed>();
-    let moves: Move[];
     try {
-      moves = enabledAfter([...sc.lines, ...appended], executed);
+      return enabledAfter([...sc.lines, ...path.flat()], executed);
     } catch (error) {
       // What the own service enables next is evaluated after the path, so a Fault there is the path's.
       if (!(error instanceof Halt)) throw error;
-      found.push({ violation: error.violation, appended });
+      found.push({ violation: error.violation, appended: path.flat() });
       return [];
     }
-    for (const move of moves) {
-      const child = executeMove(spec, sc, appended, executed, move);
-      if (givable(executed, child)) made.set(move, child);
-    }
-    if (made.size > 0) children.set(executed, made);
-    return [...made.keys()];
   };
-  const step = (parent: Executed, move: Move): Executed => {
-    const made = children.get(parent) as Map<Move, Executed>;
-    const executed = made.get(move) as Executed;
-    made.delete(move);
-    if (made.size === 0) children.delete(parent);
-    return executed;
+  const step = (parent: Executed, path: readonly Move[]): Executed | undefined => {
+    const child = executeMove(
+      spec,
+      sc,
+      path.slice(0, -1).flat(),
+      parent,
+      expectFound("the last move of a path", path.at(-1)),
+    );
+    return givable(parent, child) ? child : undefined;
   };
   const visited = new Visited();
   for (const { path, result, parent } of search<Move, Executed>({
@@ -386,12 +377,11 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   })) {
     if (parent === undefined) continue;
     const appended = path.flat();
-    paths.push(appended);
     coverageOf(result, reached);
     for (const violation of violationsSince(parent, result)) found.push({ violation, appended });
     const from = sc.lines.length + path.slice(0, -1).flat().length;
     for (const violation of stepOrderChanges(spec, { ...sc, lines: [...sc.lines, ...appended] }, result, from))
       found.push({ violation, appended });
   }
-  return { found, paths, reached, visited: visited.size };
+  return { found, reached, visited: visited.size };
 }

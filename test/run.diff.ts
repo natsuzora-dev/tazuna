@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
+import { z } from "zod";
 import { type Line, scenario } from "../src/data/scenario.generated.ts";
 import {
   type Executed,
@@ -52,39 +53,27 @@ for (const { name, spec } of specs) {
       };
       const enabledAfter = enabledLines(spec, sc, seen, valuesPerPayload);
       const invalid = new WeakSet<Move>();
-      const made = new Map<Executed, Map<Move, Executed>>();
       const next = (path: readonly Move[], executed: Executed): Move[] => {
         const last = path.at(-1);
         const stopped =
           executed.world.halted !== undefined || [...executed.world.services.values()].some((p) => p.halted);
         if (stopped || (last !== undefined && invalid.has(last))) return [];
-        const appended = appendedOf.get(executed) ?? [];
         let moves: Move[];
         try {
-          moves = enabledAfter([...sc.lines, ...appended], executed);
+          moves = enabledAfter([...sc.lines, ...(appendedOf.get(executed) ?? [])], executed);
         } catch (error) {
           if (error instanceof Halt) return [];
           throw error;
         }
-        const children = new Map(moves.map((move) => [move, both([...appended, ...move], executed)]));
-        made.set(executed, children);
         const others = invalidLines(spec, sc, executed, moves.flat());
         for (const move of others) invalid.add(move);
-        return [...children.keys(), ...others];
+        return [...moves, ...others];
       };
       let paths = 0;
       for (const _ of search<Move, Executed>({
         start: { path: [], result: both([]) },
         bound: depth,
-        step: (parent, move) => {
-          const children = made.get(parent);
-          const executed = children?.get(move);
-          if (children === undefined || executed === undefined)
-            return both([...(appendedOf.get(parent) ?? []), ...move], parent);
-          children.delete(move);
-          if (children.size === 0) made.delete(parent);
-          return executed;
-        },
+        step: (parent, path) => both(path.flat(), parent),
         next,
         merge: "none",
       }))
@@ -95,19 +84,26 @@ for (const { name, spec } of specs) {
 
 const specOf = new Map(specs.map(({ name, spec }) => [name, spec]));
 
+/**
+ * A fixture that npm run fuzz writes: the scenario with the lines it appended, and how many lines the differing
+ * execution continued from, or null when it replayed every line.
+ */
+const fuzzFoundFixture = z.strictObject({
+  spec: z.string(),
+  scenario: z.unknown(),
+  from: z.int().nonnegative().nullable(),
+});
+
 const fuzzFound = existsSync(fuzzFoundRoot) ? readdirSync(fuzzFoundRoot).filter((f) => f.endsWith(".json")) : [];
 
 for (const file of fuzzFound.sort())
-  test(`fuzz-found/${file} executes alike in TS with and without the evaluation cache, continued from its first lines, and in Lean`, async () => {
-    const found = JSON.parse(readFileSync(join(fuzzFoundRoot, file), "utf8")) as {
-      spec: string;
-      scenario: unknown;
-      from: number;
-    };
+  test(`fuzz-found/${file} executes alike in TS with and without the evaluation cache, continued from its first lines when it was, and in Lean`, async () => {
+    const found = fuzzFoundFixture.parse(JSON.parse(readFileSync(join(fuzzFoundRoot, file), "utf8")));
     const spec = specOf.get(found.spec) ?? (await checkedRoot(join(tazuna, found.spec)));
     const full = scenario.parse(found.scenario);
-    const sc = { ...full, lines: full.lines.slice(0, found.from) };
-    const parent = { executed: executeAppended(spec, sc, []), appended: [] };
-    const { difference } = executeEach(lean, spec, sc, full.lines.slice(found.from), new SameWorlds(), parent);
+    const from = found.from ?? full.lines.length;
+    const sc = { ...full, lines: full.lines.slice(0, from) };
+    const parent = found.from === null ? undefined : { executed: executeAppended(spec, sc, []), appended: [] };
+    const { difference } = executeEach(lean, spec, sc, full.lines.slice(from), new SameWorlds(), parent);
     assert.equal(difference?.other, difference?.ts, `the execution differs from ${difference?.against}`);
   });

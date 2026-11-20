@@ -1,3 +1,4 @@
+import { InternalError } from "../src/data/internalError.ts";
 import type { Line, Scenario } from "../src/data/scenario.generated.ts";
 import { type Obligation, uncovered } from "../src/data/uncovered.ts";
 import { canonicalJson, type Json, plain } from "../src/data/values.ts";
@@ -64,6 +65,40 @@ export function executedOutcome(spec: Spec, sc: Scenario, executed: Executed) {
   };
 }
 
+/** `value` as data, each Map and Set as its entries in order and each Instant as its text. */
+function data(value: unknown, path: readonly object[] = []): Json {
+  if (value === undefined) return null;
+  if (value === null || typeof value !== "object") return value as Json;
+  if (value instanceof Temporal.Instant) return value.toString();
+  if (path.includes(value)) throw new InternalError("an execution holds a cycle");
+  const inner = (v: unknown) => data(v, [...path, value]);
+  if (value instanceof Map) return ["Map", ...[...value].map(([k, v]) => [inner(k), inner(v)])];
+  if (value instanceof Set) return ["Set", ...[...value].map(inner)];
+  if (Array.isArray(value)) return value.map(inner);
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, inner(v)]));
+}
+
+/**
+ * The whole of an execution as data: every field of its world, each processing's state and queue, and every field of
+ * each listener. The functions, the service and the spec are left out, since a continued execution shares them with the
+ * one it continues.
+ */
+function executionData({ world, listeners }: Executed): Json {
+  const services = new Map(
+    [...world.services].map(([service, { processing, halted }]) => [
+      service,
+      { state: processing.state, queue: processing.queue, halted },
+    ]),
+  );
+  const heard = new Map(
+    [...listeners].map(([service, l]) => [
+      service,
+      Object.fromEntries(Object.entries(l).filter(([k]) => k !== "spec")),
+    ]),
+  );
+  return data({ ...world, services, listeners: heard });
+}
+
 /**
  * The run that an execution with the evaluation cache differs from: Lean's, the TS run without the cache, or the TS run
  * continued from its parent's execution (`incremental`); or, for `fingerprint`, two worlds that one of TS and Lean
@@ -121,10 +156,8 @@ export function executeEach(
   const uncached = canonicalJson(executedOutcome(spec, extended, plainRun) as unknown as Json);
   if (ts !== uncached) return { executed, difference: { against: "noCache", ts, other: uncached } };
   if (parent !== undefined) {
-    const continued = canonicalJson(executedOutcome(spec, extended, executed) as unknown as Json);
-    if (continued !== ts) return { executed, difference: { against: "incremental", ts, other: continued } };
-    const [plain, other] = [worldFingerprint(replayed.world), worldFingerprint(executed.world)];
-    if (plain !== other) return { executed, difference: { against: "incremental", ts: plain, other } };
+    const [whole, continued] = [canonicalJson(executionData(replayed)), canonicalJson(executionData(executed))];
+    if (continued !== whole) return { executed, difference: { against: "incremental", ts: whole, other: continued } };
   }
   const functions = new SimFunctions(spec, (part) => lean.read(part));
   const explore = {

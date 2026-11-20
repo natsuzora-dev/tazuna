@@ -3,6 +3,7 @@ import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag, Ref } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { SchemaStep } from "../data/jsonSchema.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
@@ -193,6 +194,14 @@ export class Collect
    * does not change, so the copy shares them.
    */
   clone(): Collect {
+    const open =
+      this.transition !== undefined ||
+      this.transitions.size > 0 ||
+      this.openSteps.length > 0 ||
+      this.outermost !== undefined ||
+      this.afterMessage !== undefined ||
+      this.arrival !== undefined;
+    if (open) throw new InternalError("copying a Collect while a step, microstep or afterMessage is open");
     const copy = new Collect();
     for (const name of this.reportedOrder) copy.reportedOrder.add(name);
     for (const [step, access] of this.steps) copy.steps.set(step, access);

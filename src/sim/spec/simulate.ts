@@ -68,8 +68,8 @@ export const executeSpec = (
 /**
  * A copy of `m` between lines that a run can continue apart from `m`. Each processing gets a copy of its listener as
  * its note and evaluations, and functions instrumented over that copy. Messages are copied, since a run sets their
- * status; the logs that a run only appends to are copied and their entries shared. Every world field is listed, as in
- * cloneState.
+ * status; the logs that a run only appends to are copied and their entries shared. Every world and processing field is
+ * listed, as in cloneState.
  */
 function cloneMade(spec: Spec, m: Made): Made {
   const listeners = new Map<string, Listener>();
@@ -80,7 +80,15 @@ function cloneMade(spec: Spec, m: Made): Made {
       const q = p.queue;
       const queue = { tasks: [...q.tasks], round: [...q.round], commands: [...q.commands], entered: [...q.entered] };
       const functions = instrumented(spec, service, listener);
-      const processing = { ...p, state: cloneState(p.state), queue, functions, note: listener, evaluations: listener };
+      const processing: Processing = {
+        state: cloneState(p.state),
+        st: p.st,
+        functions,
+        note: listener,
+        evaluations: listener,
+        place: p.place,
+        queue,
+      };
       return [service, { processing, halted }];
     }),
   );

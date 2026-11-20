@@ -203,8 +203,8 @@ function drawnValue(spec: Spec, line: Line): { shape: Shape; with: (value: unkno
 interface Found {
   readonly c: Case;
   readonly appended: readonly Line[];
-  /** How many of `appended` the execution that differs continued from. */
-  readonly from: number;
+  /** How many of `appended` the execution that differs continued from, or null when it replayed every line. */
+  readonly from: number | null;
   readonly difference?: Difference;
   readonly error?: unknown;
 }
@@ -227,7 +227,7 @@ const property = fc.property(fc.gen(), (g) => {
     executions += 1;
     const { executed, difference } = executeEach(lean, spec, sc, appended, c.worlds, parent);
     if (difference === undefined) return executed;
-    found = { c, appended, from: parent?.appended.length ?? 0, difference };
+    found = { c, appended, from: parent === undefined ? null : parent.appended.length, difference };
     throw new Error(`the execution differs from ${difference.against}`);
   };
   try {
@@ -263,7 +263,7 @@ const property = fc.property(fc.gen(), (g) => {
       executed = each(parent);
     }
   } catch (error) {
-    if (found?.appended !== appended) found = { c, appended, from: 0, error };
+    if (found?.appended !== appended) found = { c, appended, from: null, error };
     throw error;
   }
 });
@@ -297,7 +297,7 @@ const file = join(fuzzFoundRoot, `${seed}.json`);
 const fixture = {
   spec: c.root,
   scenario: { ...c.sc, lines: [...c.sc.lines, ...appended] },
-  from: c.sc.lines.length + from,
+  from: from === null ? null : c.sc.lines.length + from,
 };
 writeFileSync(file, `${JSON.stringify(fixture, null, 2)}\n`);
 console.error(`spec ${c.root}, ${appended.length} lines appended: ${JSON.stringify(appended)}`);
