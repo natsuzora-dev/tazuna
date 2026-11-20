@@ -103,7 +103,7 @@ test("An InternalError raised inside author code stops the question instead of b
 });
 
 test("The sorting functions sort what parse fills with a default that the spec writes out of order", async () => {
-  const spec = await loadedSpec(join(tests, "service/Records/decide_payloads_sorted"));
+  const spec = await loadedSpec(join(tests, "service/Records/sorted-by"));
   const fs = sorting(serviceOf(spec.structure, "todo"), new SpecFunctions(spec, "todo"));
   const parsed = fs.parse({ kind: "input", definition: { service: "todo", name: "shelve" } }, {});
   assert.ok(!(parsed instanceof Failed) && "encoded" in parsed);

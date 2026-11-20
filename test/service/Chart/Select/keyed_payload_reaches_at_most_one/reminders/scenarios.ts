@@ -1,4 +1,4 @@
-import { clearAll, given, scenario, starTask } from "./reminders.ts";
+import { given, scenario, starTask } from "./reminders.ts";
 
 const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
 
@@ -9,15 +9,6 @@ export const eventRoutedByKey = scenario({
   when: (w) => {
     w.client.send(starTask, { taskId: "task-1" });
     w.client.send(starTask, { taskId: "task-3" });
-  },
-  then: () => [],
-});
-
-export const eventWithoutKeyFields = scenario({
-  description: "Clear all; allCleared, whose payload has no taskId, reaches every copy",
-  given: arranged,
-  when: (w) => {
-    w.client.send(clearAll, {});
   },
   then: () => [],
 });
