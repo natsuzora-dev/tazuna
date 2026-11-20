@@ -203,6 +203,9 @@ tazuna detects a break of each assumption only in part or not at all.
 - **Fingerprints.** Two explored worlds with the same fingerprint report the same violations and reach the same parts on every later path of the same number of moves (`worldFingerprint` in `lean/Tazuna/Explore/Fingerprint.lean`).
   `test` extends only the first explored world of each fingerprint, so its explored paths rest on this assumption.
   No theorem proves it of the fingerprint, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
+  `test` keeps a 64-bit hash of each fingerprint instead of its text, so two worlds whose fingerprints share a hash also count as one.
+  It writes the probability of that, as TLC does, when the probability is at least 1e-12.
+  The diff tests compare full fingerprints.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.

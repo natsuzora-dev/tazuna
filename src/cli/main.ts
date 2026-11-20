@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { ReportedViolation } from "../data/violation.ts";
+import { collisionProbability } from "../explore/search.ts";
 import { verifyTraces } from "../verify/index.ts";
 import { explain } from "./explain.ts";
 import { testSpec, uncoveredOf } from "./test.ts";
@@ -231,7 +232,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr one summary line, <what was checked>: <number of violations, or no violations>, where test's <what was checked> is how many scenarios it ran out of all and the depth, and the paths of the snapshots that test --update writes or removes.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr one summary line, <what was checked>: <number of violations, or no violations>, where test's <what was checked> is how many scenarios it ran out of all and the depth, and the paths of the snapshots that test --update writes or removes. test keeps a 64-bit hash of each explored world's fingerprint, and when the probability that two of them share a hash is at least 1e-12, it writes that probability and the number of worlds to stderr before the summary line.",
   ),
   ...wrap(
     "",
@@ -253,6 +254,9 @@ function report(io: Io, specRoot: string, violations: readonly ReportedViolation
   io.error(`${subject}: ${violations.length === 0 ? "no violations" : count(violations.length, "violation")}`);
   return violations.length === 0 ? 0 : 1;
 }
+
+/** The fingerprint collision probability from which test prints it, as TLC does. */
+const reportedCollision = 1e-12;
 
 const isName = (command: string): command is Name => Object.hasOwn(commands, command);
 
@@ -341,6 +345,14 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
       for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
       for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
       const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
+      const collision = collisionProbability(tested.visited);
+      if (collision >= reportedCollision)
+        io.error(
+          `${count(
+            tested.visited.reduce((a, b) => a + b, 0),
+            "explored world",
+          )} kept as 64-bit fingerprints: collision probability at most ${collision.toPrecision(2)}`,
+        );
       const ran = `${scenarios.length}/${spec.scenarios.length} scenarios${only.length === 0 ? "" : " (--only)"}`;
       return report(io, spec.root, violations, `${ran}, depth ${depth}`);
     }

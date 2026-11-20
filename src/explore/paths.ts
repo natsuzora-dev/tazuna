@@ -20,7 +20,7 @@ import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
 import { rejectionKinds } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
 import { halted, worldFingerprint } from "./fingerprint.ts";
-import { search } from "./search.ts";
+import { search, Visited } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
 import { distinct, nameOf, type Seen, seenOf, valuesFor } from "./values.ts";
 
@@ -324,6 +324,8 @@ export interface ExploredLines {
   readonly paths: readonly (readonly Line[])[];
   /** What the scenario's execution and every path reached, except an execution that halted. */
   readonly reached: Coverage;
+  /** How many worlds the search visited, by fingerprint. */
+  readonly visited: number;
 }
 
 const coverageOf = (executed: Executed, reached: Coverage) => {
@@ -344,7 +346,7 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   const paths: (readonly Line[])[] = [];
   const reached = new Coverage();
   coverageOf(base, reached);
-  if (halted(base.world) || base.world.violations.length > 0) return { found, paths, reached };
+  if (halted(base.world) || base.world.violations.length > 0) return { found, paths, reached, visited: 0 };
   const enabledAfter = enabledLines(spec, sc, seen, bounds.valuesPerPayload);
   const children = new Map<Executed, Map<Move, Executed>>();
   const next = (path: readonly Move[], executed: Executed): Move[] => {
@@ -374,12 +376,13 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
     if (made.size === 0) children.delete(parent);
     return executed;
   };
+  const visited = new Visited();
   for (const { path, result, parent } of search<Move, Executed>({
     start: { path: [], result: base },
     bound: bounds.depth,
     step,
     next,
-    merge: { fingerprint: (executed) => worldFingerprint(executed.world) },
+    merge: { fingerprint: (executed) => worldFingerprint(executed.world), visited },
   })) {
     if (parent === undefined) continue;
     const appended = path.flat();
@@ -390,5 +393,5 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
     for (const violation of stepOrderChanges(spec, { ...sc, lines: [...sc.lines, ...appended] }, result, from))
       found.push({ violation, appended });
   }
-  return { found, paths, reached };
+  return { found, paths, reached, visited: visited.size };
 }

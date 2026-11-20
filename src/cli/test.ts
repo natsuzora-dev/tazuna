@@ -23,6 +23,8 @@ export interface TestResult {
   readonly written: readonly string[];
   readonly removed: readonly string[];
   readonly reached: Coverage;
+  /** How many worlds the search after each scenario visited. */
+  readonly visited: readonly number[];
 }
 
 function writeSnapshot(spec: Spec, run: Run, lines: readonly TraceLine[]): string {
@@ -102,9 +104,11 @@ export function testSpec(
   };
   for (const violation of simulated.violations) report(violation);
   const seenInLines = seenLines(spec);
+  const visited: number[] = [];
   for (const named of scenarios) {
     const explored = exploreLines(spec, named, seenInLines, bounds);
     reached.addAll(explored.reached);
+    visited.push(explored.visited);
     const ref = { service: named.service, name: named.name };
     for (const { violation, appended } of explored.found)
       report(
@@ -117,7 +121,7 @@ export function testSpec(
   }
   const skipped = spec.scenarios.filter((s) => !scenarios.includes(s));
   const snapshots = testSnapshots(spec, simulated.snapshotted, options.update, skipped);
-  return { ...snapshots, violations: [...violations, ...snapshots.violations], reached };
+  return { ...snapshots, violations: [...violations, ...snapshots.violations], reached, visited };
 }
 
 /**
