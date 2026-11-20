@@ -62,7 +62,10 @@ test("Lean and TS both stop with an internal error when exits nest deeper than e
   });
 });
 
-const refusedRoots = [...runGroupExamples("choiceDependent"), join(serviceRoot, "Chart/Deadline/deadlines")];
+const refusedRoots = [
+  ...runGroupExamples("choiceDependent"),
+  join(serviceRoot, "Chart/Deadline/fires_only_in_active_state"),
+];
 
 test("Lean and TS refuse a step order that names a step no processing takes, as unreadyStep where the processing takes a queue step and as unusedStepOrder where it takes none, clock lines included", async () => {
   const kinds = new Set<string>();

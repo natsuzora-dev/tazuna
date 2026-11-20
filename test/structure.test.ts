@@ -13,9 +13,9 @@ const chartOf = (spec: Spec, service: string, name: string): ChartStructure => {
   return chart;
 };
 
-const exitOrder = await subject("Chart/Config/exit-transition-entry-order");
+const exitOrder = await subject("Chart/Config/microstep_exits_in_exit_order");
 const closer = chartOf(exitOrder, "todo", "closer");
-const childScreen = await subject("Chart/Request/child-screen");
+const childScreen = await subject("Chart/Request/entering_opens_one_child");
 const homeScreen = chartOf(childScreen, "screens", "homeScreen");
 
 test("The structure that loadSpec builds stays the same after a JSON round trip", () => {
@@ -65,11 +65,11 @@ test("A transition has the state it is written in, the key and index in its tran
   assert.deepEqual(stateNamed(homeScreen, "helping")?.activities, [
     { keyword: "opens", name: "help", definition: { service: "screens", name: "helpPanel" }, modal: false },
   ]);
-  const reenter = await subject("Chart/Config/reenter");
+  const reenter = await subject("Chart/Config/reenter_true_exits");
   const waiting = (name: string) => stateNamed(chartOf(reenter, "todo", name), "waiting")?.transitions[0];
   assert.equal(waiting("keepsDeadline")?.reenter, false);
   assert.equal(waiting("restartsDeadline")?.reenter, true);
-  const reminder = chartOf(await subject("Chart/Select/descendant-transition-wins"), "todo", "reminder");
+  const reminder = chartOf(await subject("Chart/Select/leaf_selects_innermost"), "todo", "reminder");
   assert.deepEqual(stateNamed(reminder, "leftWaiting")?.transitions[0]?.guards, ["isLeft"]);
 });
 
