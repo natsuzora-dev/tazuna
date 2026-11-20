@@ -116,7 +116,6 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     answer question (← asking records question before) read
   { parse := fun schema value => answered (.parse schema value) fun | .parse v => some v | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
-    normalize := fun schema value => answered (.normalize schema value) fun | .normalize v => some v | _ => none
     binding := fun name binding input records now =>
       answered (.binding name binding input now) (records := records) fun | .binding b => some b | _ => none
     requirement := fun name condition input records now =>
@@ -175,8 +174,9 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       answered (.items scope) (records := records) fun
         | .items keys => some (keys.map fun k => (k.key, k.canonical)) | _ => none
     defaults := fun schema => answered (.defaults schema) fun | .defaults v => some v | _ => none
-    close := fun scope records =>
-      answered (.close scope) (records := records) fun | .close output failed => some (output, failed) | _ => none }
+    close := fun scope records => answered (.close scope) (records := records) fun | .close o => some o | _ => none
+    closeEnsures := fun screen input output =>
+      answered (.closeEnsures screen input output) fun | .closeEnsures f => some f | _ => none }
 
 /-- The comparable value that verify reads, which TS computes. -/
 def askComparable (stdin stdout : IO.FS.Stream) (reads : Reads) (d : Spec.Definition) (part : Verify.Part)

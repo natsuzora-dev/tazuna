@@ -26,7 +26,7 @@ def appliedShows (i : Instance) : List (String × Activity) :=
     (cs.activities.filter (·.isShows)).map (cs.spec.name, ·)
   shows.filter fun (n, a) => !shows.any fun (d, b) => b.key == a.key && d != n && i.chart.tree.isDescendant d n
 
-def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Instance) :
+def wantedShows [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (i : Instance) :
     m (Except Fault (List Wanted)) :=
   (appliedShows i).foldlM (fun (acc : Except Fault (List Wanted)) (n, a) => do
     match acc with
@@ -34,7 +34,9 @@ def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Ins
     | .ok wanted =>
       match ← fs.showInput (s.scopeOf i (some n)) s.records a with
       | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
-      | .ok input => pure (.ok (setWanted wanted { slot := a.key, activity := a, input }))) (.ok [])
+      | .ok input =>
+        let input ← st.sorted (.input a.ref) input
+        pure (.ok (setWanted wanted { slot := a.key, activity := a, input }))) (.ok [])
 
 def inputOf (wanted : List Wanted) (slot : String) : Option Value := (wanted.find? (·.slot == slot)).map (·.input)
 
@@ -52,7 +54,7 @@ def State.syncShows (s : State) (owner : InstanceId) (wanted : List Wanted) : St
   wanted.foldl (State.subscribeStep (s.openShows owner) owner)
     ((s.openShows owner).foldl (State.endShowStep wanted owner) s)
 
-def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : InstanceId) : m State := do
+def refresh [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (owner : InstanceId) : m State := do
   match s.machine? owner with
   | none => pure s
   | some i =>
@@ -61,7 +63,7 @@ def refresh [Monad m] (st : Service) (fs : Functions m) (s : State) (owner : Ins
     | .error fault => pure (s.report (.fault fault))
     | .ok wanted => pure (s.syncShows owner wanted)
 
-def refreshScreens [Monad m] (st : Service) (fs : Functions m) (s : State) : m State :=
+def refreshScreens [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.id) s
 
 end Tazuna.Service

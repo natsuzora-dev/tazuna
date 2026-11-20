@@ -6,10 +6,6 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def normalizeOutput [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : String) (output : Value) :
-    m (Except Issue (Option Value)) := do
-  fs.normalize (.output (st.ref name)) (← st.sorted (.output (st.ref name)) output)
-
 inductive Resolution where
   | answered (answer : Answer) (violations : List Fault)
   | halted (violation : Fault)
@@ -28,16 +24,13 @@ def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
     | .ok (some reason) => pure (.answered (.rejected { kind := .requires, reason := some reason }) [])
     | .ok none =>
       match ← fs.resolve name input s.records s.now with
-      | .error e => pure (.halted (issueViolation definition e))
+      | .error e => pure (.halted (issueViolation definition e fun _ => .outputSchema definition))
       | .ok output =>
-        match ← normalizeOutput st fs name output with
+        let output ← st.sorted (.output definition) output
+        match ← fs.queryEnsures name input output s.records with
         | .error e => pure (.halted (issueViolation definition e))
-        | .ok none => pure (.halted (.outputSchema definition))
-        | .ok (some output) =>
-          match ← fs.queryEnsures name input output s.records with
-          | .error e => pure (.halted (issueViolation definition e))
-          | .ok (some c) => pure (.answered (.fulfilled output) [st.failedEnsures name c])
-          | .ok none => pure (.answered (.fulfilled output) [])
+        | .ok (some c) => pure (.answered (.fulfilled output) [st.failedEnsures name c])
+        | .ok none => pure (.answered (.fulfilled output) [])
 
 def publishOne [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sub : Subscription) :
     m State := do

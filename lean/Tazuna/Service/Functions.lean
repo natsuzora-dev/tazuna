@@ -163,19 +163,20 @@ The questions that the semantics asks about schemas and spec functions. Every qu
 value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks at any
 depth, whether it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
 dropped.
-- parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and
-  written back as JSON (only its codecs run, encoding) if it matches the schema (the canonical value), or none otherwise.
+- parse: a value from outside (a value that a scenario line writes, or a message of another service), or one that a
+  spec function wrote and the run sorted, decoded and written back as JSON (only its codecs run, encoding) if it
+  matches the schema (the canonical value), or none otherwise. Parsing reads a sortedBy array's key order; encoding
+  does not, since the run sorts what a spec function writes.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.
-- normalize: a value that a spec function made (a decide payload or a resolve output), canonical if it matches the
-  schema, or none otherwise.
 - binding: whether one binds value of a command is non-null.
 - requirement: whether one requires condition of a command holds.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
   read only the input, or for an external peer's answer to the service's command or query.
 - decide: the events of a command whose binds are all non-null and whose requires all hold, in groups: the groups are in
-  order, and the events of one group have none.
+  order, and the events of one group have none. Each payload is encoded by its event's schema in the order it was
+  built, and one that does not match is a schema Issue; the payload of an event that the spec lacks is written as is.
 - ensures: the name of the first failing ensures of an accepted command. Binds read the records before the event write
   (the third argument), and `records` in ensures reads those after it (the fourth argument).
 - queryEnsures: the name of the first failing ensures of a fulfilled query; `output` is the answer's output.
@@ -184,7 +185,7 @@ dropped.
 - invariant, serviceInvariant, chartInvariant: the name of the first failing invariant of an entity record, the service,
   or a machine or screen instance. A service invariant reads only records, so it fails only by a throw, with the schema
   whose refinement or codec threw.
-- resolve: a query's output.
+- resolve: a query's output, encoded by its schema in the order it was built, or a schema Issue.
 - automationBinding: whether one binds value of an automation is non-null for the received payload.
 - automationGuard: whether one guard condition of an automation holds for the received payload, once every binds value
   is non-null.
@@ -198,14 +199,17 @@ dropped.
   A field that its schema does not encode is a schema Issue. initialContextOf fills in the defaults of the fields that
   it leaves out, parses it, and sorts its collections.
 - guard: whether one guard condition of a transition holds.
-- offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked and
-  encoded.
+- offers: the payloads that a control's offers return in a state (`none` for the chart itself), schema-checked,
+  encoded and in the order they were built.
 - showInput: the query input of a shows slot, as the sender writes it (only its codecs run, encoding).
-- items: the keys that a map state's items return, encoded and as canonical values. The map state takes them as a set.
-- defaults: the default value of each field of the schema that declares one, encoded and sorted. Load runs those of a
-  single entity's fields and of a map state's copy context, and reports one that throws or fails its schema.
-- close: the output of a screen that closes in a final state (the resolve value, schema-checked and encoded) and the
-  first failing ensures.
+- items: the keys that a map state's items return, encoded in the order they were built and as canonical values. The
+  map state takes them as a set.
+- defaults: the default value of each field of the schema that declares one, encoded and in the order it was built.
+  Load runs those of a single entity's fields and of a map state's copy context, and reports one that throws or fails
+  its schema.
+- close: the output of a screen that closes in a final state: the resolve value, schema-checked, encoded and in the
+  order it was built.
+- closeEnsures: the name of the first failing ensures of a screen that closed with the input and the sorted output.
 - assign: the context after the assign, unchanged where there is none, checked, encoded and in the order it was built,
   which runAssign sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign returns
   both. `keys` and the returned entities are as in react.
@@ -220,7 +224,6 @@ dropped.
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
   unordered : Schema → Value → m (Except Issue Value)
-  normalize : Schema → Value → m (Except Issue (Option Value))
   binding : String → String → Value → Records → Time → m (Except Issue Bool)
   requirement : String → String → Value → Records → Time → m (Except Issue Bool)
   inputRequirement : Spec.Ref → String → Value → m (Except Issue Bool)
@@ -247,7 +250,8 @@ structure Functions (m : Type → Type) where
   showInput : Scope → Records → Activity → m (Except Issue Value)
   items : Scope → Records → m (Except Issue (List (Value × Value)))
   defaults : Schema → m (Except Issue Value)
-  close : Scope → Records → m (Except Issue (Value × Option String))
+  close : Scope → Records → m (Except Issue Value)
+  closeEnsures : String → Value → Value → m (Except Issue (Option String))
 
 /--
 The first of `names` that `test` finds false, in order: the semantics evaluates binds, requires and guards one by one

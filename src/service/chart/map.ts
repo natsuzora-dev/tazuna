@@ -1,7 +1,7 @@
 import { expectFound } from "../../data/internalError.ts";
-import { byCodePoint, plain } from "../../data/values.ts";
+import { byCodePoint, canonicalJson, type Fields, plain } from "../../data/values.ts";
 import { ref } from "../basic.ts";
-import { Failed, type Functions, issueViolation } from "../functions.ts";
+import { Failed, type Functions, issueViolation, sorted, sortedDecoded } from "../functions.ts";
 import { copyId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import { copyKeysOf, halt, type Instance, inStep, NoteAccess, newStep, report, scopeOf } from "../state.ts";
@@ -13,18 +13,21 @@ import type { Processing } from "./queue.ts";
  * Starts a copy. The new copy replaces a closed copy with the same id and, as in Lean's list, comes last in
  * `copies`.
  */
-function startCopy(r: Processing, owner: Instance, map: string, key: unknown, encodedKey: string, step: number): void {
+function startCopy(r: Processing, owner: Instance, map: string, key: Fields, encodedKey: string, step: number): void {
   const chart = ref(r.st, owner.chart.name);
-  const defaults = r.functions.defaults({ kind: "mapContext", chart, map });
-  const context = expectFound(
-    `defaults of the copy context of ${map}`,
-    defaults instanceof Failed ? undefined : defaults,
+  const schema = { kind: "mapContext", chart, map } as const;
+  const defaults = r.functions.defaults(schema);
+  const context = sortedDecoded(
+    r.st,
+    r.functions,
+    schema,
+    expectFound(`defaults of the copy context of ${map}`, defaults instanceof Failed ? undefined : defaults),
   );
   const id = copyId(owner.id, map, encodedKey);
   const copy: Instance = {
     chart: owner.chart,
     id,
-    context: context.value,
+    context,
     input: owner.input,
     entered: new Map(),
     lastChildren: new Map(),
@@ -62,7 +65,13 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
       return halt(
         issueViolation(definition, checked, () => ({ kind: "Fault.itemsSchema", definition, data: { map } })),
       );
-    const keys = checked.toSorted((a, b) => byCodePoint(a.encodedKey, b.encodedKey));
+    const schema = { kind: "mapKey", chart: definition, map } as const;
+    const keys = checked
+      .map((k) => {
+        const encoded = sorted(r.st, schema, k);
+        return { key: r.functions.decode(schema, encoded), encoded, encodedKey: canonicalJson(encoded) };
+      })
+      .toSorted((a, b) => byCodePoint(a.encodedKey, b.encodedKey));
     const duplicate = keys.find((k, i) => keys.findIndex((other) => other.encodedKey === k.encodedKey) < i);
     if (duplicate !== undefined)
       report(r.state, { kind: "Fault.duplicateItemKey", definition, data: { map, itemKey: plain(duplicate.encoded) } });

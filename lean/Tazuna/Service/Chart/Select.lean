@@ -37,7 +37,7 @@ inductive CopyTarget where
   | everyCopy
   /-- The key fields fail the key schema, so it reaches no copy. -/
   | noCopy
-  /-- The copy whose item key is `key`: the key fields as normalize writes them, as `items` writes a copy's key. -/
+  /-- The copy whose item key is `key`: the key fields as parse writes them, as `items` writes a copy's key. -/
   | copy (key : Value)
 
 /-- The copies of the map state `map` of `chart` that an event with `payload` reaches. -/
@@ -46,7 +46,8 @@ def copyKey (st : Service) (chart : Chart) (map : String) (payload : Value) : m 
   match (Spec.schemaProperties state.key).mapM fun f => (payload.field? f).map (f, ·) with
   | none => pure (.ok .everyCopy)
   | some fields =>
-    pure ((← fs.normalize (.mapKey (st.ref chart.name) map) (.obj fields)).map fun
+    let schema := .mapKey (st.ref chart.name) map
+    pure ((← fs.parse schema (← st.sorted schema (.obj fields))).map fun
       | none => .noCopy
       | some key => .copy key)
 

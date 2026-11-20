@@ -123,7 +123,9 @@ def offered (st : Service) (s : State) (top : Instance) (control : String) (payl
         | .error e =>
           pure (.error (issueViolation (st.ref top.chart.name) e fun _ =>
             .offersSchema (st.ref top.chart.name) control state))
-        | .ok payloads => pure (.ok (done ++ [(state, .listed payloads)]))
+        | .ok payloads =>
+          let payloads ← payloads.mapM (st.sorted (.control (st.ref top.chart.name) control))
+          pure (.ok (done ++ [(state, .listed payloads)]))
 
 /--
 The instance that accepts the operation, or the refusal. `payload` is encoded. The operation is accepted if any applying

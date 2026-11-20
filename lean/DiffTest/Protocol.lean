@@ -62,7 +62,6 @@ record that TS read while it answers.
 inductive Question where
   | parse (schema : Schema) (value : Value)
   | unordered (schema : Schema) (value : Value)
-  | normalize (schema : Schema) (value : Value)
   | binding (command binding : String) (input : Value) (now : Time)
   | requirement (command condition : String) (input : Value) (now : Time)
   | inputRequirement (target : Spec.Ref) (condition : String) (input : Value)
@@ -89,6 +88,7 @@ inductive Question where
   | items (scope : Scope)
   | defaults (schema : Schema)
   | close (scope : Scope)
+  | closeEnsures (screen : String) (input output : Value)
   /-- The comparable value of `value`, read by the schema `part` of the definition `kind` `definition`. -/
   | comparableValue (kind : String) (definition : Spec.Ref) (part : Verify.Part) (value : Value)
   | served (value : Option Value)
@@ -118,7 +118,6 @@ inductive Reply where
   | issue (issue : Issue)
   | parse (value : Option Value)
   | unordered (value : Value)
-  | normalize (value : Option Value)
   | binding (bound : Bool)
   | requirement (holds : Bool)
   | inputRequirement (holds : Bool)
@@ -144,7 +143,8 @@ inductive Reply where
   | showInput (input : Value)
   | items (keys : List ItemKey)
   | defaults (defaults : Value)
-  | close (output : Value) (failed : Option String)
+  | close (output : Value)
+  | closeEnsures (failed : Option String)
   | comparableValue (value : Value)
 
 /-- A reply, with what the chart expressions read and assigned, and whether a Bag of two or more ran a callback. -/

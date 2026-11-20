@@ -51,14 +51,12 @@ theorem evaluate_accepted_applies (records : Records) (now : Time) (name : Strin
           · cases h
           · split at h
             · cases h
-            · split at h
+            · rename_i hd
+              split at h
               · cases h
-              · rename_i hd
-                split at h
-                · cases h
-                · injection h with h₁ h₂ h₃
-                  subst h₁ h₂ h₃
-                  exact ⟨rfl, by simpa using hd, input, hp, rfl⟩
+              · injection h with h₁ h₂ h₃
+                subst h₁ h₂ h₃
+                exact ⟨rfl, by simpa using hd, input, hp, rfl⟩
 
 theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option LineId) (n : Nat)
     (h : KeysDistinct s.records) : KeysDistinct (processCommand st fs s name raw id n).1.records := by
@@ -118,13 +116,11 @@ theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : St
     simp only [evaluate, id_bind, hp, hr, hd, hf]
     exact ⟨_, rfl, rfl, _, rfl⟩
 
-theorem decide_payloads_sorted_before_normalize (name : String) (emits out : List Emit)
-    (h : normalizeEmits st fs name emits = .ok out) :
-    out.length = emits.length ∧ ∀ p ∈ emits.zip out, NormalizedEmit st fs p.1 p.2 := by
-  obtain ⟨os, ho, hl, hp⟩ := normalizeEmits_fold name emits [] out h
-  simp only [List.nil_append] at ho
-  subst ho
-  exact ⟨hl, hp⟩
+theorem decide_payloads_sorted (emits : List Emit) :
+    sortEmits (m := Id) st emits = emits.map fun e => { e with payload := st.sorted (m := Id) (.payload e.event) e.payload } := by
+  induction emits with
+  | nil => rfl
+  | cons e es ih => simp only [sortEmits, List.mapM_cons, List.map_cons] at *; rw [← ih]; rfl
 
 theorem mem_chunks {α : Type} : ∀ (ns : List Nat) (xs : List α) (x : α), x ∈ (chunks ns xs).flatten → x ∈ xs
   | [], _, _, h => by simp [chunks] at h
@@ -134,8 +130,8 @@ theorem mem_chunks {α : Type} : ∀ (ns : List Nat) (xs : List α) (x : α), x 
     · exact List.mem_of_mem_take h
     · exact List.mem_of_mem_drop (mem_chunks ns _ x h)
 
-theorem mem_orderedGroups (decided : List (List Emit)) (normalized : List Emit) (e : Emit)
-    (h : e ∈ (orderedGroups decided normalized).flatten) : e ∈ normalized := by
+theorem mem_orderedGroups (decided : List (List Emit)) (sorted : List Emit) (e : Emit)
+    (h : e ∈ (orderedGroups decided sorted).flatten) : e ∈ sorted := by
   simp only [orderedGroups, List.mem_flatten, List.mem_map] at h
   obtain ⟨_, ⟨g, hg, rfl⟩, he⟩ := h
   exact mem_chunks _ _ e (List.mem_flatten.mpr ⟨g, hg, (List.mergeSort_perm _ _).mem_iff.mp he⟩)
@@ -145,9 +141,7 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
     ∃ input decided, fs.parse (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
       (∀ e ∈ decided.flatten, st.lists name e = true) ∧
-      ∃ normalized, normalizeEmits st fs name decided.flatten = .ok normalized ∧
-        normalized.length = decided.flatten.length ∧
-        (∀ p ∈ decided.flatten.zip normalized, NormalizedEmit st fs p.1 p.2) ∧ groups = orderedGroups decided normalized := by
+      groups = orderedGroups decided (sortEmits (m := Id) st decided.flatten) := by
   simp only [evaluate, id_bind] at h
   split at h
   · cases h
@@ -164,17 +158,13 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
         · rename_i hf
           split at h
           · cases h
-          · rename_i out hn
-            split at h
+          · split at h
             · cases h
             · split at h
               · cases h
-              · split at h
-                · cases h
-                · injection h with _ h₂ _
-                  subst h₂
-                  obtain ⟨hl, hz⟩ := decide_payloads_sorted_before_normalize name _ out hn
-                  refine ⟨input, decided, hp, hd, fun e he => ?_, out, hn, hl, hz, rfl⟩
-                  simpa using List.find?_eq_none.mp hf e he
+              · injection h with _ h₂ _
+                subst h₂
+                refine ⟨input, decided, hp, hd, fun e he => ?_, rfl⟩
+                simpa using List.find?_eq_none.mp hf e he
 
 end Tazuna.Thm.Service.Command

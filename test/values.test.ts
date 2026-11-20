@@ -28,9 +28,9 @@ test("written encodes a codec's part that fails its check, inside a discriminate
   });
 });
 
-test("written writes a bag that fails its check inside a plain union as its elements", () => {
+test("written writes a bag that fails its check inside a plain union as its elements, in the order it holds them", () => {
   const schema = z.object({ x: z.union([bag(z.string().min(3)), z.null()]) });
-  assert.deepEqual(written(schema, { x: new BagValue(() => ["bb", "a"]) }), { x: ["a", "bb"] });
+  assert.deepEqual(written(schema, { x: new BagValue(() => ["bb", "a"]) }), { x: ["bb", "a"] });
 });
 
 test("strict rejects a field that no object names, at any depth, and picks the union option that names every field", () => {

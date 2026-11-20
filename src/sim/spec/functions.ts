@@ -1,7 +1,7 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
 import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
-import { bag, bagged, decoded, defaultRow, encodedAs, sorted, toJson, written } from "../../data/collections.ts";
+import { bag, bagged, decoded, defaultRow, encodedAs, toJson, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
 import { expectFound, InternalError } from "../../data/internalError.ts";
@@ -9,7 +9,7 @@ import { strict } from "../../data/schemaNode.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
-import { canonicalJson, type Fields, type Json, objectOf, type Shape, strictObjectOf } from "../../data/values.ts";
+import { type Fields, type Json, objectOf, type Shape, strictObjectOf } from "../../data/values.ts";
 import { thrown, zodError } from "../../data/violation.ts";
 import { stateAt, transitionAt } from "../../dsl/chart.ts";
 import { type Conditions, firstFailing } from "../../dsl/conditions.ts";
@@ -35,6 +35,7 @@ import {
   type Access,
   type Assignment,
   type Checked,
+  type Decided,
   type Edge,
   Failed,
   type Functions,
@@ -45,7 +46,7 @@ import {
 } from "../../service/functions.ts";
 import { chartOf, mapOf } from "../../service/instance.ts";
 import type { Emit } from "../../service/message.ts";
-import type { RecordSource, Row } from "../../service/records.ts";
+import type { RecordSource } from "../../service/records.ts";
 import { type ChartStructure, chartStructure, stateNamed } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ensured } from "./contract.ts";
@@ -67,41 +68,6 @@ function attempt<T>(f: () => T, schema?: Schema): T | Failed {
     if (error instanceof NotOnly) return new Failed({ kind: "notOnly" });
     return new Failed(schema === undefined ? { kind: "thrown" } : { kind: "thrown", schema }, thrown(error));
   }
-}
-
-/**
- * Returns a value that author code made, with each Bag in a bag, set or sortedBy field as an array, as Lean's Value can
- * hold it for normalize.
- */
-const sortedFields = (shape: Shape | undefined, value: unknown): unknown => sorted(objectOf(shape ?? {}), value);
-
-/**
- * Returns the value with every collection sorted, as spec code receives it, and its encoding, or why it does not match
- * `zod`.
- */
-function encodedSorted<T>(
-  schema: Schema,
-  zod: z.ZodType,
-  value: T,
-): { readonly value: T; readonly encoded: unknown } | { readonly error: z.ZodError } | Failed {
-  const checked = attempt(() => {
-    const sortedValue = sorted(zod, value) as T;
-    return { sortedValue, encoded: z.safeEncode(zod, sortedValue as never) };
-  }, schema);
-  if (checked instanceof Failed) return checked;
-  const { sortedValue, encoded } = checked;
-  return encoded.success ? { value: bagged(zod, sortedValue) as T, encoded: encoded.data } : { error: encoded.error };
-}
-
-/** Returns the checked value and its encoding, or the Issue of a value that does not match `schema`. */
-function matching<T>(
-  schema: Schema,
-  zod: z.ZodType,
-  value: T,
-): { readonly value: T; readonly encoded: unknown } | Failed {
-  const checked = encodedSorted(schema, zod, value);
-  if (checked instanceof Failed || !("error" in checked)) return checked;
-  return new Failed({ kind: "schema", schema }, zodError(checked.error.issues));
 }
 
 /**
@@ -484,12 +450,6 @@ export class SpecFunctions implements Functions {
     return decoded(objectOf(this.shape(schema)), value) as Fields;
   }
 
-  normalize(schema: Schema, value: unknown): Checked | Failed {
-    const checked = encodedSorted(schema, strictObjectOf(this.shape(schema)), value as Fields);
-    if (checked instanceof Failed || !("error" in checked)) return checked;
-    return { error: zodError(checked.error.issues) };
-  }
-
   binding(
     name: string,
     binding: string,
@@ -532,21 +492,32 @@ export class SpecFunctions implements Functions {
     input: Fields,
     records: RecordSource,
     now: Temporal.Instant,
-  ): readonly (readonly Emit[])[] | Failed {
+  ): readonly (readonly Decided[])[] | Failed {
     const command = this.command(name);
     const args = { input, records: this.view(records), now };
     const bound = this.bound(command.binds, args);
     if (bound instanceof Failed) return bound;
     const f = command.decide as ((a: Fields) => readonly (DefinedEmit | Bag<DefinedEmit>)[]) | undefined;
     if (f === undefined) throw new InternalError(`the command ${name} of an external service has no decide`);
-    return attempt(() =>
-      f({ ...args, bound }).map((item) =>
-        ((bagValues(item) ?? [item]) as readonly DefinedEmit[]).map((e) => ({
-          event: this.emittedRef(e.event),
-          payload: sortedFields(e.event.payload, e.payload) as Fields,
-        })),
-      ),
+    const decided = attempt(() =>
+      f({ ...args, bound }).map((item) => (bagValues(item) ?? [item]) as readonly DefinedEmit[]),
     );
+    if (decided instanceof Failed) return decided;
+    const groups: Decided[][] = [];
+    for (const group of decided) {
+      const encoded: Decided[] = [];
+      for (const e of group) {
+        const event = this.emittedRef(e.event);
+        const listed = this.spec.names.has(e.event);
+        const payload = listed
+          ? encodedAnswer({ kind: "payload", event }, strictObjectOf(e.event.payload), e.payload)
+          : attempt(() => written(objectOf(e.event.payload), e.payload));
+        if (payload instanceof Failed) return payload;
+        encoded.push({ event, payload });
+      }
+      groups.push(encoded);
+    }
+    return groups;
   }
 
   ensures(
@@ -616,14 +587,14 @@ export class SpecFunctions implements Functions {
     return attempt(() => firstFailing(invariants, () => this.args(scope, records, access)));
   }
 
-  resolve(name: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown {
-    const query = this.query(name).definition;
-    return attempt(() =>
-      sortedFields(
-        query.output,
-        (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now }),
-      ),
+  resolve(name: string, input: Fields, records: RecordSource, now: Temporal.Instant): Json | Failed {
+    const { definition: query, service } = this.query(name);
+    const resolved = attempt(() =>
+      (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now }),
     );
+    if (resolved instanceof Failed) return resolved;
+    const schema: Schema = { kind: "output", definition: { service, name } };
+    return encodedAnswer(schema, strictObjectOf(query.output ?? {}), resolved);
   }
 
   private automation(name: string): Automation {
@@ -687,12 +658,9 @@ export class SpecFunctions implements Functions {
     return encodedAnswer({ kind: "context", chart: ref }, strictObjectOf(named.definition.context).partial(), given);
   }
 
-  defaults(schema: Schema): Row | Failed {
+  defaults(schema: Schema): Json | Failed {
     const shape = this.shape(schema);
-    const object = objectOf(shape);
-    const value = attempt(() => defaultRow(shape), schema);
-    if (value instanceof Failed) return value;
-    return { value: bagged(object, value) as Fields, encoded: toJson(object, value) as Fields };
+    return attempt(() => written(objectOf(shape), defaultRow(shape)), schema);
   }
 
   guard(
@@ -817,12 +785,7 @@ export class SpecFunctions implements Functions {
   }
 
   /** Returns the offers of the state `scope.state`, or of the chart itself when it is null. */
-  offers(
-    scope: Scope,
-    records: RecordSource,
-    control: string,
-    access: Access,
-  ): readonly { readonly value: Fields; readonly encoded: unknown }[] | Failed {
+  offers(scope: Scope, records: RecordSource, control: string, access: Access): readonly Json[] | Failed {
     const { named, ref } = this.chartOf(chartOf(scope.id));
     const f =
       scope.state === null
@@ -834,9 +797,9 @@ export class SpecFunctions implements Functions {
     if (given instanceof Failed) return given;
     const payloads = bagValues(given) ?? (given as readonly unknown[]);
     const row = strictObjectOf(this.control(named.definition, control).payload ?? {});
-    const checked: { readonly value: Fields; readonly encoded: unknown }[] = [];
+    const checked: Json[] = [];
     for (const o of payloads) {
-      const payload = matching({ kind: "control", screen: ref, control }, row, o as Fields);
+      const payload = encodedAnswer({ kind: "control", screen: ref, control }, row, o);
       if (payload instanceof Failed) return payload;
       checked.push(payload);
     }
@@ -849,41 +812,27 @@ export class SpecFunctions implements Functions {
     return this.writtenInput(query.input, f, () => this.args(scope, records, access));
   }
 
-  items(
-    scope: Scope,
-    records: RecordSource,
-    access: Access,
-  ): readonly { readonly key: unknown; readonly encoded: unknown; readonly encodedKey: string }[] | Failed {
+  items(scope: Scope, records: RecordSource, access: Access): readonly Json[] | Failed {
     const map = this.stateOf(scope);
     const node = this.mapNode(chartOf(scope.id), map);
     const given = attempt(() => node.items(this.args(scope, records, access) as never));
     if (given instanceof Failed) return given;
     const chart = this.chartOf(chartOf(scope.id)).ref;
-    const element = strictObjectOf(node.key);
-    const keys = matching({ kind: "mapKey", chart, map }, bag(element), given);
-    if (keys instanceof Failed) return keys;
-    // Each key is decoded from its encoding, because the Bag of keys visits them in reverse order inside reversedBags.
-    return (keys.encoded as unknown[]).map((encoded) => ({
-      key: bagged(element, z.decode(element, encoded as never)),
-      encoded,
-      encodedKey: canonicalJson(encoded),
-    }));
+    const keys = encodedAnswer({ kind: "mapKey", chart, map }, bag(strictObjectOf(node.key)), given);
+    return keys instanceof Failed ? keys : (keys as readonly Json[]);
   }
 
-  close(
-    scope: Scope,
-    records: RecordSource,
-    access: Access,
-  ): { readonly output: Fields; readonly failed: string | undefined } | Failed {
+  close(scope: Scope, records: RecordSource, access: Access): Json | Failed {
     const { named, ref } = this.chartOf(chartOf(scope.id));
     const chart = named.definition;
     const resolve = chart.resolve;
     const given = attempt(() => (resolve === undefined ? {} : resolve(this.args(scope, records, access) as never)));
     if (given instanceof Failed) return given;
-    const output = matching({ kind: "output", definition: ref }, strictObjectOf(chart.output ?? {}), given as Fields);
-    if (output instanceof Failed) return output;
-    const failed = attempt(() => firstFailing(chart.ensures, () => ({ input: scope.input, output: output.value })));
-    if (failed instanceof Failed) return failed;
-    return { output: output.value, failed };
+    return encodedAnswer({ kind: "output", definition: ref }, strictObjectOf(chart.output ?? {}), given);
+  }
+
+  closeEnsures(screen: string, input: Fields, output: Fields): string | undefined | Failed {
+    const chart = this.chartOf(screen).named.definition;
+    return attempt(() => firstFailing(chart.ensures, () => ({ input, output })));
   }
 }

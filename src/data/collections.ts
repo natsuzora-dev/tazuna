@@ -5,16 +5,7 @@ import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
 import { type Collection, collectionOf, mark } from "./marks.ts";
 import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
 import { field, fits, unionOptions } from "./unionOptions.ts";
-import {
-  byCodePoint,
-  canonicalJson,
-  type Fields,
-  type Json,
-  objectOf,
-  plain,
-  type Shape,
-  strictObjectOf,
-} from "./values.ts";
+import { byCodePoint, canonicalJson, type Fields, type Json, plain, type Shape } from "./values.ts";
 
 /** An array schema whose output type carries mark `M`, so that spec functions may produce it from a Bag. */
 type CollectionSchema<E extends z.ZodType, M extends "bag" | "sortedBy"> = z.ZodArray<E> & {
@@ -86,6 +77,9 @@ function encodedKey(json: unknown): SortKey | undefined {
 const keyOf = (element: z.ZodType, key: string) => (row: unknown) =>
   encodedKey((toJson(element, row) as Record<string, unknown> | null)?.[key]) as SortKey;
 
+/** Whether Zod is encoding a value that spec code made, which the run sorts afterwards. */
+let encoding = false;
+
 /**
  * Returns an array schema sorted ascending by `key`, like Kotlin's `sortedBy`. tazuna sorts the values that the spec
  * produces, so `resolve` and `decide` do not sort. Reading a value out of key order is an error.
@@ -95,6 +89,8 @@ export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(
   key: K,
 ): CollectionSchema<E, "sortedBy"> {
   const check = z.check<readonly Record<string, unknown>[]>((ctx) => {
+    // Zod runs a check in both directions, and only a parse reads key order.
+    if (encoding) return;
     const keys = ctx.value.map(keyOf(element, key));
     const i = keys.findIndex((k, i) => i > 0 && compareKeys(keys[i - 1], k) > 0);
     if (i > 0)
@@ -114,48 +110,6 @@ function unbagged(collection: Collection | undefined, value: unknown): unknown {
   const values = bagValues(value);
   if (values !== undefined) return values;
   return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => bagValues(v) ?? [v]) : value;
-}
-
-/**
- * Returns the value with the elements of each bag and set in the canonical JSON order of their encoded values, and each
- * sortedBy array in key order with equal keys in that order, as Lean's sortCollections orders the encoded value, so
- * that the order in which spec code built them leaves no trace. A Bag in a
- * bag or set, and a Bag or a run of Bags in a sortedBy array, become arrays.
- */
-export function sorted(schema: z.ZodType, value: unknown): unknown {
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "array": {
-      const collection = collectionOf(schema);
-      const array = unbagged(collection, value);
-      if (!Array.isArray(array)) return array;
-      const items = array.map((v) => sorted(node.element, v));
-      if (collection === undefined) return items;
-      const text = new Map(items.map((v) => [v, canonicalJson(toJson(node.element, v))]));
-      const canonical = items.toSorted((a, b) => byCodePoint(text.get(a) as string, text.get(b) as string));
-      if (collection.kind !== "sortedBy") return canonical;
-      const key = keyOf(node.element, collection.key);
-      return canonical.toSorted((a, b) => compareKeys(key(a), key(b)));
-    }
-    case "object":
-      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-      return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => {
-          const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : sorted(field, v)];
-        }),
-      );
-    case "union": {
-      const option = unionOption(node, value);
-      return option === undefined ? value : sorted(option, value);
-    }
-    case "optional":
-    case "nullable":
-    case "default":
-      return value == null ? value : sorted(node.inner, value);
-    default:
-      return value;
-  }
 }
 
 /**
@@ -192,20 +146,14 @@ export function sortCollections(schema: unknown, v: Json): Json {
 
 /**
  * Returns a value that spec code made for `schema` with each Bag in a bag or set, and each Bag or run of Bags in a
- * sortedBy array, as an array in the order that it holds its values, so that Zod can encode it. A sortedBy array goes
- * in key order, which its check reads; its elements with equal keys stay in the order they were built.
+ * sortedBy array, as an array in the order that it holds its values, so that Zod can encode it.
  */
 function arrayed(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
   switch (node.type) {
     case "array": {
-      const collection = collectionOf(schema);
-      const array = unbagged(collection, value);
-      if (!Array.isArray(array)) return array;
-      const items = array.map((v) => arrayed(node.element, v));
-      if (collection?.kind !== "sortedBy") return items;
-      const key = keyOf(node.element, collection.key);
-      return items.toSorted((a, b) => compareKeys(key(a), key(b)));
+      const array = unbagged(collectionOf(schema), value);
+      return Array.isArray(array) ? array.map((v) => arrayed(node.element, v)) : array;
     }
     case "object":
       if (!isRecord(value)) return value;
@@ -236,14 +184,19 @@ export function encodedAs(
   schema: z.ZodType,
   value: unknown,
 ): { readonly encoded: Json } | { readonly error: z.ZodError } {
-  const encoded = z.safeEncode(schema, arrayed(schema, value) as never);
-  return encoded.success ? { encoded: plain(encoded.data) } : { error: encoded.error };
+  encoding = true;
+  try {
+    const encoded = z.safeEncode(schema, arrayed(schema, value) as never);
+    return encoded.success ? { encoded: plain(encoded.data) } : { error: encoded.error };
+  } finally {
+    encoding = false;
+  }
 }
 
 /** Returns a value of `schema` from its checked encoding, as spec code receives it. */
 export const decoded = (schema: z.ZodType, json: unknown): unknown => bagged(schema, fromJson(schema, json));
 
-/** Whether `sorted` and `bagged` walk into the node. A collection under any other node is opaque. */
+/** Whether `arrayed` and `bagged` walk into the node. A collection under any other node is opaque. */
 export const sortsInside = (node: SchemaNode): boolean =>
   ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
@@ -263,10 +216,10 @@ export function unionOption(node: Extract<SchemaNode, { type: "union" }>, value:
 }
 
 /**
- * Returns a value that spec code made for `schema` as its sender writes it to a message, with each collection as
- * `sorted` orders it and encoded by toJson, so that only the receiver parses the value.
+ * Returns a value that spec code made for `schema` as its sender writes it to a message, encoded by toJson in the order
+ * it was built, so that only the receiver parses the value.
  */
-export const written = (schema: z.ZodType, value: unknown): Json => plain(toJson(schema, sorted(schema, value)));
+export const written = (schema: z.ZodType, value: unknown): Json => plain(toJson(schema, arrayed(schema, value)));
 
 /**
  * Returns a value of `schema` as JSON holds it: each codec at any depth encodes its part, and no check or other
@@ -366,8 +319,8 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 /**
- * Returns a value as `sorted` returns it, as spec code receives it: each bag and set as a Bag, and each sortedBy array
- * as Runs.
+ * Returns a decoded value whose collections the run sorted as spec code receives it: each bag and set as a Bag, and each
+ * sortedBy array as Runs.
  */
 export function bagged(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
@@ -401,23 +354,12 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
   }
 }
 
-/** Returns the value with every collection sorted, or the reason that the value does not match the schema. */
-function normalized<T>(schema: z.ZodType, value: T): { readonly value: T } | { readonly error: z.ZodError } {
-  const sortedValue = sorted(schema, value) as T;
-  const encoded = z.safeEncode(schema, sortedValue as never);
-  return encoded.success ? { value: sortedValue } : { error: encoded.error };
-}
-
-export const normalizedRow = (
-  shape: Shape,
-  value: unknown,
-): { readonly value: Fields } | { readonly error: z.ZodError } => normalized(strictObjectOf(shape), value as Fields);
-
-/** Returns the default value of each field of the shape that declares one, with every collection sorted. */
+/** Returns the default value of each field of the shape that declares one, in the order it was built. */
 export function defaultRow(shape: Shape): Fields {
-  const row = Object.entries(shape as Readonly<Record<string, z.ZodType>>).flatMap(([field, schema]) => {
-    const defaulted = schema.safeParse(undefined);
-    return defaulted.success && defaulted.data !== undefined ? [[field, defaulted.data] as const] : [];
-  });
-  return sorted(objectOf(shape), Object.fromEntries(row)) as Fields;
+  return Object.fromEntries(
+    Object.entries(shape as Readonly<Record<string, z.ZodType>>).flatMap(([field, schema]) => {
+      const defaulted = schema.safeParse(undefined);
+      return defaulted.success && defaulted.data !== undefined ? [[field, defaulted.data] as const] : [];
+    }),
+  );
 }

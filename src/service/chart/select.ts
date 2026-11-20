@@ -1,10 +1,10 @@
 import { expectFound } from "../../data/internalError.ts";
 import type { Trigger } from "../../data/transitionRef.generated.ts";
-import { canonicalJson, type Fields } from "../../data/values.ts";
+import { canonicalJson, type Fields, type Json } from "../../data/values.ts";
 import { mapStateOf, schemaProperties, transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
-import { Failed, firstFalse, issueViolation } from "../functions.ts";
+import { Failed, firstFalse, issueViolation, sorted } from "../functions.ts";
 import { copyId, type InstanceId, mapOf } from "../instance.ts";
 import { valueName } from "../note.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -62,20 +62,21 @@ type CopyTarget =
   | { readonly kind: "copy"; readonly key: string };
 
 /** Lean's copyKey. */
-function copyKey(r: Run, chart: Chart, map: string, payload: Fields): CopyTarget | Failed {
+function copyKey(r: Run, chart: Chart, map: string, payload: Readonly<Record<string, Json>>): CopyTarget | Failed {
   const state = expectFound(`map state ${map} of ${chart.name}`, mapStateOf(chart.states.get(map)?.spec));
   const fields = schemaProperties(state.key);
-  if (!fields.every((f) => payload[f] !== undefined)) return { kind: "everyCopy" };
+  if (!fields.every((f) => Object.hasOwn(payload, f))) return { kind: "everyCopy" };
   const schema = { kind: "mapKey", chart: ref(r.st, chart.name), map } as const;
-  const key = r.functions.normalize(schema, Object.fromEntries(fields.map((f) => [f, payload[f]])));
+  const fieldsOf: Readonly<Record<string, Json>> = Object.fromEntries(fields.map((f) => [f, payload[f] as Json]));
+  const key = r.functions.parse(schema, sorted(r.st, schema, fieldsOf));
   if (key instanceof Failed) return key;
   return "error" in key ? { kind: "noCopy" } : { kind: "copy", key: canonicalJson(key.encoded) };
 }
 
-/** Lean's reaches. */
-export function reaches(r: Run, copy: Instance, payload: unknown): boolean {
+/** Lean's reaches, with the encoded payload. */
+export function reaches(r: Run, copy: Instance, payload: Json): boolean {
   if (copy.id.kind !== "copy") return true;
-  const target = copyKey(r, copy.chart, copy.id.map, payload as Fields);
+  const target = copyKey(r, copy.chart, copy.id.map, payload as Readonly<Record<string, Json>>);
   if (target instanceof Failed) return halt(issueViolation(ref(r.st, copy.chart.name), target));
   return target.kind === "everyCopy" || (target.kind === "copy" && target.key === canonicalJson(copy.id.key));
 }

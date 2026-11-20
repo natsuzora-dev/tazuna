@@ -4,7 +4,7 @@ import type { StateStructure } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { reaches } from "../chart/select.ts";
-import { Failed, issueViolation } from "../functions.ts";
+import { Failed, issueViolation, sorted } from "../functions.ts";
 import type { InstanceId } from "../instance.ts";
 import { copyId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -64,7 +64,7 @@ function offered(
   r: Run,
   top: Instance,
   key: string,
-  payload: unknown,
+  payload: Json,
 ): { readonly state: string | null; readonly offered: Offered }[] {
   const chart = top.chart;
   const found = documentOrder(r.state, top).flatMap(({ holder, n }) => {
@@ -97,7 +97,16 @@ function offered(
       key,
       new NoteAccess(r, scope),
     );
-    if (!(payloads instanceof Failed)) return { state, offered: payloads };
+    if (!(payloads instanceof Failed)) {
+      const schema = { kind: "control", screen: definition, control: key } as const;
+      return {
+        state,
+        offered: payloads.map((p) => {
+          const encoded = sorted(r.st, schema, p);
+          return { value: r.functions.decode(schema, encoded), encoded };
+        }),
+      };
+    }
     return halt(
       issueViolation(definition, payloads, () => ({
         kind: "Fault.offersSchema",
@@ -126,7 +135,7 @@ export function accepting(
   if (found.kind === "covered") return { child: ref(r.st, found.child.chart.name) };
   const top = { top: found.instance };
   const asked = canonicalJson(payload.encoded);
-  const admits = offered(r, found.instance, key, payload.value).some(
+  const admits = offered(r, found.instance, key, payload.encoded as Json).some(
     ({ offered }) => offered === "any" || offered.some((o) => canonicalJson(o.encoded) === asked),
   );
   return admits ? top : { payload: payload.encoded as Json };
@@ -147,7 +156,7 @@ export function operationsOf(r: Run, resource: InstanceId): Operation[] {
     top.entered.has(map)
       ? keys.flatMap((k) => {
           const copy = machine(r.state, copyId(top.id, map, k));
-          return copy === undefined ? [] : [copy.itemKey as Fields];
+          return copy === undefined ? [] : [JSON.parse(k) as Json];
         })
       : [],
   );

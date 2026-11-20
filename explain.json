@@ -402,7 +402,7 @@
           "line": 6,
           "text": "export const tagWatcher = machine({\n  description: \"Watch each tag, one of which is empty\",\n  initial: \"watching\",\n  states: { watching: { type: \"map\", key: { tag: z.string().min(1) }, initial: \"idle\", states: { idle: {} } } },\n}).chart({ states: { watching: { items: () => [{ tag: \"home\" }, { tag: \"\" }] } } });"
         },
-        "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[0,\"tag\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[1,\"tag\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
     },
     "Fault.notOnly": {

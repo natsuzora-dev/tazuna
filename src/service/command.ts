@@ -1,19 +1,18 @@
-import { sameRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Answer, LineId } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
-import { byCodePoint, canonicalJson, type Fields, type Json } from "../data/values.ts";
-import { withExtra } from "../data/violation.ts";
+import { byCodePoint, canonicalJson, type Fields } from "../data/values.ts";
 import { emitsOf } from "../spec/structure.ts";
 import { ref, type Service } from "./basic.ts";
 import { commandEnsures, requirementsRejection } from "./contract.ts";
-import { Failed, issueViolation } from "./functions.ts";
+import { Failed, issueViolation, sorted } from "./functions.ts";
 import { applyAll, type Encoded, integrityViolations, writtenRecord } from "./integrity.ts";
-import type { Emit, Emitted } from "./message.ts";
+import type { Emitted } from "./message.ts";
 import { recordSource } from "./records.ts";
 import { halt, type Run, report, reportAll, write } from "./state.ts";
 
 /** Returns whether the command `command` lists the event of `e` in its emits. */
-function lists(st: Service, command: string, e: Emit): boolean {
+function lists(st: Service, command: string, e: { readonly event: DefinitionRef }): boolean {
   return emitsOf(st.structure, ref(st, command)).some((l) => sameRef(l, e.event));
 }
 
@@ -77,7 +76,14 @@ export function processCommand(
       rejected.unmet && rejectedBy(definition, rejected.unmet),
     );
   const decided = r.functions.decide(name, input, records, s.now);
-  if (decided instanceof Failed) return halt(issueViolation(definition, decided));
+  if (decided instanceof Failed)
+    return halt(
+      issueViolation(definition, decided, (schema) =>
+        schema.kind === "payload"
+          ? { kind: "Fault.emittedPayloadSchema", definition, data: { event: schema.event } }
+          : { kind: "Fault.exception", definition, data: {} },
+      ),
+    );
   const unlisted = decided.flat().find((e) => !lists(r.st, name, e));
   if (unlisted !== undefined) {
     const event = r.st.structure.definitions.find((d) => d.kind === "event" && sameRef(d, unlisted.event));
@@ -87,19 +93,12 @@ export function processCommand(
       data: { event: event === undefined ? null : { service: event.service, name: event.name } },
     });
   }
-  const normalized = decided.flat().map((e): Encoded => {
-    const event = e.event;
-    const payload = r.functions.normalize({ kind: "payload", event }, e.payload);
-    if (payload instanceof Failed) return halt(issueViolation(definition, payload));
-    if ("error" in payload)
-      return report(
-        s,
-        withExtra({ kind: "Fault.emittedPayloadSchema", definition, data: { event } }, { error: payload.error }),
-      );
-    const encoded = payload.encoded as Fields;
-    return { emit: { event: e.event, payload: payload.value, encoded: encoded as Json }, encoded };
+  const sortedEmits = decided.flat().map(({ event, payload }): Encoded => {
+    const schema = { kind: "payload", event } as const;
+    const encoded = sorted(r.st, schema, payload);
+    return { emit: { event, payload: r.functions.decode(schema, encoded), encoded }, encoded: encoded as Fields };
   });
-  const groups = orderedGroups(decided, normalized);
+  const groups = orderedGroups(decided, sortedEmits);
   const twice = twiceWritten(r.st, groups);
   if (twice !== undefined)
     return report(s, {

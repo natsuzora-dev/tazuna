@@ -27,7 +27,11 @@ def closeFinal (st : Service) (step : Nat) (name : InstanceId) : Processing → 
     | .error e =>
       pure (r.report (.fault (issueViolation (st.ref i.chart.name) e fun _ =>
         .screenOutputSchema (st.ref i.chart.name))))
-    | .ok (output, failed) =>
+    | .ok output =>
+      let output ← st.sorted (.output (st.ref i.chart.name)) output
+      match ← fs.closeEnsures i.chart.name i.input output with
+      | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
+      | .ok failed =>
       let ensures := failed.toList.map (st.failedEnsures i.chart.name)
       let r ← endWith (exitOne fs st st.exitFuel) name ⟨r.state.reportAll ensures, r.queue⟩
       if r.halted then pure r else

@@ -27,33 +27,12 @@ theorem mem_foldl_of_mem {α : Type} (g : List String → α → List String) (h
 theorem getElem?_append_left' {l₁ l₂ : List String} {i : Nat} (h : i < l₁.length) :
     (l₁ ++ l₂)[i]? = l₁[i]? := List.getElem?_append_left h
 
-theorem foldlM_error {α ε β : Type} (f : Except ε β → α → Id (Except ε β)) (hf : ∀ v x, f (.error v) x = .error v)
-    (es : List α) (v : ε) : es.foldlM f (.error v) = .error v := by
-  induction es with
-  | nil => rfl
-  | cons x xs ih => simp only [List.foldlM_cons, id_bind, hf, ih]
-
 theorem foldl_keeps {α β : Type} (P : β → Prop) (f : β → α → β) (h : ∀ b x, P b → P (f b x)) :
     ∀ (xs : List α) (b : β), P b → P (xs.foldl f b) := by
   intro xs
   induction xs with
   | nil => intro b hb; exact hb
   | cons x xs ih => intro b hb; exact ih _ (h b x hb)
-
-theorem exists_zip_of_mem_right {α β : Type} {l₁ : List α} {l₂ : List β} (hl : l₂.length = l₁.length) {y : β}
-    (hy : y ∈ l₂) : ∃ x, (x, y) ∈ l₁.zip l₂ := by
-  induction l₁ generalizing l₂ with
-  | nil => cases l₂ with
-    | nil => cases hy
-    | cons => cases hl
-  | cons a l₁ ih =>
-    cases l₂ with
-    | nil => cases hy
-    | cons b l₂ =>
-      rcases List.mem_cons.mp hy with rfl | hy
-      · exact ⟨a, List.mem_cons_self⟩
-      · obtain ⟨x, hx⟩ := ih (Nat.succ.inj hl) hy
-        exact ⟨x, List.mem_cons_of_mem _ hx⟩
 
 theorem foldl_bind_error {α β ε : Type} (g : β → α → Except ε β) (e : ε) :
     ∀ (l : List α), l.foldl (fun (acc : Except ε β) x => acc.bind fun a => g a x) (.error e) = .error e

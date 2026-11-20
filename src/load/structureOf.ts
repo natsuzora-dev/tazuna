@@ -1,9 +1,9 @@
-import { defaultRow, normalizedRow } from "../data/collections.ts";
+import { defaultRow, encodedAs } from "../data/collections.ts";
 import type { Delay } from "../data/datetime.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import type { Expected, Malformed } from "../data/malformed.ts";
-import { type Shape, sameJson } from "../data/values.ts";
+import { type Shape, sameJson, strictObjectOf } from "../data/values.ts";
 import { thrown, type ViolationError, zodError } from "../data/violation.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
 import {
@@ -61,7 +61,7 @@ export type StructureOf =
  */
 function defaultsError(shape: Shape): ViolationError | undefined {
   try {
-    const checked = normalizedRow(shape, defaultRow(shape));
+    const checked = encodedAs(strictObjectOf(shape), defaultRow(shape));
     return "error" in checked ? zodError(checked.error.issues) : undefined;
   } catch (error) {
     return thrown(error);

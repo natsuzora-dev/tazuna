@@ -21,7 +21,8 @@ def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (
     match ← fs.defaults (.context definition) with
     | .error e => pure (.error (fault e))
     | .ok defaults =>
-      match ← fs.parse (.context definition) (defaults.merge given) with
+      -- Parsing reads a sortedBy array's key order, and it fills in nested defaults in the order they were built.
+      match ← fs.parse (.context definition) (← st.sorted (.context definition) (defaults.merge given)) with
       | .error e => pure (.error (fault e))
       | .ok none => pure (.error (.initialContextSchema definition))
       | .ok (some context) => pure (.ok (← st.sorted (.context definition) context))
@@ -41,6 +42,7 @@ def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a 
     match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
     | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
     | .ok (input, keys) =>
+      let input ← st.sorted (.input a.ref) input
       let r : Processing := ⟨r.state.createKeys keys, r.queue⟩
       if a.isOwn st.service then
         let (s, serial) := r.state.startQueued name state
@@ -58,7 +60,7 @@ def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) 
       match ← fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys with
       | .error e => pure (r.report (.fault (issueViolation (st.ref i.chart.name) e)))
       | .ok (raw, _) =>
-      match ← fs.parse (.input (st.ref c.name)) raw with
+      match ← fs.parse (.input (st.ref c.name)) (← st.sorted (.input (st.ref c.name)) raw) with
       | .error e => pure (r.report (.fault (issueViolation (st.ref c.name) e)))
       | .ok none => pure (r.report (.fault (.inputSchema (st.ref i.chart.name) (st.ref c.name))))
       | .ok (some input) =>

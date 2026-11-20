@@ -10,7 +10,7 @@ import { type Located, type ViolationError, withExtra } from "../data/violation.
 import { type Schema, type Service, schemaOf, schemaOwner } from "./basic.ts";
 import { type InstanceId, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
-import type { RecordSource, Row } from "./records.ts";
+import type { RecordSource } from "./records.ts";
 
 /**
  * The reason that a Functions question has no answer: its author code threw (with `schema`, inside that schema's
@@ -65,9 +65,12 @@ export function issueViolation(
   }
 }
 
+/** Lean's Service.sorted: an encoded answer with its collections sorted by the structure's schema. */
+export const sorted = (st: Service, schema: Schema, json: Json): Json => sortCollections(schemaOf(st, schema), json);
+
 /** Lean's Service.sorted, then the decode that the TS engine keeps: an encoded answer as spec code receives it. */
 export const sortedDecoded = (st: Service, fs: Functions, schema: Schema, json: Json): Fields =>
-  fs.decode(schema, sortCollections(schemaOf(st, schema), json));
+  fs.decode(schema, sorted(st, schema, json));
 
 /** Lean's firstFalse: the first of `names` that `test` finds false, in order. */
 export function firstFalse<N, R extends boolean | Failed>(
@@ -180,7 +183,6 @@ export interface Functions {
    * sortedBy elements with equal keys in canonical order.
    */
   unordered(schema: Schema, value: unknown): unknown;
-  normalize(schema: Schema, value: unknown): Checked | Failed;
   /** Returns a value of `schema` from its checked encoding, as spec code receives it. */
   decode(schema: Schema, value: Json): Fields;
   binding(
@@ -198,13 +200,16 @@ export interface Functions {
     now: Temporal.Instant,
   ): boolean | Failed;
   inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed;
-  /** Returns the events in groups: the groups are in order, and the events of one group have none. */
+  /**
+   * Lean's decide: the events in groups, the groups in order and the events of one group in none. Each payload is
+   * encoded by its event's schema in the order it was built; that of an event that the spec lacks is written as is.
+   */
   decide(
     command: string,
     input: Fields,
     records: RecordSource,
     now: Temporal.Instant,
-  ): readonly (readonly Emit[])[] | Failed;
+  ): readonly (readonly Decided[])[] | Failed;
   /**
    * Returns the first failing ensures. Binds read `before`, the records before the event write; ensures read `after`.
    */
@@ -227,7 +232,8 @@ export interface Functions {
   invariant(entity: string, record: Fields): string | undefined | Failed;
   serviceInvariant(records: RecordSource): string | undefined | Failed;
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed;
-  resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown;
+  /** Lean's resolve: the output, encoded by its schema in the order it was built. */
+  resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): Json | Failed;
   automationBinding(
     automation: string,
     binding: string,
@@ -303,26 +309,22 @@ export interface Functions {
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Json | Failed;
   /** Lean's deadlineAt, with undefined for none. */
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
-  offers(
-    scope: Scope,
-    records: RecordSource,
-    control: string,
-    access: Access,
-  ): readonly { readonly value: Fields; readonly encoded: unknown }[] | Failed;
+  /** Lean's offers: the payloads, checked and encoded in the order they were built. */
+  offers(scope: Scope, records: RecordSource, control: string, access: Access): readonly Json[] | Failed;
   /** Returns the query input of a shows slot as the sender writes it. */
   showInput(scope: Scope, records: RecordSource, activity: Activity, access: Access): Json | Failed;
-  /** Returns each item key, encoded and as canonicalJson of the encoding. The map state takes them as a set. */
-  items(
-    scope: Scope,
-    records: RecordSource,
-    access: Access,
-  ): readonly { readonly key: unknown; readonly encoded: unknown; readonly encodedKey: string }[] | Failed;
-  /** Returns the default value of each field of `schema` that declares one, decoded and encoded. */
-  defaults(schema: Schema): Row | Failed;
-  /** Returns the output of a screen that closes in a final state, and its first failing ensures. */
-  close(
-    scope: Scope,
-    records: RecordSource,
-    access: Access,
-  ): { readonly output: Fields; readonly failed: string | undefined } | Failed;
+  /** Lean's items: each item key, checked and encoded in the order they were built. The map state takes them as a set. */
+  items(scope: Scope, records: RecordSource, access: Access): readonly Json[] | Failed;
+  /** Lean's defaults: the default value of each field of `schema` that declares one, encoded in the order it was built. */
+  defaults(schema: Schema): Json | Failed;
+  /** Lean's close: the output of a screen that closes in a final state, checked and encoded in the order it was built. */
+  close(scope: Scope, records: RecordSource, access: Access): Json | Failed;
+  /** Lean's closeEnsures: the first failing ensures of `screen`, which closed with `input` and the sorted `output`. */
+  closeEnsures(screen: string, input: Fields, output: Fields): string | undefined | Failed;
+}
+
+/** An event that decide returns, with its payload encoded. */
+export interface Decided {
+  readonly event: DefinitionRef;
+  readonly payload: Json;
 }

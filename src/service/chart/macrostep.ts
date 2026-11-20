@@ -6,7 +6,7 @@ import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
 import { ref } from "../basic.ts";
 import { processCommand } from "../command.ts";
-import { Failed, firstFalse, issueViolation } from "../functions.ts";
+import { Failed, firstFalse, issueViolation, sorted } from "../functions.ts";
 import { chartOf, type InstanceId } from "../instance.ts";
 import { byCaller, type Emitted } from "../message.ts";
 import { recordSource } from "../records.ts";
@@ -119,11 +119,18 @@ function handle(r: Processing, name: InstanceId, state: string, a: Activity, ans
   else applyCompletion(r, instance, ts, answer.output === undefined ? {} : { output: answer.output }, step);
 }
 
-export function dispatch(r: Processing, name: InstanceId, key: string, payload: unknown, step: number): void {
+/** Lean's dispatch, with the payload also decoded, which only TS has. */
+export function dispatch(
+  r: Processing,
+  name: InstanceId,
+  key: string,
+  payload: { readonly decoded: unknown; readonly encoded: Json },
+  step: number,
+): void {
   const instance = machine(r.state, name);
   if (instance === undefined || instance.closed) return;
-  const extra = { payload };
-  const leaves = leavesOf(r, instance, (copy) => reaches(r, copy, payload), { type: "on", key });
+  const extra = { payload: payload.decoded };
+  const leaves = leavesOf(r, instance, (copy) => reaches(r, copy, payload.encoded), { type: "on", key });
   const chosen = select(r, instance, { type: "on", key }, extra, leaves);
   if (chosen.length === 0) return;
   microstep(r, instance, chosen, extra, step);
@@ -139,7 +146,7 @@ function receiveWork(
   const e = groups[0]?.[0];
   if (e === undefined) return;
   settle(r, name, step);
-  dispatch(r, name, e.key, e.decoded, step);
+  dispatch(r, name, e.key, { decoded: e.decoded, encoded: e.payload }, step);
 }
 
 function done(r: Processing, name: InstanceId, n: string, step: number): void {
@@ -256,8 +263,8 @@ function workBody(r: Processing, work: Work, step: number): void {
       const reacted = r.functions.react(automation.name, event.payload, records, now, nextKeys(r.state));
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
       createKeys(r.state, reacted.created);
-      const { input } = reacted;
       const activity = automation.sends;
+      const input = sorted(r.st, { kind: "input", definition: activity.target }, reacted.input);
       const requester: Requester = { kind: "automation", automation: automation.name };
       if (isOwn(activity, r.st.service))
         r.queue.round.push({ order: automation.order, requester, activity, serial: undefined, input, cause: step });

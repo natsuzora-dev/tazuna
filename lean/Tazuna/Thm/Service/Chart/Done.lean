@@ -20,10 +20,8 @@ theorem keeps_closeFinal (st : Service) (step : Nat) (name : InstanceId) : Keeps
   intro i r
   try simp only [id_bind]
   have hc := keeps_endWith (fun c n => keeps_exitOne (st := st) (fs := fs) st.exitFuel c n) name
-  split
-  · simp [Processing.report]
-  · repeat' split
-    all_goals exact (hc _).trans (reportAll_fixed (s := r.state) _)
+  repeat' split
+  all_goals first | exact (hc _).trans (reportAll_fixed (s := r.state) _) | simp [Processing.report]
 
 theorem enterFinal_lines (step : Nat) (name : InstanceId) (parent : String) (r : Processing) : (enterFinal step name parent r).1.lines = r.state.lines := by
   unfold enterFinal
@@ -37,9 +35,9 @@ theorem growsBy_closeFinal (st : Service) (step : Nat) (name : InstanceId) : Gro
   try simp only [id_bind]
   have hc := growsBy_endWith (fun c n => growsBy_exitOne (st := st) (fs := fs) st.exitFuel c n)
     (fun c n => keeps_exitOne (st := st) st.exitFuel c n) name
-  split
-  · exact Grows.of_lines (report_lines ..)
-  · repeat' split
-    all_goals exact (hc _).bridge (reportAll_lines (s := r.state) _) (reportAll_now (s := r.state) _)
+  repeat' split
+  all_goals first
+    | exact Grows.of_lines (report_lines ..)
+    | exact (hc _).bridge (reportAll_lines (s := r.state) _) (reportAll_now (s := r.state) _)
 
 end Tazuna.Thm.Service.Chart.Done

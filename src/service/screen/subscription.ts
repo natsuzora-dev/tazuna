@@ -4,7 +4,7 @@ import { isDescendant } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { openShows, stateEndSubscription } from "../chart/exit.ts";
 import type { Processing } from "../chart/queue.ts";
-import { Failed, issueViolation } from "../functions.ts";
+import { Failed, issueViolation, sorted } from "../functions.ts";
 import type { InstanceId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import { awaitAnswer, halt, type Instance, NoteAccess, scopeOf } from "../state.ts";
@@ -33,8 +33,9 @@ function refresh(r: Processing, instance: Instance): boolean {
     const slot = activity.key;
     const scope = scopeOf(r.state, instance, state);
     const records = new LazyRecordSource(r.state.records, r.note);
-    const input = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
-    if (input instanceof Failed) return halt(issueViolation(definition, input));
+    const shown = r.functions.showInput(scope, records, activity, new NoteAccess(r, scope));
+    if (shown instanceof Failed) return halt(issueViolation(definition, shown));
+    const input = sorted(r.st, { kind: "input", definition: activity.target }, shown);
     wanted.set(slot, { activity, input, text: canonicalJson(input) });
   }
   const open = openShows(r.state, instance.id);

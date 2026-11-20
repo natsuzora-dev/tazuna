@@ -193,6 +193,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
     match ← fs.react a.name e.payload s.records s.now s.nextKeys with
     | .error issue => pure (faulted issue)
     | .ok (input, keys) =>
+      let input ← st.sorted (.input a.sends.ref) input
       let s := s.createKeys keys
       if a.sends.isOwn st.service then
         pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,

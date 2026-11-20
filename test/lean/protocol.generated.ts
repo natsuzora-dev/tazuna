@@ -339,11 +339,6 @@ export type Question =
       readonly value: Json;
     }
   | {
-      readonly type: "normalize";
-      readonly schema: Schema;
-      readonly value: Json;
-    }
-  | {
       readonly type: "binding";
       readonly command: string;
       readonly binding: string;
@@ -492,6 +487,12 @@ export type Question =
       readonly type: "close";
       readonly scope: Scope;
     }
+  | {
+      readonly type: "closeEnsures";
+      readonly screen: string;
+      readonly input: Json;
+      readonly output: Json;
+    }
   /** The comparable value of `value`, read by the schema `part` of the definition `kind` `definition`. */
   | {
       readonly type: "comparableValue";
@@ -540,10 +541,6 @@ export type Reply =
   | {
       readonly type: "unordered";
       readonly value: Json;
-    }
-  | {
-      readonly type: "normalize";
-      readonly value?: Json;
     }
   | {
       readonly type: "binding";
@@ -652,6 +649,9 @@ export type Reply =
   | {
       readonly type: "close";
       readonly output: Json;
+    }
+  | {
+      readonly type: "closeEnsures";
       readonly failed?: string;
     }
   | {

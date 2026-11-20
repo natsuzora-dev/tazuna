@@ -257,8 +257,8 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 
 | Property | Theorems |
 |---|---|
-| An accepted command emits exactly the events that its `decide` returned, each once, with its payload normalized by the declared schema, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run. | `accepted_emits_decided`, `unlisted_emitted_event_halts` |
-| The service normalizes the output of each query answer with the declared schema. | `resolve_output_sorted_before_normalize`, `requirements_lookup` |
+| An accepted command emits exactly the events that its `decide` returned, each once, with the collections of its payload sorted by the declared schema, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run. | `accepted_emits_decided`, `decide_payloads_sorted`, `unlisted_emitted_event_halts` |
+| The service sorts the collections of each query answer's output by the declared schema. | `resolve_output_sorted`, `requirements_lookup` |
 | When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`. | `command_invalid_input_rejected`, `query_invalid_input_rejected` |
 
 ### Statecharts

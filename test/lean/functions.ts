@@ -1,20 +1,11 @@
 import type { z } from "zod";
 import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
-import { bagged, fromJson, written } from "../../src/data/collections.ts";
-import { type DefinitionRef, sameRef } from "../../src/data/definitionRef.ts";
+import { bagged, fromJson } from "../../src/data/collections.ts";
+import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import { InternalError } from "../../src/data/internalError.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
-import {
-  canonicalJson,
-  type Fields,
-  type Json,
-  objectOf,
-  plain,
-  type Shape,
-  strictObjectOf,
-} from "../../src/data/values.ts";
-import { thrown } from "../../src/data/violation.ts";
+import { canonicalJson, type Fields, type Json, objectOf, type Shape } from "../../src/data/values.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, Automation, ServiceDefinition } from "../../src/dsl/definition.ts";
 import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
@@ -50,9 +41,6 @@ import type {
   Reply,
 } from "./protocol.generated.ts";
 
-/** Writes a value that spec code made for `shape` as Lean holds it. */
-const encode = (shape: Shape, value: unknown): Json => written(objectOf(shape), value);
-
 /** The Keys of Lean's: the owner, if any, and what createKey returns next by entity. */
 const keysOf = ({ owner, next }: LeanKeys): Keys => ({
   ...(owner === undefined ? {} : { owner }),
@@ -75,16 +63,6 @@ const idOf = (id: InstanceId): InstanceId => {
 const decodeValue = (schema: z.ZodType, value: unknown): unknown => bagged(schema, fromJson(schema, value));
 
 const decode = (shape: Shape, value: unknown): Fields => decodeValue(objectOf(shape), value) as Fields;
-
-/** Decodes `value` when it matches `shape` with no other fields, and returns undefined when it does not. */
-function decodeStrict(schema: Schema, shape: Shape, value: unknown): Fields | undefined | Failed {
-  try {
-    const decoded = strictObjectOf(shape).safeParse(value);
-    return decoded.success ? (bagged(strictObjectOf(shape), decoded.data) as Fields) : undefined;
-  } catch (error) {
-    return new Failed({ kind: "thrown", schema }, thrown(error));
-  }
-}
 
 /** Decodes each field of `row` by its schema in `shape`; a field that `shape` lacks stays as it is. */
 const decodeFields = (shape: Shape, row: Fields): Fields =>
@@ -182,14 +160,6 @@ export class RunFunctions implements Answering {
     });
     this.records = source({});
     this.before = source({ beforeEventWrite: true });
-  }
-
-  /** The payload of a decided event as its schema writes it, or as plain JSON for an event that the spec lacks. */
-  private writtenPayload(e: Emit): Json {
-    const defined = this.spec.definitions.some((d) => d.definition.kind === "event" && sameRef(d, e.event));
-    return defined
-      ? written(objectOf(this.functions.shape({ kind: "payload", event: e.event })), e.payload)
-      : plain(e.payload);
   }
 
   private decoded(schema: Schema, value: unknown): Fields {
@@ -335,19 +305,6 @@ export class RunFunctions implements Answering {
           type: "unordered",
           value: value as Json,
         }));
-      case "normalize": {
-        const schema = q.schema;
-        // The value arrives as JSON, so it is decoded first.
-        return this.replied(decodeStrict(schema, this.functions.shape(schema), q.value), (decoded) =>
-          decoded === undefined
-            ? { type: "normalize" }
-            : this.replied(this.functions.normalize(schema, decoded), (normalized) =>
-                "error" in normalized
-                  ? { type: "normalize" }
-                  : { type: "normalize", value: normalized.encoded as Json },
-              ),
-        );
-      }
       case "binding":
         return this.replied(
           this.functions.binding(q.command, q.binding, this.ownInputOf(q.command, q.input), this.records, now(q)),
@@ -366,10 +323,7 @@ export class RunFunctions implements Answering {
       case "decide":
         return this.replied(
           this.functions.decide(q.command, this.ownInputOf(q.command, q.input), this.records, now(q)),
-          (decided) => ({
-            type: "decide",
-            groups: decided.map((g) => g.map((e) => ({ event: e.event, payload: this.writtenPayload(e) }))),
-          }),
+          (decided) => ({ type: "decide", groups: decided.map((g) => [...g]) }),
         );
       case "ensures":
         return this.replied(
@@ -417,13 +371,7 @@ export class RunFunctions implements Answering {
         // Lean's Value has no undefined, so an output that author code left undefined is sent as null.
         return this.replied(
           this.functions.resolve(q.query, this.ownInputOf(q.query, q.input), this.records, now(q)),
-          (output) => ({
-            type: "resolve",
-            output: written(
-              objectOf(this.functions.shape({ kind: "output", definition: { service: this.service, name: q.query } })),
-              output,
-            ),
-          }),
+          (output) => ({ type: "resolve", output }),
         );
       case "automationBinding":
         return this.replied(
@@ -532,7 +480,7 @@ export class RunFunctions implements Answering {
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.offers(scope, this.records, q.control, access), (payloads) => ({
             type: "offers",
-            payloads: payloads.map((p) => p.encoded as Json),
+            payloads: [...payloads],
           })),
         );
       case "showInput":
@@ -546,22 +494,26 @@ export class RunFunctions implements Answering {
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.items(scope, this.records, access), (keys) => ({
             type: "items",
-            keys: keys.map((k) => ({ key: k.encoded as Json, canonical: JSON.parse(k.encodedKey) as Json })),
+            keys: keys.map((key) => ({ key, canonical: JSON.parse(canonicalJson(key)) as Json })),
           })),
         );
       case "defaults":
-        return this.replied(this.functions.defaults(q.schema), (row) => ({
-          type: "defaults",
-          defaults: row.encoded as Json,
-        }));
+        return this.replied(this.functions.defaults(q.schema), (defaults) => ({ type: "defaults", defaults }));
       case "close":
         return this.scoped(q.scope, (scope, access) =>
-          this.replied(this.functions.close(scope, this.records, access), ({ output, failed }) => ({
-            type: "close",
-            output: encode(this.functions.chartOf(chartOf(scope.id)).named.definition.output ?? {}, output),
-            ...(failed === undefined ? {} : { failed }),
-          })),
+          this.replied(this.functions.close(scope, this.records, access), (output) => ({ type: "close", output })),
         );
+      case "closeEnsures": {
+        const chart = this.functions.chartOf(q.screen).named.definition;
+        return this.replied(
+          this.functions.closeEnsures(
+            q.screen,
+            decode(chart.input ?? {}, q.input),
+            decode(chart.output ?? {}, q.output),
+          ),
+          failed("closeEnsures"),
+        );
+      }
       case "comparableValue":
       case "served":
         throw new Error(`tazuna-lean sent ${JSON.stringify(q)} to the spec functions`);

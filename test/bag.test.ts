@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { type Bag, BagValue, bagValues, enumerations, NotOnly, reversedBags } from "../src/data/bag.ts";
-import { bag, bagged, sorted } from "../src/data/collections.ts";
+import { bag, bagged, sortCollections } from "../src/data/collections.ts";
+import { jsonSchema } from "../src/data/jsonSchema.ts";
 
 const bagOf = <T>(items: readonly T[]): Bag<T> => new BagValue(() => items);
 const numbers = (bag: Bag<number>) => bag.sortedBy((n) => n).map((run) => [run.min((n) => n), run.size]);
@@ -116,9 +117,12 @@ test("enumerations counts the callbacks that a Bag of two or more values runs", 
   assert.equal(enumerations(), before + 1);
 });
 
-test("sorted and bagged order a bag in an object's catchall like one in its shape", () => {
+test("sortCollections and bagged order a bag in an object's catchall like one in its shape", () => {
   const schema = z.object({ named: bag(z.int()) }).catchall(bag(z.int()));
-  assert.deepEqual(sorted(schema, { named: [2, 1], other: [3, 1, 2] }), { named: [1, 2], other: [1, 2, 3] });
+  assert.deepEqual(sortCollections(jsonSchema(schema), { named: [2, 1], other: [3, 1, 2] }), {
+    named: [1, 2],
+    other: [1, 2, 3],
+  });
   const received = bagged(schema, { other: [1, 2] }) as { readonly other: unknown };
   assert.ok(received.other instanceof BagValue);
 });

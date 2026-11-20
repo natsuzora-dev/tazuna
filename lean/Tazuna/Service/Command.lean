@@ -7,16 +7,9 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def normalizeEmits [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (command : String) (emits : List Emit) :
-    m (Except Fault (List Emit)) :=
-  emits.foldlM (init := .ok []) fun acc e => do
-    match acc with
-    | .error r => pure (.error r)
-    | .ok done =>
-      match ← fs.normalize (.payload e.event) (← st.sorted (.payload e.event) e.payload) with
-      | .error issue => pure (.error (issueViolation (st.ref command) issue))
-      | .ok (some payload) => pure (.ok (done ++ [{ e with payload }]))
-      | .ok none => pure (.error (.emittedPayloadSchema (st.ref command) e.event))
+/-- The events with their payloads sorted, as the run keeps what decide wrote. -/
+def sortEmits [Monad m] [MonadNote m] (st : Service) (emits : List Emit) : m (List Emit) :=
+  emits.mapM fun e => do pure { e with payload := ← st.sorted (.payload e.event) e.payload }
 
 /-- `xs` cut into consecutive lists of the lengths `lengths`. -/
 def chunks {α : Type} : List Nat → List α → List (List α)
@@ -27,12 +20,12 @@ def chunks {α : Type} : List Nat → List α → List (List α)
 def Emit.text (e : Emit) : String := (ToValue.toValue e).canonical
 
 /--
-The groups of `decided` with the events of `normalized`, the normalized flattening of `decided`, each group in the
+The groups of `decided` with the events of `sorted`, the sorted flattening of `decided`, each group in the
 order of its texts. A group has no order, so the run writes its events in this order; `sameRecordInBag` keeps the
 records from depending on it.
 -/
-def orderedGroups (decided : List (List Emit)) (normalized : List Emit) : List (List Emit) :=
-  (chunks (decided.map (·.length)) normalized).map (·.mergeSort fun a b => decide (a.text ≤ b.text))
+def orderedGroups (decided : List (List Emit)) (sorted : List Emit) : List (List Emit) :=
+  (chunks (decided.map (·.length)) sorted).map (·.mergeSort fun a b => decide (a.text ≤ b.text))
 
 /-- A record that two events of one group write, as its entity and key. -/
 def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) :
@@ -69,17 +62,17 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
     | .ok (some r) => pure (.rejected r)
     | .ok none =>
       match ← fs.decide name input records now with
-      | .error e => pure (.halted [issueViolation (st.ref name) e])
+      | .error e =>
+        pure (.halted [issueViolation (st.ref name) e fun
+          | .payload event => .emittedPayloadSchema (st.ref name) event
+          | _ => .exception (some (st.ref name))])
       | .ok decided =>
       match decided.flatten.find? (!st.lists name ·) with
       | some e =>
         let event := (st.«structure».definitions.find? fun d => d.kind == "event" && d.ref == e.event).map (·.ref)
         pure (.halted [.unlistedEmittedEvent (st.ref name) event])
       | none =>
-      match ← normalizeEmits st fs name decided.flatten with
-      | .error v => pure (.halted [v])
-      | .ok normalized =>
-      let groups := orderedGroups decided normalized
+      let groups := orderedGroups decided (← sortEmits st decided.flatten)
       match twiceWritten st records groups with
       | some (entity, key) => pure (.halted [.sameRecordInBag (st.ref name) (st.ref entity) key])
       | none =>

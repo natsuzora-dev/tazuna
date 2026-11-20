@@ -20,8 +20,8 @@ checks (Malformed.defaultSchema).
 -/
 def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) : Processing → m Processing :=
   withMachine owner fun o r => do
-    let context ← expectFound s!"defaults of the copy context of {map}"
-      (← fs.defaults (.mapContext (st.ref o.chart.name) map)).toOption
+    let schema := .mapContext (st.ref o.chart.name) map
+    let context ← st.sorted schema (← expectFound s!"defaults of the copy context of {map}" (← fs.defaults schema).toOption)
     let id := .copy o.id map encodedKey
     let copy : Instance := { chart := o.chart, id, context, input := o.input, itemKey := some key }
     let started : State := { r.state with copies := r.state.copies.filter (·.id != id) ++ [copy] }
@@ -44,6 +44,11 @@ def newKeys (current : List Value) (keys : List (Value × Value)) : List (Value 
 def sortItemKeys (keys : List (Value × Value)) : List (Value × Value) :=
   keys.mergeSort fun a b => decide (a.2.canonical ≤ b.2.canonical)
 
+/-- The item keys and their canonical values, sorted by the key schema of the map state `map` of `chart`. -/
+def sortedItems (st : Service) (chart map : String) (items : List (Value × Value)) : m (List (Value × Value)) := do
+  let schema := .mapKey (st.ref chart) map
+  pure ((← items.mapM (st.sorted schema ·.1)).zip (← items.mapM (st.sorted schema ·.2)))
+
 /-- The processing after map state `map` syncs its copies with its items, and whether anything changed. -/
 def syncMap (st : Service) (step : Nat) (owner : InstanceId) (r : Processing) (map : String) : m (Processing × Bool) := do
   if r.halted then pure (r, false) else
@@ -56,7 +61,7 @@ def syncMap (st : Service) (step : Nat) (owner : InstanceId) (r : Processing) (m
       pure (r.report (.fault (issueViolation (st.ref o.chart.name) e fun _ =>
         .itemsSchema (st.ref o.chart.name) map)), true)
     | .ok items =>
-      let keys := sortItemKeys items
+      let keys := sortItemKeys (← sortedItems st o.chart.name map items)
       let current := o.copyKeysOf map
       let itemKeys := keys.map (·.2)
       match firstDuplicate (·.2) keys with

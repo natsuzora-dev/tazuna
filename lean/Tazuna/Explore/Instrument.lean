@@ -253,7 +253,6 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
 def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where
   parse a b := f (fs.parse a b)
   unordered a b := f (fs.unordered a b)
-  normalize a b := f (fs.normalize a b)
   binding a b c d e := f (fs.binding a b c d e)
   requirement a b c d e := f (fs.requirement a b c d e)
   inputRequirement a b c := f (fs.inputRequirement a b c)
@@ -280,6 +279,7 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   items a b := f (fs.items a b)
   defaults a := f (fs.defaults a)
   close a b := f (fs.close a b)
+  closeEnsures a b c := f (fs.closeEnsures a b c)
 
 def liftFunctions {m n : Type → Type} [MonadLiftT m n] (fs : Functions m) : Functions n := fs.hoist liftM
 
@@ -332,8 +332,8 @@ def stepCollect (scope : Option Scope) : StateT Collect m Unit := do
   modify (·.callAccess scope parts a)
 
 /--
-Audits a query's output as auditCollect does, comparing the comparable values of the normalized outputs. An output that
-fails its schema, or whose comparable value an Issue stops, needs no audit, because the run reports it.
+Audits a query's output as auditCollect does, comparing the comparable values of the sorted outputs. An output whose
+comparable value an Issue stops needs no audit, because the run reports it.
 -/
 def resolveCollect (name : String) (input : Value) (records : Records) (now : Time) (r : Except Issue Value) :
     StateT Collect m Unit := do
@@ -341,11 +341,11 @@ def resolveCollect (name : String) (input : Value) (records : Records) (now : Ti
   let .ok output := r | return
   unless ← ifs.lastEnumerated do return
   if st.ref name ∈ (← get).reportedOrder then return
-  let .ok (some output) ← normalizeOutput (m := m) st fs name output | return
+  let output ← st.sorted (m := m) (.output (st.ref name)) output
   let .ok original ← fs.comparable name (.fulfilled output) | return
   let exception := reportOrder (st.ref name) (BagOrderDependent.reversedException (st.ref name) "resolve").toViolation
   let .ok raw ← ifs.reversed.resolve name input records now | exception
-  let .ok (some reversed) ← normalizeOutput (m := m) st fs name raw | exception
+  let reversed ← st.sorted (m := m) (.output (st.ref name)) raw
   let .ok reordered ← fs.comparable name (.fulfilled reversed) | exception
   unless original == reordered do reportOrder (st.ref name) (BagOrderDependent.reversedResult (st.ref name) "resolve").toViolation
 
@@ -353,9 +353,8 @@ def decideCollect (name : String) (records : Records) (decided : Except Issue (L
     StateT Collect m Unit := do
   let .ok decided := decided | pure ()
   if decided.flatten.any (!st.lists name ·) then return
-  match ← normalizeEmits (m := m) st fs name decided.flatten with
-  | .ok normalized => modify (·.stepAccess (writesOf st records (orderedGroups decided normalized).flatten).values)
-  | .error _ => pure ()
+  let sorted ← sortEmits (m := m) st decided.flatten
+  modify (·.stepAccess (writesOf st records (orderedGroups decided sorted).flatten).values)
 
 /-- The texts in code-point order, which compare two lists as multisets. -/
 def sortedTexts (texts : List String) : List String := texts.mergeSort fun a b => decide (a ≤ b)
@@ -398,10 +397,13 @@ def groupTexts (groups : List (List Emit)) : List (List String) := groups.map fu
 def sameValue (a b : Value) : Bool := a.canonical == b.canonical
 
 /--
-The answer `v` with its collections sorted by `schema`, as the run sorts it before it keeps it. A missing schema is the
-run's internal error (Service.sorted), so `v` stays as it is then.
+The emits with their payloads sorted, as sortEmits sorts them. An event that the spec lacks has no schema; the run
+reports it before it sorts.
 -/
-def sortedBy (schema : Option Value) (v : Value) : Value := (schema.map (sortCollections · v)).getD v
+def sortedEmits (st : Service) (groups : List (List Emit)) : List (List Emit) :=
+  groups.map (·.map fun e => match st.schemaOf (.payload e.event) with
+    | some schema => { e with payload := sortCollections schema e.payload }
+    | none => e)
 
 /--
 Functions that return the same values as `fs`, collect what each call reads and writes, and audit the answers of the
@@ -415,6 +417,16 @@ def instrument : Functions (StateT Collect m) :=
   let audit {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
       (call : Functions m → m (Except ε α)) (same : α → α → Bool) :=
     auditBy collect definition function call fun a b => .of (same a b)
+  -- The run sorts these answers by `schema` before it keeps them, and a schema that the structure lacks is its internal
+  -- error, so the audit compares them sorted and stops on the same error.
+  let auditSorted {ε α : Type} (collect : StateT Collect m Unit) (definition : Spec.Ref) (function : String)
+      (call : Functions m → m (Except ε α)) (schemas : List (Option Value)) (same : List Value → α → α → Sameness) :=
+    observe (call fs) fun r => do
+      let found ← schemas.mapM fun schema => (expectFound s!"a schema of a {function} answer" schema : m Value)
+      auditCollect ifs collect definition function call (same found) r
+  let sortedValue (found : List Value) (a b : Value) : Sameness :=
+    let sort := sortCollections (found.headD .null)
+    .of (sameValue (sort a) (sort b))
   let collect (scope : Option Scope) := stepCollect ifs scope
   { liftFunctions fs with
     binding := fun name b input records now =>
@@ -426,8 +438,8 @@ def instrument : Functions (StateT Collect m) :=
     decide := fun name input records now =>
       observe (fs.decide name input records now) fun r => do
         auditCollect ifs (collect none) (st.ref name) "decide" (·.decide name input records now)
-          (fun a b => .of (groupTexts a == groupTexts b)) r
-        decideCollect st fs name records r
+          (fun a b => .of (groupTexts (sortedEmits st a) == groupTexts (sortedEmits st b))) r
+        decideCollect (m := m) st name records r
     ensures := fun name input before after now =>
       audit (pure ()) (st.ref name) "ensures" (·.ensures name input before after now) (· == ·)
     queryEnsures := fun name input output records =>
@@ -444,39 +456,54 @@ def instrument : Functions (StateT Collect m) :=
     automationGuard := fun name c payload records now =>
       audit (collect none) (st.ref name) "automationGuard" (·.automationGuard name c payload records now) (· == ·)
     react := fun name payload records now keys =>
-      auditBy (collect none) (st.ref name) "react" (·.react name payload records now keys) (sameMade keys)
+      auditSorted (collect none) (st.ref name) "react" (·.react name payload records now keys)
+        [(st.automations.find? (·.name == name)).bind fun a => st.schemaOf (.input a.sends.ref)]
+        fun found a b => sameMade keys (sortCollections (found.headD .null) a.1, a.2) (sortCollections (found.headD .null) b.1, b.2)
     initialContext := fun machine input =>
-      let sorted := sortedBy (st.schemaOf (.context (st.ref machine)))
-      audit (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input)
-        fun a b => sameValue (sorted a) (sorted b)
+      auditSorted (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input)
+        [st.schemaOf (.context (st.ref machine))] sortedValue
     guard := fun scope records t c extra =>
       audit (collect (some scope)) (st.ref scope.machine) "guard" (·.guard scope records t c extra) (· == ·)
     assign := fun scope records a extra keys =>
       let chart := st.ref scope.machine
-      let made (x : Value × Option Value × List String) : Value × List String :=
-        let copy := scope.id.map?.bind fun map => st.schemaOf (.mapContext chart map)
-        (.arr [sortedBy (st.schemaOf (.context chart)) x.1, (x.2.1.map (sortedBy copy)).getD .null], x.2.2)
-      auditBy (collect (some scope)) chart "assign" (·.assign scope records a extra keys)
-        fun a b => sameMade keys (made a) (made b)
+      let made (found : List Value) (x : Value × Option Value × List String) : Value × List String :=
+        let copy := (x.2.1.map (sortCollections (found.getD 1 .null))).getD .null
+        (.arr [sortCollections (found.headD .null) x.1, copy], x.2.2)
+      auditSorted (collect (some scope)) chart "assign" (·.assign scope records a extra keys)
+        (st.schemaOf (.context chart) :: (scope.id.map?.map fun map => st.schemaOf (.mapContext chart map)).toList)
+        fun found a b => sameMade keys (made found a) (made found b)
     input := fun scope records a keys =>
-      auditBy (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys) (sameMade keys)
+      auditSorted (collect (some scope)) (st.ref scope.machine) "input" (·.input scope records a keys)
+        [st.schemaOf (.input a.ref)]
+        fun found a b => sameMade keys (sortCollections (found.headD .null) a.1, a.2) (sortCollections (found.headD .null) b.1, b.2)
     held := fun scope records n edge extra =>
-      let sorted := sortedBy (((st.state? (st.ref scope.machine) n).bind (·.held)).map (·.schema))
-      audit (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records n edge extra)
-        fun a b => sameValue (sorted a) (sorted b)
+      observe (fs.held scope records n edge extra) fun r => do
+        let held ← (expectFound s!"held schema of {n}" ((st.state? (st.ref scope.machine) n).bind (·.held)) : m _)
+        let sort := sortCollections held.schema
+        auditCollect ifs (collect (some scope)) (st.ref scope.machine) "held" (·.held scope records n edge extra)
+          (fun a b => .of (sameValue (sort a) (sort b))) r
     items := fun scope records =>
-      audit (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
-        fun a b => textSet (a.map (·.2.canonical)) == textSet (b.map (·.2.canonical))
+      auditSorted (collect (some scope)) (st.ref scope.machine) "items" (·.items scope records)
+        [scope.state.bind fun map => st.schemaOf (.mapKey (st.ref scope.machine) map)]
+        fun found a b =>
+          let texts (keys : List (Value × Value)) := textSet (keys.map (sortCollections (found.headD .null) ·.2 |>.canonical))
+          .of (texts a == texts b)
     offers := fun scope records control =>
-      audit (collect (some scope)) (st.ref scope.machine) "offers" (·.offers scope records control)
-        fun a b => textSet (a.map (·.canonical)) == textSet (b.map (·.canonical))
+      auditSorted (collect (some scope)) (st.ref scope.machine) "offers" (·.offers scope records control)
+        [st.schemaOf (.control (st.ref scope.machine) control)]
+        fun found a b =>
+          let texts (payloads : List Value) := textSet (payloads.map (sortCollections (found.headD .null) · |>.canonical))
+          .of (texts a == texts b)
     showInput := fun scope records a =>
-      audit (collect (some scope)) (st.ref scope.machine) "showInput" (·.showInput scope records a) sameValue
+      auditSorted (collect (some scope)) (st.ref scope.machine) "showInput" (·.showInput scope records a)
+        [st.schemaOf (.input a.ref)] sortedValue
     deadlineAt := fun scope records name =>
       audit (collect (some scope)) (st.ref scope.machine) "deadlineAt" (·.deadlineAt scope records name) (· == ·)
     close := fun scope records =>
-      audit (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
-        fun a b => sameValue a.1 b.1 && a.2 == b.2 }
+      auditSorted (collect (some scope)) (st.ref scope.machine) "close" (·.close scope records)
+        [st.schemaOf (.output (st.ref scope.machine))] sortedValue
+    closeEnsures := fun screen input output =>
+      audit (pure ()) (st.ref screen) "closeEnsures" (·.closeEnsures screen input output) (· == ·) }
 
 /--
 Whether step `earlier` leads to step `later`. Nested steps are spans of their outer step, so only steps that write

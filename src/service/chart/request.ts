@@ -3,7 +3,7 @@ import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields, Json } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { ref } from "../basic.ts";
-import { Failed, firstFalse, issueViolation, sortedDecoded } from "../functions.ts";
+import { Failed, firstFalse, issueViolation, sorted, sortedDecoded } from "../functions.ts";
 import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {
@@ -38,7 +38,8 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
   const schema = { kind: "context", chart: definition } as const;
   const defaults = r.functions.defaults(schema);
   if (defaults instanceof Failed) return fault(defaults);
-  const parsed = r.functions.parse(schema, merged(defaults.encoded, given));
+  // Parsing reads a sortedBy array's key order, and it fills in nested defaults in the order they were built.
+  const parsed = r.functions.parse(schema, sorted(r.st, schema, merged(defaults, given)));
   if (parsed instanceof Failed) return fault(parsed);
   if ("error" in parsed)
     return halt(withExtra({ kind: "Fault.initialContextSchema", definition, data: {} }, { error: parsed.error }));
@@ -80,7 +81,7 @@ function request(r: Processing, instance: Instance, state: string, a: Activity, 
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
   createKeys(r.state, given.created);
-  const { input } = given;
+  const input = sorted(r.st, { kind: "input", definition: target }, given.input);
   const requester: Requester = { kind: "state", machine: instance.id, state };
   if (isOwn(a, r.st.service)) {
     r.queue.round.push({
@@ -107,7 +108,8 @@ function openScreen(r: Processing, step: number, instance: Instance, state: stri
   const records = new LazyRecordSource(r.state.records, r.note);
   const given = r.functions.input(scope, records, a, nextKeys(r.state), new NoteAccess(r, scope));
   if (given instanceof Failed) halt(issueViolation(definition, given));
-  const parsed = r.functions.parse({ kind: "input", definition: screen }, given.input);
+  const schema = { kind: "input", definition: screen } as const;
+  const parsed = r.functions.parse(schema, sorted(r.st, schema, given.input));
   if (parsed instanceof Failed) halt(issueViolation(screen, parsed));
   if ("error" in parsed)
     halt(withExtra({ kind: "Fault.inputSchema", definition, data: { target: screen } }, { error: parsed.error }));

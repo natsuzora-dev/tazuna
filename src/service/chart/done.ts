@@ -1,6 +1,6 @@
 import { finished } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
-import { Failed, issueViolation } from "../functions.ts";
+import { Failed, issueViolation, sorted } from "../functions.ts";
 import { LazyRecordSource } from "../records.ts";
 import { failedEnsures, halt, type Instance, NoteAccess, reportAll, scopeOf, startQueued } from "../state.ts";
 import { endWith, exitFuel } from "./exit.ts";
@@ -24,7 +24,11 @@ export function closeFinal(r: Processing, instance: Instance, step: number): voi
   const closed = r.functions.close(scope, new LazyRecordSource(r.state.records, r.note), new NoteAccess(r, scope));
   if (closed instanceof Failed)
     halt(issueViolation(definition, closed, () => ({ kind: "Fault.screenOutputSchema", definition, data: {} })));
-  const { output, failed } = closed;
+  const schema = { kind: "output", definition } as const;
+  const encoded = sorted(r.st, schema, closed);
+  const output = r.functions.decode(schema, encoded);
+  const failed = r.functions.closeEnsures(instance.chart.name, instance.input, output);
+  if (failed instanceof Failed) halt(issueViolation(definition, failed));
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
   endWith(r, instance.id, exitFuel(r.st));
   const { id } = instance;

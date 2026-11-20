@@ -69,7 +69,6 @@ theorem Agrees.mapM {α β : Type} {f : α → StateT C Id β} {g : α → Id β
 structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : Prop where
   parse : ∀ a b, Agrees (fsI.parse a b) (fs.parse a b)
   unordered : ∀ a b, Agrees (fsI.unordered a b) (fs.unordered a b)
-  normalize : ∀ a b, Agrees (fsI.normalize a b) (fs.normalize a b)
   binding : ∀ a b c d e, Agrees (fsI.binding a b c d e) (fs.binding a b c d e)
   requirement : ∀ a b c d e, Agrees (fsI.requirement a b c d e) (fs.requirement a b c d e)
   inputRequirement : ∀ a b c, Agrees (fsI.inputRequirement a b c) (fs.inputRequirement a b c)
@@ -96,6 +95,7 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   items : ∀ a b, Agrees (fsI.items a b) (fs.items a b)
   defaults : ∀ a, Agrees (fsI.defaults a) (fs.defaults a)
   close : ∀ a b, Agrees (fsI.close a b) (fs.close a b)
+  closeEnsures : ∀ a b c, Agrees (fsI.closeEnsures a b c) (fs.closeEnsures a b c)
 
 theorem note_agrees [MonadNote (StateT C Id)] (n : Note) :
     Agrees (MonadNote.note n : StateT C Id Unit) (MonadNote.note n : Id Unit) := by
@@ -182,12 +182,11 @@ theorem exitOne_agrees (fuel : Nat) (name : InstanceId) (n : String) (r : Proces
 theorem closeFinal_agrees (step : Nat) (name : InstanceId) (r : Processing) :
     Agrees (closeFinal fsI st step name r) (closeFinal fs st step name r) := by
   unfold closeFinal; refine withMachine_agrees (fun i r => ?_) r
-  agree [h.close, endWith_agrees (exitOne_agrees h _)]
+  agree [h.close, sorted_agrees, h.closeEnsures, endWith_agrees (exitOne_agrees h _)]
 
-omit [MonadNote (StateT C Id)] in
 theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (request fsI st step name state a r) (request fs st step name state a r) := by
-  unfold request; refine withMachine_agrees (fun i r => ?_) r; agree [h.input]
+  unfold request; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, sorted_agrees]
 
 theorem initialContextOf_agrees (chart : String) (input : Value) :
     Agrees (initialContextOf fsI st chart input) (initialContextOf fs st chart input) := by
@@ -195,7 +194,7 @@ theorem initialContextOf_agrees (chart : String) (input : Value) :
 
 theorem openScreen_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (openScreen fsI st step name state a r) (openScreen fs st step name state a r) := by
-  unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
+  unfold openScreen; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, sorted_agrees, h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), initialContextOf_agrees h]
 
 theorem activate_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (activate fsI st step name state a r) (activate fs st step name state a r) := by
@@ -261,7 +260,7 @@ theorem firstLevel_agrees (s : State) (extra : Extra) (levels : List (Instance �
   | cons l rest ih => unfold firstLevel; agree [choose_agrees h, ih]
 
 theorem reaches_agrees (c : Instance) (payload : Value) : Agrees (reaches fsI st c payload) (reaches fs st c payload) := by
-  unfold reaches copyKey; agree [h.normalize]
+  unfold reaches copyKey; agree [h.parse, sorted_agrees]
 
 theorem reachedCopies_agrees (s : State) (top : Instance) (payload : Value) :
     Agrees (reachedCopies fsI st s top payload) (reachedCopies fs st s top payload) := by
@@ -282,7 +281,7 @@ theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (ext
 
 theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) (r : Processing) :
     Agrees (startCopy fsI st step owner map key encodedKey r) (startCopy fs st step owner map key encodedKey r) := by
-  unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.defaults, expectFound_agrees, enter_agrees h]
+  unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.defaults, expectFound_agrees, sorted_agrees, enter_agrees h]
 
 theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     Agrees (exitLeftCopy fsI st owner map itemKeys r k) (exitLeftCopy fs st owner map itemKeys r k) := by
@@ -290,7 +289,11 @@ theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List
 
 theorem syncMap_agrees (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     Agrees (syncMap fsI st step owner r map) (syncMap fs st step owner r map) := by
-  unfold syncMap; agree [h.items, exitLeftCopy_agrees h, unlessHalted_agrees, startCopy_agrees h]
+  unfold syncMap
+  have hs (chart : String) (items : List (Value × Value)) :
+      Agrees (sortedItems st chart map items : StateT C Id _) (sortedItems st chart map items : Id _) := by
+    unfold sortedItems; agree [Agrees.mapM (fun _ => sorted_agrees _ _)]
+  agree [h.items, hs, exitLeftCopy_agrees h, unlessHalted_agrees, startCopy_agrees h]
 
 theorem syncCopies_agrees (step : Nat) (owner : InstanceId) (r : Processing) :
     Agrees (syncCopies fsI st step owner r) (syncCopies fs st step owner r) := by
@@ -366,9 +369,10 @@ theorem deliverAnswer_agrees (step : Nat) (p : Pending) (answer : Answer) (r : P
     Agrees (deliverAnswer fsI st step p answer r) (deliverAnswer fs st step p answer r) := by
   unfold deliverAnswer; agree [answerTo_agrees h]
 
-theorem normalizeEmits_agrees (name : String) (emits : List Emit) :
-    Agrees (normalizeEmits st fsI name emits) (normalizeEmits st fs name emits) := by
-  unfold normalizeEmits; agree [h.normalize, sorted_agrees]
+omit h in
+theorem sortEmits_agrees (emits : List Emit) :
+    Agrees (sortEmits st emits : StateT C Id (List Emit)) (sortEmits st emits : Id (List Emit)) := by
+  unfold sortEmits; exact Agrees.mapM (fun _ => by agree [sorted_agrees]) _
 
 theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
     Agrees (runWork st fsI s q step w) (runWork st fs s q step w) := by
@@ -377,12 +381,12 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
   obtain ⟨s, q⟩ := r
   cases w <;> unfold workBody <;>
     agree [firstFalse_agrees (fun _ => h.automationBinding _ _ _ _ _),
-      firstFalse_agrees (fun _ => h.automationGuard _ _ _ _ _), h.react, h.normalize, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
+      firstFalse_agrees (fun _ => h.automationGuard _ _ _ _ _), h.react, sorted_agrees, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
       withMachine_agrees, applyCompletion_agrees h]
 
 theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :
     Agrees (resolveChecked st fsI s name raw) (resolveChecked st fs s name raw) := by
-  unfold resolveChecked normalizeOutput; agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve, h.normalize,
+  unfold resolveChecked; agree [h.parse, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve,
     h.queryEnsures, sorted_agrees]
 
 theorem publishOne_agrees (s : State) (sub : Subscription) :
@@ -392,15 +396,12 @@ theorem publishOne_agrees (s : State) (sub : Subscription) :
 theorem publish_agrees (s : State) : Agrees (publish st fsI s) (publish st fs s) := by
   unfold publish; agree [publishOne_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem wantedShows_agrees (s : State) (i : Instance) : Agrees (wantedShows st fsI s i) (wantedShows st fs s i) := by
-  unfold wantedShows; agree [h.showInput]
+  unfold wantedShows; agree [h.showInput, sorted_agrees]
 
-omit [MonadNote (StateT C Id)] in
 theorem refresh_agrees (s : State) (owner : InstanceId) : Agrees (refresh st fsI s owner) (refresh st fs s owner) := by
   unfold refresh; agree [wantedShows_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem refreshScreens_agrees (s : State) : Agrees (refreshScreens st fsI s) (refreshScreens st fs s) := by
   unfold refreshScreens; agree [refresh_agrees h]
 
@@ -410,7 +411,7 @@ theorem offeringStates_agrees (s : State) (top : Instance) (control : String) (p
 
 theorem offered_agrees (s : State) (top : Instance) (control : String) (payload : Value) :
     Agrees (offered fsI st s top control payload) (offered fs st s top control payload) := by
-  unfold offered; agree [offeringStates_agrees h, h.offers]
+  unfold offered; agree [offeringStates_agrees h, h.offers, Agrees.mapM (fun _ => sorted_agrees _ _)]
 
 theorem acceptsOperation_agrees (s : State) (screen : InstanceId) (control : String) (payload : Value) :
     Agrees (acceptsOperation fsI st s screen control payload) (acceptsOperation fs st s screen control payload) := by
@@ -460,7 +461,7 @@ theorem requirementsRejection_agrees (records : Records) (now : Time) (name : St
 theorem evaluate_agrees (records : Records) (now : Time) (name : String) (raw : Value) :
     Agrees (evaluate st fsI records now name raw) (evaluate st fs records now name raw) := by
   unfold evaluate
-  agree [h.parse, requirementsRejection_agrees h, h.decide, normalizeEmits_agrees h, commandEnsures_agrees h,
+  agree [h.parse, requirementsRejection_agrees h, h.decide, sortEmits_agrees, commandEnsures_agrees h,
     integrityViolations_agrees h]
 
 theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Option LineId) (step : Nat) :

@@ -22,7 +22,7 @@ import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
 import { processCommand } from "./command.ts";
-import { Failed, firstFalse, issueViolation, passes } from "./functions.ts";
+import { Failed, firstFalse, issueViolation, passes, sorted } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
 import { type Emitted, idKey, type Line, sameLineId } from "./message.ts";
@@ -383,11 +383,14 @@ function startRecords(r: Processing): void {
   const { singles } = r.state.records;
   for (const name of r.st.singles) {
     if (singles.has(name)) continue;
-    const record = r.functions.defaults({ kind: "record", entity: ref(r.st, name) });
-    singles.set(
-      name,
-      expectFound(`defaults of the single entity ${name}`, record instanceof Failed ? undefined : record),
+    const schema = { kind: "record", entity: ref(r.st, name) } as const;
+    const record = r.functions.defaults(schema);
+    const defaults = expectFound(
+      `defaults of the single entity ${name}`,
+      record instanceof Failed ? undefined : record,
     );
+    const encoded = sorted(r.st, schema, defaults);
+    singles.set(name, { value: r.functions.decode(schema, encoded), encoded: encoded as Fields });
   }
 }
 
@@ -405,7 +408,7 @@ export function begin(r: Processing): void {
 /** Lean's operate: an operation on the screen instance `resource`. */
 export function operate(r: Processing, resource: InstanceId, key: string, payload: unknown): void {
   const screen = chartOf(resource);
-  const { decoded, found } = writeOperation(r, resource, screen, key, payload);
+  const { decoded, encoded, found } = writeOperation(r, resource, screen, key, payload);
   const data = { screen: ref(r.st, screen), control: key };
   const top =
     "top" in found
@@ -426,7 +429,7 @@ export function operate(r: Processing, resource: InstanceId, key: string, payloa
   const s = r.state;
   newMessage(s);
   const step = newStep(s, { kind: "root" });
-  settled(r, top.id, step, () => dispatch(r, top.id, key, decoded, step));
+  settled(r, top.id, step, () => dispatch(r, top.id, key, { decoded, encoded }, step));
   message(r);
 }
 
@@ -463,5 +466,5 @@ function writeOperation(r: Processing, resource: InstanceId, screen: string, key
         { error: parsed.error },
       ),
     );
-  return { decoded: parsed.value, found: accepting(r, resource, key, parsed) };
+  return { decoded: parsed.value, encoded: parsed.encoded as Json, found: accepting(r, resource, key, parsed) };
 }

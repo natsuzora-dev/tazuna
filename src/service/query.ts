@@ -1,15 +1,10 @@
 import { expectFound } from "../data/internalError.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
-import { withExtra } from "../data/violation.ts";
-import { ref, type Service } from "./basic.ts";
-import { type Checked, Failed, type Functions, firstFalse, issueViolation } from "./functions.ts";
+import { ref } from "./basic.ts";
+import { Failed, firstFalse, issueViolation, sorted } from "./functions.ts";
 import { recordSource } from "./records.ts";
-import { failedEnsures, halt, type Run, report, reportAll, write } from "./state.ts";
-
-export function normalizeOutput(st: Service, functions: Functions, name: string, output: unknown): Checked | Failed {
-  return functions.normalize({ kind: "output", definition: ref(st, name) }, output);
-}
+import { failedEnsures, halt, type Run, reportAll, write } from "./state.ts";
 
 export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
   const definition = ref(r.st, name);
@@ -34,15 +29,14 @@ export function resolveChecked(r: Run, name: string, encoded: unknown): Answer {
     );
   const records = recordSource(r.state.records, r.note);
   const resolved = r.functions.resolve(name, input, records, r.state.now);
-  if (resolved instanceof Failed) return halt(issueViolation(definition, resolved));
-  const output = normalizeOutput(r.st, r.functions, name, resolved);
-  if (output instanceof Failed) return halt(issueViolation(definition, output));
-  if ("error" in output)
-    return report(r.state, withExtra({ kind: "Fault.outputSchema", definition, data: {} }, { error: output.error }));
-  const failed = r.functions.queryEnsures(name, input, output.value, records);
+  if (resolved instanceof Failed)
+    return halt(issueViolation(definition, resolved, () => ({ kind: "Fault.outputSchema", definition, data: {} })));
+  const schema = { kind: "output", definition } as const;
+  const output = sorted(r.st, schema, resolved);
+  const failed = r.functions.queryEnsures(name, input, r.functions.decode(schema, output), records);
   if (failed instanceof Failed) return halt(issueViolation(definition, failed));
   if (failed !== undefined) reportAll(r.state, [failedEnsures(definition, failed)]);
-  return done({ result: "fulfilled", output: output.encoded }, { kind: "successAnswer", definition, data: {} });
+  return done({ result: "fulfilled", output }, { kind: "successAnswer", definition, data: {} });
 }
 
 /** Writes the changed answers of the open subscriptions. */
