@@ -782,15 +782,16 @@ within each domain.
 
 
 /--
-A restart ends every subscription for verify: after it, the first answer to a subscription that the same id opens again
-is kept, whatever answer the id had before.
+A restart ends every subscription for verify: the lines after it are compared as if no subscription were open, whatever
+answers came before. The first answer to a subscription that is open with no answer yet is kept.
 -/
-@[guarantee] theorem first_answer_after_restart_kept (r sub a : Line) (ls : List (Option Line))
-    (open_ : List (String × Option String)) (restartId id name to : String) (input : Value) (answer : Answer)
-    (hr : r.body = .restart .in restartId) (hs : sub.body = .subscribe .in id name input)
-    (ha : a.body = .answer .out to id answer) :
-    ∃ rest, withoutRepeatedAnswers.go (some r :: some sub :: some a :: ls) open_ =
-      some r :: some sub :: some a :: rest := by
-  simp [withoutRepeatedAnswers.go, hr, hs, ha]
+@[guarantee] theorem first_answer_after_restart_kept (r a : Line) (ls : List (Option Line))
+    (open_ : List (String × Option String)) (restartId id to : String) (answer : Answer)
+    (hr : r.body = .restart .in restartId) (ha : a.body = .answer .out id to answer) :
+    withoutRepeatedAnswers.go (some r :: ls) open_ = some r :: withoutRepeatedAnswers.go ls [] ∧
+      (open_.lookup to = some none → withoutRepeatedAnswers.go (some a :: ls) open_ =
+        some a :: withoutRepeatedAnswers.go ls (setAt open_ to (some (answerContent answer a.value).key))) := by
+  refine ⟨by simp [withoutRepeatedAnswers.go, hr], fun hl => ?_⟩
+  simp [withoutRepeatedAnswers.go, ha, hl]
 
 end Tazuna.Thm.Verify.Compare

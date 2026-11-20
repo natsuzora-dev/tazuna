@@ -655,156 +655,25 @@ event, a lost message, or a leaveInFlight or look line leaves every receiver as 
   simp [answerIn, hd, hp]
 
 
-/-- `w'` has the current time of `w`. -/
-def SameNow (w w' : World) : Prop := w'.now = w.now
-
-theorem now_report {w w' : World} (h : SameNow w w') (r : InvalidScenario) : SameNow w (w'.report r) := by
-  unfold SameNow World.report; split <;> exact h
-
-theorem now_post {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
-    (d : Spec.Ref) : SameNow w (w'.post o sender receiver l d) := by
-  unfold World.post; dsimp only; split
-  · exact now_report h _
-  · exact h
-
-theorem now_route {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (service : String) (lines : List Line) :
-    SameNow w (w'.route o service lines) := by
-  unfold World.route
-  refine foldl_keeps (SameNow w) _ (fun v l hv => ?_) _ _ h
-  split
-  · exact hv
-  · split <;> (try split) <;> first
-      | exact hv
-      | exact now_post hv _ _ _ _ _
-      | (refine foldl_keeps _ _ (fun u x hu => ?_) _ _ hv; dsimp only; split
-         · exact now_post hu _ _ _ _ _
-         · exact hu)
-
-theorem now_act {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (service : String)
-    (f : Service → Functions Id → State → Id State) : SameNow w (w'.act fsOf o service f) := by
-  unfold World.act; split
-  · exact h
-  · dsimp only [bind, pure, MonadActing.acting]
-    refine now_route ?_ _ _ _
-    exact h
-
-theorem now_recordSent {w w' : World} (h : SameNow w w') (i : Nat) (service : String) (before : Nat)
-    (id : Option LineId) : SameNow w (w'.recordSent i service before id) := by
-  unfold World.recordSent; split
-  · split <;> exact h
-  · exact h
-
-theorem now_setStatuses {w w' : World} (h : SameNow w w') (ks : List Nat) (status : Status) :
-    SameNow w (ks.foldl (fun w k => w.setStatus k status) w') :=
-  foldl_keeps (SameNow w) (fun w k => w.setStatus k status) (fun _ _ hv => hv) _ _ h
-
-theorem now_deliver {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (receiver : String) (ks : List Nat) :
-    SameNow w (w'.deliver fsOf o receiver ks) := by
-  unfold World.deliver; dsimp only; split <;> exact now_act (now_setStatuses h _ _) _ _ _
-
-theorem now_deliverCarried {w w' : World} (h : SameNow w w') (i : Nat) (ks : List Nat) :
-    SameNow w (w'.deliverCarried fsOf i ks) := by
-  unfold World.deliverCarried
-  simp only [bind, pure, foldlM_id]
-  refine foldl_keeps (SameNow w) _ (fun v r hv => ?_) _ _ (foldl_keeps (SameNow w) (fun w k => w.carry i k) (fun _ _ hu => hu) _ _ h)
-  split
-  · exact hv
-  · split
-    · exact now_setStatuses hv _ _
-    · refine foldl_keeps _ _ (fun u k hu => ?_) _ _ (now_deliver hv _ _ _)
-      split
-      · split
-        · exact hu
-        · exact foldl_keeps (SameNow w) _ (fun x _ hx => now_recordSent hx _ _ _ _) _ _ hu
-      · exact hu
-
-theorem now_resolving {α : Type} {w w' : World} (h : SameNow w w') (r : ExceptT InvalidScenario Id α)
-    (k : α → Id World) (hk : ∀ a, SameNow w (k a)) : SameNow w (w'.resolving r k) := by
-  unfold World.resolving; simp only [bind]; split
-  · exact now_report h _
-  · exact hk _
-
-theorem now_attempt {α : Type} {w w' : World} (h : SameNow w w') (r : Except InvalidScenario α)
-    (k : α → Id World) (hk : ∀ a, SameNow w (k a)) : SameNow w (w'.attempt r k) := by
-  unfold World.attempt; split
-  · exact now_report h _
-  · exact hk _
-
-theorem now_stated {w w' : World} (h : SameNow w w') (i : Nat) (msg : Message) : SameNow w (w'.stated i msg) := by
-  unfold World.stated; split
-  · exact now_report h _
-  · exact h
-
-theorem now_clientRequest {w w' : World} (h : SameNow w w') (i : Nat) (type : Scenario.RequestType) (target : Spec.Ref)
-    (input : Scenario.Template) (sameIdAs : Option Nat) :
-    SameNow w (w'.clientRequest fsOf i type target input sameIdAs) := by
-  unfold World.clientRequest
-  simp only [bind, pure]
-  split
-  · exact now_report h _
-  · refine now_resolving h _ _ fun v => ?_
-    (repeat' split) <;> first
-      | exact now_report h _
-      | exact now_recordSent (now_act h _ _ _) _ _ _ _
-
-theorem now_forEach {α : Type} {w w' : World} (h : SameNow w w') {xs : List α} {f : World → α → Id World}
-    (hf : ∀ v x, SameNow w v → SameNow w (f v x)) : SameNow w (w'.forEach xs f) :=
-  forEach_keeps (SameNow w) h fun v x _ hv => hf v x hv
-
-/-- Closes `SameNow w x` where `x` is built from `w` by steps that keep the current time. -/
-macro "now_tac" : tactic => `(tactic| repeat' (first
-  | contradiction
-  | assumption
-  | with_reducible apply now_report
-  | with_reducible apply now_stated
-  | with_reducible apply now_act
-  | with_reducible apply now_deliverCarried
-  | with_reducible apply now_clientRequest
-  | with_reducible refine now_resolving ?_ _ _ fun _ => ?_
-  | with_reducible refine now_attempt ?_ _ _ fun _ => ?_
-  | with_reducible refine now_forEach ?_ fun _ _ _ => ?_
-  | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
-  | exact rfl
-  | dsimp only
-  | split))
-
-/-- Only a clock line moves the current time of the simulation. -/
-@[guarantee] theorem only_clock_moves_time (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
-    (l : Scenario.Line) (hl : ∀ t, l ≠ .at t) : (w.line fsOf own lines i l).now = w.now := by
-  show SameNow w _
-  rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
-  · cases l with
-    | «at» t => exact absurd rfl (hl t)
-    | _ => simp only [World.take, bind, pure]; now_tac
-  · exact now_report rfl r
-
-
 /--
 A refuse line that names one request in flight answers the sender `unavailable`: the request is lost, and the line
-delivers the rejection to the sender.
+delivers the `refusal`, an `unavailable` answer in flight from the receiver to the sender.
 -/
 @[guarantee] theorem refuse_answers_unavailable (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
     (f : Scenario.Fact) (k : Nat) (msg : Message) (hk : (w.messagesOf fsOf i f).run = .ok [k])
     (hm : w.messages[k]? = some msg) (hs : msg.status = .inFlight) (ht : (requestTarget? msg.body).isSome = true)
     (hw : w.stopped = false) :
-    ∃ reply : Message, reply.sender = msg.receiver ∧ reply.receiver = msg.sender ∧
-      reply.body = .answer (receivedId msg.sender msg.id) (.rejected { kind := .unavailable }) ∧
-      w.take fsOf own lines i (.refuse f) =
-        let w' := w.setStatus k .lost
-        { w' with messages := w'.messages.push reply }.deliverCarried fsOf i [w.messages.size] := by
-  refine ⟨?reply, ?sender, ?receiver, ?body, ?take⟩
-  case take =>
-    have hn : (requestTarget? msg.body).isNone = false := by simpa [Option.isNone_iff_eq_none, Option.isSome_iff_ne_none] using ht
-    simp only [World.take, World.resolving, World.forEach, bind, pure, hk, foldlM_id, List.foldl_cons, List.foldl_nil,
-      hw, Bool.false_eq_true, ite_false, hm, hs, hn]
-    have hw' : w.halted.isSome = false ∧ (w.states.any fun x => x.2.halted.isSome) = false := by
-      simpa [World.stopped] using hw
-    simp only [bne_self_eq_false, Bool.false_eq_true, ite_false, World.stopped, hw'.1, hw'.2, Bool.or_false,
-      World.setStatus, Array.size_push, Array.size_modify, Nat.add_sub_cancel_left, List.range_one, List.map_cons,
-      List.map_nil, Nat.add_zero]
-    rfl
-  all_goals rfl
-
+    w.take fsOf own lines i (.refuse f) =
+      let w' := w.setStatus k .lost
+      { w' with messages := w'.messages.push (refusal msg i) }.deliverCarried fsOf i [w.messages.size] := by
+  have hn : (requestTarget? msg.body).isNone = false := by simpa [Option.isNone_iff_eq_none, Option.isSome_iff_ne_none] using ht
+  simp only [World.take, World.resolving, World.forEach, bind, pure, hk, foldlM_id, List.foldl_cons, List.foldl_nil,
+    hw, Bool.false_eq_true, ite_false, hm, hs, hn]
+  have hw' : w.halted.isSome = false ∧ (w.states.any fun x => x.2.halted.isSome) = false := by
+    simpa [World.stopped] using hw
+  simp only [bne_self_eq_false, Bool.false_eq_true, ite_false, World.stopped, hw'.1, hw'.2, Bool.or_false,
+    World.setStatus, Array.size_push, Array.size_modify, Nat.add_sub_cancel_left, List.range_one, List.map_cons,
+    List.map_nil, Nat.add_zero]
 
 /-- A running service whose state reported a halting `Fault` or `InvalidInput` stops the simulation. -/
 @[guarantee] theorem halting_finding_stops (w : World) (q : String) (s : State) (f : Finding)

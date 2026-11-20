@@ -1,5 +1,6 @@
 import Tazuna.Sim.Run
 import Tazuna.Thm.Sim.Run
+import Tazuna.Thm.Sim.Keeps
 import Tazuna.Thm.Service.Keys
 import Tazuna.Thm.Service.KeyGrowth
 import Tazuna.Thm.Guarantee
@@ -13,7 +14,7 @@ namespace Tazuna.Thm.Sim.Keys
 
 open Tazuna.Data Tazuna.Service Tazuna.Sim
 open Tazuna.Thm.Service.Keys Tazuna.Thm.Service.KeyGrowth
-open Tazuna.Thm.Data.Basic
+open Tazuna.Thm.Data.Basic Tazuna.Thm.Sim.Keeps
 
 /--
 A string that writtenKey? lets a scenario write is no createKey value of a keyed entity of a running service `p`,
@@ -37,101 +38,10 @@ in any state whose values `p` qualifies.
 
 variable {fsOf : String → Functions Id}
 
-/-- Every running service of `w'` keeps the createKey values that it has in `w`. -/
-def KeepsWorld (w w' : World) : Prop := ∀ p, KeepsKeys (w.state p) (w'.state p)
-
-theorem KeepsWorld.refl (w : World) : KeepsWorld w w := fun _ => .refl _
-
-theorem KeepsWorld.trans {a b c : World} (h₁ : KeepsWorld a b) (h₂ : KeepsWorld b c) : KeepsWorld a c :=
-  fun p => (h₁ p).trans (h₂ p)
-
-theorem keepsWorld_states {w w' w'' : World} (h : KeepsWorld w w') (hs : w''.states = w'.states) : KeepsWorld w w'' :=
-  fun p => by unfold World.state; rw [hs]; exact h p
-
-theorem keepsWorld_report {w w' : World} (h : KeepsWorld w w') (r : InvalidScenario) : KeepsWorld w (w'.report r) :=
-  keepsWorld_states h (by unfold World.report; split <;> rfl)
-
-theorem keepsWorld_post {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (sender receiver : String)
-    (l : Line) (definition : Spec.Ref) : KeepsWorld w (w'.post o sender receiver l definition) := by
-  unfold World.post; dsimp only; split
-  · exact keepsWorld_report h _
-  · exact keepsWorld_states h rfl
-
-theorem keepsWorld_route {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
-    (lines : List Line) : KeepsWorld w (w'.route o service lines) := by
-  unfold World.route
-  refine foldl_keeps (KeepsWorld w) _ (fun v l hv => ?_) _ _ h
-  dsimp only
-  (repeat' split) <;> first
-    | exact hv
-    | exact keepsWorld_post hv _ _ _ _ _
-    | (refine foldl_keeps (KeepsWorld w) _ (fun u x hu => ?_) _ _ hv
-       split <;> first | exact hu | exact keepsWorld_post hu _ _ _ _ _)
-
-theorem lookup_map_ne (l : List (String × State)) (k p : String) (t : State) (hp : (p == k) = false) :
-    (l.map fun (q, x) => if q == k then (q, t) else (q, x)).lookup p = l.lookup p := by
-  induction l with
-  | nil => rfl
-  | cons a l ih =>
-    obtain ⟨q, x⟩ := a
-    show List.lookup p ((if q == k then (q, t) else (q, x)) :: _) = List.lookup p ((q, x) :: l)
-    by_cases hq : (q == k) = true
-    · simp only [hq, ↓reduceIte]; rw [List.lookup_cons, List.lookup_cons]
-      have : (p == q) = false := by
-        have := beq_iff_eq.mp hq; subst this; exact hp
-      simp only [this]; exact ih
-    · simp only [Bool.not_eq_true] at hq; simp only [hq, Bool.false_eq_true, ↓reduceIte]
-      rw [List.lookup_cons, List.lookup_cons]
-      split
-      · rfl
-      · exact ih
-
-theorem lookup_map_eq (l : List (String × State)) (k : String) (t : State) :
-    (l.map fun (q, x) => if q == k then (q, t) else (q, x)).lookup k = (l.lookup k).map fun _ => t := by
-  induction l with
-  | nil => rfl
-  | cons a l ih =>
-    obtain ⟨q, x⟩ := a
-    show List.lookup k ((if q == k then (q, t) else (q, x)) :: _) = (List.lookup k ((q, x) :: l)).map _
-    by_cases hq : (q == k) = true
-    · have := beq_iff_eq.mp hq; subst this
-      simp only [hq, ↓reduceIte]; rw [List.lookup_cons, List.lookup_cons]; simp
-    · simp only [Bool.not_eq_true] at hq; simp only [hq, Bool.false_eq_true, ↓reduceIte]
-      rw [List.lookup_cons, List.lookup_cons]
-      have : (k == q) = false := by
-        subst_vars; simp only [beq_eq_false_iff_ne, ne_eq] at hq ⊢; exact fun h => hq h.symm
-      simp only [this]; exact ih
-
 theorem keeps_stepOrder (x : State) (o : List StepName) : KeepsKeys x { x with stepOrder := o } := .refl _
 
 theorem keeps_checkStepOrder (x : State) : KeepsKeys x (checkStepOrder x) := by
   unfold checkStepOrder; split <;> keys_leaf
-
-theorem keepsWorld_act {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (service : String)
-    (f : Service → Functions Id → State → Id State) (hf : ∀ st s, KeepsKeys s (f st (fsOf service) s))
-    : KeepsWorld w (w'.act fsOf o service f) := by
-  unfold World.act
-  split
-  · exact h
-  · rename_i st _
-    refine keepsWorld_route ?_ _ _ _
-    intro p
-    refine (h p).trans ?_
-    unfold World.state
-    dsimp only
-    by_cases hp : (p == service) = true
-    · have hp' : p = service := by simpa using hp
-      subst hp'
-      rw [lookup_map_eq]
-      cases hl : w'.states.lookup p with
-      | none => exact .refl _
-      | some x =>
-        simp only [Option.map_some, Option.getD_some]
-        split
-        · exact ((keeps_stepOrder x _).trans (hf _ _)).trans (keeps_checkStepOrder _)
-        · exact (keeps_stepOrder x _).trans (hf _ _)
-    · rw [lookup_map_ne _ _ _ _ (by simpa using hp)]
-      exact .refl _
 
 theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer) :
     KeepsKeys s (answerIn st fs s id to a) := by
@@ -192,138 +102,38 @@ theorem keeps_requestOf (type : Scenario.RequestType) (name : Spec.Ref) (id : Op
   · exact keeps_call _ _ _ _
   · exact keeps_subscribe _ _ _ _
 
-theorem keepsWorld_setStatus {w w' : World} (h : KeepsWorld w w') (k : Nat) (status : Status) :
-    KeepsWorld w (w'.setStatus k status) := keepsWorld_states h rfl
-
-theorem keepsWorld_carry {w w' : World} (h : KeepsWorld w w') (i k : Nat) : KeepsWorld w (w'.carry i k) :=
-  keepsWorld_states h rfl
-
-theorem keepsWorld_recordSent {w w' : World} (h : KeepsWorld w w') (i : Nat) (service : String) (before : Nat)
-    (id : Option LineId) : KeepsWorld w (w'.recordSent i service before id) :=
-  keepsWorld_states h (by unfold World.recordSent; (repeat' split) <;> rfl)
-
-theorem keepsWorld_stated {w w' : World} (h : KeepsWorld w w') (i : Nat) (msg : Message) :
-    KeepsWorld w (w'.stated i msg) := by
-  unfold World.stated; split
-  · exact keepsWorld_report h _
-  · exact keepsWorld_states h rfl
-
-theorem keepsWorld_nextId {w w' : World} (h : KeepsWorld w w') (peer name : String) :
-    KeepsWorld w (w'.nextId peer name).1 := keepsWorld_states h rfl
-
-theorem keepsWorld_resolving {α : Type} {w w' : World} (h : KeepsWorld w w') (r : ExceptT InvalidScenario Id α)
-    (k : α → Id World) (hk : ∀ a, KeepsWorld w (k a)) : KeepsWorld w (w'.resolving r k) := by
-  unfold World.resolving; simp only [bind]; split
-  · exact keepsWorld_report h _
-  · exact hk _
-
-theorem keepsWorld_attempt {α : Type} {w w' : World} (h : KeepsWorld w w') (r : Except InvalidScenario α)
-    (k : α → Id World) (hk : ∀ a, KeepsWorld w (k a)) : KeepsWorld w (w'.attempt r k) := by
-  unfold World.attempt; split
-  · exact keepsWorld_report h _
-  · exact hk _
-
-theorem keepsWorld_setStatuses {w w' : World} (h : KeepsWorld w w') (ks : List Nat) (status : Status) :
-    KeepsWorld w (ks.foldl (fun w k => w.setStatus k status) w') :=
-  foldl_keeps (KeepsWorld w) _ (fun _ k hv => keepsWorld_setStatus hv k status) _ _ h
-
-theorem keepsWorld_deliver {w w' : World} (h : KeepsWorld w w') (o : Scenario.Origin) (receiver : String)
-    (ks : List Nat) : KeepsWorld w (w'.deliver fsOf o receiver ks) := by
-  unfold World.deliver
-  dsimp only
-  split
-  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveFrom _ _ _ _ _ _)
-  · exact keepsWorld_act (keepsWorld_setStatuses h _ _) _ _ _ (fun st s => keeps_arriveAll _ _ _ _)
-
-theorem keepsWorld_deliverCarried {w w' : World} (h : KeepsWorld w w') (i : Nat) (ks : List Nat) :
-    KeepsWorld w (w'.deliverCarried fsOf i ks) := by
-  unfold World.deliverCarried
-  simp only [bind, pure, foldlM_id]
-  have hc : KeepsWorld w (ks.foldl (fun w k => w.carry i k) w') :=
-    foldl_keeps (KeepsWorld w) _ (fun v k hv => keepsWorld_carry hv _ _) _ _ h
-  refine foldl_keeps (KeepsWorld w) _ (fun v r hv => ?_) _ _ hc
-  split
-  · exact hv
-  · split
-    · exact keepsWorld_setStatuses hv _ _
-    · refine foldl_keeps (KeepsWorld w) _ (fun u k hu => ?_) _ _ (keepsWorld_deliver hv _ _ _)
-      repeat' split
-      all_goals first
-        | exact hu
-        | exact foldl_keeps (KeepsWorld w) _ (fun x l hx => keepsWorld_recordSent hx _ _ _ _) _ _ hu
-
-theorem keepsWorld_clientRequest {w w' : World} (h : KeepsWorld w w') (i : Nat) (type : Scenario.RequestType)
-    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
-    KeepsWorld w (w'.clientRequest fsOf i type target input sameIdAs) := by
-  unfold World.clientRequest
-  simp only [bind, pure]
-  split
-  · exact keepsWorld_report h _
-  · refine keepsWorld_resolving h _ _ fun v => ?_
-    repeat' split
-    all_goals first
-      | exact keepsWorld_report h _
-      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => keeps_requestOf _ _ _ _ _ _ _)) _ _ _ _
-
-theorem keepsWorld_now_iff {w w' : World} (now : Time) : KeepsWorld w { w' with now } ↔ KeepsWorld w w' := Iff.rfl
-
-theorem keepsWorld_inFlight_iff {w w' : World} (leftInFlight : List (Nat × Nat)) :
-    KeepsWorld w { w' with leftInFlight } ↔ KeepsWorld w w' := Iff.rfl
-
-theorem keepsWorld_messages_iff {w w' : World} (messages : Array Message) :
-    KeepsWorld w { w' with messages } ↔ KeepsWorld w w' := Iff.rfl
-
-/-- Closes `KeepsWorld w x` where `x` is built from `w` by steps that keep every running service's createKey values. -/
-macro "kw_tac" : tactic => `(tactic| repeat' (first
-  | contradiction
-  | with_reducible assumption
-  | with_reducible exact KeepsWorld.refl _
-  | with_reducible apply keepsWorld_report
-  | with_reducible apply keepsWorld_carry
-  | with_reducible apply keepsWorld_recordSent
-  | with_reducible apply keepsWorld_stated
-  | with_reducible apply keepsWorld_nextId
-  | with_reducible apply keepsWorld_setStatus
-  | with_reducible apply keepsWorld_deliverCarried
-  | with_reducible apply keepsWorld_clientRequest
-  | (with_reducible refine keepsWorld_act ?_ _ _ _ (fun st s => ?_))
-  | simp only [keepsWorld_now_iff, keepsWorld_inFlight_iff, keepsWorld_messages_iff]
-  | with_reducible refine keepsWorld_resolving ?_ _ _ fun _ => ?_
-  | with_reducible refine keepsWorld_attempt ?_ _ _ fun _ => ?_
-  | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
-  | with_reducible refine Tazuna.Thm.Sim.Run.forEach_keeps _ ?_ fun _ _ _ _ => ?_
-  | with_reducible exact keeps_endSubscription _ _
-  | with_reducible exact keeps_operate _ _ _ _
-  | with_reducible exact keeps_restart _
-  | with_reducible exact keeps_fireTo _ _ _ _
-  | dsimp only
-  | split))
+/-- Keeping the createKey values, which every input of a line does. -/
+abbrev keysRel : StateRel where
+  R := KeepsKeys
+  refl := .refl
+  trans := .trans
+  stepOrder := keeps_stepOrder
+  checkStepOrder := keeps_checkStepOrder
+  arriveFrom := keeps_arriveFrom
+  arriveAll := keeps_arriveAll
+  requestOf := keeps_requestOf
 
 theorem keepsWorld_take (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line) :
-    KeepsWorld w (w.take fsOf own lines i l) := by
+    KeepsWorld keysRel w (w.take fsOf own lines i l) := by
   cases l <;> simp only [World.take, bind, pure, foldlM_id]
-  all_goals kw_tac
-
-theorem keepsWorld_line (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line) :
-    KeepsWorld w (w.line fsOf own lines i l) := by
-  unfold World.line
-  dsimp only
-  split
-  · exact keepsWorld_report (.refl w) _
-  · exact keepsWorld_take w own lines i l
+  all_goals keeps_tac first
+    | exact keeps_endSubscription _ _
+    | exact keeps_operate _ _ _ _
+    | exact keeps_restart _
+    | exact keeps_fireTo _ _ _ _
 
 /-- A line of When keeps every running service's createKey values: it may only add to them. -/
 theorem step_keepsKeys (w : World) (sc : Scenario) (l : Scenario.Line) (i : Nat) :
-    KeepsWorld w (w.step fsOf sc l i) := by
+    KeepsWorld keysRel w (w.step fsOf sc l i) := by
   unfold World.step
   split
-  · exact .refl w
-  · exact keepsWorld_line w _ _ i l
+  · exact .refl _ w
+  · exact keepsWorld_line w _ _ i l (keepsWorld_take w _ _ i l)
 
-theorem keepsWorld_beginAll (w : World) : KeepsWorld w (w.beginAll fsOf) := by
+theorem keepsWorld_beginAll (w : World) : KeepsWorld keysRel w (w.beginAll fsOf) := by
   unfold World.beginAll
   rw [foldlM_id]
-  refine foldl_keeps (KeepsWorld w) _ (fun v x hv => ?_) _ _ (.refl w)
+  refine foldl_keeps (KeepsWorld keysRel w) _ (fun v x hv => ?_) _ _ (.refl _ w)
   dsimp only
   split
   · exact hv
@@ -343,7 +153,7 @@ theorem keeps_lookup_map (l : List (String × State)) (g : String × State → S
     · exact h₂
     · exact ih
 
-theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : KeepsWorld w (w.given j fsOf sc) := by
+theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : KeepsWorld keysRel w (w.given j fsOf sc) := by
   unfold World.given
   simp only [bind, pure]
   rw [foldlM_id]
@@ -351,7 +161,7 @@ theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : Keep
     intro rs; induction rs with
     | nil => intro v; rfl
     | cons r rs ih => intro v; simp only [List.foldl_cons]; rw [ih]; rfl
-  refine foldl_keeps (KeepsWorld w) _ (fun v x hv => ?_) _ _ (keepsWorld_states (.refl w) (hn _ _))
+  refine foldl_keeps (KeepsWorld keysRel w) _ (fun v x hv => ?_) _ _ (keepsWorld_states (.refl _ w) (hn _ _))
   intro p
   refine (hv p).trans ?_
   have : ∀ (l : List (String × State)) (k : String) (rows : Records),
@@ -370,14 +180,14 @@ theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : Keep
 
 /-- The lines of a scenario keep every running service's createKey values from the start: they may only add to them. -/
 @[guarantee] theorem execute_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
-    KeepsWorld start (execute j fsOf start sc) := by
+    KeepsWorld keysRel start (execute j fsOf start sc) := by
   unfold execute World.execute
   simp only [bind, pure]
   have hg := keepsWorld_given (fsOf := fsOf) start j sc
   split
   · exact hg
   · rw [foldlM_id]
-    refine foldl_keeps (KeepsWorld start) _ (fun v x hv => hv.trans (step_keepsKeys _ _ _ _)) _ _
+    refine foldl_keeps (KeepsWorld keysRel start) _ (fun v x hv => hv.trans (step_keepsKeys _ _ _ _)) _ _
       (hg.trans (keepsWorld_beginAll _))
 
 theorem givenKeys_prefix (o : Option String) {es es' : List String} (h : es <+: es') :
@@ -402,7 +212,7 @@ theorem givenKeys_prefix (o : Option String) {es es' : List String} (h : es <+: 
       rw [a₂, b₂, he, ht]
 
 /-- A running service keeps every createKey value that it has: each is among its values in any later world. -/
-@[guarantee] theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
+@[guarantee] theorem created_kept {w w' : World} (h : KeepsWorld keysRel w w') (p : String) :
     (w.state p).created <+: (w'.state p).created := by
   unfold State.created
   rw [(h p).1]

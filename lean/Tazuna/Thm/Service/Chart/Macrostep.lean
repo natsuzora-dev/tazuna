@@ -434,24 +434,31 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
   simp only [drain, hs, Option.isSome_none, Bool.false_eq_true, ite_false, hq, Bool.not_false, ite_true]
   exact report_halted _ rfl
 
-theorem newCommandStep_halts (cause : Nat) (sender : Spec.Ref) (f : Fault)
-    (h : (s.newCommandStep cause sender).2 = some f) : f.halts = true := by
+/-- The Fault that newCommandStep reports is the one of the limit that the command passed. -/
+theorem newCommandStep_limit (cause : Nat) (sender : Spec.Ref) (f : Fault)
+    (h : (s.newCommandStep cause sender).2 = some f) :
+    f = .exceededCommandDepth sender Limit.commandDepth.max ∨
+      f = .exceededMessageCommands sender Limit.messageCommands.max := by
   simp only [State.newCommandStep] at h
   split at h
-  · cases h; rfl
+  · cases h; exact .inl rfl
   · split at h
-    · cases h; rfl
+    · cases h; exact .inr rfl
     · cases h
 
 /--
 A command whose chain of own-service commands is deeper than Limit.commandDepth, or that is one too many of its message
-(Limit.messageCommands), halts with the Fault of that limit.
+(Limit.messageCommands), halts with the Fault of that limit, which names the command's sender.
 -/
 @[guarantee] theorem command_limit_halts (n : Nat) (q rest : Queue) (c : Sent) (i : Nat) (order : List StepName)
     (f : Fault) (hs : s.halted = none) (ht : q.take Ready.name s.stepOrder = .ok (some (.command c, i, rest, order)))
     (hf : ({ s with stepOrder := order }.newCommandStep c.cause (st.ref c.requester.sender)).2 = some f) :
-    (drain st fs (n + 1) s q).halted = some (.fault f) := by
-  have hh := newCommandStep_halts _ _ f hf
+    (drain st fs (n + 1) s q).halted = some (.fault f) ∧
+      (f = .exceededCommandDepth (st.ref c.requester.sender) Limit.commandDepth.max ∨
+        f = .exceededMessageCommands (st.ref c.requester.sender) Limit.messageCommands.max) := by
+  have hl := newCommandStep_limit _ _ f hf
+  refine ⟨?_, hl⟩
+  have hh : f.halts = true := by rcases hl with rfl | rfl <;> rfl
   simp only [hs] at hf
   simp only [drain, hs, Option.isSome_none, Bool.false_eq_true, ite_false, ht, hf]
   exact report_halted _ hh

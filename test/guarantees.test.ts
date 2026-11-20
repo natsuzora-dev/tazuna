@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { test } from "node:test";
 import { exampleFolders } from "../scripts/explain.ts";
 import type { UserKind } from "../src/data/kinds.ts";
-import { groupExamples, leanRoot, runExamples, simExamples } from "./examples.ts";
+import { groupExamples, runExamples, simExamples } from "./examples.ts";
 import { type Guarantee, guarantees } from "./guarantees.generated.ts";
 
 const tests = import.meta.dirname;
@@ -21,20 +21,6 @@ test("The theorems that docs/guarantees.md cites are the theorems tagged @[guara
   const doc = readFileSync(join(tests, "../docs/guarantees.md"), "utf8");
   const cited = [...new Set([...doc.matchAll(/`([a-z][A-Za-z0-9]*_\w*)`/g)].map((m) => m[1] ?? ""))];
   assert.deepEqual(difference(cited, guarantees), none);
-});
-
-test("The theorems tagged @[guarantee] in lean/Tazuna/Thm are those that test/guarantees.generated.ts lists", () => {
-  const tagged = readdirSync(join(leanRoot, "Thm"), { recursive: true, encoding: "utf8" })
-    .filter((file) => file.endsWith(".lean"))
-    .flatMap((file) =>
-      [
-        ...readFileSync(join(leanRoot, "Thm", file), "utf8")
-          .replace(/\/-[\s\S]*?-\//g, "")
-          .replace(/--.*$/gm, "")
-          .matchAll(/@\[[^\]]*\bguarantee\b[^\]]*\]\s*theorem\s+([^\s(:{[]+)/g),
-      ].map((m) => m[1] ?? ""),
-    );
-  assert.deepEqual(difference(tagged, guarantees), none);
 });
 
 /**

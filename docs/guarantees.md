@@ -189,14 +189,15 @@ tazuna detects a break of each assumption only in part or not at all.
   Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
   The theorems are about the Lean definitions with pure spec functions (`Functions Id`), and about a scenario's start only through hypotheses such as distinct Given keys.
   `test` runs the definitions with the spec functions of the TypeScript runtime and passes `verify`'s comparison to the exploration, so its runs rest on this assumption.
-  Two rules exist only in the TypeScript runtime.
+  Two rules exist only in the TypeScript runtime, so no theorem covers them.
   Spec functions read the keys of an entity in one order, whatever order the records were written in, while the Lean definitions give spec functions the records in write order.
+  The two runtimes agree there only when spec functions do not depend on the order of keys, as the spec functions assumption states.
   `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for the structure that loading builds, and no theorem states what loading guarantees of it.
 - **Definitions without a theorem.** No theorem states what three Lean definitions do.
   The step-order search reaches every order of dependent steps that changes a message's outcome (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
   A proof needs that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write of every step.
   The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists (`checkExchanges` in `lean/Tazuna/Service/Input.lean`).
-  That list is the definition, so a theorem would only restate it.
+  No theorem ties each item of that list to the definition.
   The cause chain is what `causedBy` in `lean/Tazuna/Sim/Order.lean` computes, and the theorems under [Ordering](#ordering) state only the `after` that it gives.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
@@ -249,7 +250,7 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | An accepted command emits exactly the events that its `decide` returned, each once, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run. Each payload has its collections sorted by the declared schema, is parsed by it, and is sorted again, since parsing fills defaults as the schema writes them. A run gets its spec functions only from `instrument`, which sorts them. | `accepted_emits_decided`, `decide_payloads_sorted`, `instrument_agrees`, `unlisted_emitted_event_halts` |
 | The service answers a query with the output of its `resolve`, its collections sorted by the declared schema, parsed by it, and sorted again. | `resolve_output_answered`, `sorting_resolve_parsed`, `instrument_agrees`, `requirements_lookup` |
 | When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`. | `command_invalid_input_rejected`, `query_invalid_input_rejected` |
-| A spec service's `invalid-input` answer to another spec service is the sender's `Fault`, because a message carries its value as the sender wrote it and only the receiver parses it. | `invalid_input_answer_blames_sender` |
+| A spec service's `invalid-input` answer to another spec service is the sender's `Fault`. | `invalid_input_answer_blames_sender` |
 
 ### Statecharts
 
@@ -298,7 +299,7 @@ The other rows are tazuna's own.
 | Every line that the steps of a message and the checks after them write carries the current time. | `message_outputs_at_its_time` |
 | A deadline due by the time that the clock moves to fires as a message of its own, at its time. | `deadline_message_at_its_time` |
 | Deadlines of one service due at the same time fire in the step order that `test` searches, whichever line moved the time. | `chooseDeadline_stepOrder` |
-| Only a clock line moves the current time. | `only_clock_moves_time` |
+| Only a clock line moves the current time of a running service, which every line that the service writes carries. | `only_clock_moves_time` |
 | A clock line publishes the subscription answers that the new time changes. | `clock_publishes` |
 
 ### Processing and completion
@@ -349,7 +350,7 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | A restart begins the service again from the part of its state that it persists: its records, its command answers, the events and answers that arrived, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions. | `restart_keeps` |
 | An answer that arrives when its request waits no more, as after a restart, is written and has no other effect. The end of the run checks it with the other answers, and no theorem states that check. | `late_answer_written` |
 | A restart reads nothing of the state that it discards. | `restart_forgets` |
-| A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it. | `first_answer_after_restart_kept` |
+| A restart ends every subscription for `verify`, which compares the lines after it as if no subscription were open and keeps the first answer of a subscription that opens again. | `first_answer_after_restart_kept` |
 
 ### Comparison
 

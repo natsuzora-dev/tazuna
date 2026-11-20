@@ -207,6 +207,12 @@ def fireTo (time : Time) : Service → Functions m → State → m State :=
 def World.answered (w : World) (sender : String) (to : LineId) : Bool :=
   w.messages.any fun n => n.sender == sender && n.channel == some (.answers to)
 
+/-- The answer `unavailable` that refuse line `i` sends to the sender of the refused request `msg`, in flight. -/
+def refusal (msg : Message) (i : Nat) : Message :=
+  { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
+    body := .answer (receivedId msg.sender msg.id) (.rejected { kind := .unavailable }),
+    definition := msg.definition, origin := .line i, status := .inFlight }
+
 /-- The world after line `i` of the scenario of the own service `own`. -/
 def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (i : Nat) :
     Scenario.Line → m World
@@ -358,12 +364,8 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
         let some msg := w.messages[k]? | return w
         if msg.status != .inFlight then return w.report (.notInFlight i msg.describe)
         if requestTarget? msg.body |>.isNone then return w.report (.unrefusable i msg.describe)
-        let to := receivedId msg.sender msg.id
-        let reply : Message := { sender := msg.receiver, receiver := msg.sender, id := .own s!"answer:{msg.id.text}",
-                                 body := .answer to (.rejected { kind := .unavailable }),
-                                 definition := msg.definition, origin := .line i, status := .inFlight }
         let w := w.setStatus k .lost
-        pure { w with messages := w.messages.push reply }
+        pure { w with messages := w.messages.push (refusal msg i) }
       if w.stopped then return w
       w.deliverCarried fsOf i ((List.range (w.messages.size - start)).map (start + ·))
   | .leaveInFlight message =>
