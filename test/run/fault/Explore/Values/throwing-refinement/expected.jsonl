@@ -1,0 +1,1 @@
+{"kind":"Fault.exception","definition":{"service":"todo","name":"rename"},"data":{},"location":{"file":"todo/todo.ts","line":6},"scenario":{"service":"todo","name":"nothingSent"},"appendedLines":[],"error":{"type":"thrownError","name":"Error","message":"a is no title","stack":"<stack>"}}

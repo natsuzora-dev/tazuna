@@ -127,26 +127,36 @@ where
 def distinct (values : List Value) : List Value :=
   values.foldl (fun kept v => if kept.any (·.canonical == v.canonical) then kept else kept ++ [v]) []
 
+/--
+How many representative values valuesFor tries for at most `n` values: enough that every scenario word, filler string
+and representative number comes up at some leaf, since a refinement that only parse sees may reject all others.
+-/
+def rounds (words : List String) (n : Nat) : Nat :=
+  n + 2 + words.length + fillerStrings.length + representativeNumbers.length
+
 variable {m : Type → Type} [Monad m] [MonadNote m]
 
 /--
-Up to `n` values of the schema `schema`: the `listed` ones first, then representative values 0 to `n + 1` that
-parseOutside accepts, stopping once `n` are found. A refinement that throws is the schema owner's fault.
+Up to `n` values of the schema `schema`: the `listed` ones first, then the representative values that parseOutside
+accepts, over `rounds words n` indices and stopping once `n` are found. A value already found is not parsed again. A
+refinement that throws is the schema owner's fault.
 -/
 def valuesFor (st : Service) (fs : Functions m) (schema : Schema) (listed : List Value) (words : List String) (n : Nat) :
     m (Except Fault (List Value)) := do
   let json ← expectFound s!"schema {repr schema}" (st.schemaOf schema)
-  let found ← (List.range (n + 2)).foldlM (init := (.ok (distinct listed) : Except Fault (List Value))) fun acc i => do
+  let found ← (List.range (rounds words n)).foldlM (init := (.ok (distinct listed) : Except Fault (List Value))) fun acc i => do
     match acc with
     | .error f => pure (.error f)
     | .ok found =>
       if found.length ≥ n then pure (.ok found) else
       match representative words json i with
       | none => pure (.ok found)
-      | some v => match ← fs.parseOutside st schema v with
+      | some v =>
+        if found.any (·.canonical == v.canonical) then pure (.ok found) else
+        match ← fs.parseOutside st schema v with
         | .error issue => pure (.error (issueViolation schema.owner issue))
         | .ok none => pure (.ok found)
-        | .ok (some _) => pure (.ok (distinct (found ++ [v])))
+        | .ok (some _) => pure (.ok (found ++ [v]))
   pure (found.map (·.take n))
 
 end Tazuna.Explore

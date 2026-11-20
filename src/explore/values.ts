@@ -47,6 +47,9 @@ export function seenOf(scenarios: readonly Scenario[]): Seen {
 
 const fillerStrings = ["a", "b", "c"];
 const representativeNumbers = [0, 1, 2, -1, 0.5, 10, 1000];
+/** Lean's rounds. */
+const rounds = (words: readonly string[], n: number): number =>
+  n + 2 + words.length + fillerStrings.length + representativeNumbers.length;
 const representativeDates = ["2026-10-25", "2026-10-26"];
 const representativeDateTimes = ["2026-10-25T00:00:00Z", "2026-10-26T00:00:00Z"];
 
@@ -163,12 +166,16 @@ export function valuesFor(
 ): Json[] {
   const json = expectFound(`schema ${JSON.stringify(schema)}`, schemaOf(st, schema) as Json | undefined);
   let found = distinct(listed);
-  for (let i = 0; i < n + 2 && found.length < n; i += 1) {
+  const kept = new Set(found.map(canonicalJson));
+  for (let i = 0; i < rounds(words, n) && found.length < n; i += 1) {
     const v = representative(words, json, i);
-    if (v === undefined) continue;
+    if (v === undefined || kept.has(canonicalJson(v))) continue;
     const parsed = parseOutside(st, fs, schema, v);
     if (parsed instanceof Failed) halt(issueViolation(schemaOwner(schema), parsed));
-    if (!("error" in parsed)) found = distinct([...found, v]);
+    if (!("error" in parsed)) {
+      found = [...found, v];
+      kept.add(canonicalJson(v));
+    }
   }
   return found.slice(0, n);
 }
