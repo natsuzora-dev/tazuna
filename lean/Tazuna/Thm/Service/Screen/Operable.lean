@@ -1,5 +1,6 @@
 import Tazuna.Service.Screen.Operable
 import Tazuna.Thm.Data.Basic
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Screen.Operable
 
@@ -25,7 +26,7 @@ theorem accepting_skips (resource : InstanceId) (pre rest : List InstanceId)
       simp [hn', ho i hm]
 
 /-- An instance that a modal `opens` opened after the operated instance `resource` covers it. -/
-theorem modal_child_covers (resource : InstanceId) (pre rest : List InstanceId) (c : InstanceId) (ci : Instance)
+@[guarantee] theorem modal_child_covers (resource : InstanceId) (pre rest : List InstanceId) (c : InstanceId) (ci : Instance)
     (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → s.modal i = false)
     (hc : s.machine? c = some ci) (hn : c ≠ resource) (hm : s.modal ci = true) :
     State.accepting.go s resource (pre ++ c :: rest) = .error (.covered ci.chart.name) := by
@@ -37,7 +38,7 @@ theorem modal_child_covers (resource : InstanceId) (pre rest : List InstanceId) 
 The operated instance `resource` accepts when only non-modal instances were opened after it, whatever their charts, so
 several open instances of one screen are each operable (B13).
 -/
-theorem nonmodal_child_lets_parent (resource : InstanceId) (pre rest : List InstanceId) (pi : Instance)
+@[guarantee] theorem nonmodal_child_lets_parent (resource : InstanceId) (pre rest : List InstanceId) (pi : Instance)
     (hp : ∀ r ∈ pre, r ≠ resource ∧ ∀ i, s.machine? r = some i → s.modal i = false)
     (hpi : s.machine? resource = some pi) :
     State.accepting.go s resource (pre ++ resource :: rest) = .ok pi := by

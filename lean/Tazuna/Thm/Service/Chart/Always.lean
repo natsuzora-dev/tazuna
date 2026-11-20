@@ -1,6 +1,7 @@
 import Tazuna.Service.Chart.Always
 import Tazuna.Thm.Service.Chart.Map
 import Tazuna.Thm.Service.Chart.Select
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Chart.Always
 
@@ -214,5 +215,25 @@ theorem always_step_independent (a b : Nat) (owner : InstanceId) (f : Processing
   simp only [H, settleAround, id_bind, unlessHalted_pure]
   rw [settleFrom_idem, settleFrom_idem, settleFrom_idem, settleFrom_idem]
   exact ⟨rfl, rfl⟩
+
+
+/--
+A settle whose always transitions still select a transition, or change the copies, after Limit.alwaysRounds rounds
+halts with exceededAlwaysRounds.
+-/
+@[guarantee] theorem always_rounds_limit_halts (step : Nat) (owner : InstanceId) (r r' : Processing) (o o' : Instance)
+    (changed : Bool) (chosen : List (InstanceId × Transition)) (hr : r.halted = false)
+    (ho : r.state.machine? owner = some o) (hc : o.closed = false)
+    (hs : syncCopies fs st step owner r = (r', changed)) (hr' : r'.halted = false)
+    (ho' : r'.state.machine? owner = some o')
+    (hsel : select fs st r'.state o' .always .none (leavesOf r'.state o' o'.copyIds) = .ok chosen)
+    (hn : chosen.isEmpty = false ∨ changed = true) :
+    (settleFrom fs st step owner 0 r).state.halted =
+      some (.fault (.exceededAlwaysRounds (st.ref o'.chart.name) Limit.alwaysRounds.max)) := by
+  have hn' : (chosen.isEmpty && !changed) = false := by cases hn <;> simp [*]
+  simp only [settleFrom, alwaysRound, hr, ho, hc, Bool.false_eq_true, ite_false, id_bind]
+  rw [hs]
+  simp only [hr', ho', Bool.false_eq_true, ite_false, hsel, hn', Processing.report]
+  exact report_halted _ rfl
 
 end Tazuna.Thm.Service.Chart.Always

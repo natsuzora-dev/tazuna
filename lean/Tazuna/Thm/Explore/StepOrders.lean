@@ -1,6 +1,7 @@
 import Tazuna.Explore.StepOrders
 import Tazuna.Thm.Explore.ChoiceDependent
 import Tazuna.Thm.Verify.Compare
+import Tazuna.Thm.Guarantee
 
 /-!
 The verdict of the step-order search: what a search that reports nothing says of the orders that it ran.
@@ -22,7 +23,7 @@ place through one pairing, `after` included (GroupsMatch with `relation`), under
 to one within each domain. The lines are those that verify reads: by the schema of their definitions, and the actual
 lines without resends and their answers (withoutResends) and without repeated subscription answers.
 -/
-theorem compareTraces_ok {spec : Spec.Structure} {service : String}
+@[guarantee] theorem compareTraces_ok {spec : Spec.Structure} {service : String}
     {ask : Spec.Definition → Verify.Part → Value → Id CValue} {renamed : Values → Values}
     {expected actual : List TraceLine} {set : List Binding}
     (h : (Verify.compareTraces spec service ask renamed expected actual : Id _) = .ok set) :
@@ -72,7 +73,7 @@ Two outcomes that difference finds the same halt alike, and when both finish, ei
 of which one makes the states equal (sameState: records and open instances, deadlines included), or the original
 outputs do not compare even with themselves, and the states are equal (sameState under the empty binding).
 -/
-theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (difference compare o a : Id _) = .same) :
+@[guarantee] theorem difference_same {compare : Compare Id} {o a : Explore.Outcome} (h : (difference compare o a : Id _) = .same) :
     haltIdentity o.halted? = haltIdentity a.halted? ∧
     ∀ x y, o = .finished x → a = .finished y →
       (∃ set, compare (x.renaming y) x.lines y.lines = .ok set ∧ sameState set x y = .same) ∨
@@ -213,7 +214,7 @@ same (difference_same, compareTraces_ok). The search reports Undecided.stepOrder
 so it ran every order that it reached. That it reaches every order of dependent steps (dynamic partial-order reduction)
 has no theorem.
 -/
-theorem stepOrderSearch_same (base : Execution)
+@[guarantee] theorem stepOrderSearch_same (base : Execution)
     (h : (stepOrderSearch compare executeWith o st base : Id _).found = none) :
     ∀ t ∈ (stepOrderSearch compare executeWith o st base : Id _).tried,
       t.verdict = .refused ∨ (t.verdict = .decided none ∧ ∃ parent : Execution,

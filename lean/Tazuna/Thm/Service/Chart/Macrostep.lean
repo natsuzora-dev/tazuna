@@ -3,6 +3,7 @@ import Tazuna.Thm.Service.Chart.Always
 import Tazuna.Thm.Service.Screen.Subscription
 import Tazuna.Thm.Service.Automation
 import Tazuna.Thm.Service.Command
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Chart.Macrostep
 
@@ -238,12 +239,12 @@ theorem growsBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requeste
     all_goals exact showAnswer_grows _ _ _ _
   | automation n => exact Grows.of_lines (automationAnswer_lines _ _ _)
 
-theorem stopped_machine_takes_no_event (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
+@[guarantee] theorem stopped_machine_takes_no_event (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
     (hi : r.state.machine? name = some i) (hc : i.closed = true) :
     dispatch fs st step name key payload r = r := by
   simp [dispatch, hi, hc]
 
-theorem untaken_operation_changes_nothing (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
+@[guarantee] theorem untaken_operation_changes_nothing (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
     (leaves : List (InstanceId × Option String)) (hh : r.state.halted = none) (hi : r.state.machine? name = some i)
     (hl : eventLeaves fs st r.state i payload = .ok leaves)
     (hs : select fs st r.state i (.on key) (.payload payload) leaves = .ok []) :
@@ -254,7 +255,7 @@ theorem untaken_operation_changes_nothing (step : Nat) (name : InstanceId) (key 
   · rfl
   · simp only [id_bind]; rw [hl]; simp only; rw [hs]; rfl
 
-theorem stale_answer_ignored (step : Nat) (p : Pending) (answer : Answer) (r : Processing) (waiting : Pending)
+@[guarantee] theorem stale_answer_ignored (step : Nat) (p : Pending) (answer : Answer) (r : Processing) (waiting : Pending)
     (hw : r.state.pending.find? (·.id == p.id) = some waiting) (hs : waiting.stale = true) :
     deliverAnswer fs st step p answer r = ⟨(r.state.answered p).1, r.queue⟩ := by
   simp [deliverAnswer, State.answered, hw, hs]
@@ -413,7 +414,7 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
       | exact ih _ (processCommand_keysDistinct _ _ _ _ h)
 
 /-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (rejectedInput?). -/
-theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : Sent) (serial cause : Nat)
+@[guarantee] theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : Sent) (serial cause : Nat)
     (answer : Answer) (sent : Queued) (hc : c.serial = some serial) (hq : s.queued.find? (·.serial == serial) = some sent)
     (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
@@ -423,7 +424,44 @@ theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : S
   · cases kind
     · exact absurd rfl (ha reason)
     all_goals simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
-theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
+@[guarantee] theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
+
+
+/-- A message whose work is still queued after Limit.messageWork steps halts with exceededMessageWork. -/
+@[guarantee] theorem message_work_limit_halts (q : Queue) (hs : s.halted = none) (hq : q.isEmpty = false) :
+    (drain st fs 0 s q).halted = some (.fault (.exceededMessageWork Limit.messageWork.max)) := by
+  simp only [drain, hs, Option.isSome_none, Bool.false_eq_true, ite_false, hq, Bool.not_false, ite_true]
+  exact report_halted _ rfl
+
+theorem newCommandStep_halts (cause : Nat) (sender : Spec.Ref) (f : Fault)
+    (h : (s.newCommandStep cause sender).2 = some f) : f.halts = true := by
+  simp only [State.newCommandStep] at h
+  split at h
+  · cases h; rfl
+  · split at h
+    · cases h; rfl
+    · cases h
+
+/--
+A command whose chain of own-service commands is deeper than Limit.commandDepth, or that is one too many of its message
+(Limit.messageCommands), halts with the Fault of that limit.
+-/
+@[guarantee] theorem command_limit_halts (n : Nat) (q rest : Queue) (c : Sent) (i : Nat) (order : List StepName)
+    (f : Fault) (hs : s.halted = none) (ht : q.take Ready.name s.stepOrder = .ok (some (.command c, i, rest, order)))
+    (hf : ({ s with stepOrder := order }.newCommandStep c.cause (st.ref c.requester.sender)).2 = some f) :
+    (drain st fs (n + 1) s q).halted = some (.fault f) := by
+  have hh := newCommandStep_halts _ _ f hf
+  simp only [hs] at hf
+  simp only [drain, hs, Option.isSome_none, Bool.false_eq_true, ite_false, ht, hf]
+  exact report_halted _ hh
+
+/-- An onDone work that still has selections after Limit.onDoneSelections halts with exceededOnDoneSelections. -/
+@[guarantee] theorem done_selections_limit_halts (step : Nat) (name : InstanceId) (r : Processing) (i : Instance)
+    (n : String) (rest : List String) (hi : r.state.machine? name = some i) (ha : i.awaitingOnDone = some (n :: rest)) :
+    (doneWork fs st step name 0 r).state.halted =
+      some (.fault (.exceededOnDoneSelections (st.ref i.chart.name) Limit.onDoneSelections.max)) := by
+  simp only [doneWork, hi, ha, Processing.report]
+  exact report_halted _ rfl
 
 end Tazuna.Thm.Service.Chart.Macrostep

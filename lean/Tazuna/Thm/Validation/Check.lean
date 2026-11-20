@@ -4,6 +4,7 @@ import Tazuna.Thm.Validation.Charts
 import Tazuna.Thm.Validation.Commands
 import Tazuna.Thm.Validation.Contracts
 import Tazuna.Thm.Validation.Schemas
+import Tazuna.Thm.Guarantee
 
 /-!
 The verdict of check's structural part (Illegal): the rules that a spec without such a violation keeps.
@@ -52,7 +53,7 @@ structure Checked (s : Structure) : Prop where
   unionsApart : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ Schemas.issues x.1 x.2
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
-theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
+@[guarantee] theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
   simp only [Validation.check, Charts.check, Commands.check, List.append_eq_nil_iff,
     Tazuna.Thm.Validation.Automations.no_automation_returns,
     Tazuna.Thm.Validation.Charts.queries_of_other_services,

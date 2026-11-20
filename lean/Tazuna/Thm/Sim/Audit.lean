@@ -1,5 +1,6 @@
 import Tazuna.Sim.Run
 import Tazuna.Thm.Explore.Instrument
+import Tazuna.Thm.Guarantee
 
 /-!
 The audit's agreement for each service input (Thm.Explore.Instrument) lifted to the whole run: instrumented functions
@@ -345,7 +346,7 @@ theorem beginAll_agrees (w : World) : Agrees (w.beginAll fsOfI) (w.beginAll fsOf
 An audited run of the lines of a scenario returns the world of the plain run, whatever the audit collected before:
 the run that explore appends lines to.
 -/
-theorem execute_agrees (j : Spec.Structure) (start : World) (sc : Scenario) :
+@[guarantee] theorem execute_agrees (j : Spec.Structure) (start : World) (sc : Scenario) :
     Agrees (execute j fsOfI start sc) (execute j fsOf start sc) := by
   unfold execute World.execute; agreeE [given_agrees h, beginAll_agrees h hact, step_agrees h hact]
 
@@ -353,7 +354,7 @@ theorem execute_agrees (j : Spec.Structure) (start : World) (sc : Scenario) :
 An audited run of a whole scenario returns the world of the plain run, whatever the audit collected before: `test`'s
 audits for `BagOrderDependent` and `ChoiceDependent` change no simulation.
 -/
-theorem simulate_agrees (j : Spec.Structure) (start : World) (sc : Scenario) :
+@[guarantee] theorem simulate_agrees (j : Spec.Structure) (start : World) (sc : Scenario) :
     Agrees (simulate j fsOfI start sc) (simulate j fsOf start sc) := by
   unfold simulate World.stepFinding
   agreeE [given_agrees h, beginAll_agrees h hact, step_agrees h hact, found_agrees h, ended_agrees h,

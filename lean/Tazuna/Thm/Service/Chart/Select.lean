@@ -1,6 +1,7 @@
 import Tazuna.Service.Chart.Select
 import Tazuna.Thm.Service.State
 import Tazuna.Thm.Service.Functions
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Chart.Select
 
@@ -10,7 +11,7 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Functions Tazuna.Thm.Service.State
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem leaf_selects_innermost (s : State) (extra : Extra) (i : Instance) (ts : List Transition)
+@[guarantee] theorem leaf_selects_innermost (s : State) (extra : Extra) (i : Instance) (ts : List Transition)
     (rest : List (Instance × List Transition)) (t : Transition) (h : choose fs st s i extra ts = .ok (some t)) :
     firstLevel fs st s extra ((i, ts) :: rest) = .ok (some (i.id, t)) := by
   simp [firstLevel, h]
@@ -24,14 +25,14 @@ theorem keyed_payload_reaches_matching (chart : Chart) (map : String) (payload :
   simp only [reaches, hm, id_bind, hn, hk, id_pure]
   cases c.id.key? == some k <;> rfl
 
-theorem keyless_payload_reaches_all (chart : Chart) (map : String) (payload : Value)
+@[guarantee] theorem keyless_payload_reaches_all (chart : Chart) (map : String) (payload : Value)
     (hk : copyKey fs st chart map payload = .ok .everyCopy) (cs : List Instance) (hcs : CopiesOf chart map cs) :
     cs.filter (fun c => reaches fs st c payload matches .ok true) = cs := by
   refine List.filter_eq_self.mpr (fun c hc => ?_)
   obtain ⟨hn, hm⟩ := hcs c hc
   simp [reaches, hn, hm, hk]
 
-theorem keyed_payload_reaches_at_most_one (chart : Chart) (map : String) (payload : Value) (k : Value)
+@[guarantee] theorem keyed_payload_reaches_at_most_one (chart : Chart) (map : String) (payload : Value) (k : Value)
     (hk : copyKey fs st chart map payload = .ok (.copy k)) (cs : List Instance) (hcs : CopiesOf chart map cs)
     (hd : (cs.map (·.id.key?)).Nodup) :
     (cs.filter fun c => reaches fs st c payload matches .ok true).length ≤ 1 := by
@@ -75,7 +76,7 @@ theorem removeConflicts_sublist (s : State) (c : Chart) (enabled : List (Instanc
       · exact (List.filter_sublist.trans h).append (List.Sublist.refl _)
   simpa using key enabled [] [] List.Sublist.slnil
 
-theorem select_follows_leaves (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
+@[guarantee] theorem select_follows_leaves (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     chosen.Sublist (leaves.filterMap fun l =>
@@ -139,7 +140,7 @@ theorem select_follows_leaves (s : State) (top : Instance) (trigger : Spec.Trigg
     cases h
     exact (removeConflicts_sublist s _ e).trans (by simpa using key leaves [] _ (by intro e he; cases he; simp) e hfound)
 
-theorem select_picked_by_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
+@[guarantee] theorem select_picked_by_leaf (s : State) (top : Instance) (trigger : Spec.Trigger) (extra : Extra)
     (leaves : List (InstanceId × Option String)) (chosen : List (InstanceId × Transition))
     (h : select fs st s top trigger extra leaves = .ok chosen) :
     ∀ c ∈ chosen, ∃ l ∈ leaves, pick fs st s top trigger extra l = .ok (some c) := by

@@ -1,5 +1,6 @@
 import Tazuna.Service.Chart.Exit
 import Tazuna.Thm.Service.Chart.Queue
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Chart.Exit
 
@@ -326,7 +327,7 @@ theorem pendingMapped_exitOne (fuel : Nat) (name : InstanceId) (n : String) : Pe
       rw [eb]
       simp only [State.setMachine, ea, List.map_map]
 
-theorem leave_makes_requests_stale (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) (p : Pending)
+@[guarantee] theorem leave_makes_requests_stale (fuel : Nat) (name : InstanceId) (n : String) (r : Processing) (p : Pending)
     (hp : p ∈ r.state.pending) (hr : p.requester = .state name n)
     (ha : (runAssign fs st name (.exit n) (some n) .none none r).1.halted = none) :
     ∃ p' ∈ (leaveWith fs st (exitOne fs st fuel) name n r).1.pending, p'.id = p.id ∧ p'.stale = true := by
@@ -502,7 +503,7 @@ theorem exits_cancel (c : InstanceId) (ns : List String) (r : Processing) (hm : 
         exact mq.2.2 (exit_stales_requests _ c _ r i hi hh1 q hq (mq.2.1 ▸ hpm))
       · exact ihp p hp hps hpm hx
 
-theorem endWith_cancels_deadlines_and_requests (c : InstanceId) (r : Processing) (ci : Instance) (hh : r.state.halted = none)
+@[guarantee] theorem endWith_cancels_deadlines_and_requests (c : InstanceId) (r : Processing) (ci : Instance) (hh : r.state.halted = none)
     (hi : r.state.machine? c = some ci) (hm : c ∈ r.state.machines.map (·.id))
     (hn : (endWith (exitOne fs st st.exitFuel) c r).1.halted = none)
     (ht : ∀ t ∈ r.state.deadlines, t.machine = c → t.state ∈ ci.chart.tree.exitOrder ci.active)
@@ -559,7 +560,7 @@ theorem endWith_cancels_deadlines_and_requests (c : InstanceId) (r : Processing)
             exact cP q hq' n hreq (hp o ho n hor hos)
         | automation a => simp [hreq, Requester.machine?] at hqm
 
-theorem leave_makes_queued_stale (s : State) (name : InstanceId) (n : String) :
+@[guarantee] theorem leave_makes_queued_stale (s : State) (name : InstanceId) (n : String) :
     ∀ q ∈ (s.leaveState name n).queued, q.machine = name → q.state = n → q.stale = true := by
   intro q hq hm hs
   simp only [State.leaveState, List.mem_map] at hq

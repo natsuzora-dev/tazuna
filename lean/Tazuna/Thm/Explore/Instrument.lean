@@ -1,5 +1,6 @@
 import Tazuna.Explore.Instrument
 import Tazuna.Thm.Data.List
+import Tazuna.Thm.Guarantee
 
 /-!
 Service definitions are generic in `m`, so instrumented functions that agree with the plain ones (FunctionsAgree) make
@@ -397,7 +398,7 @@ theorem publishOne_agrees (s : State) (sub : Subscription) :
     Agrees (publishOne st fsI s sub) (publishOne st fs s sub) := by
   unfold publishOne; agree [resolveChecked_agrees h, h.comparable]
 
-theorem publish_agrees (s : State) : Agrees (publish st fsI s) (publish st fs s) := by
+@[guarantee] theorem publish_agrees (s : State) : Agrees (publish st fsI s) (publish st fs s) := by
   unfold publish; agree [publishOne_agrees h]
 
 theorem wantedShows_agrees (s : State) (i : Instance) : Agrees (wantedShows st fsI s i) (wantedShows st fs s i) := by
@@ -485,7 +486,7 @@ theorem drain_agrees (fuel : Nat) (s : State) (q : Queue) :
     agree [runWork_agrees h, processCommand_agrees h, sendEntered_agrees h, refreshScreens_agrees h,
       settleScreen_agrees h, ih]
 
-theorem fireDue_agrees (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
+@[guarantee] theorem fireDue_agrees (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
     Agrees (fireDue st fsI to fuel tie s) (fireDue st fs to fuel tie s) := by
   induction fuel generalizing s tie with
   | zero => unfold fireDue; agree []
@@ -497,19 +498,19 @@ theorem finish_agrees (s : State) : Agrees (finish st fsI s) (finish st fs s) :=
 theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (message st fs s q) := by
   unfold message; agree [drain_agrees h, finish_agrees h]
 
-theorem send_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
+@[guarantee] theorem send_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
   unfold send; agree [message_agrees h, processCommand_agrees h]
 
-theorem call_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
+@[guarantee] theorem call_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
   unfold call; agree [resolveChecked_agrees h, message_agrees h]
 
-theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
+@[guarantee] theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
   unfold subscribe; agree [message_agrees h]
 
-theorem endSubscription_agrees (s : State) (id : LineId) :
+@[guarantee] theorem endSubscription_agrees (s : State) (id : LineId) :
     Agrees (endSubscription st fsI s id) (endSubscription st fs s id) := by
   unfold endSubscription; agree [message_agrees h]
 
@@ -522,7 +523,7 @@ theorem redeliver_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Valu
     Agrees (redeliver st fsI s name id raw resultOf) (redeliver st fs s name id raw resultOf) := by
   unfold redeliver; agree [message_agrees h]
 
-theorem receive_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId) :
+@[guarantee] theorem receive_agrees (s : State) (name : Spec.Ref) (id : LineId) (raw : Value) (resultOf : Option LineId) :
     Agrees (receive st fsI s name id raw resultOf) (receive st fs s name id raw resultOf) := by
   unfold receive; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, deliver_agrees h, redeliver_agrees h]
 
@@ -547,7 +548,7 @@ theorem answerRequest_agrees (s : State) (id : Option LineId) (p : Pending) (ans
   unfold answerRequest
   agree [checkAnswer_agrees h, settled_agrees h, deliverAnswer_agrees h, message_agrees h]
 
-theorem answerIn_agrees (s : State) (id to : LineId) (answer : Answer) :
+@[guarantee] theorem answerIn_agrees (s : State) (id to : LineId) (answer : Answer) :
     Agrees (answerIn st fsI s id to answer) (answerIn st fs s id to answer) := by
   unfold answerIn; agree [message_agrees h, answerRequest_agrees h]
 
@@ -560,17 +561,17 @@ theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List 
   agree [decodedAnswer_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _),
     firstFalse_agrees (fun _ => Agrees.map _ (h.resultEnsures _ _ _ _ _))]
 
-theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by
+@[guarantee] theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by
   unfold checkExchanges checkExchange
   agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, decodedEvents_agrees h, checkAssumedAnswer_agrees h]
 
 theorem startRecords_agrees (s : State) : Agrees (startRecords st fsI s) (startRecords st fs s) := by
   unfold startRecords; agree [h.defaults, expectFound_agrees]
 
-theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
+@[guarantee] theorem begin_agrees (s : State) : Agrees (begin st fsI s) (begin st fs s) := by
   unfold begin startInstances; agree [startRecords_agrees h, startInstance_agrees h, message_agrees h]
 
-theorem operate_agrees (s : State) (screen : InstanceId) (control : String) (payload : Value) :
+@[guarantee] theorem operate_agrees (s : State) (screen : InstanceId) (control : String) (payload : Value) :
     Agrees (operate st fsI s screen control payload) (operate st fs s screen control payload) := by
   unfold operate
   dsimp only
@@ -588,7 +589,7 @@ theorem operate_agrees (s : State) (screen : InstanceId) (control : String) (pay
   · exact Agrees.bind (settled_agrees h _ _ (dispatch_agrees h _ _ _ _) _) (fun _ => message_agrees h _ _)
   · exact Agrees.pure _
 
-theorem restart_agrees (s : State) : Agrees (restart st fsI s) (restart st fs s) := by
+@[guarantee] theorem restart_agrees (s : State) : Agrees (restart st fsI s) (restart st fs s) := by
   unfold restart; exact begin_agrees h _
 
 end
@@ -607,7 +608,7 @@ theorem Agrees.lift {α : Type} (x : Id α) : Agrees (C := C) (liftM x) x := by
 theorem observe_agrees {α : Type} (x : Id α) (f : α → StateT Collect Id Unit) : Agrees (observe x f) x := by
   unfold Agrees observe; intro _; rfl
 
-theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) (fs.sorting st) := by
+@[guarantee] theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) (fs.sorting st) := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
 
 end Tazuna.Thm.Explore.Instrument

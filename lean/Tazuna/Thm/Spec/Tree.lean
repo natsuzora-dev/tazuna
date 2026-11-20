@@ -2,6 +2,7 @@ import Tazuna.Spec.Tree
 import Tazuna.Thm.Data.Basic
 import Tazuna.Thm.Data.List
 import Tazuna.Thm.Spec.Shape
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Spec.Tree
 
@@ -26,7 +27,7 @@ theorem mem_addDefaults_of_mem (t : Tree) (n : String) {acc : List String} {x : 
           ih _ (hk ▸ t.child_deeper h (t.defaultChildren_mem h child.2)) child.1 _ rfl y (mem_addName_of_mem child.1 hy))
           _ hx
 
-theorem enters_initial (t : Tree) (p : String) (st : Shape) (child : String) (acc : List String)
+@[guarantee] theorem enters_initial (t : Tree) (p : String) (st : Shape) (child : String) (acc : List String)
     (hs : t.state? p = some st) (hk : st.kind ≠ .parallel) (hm : st.kind ≠ .map) (hi : st.initial = some child) :
     child ∈ t.addDefaults p acc := by
   have hk' : (st.kind == .parallel) = false := by simpa using hk
@@ -157,7 +158,7 @@ theorem ancestor_before (t : Tree) (x y : String) (hy : y ∈ t.pathOf x) (hne :
     rw [← hname]
     simpa using hAB
 
-theorem exitOrder_descendants_first (t : Tree) (names : List String) (x y : String) (hy : y ∈ t.pathOf x) (hne : y ≠ x)
+@[guarantee] theorem exitOrder_descendants_first (t : Tree) (names : List String) (x y : String) (hy : y ∈ t.pathOf x) (hne : y ≠ x)
     (hx : x ∈ names) (hyn : y ∈ names) : [x, y].Sublist (t.exitOrder names) := by
   obtain ⟨A, B, hAB, hyA⟩ := ancestor_before t x y hy hne
   unfold Tree.exitOrder
@@ -167,7 +168,7 @@ theorem exitOrder_descendants_first (t : Tree) (names : List String) (x y : Stri
   have hf := (show [x, y].Sublist (A ++ x :: B).reverse by simpa using h).filter (· ∈ names)
   simpa [hx, hyn] using hf
 
-theorem entryOrder_ancestors_first (t : Tree) (names : List String) (x y : String) (hy : y ∈ t.pathOf x) (hne : y ≠ x)
+@[guarantee] theorem entryOrder_ancestors_first (t : Tree) (names : List String) (x y : String) (hy : y ∈ t.pathOf x) (hne : y ≠ x)
     (hx : x ∈ names) (hyn : y ∈ names) : [y, x].Sublist (t.entryOrder names) := by
   obtain ⟨A, B, hAB, hyA⟩ := ancestor_before t x y hy hne
   unfold Tree.entryOrder
@@ -200,19 +201,19 @@ theorem exits_of_domainDepth_le (t : Tree) (entered : List String) (source : Opt
     have hne : ps[k] ≠ n := fun h => hn (h ▸ List.getElem_mem hk)
     simp [Tree.isDescendant, hp, Ne.symm hne, List.getElem_mem hk, he]
 
-theorem reenter_false_not_exited (t : Tree) (entered : List String) (source target : String) (ps rt : List String)
+@[guarantee] theorem reenter_false_not_exited (t : Tree) (entered : List String) (source target : String) (ps rt : List String)
     (hs : t.pathOf source = ps ++ [source]) (ht : t.pathOf target = ps ++ source :: rt) :
     source ∉ t.exitSet entered (some source) target false := by
   simp [Tree.exitSet, Tree.domainDepth, hs, ht, commonPrefix_within]
 
-theorem reenter_true_exits (t : Tree) (entered : List String) (source target : String) (ps rt : List String)
+@[guarantee] theorem reenter_true_exits (t : Tree) (entered : List String) (source target : String) (ps rt : List String)
     (hs : t.pathOf source = ps ++ [source]) (ht : t.pathOf target = ps ++ source :: rt)
     (he : source ∈ entered) : source ∈ t.exitSet entered (some source) target true := by
   refine exits_of_domainDepth_le t entered _ target source true ps rt hs ht he ?_
   have := withoutParallel_le t (ps ++ source :: rt) ps.length
   simpa [Tree.domainDepth, hs, ht, commonPrefix_within] using this
 
-theorem ancestor_target_exits (t : Tree) (entered : List String) (source target : String) (ps rs : List String)
+@[guarantee] theorem ancestor_target_exits (t : Tree) (entered : List String) (source target : String) (ps rs : List String)
     (reenter : Bool) (hs : t.pathOf source = ps ++ target :: rs) (hr : rs ≠ []) (he : target ∈ entered) :
     target ∈ t.exitSet entered (some source) target reenter := by
   have ht := pathOf_of_mem_path t source target ps rs hs

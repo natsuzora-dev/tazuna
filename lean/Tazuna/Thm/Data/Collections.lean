@@ -1,4 +1,5 @@
 import Tazuna.Data.Collections
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Data.Collections
 
@@ -44,7 +45,7 @@ theorem sortByKey_keeps_equal_keys (key : String) (k : SortKey) (xs : List Value
           · simp [List.filter_cons, hc]
       rw [this, ih, List.filter_cons_of_neg (by simpa using hc)]
 
-theorem bag_or_set_array_sorted (schema item : Value) (xs : List Value)
+@[guarantee] theorem bag_or_set_array_sorted (schema item : Value) (xs : List Value)
     (ha : unionOptions schema = none) (hi : schema.field? "items" = some item)
     (hk : schema.field? "x-tazuna-sorted-by" = none)
     (hb : schema.field? "x-tazuna-bag" = some (.bool true) ∨ schema.field? "x-tazuna-set" = some (.bool true)) :
@@ -64,7 +65,7 @@ theorem sortCanonical_in_order (xs : List Value) : (sortCanonical xs).Pairwise (
   simpa [sortCanonical] using List.pairwise_mergeSort trans total xs
 
 /-- In an array sorted by a key, the elements with equal keys are in the order of their canonical text. -/
-theorem sortByKey_equal_keys_in_canonical_order (key : String) (k : SortKey) (xs : List Value) :
+@[guarantee] theorem sortByKey_equal_keys_in_canonical_order (key : String) (k : SortKey) (xs : List Value) :
     ((sortByKey key (sortCanonical xs)).filter (keyOf key · == k)).Pairwise (·.canonical ≤ ·.canonical) := by
   rw [sortByKey_keeps_equal_keys]
   exact (sortCanonical_in_order xs).filter _
@@ -73,7 +74,7 @@ theorem sortByKey_equal_keys_in_canonical_order (key : String) (k : SortKey) (xs
 The canonical texts of the sorted elements of a bag or set do not depend on the order of its elements, so the order
 in which spec code builds a bag leaves no trace in the values that tazuna keeps.
 -/
-theorem sortCanonical_perm {xs ys : List Value} (h : xs.Perm ys) :
+@[guarantee] theorem sortCanonical_perm {xs ys : List Value} (h : xs.Perm ys) :
     (sortCanonical xs).map Value.canonical = (sortCanonical ys).map Value.canonical := by
   have sorted (zs : List Value) : ((sortCanonical zs).map Value.canonical).Pairwise (· ≤ ·) :=
     List.pairwise_map.mpr (sortCanonical_in_order zs)
@@ -87,7 +88,7 @@ When no two elements have the same canonical text unless they are equal, the can
 same list, and so is the sort by a key that follows it: a sortedBy array keeps no trace of the order in which spec code
 built it.
 -/
-theorem sortByKey_perm (key : String) {xs ys : List Value} (h : xs.Perm ys)
+@[guarantee] theorem sortByKey_perm (key : String) {xs ys : List Value} (h : xs.Perm ys)
     (hc : ∀ a ∈ xs, ∀ b ∈ xs, a.canonical = b.canonical → a = b) :
     sortByKey key (sortCanonical xs) = sortByKey key (sortCanonical ys) := by
   have perm (zs : List Value) : (sortCanonical zs).Perm zs := List.mergeSort_perm _ _

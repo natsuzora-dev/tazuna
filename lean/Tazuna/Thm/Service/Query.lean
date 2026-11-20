@@ -1,5 +1,6 @@
 import Tazuna.Service.Query
 import Tazuna.Thm.Service.State
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Query
 
@@ -42,7 +43,7 @@ theorem publish_grows : Grows s (publish st fs s) := by
         · exact Grows.of_lines (reportAll_lines _)
         · exact (Grows.of_lines (reportAll_lines (s := t) _)).trans (reportAll_now (s := t) _) (grows_write _ _ _ _ _ _)
 
-theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
+@[guarantee] theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
     (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input = .answered a vs)
     (hc : fs.comparable sub.query a = .ok c) (hl : sub.last ≠ some c) :
     publishOne st fs s sub =
@@ -50,7 +51,7 @@ theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) 
           if u.id == sub.id then { u with last := some c } else u }.write .out none (.answer sub.id a) () () (st.ref sub.query)).1 := by
   simp [publishOne, hh, hr, hc, hl]
 
-theorem unchanged_answer_not_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
+@[guarantee] theorem unchanged_answer_not_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
     (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input = .answered a vs)
     (hc : fs.comparable sub.query a = .ok c) (hl : sub.last = some c) :
     publishOne st fs s sub = s.reportAll vs := by
@@ -96,7 +97,7 @@ theorem publish_answers_only_open_subscriptions :
       exact ⟨hd, sub, hsub sub (List.mem_cons_self ..), a, ha⟩
   exact key _ _ fun _ h => h
 
-theorem ended_subscription_not_answered (id : LineId) (hid : ∀ sub ∈ s.subscriptions, sub.id ≠ id) :
+@[guarantee] theorem ended_subscription_not_answered (id : LineId) (hid : ∀ sub ∈ s.subscriptions, sub.id ≠ id) :
     ∃ new, (publish st fs s).lines = s.lines ++ new ∧ ∀ l ∈ new, ∀ a, l.body ≠ .answer id a := by
   obtain ⟨new, e, p⟩ := publish_answers_only_open_subscriptions (st := st) (fs := fs) (s := s)
   refine ⟨new, e, fun l hl a ha => ?_⟩
@@ -105,12 +106,12 @@ theorem ended_subscription_not_answered (id : LineId) (hid : ∀ sub ∈ s.subsc
   injection hb with h
   exact hid sub hsub h.symm
 
-theorem query_invalid_input_rejected (name : String) (raw : Value)
+@[guarantee] theorem query_invalid_input_rejected (name : String) (raw : Value)
     (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok none) :
     resolveChecked st fs s name raw = .answered (.rejected { kind := .invalidInput }) [] := by
   simp [resolveChecked, hp]
 
-theorem resolve_output_answered (name : String) (raw input output : Value)
+@[guarantee] theorem resolve_output_answered (name : String) (raw input output : Value)
     (failed : Option String) (rq : Requirements) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hq : st.requirements.lookup name = some rq)
     (hr : firstFalse (fs.inputRequirement (st.ref name) · input) rq.requires = .ok none)

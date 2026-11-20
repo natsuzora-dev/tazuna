@@ -3,6 +3,7 @@ import Tazuna.Thm.Service.Functions
 import Tazuna.Thm.Service.Contract
 import Tazuna.Thm.Service.Integrity
 import Tazuna.Thm.Service.State
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Command
 
@@ -76,7 +77,7 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option L
     exact h
 
 /-- A rejected command writes no record and emits no event: the state only gains the answer line. -/
-theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option LineId) (n : Nat) (r : Rejection)
+@[guarantee] theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option LineId) (n : Nat) (r : Rejection)
     (h : evaluate st fs s.records s.now name raw = .rejected r) :
     processCommand st fs s name raw id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) ∧
       (processCommand st fs s name raw id n).1.records = s.records := by
@@ -84,7 +85,7 @@ theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Opt
     simp only [processCommand, id_bind, h]; rfl
   exact ⟨hp, by rw [hp]; exact answer_records s id _ _⟩
 
-theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option LineId) (n : Nat)
+@[guarantee] theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option LineId) (n : Nat)
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
     (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
     applyAll st s.records groups.flatten = written ∧
@@ -97,12 +98,12 @@ theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Val
       (by show (State.answer _ id _ _).records = _; rw [answer_records, reportAll_records])
   · simp [processCommand, h]
 
-theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value)
+@[guarantee] theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value)
     (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok none) :
     evaluate st fs records now name raw = .rejected { kind := .invalidInput } := by
   simp [evaluate, hp]
 
-theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value)
+@[guarantee] theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value)
     (decided : List (List Emit)) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hr : requirementsRejection st fs records now name input = .ok none)
     (hd : fs.decide name input records now = .ok decided) (hu : ∃ e ∈ decided.flatten, st.lists name e = false) :
@@ -130,7 +131,7 @@ theorem mem_orderedGroups (decided : List (List Emit)) (sorted : List Emit) (e :
   obtain ⟨_, ⟨g, hg, rfl⟩, he⟩ := h
   exact mem_chunks _ _ e (List.mem_flatten.mpr ⟨g, hg, (List.mergeSort_perm _ _).mem_iff.mp he⟩)
 
-theorem accepted_emits_decided (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
+@[guarantee] theorem accepted_emits_decided (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
     (groups : List (List Emit)) (vs : List Fault)
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
     ∃ input decided, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
@@ -165,7 +166,7 @@ theorem accepted_emits_decided (records : Records) (now : Time) (name : String) 
 Each event that a command accepted with the sorting functions (Functions.sorting, which `instrument` gives every run)
 emits is one that its `decide` returned, with the payload sorted by its event's schema, parsed by it, and sorted again.
 -/
-theorem decide_payloads_sorted (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
+@[guarantee] theorem decide_payloads_sorted (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
     (groups : List (List Emit)) (vs : List Fault)
     (h : evaluate st (fs.sorting st) records now name raw = .accepted written groups vs) :
     ∃ input decided, fs.decide name input records now = .ok decided ∧

@@ -1,5 +1,6 @@
 import Tazuna.Explore.ChoiceDependent
 import Tazuna.Thm.Data.Binding
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Explore.ChoiceDependent
 
@@ -12,7 +13,7 @@ States that sameState finds the same (records and instances together) are rename
 that extends one of the output bindings: each created key of `original` stands for one created key of `alternative`,
 one to one.
 -/
-theorem sameState_renamed {set : List Binding} {original alternative : Finished}
+@[guarantee] theorem sameState_renamed {set : List Binding} {original alternative : Finished}
     (hx : Distinct original.state) (hy : Distinct alternative.state)
     (h : sameState set original alternative = .same) :
     ∃ b ∈ set, ∃ c : Binding, b.Extends c ∧ OneToOne c.pairs ∧

@@ -2,6 +2,7 @@ import Tazuna.Thm.Data.Pairing
 import Tazuna.Thm.Data.Canonical
 import Tazuna.Thm.Verify.Pairing
 import Tazuna.Verify.Snapshot
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Verify.Snapshot
 
@@ -16,7 +17,7 @@ theorem numbered_values (snapshot : List (Option Value)) :
   | nil => intro n; rfl
   | cons v vs ih => intro n; cases v <;> simp [List.zipIdx_cons, ih]
 
-theorem compareSnapshot_eq_none_iff (snapshot : List (Option Value)) (run : List Value) :
+@[guarantee] theorem compareSnapshot_eq_none_iff (snapshot : List (Option Value)) (run : List Value) :
     compareSnapshot snapshot run = none ↔ (snapshot.filterMap id).map Value.canonical = run.map Value.canonical := by
   rw [← numbered_values, List.map_map]
   simp only [compareSnapshot, Option.map_eq_none_iff, List.find?_eq_none, List.mem_range, decide_eq_true_eq,
@@ -35,7 +36,7 @@ theorem compareSnapshot_eq_none_iff (snapshot : List (Option Value)) (run : List
     simp only [List.getElem?_map] at this
     exact this
 
-theorem compareSnapshot_reordered (snapshot : List (Option Value)) (run : List Value)
+@[guarantee] theorem compareSnapshot_reordered (snapshot : List (Option Value)) (run : List Value)
     (h : ReorderedList (snapshot.filterMap id) run) : compareSnapshot snapshot run = none := by
   rw [compareSnapshot_eq_none_iff, ← canonicalList_eq, ← canonicalList_eq]
   exact h.canonical_eq

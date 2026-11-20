@@ -2,6 +2,7 @@ import Tazuna.Thm.Data.Pairing
 import Tazuna.Verify.Pairing
 import Tazuna.Thm.Data.List
 import Tazuna.Data.Binding
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Verify.Pairing
 
@@ -84,7 +85,7 @@ theorem pairTraces_nil (services : List (String × Bool)) (expected : List Expec
     Option.isNone_iff_eq_none, unknownServiceViolations_nil, and_imp, and_assoc]
 
 /-- The theorem leaves out runs of scenarios of external services because check rejects them (scenarioOfExternalService). -/
-theorem no_violation_iff (services : List (String × Bool)) (expected : List Expected) (others : List String)
+@[guarantee] theorem no_violation_iff (services : List (String × Bool)) (expected : List Expected) (others : List String)
     (folders : List Folder) (uniqueServices : (services.map (·.1)).Nodup)
     (uniqueFolders : (folders.map (·.service)).Nodup) :
     (pairTraces services expected others folders).violations = [] ↔

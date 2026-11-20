@@ -1,5 +1,6 @@
 import Tazuna.Service.State
 import Tazuna.Spec.Structure
+import Tazuna.Thm.Guarantee
 
 /-!
 The createKey values of a state: each is `<entity>-<n>` for the entity's `n`-th value, qualified by the running service that
@@ -76,7 +77,7 @@ theorem count_lt {es : List String} {i j : Nat} (hij : i < j) (hj : j < es.lengt
   omega
 
 /-- No two createKey values of a state are equal, whatever it went through. -/
-theorem created_distinct (s : State) : (s.created.map (·.2)).Nodup := by
+@[guarantee] theorem created_distinct (s : State) : (s.created.map (·.2)).Nodup := by
   unfold State.created
   rw [List.Nodup, List.pairwise_iff_getElem]
   intro i j hi hj hij heq
@@ -109,7 +110,7 @@ theorem givenKeys_getElem_pair (o : Option String) (es : List String) (i : Nat)
   cases o <;> simp [givenKeys, keyChars, keyPrefix, String.toList_append, Nat.toList_repr, toString]
 
 /-- Each createKey value of a state is `<owner>/<entity>-<n>`, `n` > 0, for its entity and the state's service. -/
-theorem created_form {s : State} {e k : String} (h : (e, k) ∈ s.created) :
+@[guarantee] theorem created_form {s : State} {e k : String} (h : (e, k) ∈ s.created) :
     ∃ n, 0 < n ∧ k.toList = keyChars (some s.service) e n := by
   unfold State.created at h
   obtain ⟨i, hi, he⟩ := List.mem_iff_getElem.mp h

@@ -1,4 +1,5 @@
 import Tazuna.Validation.Canonical
+import Tazuna.Thm.Guarantee
 
 /-!
 The verdict of check's structural NonCanonical part: the canonical forms that a spec without such a violation keeps.
@@ -27,7 +28,7 @@ structure CanonicalForms (s : Structure) : Prop where
 Canonical.check reports no violation exactly when the spec keeps every canonical form that the structure shows
 (CanonicalForms).
 -/
-theorem canonical_check_eq_nil_iff (s : Structure) : Canonical.check s = [] ↔ CanonicalForms s := by
+@[guarantee] theorem canonical_check_eq_nil_iff (s : Structure) : Canonical.check s = [] ↔ CanonicalForms s := by
   simp only [Canonical.check, List.append_eq_nil_iff]
   have machines : statelessMachines s = [] ↔
       ∀ d ∈ s.definitions, ∀ c, d.body = .machine c → stateless c = false := by

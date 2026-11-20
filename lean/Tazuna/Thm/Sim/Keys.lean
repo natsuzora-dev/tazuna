@@ -2,6 +2,7 @@ import Tazuna.Sim.Run
 import Tazuna.Thm.Sim.Run
 import Tazuna.Thm.Service.Keys
 import Tazuna.Thm.Service.KeyGrowth
+import Tazuna.Thm.Guarantee
 
 /-!
 The createKey values of the running services of a simulation: each running service's values differ from each other, and from
@@ -18,7 +19,7 @@ open Tazuna.Thm.Data.Basic
 A string that writtenKey? lets a scenario write is no createKey value of a keyed entity of a running service `p`,
 in any state whose values `p` qualifies.
 -/
-theorem unwritten_not_created {w : World} {p : String} {st : Service} (hs : (p, st) ∈ w.services) {s : State}
+@[guarantee] theorem unwritten_not_created {w : World} {p : String} {st : Service} (hs : (p, st) ∈ w.services) {s : State}
     (ho : s.service = p) {e k : String} (he : e ∈ st.entities) (hk : st.singles.contains e = false)
     (hw : w.writtenKey? (.str k) = none) : (e, k) ∉ s.created := by
   intro h
@@ -368,7 +369,7 @@ theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : Keep
     split <;> exact .refl _
 
 /-- The lines of a scenario keep every running service's createKey values from the start: they may only add to them. -/
-theorem execute_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
+@[guarantee] theorem execute_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
     KeepsWorld start (execute j fsOf start sc) := by
   unfold execute World.execute
   simp only [bind, pure]
@@ -401,7 +402,7 @@ theorem givenKeys_prefix (o : Option String) {es es' : List String} (h : es <+: 
       rw [a₂, b₂, he, ht]
 
 /-- A running service keeps every createKey value that it has: each is among its values in any later world. -/
-theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
+@[guarantee] theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
     (w.state p).created <+: (w'.state p).created := by
   unfold State.created
   rw [(h p).1]
@@ -411,7 +412,7 @@ theorem created_kept {w w' : World} (h : KeepsWorld w w') (p : String) :
 No createKey value of a running service at the end of the lines of a scenario equals a key of a keyed entity that
 the start's writtenKey? lets the scenario write: the running service qualifies its values by its name throughout the run.
 -/
-theorem execute_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
+@[guarantee] theorem execute_unwritten_not_created (j : Spec.Structure) (start : World) (sc : Scenario) {p : String} {st : Service}
     (hs : (p, st) ∈ start.services) (ho : (start.state p).service = p) {e k : String} (he : e ∈ st.entities)
     (hk : st.singles.contains e = false) (hw : start.writtenKey? (.str k) = none) :
     (e, k) ∉ ((execute j fsOf start sc).state p).created :=

@@ -189,6 +189,15 @@ tazuna detects a break of each assumption only in part or not at all.
   Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
   The theorems are about the Lean definitions with pure spec functions (`Functions Id`), and about a scenario's start only through hypotheses such as distinct Given keys.
   `test` runs the definitions with the spec functions of the TypeScript runtime and passes `verify`'s comparison to the exploration, so its runs rest on this assumption.
+  Two rules exist only in the TypeScript runtime.
+  Spec functions read the keys of an entity in one order, whatever order the records were written in, while the Lean definitions give spec functions the records in write order.
+  `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for the structure that loading builds, and no theorem states what loading guarantees of it.
+- **Definitions without a theorem.** No theorem states what three Lean definitions do.
+  The step-order search reaches every order of dependent steps that changes a message's outcome (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
+  A proof needs that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write of every step.
+  The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists (`checkExchanges` in `lean/Tazuna/Service/Input.lean`).
+  That list is the definition, so a theorem would only restate it.
+  The cause chain is what `causedBy` in `lean/Tazuna/Sim/Order.lean` computes, and the theorems under [Ordering](#ordering) state only the `after` that it gives.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
@@ -208,29 +217,6 @@ tazuna detects a break of each assumption only in part or not at all.
 - **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
   The Lean build fails on `sorry` and on any axiom other than `propext`, `Classical.choice`, and `Quot.sound`, so no theorem rests on an unproven step.
 
-## Properties without a theorem
-
-No theorem proves the following properties yet.
-
-| Property | Holds by |
-|---|---|
-| Processing that reaches a limit that tazuna sets halts with the `Fault` of that limit. | `drain` in `lean/Tazuna/Service/Chart/Macrostep.lean`, `settle` in `lean/Tazuna/Service/Chart/Always.lean`, `fireDue` in `lean/Tazuna/Service/Queue.lean` |
-| The service answers a repeated query again, because a query has no identity. | `call` in `lean/Tazuna/Service/Input.lean` |
-| A refuse line gives the sender the `unavailable` answer. | `take` in `lean/Tazuna/Sim/Run.lean` |
-| A halting `Fault` or `InvalidInput` halts the simulation. | `stopped` in `lean/Tazuna/Sim/Network.lean` |
-| A run that halts gets no checks of the exchanges with external services. | `World.ended` in `lean/Tazuna/Sim/Run.lean` |
-| A clock line publishes the subscription answers that the new time changes. | `fireTo` in `lean/Tazuna/Sim/Run.lean` |
-| Only a clock line moves the current time. | `fireTo` in `lean/Tazuna/Sim/Run.lean` |
-| A command is processed as one message. | `send` in `lean/Tazuna/Service/Input.lean` |
-| Several open instances of one screen are each operable. | `operate` in `lean/Tazuna/Service/Input.lean` |
-| A message carries its value as the sender wrote it, and only the receiver parses it. A spec service's `invalid-input` answer to another spec service is the sender's `Fault`. | `checkAnswer` in `lean/Tazuna/Service/Input.lean` |
-| A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it. | `withoutRepeatedAnswers` in `lean/Tazuna/Verify/Compare.lean` |
-| The step-order search reaches every order of dependent steps that changes a message's outcome: steps whose reads and writes do not overlap commute, and `involved` covers every read and write. | `stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean` |
-| The end-of-run checks of the exchanges with external services. | `checkExchanges` in `lean/Tazuna/Service/Input.lean` |
-| Which steps cause which, beyond the `after` theorems under Ordering. | `causedBy` in `lean/Tazuna/Sim/Order.lean` |
-| Spec functions read the keys of an entity in one order, whatever order the records were written in. The Lean definitions give spec functions the records in write order. | The TypeScript runtime only. |
-| `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source. The Lean definitions take the structure that loading builds, and no theorem states what loading guarantees of it. | The TypeScript runtime only. |
-
 ## Proven properties
 
 Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove it.
@@ -246,6 +232,9 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | A deliver line halts the simulation and delivers nothing when one of its messages has an earlier message in flight that must arrive first: on its channel, not named by the line, and not an event of a step that no cause chain links to its own. | `overtaking_delivery_halts` |
 | An external peer's answer line that names a request that has not reached the peer halts the simulation. | `external_answer_needs_delivery` |
 | A halting `InvalidScenario` violation halts the simulation, and once the simulation halts, the steps of the later lines take no effect. | `halting_report_stops`, `lines_after_stop_ignored` |
+| A halting `Fault` or `InvalidInput` of a running service halts the simulation. | `halting_finding_stops` |
+| A run that halts gets no checks of the exchanges with external services. | `stopped_run_skips_exchanges` |
+| A refuse line that names one request in flight loses the request and delivers the `unavailable` answer to its sender. | `refuse_answers_unavailable` |
 | Each line keeps every created key. | `execute_keepsKeys`, `created_kept` |
 | The `n`-th created key of an entity is `<owner>/<Entity>-<n>`, so no two createKey calls of one service return the same key. | `created_form`, `created_distinct` |
 | No key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity. This needs the service's state to name the service as the owner of its keys, which `World.start` sets but no theorem proves. | `unwritten_not_created`, `execute_unwritten_not_created` |
@@ -260,6 +249,7 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | An accepted command emits exactly the events that its `decide` returned, each once, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run. Each payload has its collections sorted by the declared schema, is parsed by it, and is sorted again, since parsing fills defaults as the schema writes them. A run gets its spec functions only from `instrument`, which sorts them. | `accepted_emits_decided`, `decide_payloads_sorted`, `instrument_agrees`, `unlisted_emitted_event_halts` |
 | The service answers a query with the output of its `resolve`, its collections sorted by the declared schema, parsed by it, and sorted again. | `resolve_output_answered`, `sorting_resolve_parsed`, `instrument_agrees`, `requirements_lookup` |
 | When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`. | `command_invalid_input_rejected`, `query_invalid_input_rejected` |
+| A spec service's `invalid-input` answer to another spec service is the sender's `Fault`, because a message carries its value as the sender wrote it and only the receiver parses it. | `invalid_input_answer_blames_sender` |
 
 ### Statecharts
 
@@ -298,7 +288,7 @@ The other rows are tazuna's own.
 | Publishing sends no answer to a subscription id that no open subscription has. | `ended_subscription_not_answered` |
 | Opening a screen creates one child instance of the opened screen. | `entering_opens_one_child`, `requirements_lookup` |
 | Among the screens open above an operated screen, a modal one covers it, as in the WAI-ARIA modal dialog. | `modal_child_covers` |
-| Non-modal screens above an operated screen leave it operable. | `nonmodal_child_lets_parent` |
+| Non-modal screens above an operated screen leave it operable, so several open instances of one screen are each operable. | `nonmodal_child_lets_parent` |
 
 ### Time
 
@@ -308,11 +298,15 @@ The other rows are tazuna's own.
 | Every line that the steps of a message and the checks after them write carries the current time. | `message_outputs_at_its_time` |
 | A deadline due by the time that the clock moves to fires as a message of its own, at its time. | `deadline_message_at_its_time` |
 | Deadlines of one service due at the same time fire in the step order that `test` searches, whichever line moved the time. | `chooseDeadline_stepOrder` |
+| Only a clock line moves the current time. | `only_clock_moves_time` |
+| A clock line publishes the subscription answers that the new time changes. | `clock_publishes` |
 
 ### Processing and completion
 
 | Property | Theorems |
 |---|---|
+| A command is processed as one message, with the work that it causes. | `command_one_message` |
+| Processing that still has work when it reaches a limit that tazuna sets halts with the `Fault` of that limit. | `always_rounds_limit_halts`, `command_limit_halts`, `done_selections_limit_halts`, `due_deadlines_limit_halts`, `message_work_limit_halts` |
 | A failed postcondition or invariant is a `Fault` of the command after which it fails. | `failed_ensures_blames_command`, `entity_invariant_reported_iff`, `service_invariant_reported_iff` |
 | A rejected command writes no record and emits no event. | `rejected_command_changes_nothing` |
 | An accepted command leaves exactly the records that applying its emitted events gives. | `accepted_command_writes_then_queues_reactions` |
@@ -340,6 +334,7 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | A reference that does not resolve is a `Fault`. | `dangling_ref_reported_iff` |
 | When a command arrives again with the same id and the same input, the service answers it with the first answer and does not run it again. | `resent_command_gets_first_answer` |
 | The service rejects a command that reuses an id with another input, whatever the order of object fields. | `reused_id_rejected` |
+| The service answers a repeated query again, because a query has no identity. | `query_answered_again` |
 | When an event or an answer arrives again with the same id, the service does not process it again. | `redelivered_event_not_processed`, `redelivered_answer_not_processed` |
 | Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed`, `sameState_renamed` |
 | For a binding that pairs no value of domain "", that renaming is a renaming in the sense of the rows below. | `matchValue_strRenamed` |
@@ -354,6 +349,7 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | A restart begins the service again from the part of its state that it persists: its records, its command answers, the events and answers that arrived, and its created keys. It discards the part in its process memory: its instances, deadlines, awaited requests, and subscriptions. | `restart_keeps` |
 | An answer that arrives when its request waits no more, as after a restart, is written and has no other effect. The end of the run checks it with the other answers, and no theorem states that check. | `late_answer_written` |
 | A restart reads nothing of the state that it discards. | `restart_forgets` |
+| A restart ends every subscription for `verify`, which expects the first answer of a subscription with the same id after it. | `first_answer_after_restart_kept` |
 
 ### Comparison
 

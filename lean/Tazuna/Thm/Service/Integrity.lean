@@ -2,6 +2,7 @@ import Tazuna.Service.Integrity
 import Tazuna.Thm.Data.Basic
 import Tazuna.Thm.Service.Records
 import Tazuna.Thm.Service.Functions
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Integrity
 
@@ -158,7 +159,7 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
         · cases he
         · cases hc; exact Or.inr rfl
 
-theorem entity_invariant_reported_iff (records : Records) (name : String) (definition : Spec.Ref) (key c : String)
+@[guarantee] theorem entity_invariant_reported_iff (records : Records) (name : String) (definition : Spec.Ref) (key c : String)
     (command : Spec.Ref) :
     .failedEntityInvariant definition key c command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
@@ -180,7 +181,7 @@ theorem entity_invariant_reported_iff (records : Records) (name : String) (defin
   · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
 
-theorem service_invariant_reported_iff (records : Records) (name : String) (c : String) (command : Spec.Ref) :
+@[guarantee] theorem service_invariant_reported_iff (records : Records) (name : String) (c : String) (command : Spec.Ref) :
     .failedServiceInvariant c command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ fs.serviceInvariant records = .ok (some c) := by
   rw [mem_integrityViolations]
@@ -197,7 +198,7 @@ theorem service_invariant_reported_iff (records : Records) (name : String) (c : 
   · rintro ⟨rfl, hs⟩
     exact Or.inr (Or.inr ⟨c, hs, rfl⟩)
 
-theorem dangling_ref_reported_iff (records : Records) (name : String) (definition : Spec.Ref)
+@[guarantee] theorem dangling_ref_reported_iff (records : Records) (name : String) (definition : Spec.Ref)
     (key field targetKey : String) (command : Spec.Ref) :
     .danglingRef definition key field targetKey command ∈ (integrityViolations st fs records name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧

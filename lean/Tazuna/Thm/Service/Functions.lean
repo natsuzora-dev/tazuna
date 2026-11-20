@@ -1,5 +1,6 @@
 import Tazuna.Service.Functions
 import Tazuna.Thm.Data.Basic
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Functions
 
@@ -111,7 +112,7 @@ theorem sorting_decide_parsed (name : String) (input : Value) (records : Records
       exact heo.symm
 
 /-- A query's output is the sorted output of resolve, as its output schema parses it, sorted again. -/
-theorem sorting_resolve_parsed (name : String) (input : Value) (records : Records) (now : Time) (output : Value)
+@[guarantee] theorem sorting_resolve_parsed (name : String) (input : Value) (records : Records) (now : Time) (output : Value)
     (h : (fs.sorting st).resolve name input records now = .ok output) :
     ∃ raw, fs.resolve name input records now = .ok raw ∧
       ∃ y, fs.parse (.output (st.ref name)) (st.sorted (m := Id) (.output (st.ref name)) raw) = .ok (some y) ∧

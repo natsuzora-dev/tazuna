@@ -1,6 +1,7 @@
 import Tazuna.Data.Binding
 import Tazuna.Thm.Data.Renaming
 import Tazuna.Thm.Data.List
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Data.Binding
 
@@ -246,7 +247,7 @@ mutual
 Every binding under which matchValue compares two values equal relates them by `Renamed`: keys as the binding pairs
 them, bags and objects after reordering.
 -/
-theorem matchValue_renamed (v : Values) (b : Binding) (x y : CValue) (hx : Distinct x) (hy : Distinct y)
+@[guarantee] theorem matchValue_renamed (v : Values) (b : Binding) (x y : CValue) (hx : Distinct x) (hy : Distinct y)
     {out : List (From b)} (h : matchValue v b x y = some out) : ∀ c ∈ out, Renamed (BoundBy v.domain c.val) x y := by
   intro c hc
   match x, y, hx, hy with
@@ -403,7 +404,7 @@ theorem boundBy_strRenames {dom : String → String} {c : Binding} (hc : ∀ p �
       exact (hc p hp).2 (by rw [e]; exact hd)
 
 /-- matchValue_renamed for a binding that pairs no value of domain "", in the relation of Renaming. -/
-theorem matchValue_strRenamed {v : Values} {b : Binding} {x y : CValue} (hx : Distinct x) (hy : Distinct y)
+@[guarantee] theorem matchValue_strRenamed {v : Values} {b : Binding} {x y : CValue} (hx : Distinct x) (hy : Distinct y)
     {out : List (From b)} (h : matchValue v b x y = some out) {c : From b} (hc : c ∈ out)
     (hblank : ∀ p ∈ c.val.pairs, p.1.1 ≠ "" ∧ p.2.1 ≠ "") : Renamed (StrRenames v.domain c.val.pairs) x y :=
   Renamed.mono (fun _ _ => boundBy_strRenames hblank) (matchValue_renamed v b x y hx hy h c hc)

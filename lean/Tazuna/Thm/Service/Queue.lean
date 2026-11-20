@@ -2,6 +2,7 @@ import Tazuna.Service.Queue
 import Tazuna.Thm.Service.Screen.Subscription
 import Tazuna.Thm.Service.Query
 import Tazuna.Thm.Service.Clock
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Queue
 
@@ -52,11 +53,11 @@ theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : K
           try simp only [id_bind, endMessage_id]
           exact ih _ (afterMessage_keysDistinct (drain_keysDistinct _ _ (by rw [(keeps_settled _ _ (keeps_fire _ _)).records]; exact h)))
 
-theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDistinct (message st fs s q).records := by
+@[guarantee] theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDistinct (message st fs s q).records := by
   simp only [message, finish, id_bind, endMessage_id]
   exact fireDue_keysDistinct _ _ _ (afterMessage_keysDistinct (drain_keysDistinct _ _ h))
 
-theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
+@[guarantee] theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time) (e t : Deadline) (s' : State)
     (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
     (hc : chooseDeadline s e (s.deadlines.filter (·.time == e.time))
       (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
@@ -67,8 +68,16 @@ theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time
       id_pure, endMessage_id, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
   exact (keeps_settled _ _ (keeps_fire _ t)).now _
 
-theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
+@[guarantee] theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
     ∃ new, (afterMessage st fs (drain st fs n s q)).lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now :=
   (drain_grows n q).trans (drain_keeps_now n q) afterMessage_grows
+
+
+/-- A clock advance that still has a deadline due after Limit.dueDeadlines deadlines halts with exceededDueDeadlines. -/
+@[guarantee] theorem due_deadlines_limit_halts (to : Time) (tie : Option Time) (hs : s.halted = none)
+    (hd : (earliestDeadline s.deadlines to).isSome = true) :
+    (fireDue st fs to 0 tie s).halted = some (.fault (.exceededDueDeadlines Limit.dueDeadlines.max)) := by
+  simp only [fireDue, hs, Option.isNone_none, hd, Bool.and_self, ite_true]
+  exact report_halted _ rfl
 
 end Tazuna.Thm.Service.Queue

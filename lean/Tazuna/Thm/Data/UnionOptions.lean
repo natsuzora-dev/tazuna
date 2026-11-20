@@ -1,4 +1,5 @@
 import Tazuna.Data.UnionOptions
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Data.UnionOptions
 
@@ -70,7 +71,7 @@ theorem misses_absurd {a b : Value} {fields : List (String × Value)} (hm : miss
 
 /-- No value fits two options that are `apart`, so the option that `fits` picks in a union whose options are all apart
 is the only one that the value fits. -/
-theorem apart_disjoint {a b v : Value} (h : apart a b = true) (ha : fits a v = true) (hb : fits b v = true) : False := by
+@[guarantee] theorem apart_disjoint {a b v : Value} (h : apart a b = true) (ha : fits a v = true) (hb : fits b v = true) : False := by
   have hta : fitsType a v = true := by simp only [fits, Bool.and_eq_true] at ha; exact ha.1.1
   have htb : fitsType b v = true := by simp only [fits, Bool.and_eq_true] at hb; exact hb.1.1
   simp only [apart, Bool.or_eq_true, Bool.and_eq_true] at h

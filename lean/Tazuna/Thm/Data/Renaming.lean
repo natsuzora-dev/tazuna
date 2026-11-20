@@ -1,5 +1,6 @@
 import Tazuna.Data.Binding
 import Tazuna.Thm.Data.List
+import Tazuna.Thm.Guarantee
 
 /-!
 Explore compares two runs up to a renaming of their created keys (Data/Binding): a created key of one run may stand for
@@ -309,7 +310,7 @@ theorem composeLeft_fst_sublist (b c : List (Bound × Bound)) :
       · simpa using ih.cons p.1
       · simpa using ih.cons_cons p.1
 
-theorem compose_fst_nodup {b c : List (Bound × Bound)} (hb : (b.map Prod.fst).Nodup)
+@[guarantee] theorem compose_fst_nodup {b c : List (Bound × Bound)} (hb : (b.map Prod.fst).Nodup)
     (hc : (c.map Prod.fst).Nodup) : ((compose b c).map Prod.fst).Nodup := by
   rw [compose_eq, List.map_append, List.nodup_append]
   refine ⟨hb.sublist (composeLeft_fst_sublist b c), hc.sublist ((List.filter_sublist).map _), ?_⟩
@@ -362,7 +363,7 @@ theorem composeLeft_snd_nodup {b c : List (Bound × Bound)} (hb : (b.map Prod.sn
           · exact hs (List.mem_map.mpr ⟨_, hqx, rfl⟩)
           · exact hq2 e.symm
 
-theorem compose_snd_nodup {b c : List (Bound × Bound)} (hb : (b.map Prod.snd).Nodup)
+@[guarantee] theorem compose_snd_nodup {b c : List (Bound × Bound)} (hb : (b.map Prod.snd).Nodup)
     (hc : (c.map Prod.snd).Nodup) : ((compose b c).map Prod.snd).Nodup := by
   rw [compose_eq, List.map_append, List.nodup_append]
   refine ⟨composeLeft_snd_nodup hb hc, hc.sublist ((List.filter_sublist).map _), ?_⟩
@@ -400,11 +401,11 @@ theorem strRenames_compose {dom : String → String} {b c : List (Bound × Bound
 /-! ## The equivalence -/
 
 /-- Every value renames to itself under the empty binding. -/
-theorem renamed_refl (dom : String → String) (v : CValue) : Renamed (StrRenames dom []) v v :=
+@[guarantee] theorem renamed_refl (dom : String → String) (v : CValue) : Renamed (StrRenames dom []) v v :=
   Renamed.refl (fun _ => renames_nil.mpr rfl) v
 
 /-- A renaming under a consistent binding reads backward under the inverse binding. -/
-theorem renamed_symm {dom : String → String} {b : List (Bound × Bound)} (hb : Consistent dom b) {s t : CValue}
+@[guarantee] theorem renamed_symm {dom : String → String} {b : List (Bound × Bound)} (hb : Consistent dom b) {s t : CValue}
     (h : Renamed (StrRenames dom b) s t) : Renamed (StrRenames dom (inverse b)) t s :=
   Renamed.mono (fun _ _ h => strRenames_inverse hb h) (Renamed.symm h)
 
@@ -412,7 +413,7 @@ theorem renamed_symm {dom : String → String} {b : List (Bound × Bound)} (hb :
 Two renamings in a row, the first under a consistent binding and the second under a binding that binds each value at
 most once, are one renaming under their composition.
 -/
-theorem renamed_trans {dom : String → String} {b c : List (Bound × Bound)} (hb : Consistent dom b)
+@[guarantee] theorem renamed_trans {dom : String → String} {b c : List (Bound × Bound)} (hb : Consistent dom b)
     (hc : (c.map Prod.fst).Nodup) {s t u : CValue} (h₁ : Renamed (StrRenames dom b) s t)
     (h₂ : Renamed (StrRenames dom c) t u) : Renamed (StrRenames dom (compose b c)) s u :=
   Renamed.mono (fun _ _ ⟨_, h, h'⟩ => strRenames_compose hb hc h h') (Renamed.trans h₁ h₂)

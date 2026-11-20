@@ -1,6 +1,7 @@
 import Tazuna.Sim.Run
 import Tazuna.Thm.Data.Basic
 import Tazuna.Thm.Service.Queue
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Sim.Run
 
@@ -84,7 +85,7 @@ theorem given_then (j : Spec.Structure) (w : World) (sc : Scenario) (then' : Lis
 Then and the end checks only add violations: the world that `simulate` leaves is the one `execute` leaves after the run
 ends, with the same traces, messages, and halt, and more violations.
 -/
-theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario)
+@[guarantee] theorem simulate_reported (j : Spec.Structure) (start : World) (sc : Scenario)
     (h : (start.given j fsOf sc).violations = []) :
     Reported ((execute j fsOf start sc).ended fsOf) (simulate j fsOf start sc) := by
   unfold simulate execute World.execute
@@ -101,7 +102,7 @@ theorem expect_nil (w : World) (own : String) (lines : List Scenario.Line) (foun
 Then only adds violations: the scenario leaves the same traces, messages, and halt as the scenario without its
 expectations, so a snapshot depends on Given and When alone.
 -/
-theorem then_only_reports (j : Spec.Structure) (start : World) (sc : Scenario) :
+@[guarantee] theorem then_only_reports (j : Spec.Structure) (start : World) (sc : Scenario) :
     Reported (simulate j fsOf start { sc with expectations := [] }) (simulate j fsOf start sc) := by
   unfold simulate
   simp only [bind, pure, given_then]
@@ -118,7 +119,7 @@ theorem then_only_reports (j : Spec.Structure) (start : World) (sc : Scenario) :
       exact expect_reported _ _ _ _ _
 
 /-- A report that halts stops the simulation. -/
-theorem halting_report_stops (w : World) (r : InvalidScenario) (hr : r.halts = true) : (w.report r).stopped = true := by
+@[guarantee] theorem halting_report_stops (w : World) (r : InvalidScenario) (hr : r.halts = true) : (w.report r).stopped = true := by
   simp [World.report, World.stopped, hr]
 
 theorem foldlM_step_stopped (sc : Scenario) (xs : List (Scenario.Line × Nat)) (w : World) (h : w.stopped = true) :
@@ -128,7 +129,7 @@ theorem foldlM_step_stopped (sc : Scenario) (xs : List (Scenario.Line × Nat)) (
   | cons x xs ih => simp only [List.foldlM_cons, World.step, h, ite_true, id_bind, id_pure]; exact ih
 
 /-- The lines after the one that stopped the simulation take no effect. -/
-theorem lines_after_stop_ignored (sc : Scenario) (pre post : List (Scenario.Line × Nat)) (w : World)
+@[guarantee] theorem lines_after_stop_ignored (sc : Scenario) (pre post : List (Scenario.Line × Nat)) (w : World)
     (h : (pre.foldlM (m := Id) (fun w (l, i) => w.step fsOf sc l i) w).stopped = true) :
     (pre ++ post).foldlM (m := Id) (fun w (l, i) => w.step fsOf sc l i) w =
       pre.foldlM (m := Id) (fun w (l, i) => w.step fsOf sc l i) w := by
@@ -403,7 +404,7 @@ theorem line_eq (w : World) (own : String) (lines : List Scenario.Line) (i : Nat
 A line that is not a deliver, lose, or refuse line leaves every message in flight as it is: no message reaches its
 receiver, or is lost, unless a line names it.
 -/
-theorem line_keeps_leftInFlight (w : World) (own : String) (lines : List Scenario.Line)
+@[guarantee] theorem line_keeps_leftInFlight (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (l : Scenario.Line) (hl : moved l = none) :
     KeepsInFlight (fun _ => False) w (w.line fsOf own lines i l) := by
   rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
@@ -413,7 +414,7 @@ theorem line_keeps_leftInFlight (w : World) (own : String) (lines : List Scenari
 /--
 A deliver, lose, or refuse line leaves every message in flight as it is, except those its handle names.
 -/
-theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenario.Line)
+@[guarantee] theorem moving_line_keeps_others (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (l : Scenario.Line) (f : Scenario.Fact) (hl : moved l = some f) (ks : List Nat)
     (hk : (w.messagesOf fsOf i f).run = .ok ks) :
     KeepsInFlight (· ∈ ks) w (w.line fsOf own lines i l) := by
@@ -456,7 +457,7 @@ A deliver line any of whose messages has an earlier message in flight that the l
 first (World.precedes) delivers nothing and stops the simulation with a violation: ordered messages on one channel reach
 their receiver in sending order. A line that names both delivers them in one processing.
 -/
-theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
+@[guarantee] theorem overtaking_delivery_halts (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (f : Scenario.Fact) (ks : List Nat) (k : Nat) (msg : Message)
     (hk : (w.messagesOf fsOf i f).run = .ok ks) (hkm : k ∈ ks) (hm : w.messages[k]? = some msg)
     (j : Nat) (n : Message) (hj : j < k) (hjk : j ∉ ks) (hn : w.messages[j]? = some n)
@@ -536,7 +537,7 @@ theorem holds_stated {k : Nat} {msg : Message} {peer : String} {w : World} (h : 
 /--
 An external peer's answer line names requests that reached that peer: when any it takes did not, the simulation stops.
 -/
-theorem external_answer_needs_delivery (w : World) (own : String) (lines : List Scenario.Line)
+@[guarantee] theorem external_answer_needs_delivery (w : World) (own : String) (lines : List Scenario.Line)
     (i : Nat) (peer : String) (f : Scenario.Fact) (a : Scenario.Template) (ks : List Nat) (k : Nat)
     (msg : Message) (hr : w.role peer = some .external)
     (hk : (w.messagesOf fsOf i f).run = .ok ks) (hkm : k ∈ ks)
@@ -625,7 +626,7 @@ def reaches : Scenario.Line → Bool
 A line that gives no running service anything to process changes no running service's state: a peer's message, an answer, an
 event, a lost message, or a leaveInFlight or look line leaves every receiver as it was until a line delivers the message.
 -/
-theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line)
+@[guarantee] theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line)
     (hl : reaches l = false) : (w.line fsOf own lines i l).states = w.states := by
   rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
   · show SameStates w _
@@ -641,16 +642,189 @@ theorem line_keeps_states (w : World) (own : String) (lines : List Scenario.Line
     | _ => simp only [reaches, reduceCtorEq] at hl <;> simp only [World.take, bind, pure] <;> same_tac
   · exact same_report (same_refl w) r
 /-- An answer that arrives again with the id of an earlier one is written and not processed again. -/
-theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer)
+@[guarantee] theorem redelivered_answer_not_processed (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer)
     (hd : id ∈ s.deliveries) :
     answerIn st fs s id to a = message st fs (s.write .in (some id) (.answer to a)).1.newMessage {} := by
   simp [answerIn, hd]
 
 /-- An answer to a request that waits no more, as after a restart, is written and has no other effect. -/
-theorem late_answer_written (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer)
+@[guarantee] theorem late_answer_written (st : Service) (fs : Functions Id) (s : State) (id to : LineId) (a : Answer)
     (hd : id ∉ s.deliveries) (hp : s.pending.find? (·.id == to) = none) :
     answerIn st fs s id to a =
       message st fs ({ s with deliveries := s.deliveries ++ [id] }.write .in (some id) (.answer to a)).1.newMessage {} := by
   simp [answerIn, hd, hp]
+
+
+/-- `w'` has the current time of `w`. -/
+def SameNow (w w' : World) : Prop := w'.now = w.now
+
+theorem now_report {w w' : World} (h : SameNow w w') (r : InvalidScenario) : SameNow w (w'.report r) := by
+  unfold SameNow World.report; split <;> exact h
+
+theorem now_post {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (sender receiver : String) (l : Line)
+    (d : Spec.Ref) : SameNow w (w'.post o sender receiver l d) := by
+  unfold World.post; dsimp only; split
+  · exact now_report h _
+  · exact h
+
+theorem now_route {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (service : String) (lines : List Line) :
+    SameNow w (w'.route o service lines) := by
+  unfold World.route
+  refine foldl_keeps (SameNow w) _ (fun v l hv => ?_) _ _ h
+  split
+  · exact hv
+  · split <;> (try split) <;> first
+      | exact hv
+      | exact now_post hv _ _ _ _ _
+      | (refine foldl_keeps _ _ (fun u x hu => ?_) _ _ hv; dsimp only; split
+         · exact now_post hu _ _ _ _ _
+         · exact hu)
+
+theorem now_act {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (service : String)
+    (f : Service → Functions Id → State → Id State) : SameNow w (w'.act fsOf o service f) := by
+  unfold World.act; split
+  · exact h
+  · dsimp only [bind, pure, MonadActing.acting]
+    refine now_route ?_ _ _ _
+    exact h
+
+theorem now_recordSent {w w' : World} (h : SameNow w w') (i : Nat) (service : String) (before : Nat)
+    (id : Option LineId) : SameNow w (w'.recordSent i service before id) := by
+  unfold World.recordSent; split
+  · split <;> exact h
+  · exact h
+
+theorem now_setStatuses {w w' : World} (h : SameNow w w') (ks : List Nat) (status : Status) :
+    SameNow w (ks.foldl (fun w k => w.setStatus k status) w') :=
+  foldl_keeps (SameNow w) (fun w k => w.setStatus k status) (fun _ _ hv => hv) _ _ h
+
+theorem now_deliver {w w' : World} (h : SameNow w w') (o : Scenario.Origin) (receiver : String) (ks : List Nat) :
+    SameNow w (w'.deliver fsOf o receiver ks) := by
+  unfold World.deliver; dsimp only; split <;> exact now_act (now_setStatuses h _ _) _ _ _
+
+theorem now_deliverCarried {w w' : World} (h : SameNow w w') (i : Nat) (ks : List Nat) :
+    SameNow w (w'.deliverCarried fsOf i ks) := by
+  unfold World.deliverCarried
+  simp only [bind, pure, foldlM_id]
+  refine foldl_keeps (SameNow w) _ (fun v r hv => ?_) _ _ (foldl_keeps (SameNow w) (fun w k => w.carry i k) (fun _ _ hu => hu) _ _ h)
+  split
+  · exact hv
+  · split
+    · exact now_setStatuses hv _ _
+    · refine foldl_keeps _ _ (fun u k hu => ?_) _ _ (now_deliver hv _ _ _)
+      split
+      · split
+        · exact hu
+        · exact foldl_keeps (SameNow w) _ (fun x _ hx => now_recordSent hx _ _ _ _) _ _ hu
+      · exact hu
+
+theorem now_resolving {α : Type} {w w' : World} (h : SameNow w w') (r : ExceptT InvalidScenario Id α)
+    (k : α → Id World) (hk : ∀ a, SameNow w (k a)) : SameNow w (w'.resolving r k) := by
+  unfold World.resolving; simp only [bind]; split
+  · exact now_report h _
+  · exact hk _
+
+theorem now_attempt {α : Type} {w w' : World} (h : SameNow w w') (r : Except InvalidScenario α)
+    (k : α → Id World) (hk : ∀ a, SameNow w (k a)) : SameNow w (w'.attempt r k) := by
+  unfold World.attempt; split
+  · exact now_report h _
+  · exact hk _
+
+theorem now_stated {w w' : World} (h : SameNow w w') (i : Nat) (msg : Message) : SameNow w (w'.stated i msg) := by
+  unfold World.stated; split
+  · exact now_report h _
+  · exact h
+
+theorem now_clientRequest {w w' : World} (h : SameNow w w') (i : Nat) (type : Scenario.RequestType) (target : Spec.Ref)
+    (input : Scenario.Template) (sameIdAs : Option Nat) :
+    SameNow w (w'.clientRequest fsOf i type target input sameIdAs) := by
+  unfold World.clientRequest
+  simp only [bind, pure]
+  split
+  · exact now_report h _
+  · refine now_resolving h _ _ fun v => ?_
+    (repeat' split) <;> first
+      | exact now_report h _
+      | exact now_recordSent (now_act h _ _ _) _ _ _ _
+
+theorem now_forEach {α : Type} {w w' : World} (h : SameNow w w') {xs : List α} {f : World → α → Id World}
+    (hf : ∀ v x, SameNow w v → SameNow w (f v x)) : SameNow w (w'.forEach xs f) :=
+  forEach_keeps (SameNow w) h fun v x _ hv => hf v x hv
+
+/-- Closes `SameNow w x` where `x` is built from `w` by steps that keep the current time. -/
+macro "now_tac" : tactic => `(tactic| repeat' (first
+  | contradiction
+  | assumption
+  | with_reducible apply now_report
+  | with_reducible apply now_stated
+  | with_reducible apply now_act
+  | with_reducible apply now_deliverCarried
+  | with_reducible apply now_clientRequest
+  | with_reducible refine now_resolving ?_ _ _ fun _ => ?_
+  | with_reducible refine now_attempt ?_ _ _ fun _ => ?_
+  | with_reducible refine now_forEach ?_ fun _ _ _ => ?_
+  | with_reducible refine foldl_keeps _ _ (fun _ _ _ => ?_) _ _ ?_
+  | exact rfl
+  | dsimp only
+  | split))
+
+/-- Only a clock line moves the current time of the simulation. -/
+@[guarantee] theorem only_clock_moves_time (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
+    (l : Scenario.Line) (hl : ∀ t, l ≠ .at t) : (w.line fsOf own lines i l).now = w.now := by
+  show SameNow w _
+  rcases line_eq w own lines i l with h | ⟨r, -, h⟩ <;> rw [h]
+  · cases l with
+    | «at» t => exact absurd rfl (hl t)
+    | _ => simp only [World.take, bind, pure]; now_tac
+  · exact now_report rfl r
+
+
+/--
+A refuse line that names one request in flight answers the sender `unavailable`: the request is lost, and the line
+delivers the rejection to the sender.
+-/
+@[guarantee] theorem refuse_answers_unavailable (w : World) (own : String) (lines : List Scenario.Line) (i : Nat)
+    (f : Scenario.Fact) (k : Nat) (msg : Message) (hk : (w.messagesOf fsOf i f).run = .ok [k])
+    (hm : w.messages[k]? = some msg) (hs : msg.status = .inFlight) (ht : (requestTarget? msg.body).isSome = true)
+    (hw : w.stopped = false) :
+    ∃ reply : Message, reply.sender = msg.receiver ∧ reply.receiver = msg.sender ∧
+      reply.body = .answer (receivedId msg.sender msg.id) (.rejected { kind := .unavailable }) ∧
+      w.take fsOf own lines i (.refuse f) =
+        let w' := w.setStatus k .lost
+        { w' with messages := w'.messages.push reply }.deliverCarried fsOf i [w.messages.size] := by
+  refine ⟨?reply, ?sender, ?receiver, ?body, ?take⟩
+  case take =>
+    have hn : (requestTarget? msg.body).isNone = false := by simpa [Option.isNone_iff_eq_none, Option.isSome_iff_ne_none] using ht
+    simp only [World.take, World.resolving, World.forEach, bind, pure, hk, foldlM_id, List.foldl_cons, List.foldl_nil,
+      hw, Bool.false_eq_true, ite_false, hm, hs, hn]
+    have hw' : w.halted.isSome = false ∧ (w.states.any fun x => x.2.halted.isSome) = false := by
+      simpa [World.stopped] using hw
+    simp only [bne_self_eq_false, Bool.false_eq_true, ite_false, World.stopped, hw'.1, hw'.2, Bool.or_false,
+      World.setStatus, Array.size_push, Array.size_modify, Nat.add_sub_cancel_left, List.range_one, List.map_cons,
+      List.map_nil, Nat.add_zero]
+    rfl
+  all_goals rfl
+
+
+/-- A running service whose state reported a halting `Fault` or `InvalidInput` stops the simulation. -/
+@[guarantee] theorem halting_finding_stops (w : World) (q : String) (s : State) (f : Finding)
+    (hm : (q, s.report f) ∈ w.states) (hf : f.halts = true) : w.stopped = true := by
+  simp only [World.stopped, Bool.or_eq_true, List.any_eq_true]
+  exact Or.inr ⟨_, hm, by simp [Tazuna.Thm.Service.State.report_halted f hf]⟩
+
+/-- A run that stopped gets no checks of the exchanges with external services. -/
+@[guarantee] theorem stopped_run_skips_exchanges (w : World) (h : w.stopped = true) : w.ended fsOf = w := by
+  simp [World.ended, h]
+
+/--
+A clock line publishes the subscription answers that the new time changes: after the due deadlines fire, a running
+service that did not halt writes the time line and publishes.
+-/
+@[guarantee] theorem clock_publishes (time : Time) (st : Service) (fs : Functions Id) (s : State)
+    (h : (fireDue st fs time Limit.dueDeadlines.max none s).halted = none) :
+    fireTo time st fs s =
+      publish st fs ({ fireDue st fs time Limit.dueDeadlines.max none s with
+        now := max (fireDue st fs time Limit.dueDeadlines.max none s).now time }.write .in none .time).1 := by
+  simp [fireTo, h]
 
 end Tazuna.Thm.Sim.Run

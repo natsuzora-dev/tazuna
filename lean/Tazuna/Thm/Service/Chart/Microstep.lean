@@ -5,6 +5,7 @@ import Tazuna.Thm.Service.Chart.Request
 import Tazuna.Thm.Data.List
 import Tazuna.Thm.Spec.Tree
 import Tazuna.Thm.Service.Note
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Chart.Microstep
 
@@ -241,13 +242,13 @@ theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × St
       · intro hp; exact ⟨_, ⟨hp, rfl⟩, rfl⟩
     by_cases hp : (i.id, cs.spec.name) ∈ pairs <;> simp [hp, hm, ih]
 
-theorem microstep_exits_in_exit_order (s : State) (i : Instance) (chosen : List (InstanceId × Transition)) :
+@[guarantee] theorem microstep_exits_in_exit_order (s : State) (i : Instance) (chosen : List (InstanceId × Transition)) :
     ((((i.documentOrder.filter (· ∈ s.exitPairs chosen)).reverse).filter (·.1 == i.id)).map (·.2)) =
       i.chart.tree.exitOrder (((s.exitPairs chosen).filter (·.1 == i.id)).map (·.2)) := by
   rw [List.filter_reverse, List.map_reverse, documentOrder_owner_pairs i _]
   simp only [Tree.entryOrder, Tree.exitOrder, List.filter_reverse]
 
-theorem microstep_enters_in_entry_order (s : State) (i : Instance) (chosen : List (InstanceId × Transition)) :
+@[guarantee] theorem microstep_enters_in_entry_order (s : State) (i : Instance) (chosen : List (InstanceId × Transition)) :
     (((i.documentOrder.filter (· ∈ s.entryPairs chosen)).filter (·.1 == i.id)).map (·.2)) =
       i.chart.tree.entryOrder (((s.entryPairs chosen).filter (·.1 == i.id)).map (·.2)) :=
   documentOrder_owner_pairs i _

@@ -1,5 +1,6 @@
 import Tazuna.Service.Basic
 import Tazuna.Thm.Validation.Check
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Basic
 
@@ -28,7 +29,7 @@ theorem lookup_of_mem {β : Type} {l : List (String × β)} {a : String} {b : β
 Every own command, query, and screen of a service has requirements, so the requirements lookups that the run makes
 through expectFound find them.
 -/
-theorem requirements_lookup (j : Spec.Structure) (service : String) (d : Spec.Definition) (hd : d ∈ j.definitions)
+@[guarantee] theorem requirements_lookup (j : Spec.Structure) (service : String) (d : Spec.Definition) (hd : d ∈ j.definitions)
     (hs : d.service = service) (hk : d.body matches .command _ | .query _ | .screen _) :
     ∃ rq, (ofStructure (m := Id) j service).run.requirements.lookup d.name = some rq := by
   rw [requirements_ofStructure]
@@ -62,7 +63,7 @@ theorem charts_ofStructure (j : Spec.Structure) (service : String) :
 Every deadline of a checked structure's charts has a delay in milliseconds, so addDeadlines' lookup of it
 (expectFound) always finds one.
 -/
-theorem deadlines_exact (j : Spec.Structure) (h : Tazuna.Thm.Validation.Check.Checked j) (service : String) :
+@[guarantee] theorem deadlines_exact (j : Spec.Structure) (h : Tazuna.Thm.Validation.Check.Checked j) (service : String) :
     ∀ c ∈ (ofStructure (m := Id) j service).run.charts, ∀ cs ∈ c.states, ∀ t ∈ cs.spec.deadlines,
       t.time.isExact = true := by
   intro c hc cs hcs t ht

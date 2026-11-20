@@ -1,5 +1,6 @@
 import Tazuna.Service.Chart.Request
 import Tazuna.Thm.Service.Chart.Queue
+import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Service.Chart.Request
 
@@ -95,14 +96,14 @@ theorem growsBy_sendEntered : GrowsBy (sendEntered fs st) := fun r =>
   (foldlM_grows (fun e => growsBy_activateEntered e) (fun e => keeps_activateEntered e) _
     ⟨r.state, { r.queue with entered := [] }⟩).bridge rfl rfl
 
-theorem exited_state_sends_nothing (e : InstanceId × String × Nat) (r : Processing) (i : Instance)
+@[guarantee] theorem exited_state_sends_nothing (e : InstanceId × String × Nat) (r : Processing) (i : Instance)
     (hi : r.state.machine? e.1 = some i) (hn : i.isIn e.2.1 = false) : activateEntered fs st e r = r := by
   unfold activateEntered withMachine
   split
   · rfl
   · simp [hi, hn]
 
-theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) (i : Instance)
+@[guarantee] theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) (i : Instance)
     (c : Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
     (hi : r.state.machine? name = some i) (hc : st.chart? a.ref.name = some c)
     (raw : Value) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (raw, keys))

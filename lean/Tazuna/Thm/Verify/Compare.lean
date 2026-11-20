@@ -1,6 +1,7 @@
 import Tazuna.Verify.Compare
 import Tazuna.Thm.Data.Binding
 import Tazuna.Thm.Data.Basic
+import Tazuna.Thm.Guarantee
 
 /-!
 What compareGroup decides: a group of `out` lines without a finding pairs every snapshot line with a trace line, one to
@@ -48,7 +49,7 @@ theorem opt_bound {v : Values} {b : Binding} {x y : Option String} {out : List (
 What two lines that compare equal under `b` share: their type, direction and name; their ids, when the snapshot line is
 an `in` line or an `out` request; the request they answer and their `resultOf`; and their content, renamed under `b`.
 -/
-theorem contentMatch_renamed {dom : String → String} {b : Binding} {s t : Line} (h : ContentMatch dom b s t)
+@[guarantee] theorem contentMatch_renamed {dom : String → String} {b : Binding} {s t : Line} (h : ContentMatch dom b s t)
     (hd : ∀ x ∈ s.content, Distinct x) (he : ∀ y ∈ t.content, Distinct y) :
     s.fields = t.fields ∧ ((s.body.dir = .in ∨ s.isOutRequest = true) → BoundBy dom b s.body.id t.body.id) ∧
       OptBound dom b s.body.to? t.body.to? ∧ OptBound dom b s.body.resultOf? t.body.resultOf? ∧
@@ -758,7 +759,7 @@ A trace that compare finds no violation in matches the snapshot: no line cut the
 comparison ends with, each snapshot group matches the trace group at its place (GroupsMatch). Each binding is one to one
 within each domain.
 -/
-theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool)
+@[guarantee] theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool)
     (renamed : Values → Values) (relation : Bool)
     (h : (Verify.compare snapshot lines cut internal renamed relation).findings = []) :
     cut = none ∧ (Verify.compare snapshot lines cut internal renamed relation).bindings ≠ [] ∧
@@ -778,5 +779,18 @@ theorem compare_matches (snapshot lines : List (Option Line)) (cut : Option Unco
   refine ⟨trivial, fun e => hne (List.map_eq_nil_iff.mp e), fun b hb => ?_⟩
   obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hb
   exact ⟨c.val.pairs_oneToOne, (hall c hc).2⟩
+
+
+/--
+A restart ends every subscription for verify: after it, the first answer to a subscription that the same id opens again
+is kept, whatever answer the id had before.
+-/
+@[guarantee] theorem first_answer_after_restart_kept (r sub a : Line) (ls : List (Option Line))
+    (open_ : List (String × Option String)) (restartId id name to : String) (input : Value) (answer : Answer)
+    (hr : r.body = .restart .in restartId) (hs : sub.body = .subscribe .in id name input)
+    (ha : a.body = .answer .out to id answer) :
+    ∃ rest, withoutRepeatedAnswers.go (some r :: some sub :: some a :: ls) open_ =
+      some r :: some sub :: some a :: rest := by
+  simp [withoutRepeatedAnswers.go, hr, hs, ha]
 
 end Tazuna.Thm.Verify.Compare
