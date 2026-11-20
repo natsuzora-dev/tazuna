@@ -452,8 +452,7 @@ export class SpecFunctions implements Functions {
   }
 
   parse(schema: Schema, value: unknown): Checked | Failed {
-    // Given writes every field of a record, so a record also fails on a field that its entity does not have.
-    const object = schema.kind === "record" ? strictObjectOf(this.shape(schema)) : objectOf(this.shape(schema));
+    const object = strictObjectOf(this.shape(schema));
     const parsed = attempt(() => object.safeParse(value), schema);
     if (parsed instanceof Failed) return parsed;
     if (!parsed.success) return { error: zodError(parsed.error.issues) };

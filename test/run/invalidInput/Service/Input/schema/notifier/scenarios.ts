@@ -22,3 +22,15 @@ export const receiveAddedEmptyTitle = scenario({
   },
   then: () => [],
 });
+
+const withNote = { taskId: "task-1", title: "Buy milk", note: "two bottles" };
+
+export const receiveAddedWithUnknownField = scenario({
+  description:
+    "Receive an added task with a field that taskAdded does not have; a field that nothing reads is the sender's mistake, so test reports eventPayloadSchema",
+  given: arranged,
+  when: (w) => {
+    w.net.deliver(w.peer.todo.emit(todo.taskAdded, withNote, { resultOf: null }));
+  },
+  then: () => [],
+});

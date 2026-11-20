@@ -160,14 +160,16 @@ def Ensured.passes : Ensured → Bool
 
 /--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
-value or the Issue that stopped the code.
+value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks, whether
+it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
+dropped.
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and
   written back as JSON (only its codecs run, encoding) if it matches the schema (the canonical value), or none otherwise.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.
 - normalize: a value that a spec function made (a decide payload or a resolve output), canonical if it matches the
-  schema, or none otherwise. Extra fields do not match.
+  schema, or none otherwise.
 - binding: whether one binds value of a command is non-null.
 - requirement: whether one requires condition of a command holds.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
