@@ -107,6 +107,19 @@ export type Illegal =
         readonly state: string;
         readonly history: string;
       };
+    }
+  /**
+   * The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that Temporal
+   * does not read, so the run cannot add it to an instant in milliseconds. `check` reports none exactly when every delay
+   * has a length in milliseconds (`Checked.delaysExact`).
+   */
+  | {
+      readonly kind: "Illegal.inexactDelay";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly state: string;
+        readonly deadline: string;
+      };
     };
 
 export const illegalKinds = [
@@ -119,4 +132,5 @@ export const illegalKinds = [
   "Illegal.indexReason",
   "Illegal.foreignMember",
   "Illegal.restoredHeld",
+  "Illegal.inexactDelay",
 ] as const;

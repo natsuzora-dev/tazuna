@@ -51,6 +51,7 @@ interface ChartState {
   readonly offers: StateStructure["offers"];
   /** Whether the state has parameters (`held`), which the edge that enters it fills. */
   readonly hasParameters: boolean;
+  readonly deadlines: StateStructure["deadlines"];
 }
 
 /** An executable chart. `tree` is the chart's structure, which the syntax tree functions read. */
@@ -90,17 +91,12 @@ function transitionOf(t: TransitionStructure): Transition {
 }
 
 /** Returns the activity of `a`, or none when it names no definition. */
-function activityOf(a: ActivityStructure): Activity[] {
-  const target = a.definition;
-  if (target === null) return [];
-  return [
-    a.keyword === "opens"
-      ? { keyword: a.keyword, key: a.name, target, modal: a.modal }
-      : { keyword: a.keyword, key: a.name, target },
-  ];
-}
+const activityOf = (a: ActivityStructure): Activity =>
+  a.keyword === "opens"
+    ? { keyword: a.keyword, key: a.name, target: a.definition, modal: a.modal }
+    : { keyword: a.keyword, key: a.name, target: a.definition };
 
-/** Returns the executable chart of the structure `c`, dropping each receives key that names no event. */
+/** Lean's Chart.ofSpec: the executable chart of the structure `c`. */
 export function executableChart(c: ChartStructure, order: number, opened: boolean): Chart {
   return {
     name: c.name,
@@ -115,15 +111,16 @@ export function executableChart(c: ChartStructure, order: number, opened: boolea
           parent: st.parent,
           kind: st.kind,
           initial: st.initial,
-          activities: st.activities.flatMap(activityOf),
+          activities: st.activities.map(activityOf),
           transitions: st.transitions.map(transitionOf),
           offers: st.offers,
-          hasParameters: st.hasParameters,
+          hasParameters: st.heldSchema !== null,
+          deadlines: st.deadlines,
         },
       ]),
     ),
     tree: c,
-    receives: Object.entries(c.receives).flatMap(([key, r]) => (r === null ? [] : [[key, r] as const])),
+    receives: Object.entries(c.receives),
     screen: c.kind === "screen",
     opened,
     offers: c.offers,

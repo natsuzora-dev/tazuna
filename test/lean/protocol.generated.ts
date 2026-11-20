@@ -460,11 +460,6 @@ export type Question =
       readonly extra: Extra;
     }
   | {
-      readonly type: "deadlines";
-      readonly machine: string;
-      readonly state: string;
-    }
-  | {
       readonly type: "deadlineTime";
       readonly scope: Scope;
       readonly name: string;
@@ -638,10 +633,6 @@ export type Reply =
   | {
       readonly type: "held";
       readonly held: Json;
-    }
-  | {
-      readonly type: "deadlines";
-      readonly names: readonly string[];
     }
   | {
       readonly type: "deadlineTime";

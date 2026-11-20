@@ -143,6 +143,8 @@ instance : ToValue Bool := ⟨.bool⟩
 
 instance : ToValue Nat := ⟨fun n => .num n⟩
 
+instance : ToValue Int := ⟨fun n => .num ⟨n, 0⟩⟩
+
 instance : ToValue Value := ⟨id⟩
 
 instance {α : Type} [ToValue α] : ToValue (Option α) := ⟨fun o => (o.map ToValue.toValue).getD .null⟩
@@ -171,6 +173,10 @@ instance : FromValue Bool := ⟨fun
 instance : FromValue Nat := ⟨fun
   | .num ⟨m, 0⟩ => if m ≥ 0 then pure m.toNat else throw "expected a natural number"
   | _ => throw "expected a natural number"⟩
+
+instance : FromValue Int := ⟨fun
+  | .num ⟨m, 0⟩ => pure m
+  | _ => throw "expected an integer"⟩
 
 instance : FromValue Value := ⟨pure⟩
 

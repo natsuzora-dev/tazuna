@@ -108,7 +108,7 @@ function enterOne(r: Processing, instance: Instance, name: string, step: number,
     else endWith(r, instance.id, exitFuel(r.st));
     return;
   }
-  addDeadlines(r, instance, name, step);
+  addDeadlines(r, instance, name, state.deadlines, step);
   if (state.activities.length > 0) enterQueue(r.queue, instance.id, name, step);
 }
 

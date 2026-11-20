@@ -796,17 +796,10 @@ export class SpecFunctions implements Functions {
     return values;
   }
 
-  deadlines(machine: string, state: string): readonly string[] {
-    return Object.keys(this.node(machine, state).after ?? {});
-  }
-
   deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed {
     const d = named(this.node(chartOf(scope.id), this.stateOf(scope)).after, name, "deadline");
     const at = d.at as ((args: unknown) => unknown) | undefined;
-    if (at === undefined) {
-      if (d.delay === undefined) throw new InternalError(`the deadline ${name} has neither delay nor at`);
-      return scope.now.add(d.delay).toString();
-    }
+    if (at === undefined) throw new InternalError(`the deadline ${name} has no at`);
     const time = attempt(() => at(this.args(scope, records, access)));
     if (time instanceof Failed) return time;
     return time instanceof Temporal.Instant ? time.toString() : undefined;

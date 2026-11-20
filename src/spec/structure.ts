@@ -6,7 +6,9 @@ import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts"
 import type {
   Activity as ActivityStructure,
   AssumptionMismatch,
+  DeadlineTime,
   Definition as DefinitionStructure,
+  Delay,
   ResultOfMismatch,
   State as StateStructure,
   Structure,
@@ -231,6 +233,17 @@ export function schemaProperties(schema: unknown): string[] {
   const properties = (schema as { readonly properties?: unknown } | null)?.properties;
   return properties !== null && typeof properties === "object" ? Object.keys(properties) : [];
 }
+
+/** Lean's Delay.ms?: the length of `d` in milliseconds, or undefined when a date unit or a part below one is not 0. */
+export function delayMs(d: Delay): number | undefined {
+  const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } = d;
+  if ([years, months, weeks, days, microseconds, nanoseconds].some((n) => n !== 0)) return undefined;
+  return ((hours * 60 + minutes) * 60 + seconds) * 1000 + milliseconds;
+}
+
+/** Lean's DeadlineTime.exact: whether the run can add the delay of `time` to an instant. */
+export const isExact = (time: DeadlineTime): boolean =>
+  time.kind === "at" || (time.delay !== null && delayMs(time.delay) !== undefined);
 
 /** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value of the entity. */
 export function isKeyOf(entity: string, value: string): boolean {

@@ -1,4 +1,6 @@
+import type { Delay } from "../data/datetime.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import type { Shape } from "../data/values.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
@@ -12,7 +14,7 @@ import {
   type StateSpec,
 } from "../dsl/definition.ts";
 import { refTarget } from "../dsl/entity.ts";
-import type { Structure } from "../spec/structure.generated.ts";
+import type { DeadlineTime, Structure } from "../spec/structure.generated.ts";
 import type {
   ActivityStructure,
   ChartStructure,
@@ -124,6 +126,7 @@ function structureWith(
           name,
           key: d.single ? null : d.key,
           fields: Object.keys(d.fields),
+          schema: schemaOf(d, d.fields as Shape),
           unique: d.single ? [] : [...d.unique],
           references: references(d.fields as Shape, at),
           keys: keysOf(d.fields as Shape, ref, at),
@@ -171,6 +174,7 @@ function structureWith(
           command: ref(oneEntry(d.commands), `${at} commands`),
           binds: Object.keys(d.binds),
           guard: Object.keys(d.guard),
+          onRejected: d.onRejected !== undefined,
         };
       const chart = chartOf(d) as ChartSpec;
       return {
@@ -186,6 +190,23 @@ function structureWith(
     }),
   };
   return { structure, thrownDefaults };
+}
+
+/**
+ * Returns how the time of the deadline `d` is computed, with its delay as Temporal.Duration reads it, or null when it
+ * does not. The types give a deadline a delay or an `at`.
+ */
+function deadlineTime(d: { readonly delay?: Delay; readonly at?: unknown }, deadline: string): DeadlineTime {
+  if (d.at !== undefined) return { kind: "at" };
+  if (d.delay === undefined) throw new InternalError(`the deadline ${deadline} has neither delay nor at`);
+  try {
+    const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } =
+      Temporal.Duration.from(d.delay);
+    const delay = { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds };
+    return { kind: "delay", delay };
+  } catch {
+    return { kind: "delay", delay: null };
+  }
 }
 
 const keysOf = (shape: Shape, ref: RefOf, at: string) =>
@@ -219,18 +240,20 @@ function structureOfChart(
   const visit = (nodes: Readonly<Record<string, StateSpec>>, parent: StateStructure | undefined): void => {
     for (const [name, node] of Object.entries(nodes)) {
       const activities = [
-        ...Object.keys(node.calls ?? {}).map(
-          (key): ActivityStructure => ({
+        ...Object.entries(node.calls ?? {}).map(
+          ([key, call]): ActivityStructure => ({
             keyword: "calls",
             name: key,
             definition: ref(chart.queries?.[key], `state ${name} calls ${key}`),
+            onRejected: call.onRejected !== undefined,
           }),
         ),
-        ...Object.keys(node.sends ?? {}).map(
-          (key): ActivityStructure => ({
+        ...Object.entries(node.sends ?? {}).map(
+          ([key, send]): ActivityStructure => ({
             keyword: "sends",
             name: key,
             definition: ref(chart.commands[key], `state ${name} sends ${key}`),
+            onRejected: send.onRejected !== undefined,
           }),
         ),
         ...Object.keys(node.shows ?? {}).map(
@@ -259,10 +282,15 @@ function structureOfChart(
         offers: offerKinds(node.offers),
         activities,
         transitions: transitions(node, name),
-        deadlines: Object.keys(node.after ?? {}),
+        deadlines: Object.entries(node.after ?? {}).map(([deadline, d]) => ({
+          name: deadline,
+          ...deadlineTime(d, `${name} ${deadline}`),
+        })),
+        keySchema: node.type === "map" ? schemaOf(node.key) : null,
         itemKeys: keysOf(node.key ?? {}, ref, `state ${name}`),
+        contextSchema: node.type === "map" ? schemaOf(node.context ?? {}) : null,
         contextKeys: keysOf(node.context ?? {}, ref, `state ${name} context`),
-        hasParameters: node.held !== undefined,
+        heldSchema: node.held === undefined ? null : schemaOf(node.held),
         heldKeys: keysOf(node.held ?? {}, ref, `state ${name} held`),
       };
       states.push(state);
@@ -275,6 +303,7 @@ function structureOfChart(
   return {
     initial: chart.initial,
     context: Object.keys(chart.context),
+    contextSchema: schemaOf(chart.context),
     contextKeys: keysOf(chart.context, ref, "context"),
     input: Object.keys(chart.input ?? {}),
     output: Object.keys(chart.output ?? {}),

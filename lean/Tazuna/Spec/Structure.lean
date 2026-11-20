@@ -57,11 +57,11 @@ def Ref.traceName (r : Ref) (service : String) : String :=
 
 /--
 An activity of a state. `name` is the key under the keyword, and `definition` is the query, command, or screen of
-that key.
+that key. `onRejected` says whether the body writes a transition on a rejected answer.
 -/
 inductive Activity where
-  | calls (name : String) (definition : Ref)
-  | sends (name : String) (definition : Ref)
+  | calls (name : String) (definition : Ref) (onRejected : Bool)
+  | sends (name : String) (definition : Ref) (onRejected : Bool)
   | shows (name : String) (definition : Ref)
   | opens (name : String) (definition : Ref) (modal : Bool)
 deriving Repr, Inhabited
@@ -109,6 +109,56 @@ deriving Repr, Inhabited
 
 derive_wire KeyPosition
 
+/--
+A deadline's delay, as Temporal.Duration reads it: the count of each unit. TS reads it and Lean decides what it means
+(Delay.ms?).
+-/
+structure Delay where
+  years : Int
+  months : Int
+  weeks : Int
+  days : Int
+  hours : Int
+  minutes : Int
+  seconds : Int
+  milliseconds : Int
+  microseconds : Int
+  nanoseconds : Int
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Delay
+
+/--
+The length of `d` in milliseconds, which the run adds to an instant, or none when a date unit, which has no fixed
+length for an instant, or a part below a millisecond, which the run's time cannot count, is not zero.
+-/
+def Delay.ms? (d : Delay) : Option Int :=
+  if d.years == 0 && d.months == 0 && d.weeks == 0 && d.days == 0 && d.microseconds == 0 && d.nanoseconds == 0 then
+    some (((d.hours * 60 + d.minutes) * 60 + d.seconds) * 1000 + d.milliseconds)
+  else none
+
+/-- How a deadline's time is computed. -/
+inductive DeadlineTime where
+  /-- `now` plus the delay, or null when Temporal.Duration does not read the delay. -/
+  | delay (delay : Option Delay)
+  /-- What its `at` function computes. -/
+  | «at»
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire DeadlineTime tag "kind"
+
+/-- Whether the run can add the delay of `time` to an instant: true for an `at`, which computes an instant. -/
+def DeadlineTime.exact : DeadlineTime → Bool
+  | .delay d => (d.bind Delay.ms?).isSome
+  | .at => true
+
+structure Deadline where
+  name : String
+  time : DeadlineTime
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Deadline flatten time
+
 structure State where
   name : String
   /-- The names from a child of the root down to the state itself. -/
@@ -122,19 +172,28 @@ structure State where
   /-- The activities, in the order calls, sends, shows, opens. -/
   activities : List Activity
   transitions : List Transition
-  /-- The names of the deadlines that the body writes under `after`. -/
-  deadlines : List String
+  /-- The deadlines that the body writes under `after`, in declaration order. -/
+  deadlines : List Deadline
+  /-- The JSON Schema of a map state's item key; null for any other state. -/
+  keySchema : Option Value
   /-- The key positions of a map state's item key; empty for any other state. -/
   itemKeys : List KeyPosition
-  /-- The key positions of a map state's own context, which each copy holds; empty for any other state. -/
+  /-- The JSON Schema of a map state's own context, which each copy holds; null for any other state. -/
+  contextSchema : Option Value
+  /-- The key positions of a map state's own context; empty for any other state. -/
   contextKeys : List KeyPosition
-  /-- Whether the state has parameters (`held`), which the edge that enters the state fills. -/
-  hasParameters : Bool
+  /--
+  The JSON Schema of the state's parameters (`held`), which the edge that enters the state fills; null for a state
+  without parameters.
+  -/
+  heldSchema : Option Value
   /-- The key positions of the state's parameters. -/
   heldKeys : List KeyPosition
 deriving Repr, Inhabited
 
 derive_wire State
+
+def State.hasParameters (st : State) : Bool := st.heldSchema.isSome
 
 def State.shape (st : State) : Shape :=
   { name := st.name, path := st.path, parent := st.parent, initial := st.initial, children := st.children,
@@ -143,6 +202,7 @@ def State.shape (st : State) : Shape :=
 structure ChartFields where
   initial : String
   context : List String
+  contextSchema : Value
   /-- The key positions of the context. -/
   contextKeys : List KeyPosition
   /-- The input fields. A machine has none, and no `output`, `requires`, or `ensures`. -/
@@ -206,6 +266,8 @@ derive_wire Change
 structure EntityBody where
   key : Option String
   fields : List String
+  /-- The JSON Schema of a record. -/
+  schema : Value
   unique : List String
   references : List Reference
   /-- The key positions of the fields. -/
@@ -259,6 +321,8 @@ structure AutomationBody where
   command : Ref
   binds : List String
   guard : List String
+  /-- Whether the automation writes `onRejected`. -/
+  onRejected : Bool
 deriving Repr, Inhabited
 
 derive_wire AutomationBody

@@ -192,7 +192,14 @@ def restoredHeld (s : Structure) : List Illegal :=
     | some c => (restoredHeldOf c).map fun (st, h) => .restoredHeld d.ref st h
     | none => []
 
+def inexactDelays (s : Structure) : List Illegal :=
+  s.definitions.flatMap fun d =>
+    match d.chart? with
+    | some c => c.states.flatMap fun st =>
+      (st.deadlines.filter (!·.time.exact)).map fun t => .inexactDelay d.ref st.name t.name
+    | none => []
+
 def check (s : Structure) : List Illegal :=
-  missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s ++ restoredHeld s
+  missingParents s ++ ownQueries s ++ unlistedControls s ++ alwaysCycles s ++ restoredHeld s ++ inexactDelays s
 
 end Tazuna.Validation.Charts

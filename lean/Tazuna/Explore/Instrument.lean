@@ -274,7 +274,6 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   assign a b c d e := f (fs.assign a b c d e)
   input a b c d := f (fs.input a b c d)
   held a b c d e := f (fs.held a b c d e)
-  deadlines a b := f (fs.deadlines a b)
   deadlineTime a b c := f (fs.deadlineTime a b c)
   offers a b c := f (fs.offers a b c)
   showInput a b c := f (fs.showInput a b c)

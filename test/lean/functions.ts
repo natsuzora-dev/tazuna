@@ -531,8 +531,6 @@ export class RunFunctions implements Answering {
           );
         });
       }
-      case "deadlines":
-        return { type: "deadlines", names: [...this.functions.deadlines(q.machine, q.state)] };
       case "deadlineTime":
         return this.scoped(q.scope, (scope, access) =>
           this.replied(this.functions.deadlineTime(scope, this.records, q.name, access), (time) =>

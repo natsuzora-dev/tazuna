@@ -574,6 +574,19 @@
         "violation": "{\"kind\":\"Illegal.indexReason\",\"definition\":{\"service\":\"todo\",\"name\":\"renameTask\"},\"data\":{\"reason\":\"1\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":20}}"
       }
     },
+    "Illegal.inexactDelay": {
+      "meaning": "The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that Temporal does not read, so the run cannot add it to an instant in milliseconds. `check` reports none exactly when every delay has a length in milliseconds (`Checked.delaysExact`).",
+      "example": {
+        "excerpt": {
+          "file": "reminder/reminder.ts",
+          "from": 15,
+          "to": 24,
+          "line": 15,
+          "text": "export const reminder = machine({\n  description: \"Remind a day after it starts, and nudge half a millisecond after that\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {}, done: {} },\n}).chart({\n  states: {\n    waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: \"reminding\" }] } } },\n    reminding: { after: { nudge: { delay: reminderConstants.nudgeAfter, onFired: [{ target: \"done\" }] } } },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Illegal.inexactDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"day\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":15}}"
+      }
+    },
     "Illegal.missingParent": {
       "meaning": "A screen that no screen opens has the `keys` of input, requires, output, and ensures, in this order. Only a screen that opens it gives the input and reads the output.",
       "example": {
@@ -1209,19 +1222,6 @@
           "text": "export const { command, query } = service({ name: \"todo\", description: \"Keep the notes\", entities: { Note } });"
         },
         "violation": "{\"kind\":\"Malformed.duplicateService\",\"definition\":null,\"data\":{\"name\":\"todo\",\"elsewhere\":\"todo/data.ts\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":7}}"
-      }
-    },
-    "Malformed.inexactDelay": {
-      "meaning": "The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that Temporal does not read, so the run cannot add it to an instant in milliseconds.",
-      "example": {
-        "excerpt": {
-          "file": "reminder/reminder.ts",
-          "from": 15,
-          "to": 24,
-          "line": 15,
-          "text": "export const reminder = machine({\n  description: \"Remind a day after it starts, and nudge half a millisecond after that\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {}, done: {} },\n}).chart({\n  states: {\n    waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: \"reminding\" }] } } },\n    reminding: { after: { nudge: { delay: reminderConstants.nudgeAfter, onFired: [{ target: \"done\" }] } } },\n  },\n});"
-        },
-        "violation": "{\"kind\":\"Malformed.inexactDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"day\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":15}}"
       }
     },
     "Malformed.lineAfterWhen": {

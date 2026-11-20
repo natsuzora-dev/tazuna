@@ -160,8 +160,7 @@ def Ensured.passes : Ensured → Bool
 
 /--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
-value or the Issue that stopped the code; deadlines (no author code), copyContext, and singleRecord (defaults, checked
-at load) always answer.
+value or the Issue that stopped the code; copyContext and singleRecord (defaults, checked at load) always answer.
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), decoded and
   written back as JSON (only its codecs run, encoding) if it matches the schema (the canonical value), or none otherwise.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
@@ -211,9 +210,8 @@ at load) always answer.
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
   of `n` and encoded. A transition's `with` reads what its assign reads.
-- deadlines: a state's `after` deadline names, in declaration order.
-- deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes, as
-  Temporal.Instant.prototype.toString writes it, or none when `at` computes no Instant.
+- deadlineTime: what the `at` of a state's `after` deadline computes on entering it, as
+  Temporal.Instant.prototype.toString writes it, or none when it computes no Instant.
 -/
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
@@ -240,7 +238,6 @@ structure Functions (m : Type → Type) where
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
   held : Scope → Records → String → Edge → Extra → m (Except Issue Value)
-  deadlines : String → String → m (List String)
   deadlineTime : Scope → Records → String → m (Except Issue (Option String))
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)

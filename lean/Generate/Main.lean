@@ -39,7 +39,8 @@ def constArray (name : String) (values : List String) : String :=
 
 /-- The TS type of each Lean type that no generated file declares: a TS built-in, or a type of a hand-written module. -/
 def handTypes : List (Name × String × Option String) :=
-  [(``String, "string", none), (``Nat, "number", none), (``Bool, "boolean", none), (``Tazuna.Data.Time, "string", none),
+  [(``String, "string", none), (``Nat, "number", none), (``Int, "number", none), (``Bool, "boolean", none),
+   (``Tazuna.Data.Time, "string", none),
    (``Tazuna.Data.DateTime, "string", none), (``Tazuna.Data.Value, "Json", some "src/data/values.ts"),
    (``Tazuna.Spec.Ref, "DefinitionRef", some "src/data/definitionRef.ts"),
    (``Tazuna.Data.Violation, "ViolationValue", some "src/data/violation.ts"),
@@ -80,7 +81,8 @@ def modules : List (String × List Name) :=
     [``Tazuna.Data.RejectionKind, ``Tazuna.Data.Rejection, ``Tazuna.Data.Answer, ``Tazuna.Data.LineId,
      ``Tazuna.Data.TraceLine]),
    ("src/spec/structure.generated.ts",
-    [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.State, ``Tazuna.Spec.ChartFields,
+    [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.Delay, ``Tazuna.Spec.DeadlineTime,
+     ``Tazuna.Spec.Deadline, ``Tazuna.Spec.State, ``Tazuna.Spec.ChartFields,
      ``Tazuna.Spec.Reference, ``Tazuna.Spec.KeyPosition, ``Tazuna.Spec.ChangeKind, ``Tazuna.Spec.Change,
      ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
      ``Tazuna.Spec.AutomationBody, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
@@ -305,6 +307,7 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
   | .const ``String _ => return "z.string()"
   | .const ``Bool _ => return "z.boolean()"
   | .const ``Nat _ => return "z.int().nonnegative()"
+  | .const ``Int _ => return "z.int()"
   | .const ``Tazuna.Data.Value _ => return "z.unknown()"
   | .const ``Tazuna.Data.DateTime _ => return "z.iso.datetime({ offset: true })"
   | .const ``Tazuna.Data.Time _ => return "z.string()"

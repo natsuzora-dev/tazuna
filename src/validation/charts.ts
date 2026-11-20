@@ -1,6 +1,12 @@
 import type { Illegal } from "../data/illegal.generated.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-import { type ChartStructure, isOpenedByScreen, stateNamed, type TransitionStructure } from "../spec/structure.ts";
+import {
+  type ChartStructure,
+  isExact,
+  isOpenedByScreen,
+  stateNamed,
+  type TransitionStructure,
+} from "../spec/structure.ts";
 import { addEntrySet, domainDepth, enterable, entryOrder, historyTargets, kindOf, pathOf } from "../spec/tree.ts";
 
 function parentKeys(chart: ChartStructure): string[] {
@@ -158,7 +164,7 @@ function alwaysCycles(structure: Structure): Illegal[] {
 /** Lean's restoredHeldOf: each state with parameters that a history state may restore, with that history state. */
 function restoredHeldOf(chart: ChartStructure): [string, string][] {
   return chart.states.flatMap((st): [string, string][] => {
-    if (!st.hasParameters || st.parent === null) return [];
+    if (st.heldSchema === null || st.parent === null) return [];
     const parent = stateNamed(chart, st.parent);
     if (parent === undefined || parent.kind === "map") return [];
     return parent.children
@@ -181,6 +187,25 @@ function restoredHeld(structure: Structure): Illegal[] {
   );
 }
 
+/** Lean's inexactDelays. */
+function inexactDelays(structure: Structure): Illegal[] {
+  return structure.definitions.flatMap((d) =>
+    d.kind !== "machine" && d.kind !== "screen"
+      ? []
+      : d.states.flatMap((st) =>
+          st.deadlines
+            .filter((t) => !isExact(t))
+            .map(
+              (t): Illegal => ({
+                kind: "Illegal.inexactDelay",
+                definition: { service: d.service, name: d.name },
+                data: { state: st.name, deadline: t.name },
+              }),
+            ),
+        ),
+  );
+}
+
 export function check(structure: Structure): Illegal[] {
   return [
     ...missingParents(structure),
@@ -188,5 +213,6 @@ export function check(structure: Structure): Illegal[] {
     ...unlistedControls(structure),
     ...alwaysCycles(structure),
     ...restoredHeld(structure),
+    ...inexactDelays(structure),
   ];
 }

@@ -80,7 +80,7 @@ theorem keeps_emitAll (s : State) (r : Option LineId) (es : List (Emit × Emitte
 @[simp] theorem emitAll_service (s : State) (r : Option LineId) (es : List (Emit × EmittedBy)) :
     (s.emitAll r es).service = s.service := (keeps_emitAll s r es).1
 
-theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : List String) (s : State) :
+theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : List Spec.Deadline) (s : State) :
     KeepsKeys s (addDeadlines st fs step name n ds s) := by
   unfold addDeadlines
   split
@@ -89,8 +89,11 @@ theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : L
     dsimp only
     split
     · exact .refl _
-    · generalize fs.deadlineTime _ _ _ = r
-      rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> keys_leaf
+    · split
+      · generalize (expectFound _ _ : Id Int) = ms
+        keys_leaf
+      · generalize fs.deadlineTime _ _ _ = r
+        rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> keys_leaf
 
 /-- Processing `f` keeps the createKey values. -/
 def KeysBy (f : Processing → Id Processing) : Prop := ∀ r, KeepsKeys r.state (f r).1

@@ -67,6 +67,7 @@ function placeOfIllegal(spec: LoadedSpec, illegal: Illegal): Place {
     case "Illegal.foreignEvent":
     case "Illegal.indexReason":
     case "Illegal.restoredHeld":
+    case "Illegal.inexactDelay":
       return placeOf(spec, illegal.definition);
   }
 }

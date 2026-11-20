@@ -295,8 +295,6 @@ export interface Functions {
    * `state`. A transition's `with` reads what its assign reads.
    */
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed;
-  /** Returns the names of a state's `after` deadlines, in declaration order. */
-  deadlines(machine: string, state: string): readonly string[];
   /** Lean's deadlineTime, with undefined for none. */
   deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
   offers(

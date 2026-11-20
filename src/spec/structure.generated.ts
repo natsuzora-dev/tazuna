@@ -6,18 +6,20 @@ import type { Json } from "../data/values.ts";
 
 /**
  * An activity of a state. `name` is the key under the keyword, and `definition` is the query, command, or screen of
- * that key.
+ * that key. `onRejected` says whether the body writes a transition on a rejected answer.
  */
 export type Activity =
   | {
       readonly keyword: "calls";
       readonly name: string;
       readonly definition: DefinitionRef;
+      readonly onRejected: boolean;
     }
   | {
       readonly keyword: "sends";
       readonly name: string;
       readonly definition: DefinitionRef;
+      readonly onRejected: boolean;
     }
   | {
       readonly keyword: "shows";
@@ -41,6 +43,39 @@ export type Transition = {
   readonly reenter: boolean | null;
 };
 
+/**
+ * A deadline's delay, as Temporal.Duration reads it: the count of each unit. TS reads it and Lean decides what it means
+ * (Delay.ms?).
+ */
+export type Delay = {
+  readonly years: number;
+  readonly months: number;
+  readonly weeks: number;
+  readonly days: number;
+  readonly hours: number;
+  readonly minutes: number;
+  readonly seconds: number;
+  readonly milliseconds: number;
+  readonly microseconds: number;
+  readonly nanoseconds: number;
+};
+
+/** How a deadline's time is computed. */
+export type DeadlineTime =
+  /** `now` plus the delay, or null when Temporal.Duration does not read the delay. */
+  | {
+      readonly kind: "delay";
+      readonly delay: Delay | null;
+    }
+  /** What its `at` function computes. */
+  | {
+      readonly kind: "at";
+    };
+
+export type Deadline = {
+  readonly name: string;
+} & DeadlineTime;
+
 export type State = {
   readonly name: string;
   /** The names from a child of the root down to the state itself. */
@@ -54,14 +89,21 @@ export type State = {
   /** The activities, in the order calls, sends, shows, opens. */
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
-  /** The names of the deadlines that the body writes under `after`. */
-  readonly deadlines: readonly string[];
+  /** The deadlines that the body writes under `after`, in declaration order. */
+  readonly deadlines: readonly Deadline[];
+  /** The JSON Schema of a map state's item key; null for any other state. */
+  readonly keySchema: Json | null;
   /** The key positions of a map state's item key; empty for any other state. */
   readonly itemKeys: readonly KeyPosition[];
-  /** The key positions of a map state's own context, which each copy holds; empty for any other state. */
+  /** The JSON Schema of a map state's own context, which each copy holds; null for any other state. */
+  readonly contextSchema: Json | null;
+  /** The key positions of a map state's own context; empty for any other state. */
   readonly contextKeys: readonly KeyPosition[];
-  /** Whether the state has parameters (`held`), which the edge that enters the state fills. */
-  readonly hasParameters: boolean;
+  /**
+   * The JSON Schema of the state's parameters (`held`), which the edge that enters the state fills; null for a state
+   * without parameters.
+   */
+  readonly heldSchema: Json | null;
   /** The key positions of the state's parameters. */
   readonly heldKeys: readonly KeyPosition[];
 };
@@ -69,6 +111,7 @@ export type State = {
 export type ChartFields = {
   readonly initial: string;
   readonly context: readonly string[];
+  readonly contextSchema: Json;
   /** The key positions of the context. */
   readonly contextKeys: readonly KeyPosition[];
   /** The input fields. A machine has none, and no `output`, `requires`, or `ensures`. */
@@ -118,6 +161,8 @@ export type Change = {
 export type EntityBody = {
   readonly key: string | null;
   readonly fields: readonly string[];
+  /** The JSON Schema of a record. */
+  readonly schema: Json;
   readonly unique: readonly string[];
   readonly references: readonly Reference[];
   /** The key positions of the fields. */
@@ -163,6 +208,8 @@ export type AutomationBody = {
   readonly command: DefinitionRef;
   readonly binds: readonly string[];
   readonly guard: readonly string[];
+  /** Whether the automation writes `onRejected`. */
+  readonly onRejected: boolean;
 };
 
 /** A definition's body, whose fields the definition writes in its place. */

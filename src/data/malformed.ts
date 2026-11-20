@@ -116,9 +116,4 @@ export type Malformed =
    */
   | (Of<"misusedObserved", null, { readonly use: string; readonly path: readonly string[] }> & {
       readonly scenario: DefinitionRef;
-    })
-  /**
-   * The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that
-   * Temporal does not read, so the run cannot add it to an instant in milliseconds.
-   */
-  | Of<"inexactDelay", DefinitionRef, { readonly state: string; readonly deadline: string }>;
+    });

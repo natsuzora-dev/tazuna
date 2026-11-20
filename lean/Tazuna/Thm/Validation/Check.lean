@@ -38,6 +38,9 @@ structure Checked (s : Structure) : Prop where
   heldNotRestored : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → Charts.restoredHeldOf c = []
   /-- A contract lists only members of its own service. -/
   ownMembers : ∀ c ∈ s.contracts, ∀ key m, (key, some m) ∈ c.members → m.service = c.service
+  /-- Every deadline's delay has a length in milliseconds, which the run adds to an instant. -/
+  delaysExact : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states, ∀ t ∈ st.deadlines,
+    t.time.exact = true
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -98,12 +101,27 @@ theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s
       · rename_i c hc
         simp [h d hd c hc]
       · rfl
-  rw [parents, controls, reasons, restored]
+  have delays : Charts.inexactDelays s = [] ↔ ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states,
+      ∀ t ∈ st.deadlines, t.time.exact = true := by
+    simp only [Charts.inexactDelays, List.flatMap_eq_nil_iff]
+    constructor
+    · intro h d hd c hc st hst t ht
+      have := h d hd
+      simp only [hc, List.flatMap_eq_nil_iff, List.map_eq_nil_iff, List.filter_eq_nil_iff] at this
+      simpa using this st hst t ht
+    · intro h d hd
+      split
+      · rename_i c hc
+        simp only [List.flatMap_eq_nil_iff, List.map_eq_nil_iff, List.filter_eq_nil_iff]
+        intro st hst t ht
+        simpa using h d hd c hc st hst t ht
+      · rfl
+  rw [parents, controls, reasons, restored, delays]
   simp only [and_assoc]
   constructor
-  · intro ⟨a, p, q, c, al, hr, e, r, m⟩
-    exact ⟨a, p, q, c, al, e, r, hr, m⟩
+  · intro ⟨a, p, q, c, al, hr, dl, e, r, m⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m, dl⟩
   · intro h
-    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.6, h.7, h.9⟩
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.6, h.7, h.9⟩
 
 end Tazuna.Thm.Validation.Check

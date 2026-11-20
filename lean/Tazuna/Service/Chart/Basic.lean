@@ -86,6 +86,7 @@ structure ChartState where
   offers : List (String × Spec.Offer) := []
   /-- Whether the state has parameters (`held`), which the edge that enters it fills. -/
   hasParameters : Bool := false
+  deadlines : List Spec.Deadline := []
 deriving Repr, Inhabited
 
 def ChartState.shape (st : ChartState) : Shape :=
@@ -145,15 +146,16 @@ theorem Transition.targets_ofSpec (ts : List Spec.Transition) :
 
 /-- The executable form of an activity. -/
 def Activity.ofSpec : Spec.Activity → Activity
-  | .calls key r => .calls key r
-  | .sends key r => .sends key r
+  | .calls key r _ => .calls key r
+  | .sends key r _ => .sends key r
   | .shows key r => .shows key r
   | .opens key r modal => .opens key r modal
 
 def ChartState.ofSpec (st : Spec.State) : ChartState :=
   { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
     children := st.children, activities := st.activities.map Activity.ofSpec,
-    transitions := st.transitions.map Transition.ofSpec, offers := st.offers, hasParameters := st.hasParameters }
+    transitions := st.transitions.map Transition.ofSpec, offers := st.offers, hasParameters := st.hasParameters,
+    deadlines := st.deadlines }
 
 /-- The executable form of a chart. -/
 def Chart.ofSpec (c : Spec.Chart) (name : String) (order : Nat) (screen opened : Bool) : Chart :=

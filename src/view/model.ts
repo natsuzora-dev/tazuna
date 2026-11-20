@@ -98,9 +98,11 @@ function chartView(name: string, chart: ChartStructure): StateView {
     activities: [],
     transitions: chart.on,
     deadlines: [],
+    keySchema: null,
     itemKeys: [],
+    contextSchema: null,
     contextKeys: [],
-    hasParameters: false,
+    heldSchema: null,
     heldKeys: [],
   });
 }

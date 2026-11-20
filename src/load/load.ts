@@ -27,7 +27,6 @@ import { unexportedDefinitions } from "./references.ts";
 import { type LoadedScenario, loadScenarios } from "./scenarios.ts";
 import { misplacedSelfRefs } from "./selfRefs.ts";
 import { structureOf } from "./structureOf.ts";
-import { inexactDelays } from "./times.ts";
 import { unrepresentableSchemas } from "./unrepresentable.ts";
 
 interface Constants {
@@ -299,7 +298,6 @@ export async function loadSpec(
     ...caseCollisions(serviceNamed),
     ...[...services.keys()].flatMap((service) => caseCollisions(defined.filter((s) => s.service === service))),
     ...unexportedDefinitions(definitions, services, contracts, constants, exported),
-    ...(built.structure === undefined ? [] : inexactDelays(charts({ definitions, structure: built.structure }))),
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),

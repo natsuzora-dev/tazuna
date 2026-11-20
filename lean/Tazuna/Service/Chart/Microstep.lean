@@ -128,8 +128,7 @@ def enterOne (st : Service) (step : Nat) (filled : Bool) (name : InstanceId) (n 
           else endWith (exitOne fs st st.exitFuel) name r
         | some parent => pure (enterFinal step name parent r)
       else do
-      let deadlines ← fs.deadlines i.chart.name n
-      let s ← addDeadlines st fs step name n deadlines r.state
+      let s ← addDeadlines st fs step name n cs.deadlines r.state
       pure ⟨s, if cs.activities.isEmpty then r.queue else r.queue.enter name n step⟩
 
 /--

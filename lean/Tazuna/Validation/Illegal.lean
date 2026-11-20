@@ -56,6 +56,12 @@ inductive Illegal where
   parameters (`Checked.heldNotRestored`).
   -/
   | restoredHeld (definition : Spec.Ref) (state history : String)
+  /--
+  The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that Temporal
+  does not read, so the run cannot add it to an instant in milliseconds. `check` reports none exactly when every delay
+  has a length in milliseconds (`Checked.delaysExact`).
+  -/
+  | inexactDelay (definition : Spec.Ref) (state deadline : String)
 
 derive_group Illegal
 
