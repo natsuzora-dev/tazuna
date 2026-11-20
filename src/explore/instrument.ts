@@ -3,6 +3,7 @@ import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
 import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
 import { Bag, Ref } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { SchemaStep } from "../data/jsonSchema.ts";
 import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
@@ -522,6 +523,9 @@ export class InstrumentedFunctions implements Functions {
 
   parse(schema: Schema, value: unknown) {
     return this.fs.parse(schema, value);
+  }
+  fits(schema: Schema, path: readonly SchemaStep[], value: Json) {
+    return this.fs.fits(schema, path, value);
   }
   unordered(schema: Schema, value: unknown): unknown {
     return this.fs.unordered(schema, value);

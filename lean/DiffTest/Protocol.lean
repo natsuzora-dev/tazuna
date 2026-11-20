@@ -82,6 +82,7 @@ record that TS read while it answers.
 -/
 inductive Question where
   | parse (schema : Schema) (value : Value)
+  | fits (schema : Schema) (path : List SchemaStep) (value : Value)
   | unordered (schema : Schema) (value : Value)
   | binding (command binding : String) (input : Value) (now : Time)
   | requirement (command condition : String) (input : Value) (now : Time)
@@ -131,6 +132,7 @@ inductive Reply where
   | read (entity : String) (key field : Option String) (beforeEventWrite : Option Bool)
   | issue (issue : Issue)
   | parse (value : Option Value)
+  | fits (fits : Bool)
   | unordered (value : Value)
   | binding (bound : Bool)
   | requirement (holds : Bool)

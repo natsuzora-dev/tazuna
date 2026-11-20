@@ -76,6 +76,7 @@ theorem Agrees.mapM {α β : Type} {f : α → StateT C Id β} {g : α → Id β
 
 structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : Prop where
   parse : ∀ a b, Agrees (fsI.parse a b) (fs.parse a b)
+  fits : ∀ a b c, Agrees (fsI.fits a b c) (fs.fits a b c)
   unordered : ∀ a b, Agrees (fsI.unordered a b) (fs.unordered a b)
   binding : ∀ a b c d e, Agrees (fsI.binding a b c d e) (fs.binding a b c d e)
   requirement : ∀ a b c d e, Agrees (fsI.requirement a b c d e) (fs.requirement a b c d e)

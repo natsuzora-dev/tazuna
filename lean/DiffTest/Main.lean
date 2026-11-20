@@ -107,7 +107,7 @@ def answer {α : Type} (question : Question) (reply : Reply) (read : Reply → O
 /--
 The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set, about the service
 `service` when given, or else the request's service. A parse logs nothing into `reads`: Functions.sorting asks it
-inside another answer, whose reads Instrument then reads.
+inside another answer, whose reads Instrument then reads. Nor does fits, which reads no records.
 -/
 def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool)
     (service : Option String := none) : Functions IO :=
@@ -119,6 +119,10 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
   { parse := fun schema value => do
       answer (.parse schema value) (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] (.parse schema value)) fun
         | .parse v => some v | _ => none
+    fits := fun schema path value => do
+      let question := .fits schema path value
+      answer question (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] question) fun
+        | .fits b => some b | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     binding := fun name binding input records now =>
       answered (.binding name binding input now) (records := records) fun | .binding b => some b | _ => none

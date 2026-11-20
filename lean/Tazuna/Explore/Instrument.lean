@@ -255,6 +255,7 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
 /-- The functions that ask `fs` and carry each answer into `n` by `f`. -/
 def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where
   parse a b := f (fs.parse a b)
+  fits a b c := f (fs.fits a b c)
   unordered a b := f (fs.unordered a b)
   binding a b c d e := f (fs.binding a b c d e)
   requirement a b c d e := f (fs.requirement a b c d e)

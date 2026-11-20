@@ -5,6 +5,7 @@ import { bag, bagged, decoded, defaultRow, encoded, toJson } from "../../data/co
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
 import { expectFound, InternalError } from "../../data/internalError.ts";
+import { partAt, type SchemaStep } from "../../data/jsonSchema.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
@@ -442,6 +443,12 @@ export class SpecFunctions implements Functions {
     if (parsed instanceof Failed) return parsed;
     if (!parsed.success) return { error: zodError(parsed.error.issues) };
     return { value: bagged(object, parsed.data) as Fields, encoded: toJson(object, parsed.data) };
+  }
+
+  fits(schema: Schema, path: readonly SchemaStep[], value: Json): boolean | Failed {
+    const part = partAt(objectOf(this.shape(schema)), path);
+    const parsed = attempt(() => part.safeParse(value), schema);
+    return parsed instanceof Failed ? parsed : parsed.success;
   }
 
   /** Returns a decoded value of `schema` as JSON holds it, as Lean holds it (ChoiceDependent's Encode). */

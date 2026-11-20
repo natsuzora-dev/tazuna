@@ -1,4 +1,5 @@
 import { expectFound } from "../data/internalError.ts";
+import type { SchemaStep } from "../data/jsonSchema.ts";
 import type { Scenario } from "../data/scenario.generated.ts";
 import { canonicalJson, type Json, stringsOf } from "../data/values.ts";
 import { type Schema, type Service, schemaOf, schemaOwner } from "../service/basic.ts";
@@ -47,9 +48,6 @@ export function seenOf(scenarios: readonly Scenario[]): Seen {
 
 const fillerStrings = ["a", "b", "c"];
 const representativeNumbers = [0, 1, 2, -1, 0.5, 10, 1000];
-/** Lean's rounds. */
-const rounds = (words: readonly string[], n: number): number =>
-  n + 2 + words.length + fillerStrings.length + representativeNumbers.length;
 const representativeDates = ["2026-10-25", "2026-10-26"];
 const representativeDateTimes = ["2026-10-25T00:00:00Z", "2026-10-26T00:00:00Z"];
 
@@ -59,55 +57,53 @@ const isObject = (v: Json | undefined): v is Schemaish => typeof v === "object" 
 
 const pick = <T>(xs: readonly T[], i: number): T | undefined => (xs.length === 0 ? undefined : xs[i % xs.length]);
 
-/** Lean's numberFits. */
-function numberFits(s: Schemaish, integer: boolean, n: number): boolean {
-  const bound = (key: string, holds: (b: number) => boolean) => {
-    const b = s[key];
-    return typeof b === "number" ? holds(b) : true;
-  };
-  return (
-    (!integer || Number.isInteger(n)) &&
-    bound("minimum", (b) => n >= b) &&
-    bound("maximum", (b) => n <= b) &&
-    bound("exclusiveMinimum", (b) => n > b) &&
-    bound("exclusiveMaximum", (b) => n < b) &&
-    bound("multipleOf", (b) => b !== 0 && Number.isInteger(n / b))
-  );
-}
+type Fits = (path: readonly SchemaStep[], value: Json) => boolean;
 
-/** Lean's stringFits. */
-function stringFits(s: Schemaish, x: string): boolean {
-  const length = [...x].length;
-  const bound = (key: string, holds: (b: number) => boolean) => {
-    const b = s[key];
-    return typeof b === "number" ? holds(b) : true;
-  };
-  return bound("minLength", (b) => length >= b) && bound("maxLength", (b) => length <= b);
+/** Lean's fitting. */
+function fitting(fits: (value: Json) => boolean, candidates: readonly Json[], i: number): Json | undefined {
+  const found: Json[] = [];
+  for (const c of candidates) {
+    if (!fits(c)) continue;
+    if (found.length === i) return c;
+    found.push(c);
+  }
+  return pick(found, i);
 }
 
 /** Lean's representative. */
-function representative(words: readonly string[], s: Json, i: number): Json | undefined {
+function representative(
+  fits: Fits,
+  words: readonly string[],
+  s: Json,
+  path: readonly SchemaStep[],
+  i: number,
+): Json | undefined {
   if (!isObject(s)) return undefined;
   const { anyOf, oneOf, const: constant, enum: values, type } = s;
-  if (Array.isArray(anyOf)) return pickRepresentative(words, anyOf, i);
+  const option = (options: readonly Json[], schemaOf: (o: Json) => Json): Json | undefined => {
+    if (options.length === 0) return undefined;
+    const index = i % options.length;
+    return representative(fits, words, schemaOf(options[index] as Json), [...path, { kind: "option", index }], i);
+  };
+  if (Array.isArray(anyOf)) return option(anyOf, (o) => o);
   if (anyOf !== undefined) return undefined;
-  if (Array.isArray(oneOf)) return pickRepresentative(words, oneOf, i);
+  if (Array.isArray(oneOf)) return option(oneOf, (o) => o);
   if (oneOf !== undefined) return undefined;
   if (constant !== undefined) return constant;
   if (Array.isArray(values)) return pick(values, i);
-  if (Array.isArray(type)) {
-    const t = pick(type, i);
-    return t === undefined ? undefined : representative(words, { ...s, type: t }, i);
-  }
-  return typeof type === "string" ? typed(words, s, type, i) : undefined;
+  if (Array.isArray(type)) return option(type, (t) => ({ ...s, type: t }));
+  return typeof type === "string" ? typed(fits, words, s, path, type, i) : undefined;
 }
 
-function pickRepresentative(words: readonly string[], options: readonly Json[], i: number): Json | undefined {
-  const option = pick(options, i);
-  return option === undefined ? undefined : representative(words, option, i);
-}
-
-function typed(words: readonly string[], s: Schemaish, type: string, i: number): Json | undefined {
+function typed(
+  fits: Fits,
+  words: readonly string[],
+  s: Schemaish,
+  path: readonly SchemaStep[],
+  type: string,
+  i: number,
+): Json | undefined {
+  const fitsHere = (value: Json) => fits(path, value);
   switch (type) {
     case "null":
       return null;
@@ -116,20 +112,15 @@ function typed(words: readonly string[], s: Schemaish, type: string, i: number):
     case "string":
       if (s["format"] === "date-time") return pick(representativeDateTimes, i);
       if (s["format"] === "date") return pick(representativeDates, i);
-      return pick(
-        [...words, ...fillerStrings].filter((x) => stringFits(s, x)),
-        i,
-      );
+      return fitting(fitsHere, [...words, ...fillerStrings], i);
     case "number":
     case "integer":
-      return pick(
-        representativeNumbers.filter((n) => numberFits(s, type === "integer", n)),
-        i,
-      );
+      return fitting(fitsHere, representativeNumbers, i);
     case "array": {
       if (i === 0 || s["x-tazuna-sorted-by"] !== undefined) return [];
       const items = s["items"];
-      const element = items === undefined ? undefined : representative(words, items, i - 1);
+      const element =
+        items === undefined ? undefined : representative(fits, words, items, [...path, { kind: "items" }], i - 1);
       return element === undefined ? [] : [element];
     }
     case "object": {
@@ -137,7 +128,7 @@ function typed(words: readonly string[], s: Schemaish, type: string, i: number):
       if (!isObject(properties)) return {};
       const entries: [string, Json][] = [];
       for (const [k, p] of Object.entries(properties)) {
-        const v = representative(words, p, i);
+        const v = representative(fits, words, p, [...path, { kind: "field", name: k }], i);
         if (v === undefined) return undefined;
         entries.push([k, v]);
       }
@@ -165,10 +156,15 @@ export function valuesFor(
   n: number,
 ): Json[] {
   const json = expectFound(`schema ${JSON.stringify(schema)}`, schemaOf(st, schema) as Json | undefined);
+  const fits: Fits = (path, value) => {
+    const fit = fs.fits(schema, path, value);
+    if (fit instanceof Failed) halt(issueViolation(schemaOwner(schema), fit));
+    return fit;
+  };
   let found = distinct(listed);
   const kept = new Set(found.map(canonicalJson));
-  for (let i = 0; i < rounds(words, n) && found.length < n; i += 1) {
-    const v = representative(words, json, i);
+  for (let i = 0; i < n + 2 && found.length < n; i += 1) {
+    const v = representative(fits, words, json, [], i);
     if (v === undefined || kept.has(canonicalJson(v))) continue;
     const parsed = parseOutside(st, fs, schema, v);
     if (parsed instanceof Failed) halt(issueViolation(schemaOwner(schema), parsed));

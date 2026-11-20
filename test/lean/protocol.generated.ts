@@ -63,6 +63,20 @@ export type Schema =
       readonly entity: DefinitionRef;
     };
 
+/** A step into a JSON Schema: a property of an object, the items of an array, or an option of a union or a type list. */
+export type SchemaStep =
+  | {
+      readonly kind: "field";
+      readonly name: string;
+    }
+  | {
+      readonly kind: "items";
+    }
+  | {
+      readonly kind: "option";
+      readonly index: number;
+    };
+
 /**
  * The reason that a question has no answer: its author code threw (with `schema`, inside that schema's refinement or
  * codec), a value does not match `schema`, an expression read a `held` name that its state does not have, or it called
@@ -367,6 +381,12 @@ export type Question =
       readonly value: Json;
     }
   | {
+      readonly type: "fits";
+      readonly schema: Schema;
+      readonly path: readonly SchemaStep[];
+      readonly value: Json;
+    }
+  | {
       readonly type: "unordered";
       readonly schema: Schema;
       readonly value: Json;
@@ -564,6 +584,10 @@ export type Reply =
   | {
       readonly type: "parse";
       readonly value?: Json;
+    }
+  | {
+      readonly type: "fits";
+      readonly fits: boolean;
     }
   | {
       readonly type: "unordered";

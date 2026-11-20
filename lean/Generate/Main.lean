@@ -93,7 +93,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
      ``Tazuna.Spec.Structure]),
    ("test/lean/protocol.generated.ts",
-    [``Tazuna.Service.Schema, ``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
+    [``Tazuna.Service.Schema, ``Tazuna.Service.SchemaStep, ``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Edge, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
      ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys, ``Tazuna.Explore.Holder, ``Tazuna.Explore.Access,
      ``Tazuna.Verify.Part, ``Tazuna.Service.Operation, ``Tazuna.Explore.Awaiting, ``Tazuna.Explore.Enabled,

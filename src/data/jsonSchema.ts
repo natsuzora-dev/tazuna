@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { date, datetime } from "./datetime.ts";
+import { InternalError } from "./internalError.ts";
 import { collectionOf } from "./marks.ts";
-import { holdsCodec, recursesEagerly, schemaNode, strict } from "./schemaNode.ts";
+import { fieldSchema, holdsCodec, recursesEagerly, type SchemaNode, schemaNode, strict } from "./schemaNode.ts";
 import type { Json, Shape } from "./values.ts";
 
 export type JsonSchema = { readonly [key: string]: Json };
@@ -112,6 +113,52 @@ export const jsonSchema = (schema: z.ZodType): JsonSchema =>
       },
     }) as JsonSchema,
   );
+
+/** Lean's SchemaStep: a step into a JSON Schema. */
+export type SchemaStep =
+  | { readonly kind: "field"; readonly name: string }
+  | { readonly kind: "items" }
+  | { readonly kind: "option"; readonly index: number };
+
+/** The node of `schema` that jsonSchema writes for it: past each wrapper that jsonSchema writes as what it wraps. */
+function written(schema: z.ZodType): SchemaNode {
+  const node = schemaNode(schema);
+  switch (node.type) {
+    case "optional":
+    case "default":
+    case "lazy":
+      return written(node.inner);
+    case "codec":
+    case "pipe":
+      return written(node.in);
+    case "opaque":
+      return node.inner === undefined ? node : written(node.inner);
+    default:
+      return node;
+  }
+}
+
+/**
+ * The part of `schema` at `path` in its jsonSchema: a nullable is written as a union of what it wraps and null. A path
+ * that the JSON Schema has and `schema` lacks is an InternalError.
+ */
+export function partAt(schema: z.ZodType, path: readonly SchemaStep[]): z.ZodType {
+  return path.reduce((at, step) => {
+    const node = written(at);
+    const part =
+      step.kind === "field" && node.type === "object"
+        ? fieldSchema(node, step.name)
+        : step.kind === "items" && node.type === "array"
+          ? node.element
+          : step.kind === "option" && node.type === "union"
+            ? node.options[step.index]
+            : step.kind === "option" && node.type === "nullable"
+              ? [node.inner, z.null()][step.index]
+              : undefined;
+    if (part === undefined) throw new InternalError(`no part at ${JSON.stringify(step)} of a ${node.type} schema`);
+    return part;
+  }, schema);
+}
 
 export function objectSchema(shape: Shape): JsonSchema {
   const { $schema: _, additionalProperties: __, ...schema } = jsonSchema(z.object(shape as Record<string, z.ZodType>));
