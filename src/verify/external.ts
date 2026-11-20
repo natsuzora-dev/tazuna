@@ -11,7 +11,7 @@ import type { AnyCommand, AnyEvent, AnyQuery, Emit } from "../dsl/definition.ts"
 import { emit } from "../dsl/event.ts";
 import type { Spec } from "../load/load.ts";
 import { definitionOfTraceName, refOfDefinition } from "../load/traceName.ts";
-import { ensured } from "../sim/spec/contract.ts";
+import { firstFailedEnsures } from "../sim/spec/contract.ts";
 import {
   assumptionMismatch,
   assumptionViolation,
@@ -274,9 +274,7 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
         const results = x.events.flatMap(({ at }) => emitted.get(at) ?? []);
         const withEvents = definition.kind === "command" ? { events: results } : {};
         const ensures = definition.ensures as Conditions<never>;
-        const failedEnsures = checked
-          ? Object.entries(ensures).find(([, f]) => ensured(f, { ...decoded, ...withEvents }) === "fails")?.[0]
-          : undefined;
+        const failedEnsures = checked ? firstFailedEnsures(ensures, { ...decoded, ...withEvents }) : undefined;
         const broken = assumptionMismatch(answer, failedRequires, failedEnsures);
         if (broken !== undefined) violations.push(assumptionViolation("Mismatch", ref, broken, line));
       }

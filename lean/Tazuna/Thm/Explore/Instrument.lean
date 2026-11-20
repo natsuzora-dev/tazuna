@@ -125,14 +125,6 @@ macro_rules
 variable {fsI : Functions (StateT C Id)} {fs : Functions Id} {st : Service} [MonadNote (StateT C Id)]
 
 omit [MonadNote (StateT C Id)] in
-theorem firstFailedResult_agrees {test : String → StateT C Id (Except Issue Ensured)}
-    {test' : String → Id (Except Issue Ensured)} (ht : ∀ n, Agrees (test n) (test' n)) (ns : List String) :
-    Agrees (firstFailedResult test ns) (firstFailedResult test' ns) := by
-  induction ns with
-  | nil => exact Agrees.pure _
-  | cons n ns ih => simp only [firstFailedResult]; agree [ht, ih]
-
-omit [MonadNote (StateT C Id)] in
 theorem firstFalse_agrees {test : String → StateT C Id (Except Issue Bool)} {test' : String → Id (Except Issue Bool)}
     (ht : ∀ n, Agrees (test n) (test' n)) (ns : List String) : Agrees (firstFalse test ns) (firstFalse test' ns) := by
   induction ns with
@@ -578,7 +570,7 @@ theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List 
     Agrees (checkAssumedAnswer st fsI x input events s a) (checkAssumedAnswer st fs x input events s a) := by
   unfold checkAssumedAnswer
   agree [decodedAnswer_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _),
-    firstFailedResult_agrees (fun _ => h.resultEnsures _ _ _ _ _)]
+    firstFalse_agrees (fun _ => Agrees.map _ (h.resultEnsures _ _ _ _ _))]
 
 omit [MonadNote (StateT C Id)] in
 theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by

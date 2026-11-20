@@ -4,14 +4,14 @@ import { LazyRecordSource } from "../records.ts";
 import { type Deadline, halt, type Instance, NoteAccess, type State, scopeOf } from "../state.ts";
 import type { Processing } from "./queue.ts";
 
-/** Lean's instantTime?: the instant that `text` writes, when Temporal writes it back as `text` in whole milliseconds. */
+/**
+ * Lean's instantTime?: the instant that `text` writes, when renderTime writes it back as `text`. parseTime reads a
+ * four-digit year, and renderTime writes whole milliseconds.
+ */
 function instantTime(text: string): Temporal.Instant | undefined {
-  try {
-    const instant = Temporal.Instant.from(text);
-    return instant.epochNanoseconds % 1_000_000n === 0n && instant.toString() === text ? instant : undefined;
-  } catch {
-    return undefined;
-  }
+  if (!/^\d{4}-/.test(text)) return undefined;
+  const instant = Temporal.Instant.from(text);
+  return instant.epochNanoseconds % 1_000_000n === 0n && instant.toString() === text ? instant : undefined;
 }
 
 /** Lean's addDeadlines: arms the `after` deadlines of `state`, each time fixed now (deadlineTime). */

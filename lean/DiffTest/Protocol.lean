@@ -141,7 +141,6 @@ inductive Reply where
   | input (input : Value) (created : List String)
   | held (held : Value)
   | deadlines (names : List String)
-  /-- The instant as Temporal.Instant.prototype.toString writes it, or none when `at` computes no Instant. -/
   | deadlineTime (time : Option String)
   | offers (payloads : List Value)
   | showInput (input : Value)

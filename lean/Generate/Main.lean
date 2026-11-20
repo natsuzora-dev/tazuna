@@ -66,6 +66,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Scenario.GivenRecord, ``Tazuna.Scenario.Peer, ``Tazuna.Scenario.PeerEntry, ``Tazuna.Scenario.Given,
      ``Tazuna.Scenario]),
    ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),
+   ("src/data/ensured.generated.ts", [``Tazuna.Service.Ensured]),
    ("src/data/bagOrderDependent.generated.ts", [``Tazuna.Explore.BagOrderDependent]),
    ("src/data/undecided.generated.ts", [``Tazuna.Explore.Undecided]),
    ("src/data/choiceDependent.generated.ts",
@@ -482,6 +483,7 @@ def files : List (String × String) :=
    zod% "src/data/scenario.generated.ts",
    appended (typescript% "src/data/fault.generated.ts")
      (halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
+   types% "src/data/ensured.generated.ts",
    typescript% "src/data/bagOrderDependent.generated.ts",
    typescript% "src/data/undecided.generated.ts",
    typescript% "src/data/choiceDependent.generated.ts",

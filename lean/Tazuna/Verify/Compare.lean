@@ -539,48 +539,46 @@ and only its input is compared. `internal` selects the `out` lines that are not 
 def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool) (inputs : List Line) (outs : List Numbered)
     (cut : Bool) {root : Binding} :
     (expected actual : List Group) → Values → List (From root) → List Finding × List (From root)
-  | expected, actual, v, set =>
-    match expected, actual with
-    | [], [] => ([], set)
-    | e :: es, a :: as =>
-      let inputs' : Except Finding (List (From root)) :=
-        match e.input, a.input with
-        | none, none => .ok set
-        | some s, some t =>
-          let subject := Subject.of s.line.toTraceLine
-          match expand From.same set fun b => (matchLine { v with fresh := [] } b.val s.line t.line).map
-              (lift b.property) with
-          | none => .error (.uncomparable (.bindingLimit t.index subject s.index bindingLimit))
-          | some [] => .error (differentInput ((set.head?.map (·.val)).getD .empty) s t)
-          | some set' =>
-            match unrouted (set.map (·.val)) v inputs s.line with
-            | some images =>
-              .error (.uncomparable (.ambiguous t.index subject s.index
-                ((outs.filter fun o => images.contains o.line.body.id).map (·.index))))
-            | none => .ok set'
-        | some s, none => .error (.uncomparable (.missingInput lineCount (lineValue s.line) s.index))
-        | none, some t => .error (.uncomparable (.unexpectedInput t.index (lineValue t.line)))
-      match inputs' with
-      | .error f => ([f], set)
-      | .ok set₁ =>
-        if cut && as.isEmpty then ([], set₁)
+  | [], [], _, set => ([], set)
+  | e :: es, a :: as, v, set =>
+    let inputs' : Except Finding (List (From root)) :=
+      match e.input, a.input with
+      | none, none => .ok set
+      | some s, some t =>
+        let subject := Subject.of s.line.toTraceLine
+        match expand From.same set fun b => (matchLine { v with fresh := [] } b.val s.line t.line).map
+            (lift b.property) with
+        | none => .error (.uncomparable (.bindingLimit t.index subject s.index bindingLimit))
+        | some [] => .error (differentInput ((set.head?.map (·.val)).getD .empty) s t)
+        | some set' =>
+          match unrouted (set.map (·.val)) v inputs s.line with
+          | some images =>
+            .error (.uncomparable (.ambiguous t.index subject s.index
+              ((outs.filter fun o => images.contains o.line.body.id).map (·.index))))
+          | none => .ok set'
+      | some s, none => .error (.uncomparable (.missingInput lineCount (lineValue s.line) s.index))
+      | none, some t => .error (.uncomparable (.unexpectedInput t.index (lineValue t.line)))
+    match inputs' with
+    | .error f => ([f], set)
+    | .ok set₁ =>
+      if cut && as.isEmpty then ([], set₁)
+      else
+        let place := (a.input.map (·.index)).getD 1
+        let compared (outs : List Numbered) := outs.filter fun o => !internal o.line
+        let v := { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) }
+        let (found, set₂, stop) := compareGroup set₁ v relation (compared e.outs) (compared a.outs) place
+        if stop then (found, set₂)
         else
-          let place := (a.input.map (·.index)).getD 1
-          let compared (outs : List Numbered) := outs.filter fun o => !internal o.line
-          let v := { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) }
-          let (found, set₂, stop) := compareGroup set₁ v relation (compared e.outs) (compared a.outs) place
-          if stop then (found, set₂)
-          else
-            let (rest, set₃) := compareGroups lineCount internal relation inputs outs cut es as v set₂
-            (found ++ rest, set₃)
-    | e :: _, [] =>
-      match e.input with
-      | some s => ([.uncomparable (.missingInput lineCount (lineValue s.line) s.index)], set)
-      | none => ([], set)
-    | [], a :: _ =>
-      match a.input with
-      | some t => ([.uncomparable (.unexpectedInput t.index (lineValue t.line))], set)
-      | none => ([], set)
+          let (rest, set₃) := compareGroups lineCount internal relation inputs outs cut es as v set₂
+          (found ++ rest, set₃)
+  | e :: _, [], _, set =>
+    match e.input with
+    | some s => ([.uncomparable (.missingInput lineCount (lineValue s.line) s.index)], set)
+    | none => ([], set)
+  | [], a :: _, _, set =>
+    match a.input with
+    | some t => ([.uncomparable (.unexpectedInput t.index (lineValue t.line))], set)
+    | none => ([], set)
 
 /--
 The violations of comparing a trace with a snapshot, and the bindings that agree with every compared line. In

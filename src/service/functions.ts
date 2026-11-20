@@ -1,4 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { Ensured } from "../data/ensured.generated.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
@@ -64,33 +65,20 @@ export function issueViolation(
 }
 
 /** Lean's firstFalse: the first of `names` that `test` finds false, in order. */
-export function firstFalse(
-  test: (name: string) => boolean | Failed,
-  names: readonly string[],
-): string | undefined | Failed {
+export function firstFalse<N, R extends boolean | Failed>(
+  test: (name: N) => R,
+  names: readonly N[],
+): N | undefined | Exclude<R, boolean> {
   for (const name of names) {
-    const holds = test(name);
-    if (holds instanceof Failed) return holds;
+    const holds: boolean | Failed = test(name);
+    if (holds instanceof Failed) return holds as Exclude<R, boolean>;
     if (!holds) return name;
   }
   return undefined;
 }
 
-/** Lean's Ensured: what one ensures of a request's target gives on the request's results. */
-export type Ensured = "holds" | "fails" | "readsRecords";
-
-/** Lean's firstFailedResult: the first ensures of `names` that fails, skipping each that reads records. */
-export function firstFailedResult(
-  test: (name: string) => Ensured | Failed,
-  names: readonly string[],
-): string | undefined | Failed {
-  for (const name of names) {
-    const ensured = test(name);
-    if (ensured instanceof Failed) return ensured;
-    if (ensured === "fails") return name;
-  }
-  return undefined;
-}
+/** Lean's Ensured.passes. */
+export const passes = (ensured: Ensured): boolean => ensured !== "fails";
 
 /** The scope of a copy: its decoded item key and its own context. */
 export interface CopyScope {
@@ -309,10 +297,7 @@ export interface Functions {
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed;
   /** Returns the names of a state's `after` deadlines, in declaration order. */
   deadlines(machine: string, state: string): readonly string[];
-  /**
-   * Lean's deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes,
-   * as Temporal writes it, or undefined when `at` computes no Instant.
-   */
+  /** Lean's deadlineTime, with undefined for none. */
   deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
   offers(
     scope: Scope,

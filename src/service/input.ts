@@ -22,7 +22,7 @@ import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
 import { processCommand } from "./command.ts";
-import { Failed, firstFailedResult, firstFalse, issueViolation } from "./functions.ts";
+import { Failed, firstFalse, issueViolation, passes } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
 import { type Emitted, idKey, type Line, sameLineId } from "./message.ts";
@@ -314,8 +314,11 @@ function checkAssumedAnswer(r: Run, x: Exchange, input: Fields, events: readonly
   const failedEnsures =
     decoded.result === "rejected" || failedRequires !== undefined
       ? undefined
-      : firstFailedResult(
-          (condition) => r.functions.resultEnsures(target, condition, input, decoded.output, events),
+      : firstFalse(
+          (condition) => {
+            const ensured = r.functions.resultEnsures(target, condition, input, decoded.output, events);
+            return ensured instanceof Failed ? ensured : passes(ensured);
+          },
           ensuresOf(r.st.structure, target),
         );
   if (failedEnsures instanceof Failed) halt(issueViolation(target, failedEnsures));

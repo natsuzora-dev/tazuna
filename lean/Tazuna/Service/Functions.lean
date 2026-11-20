@@ -151,6 +151,14 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire Ensured
 
 /--
+Whether a result ensures lets the request's results pass. One that reads records passes, because it reads the target's
+records, which the caller does not have.
+-/
+def Ensured.passes : Ensured → Bool
+  | .holds | .readsRecords => true
+  | .fails => false
+
+/--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code; deadlines (no author code), copyContext, and singleRecord (defaults, checked
 at load) always answer.
@@ -254,18 +262,5 @@ def firstFalse {m : Type → Type} [Monad m] (test : String → m (Except Issue 
     | .error e => pure (.error e)
     | .ok true => firstFalse test ns
     | .ok false => pure (.ok (some n))
-
-/--
-The first ensures of `names` that fails on a request's results, in order. An ensures that reads records is skipped,
-because it reads the target's records, which the caller does not have.
--/
-def firstFailedResult {m : Type → Type} [Monad m] (test : String → m (Except Issue Ensured)) :
-    List String → m (Except Issue (Option String))
-  | [] => pure (.ok none)
-  | n :: ns => do
-    match ← test n with
-    | .error e => pure (.error e)
-    | .ok .fails => pure (.ok (some n))
-    | .ok .holds | .ok .readsRecords => firstFailedResult test ns
 
 end Tazuna.Service

@@ -3,6 +3,7 @@ import { type Bag, bagValues, NotOnly } from "../../data/bag.ts";
 import { comparableAnswer, comparable as comparableOf, orderFree } from "../../data/canonical.ts";
 import { bag, bagged, defaultRow, sorted, toJson, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
+import type { Ensured } from "../../data/ensured.generated.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
@@ -32,7 +33,6 @@ import {
   type Assignment,
   type Checked,
   type Edge,
-  type Ensured,
   Failed,
   type Functions,
   givenKeys,

@@ -40,7 +40,6 @@ export function choose(
 
 /** Returns whether every guard condition of `t` holds, and reports the first false one as a coverage hit. */
 function passes(r: Run, instance: Instance, t: Transition, extra: Fields): boolean {
-  if (t.guards.length === 0) return true;
   const scope = scopeOf(r.state, instance, t.source);
   const records = new LazyRecordSource(r.state.records, r.note);
   const transition = transitionRef(t);

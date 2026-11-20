@@ -79,10 +79,7 @@ def renderTime (t : Time) : String :=
     "." ++ String.ofList ((pad 3 (ms % 1000)).toList.reverse.dropWhile (· == '0')).reverse
   s!"{pad 4 y}-{pad 2 mo}-{pad 2 d}T{pad 2 (ms / 3600000)}:{pad 2 (ms / 60000 % 60)}:{pad 2 (ms / 1000 % 60)}{fraction}Z"
 
-/--
-The time of `text`, an instant as Temporal.Instant.prototype.toString writes it, when it is in whole milliseconds:
-renderTime writes the time back as `text`.
--/
+/-- The time of `text`, when renderTime writes that time back as `text`. -/
 def instantTime? (text : String) : Option Time :=
   match parseTime text with
   | .ok t => if renderTime t == text then some t else none

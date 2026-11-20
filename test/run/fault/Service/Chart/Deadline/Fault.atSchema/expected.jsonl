@@ -1,1 +1,3 @@
 {"kind":"Fault.atSchema","definition":{"service":"alarms","name":"alarm"},"data":{"state":"waiting","deadline":"ring"},"location":{"file":"alarms/alarms.ts","line":5},"scenario":{"service":"alarms","name":"start"}}
+{"kind":"Fault.atSchema","definition":{"service":"farAlarms","name":"alarm"},"data":{"state":"waiting","deadline":"ring"},"location":{"file":"farAlarms/farAlarms.ts","line":5},"scenario":{"service":"farAlarms","name":"start"}}
+{"kind":"Fault.atSchema","definition":{"service":"textAlarms","name":"alarm"},"data":{"state":"waiting","deadline":"ring"},"location":{"file":"textAlarms/textAlarms.ts","line":5},"scenario":{"service":"textAlarms","name":"start"}}
