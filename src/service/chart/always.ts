@@ -37,9 +37,10 @@ export function settle(r: Processing, name: InstanceId, step: number): void {
       const states = [owner, ...copiesOf(r.state, owner)].flatMap((holder) =>
         [...owner.chart.states.values()]
           .filter(
-            (state) => transitionsAt(owner.chart, state.name, { type: "always" }).length > 0 || state.kind === "map",
+            (state) =>
+              transitionsAt(owner.chart, state.spec.name, { type: "always" }).length > 0 || state.spec.kind === "map",
           )
-          .map((state) => valueName({ kind: "state", id: holder.id, state: state.name })),
+          .map((state) => valueName({ kind: "state", id: holder.id, state: state.spec.name })),
       );
       // After a transition the evaluation stays stale, so only one that chose nothing is remembered.
       if (chosen.length === 0) evaluations.remember(owner.id, "always", reads, [...reads, ...states]);

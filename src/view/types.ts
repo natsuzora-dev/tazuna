@@ -59,8 +59,7 @@ export interface FieldView {
 /**
  * A state of a chart. The root has the definition's name, kind compound, and the chart's top-level `on` transitions.
  */
-export interface StateView
-  extends Omit<StateStructure, "children" | "activities" | "transitions" | "itemKeys" | "contextKeys" | "heldKeys"> {
+export interface StateView extends Omit<StateStructure, "children" | "activities" | "transitions" | "map" | "held"> {
   readonly activities: readonly ActivityView[];
   readonly transitions: readonly TransitionView[];
   readonly states: readonly StateView[];

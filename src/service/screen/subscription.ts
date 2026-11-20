@@ -16,8 +16,8 @@ import { awaitAnswer, halt, type Instance, NoteAccess, scopeOf } from "../state.
  */
 function appliedShows(instance: Instance): (readonly [string, Activity])[] {
   const shows = [...instance.chart.states.values()]
-    .filter((st) => instance.entered.has(st.name))
-    .flatMap((st) => st.activities.filter((a) => a.keyword === "shows").map((a) => [st.name, a] as const));
+    .filter((st) => instance.entered.has(st.spec.name))
+    .flatMap((st) => st.activities.filter((a) => a.keyword === "shows").map((a) => [st.spec.name, a] as const));
   return shows.filter(
     ([n, a]) => !shows.some(([d, b]) => b.key === a.key && d !== n && isDescendant(instance.chart.tree, d, n)),
   );

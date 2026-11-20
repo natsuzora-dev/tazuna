@@ -25,7 +25,7 @@ theorem addDeadlines_fixed (step : Nat) (name : InstanceId) (n : String) (ds : L
       · split
         · generalize (expectFound _ _ : Id Int) = ms
           simp [State.fixed]
-        · generalize fs.deadlineTime _ _ _ = r
+        · generalize fs.deadlineAt _ _ _ = r
           rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;>
             (try split) <;> simp [report_eq, State.fixed]
 
@@ -46,7 +46,7 @@ theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : L
       · split
         · generalize (expectFound _ _ : Id Int) = ms
           simp
-        · generalize fs.deadlineTime _ _ _ = r
+        · generalize fs.deadlineAt _ _ _ = r
           rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> simp
 
 theorem takeDeadline_fixed (t : Deadline) : (s.takeDeadline t).1.fixed = s.fixed := rfl

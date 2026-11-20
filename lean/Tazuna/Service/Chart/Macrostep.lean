@@ -21,7 +21,8 @@ open Tazuna.Data
 variable {m : Type → Type}
 
 def handlingStateReads (i : Instance) (key : String) (leaves : List (InstanceId × Option String)) : List (InstanceId × String) :=
-  let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.name) (.on key)).isEmpty).map (·.name)
+  let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.spec.name) (.on key)).isEmpty).map
+    (·.spec.name)
   let holders := i.id :: dedupe ((leaves.map (·.1)).filter (· != i.id))
   holders.flatMap fun h => handling.map (h, ·)
 

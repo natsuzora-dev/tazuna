@@ -249,22 +249,14 @@ const line = z.discriminatedUnion("type", [
  */
 export type Line = z.infer<typeof line>;
 
-const requested = z.union([
-  z.object({
-    kind: z.enum(["command", "query", "subscribe"]),
-    target: ref,
-    input: template,
-  }),
-  z.object({
-    subscription: fact,
-  }),
-]);
+const sentRequest = z.object({
+  kind: z.enum(["command", "query", "subscribe"]),
+  target: ref,
+  input: template,
+});
 
-/**
- * An entry of a Then `requested`, in written order: a request that the own service sent, with its kind, target, and
- * input, or the end of the subscription that the request `subscription` opened.
- */
-export type Requested = z.infer<typeof requested>;
+/** A request that the own service sent: its kind, its target, and its input. */
+export type SentRequest = z.infer<typeof sentRequest>;
 
 const emittedEvent = z.object({
   event: ref,
@@ -291,13 +283,14 @@ const expectation = z.discriminatedUnion("type", [
     events: z.array(emittedEvent),
   }),
   /**
-   * The requests that the own service sent while line `line` was processed, and the subscriptions that it ended then,
-   * as written. The requests and the ends are each a bag.
+   * The requests that the own service sent while line `line` was processed, and the subscriptions, each named by the
+   * request that opened it, that the own service ended then, each as a bag.
    */
   z.object({
     type: z.literal("requested"),
     line: z.int().nonnegative(),
-    requests: z.array(requested),
+    requests: z.array(sentRequest),
+    ends: z.array(fact),
   }),
   /**
    * Whether the screen that the look line `look` looked at offers `control` with `payload` at that point: `offered` is

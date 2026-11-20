@@ -474,9 +474,7 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       let compared ← comparedOr fs (.payload ev.event) (← w.fill fsOf line ev.payload)
       pure (Value.obj [("event", ToValue.toValue ev.event), ("payload", compared)])
     pure (some (.arr (bag expected), .arr (bag actual)))
-  | .requested line entries =>
-    let requests := entries.filterMap (·.sent?)
-    let ends := entries.filterMap (·.ended?)
+  | .requested line requests ends =>
     let span := w.spanLines (.line line) own
     let actualEnds := span.filterMap fun l => match l.dir, l.body with
       | .out, .unsubscribe to => some (Value.str to.text)
@@ -492,10 +490,10 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       | _, _ => none).mapM fun (type, r, input) => do
         pure (Value.obj [("kind", ToValue.toValue type), ("target", ToValue.toValue r),
           ("input", ← comparedOr fs (.input r) input)])
-    let expected ← requests.mapM fun (kind, target, input) => do
-      let v ← w.fill fsOf line input
-      pure (Value.obj [("kind", ToValue.toValue kind), ("target", ToValue.toValue target),
-        ("input", ← comparedOr fs (.input target) v)])
+    let expected ← requests.mapM fun r => do
+      let v ← w.fill fsOf line r.input
+      pure (Value.obj [("kind", ToValue.toValue r.kind), ("target", ToValue.toValue r.target),
+        ("input", ← comparedOr fs (.input r.target) v)])
     pure (some (.obj [("requests", .arr (bag expected)), ("ends", .arr (bag endIds))],
       .obj [("requests", .arr (bag actual)), ("ends", .arr (bag actualEnds))]))
   | .offered look _ _ offered =>

@@ -196,7 +196,7 @@ def inexactDelays (s : Structure) : List Illegal :=
   s.definitions.flatMap fun d =>
     match d.chart? with
     | some c => c.states.flatMap fun st =>
-      (st.deadlines.filter (!·.time.exact)).map fun t => .inexactDelay d.ref st.name t.name
+      (st.deadlines.filter (!·.time.isExact)).map fun t => .inexactDelay d.ref st.name t.name
     | none => []
 
 def check (s : Structure) : List Illegal :=

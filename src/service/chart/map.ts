@@ -31,7 +31,7 @@ function startCopy(r: Processing, owner: Instance, map: string, key: unknown, en
   r.state.copies.delete(id);
   r.state.copies.set(id, copy);
   const copyStep = newStep(r.state, { kind: "caused", cause: step });
-  const initial = owner.chart.states.get(map)?.initial;
+  const initial = owner.chart.states.get(map)?.spec.initial;
   inStep(r, copyStep, { kind: "start", id }, id, () => {
     if (initial !== null && initial !== undefined) enter(r, copy, [initial], copyStep);
   });
@@ -43,7 +43,7 @@ export function syncCopies(r: Processing, owner: Instance, step: number): boolea
   let changed = false;
   for (const map of [...owner.entered.keys()]) {
     const part = `items of ${map}`;
-    if (owner.chart.states.get(map)?.kind !== "map" || evaluations.replayIfFresh(owner.id, part)) continue;
+    if (owner.chart.states.get(map)?.spec.kind !== "map" || evaluations.replayIfFresh(owner.id, part)) continue;
     const definition = ref(r.st, owner.chart.name);
     let checked: ReturnType<Functions["items"]> = [];
     const reads = evaluations.track(() => {

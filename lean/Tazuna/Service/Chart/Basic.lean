@@ -72,26 +72,16 @@ structure Control where
   hasPayload : Bool
 deriving DecidableEq, Repr, Inhabited
 
+/-- A state of a chart: the state as the structure writes it, with its activities and transitions in executable form. -/
 structure ChartState where
-  name : String
-  /-- The names from the root's child down to the state. -/
-  path : List String
-  parent : Option String
-  kind : StateKind
-  initial : Option String
-  children : List String
+  spec : Spec.State
   /-- The activities in the order calls, sends, shows, opens. -/
   activities : List Activity
   transitions : List Transition
-  offers : List (String × Spec.Offer) := []
-  /-- Whether the state has parameters (`held`), which the edge that enters it fills. -/
-  hasParameters : Bool := false
-  deadlines : List Spec.Deadline := []
 deriving Repr, Inhabited
 
 def ChartState.shape (st : ChartState) : Shape :=
-  { name := st.name, path := st.path, parent := st.parent, initial := st.initial, children := st.children, kind := st.kind,
-    targets := st.transitions.filterMap (·.target) }
+  { st.spec.shape with targets := st.transitions.filterMap (·.target) }
 
 structure Chart where
   name : String
@@ -113,14 +103,16 @@ deriving Repr
 
 instance : Inhabited Chart :=
   ⟨{ name := "", order := 0, initial := "s", on := [], receives := [],
-     states := [{ name := "s", path := ["s"], parent := none, kind := .atomic, initial := none, children := [],
+     states := [{ spec := { name := "s", path := ["s"], parent := none, kind := .atomic, initial := none,
+                            children := [], offers := [], activities := [], transitions := [], deadlines := [],
+                            map := none, held := none },
                   activities := [], transitions := [] }] }⟩
 
 namespace Chart
 
 variable (c : Chart)
 
-def state? (n : String) : Option ChartState := c.states.find? (·.name == n)
+def state? (n : String) : Option ChartState := c.states.find? (·.spec.name == n)
 
 def tree : Tree := { states := c.states.map (·.shape), shaped := stateTree_of_chartTree c.shaped }
 
@@ -152,10 +144,7 @@ def Activity.ofSpec : Spec.Activity → Activity
   | .opens key r modal => .opens key r modal
 
 def ChartState.ofSpec (st : Spec.State) : ChartState :=
-  { name := st.name, path := st.path, parent := st.parent, kind := st.kind, initial := st.initial,
-    children := st.children, activities := st.activities.map Activity.ofSpec,
-    transitions := st.transitions.map Transition.ofSpec, offers := st.offers, hasParameters := st.hasParameters,
-    deadlines := st.deadlines }
+  { spec := st, activities := st.activities.map Activity.ofSpec, transitions := st.transitions.map Transition.ofSpec }
 
 /-- The executable form of a chart. -/
 def Chart.ofSpec (c : Spec.Chart) (name : String) (order : Nat) (screen opened : Bool) : Chart :=

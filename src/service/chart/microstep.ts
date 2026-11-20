@@ -1,5 +1,5 @@
 import type { Fields } from "../../data/values.ts";
-import { transitionRef } from "../../spec/structure.ts";
+import { hasParameters, transitionRef } from "../../spec/structure.ts";
 import { entryOrder, entrySet, historyTargets, parallelBetween } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
 import { type Edge, Failed, issueViolation } from "../functions.ts";
@@ -82,15 +82,16 @@ function fillHeld(
 function fillByTransition(r: Processing, c: Chosen, entered: ReadonlySet<string>, held: Fields, extra: Fields): void {
   const target = c.t.target;
   if (target === null || machine(r.state, c.instance.id) === undefined) return;
-  if (!c.instance.chart.states.get(target)?.hasParameters || !entered.has(target)) return;
+  const state = c.instance.chart.states.get(target);
+  if (state === undefined || !hasParameters(state.spec) || !entered.has(target)) return;
   fillHeld(r, c.instance, target, { kind: "transition", transition: transitionRef(c.t) }, c.t.source, held, extra);
 }
 
 /** Lean's fillByInitial: the parent's initial edge fills the parameters of `n`, unless a transition `filled` them. */
 function fillByInitial(r: Processing, instance: Instance, n: string, filled: boolean): void {
   const state = instance.chart.states.get(n);
-  if (state === undefined || state.parent === null || !state.hasParameters || filled) return;
-  fillHeld(r, instance, n, { kind: "initial", parent: state.parent }, state.parent, undefined, {});
+  if (state === undefined || state.spec.parent === null || !hasParameters(state.spec) || filled) return;
+  fillHeld(r, instance, n, { kind: "initial", parent: state.spec.parent }, state.spec.parent, undefined, {});
 }
 
 /** Lean's enterOne; `filled` is as in fillByInitial. */
@@ -102,13 +103,13 @@ function enterOne(r: Processing, instance: Instance, name: string, step: number,
   r.note.reached({ kind: "state", definition: ref(r.st, instance.chart.name), data: { state: name } });
   fillByInitial(r, instance, name, filled);
   runAssign(r, instance, { kind: "entry", state: name }, {}, name);
-  if (state.kind === "final") {
-    if (state.parent !== null) enterFinal(r, instance, state.parent, step);
+  if (state.spec.kind === "final") {
+    if (state.spec.parent !== null) enterFinal(r, instance, state.spec.parent, step);
     else if (instance.chart.screen) closeFinal(r, instance, step);
     else endWith(r, instance.id, exitFuel(r.st));
     return;
   }
-  addDeadlines(r, instance, name, state.deadlines, step);
+  addDeadlines(r, instance, name, state.spec.deadlines, step);
   if (state.activities.length > 0) enterQueue(r.queue, instance.id, name, step);
 }
 

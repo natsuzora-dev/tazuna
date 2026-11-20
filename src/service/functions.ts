@@ -295,8 +295,8 @@ export interface Functions {
    * `state`. A transition's `with` reads what its assign reads.
    */
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed;
-  /** Lean's deadlineTime, with undefined for none. */
-  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
+  /** Lean's deadlineAt, with undefined for none. */
+  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
   offers(
     scope: Scope,
     records: RecordSource,

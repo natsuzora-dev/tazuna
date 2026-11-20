@@ -25,7 +25,6 @@ export type {
 };
 export type ChartStructure = Extract<DefinitionStructure, { kind: "machine" | "screen" }>;
 type CommandStructure = Extract<DefinitionStructure, { kind: "command" }>;
-type QueryStructure = Extract<DefinitionStructure, { kind: "query" }>;
 
 const kinds: { readonly [K in DefinitionStructure["kind"]]: K } = {
   entity: "entity",
@@ -73,6 +72,9 @@ export function chartStructure(structure: Structure, service: string, name: stri
       (d.kind === "machine" || d.kind === "screen") && d.service === service && d.name === name,
   );
 }
+
+/** Lean's State.hasParameters: whether the state has parameters (`held`), which the edge that enters it fills. */
+export const hasParameters = (st: StateStructure): boolean => st.held !== null;
 
 export function stateNamed(chart: ChartStructure, name: string): StateStructure | undefined {
   return chart.states.find((s) => s.name === name);
@@ -126,13 +128,15 @@ export function emitsOf(structure: Structure, command: DefinitionRef): readonly 
   );
 }
 
-/** Lean's conditionsOf?: the command or query `target`, or undefined when it is none. */
+/** Lean's conditionsOf?: the requires and ensures conditions of `target`, or undefined when it is no command or query. */
 export function conditionsOf(
   structure: Structure,
   target: DefinitionRef,
-): CommandStructure | QueryStructure | undefined {
+): { readonly requires: readonly string[]; readonly ensures: readonly string[] } | undefined {
   const definition = structure.definitions.find((d) => sameRef(d, target));
-  return definition?.kind === "command" || definition?.kind === "query" ? definition : undefined;
+  return definition?.kind === "command" || definition?.kind === "query"
+    ? { requires: definition.requires, ensures: definition.ensures }
+    : undefined;
 }
 
 /**
@@ -234,14 +238,14 @@ export function schemaProperties(schema: unknown): string[] {
   return properties !== null && typeof properties === "object" ? Object.keys(properties) : [];
 }
 
-/** Lean's Delay.ms?: the length of `d` in milliseconds, or undefined when a date unit or a part below one is not 0. */
+/** Lean's delayMs?: the length of `d` in milliseconds, or undefined when a date unit or a part below one is not 0. */
 export function delayMs(d: Delay): number | undefined {
   const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } = d;
   if ([years, months, weeks, days, microseconds, nanoseconds].some((n) => n !== 0)) return undefined;
   return ((hours * 60 + minutes) * 60 + seconds) * 1000 + milliseconds;
 }
 
-/** Lean's DeadlineTime.exact: whether the run can add the delay of `time` to an instant. */
+/** Lean's DeadlineTime.isExact: whether the run can add the delay of `time` to an instant. */
 export const isExact = (time: DeadlineTime): boolean =>
   time.kind === "at" || (time.delay !== null && delayMs(time.delay) !== undefined);
 

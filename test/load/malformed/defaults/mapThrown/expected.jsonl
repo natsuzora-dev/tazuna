@@ -1,0 +1,1 @@
+{"kind":"Malformed.defaultSchema","definition":{"service":"counters","name":"tagCounter"},"data":{"map":"counting"},"location":{"file":"counters/counters.ts","line":6},"error":{"type":"thrownError","name":"Error","message":"no visit count is set","stack":"<stack>"}}

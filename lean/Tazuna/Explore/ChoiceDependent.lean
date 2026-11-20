@@ -129,7 +129,7 @@ def idValue (st : Service) : InstanceId → CValue
       ("state", .leaf (.str state)), ("key", .leaf (.str key))]
   | .copy o m k =>
     .obj [("kind", .leaf (.str "copy")), ("owner", idValue st o), ("map", .leaf (.str m)),
-      ("key", keyed (refsAt ((mapNamed st o.chart m).map (·.itemKeys) |>.getD [])) [] k)]
+      ("key", keyed (refsAt (((mapNamed st o.chart m).bind (·.map)).map (·.itemKeys) |>.getD [])) [] k)]
 
 /-- `vs` in the order of their canonical texts. -/
 def canonicalOrder (vs : List Value) : List Value := vs.mergeSort fun a b => decide (a.canonical ≤ b.canonical)
@@ -143,16 +143,17 @@ reads.
 -/
 def instanceValue (st : Service) (deadlines : List Deadline) (i : Instance) : CValue :=
   let contextKeys : Option (List Spec.KeyPosition) := match i.id.map? with
-    | some m => (mapNamed st i.id.chart m).map Spec.State.contextKeys
+    | some m => ((mapNamed st i.id.chart m).bind (·.map)).map (·.contextKeys)
     | none => (chartNamed st i.id.chart).map (·.toChartFields.contextKeys)
+  let heldKeys (n : String) : List Spec.KeyPosition :=
+    (((chartNamed st i.id.chart).bind (·.state? n)).bind (·.held)).map (·.keys) |>.getD []
   let names (ns : List String) : Value := .arr (ns.mergeSort (· ≤ ·) |>.map .str)
   .obj [("id", idValue st i.id), ("states", .leaf (names i.active)),
     ("history", .leaf (.arr ((i.lastChildren.mergeSort fun a b => decide (a.1 ≤ b.1)).map fun (p, cs) =>
       .arr [.str p, names cs]))),
     ("context", keyed (refsAt (contextKeys.getD [])) [] i.context),
     ("held", .obj ((i.held.mergeSort fun a b => decide (a.1 ≤ b.1)).map fun (n, v) =>
-      (n, keyed (refsAt (((chartNamed st i.id.chart).bind fun c => c.states.find? (·.name == n)).map (·.heldKeys)
-        |>.getD [])) [] v))),
+      (n, keyed (refsAt (heldKeys n)) [] v))),
     ("deadlines", .leaf (.arr (canonicalOrder ((deadlines.filter (·.machine == i.id)).map fun d =>
       .obj [("state", .str d.state), ("name", .str d.name), ("time", Time.toValue d.time)]))))]
 

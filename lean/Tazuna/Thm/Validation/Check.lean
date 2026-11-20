@@ -40,7 +40,7 @@ structure Checked (s : Structure) : Prop where
   ownMembers : ∀ c ∈ s.contracts, ∀ key m, (key, some m) ∈ c.members → m.service = c.service
   /-- Every deadline's delay has a length in milliseconds, which the run adds to an instant. -/
   delaysExact : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states, ∀ t ∈ st.deadlines,
-    t.time.exact = true
+    t.time.isExact = true
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -102,7 +102,7 @@ theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s
         simp [h d hd c hc]
       · rfl
   have delays : Charts.inexactDelays s = [] ↔ ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states,
-      ∀ t ∈ st.deadlines, t.time.exact = true := by
+      ∀ t ∈ st.deadlines, t.time.isExact = true := by
     simp only [Charts.inexactDelays, List.flatMap_eq_nil_iff]
     constructor
     · intro h d hd c hc st hst t ht

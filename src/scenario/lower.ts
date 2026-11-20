@@ -444,11 +444,12 @@ export function lower(
         return {
           type: "requested",
           line: indexOf(e.line),
-          requests: e.requests.map((q, j) =>
+          requests: e.requests.flatMap((q, j) =>
             q.kind === "end"
-              ? { subscription: factOfHandle(q.subscription) }
-              : { kind: q.kind, target: named(q.target, ["then", k, "requests", j]), input: template(q.input) },
+              ? []
+              : [{ kind: q.kind, target: named(q.target, ["then", k, "requests", j]), input: template(q.input) }],
           ),
+          ends: e.requests.flatMap((q) => (q.kind === "end" ? [factOfHandle(q.subscription)] : [])),
         };
       case "offered":
         return {

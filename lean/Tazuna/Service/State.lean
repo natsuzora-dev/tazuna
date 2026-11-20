@@ -313,7 +313,8 @@ def Instance.copyIds (i : Instance) : List InstanceId := i.copyKeys.flatMap fun 
 def Instance.documentOrder (i : Instance) : List (InstanceId × String) :=
   let tree := i.chart.tree
   i.chart.states.flatMap fun cs =>
-    (i.id, cs.name) :: (i.copyKeysOf cs.name).flatMap fun k => (tree.descendants cs.name).map (.copy i.id cs.name k, ·)
+    let n := cs.spec.name
+    (i.id, n) :: (i.copyKeysOf n).flatMap fun k => (tree.descendants n).map (.copy i.id n k, ·)
 
 /-- The scope of instance `i` at `state`. A copy's expressions also read the owner's context, shown, and input. -/
 def Instance.heldAt (i : Instance) (state : Option String) : Value :=

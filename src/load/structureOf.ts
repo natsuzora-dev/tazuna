@@ -126,7 +126,6 @@ function structureWith(
           name,
           key: d.single ? null : d.key,
           fields: Object.keys(d.fields),
-          schema: schemaOf(d, d.fields as Shape),
           unique: d.single ? [] : [...d.unique],
           references: references(d.fields as Shape, at),
           keys: keysOf(d.fields as Shape, ref, at),
@@ -196,7 +195,7 @@ function structureWith(
  * Returns how the time of the deadline `d` is computed, with its delay as Temporal.Duration reads it, or null when it
  * does not. The types give a deadline a delay or an `at`.
  */
-function deadlineTime(d: { readonly delay?: Delay; readonly at?: unknown }, deadline: string): DeadlineTime {
+function deadlineTimeOf(d: { readonly delay?: Delay; readonly at?: unknown }, deadline: string): DeadlineTime {
   if (d.at !== undefined) return { kind: "at" };
   if (d.delay === undefined) throw new InternalError(`the deadline ${deadline} has neither delay nor at`);
   try {
@@ -284,14 +283,16 @@ function structureOfChart(
         transitions: transitions(node, name),
         deadlines: Object.entries(node.after ?? {}).map(([deadline, d]) => ({
           name: deadline,
-          ...deadlineTime(d, `${name} ${deadline}`),
+          ...deadlineTimeOf(d, `${name} ${deadline}`),
         })),
-        keySchema: node.type === "map" ? schemaOf(node.key) : null,
-        itemKeys: keysOf(node.key ?? {}, ref, `state ${name}`),
-        contextSchema: node.type === "map" ? schemaOf(node.context ?? {}) : null,
-        contextKeys: keysOf(node.context ?? {}, ref, `state ${name} context`),
-        heldSchema: node.held === undefined ? null : schemaOf(node.held),
-        heldKeys: keysOf(node.held ?? {}, ref, `state ${name} held`),
+        map:
+          node.type === "map"
+            ? {
+                itemKeys: keysOf(node.key, ref, `state ${name}`),
+                contextKeys: keysOf(node.context ?? {}, ref, `state ${name} context`),
+              }
+            : null,
+        held: node.held === undefined ? null : { keys: keysOf(node.held, ref, `state ${name} held`) },
       };
       states.push(state);
       visit(node.states ?? {}, state);
@@ -303,7 +304,6 @@ function structureOfChart(
   return {
     initial: chart.initial,
     context: Object.keys(chart.context),
-    contextSchema: schemaOf(chart.context),
     contextKeys: keysOf(chart.context, ref, "context"),
     input: Object.keys(chart.input ?? {}),
     output: Object.keys(chart.output ?? {}),

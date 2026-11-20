@@ -92,7 +92,7 @@ theorem keeps_addDeadlines (step : Nat) (name : InstanceId) (n : String) (ds : L
     · split
       · generalize (expectFound _ _ : Id Int) = ms
         keys_leaf
-      · generalize fs.deadlineTime _ _ _ = r
+      · generalize fs.deadlineAt _ _ _ = r
         rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> keys_leaf
 
 /-- Processing `f` keeps the createKey values. -/

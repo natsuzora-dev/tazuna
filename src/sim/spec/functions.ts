@@ -796,7 +796,7 @@ export class SpecFunctions implements Functions {
     return values;
   }
 
-  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed {
+  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed {
     const d = named(this.node(chartOf(scope.id), this.stateOf(scope)).after, name, "deadline");
     const at = d.at as ((args: unknown) => unknown) | undefined;
     if (at === undefined) throw new InternalError(`the deadline ${name} has no at`);

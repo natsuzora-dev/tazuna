@@ -2,6 +2,7 @@ import type { Illegal } from "../data/illegal.generated.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import {
   type ChartStructure,
+  hasParameters,
   isExact,
   isOpenedByScreen,
   stateNamed,
@@ -164,7 +165,7 @@ function alwaysCycles(structure: Structure): Illegal[] {
 /** Lean's restoredHeldOf: each state with parameters that a history state may restore, with that history state. */
 function restoredHeldOf(chart: ChartStructure): [string, string][] {
   return chart.states.flatMap((st): [string, string][] => {
-    if (st.heldSchema === null || st.parent === null) return [];
+    if (!hasParameters(st) || st.parent === null) return [];
     const parent = stateNamed(chart, st.parent);
     if (parent === undefined || parent.kind === "map") return [];
     return parent.children

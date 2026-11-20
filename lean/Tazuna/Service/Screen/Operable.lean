@@ -63,7 +63,7 @@ def offeringStates (st : Service) (s : State) (top : Instance) (control : String
   pure ((← reachedCopies fs st s top payload).map fun reached => top.documentOrder.filterMap fun (h, n) =>
     let holder := if h == top.id then some top else if h ∈ reached then s.machine? h else none
     holder.bind fun hi =>
-      match (top.chart.state? n).bind (·.offers.lookup control) with
+      match (top.chart.state? n).bind (·.spec.offers.lookup control) with
       | some o => if hi.isIn n then some (hi, n, o) else none
       | none => none)
 

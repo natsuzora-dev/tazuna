@@ -45,7 +45,7 @@ export type Transition = {
 
 /**
  * A deadline's delay, as Temporal.Duration reads it: the count of each unit. TS reads it and Lean decides what it means
- * (Delay.ms?).
+ * (delayMs?).
  */
 export type Delay = {
   readonly years: number;
@@ -76,6 +76,17 @@ export type Deadline = {
   readonly name: string;
 } & DeadlineTime;
 
+/** The key positions of a map state: those of its item key, and those of its own context, which each copy holds. */
+export type MapKeys = {
+  readonly itemKeys: readonly KeyPosition[];
+  readonly contextKeys: readonly KeyPosition[];
+};
+
+/** The key positions of a state's parameters. */
+export type HeldKeys = {
+  readonly keys: readonly KeyPosition[];
+};
+
 export type State = {
   readonly name: string;
   /** The names from a child of the root down to the state itself. */
@@ -91,27 +102,18 @@ export type State = {
   readonly transitions: readonly Transition[];
   /** The deadlines that the body writes under `after`, in declaration order. */
   readonly deadlines: readonly Deadline[];
-  /** The JSON Schema of a map state's item key; null for any other state. */
-  readonly keySchema: Json | null;
-  /** The key positions of a map state's item key; empty for any other state. */
-  readonly itemKeys: readonly KeyPosition[];
-  /** The JSON Schema of a map state's own context, which each copy holds; null for any other state. */
-  readonly contextSchema: Json | null;
-  /** The key positions of a map state's own context; empty for any other state. */
-  readonly contextKeys: readonly KeyPosition[];
+  /** The key positions of a map state's item key and own context; null for any other state. */
+  readonly map: MapKeys | null;
   /**
-   * The JSON Schema of the state's parameters (`held`), which the edge that enters the state fills; null for a state
+   * The key positions of the state's parameters (`held`), which the edge that enters the state fills; null for a state
    * without parameters.
    */
-  readonly heldSchema: Json | null;
-  /** The key positions of the state's parameters. */
-  readonly heldKeys: readonly KeyPosition[];
+  readonly held: HeldKeys | null;
 };
 
 export type ChartFields = {
   readonly initial: string;
   readonly context: readonly string[];
-  readonly contextSchema: Json;
   /** The key positions of the context. */
   readonly contextKeys: readonly KeyPosition[];
   /** The input fields. A machine has none, and no `output`, `requires`, or `ensures`. */
@@ -161,8 +163,6 @@ export type Change = {
 export type EntityBody = {
   readonly key: string | null;
   readonly fields: readonly string[];
-  /** The JSON Schema of a record. */
-  readonly schema: Json;
   readonly unique: readonly string[];
   readonly references: readonly Reference[];
   /** The key positions of the fields. */

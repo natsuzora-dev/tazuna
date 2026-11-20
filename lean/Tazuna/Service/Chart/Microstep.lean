@@ -92,7 +92,7 @@ def fillByTransition (st : Service) (c : InstanceId × Transition) (entered : Li
     match c.2.target with
     | none => pure r
     | some n =>
-      if (i.chart.state? n).any (·.hasParameters) && entered.contains (c.1, n) then
+      if (i.chart.state? n).any (·.spec.hasParameters) && entered.contains (c.1, n) then
         fillHeld fs st c.1 n (.transition c.2) c.2.source (some held) extra r
       else pure r
 
@@ -104,8 +104,8 @@ def fillByInitial (st : Service) (filled : Bool) (name : InstanceId) (n : String
   withMachine name fun i r =>
     match i.chart.state? n with
     | some cs =>
-      match cs.parent with
-      | some p => if cs.hasParameters && !filled then fillHeld fs st name n (.initial p) (some p) none .none r else pure r
+      match cs.spec.parent with
+      | some p => if cs.spec.hasParameters && !filled then fillHeld fs st name n (.initial p) (some p) none .none r else pure r
       | none => pure r
     | none => pure r
 
@@ -121,14 +121,14 @@ def enterOne (st : Service) (step : Nat) (filled : Bool) (name : InstanceId) (n 
     match i.chart.state? n with
     | none => pure r
     | some cs =>
-      if cs.kind == .final then
-        match cs.parent with
+      if cs.spec.kind == .final then
+        match cs.spec.parent with
         | none =>
           if i.chart.screen then closeFinal fs st step name r
           else endWith (exitOne fs st st.exitFuel) name r
         | some parent => pure (enterFinal step name parent r)
       else do
-      let s ← addDeadlines st fs step name n cs.deadlines r.state
+      let s ← addDeadlines st fs step name n cs.spec.deadlines r.state
       pure ⟨s, if cs.activities.isEmpty then r.queue else r.queue.enter name n step⟩
 
 /--

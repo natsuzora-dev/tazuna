@@ -69,7 +69,7 @@ function offered(
   const chart = top.chart;
   const found = documentOrder(r.state, top).flatMap(({ holder, n }) => {
     if (!holder.entered.has(n) || (holder !== top && !reaches(r, holder, payload))) return [];
-    const offer = chart.states.get(n)?.offers[key];
+    const offer = chart.states.get(n)?.spec.offers[key];
     return offer === undefined ? [] : [{ holder, state: n, offer }];
   });
   const innermost = found.filter(

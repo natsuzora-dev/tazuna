@@ -96,7 +96,7 @@ const idValue = (st: Service, id: InstanceId): unknown => {
         kind: "copy",
         owner: idValue(st, id.owner),
         map: id.map,
-        key: keyed(refsAt(mapNamed(st, chartOf(id.owner), id.map)?.itemKeys), [], id.key),
+        key: keyed(refsAt(mapNamed(st, chartOf(id.owner), id.map)?.map?.itemKeys), [], id.key),
       };
   }
 };
@@ -113,7 +113,7 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
   const contextKeys =
     map === undefined
       ? chartStructure(st.structure, st.service, chart.name)?.contextKeys
-      : mapNamed(st, chart.name, map)?.contextKeys;
+      : mapNamed(st, chart.name, map)?.map?.contextKeys;
   const context = encode(
     map === undefined ? { kind: "context", chart } : { kind: "mapContext", chart, map },
     i.context,
@@ -134,7 +134,7 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
             ]),
           );
           const c = chartStructure(st.structure, st.service, chart.name);
-          return [state, keyed(refsAt(c === undefined ? undefined : stateNamed(c, state)?.heldKeys), [], encoded)];
+          return [state, keyed(refsAt(c === undefined ? undefined : stateNamed(c, state)?.held?.keys), [], encoded)];
         }),
     ),
     deadlines: canonicalOrder(

@@ -111,7 +111,7 @@ derive_wire KeyPosition
 
 /--
 A deadline's delay, as Temporal.Duration reads it: the count of each unit. TS reads it and Lean decides what it means
-(Delay.ms?).
+(delayMs?).
 -/
 structure Delay where
   years : Int
@@ -132,7 +132,7 @@ derive_wire Delay
 The length of `d` in milliseconds, which the run adds to an instant, or none when a date unit, which has no fixed
 length for an instant, or a part below a millisecond, which the run's time cannot count, is not zero.
 -/
-def Delay.ms? (d : Delay) : Option Int :=
+def delayMs? (d : Delay) : Option Int :=
   if d.years == 0 && d.months == 0 && d.weeks == 0 && d.days == 0 && d.microseconds == 0 && d.nanoseconds == 0 then
     some (((d.hours * 60 + d.minutes) * 60 + d.seconds) * 1000 + d.milliseconds)
   else none
@@ -148,8 +148,8 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire DeadlineTime tag "kind"
 
 /-- Whether the run can add the delay of `time` to an instant: true for an `at`, which computes an instant. -/
-def DeadlineTime.exact : DeadlineTime → Bool
-  | .delay d => (d.bind Delay.ms?).isSome
+def DeadlineTime.isExact : DeadlineTime → Bool
+  | .delay d => (d.bind delayMs?).isSome
   | .at => true
 
 structure Deadline where
@@ -158,6 +158,21 @@ structure Deadline where
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Deadline flatten time
+
+/-- The key positions of a map state: those of its item key, and those of its own context, which each copy holds. -/
+structure MapKeys where
+  itemKeys : List KeyPosition
+  contextKeys : List KeyPosition
+deriving Repr, Inhabited
+
+derive_wire MapKeys
+
+/-- The key positions of a state's parameters. -/
+structure HeldKeys where
+  keys : List KeyPosition
+deriving Repr, Inhabited
+
+derive_wire HeldKeys
 
 structure State where
   name : String
@@ -174,26 +189,18 @@ structure State where
   transitions : List Transition
   /-- The deadlines that the body writes under `after`, in declaration order. -/
   deadlines : List Deadline
-  /-- The JSON Schema of a map state's item key; null for any other state. -/
-  keySchema : Option Value
-  /-- The key positions of a map state's item key; empty for any other state. -/
-  itemKeys : List KeyPosition
-  /-- The JSON Schema of a map state's own context, which each copy holds; null for any other state. -/
-  contextSchema : Option Value
-  /-- The key positions of a map state's own context; empty for any other state. -/
-  contextKeys : List KeyPosition
+  /-- The key positions of a map state's item key and own context; null for any other state. -/
+  map : Option MapKeys
   /--
-  The JSON Schema of the state's parameters (`held`), which the edge that enters the state fills; null for a state
+  The key positions of the state's parameters (`held`), which the edge that enters the state fills; null for a state
   without parameters.
   -/
-  heldSchema : Option Value
-  /-- The key positions of the state's parameters. -/
-  heldKeys : List KeyPosition
+  held : Option HeldKeys
 deriving Repr, Inhabited
 
 derive_wire State
 
-def State.hasParameters (st : State) : Bool := st.heldSchema.isSome
+def State.hasParameters (st : State) : Bool := st.held.isSome
 
 def State.shape (st : State) : Shape :=
   { name := st.name, path := st.path, parent := st.parent, initial := st.initial, children := st.children,
@@ -202,7 +209,6 @@ def State.shape (st : State) : Shape :=
 structure ChartFields where
   initial : String
   context : List String
-  contextSchema : Value
   /-- The key positions of the context. -/
   contextKeys : List KeyPosition
   /-- The input fields. A machine has none, and no `output`, `requires`, or `ensures`. -/
@@ -230,7 +236,9 @@ structure Chart extends ChartFields where
 deriving Repr
 
 def Chart.tryFrom (c : ChartFields) : Except String Chart :=
-  if h : chartTree (c.states.map (·.shape)) c.initial (c.on.filterMap (·.target)) = true then
+  if !c.states.all fun st => (st.kind == .map) == st.map.isSome then
+    throw "expected the key positions of a map state on each map state and on no other state"
+  else if h : chartTree (c.states.map (·.shape)) c.initial (c.on.filterMap (·.target)) = true then
     pure { toChartFields := c, shaped := h }
   else throw "expected the states as a tree in document order (the parent path of each state is a prefix of the path of the state before it), with unique names, parents, children, and initial states that match the paths, an initial state for each state with children other than a parallel state, no children of final and history states, no map or final state under a map state, and transition targets inside the same map state as their source or outside every map state, and an initial state of the chart among the children of the root"
 
@@ -266,8 +274,6 @@ derive_wire Change
 structure EntityBody where
   key : Option String
   fields : List String
-  /-- The JSON Schema of a record. -/
-  schema : Value
   unique : List String
   references : List Reference
   /-- The key positions of the fields. -/

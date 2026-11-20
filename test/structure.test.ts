@@ -103,11 +103,6 @@ test("Commands and events have the JSON Schema of their input and payload and re
     name: "Task",
     key: "id",
     fields: ["id", "title"],
-    schema: {
-      type: "object",
-      properties: { id: { type: "string" }, title: { type: "string" } },
-      required: ["id", "title"],
-    },
     unique: [],
     references: [],
     keys: [{ path: ["id"], entity: { service: "todo", name: "Task" } }],

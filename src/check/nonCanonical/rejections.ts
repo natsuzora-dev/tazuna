@@ -1,6 +1,6 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { Found } from "../../load/found.ts";
-import { charts, type Spec, structured } from "../../load/load.ts";
+import { type Spec, structured } from "../../load/load.ts";
 import { rejectionKinds } from "../../spec/structure.ts";
 
 const kindOf = (arrives: boolean) =>
@@ -24,8 +24,8 @@ const automations = (spec: Spec): Found<NonCanonical>[] =>
 
 /** A state that calls or sends writes `onRejected` exactly when an answer may be rejected. */
 const states = (spec: Spec): Found<NonCanonical>[] =>
-  charts(spec).flatMap(({ named, structure }) =>
-    structure.states.flatMap((state) =>
+  structured(spec).flatMap(({ named, structure }) =>
+    (structure.kind === "machine" || structure.kind === "screen" ? structure.states : []).flatMap((state) =>
       state.activities.flatMap((a): Found<NonCanonical>[] => {
         if (a.keyword !== "calls" && a.keyword !== "sends") return [];
         const arrives = rejectionKinds(spec.structure, named.service, a.definition).length > 0;

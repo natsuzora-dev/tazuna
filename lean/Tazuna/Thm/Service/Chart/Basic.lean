@@ -8,7 +8,7 @@ open Tazuna.Data Tazuna.Service
 open Tazuna.Spec (chartTree stateTree)
 open Tazuna.Thm.Data.Basic Tazuna.Thm.Spec.Shape
 
-theorem tree_names (c : Chart) : c.tree.states.map (·.name) = c.states.map (·.name) := by
-  simp [Chart.tree, List.map_map, Function.comp_def, ChartState.shape]
+theorem tree_names (c : Chart) : c.tree.states.map (·.name) = c.states.map (·.spec.name) := by
+  simp [Chart.tree, List.map_map, Function.comp_def, ChartState.shape, Spec.State.shape]
 
 end Tazuna.Thm.Service.Chart.Basic

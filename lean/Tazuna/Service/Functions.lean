@@ -210,7 +210,7 @@ value or the Issue that stopped the code; copyContext and singleRecord (defaults
   it (only its codecs run, encoding): only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
   of `n` and encoded. A transition's `with` reads what its assign reads.
-- deadlineTime: what the `at` of a state's `after` deadline computes on entering it, as
+- deadlineAt: what the `at` of a state's `after` deadline computes on entering it, as
   Temporal.Instant.prototype.toString writes it, or none when it computes no Instant.
 -/
 structure Functions (m : Type → Type) where
@@ -238,7 +238,7 @@ structure Functions (m : Type → Type) where
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
   held : Scope → Records → String → Edge → Extra → m (Except Issue Value)
-  deadlineTime : Scope → Records → String → m (Except Issue (Option String))
+  deadlineAt : Scope → Records → String → m (Except Issue (Option String))
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
   items : Scope → Records → m (Except Issue (List (Value × Value)))

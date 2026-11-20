@@ -234,12 +234,12 @@ theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × St
   | nil => rfl
   | cons cs rest ih =>
     simp only [List.map_cons, List.filter_cons]
-    have hm : (cs.name ∈ (pairs.filter (·.1 == i.id)).map (·.2)) ↔ (i.id, cs.name) ∈ pairs := by
+    have hm : (cs.spec.name ∈ (pairs.filter (·.1 == i.id)).map (·.2)) ↔ (i.id, cs.spec.name) ∈ pairs := by
       simp only [List.mem_map, List.mem_filter, beq_iff_eq]
       constructor
       · rintro ⟨⟨a, b⟩, ⟨hab, rfl⟩, rfl⟩; exact hab
       · intro hp; exact ⟨_, ⟨hp, rfl⟩, rfl⟩
-    by_cases hp : (i.id, cs.name) ∈ pairs <;> simp [hp, hm, ih]
+    by_cases hp : (i.id, cs.spec.name) ∈ pairs <;> simp [hp, hm, ih]
 
 theorem microstep_exits_in_exit_order (s : State) (i : Instance) (chosen : List (InstanceId × Transition)) :
     ((((i.documentOrder.filter (· ∈ s.exitPairs chosen)).reverse).filter (·.1 == i.id)).map (·.2)) =

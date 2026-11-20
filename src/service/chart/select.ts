@@ -100,14 +100,16 @@ export function leavesOf(r: Run, instance: Instance, reached: (copy: Instance) =
     ]),
   );
   if (trigger !== undefined) {
-    const handling = states.filter((st) => transitionsAt(chart, st.name, trigger).length > 0).map((st) => st.name);
+    const handling = states
+      .filter((st) => transitionsAt(chart, st.spec.name, trigger).length > 0)
+      .map((st) => st.spec.name);
     r.note.readStates([
       ...[instance, ...[...reaching.values()].flat()].flatMap((holder) =>
         handling.map((n): [InstanceId, string] => [holder.id, n]),
       ),
       ...states
-        .filter((state) => instance.entered.has(state.name) && state.kind === "map")
-        .map((state): [InstanceId, string] => [instance.id, state.name]),
+        .filter((state) => instance.entered.has(state.spec.name) && state.spec.kind === "map")
+        .map((state): [InstanceId, string] => [instance.id, state.spec.name]),
     ]);
   }
   const leavesOfHolder = new Map(

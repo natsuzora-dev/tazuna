@@ -22,8 +22,8 @@ apply while an active descendant shows the same slot, as in SCXML, where a desce
 ancestor's. Of two active states in parallel regions that show one slot, the later in document order wins (setWanted).
 -/
 def appliedShows (i : Instance) : List (String × Activity) :=
-  let shows := (i.chart.states.filter (i.isIn ·.name)).flatMap fun cs =>
-    (cs.activities.filter (·.isShows)).map (cs.name, ·)
+  let shows := (i.chart.states.filter (i.isIn ·.spec.name)).flatMap fun cs =>
+    (cs.activities.filter (·.isShows)).map (cs.spec.name, ·)
   shows.filter fun (n, a) => !shows.any fun (d, b) => b.key == a.key && d != n && i.chart.tree.isDescendant d n
 
 def wantedShows [Monad m] (st : Service) (fs : Functions m) (s : State) (i : Instance) :

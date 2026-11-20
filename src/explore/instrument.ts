@@ -655,14 +655,8 @@ export class InstrumentedFunctions implements Functions {
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access) {
     return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, state, edge, extra, a), text);
   }
-  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access) {
-    return this.chartAudited(
-      scope,
-      access,
-      "deadlineTime",
-      (fs, a) => fs.deadlineTime(scope, records, name, a),
-      String,
-    );
+  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access) {
+    return this.chartAudited(scope, access, "deadlineAt", (fs, a) => fs.deadlineAt(scope, records, name, a), String);
   }
   offers(scope: Scope, records: RecordSource, control: string, access: Access) {
     return this.chartAudited(

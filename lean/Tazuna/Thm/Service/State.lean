@@ -132,20 +132,20 @@ theorem copy_ne (i : InstanceId) (map : String) (key : Value) : InstanceId.copy 
   omega
 
 theorem documentOrder_owner (i : Instance) :
-    i.documentOrder.filter (·.1 == i.id) = i.chart.states.map fun cs => (i.id, cs.name) := by
+    i.documentOrder.filter (·.1 == i.id) = i.chart.states.map fun cs => (i.id, cs.spec.name) := by
   unfold Instance.documentOrder
   generalize i.chart.states = l
   induction l with
   | nil => rfl
   | cons cs rest ih =>
     rw [List.flatMap_cons, List.filter_append, ih, List.filter_cons]
-    have hb : ((i.copyKeysOf cs.name).flatMap fun k => (i.chart.tree.descendants cs.name).map (InstanceId.copy i.id cs.name k, ·)).filter
+    have hb : ((i.copyKeysOf cs.spec.name).flatMap fun k => (i.chart.tree.descendants cs.spec.name).map (InstanceId.copy i.id cs.spec.name k, ·)).filter
         (·.1 == i.id) = [] := by
       rw [List.filter_eq_nil_iff]
       intro a ha
       obtain ⟨k, -, ha⟩ := List.mem_flatMap.mp ha
       obtain ⟨d, -, rfl⟩ := List.mem_map.mp ha
-      simpa using copy_ne i.id cs.name k
+      simpa using copy_ne i.id cs.spec.name k
     simp [hb]
 
 theorem emitAll_fixed (r : Option LineId) (es : List (Emit × EmittedBy)) : (s.emitAll r es).fixed = s.fixed := by

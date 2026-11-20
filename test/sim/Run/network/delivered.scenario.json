@@ -301,6 +301,7 @@
     {
       "type": "requested",
       "line": 0,
+      "ends": [],
       "requests": [
         {
           "kind": "command",

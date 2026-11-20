@@ -39,19 +39,12 @@ interface Control {
   readonly hasPayload: boolean;
 }
 
-/** Lean's `path` and `children` have no field: TS reads them from the chart's structure, `tree`. */
+/** A state of a chart: the state as the structure writes it, with its activities and transitions in executable form. */
 interface ChartState {
-  readonly name: string;
-  readonly parent: string | null;
-  readonly kind: StateStructure["kind"];
-  readonly initial: string | null;
+  readonly spec: StateStructure;
   /** The activities in the order calls, sends, shows, opens. */
   readonly activities: readonly Activity[];
   readonly transitions: readonly Transition[];
-  readonly offers: StateStructure["offers"];
-  /** Whether the state has parameters (`held`), which the edge that enters it fills. */
-  readonly hasParameters: boolean;
-  readonly deadlines: StateStructure["deadlines"];
 }
 
 /** An executable chart. `tree` is the chart's structure, which the syntax tree functions read. */
@@ -90,7 +83,7 @@ function transitionOf(t: TransitionStructure): Transition {
   };
 }
 
-/** Returns the activity of `a`, or none when it names no definition. */
+/** Returns the executable form of `a`. */
 const activityOf = (a: ActivityStructure): Activity =>
   a.keyword === "opens"
     ? { keyword: a.keyword, key: a.name, target: a.definition, modal: a.modal }
@@ -106,17 +99,7 @@ export function executableChart(c: ChartStructure, order: number, opened: boolea
     states: new Map(
       c.states.map((st) => [
         st.name,
-        {
-          name: st.name,
-          parent: st.parent,
-          kind: st.kind,
-          initial: st.initial,
-          activities: st.activities.map(activityOf),
-          transitions: st.transitions.map(transitionOf),
-          offers: st.offers,
-          hasParameters: st.heldSchema !== null,
-          deadlines: st.deadlines,
-        },
+        { spec: st, activities: st.activities.map(activityOf), transitions: st.transitions.map(transitionOf) },
       ]),
     ),
     tree: c,

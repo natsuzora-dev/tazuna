@@ -531,10 +531,10 @@ export class RunFunctions implements Answering {
           );
         });
       }
-      case "deadlineTime":
+      case "deadlineAt":
         return this.scoped(q.scope, (scope, access) =>
-          this.replied(this.functions.deadlineTime(scope, this.records, q.name, access), (time) =>
-            time === undefined ? { type: "deadlineTime" } : { type: "deadlineTime", time },
+          this.replied(this.functions.deadlineAt(scope, this.records, q.name, access), (time) =>
+            time === undefined ? { type: "deadlineAt" } : { type: "deadlineAt", time },
           ),
         );
       case "offers":

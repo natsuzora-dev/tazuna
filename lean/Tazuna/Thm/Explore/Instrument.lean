@@ -90,7 +90,7 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   assign : ∀ a b c d e, Agrees (fsI.assign a b c d e) (fs.assign a b c d e)
   input : ∀ a b c d, Agrees (fsI.input a b c d) (fs.input a b c d)
   held : ∀ a b c d e, Agrees (fsI.held a b c d e) (fs.held a b c d e)
-  deadlineTime : ∀ a b c, Agrees (fsI.deadlineTime a b c) (fs.deadlineTime a b c)
+  deadlineAt : ∀ a b c, Agrees (fsI.deadlineAt a b c) (fs.deadlineAt a b c)
   offers : ∀ a b c, Agrees (fsI.offers a b c) (fs.offers a b c)
   showInput : ∀ a b c, Agrees (fsI.showInput a b c) (fs.showInput a b c)
   items : ∀ a b, Agrees (fsI.items a b) (fs.items a b)
@@ -210,7 +210,7 @@ theorem sendEntered_agrees (r : Processing) : Agrees (sendEntered fsI st r) (sen
 
 theorem addDeadlines_agrees (step : Nat) (name : InstanceId) (n : String) (ds : List Spec.Deadline)
     (s : State) : Agrees (addDeadlines st fsI step name n ds s) (addDeadlines st fs step name n ds s) := by
-  unfold addDeadlines; agree [h.deadlineTime]
+  unfold addDeadlines; agree [h.deadlineAt]
 
 omit [MonadNote (StateT C Id)] in
 theorem fillHeld_agrees (name : InstanceId) (n : String) (edge : Edge) (scope : Option String) (held : Option Value)
