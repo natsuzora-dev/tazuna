@@ -150,7 +150,7 @@ function expectationWritten(e: Expectation): Template[] {
     case "emitted":
       return e.events.map((ev) => ev.payload);
     case "requested":
-      return e.requests.map((q) => q.input);
+      return e.requests.flatMap((q) => ("input" in q ? [q.input] : []));
     case "offered":
       return e.payload === undefined ? [] : [e.payload];
   }
@@ -158,7 +158,7 @@ function expectationWritten(e: Expectation): Template[] {
 
 /** Lean's Expectation.picks. */
 const expectationPicks = (e: Expectation): Template[] => [
-  ...(e.type === "requested" ? e.ends.flatMap(factPicks) : []),
+  ...(e.type === "requested" ? e.requests.flatMap((q) => ("subscription" in q ? factPicks(q.subscription) : [])) : []),
   ...expectationWritten(e).flatMap(templatePicks),
 ];
 
@@ -869,9 +869,9 @@ function compared(
           ? [{ kind: l.type, target: l.target, input: comparedOr(r, inputSchema(l.target), l.input) }]
           : [],
       );
-      const filled = e.requests.map((q) => [q, fill(w, e.line, q.input)] as const);
-      const expectedEnds = e.ends.flatMap((f) =>
-        messagesOf(w, e.line, f).map((k) => {
+      const filled = e.requests.flatMap((q) => ("input" in q ? [[q, fill(w, e.line, q.input)] as const] : []));
+      const expectedEnds = e.requests.flatMap((q) =>
+        ("subscription" in q ? messagesOf(w, e.line, q.subscription) : []).map((k) => {
           const m = w.messages[k];
           return m === undefined ? "" : lineIdText(m.id);
         }),

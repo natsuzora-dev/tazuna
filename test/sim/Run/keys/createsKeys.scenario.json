@@ -255,7 +255,6 @@
     {
       "type": "requested",
       "line": 2,
-      "ends": [],
       "requests": [
         {
           "kind": "query",

@@ -189,7 +189,6 @@ test("Then lowers each expectation about the line it names", () => {
           input: { value: { from: "2026-10-25" }, holes: [] },
         },
       ],
-      ends: [],
     },
   ]);
 });

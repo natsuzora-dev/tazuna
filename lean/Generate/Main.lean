@@ -63,7 +63,7 @@ def modules : List (String × List Name) :=
    ("src/data/scenario.generated.ts",
     [``Tazuna.Spec.Ref, ``Tazuna.Scenario.Origin, ``Tazuna.Scenario.Fact, ``Tazuna.Scenario.ValueRef,
      ``Tazuna.Scenario.Fill, ``Tazuna.Scenario.Hole, ``Tazuna.Scenario.Template, ``Tazuna.Scenario.Line,
-     ``Tazuna.Scenario.SentRequest, ``Tazuna.Scenario.EmittedEvent, ``Tazuna.Scenario.Expectation,
+     ``Tazuna.Scenario.Requested, ``Tazuna.Scenario.EmittedEvent, ``Tazuna.Scenario.Expectation,
      ``Tazuna.Scenario.GivenRecord, ``Tazuna.Scenario.Peer, ``Tazuna.Scenario.PeerEntry, ``Tazuna.Scenario.Given,
      ``Tazuna.Scenario]),
    ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),

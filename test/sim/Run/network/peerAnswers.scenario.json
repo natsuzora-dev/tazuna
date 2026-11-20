@@ -209,7 +209,6 @@
     {
       "type": "requested",
       "line": 4,
-      "ends": [],
       "requests": [
         {
           "kind": "command",
