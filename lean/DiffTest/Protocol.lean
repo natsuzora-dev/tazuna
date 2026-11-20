@@ -1,5 +1,6 @@
 import Tazuna.Explore.StepOrders
 import Tazuna.Explore.Enabled
+import Tazuna.Explore.Moves
 import Tazuna.Explore.Instrument
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
@@ -35,6 +36,13 @@ structure StepOrder where
 
 derive_wire StepOrder
 
+/-- What explore enumerates moves from besides the world: every scenario of the spec, and the values per payload. -/
+structure ExploreOptions where
+  scenarios : List Scenario
+  valuesPerPayload : Nat
+
+derive_wire ExploreOptions
+
 /-- What TS asks Lean to compute. A snapshot line is null for a blank line. -/
 inductive Request where
   | check («structure» : Spec.Structure)
@@ -48,9 +56,12 @@ inductive Request where
   | compareSnapshot (snapshot : List (Option Value)) (run : List Value)
   | afters (snapshot : List (Option TraceLine))
   | decodeLines (values : List Value)
-  /-- With `execute`, the lines take place as explore runs them, and each service also returns what it enables. -/
+  /--
+  With `execute`, the lines take place as explore runs them, and each service also returns what it enables; with
+  `explore` too, the own service returns the moves that explore appends next.
+  -/
   | simulate («structure» : Spec.Structure) (scenario : Scenario) (execute : Option Bool)
-      (stepOrders : Option (List StepOrder))
+      (stepOrders : Option (List StepOrder)) (explore : Option ExploreOptions)
   | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
   /-- sortCollections of an encoded value by its JSON Schema. -/
   | sort (schema value : Value)
@@ -173,7 +184,8 @@ derive_wire Unpaired serialize_only
 
 /--
 What a simulation shows of one running service: its trace lines, its violations, and its candidates, and when it runs
-as explore does and did not halt, what it enables next or the fault that computing it raised.
+as explore does and did not halt, what it enables next and, for the own service, the moves that explore appends next,
+or the fault that computing them raised.
 -/
 structure SimulatedService where
   service : String
@@ -181,6 +193,7 @@ structure SimulatedService where
   violations : List Violation
   candidates : List (Nat × Nat)
   enabled : Option Explore.Enabled
+  moves : Option (List (List Scenario.Line))
   fault : Option Violation
   /-- The state that ChoiceDependent compares (Explore.stateValue), given with `enabled`. -/
   state : Option Value

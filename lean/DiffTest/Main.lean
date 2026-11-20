@@ -261,7 +261,7 @@ simulation's violations and halting violation. With `execute` true, the lines ta
 each running service that did not halt also returns what it enables next and its state as ChoiceDependent compares it.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) (executing : Bool)
-    (stepOrders : List StepOrder) : IO Response := do
+    (stepOrders : List StepOrder) (explore : Option ExploreOptions) : IO Response := do
   let start ← worldOf spec sc stepOrders
   let fsOf ← instrumentedOf stdin stdout start
   let ran : ActingIO Sim.World :=
@@ -272,14 +272,24 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
     let running := match executing, s.halted, w.services.lookup service with
       | true, none, some st => some st
       | _, _, _ => none
-    let next ← match running with
-      | some st => do pure (some (← Explore.enabled st (fsOf service) s))
+    let next : Option (Except Fault (Explore.Enabled × Option (List Explore.Move))) ← match running with
+      | some st => do
+        match ← Explore.enabled st (fsOf service) s with
+        | .error f => pure (some (.error f))
+        | .ok e => match explore with
+          | some o =>
+            if service != sc.service then pure (some (.ok (e, none))) else
+            let x : Explore.Explored :=
+              { sc, lines := sc.lines, seen := Explore.seenOf o.scenarios, valuesPerPayload := o.valuesPerPayload }
+            pure (some ((← (Explore.moves spec st (fsOf service) x w e).run).map fun ms => (e, some ms)))
+          | none => pure (some (.ok (e, none)))
       | none => pure none
     pure ({ service
             lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
             violations := reportedViolations s c none
             candidates := if (w.services.lookup service).isSome then candidates s c none else []
-            enabled := next.bind (·.toOption)
+            enabled := next.bind fun r => r.toOption.map Prod.fst
+            moves := next.bind fun r => r.toOption.bind Prod.snd
             fault := next.bind fun
               | .error f => some (Finding.fault f).toViolation
               | .ok _ => none
@@ -332,8 +342,8 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
     pure (.afters (Verify.unknownAfters lines))
   | .decodeLines values =>
     pure (.decodedLines (values.map fun v => (FromValue.fromValue v : Except String TraceLine).toOption))
-  | .simulate s sc execute stepOrders =>
-    simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD [])
+  | .simulate s sc execute stepOrders explore =>
+    simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD []) explore
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))

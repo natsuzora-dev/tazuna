@@ -174,7 +174,7 @@ When it reports nothing, the violation can still exist.
 
 | Detection | How it detects | What it leaves out |
 |---|---|---|
-| Violations on explored paths | It runs every explored path. | Paths longer than `--depth`, and values that no scenario uses. |
+| Violations on explored paths | It runs every explored path. | Paths longer than `--depth`, and values beyond the first two of each payload: the values that the scenarios write, then representative values of the schema (`valuesFor` in `lean/Tazuna/Explore/Values.lean`). |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that a spec function reaches by another name, or through a package that the spec imports. |
 | `BagOrderDependent` | It runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and compares the two results under a binding of created keys. | Orders of a `Bag` other than the written one and its reverse. Answers with too many bindings of created keys to compare, which it reports as `Undecided.reversedBagBindings`. |
 | `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`, and the orders of a processing after its first violation. The order of two ready steps that are not message arrivals and run the same definition on equal values, such as one automation's reactions to two equal events, which the search takes as one step. Such steps differ only in the step that caused them. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the state is still compared. A state with too many bindings of created keys to compare, which it reports as `Undecided.stepOrderBindings`. A screen's input, the answers to its `shows` requests, and the order of open screens, which the opener and the answer lines set. |
@@ -363,3 +363,9 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | When the step-order search of a message reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from. | `stepOrderSearch_same` |
 | The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, or outputs that do not compare even with themselves and a state equal under a binding. The state is the records and the open instances, pending deadlines included. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
 | `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace. | `no_violation_iff` |
+
+### Exploration
+
+| Property | Theorems |
+|---|---|
+| Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each enabled slot is enumerated. Values fill each slot only up to two per payload, so the values are not complete. | `moves_enabled`, `slots_complete` |

@@ -5,7 +5,7 @@ import type { Illegal } from "../../src/data/illegal.generated.ts";
 import type { InvalidScenario } from "../../src/data/invalidScenario.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { NonCanonical } from "../../src/data/nonCanonical.generated.ts";
-import type { Origin, Scenario } from "../../src/data/scenario.generated.ts";
+import type { Line, Origin, Scenario } from "../../src/data/scenario.generated.ts";
 import type { Activity, InstanceId, StepName } from "../../src/data/step.generated.ts";
 import type { Answer, LineId, Rejection, TraceLine } from "../../src/data/trace.generated.ts";
 import type { Run } from "../../src/data/traceFile.ts";
@@ -258,6 +258,12 @@ export type StepOrder = {
   readonly order: readonly StepName[];
 };
 
+/** What explore enumerates moves from besides the world: every scenario of the spec, and the values per payload. */
+export type ExploreOptions = {
+  readonly scenarios: readonly Scenario[];
+  readonly valuesPerPayload: number;
+};
+
 /** What TS asks Lean to compute. A snapshot line is null for a blank line. */
 export type Request =
   | {
@@ -307,13 +313,17 @@ export type Request =
       readonly type: "decodeLines";
       readonly values: readonly Json[];
     }
-  /** With `execute`, the lines take place as explore runs them, and each service also returns what it enables. */
+  /**
+   * With `execute`, the lines take place as explore runs them, and each service also returns what it enables; with
+   * `explore` too, the own service returns the moves that explore appends next.
+   */
   | {
       readonly type: "simulate";
       readonly structure: Structure;
       readonly scenario: Scenario;
       readonly execute?: boolean;
       readonly stepOrders?: readonly StepOrder[];
+      readonly explore?: ExploreOptions;
     }
   | {
       readonly type: "stepOrderChanges";
@@ -689,7 +699,8 @@ export type Unpaired = {
 
 /**
  * What a simulation shows of one running service: its trace lines, its violations, and its candidates, and when it runs
- * as explore does and did not halt, what it enables next or the fault that computing it raised.
+ * as explore does and did not halt, what it enables next and, for the own service, the moves that explore appends next,
+ * or the fault that computing them raised.
  */
 export type SimulatedService = {
   readonly service: string;
@@ -697,6 +708,7 @@ export type SimulatedService = {
   readonly violations: readonly ViolationValue[];
   readonly candidates: readonly (readonly [number, number])[];
   readonly enabled?: Enabled;
+  readonly moves?: readonly (readonly Line[])[];
   readonly fault?: ViolationValue;
   /** The state that ChoiceDependent compares (Explore.stateValue), given with `enabled`. */
   readonly state?: Json;

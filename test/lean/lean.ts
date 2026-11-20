@@ -14,7 +14,7 @@ import type { Schema } from "../../src/service/basic.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
-import type { Asked, Reply, Request, Response } from "./protocol.generated.ts";
+import type { Asked, ExploreOptions, Reply, Request, Response } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -184,13 +184,17 @@ export class Lean {
     return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
   }
 
-  /** Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables. */
+  /**
+   * Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables, and
+   * with `explore` the moves that explore appends next.
+   */
   simulate(
     spec: Spec,
     scenario: Scenario,
     functions: Answering,
     execute = false,
     stepOrders: readonly StepOrder[] = [],
+    explore?: ExploreOptions,
   ): Responded<"simulate"> {
     return this.exchange(
       {
@@ -199,6 +203,7 @@ export class Lean {
         scenario,
         ...(execute ? { execute } : {}),
         ...(stepOrders.length > 0 ? { stepOrders } : {}),
+        ...(explore === undefined ? {} : { explore }),
       },
       functions,
     );

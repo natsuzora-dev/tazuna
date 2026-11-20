@@ -1,15 +1,16 @@
-import { sameRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import { expectFound, InternalError } from "../data/internalError.ts";
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { Answer, LineId } from "../data/trace.generated.ts";
-import { canonicalJson, type Shape } from "../data/values.ts";
+import type { LineId } from "../data/trace.generated.ts";
+import { canonicalJson, type Json } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
-import { chartOf } from "../dsl/chart.ts";
-import type { AnyCommand, AnyEvent, AnyQuery, Named } from "../dsl/definition.ts";
+import type { Named } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
-import { serviceOf } from "../service/basic.ts";
-import { idKey, sameLineId } from "../service/message.ts";
+import type { Schema, Service } from "../service/basic.ts";
+import type { Processing } from "../service/chart/queue.ts";
+import { sameLineId } from "../service/message.ts";
 import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
 import type { Cache } from "../sim/spec/cache.ts";
@@ -18,237 +19,241 @@ import { fingerprint } from "../sim/spec/fingerprint.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec } from "../sim/spec/simulate.ts";
 import { rejectionKinds } from "../spec/structure.ts";
-import { enabled } from "./enabled.ts";
+import { type Enabled, enabled } from "./enabled.ts";
 import { search } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
-import { stringsIn, valuesFor } from "./values.ts";
+import { distinct, nameOf, type Seen, seenOf, valuesFor } from "./values.ts";
 
 export interface Executed {
   readonly world: World;
   readonly listeners: ReadonlyMap<string, Listener>;
 }
 
-/** The values that the scenarios of a spec already write, tried first, by `<service>.<name>` of a definition. */
-export interface Seen {
-  readonly words: readonly string[];
-  readonly answers: ReadonlyMap<string, readonly unknown[]>;
-  /** The inputs of the requests and the payloads of the events that lines write. */
-  readonly messages: ReadonlyMap<string, readonly unknown[]>;
-  /** The payloads of the operations, by `<service>.<screen>.<control>`. */
-  readonly payloads: ReadonlyMap<string, readonly unknown[]>;
-}
-
-const nameOf = (r: { readonly service: string; readonly name: string }) => `${r.service}.${r.name}`;
-
-export function seenLines(spec: Spec): Seen {
-  const words = new Set<string>();
-  const answers = new Map<string, unknown[]>();
-  const messages = new Map<string, unknown[]>();
-  const payloads = new Map<string, unknown[]>();
-  const add = (map: Map<string, unknown[]>, key: string, t: Template) => {
-    map.set(key, [...(map.get(key) ?? []), t.value]);
-    for (const w of stringsIn(t.value)) words.add(w);
-  };
-  for (const s of spec.scenarios)
-    for (const l of (s.definition as LoadedScenario).scenario.lines)
-      switch (l.type) {
-        case "request":
-          add(messages, nameOf(l.target), l.input);
-          break;
-        case "emit":
-          add(messages, nameOf(l.event), l.payload);
-          break;
-        case "answer":
-          if (l.request.type === "request") add(answers, nameOf(l.request.target), l.answer);
-          break;
-        case "operate":
-          if (l.screen.type === "screen") add(payloads, `${nameOf(l.screen.screen)}.${l.control}`, l.payload);
-          break;
-      }
-  return { words: [...words], answers, messages, payloads };
-}
-
-const literal = (value: unknown): Template => ({ value, holes: [] });
-
-const reject: Answer = { result: "rejected", rejection: { kind: "unavailable" } };
-
-const isAnswer = (v: unknown): v is Answer =>
-  typeof v === "object" && v !== null && "result" in v && typeof (v as { result: unknown }).result === "string";
-
-function awaitedMessage(w: World, own: string, id: LineId): Message | undefined {
-  return w.messages.find(
-    (m) =>
-      m.sender === own &&
-      sameLineId(m.id, id) &&
-      (m.status === "inFlight" || m.status === "delivered") &&
-      w.roles.get(m.receiver) === "external" &&
-      (m.body.type === "command" || m.body.type === "query" || m.body.type === "subscribe"),
-  );
-}
-
-/** The fact that names the request `m` by its origin, its kind, its target, and its whole input. */
-function requestFact(m: Message): Fact | undefined {
-  if (m.body.type !== "command" && m.body.type !== "query" && m.body.type !== "subscribe") return undefined;
-  return {
-    type: "request",
-    origin: m.origin,
-    kind: m.body.type,
-    target: m.body.target,
-    input: literal(m.body.input),
-  };
-}
-
 /** The lines of one step of explore, which a path appends together: a message stated and the line delivering it. */
 export type Move = readonly Line[];
 
-/**
- * Returns a function that lists the moves that may come next after an executed world, all facing the own service: a
- * client's request to each of its commands and queries, a subscription's end for each subscription a client line opened
- * and no line ended, an external peer's answer to each request the own service awaits from it (delivering the request
- * first when it is in flight) and each event of an external peer that the own service receives, each delivered to the
- * own service, an operation of each open screen, the clock just before and at the next deadline, and a restart. A
- * running peer's messages stay as the scenario left them.
- */
-export function enabledLines(
-  spec: Spec,
-  sc: Scenario,
-  seen: Seen,
-  valuesPerInput: number,
-): (lines: readonly Line[], executed: Executed) => Move[] {
+/** Lean's Slot. */
+type Slot =
+  | { readonly kind: "answer"; readonly awaiting: Enabled["awaiting"][number]; readonly message: Message }
+  | { readonly kind: "at"; readonly time: Temporal.Instant }
+  | { readonly kind: "operate"; readonly operation: Enabled["operations"][number] }
+  | { readonly kind: "unsubscribe"; readonly line: number }
+  | { readonly kind: "request"; readonly definition: DefinitionRef; readonly query: boolean }
+  | { readonly kind: "emit"; readonly peer: string; readonly event: DefinitionRef }
+  | { readonly kind: "restart" };
+
+const isRequest = (m: Message): boolean =>
+  m.body.type === "command" || m.body.type === "query" || m.body.type === "subscribe";
+
+/** Lean's awaits. */
+const awaits = (w: World, own: string, id: LineId, m: Message): boolean =>
+  m.sender === own &&
+  sameLineId(m.id, id) &&
+  (m.status === "inFlight" || m.status === "delivered") &&
+  w.roles.get(m.receiver) === "external" &&
+  isRequest(m);
+
+/** Lean's ended. */
+const ended = (w: World, own: string, id: LineId): boolean =>
+  (stateOf(w, own)?.lines ?? []).some((l) => l.dir === "out" && l.type === "unsubscribe" && sameLineId(l.to, id));
+
+/** Lean's openSubscription. */
+const openSubscription = (own: string, lines: readonly Line[], l: Line, i: number): boolean =>
+  l.type === "request" &&
+  l.peer === undefined &&
+  l.kind === "subscribe" &&
+  l.target.service === own &&
+  !lines.some((u) => u.type === "unsubscribe" && u.subscription === i);
+
+/** Lean's times. */
+function times(w: World, e: Enabled): Temporal.Instant[] {
+  if (e.nextDeadline === undefined) return [];
+  const d = Temporal.Instant.from(e.nextDeadline);
+  return [d.subtract({ milliseconds: 1 }), d].filter((t) => Temporal.Instant.compare(w.now, t) <= 0);
+}
+
+/** Lean's slots. */
+function slots(spec: Spec, st: Service, sc: Scenario, lines: readonly Line[], w: World, e: Enabled): Slot[] {
   const own = sc.service;
-  const values = (key: string, shape: Shape) =>
-    valuesFor(shape, seen.messages.get(key) ?? [], seen.words, valuesPerInput);
   const externals = sc.given.peers.flatMap((p) => (p.role === "external" ? [p.service] : []));
-  const requests = spec.definitions.flatMap(({ service, name, definition: d }): Line[] => {
-    if (service !== own) return [];
-    const target = { service, name };
-    const request = (kind: "command" | "query" | "subscribe", input: unknown): Line => ({
-      type: "request",
-      kind,
-      target,
-      input: literal(input),
-    });
-    if (d.kind === "command")
-      return values(nameOf(target), (d as AnyCommand).input).map((input) => request("command", input));
-    if (d.kind === "query")
-      return values(nameOf(target), (d as AnyQuery).input).flatMap((input) => [
-        request("query", input),
-        request("subscribe", input),
-      ]);
-    return [];
-  });
-  const receives = serviceOf(spec.structure, own).receives;
-  const events = spec.definitions.flatMap(({ service, name, definition: d }): Line[] => {
-    const event = { service, name };
-    if (d.kind !== "event" || !externals.includes(service) || !receives.some((r) => sameRef(r, event))) return [];
-    return values(nameOf(event), (d as AnyEvent).payload).map(
-      (payload): Line => ({ type: "emit", peer: service, event, payload: literal(payload) }),
-    );
-  });
-  return (lines, { world: w }) => {
-    const self = (k: number): Fact => ({ type: "line", index: lines.length + k });
-    const r = w.services.get(own)?.processing;
-    if (r === undefined) return [];
-    const next = enabled(r);
-    const ownLines = stateOf(w, own)?.lines ?? [];
-    const ended = new Set(ownLines.flatMap((l) => (l.dir === "out" && l.type === "unsubscribe" ? [idKey(l.to)] : [])));
-    const answers = next.awaiting.flatMap((a) => {
-      const m = ended.has(idKey(a.id)) ? undefined : awaitedMessage(w, own, a.id);
-      const request = m === undefined ? undefined : requestFact(m);
-      const target = spec.definitions.find(
-        (d) =>
-          d.service === a.target &&
-          d.name === a.name &&
-          (d.definition.kind === "command" || d.definition.kind === "query"),
-      )?.definition as AnyCommand | AnyQuery | undefined;
-      if (m === undefined || request === undefined || target === undefined) return [];
-      const output = target.output as Shape | undefined;
-      const generated = (output === undefined ? [{}] : valuesFor(output, [], seen.words, valuesPerInput)).map(
-        (o): Answer =>
-          target.kind === "query"
-            ? { result: "fulfilled", output: o }
-            : output === undefined
-              ? { result: "accepted" }
-              : { result: "accepted", output: o },
-      );
-      const listed = (seen.answers.get(`${a.target}.${a.name}`) ?? []).filter(isAnswer);
-      const kinds = rejectionKinds(spec.structure, own, { service: a.target, name: a.name });
-      const pool = new Map<string, Answer>();
-      for (const answer of [
-        listed[0] ?? generated[0],
-        ...(kinds.includes("unavailable") ? [reject] : []),
-        ...listed,
-        ...generated,
-      ])
-        if (answer !== undefined) pool.set(canonicalJson(answer), answer);
-      const delivering: Line[] = m.status === "inFlight" ? [{ type: "deliver", message: request }] : [];
-      return [...pool.values()]
-        .slice(0, valuesPerInput)
-        .map(
-          (answer): Move => [
-            ...delivering,
-            { type: "answer", peer: m.receiver, request, answer: literal(answer) },
-            { type: "deliver", message: self(delivering.length) },
-          ],
-        );
-    });
-    const times =
-      next.nextDeadline === undefined
-        ? []
-        : [
-            Temporal.Instant.from(next.nextDeadline).subtract({ milliseconds: 1 }),
-            Temporal.Instant.from(next.nextDeadline),
-          ]
-            .filter((t) => Temporal.Instant.compare(t, w.now) >= 0)
-            .map((t): Line => ({ type: "at", time: t.toString() }));
-    const operations = next.operations.flatMap((o) => {
-      const opened = w.opened.findLast((s) => s.service === own && s.id === o.id);
-      const screen = spec.definitions.find(
-        (d) => d.service === own && d.name === o.screen && d.definition.kind === "screen",
-      );
-      if (opened === undefined || screen === undefined) return [];
-      const shape = (chartOf(screen.definition)?.controls?.[o.control]?.payload ?? {}) as Shape;
-      const listed = seen.payloads.get(`${own}.${o.screen}.${o.control}`) ?? [];
-      const payloads =
-        o.payloads === null
-          ? valuesFor(shape, listed, seen.words, valuesPerInput)
-          : o.payloads.slice(0, valuesPerInput);
-      return payloads.map(
-        (payload): Line => ({
-          type: "operate",
-          screen: { type: "screen", origin: opened.origin, screen: { service: own, name: o.screen } },
-          control: o.control,
-          payload: literal(payload),
-        }),
-      );
-    });
-    const unsubscribes = lines.flatMap((l, i): Line[] =>
-      l.type === "request" &&
-      l.kind === "subscribe" &&
-      l.peer === undefined &&
-      l.target.service === own &&
-      !lines.some((u) => u.type === "unsubscribe" && u.subscription === i)
-        ? [{ type: "unsubscribe", subscription: i }]
+  const definitions = spec.structure.definitions;
+  return [
+    ...e.awaiting.flatMap((a): Slot[] => {
+      if (ended(w, own, a.id)) return [];
+      const message = w.messages.find((m) => awaits(w, own, a.id, m));
+      return message === undefined ? [] : [{ kind: "answer", awaiting: a, message }];
+    }),
+    ...times(w, e).map((time): Slot => ({ kind: "at", time })),
+    ...e.operations.map((operation): Slot => ({ kind: "operate", operation })),
+    ...lines.flatMap((l, i): Slot[] => (openSubscription(own, lines, l, i) ? [{ kind: "unsubscribe", line: i }] : [])),
+    ...definitions.flatMap((d): Slot[] =>
+      d.service === own && (d.kind === "command" || d.kind === "query")
+        ? [{ kind: "request", definition: { service: d.service, name: d.name }, query: d.kind === "query" }]
         : [],
-    );
-    const emitted = events.map((line): Move => {
-      const event = line.type === "emit" ? line.event : { service: "", name: "" };
-      return [
-        line,
-        {
-          type: "deliver",
-          message: { type: "event", origin: { type: "line", index: lines.length }, event, receiver: own },
-        },
-      ];
-    });
-    return [
-      ...answers,
-      ...[...times, ...operations, ...unsubscribes, ...requests].map((line): Move => [line]),
-      ...emitted,
-      [{ type: "restart" }],
-    ];
+    ),
+    ...definitions.flatMap((d): Slot[] => {
+      const event = { service: d.service, name: d.name };
+      return d.kind === "event" && externals.includes(d.service) && st.receives.some((r) => sameRef(r, event))
+        ? [{ kind: "emit", peer: d.service, event }]
+        : [];
+    }),
+    { kind: "restart" },
+  ];
+}
+
+const literal = (value: Json): Template => ({ value, holes: [] });
+
+/** Lean's requestFact?. */
+function requestFact(m: Message): Fact {
+  const { body } = m;
+  if (body.type !== "command" && body.type !== "query" && body.type !== "subscribe")
+    throw new InternalError(`request of ${JSON.stringify(m.id)}`);
+  return {
+    type: "request",
+    origin: m.origin,
+    kind: body.type,
+    target: body.target,
+    input: literal(body.input as Json),
   };
 }
+
+/** Lean's isAnswer. */
+const isAnswer = (v: Json): boolean =>
+  typeof v === "object" &&
+  v !== null &&
+  !Array.isArray(v) &&
+  typeof (v as { readonly [key: string]: Json })["result"] === "string";
+
+const unavailable: Json = { result: "rejected", rejection: { kind: "unavailable" } };
+
+/** Lean's answerOf. */
+const answerOf = (query: boolean, hasOutput: boolean, output: Json): Json =>
+  query ? { result: "fulfilled", output } : hasOutput ? { result: "accepted", output } : { result: "accepted" };
+
+/** Lean's answerMove. */
+const answerMove = (receiver: string, request: Fact, answer: Json, delivering: boolean, k: number): Move =>
+  delivering
+    ? [
+        { type: "deliver", message: request },
+        { type: "answer", peer: receiver, request, answer: literal(answer) },
+        { type: "deliver", message: { type: "line", index: k + 1 } },
+      ]
+    : [
+        { type: "answer", peer: receiver, request, answer: literal(answer) },
+        { type: "deliver", message: { type: "line", index: k } },
+      ];
+
+/** Lean's requestMoves. */
+const requestMoves = (target: DefinitionRef, query: boolean, input: Json): Move[] =>
+  (query ? (["query", "subscribe"] as const) : (["command"] as const)).map((kind) => [
+    { type: "request", kind, target, input: literal(input) },
+  ]);
+
+/** Lean's fill. */
+function fill(
+  spec: Spec,
+  r: Processing,
+  sc: Scenario,
+  lines: readonly Line[],
+  seen: Seen,
+  n: number,
+  w: World,
+  slot: Slot,
+): Move[] {
+  const { st, functions: fs } = r;
+  const own = sc.service;
+  const values = (schema: Schema, listed: readonly Json[]) => valuesFor(st, fs, schema, listed, seen.words, n);
+  switch (slot.kind) {
+    case "answer": {
+      const { awaiting: a, message: m } = slot;
+      const request = requestFact(m);
+      const target = { service: a.target, name: a.name };
+      const d = expectFound(
+        `definition ${nameOf(target)}`,
+        spec.structure.definitions.find((x) => sameRef(x, target)),
+      );
+      if (d.kind !== "command" && d.kind !== "query")
+        throw new InternalError(`${nameOf(target)} is no command or query`);
+      const query = d.kind === "query";
+      const generated =
+        d.output === null
+          ? [answerOf(query, false, {})]
+          : values({ kind: "output", definition: target }, []).map((o) => answerOf(query, true, o));
+      const listed = (seen.answers.get(nameOf(target)) ?? []).filter(isAnswer);
+      const rejects = rejectionKinds(spec.structure, own, target).includes("unavailable") ? [unavailable] : [];
+      const first = listed[0] ?? generated[0];
+      const pool = distinct([...(first === undefined ? [] : [first]), ...rejects, ...listed, ...generated]);
+      return pool
+        .slice(0, n)
+        .map((answer) => answerMove(m.receiver, request, answer, m.status === "inFlight", lines.length));
+    }
+    case "at":
+      return [[{ type: "at", time: slot.time.toString() }]];
+    case "operate": {
+      const o = slot.operation;
+      const opened = expectFound(
+        `opening of ${JSON.stringify(o.id)}`,
+        w.opened.findLast((s) => s.service === own && s.id === o.id),
+      );
+      const screen = { service: own, name: o.screen };
+      const payloads =
+        o.payloads === null
+          ? values(
+              { kind: "control", screen, control: o.control },
+              seen.payloads.get(`${nameOf(screen)}.${o.control}`) ?? [],
+            )
+          : (o.payloads as Json[]).slice(0, n);
+      return payloads.map(
+        (payload): Move => [
+          {
+            type: "operate",
+            screen: { type: "screen", origin: opened.origin, screen },
+            control: o.control,
+            payload: literal(payload),
+          },
+        ],
+      );
+    }
+    case "unsubscribe":
+      return [[{ type: "unsubscribe", subscription: slot.line }]];
+    case "request":
+      return values(
+        { kind: "input", definition: slot.definition },
+        seen.messages.get(nameOf(slot.definition)) ?? [],
+      ).flatMap((input) => requestMoves(slot.definition, slot.query, input));
+    case "emit":
+      return values({ kind: "payload", event: slot.event }, seen.messages.get(nameOf(slot.event)) ?? []).map(
+        (payload): Move => [
+          { type: "emit", peer: slot.peer, event: slot.event, payload: literal(payload) },
+          {
+            type: "deliver",
+            message: { type: "event", origin: { type: "line", index: lines.length }, event: slot.event, receiver: own },
+          },
+        ],
+      );
+    case "restart":
+      return [[{ type: "restart" }]];
+  }
+}
+
+/**
+ * Lean's moves: returns a function that lists the moves after an executed world, each slot filled. It halts with the
+ * fault of what the own service enables, or of a refinement that throws on a representative value.
+ */
+export const enabledLines =
+  (spec: Spec, sc: Scenario, seen: Seen, n: number) =>
+  (lines: readonly Line[], { world: w }: Executed): Move[] => {
+    const r = w.services.get(sc.service)?.processing;
+    if (r === undefined) return [];
+    const e = enabled(r);
+    return r.evaluations.quietly(() =>
+      slots(spec, r.st, sc, lines, w, e).flatMap((slot) => fill(spec, r, sc, lines, seen, n, w, slot)),
+    );
+  };
+
+/** The values that the scenarios of a spec write, which explore tries first. */
+export const seenLines = (spec: Spec): Seen =>
+  seenOf(spec.scenarios.map((s) => (s.definition as LoadedScenario).scenario));
 
 export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[], cache?: () => Cache): Executed =>
   executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] }, [], cache);
