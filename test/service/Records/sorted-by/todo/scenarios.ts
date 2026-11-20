@@ -1,6 +1,7 @@
 import {
   checkPlan,
   given,
+  listGroups,
   listPrices,
   listTasks,
   listVisits,
@@ -83,6 +84,16 @@ export const listedPrices = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(listPrices, {});
+  },
+  then: () => [],
+});
+
+export const listedGroups = scenario({
+  description:
+    "List the groups; decide writes each counts bag out of order, in a union whose option only the closed fields or the enum discriminator tell apart, and tazuna sorts every counts bag",
+  given: arranged,
+  when: (w) => {
+    w.client.send(listGroups, {});
   },
   then: () => [],
 });

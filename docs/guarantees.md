@@ -322,6 +322,7 @@ The other rows are tazuna's own.
 | Property | Theorems |
 |---|---|
 | The elements of a bag or set, and the elements with equal keys in an array sorted by a key, are in the order of the canonical JSON of their encoded values. | `bag_or_set_array_sorted`, `sortByKey_equal_keys_in_canonical_order` |
+| In a union that holds a collection and that `check` accepts, a value fits at most one option, so the option that sorts it is never a guess. | `apart_disjoint` |
 | A snapshot orders two `out` lines after one `in` line only when they travel on one channel. | `ordered_same_channel` |
 | A snapshot never orders two events at one time of one group that `decide` returns. | `group_lines_unordered` |
 | A snapshot never orders two events at one time of steps that no cause chain links. | `independent_unordered` |

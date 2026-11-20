@@ -1063,6 +1063,10 @@ sortedBy(z.strictObject({ n: z.int(), at: datetime }), "at");
 // @ts-expect-error a sortedBy key is not a string field, since string order differs by language
 sortedBy(z.strictObject({ title: z.string() }), "title");
 
+const cents = z.codec(z.string(), z.int(), { decode: Number, encode: String });
+// @ts-expect-error a sortedBy key has no codec but tazuna's datetime and date, since a codec may decode to another order
+sortedBy(z.strictObject({ price: cents }), "price");
+
 // Map copy expressions read key, the copy context and the instance context; assign writes to each.
 machine({
   description: "",

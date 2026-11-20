@@ -1,6 +1,6 @@
-import type { Collection } from "./collections.ts";
 import type { DefinitionRef } from "./definitionRef.ts";
 import type { UnrepresentableType } from "./jsonSchema.ts";
+import type { Collection } from "./marks.ts";
 
 /** What a reference must name: a definition of that kind, or a keyed entity. */
 export type Expected = "keyedEntity" | "entity" | "event" | "command" | "query" | "screen";

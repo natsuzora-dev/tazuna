@@ -1,5 +1,6 @@
 import type { z } from "zod";
-import { collectionOf, toJson, unionOption } from "./collections.ts";
+import { toJson, unionOption } from "./collections.ts";
+import { collectionOf } from "./marks.ts";
 import { fieldSchema, schemaNode, tolerant } from "./schemaNode.ts";
 import type { Answer } from "./trace.generated.ts";
 import { canonicalJson, objectOf, type Shape } from "./values.ts";

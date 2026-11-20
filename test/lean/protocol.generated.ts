@@ -315,6 +315,12 @@ export type Request =
       readonly type: "stepOrderChanges";
       readonly structure: Structure;
       readonly scenario: Scenario;
+    }
+  /** sortCollections of an encoded value by its JSON Schema. */
+  | {
+      readonly type: "sort";
+      readonly schema: Json;
+      readonly value: Json;
     };
 
 /**
@@ -744,6 +750,10 @@ export type Response =
   | {
       readonly type: "stepOrderChanges";
       readonly searched: readonly SearchedProcessing[];
+    }
+  | {
+      readonly type: "sorted";
+      readonly value: Json;
     }
   | {
       readonly type: "error";

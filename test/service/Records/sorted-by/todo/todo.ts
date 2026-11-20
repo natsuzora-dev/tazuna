@@ -39,6 +39,25 @@ export const pricesListed = event({ payload: { prices: bag(cents) } });
 
 export const listPrices = command({ emits: [pricesListed] }).decide(() => [emit(pricesListed, { prices: [150, 20] })]);
 
+export const groupsListed = event({
+  payload: {
+    tagged: z.union([z.object({ note: z.string().optional() }), z.object({ counts: bag(z.int()) })]),
+    extended: z.union([z.object({ name: z.string() }), z.object({ name: z.string(), counts: bag(z.int()) })]),
+    named: z.discriminatedUnion("kind", [
+      z.object({ kind: z.enum(["plain", "empty"]), name: z.string() }),
+      z.object({ kind: z.literal("counted"), name: z.string(), counts: bag(z.int()) }),
+    ]),
+  },
+});
+
+export const listGroups = command({ emits: [groupsListed] }).decide(() => [
+  emit(groupsListed, {
+    tagged: { counts: [3, 1] },
+    extended: { name: "Shop", counts: [3, 1] },
+    named: { kind: "counted", name: "Shop", counts: [3, 1] },
+  }),
+]);
+
 export const tasksPlanned = event({ payload: { entries: sortedBy(Entry, "day") } });
 
 export const planTasks = command({

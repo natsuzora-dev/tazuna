@@ -1,6 +1,6 @@
 import type { z } from "zod";
-import { collectionOf } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { collectionOf } from "../data/marks.ts";
 import type {
   Expectation as DataExpectation,
   Line as DataLine,

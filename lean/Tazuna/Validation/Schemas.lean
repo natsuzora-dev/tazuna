@@ -10,51 +10,19 @@ namespace Tazuna.Validation.Schemas
 open Tazuna.Data
 open Tazuna.Spec
 
-/-- Whether the field `key` of `item` is a number, or a string that holds an instant or a date, which SortKey orders. -/
+/--
+Whether the field `key` of `item` is a number, or a string that holds an instant or a date, which SortKey orders, and
+has no codec but tazuna's datetime and date, whose encoded order is their decoded order.
+-/
 def orderedKey (item : Value) (key : String) : Bool :=
-  match (item.field? "properties").bind (·.field? key) with
+  match propertyOf item key with
   | some p =>
+    (p.field? "x-tazuna-codec").isNone &&
     match p.field? "type", p.field? "format" with
     | some (.str "number"), _ | some (.str "integer"), _ => true
     | some (.str "string"), some (.str "date-time") | some (.str "string"), some (.str "date") => true
     | _, _ => false
   | none => false
-
-def requiredOf (option : Value) : List String :=
-  match option.field? "required" with
-  | some (.arr required) => required.filterMap fun | .str k => some k | _ => none
-  | _ => []
-
-def propertyConst (option : Value) (k : String) : Option Value :=
-  (option.field? "properties").bind (·.field? k) |>.bind (·.field? "const")
-
-/-- Whether `a` lacks a field that `b` requires, while `a` takes no field outside its properties. -/
-def missesRequired (a b : Value) : Bool :=
-  a.field? "additionalProperties" == some (.bool false) &&
-    (requiredOf b).any fun k => ((a.field? "properties").bind (·.field? k)).isNone
-
-/--
-Whether no value fits both options as `fits` reads them: their types differ (an integer is a number), their own consts
-differ, a property has a different const in each, or one requires a field that the other cannot have.
--/
-def apart (a b : Value) : Bool :=
-  (match a.field? "type", b.field? "type" with
-    | some (.str x), some (.str y) =>
-      x != y && !([x, y] == ["integer", "number"] || [x, y] == ["number", "integer"])
-    | _, _ => false) ||
-  (match a.field? "const", b.field? "const" with
-    | some x, some y => x != y
-    | _, _ => false) ||
-  (requiredOf a ++ requiredOf b).any (fun k =>
-    match propertyConst a k, propertyConst b k with
-    | some x, some y => x != y
-    | _, _ => false) ||
-  missesRequired a b || missesRequired b a
-
-/-- Whether every two options are `apart`. -/
-def allApart : List Value → Bool
-  | [] => true
-  | o :: os => os.all (apart o) && allApart os
 
 /-- What a schema breaks at a path: a sortedBy key that its encoded value does not order, or an ambiguous union. -/
 inductive Issue where
@@ -63,70 +31,60 @@ inductive Issue where
 deriving DecidableEq, Repr
 
 /--
-Whether the schema has a bag, set, or sortedBy array at any depth that sortCollections reaches (union options, items,
-properties, additionalProperties).
+The schemas that sortCollections walks into from `schema`: its union options, items, properties, each with its name,
+and additionalProperties.
 -/
+def children (schema : Value) : List (Option String × Value) :=
+  ((unionOptions schema).getD []).map (none, ·) ++
+  (schema.field? "items").toList.map (none, ·) ++
+  (match schema.field? "properties" with
+    | some (.obj properties) => properties.map fun (k, p) => (some k, p)
+    | _ => []) ++
+  (schema.field? "additionalProperties").toList.map (none, ·)
+
+theorem children_lt {schema : Value} {c : Option String × Value} (h : c ∈ children schema) :
+    sizeOf c.2 < sizeOf schema := by
+  simp only [children, List.mem_append, List.mem_map] at h
+  rcases h with ((⟨o, ho, rfl⟩ | ⟨i, hi, rfl⟩) | hp) | ⟨a, ha, rfl⟩
+  · cases hu : unionOptions schema with
+    | none => simp [hu] at ho
+    | some os =>
+      simp only [hu, Option.getD_some] at ho
+      have := List.sizeOf_lt_of_mem ho
+      have := unionOptions_lt hu
+      simp only
+      omega
+  · exact Value.field?_lt (Option.mem_toList.mp hi)
+  · split at hp
+    · rename_i properties hps
+      obtain ⟨⟨k, p⟩, hm, rfl⟩ := List.mem_map.mp hp
+      have h1 := List.sizeOf_lt_of_mem hm
+      have h2 := Value.field?_lt hps
+      simp only [Prod.mk.sizeOf_spec, Value.obj.sizeOf_spec] at h1 h2 ⊢
+      omega
+    · simp at hp
+  · exact Value.field?_lt (Option.mem_toList.mp ha)
+
+/-- Whether the schema has a bag, set, or sortedBy array at any depth of its `children`. -/
 def holdsCollection (schema : Value) : Bool :=
   (schema.field? "x-tazuna-sorted-by").isSome || (schema.field? "x-tazuna-bag").isSome ||
     (schema.field? "x-tazuna-set").isSome ||
-  (match _ha : unionOptions schema with
-    | some options => options.attach.any fun ⟨o, _ho⟩ => holdsCollection o
-    | none => false) ||
-  (match _hi : schema.field? "items" with
-    | some item => holdsCollection item
-    | none => false) ||
-  (match _hp : schema.field? "properties" with
-    | some (.obj properties) => properties.attach.any fun ⟨(_, p), _hm⟩ => holdsCollection p
-    | _ => false) ||
-  (match _hc : schema.field? "additionalProperties" with
-    | some c => holdsCollection c
-    | none => false)
+  (children schema).attach.any fun ⟨c, _h⟩ => holdsCollection c.2
 termination_by sizeOf schema
-decreasing_by
-  · have := List.sizeOf_lt_of_mem _ho
-    have := unionOptions_lt _ha
-    omega
-  · exact Value.field?_lt _hi
-  · have h1 := List.sizeOf_lt_of_mem _hm
-    have h2 := Value.field?_lt _hp
-    simp only [Prod.mk.sizeOf_spec, Value.obj.sizeOf_spec] at h1 h2
-    omega
-  · exact Value.field?_lt _hc
+decreasing_by exact children_lt _h
 
 /-- The issues of the schema at `path` and below, each with the path of field names that leads to it. -/
 def issues (path : List String) (schema : Value) : List (List String × Issue) :=
-  let own :=
-    (match schema.field? "x-tazuna-sorted-by", schema.field? "items" with
-      | some (.str key), some item => if orderedKey item key then [] else [(path, .unorderedSortKey key)]
-      | some (.str key), none => [(path, .unorderedSortKey key)]
-      | _, _ => []) ++
-    (match unionOptions schema with
-      | some options => if options.any holdsCollection && !allApart options then [(path, .ambiguousUnion)] else []
-      | none => [])
-  own ++
-  (match _ha : unionOptions schema with
-    | some options => options.attach.flatMap fun ⟨o, _ho⟩ => issues path o
+  (match schema.field? "x-tazuna-sorted-by", schema.field? "items" with
+    | some (.str key), some item => if orderedKey item key then [] else [(path, .unorderedSortKey key)]
+    | some (.str key), none => [(path, .unorderedSortKey key)]
+    | _, _ => []) ++
+  (match unionOptions schema with
+    | some options => if options.any holdsCollection && !allApart options then [(path, .ambiguousUnion)] else []
     | none => []) ++
-  (match _hi : schema.field? "items" with
-    | some item => issues path item
-    | none => []) ++
-  (match _hp : schema.field? "properties" with
-    | some (.obj properties) => properties.attach.flatMap fun ⟨(k, p), _hm⟩ => issues (path ++ [k]) p
-    | _ => []) ++
-  (match _hc : schema.field? "additionalProperties" with
-    | some c => issues path c
-    | none => [])
+  (children schema).attach.flatMap fun ⟨c, _h⟩ => issues (path ++ c.1.toList) c.2
 termination_by sizeOf schema
-decreasing_by
-  · have := List.sizeOf_lt_of_mem _ho
-    have := unionOptions_lt _ha
-    omega
-  · exact Value.field?_lt _hi
-  · have h1 := List.sizeOf_lt_of_mem _hm
-    have h2 := Value.field?_lt _hp
-    simp only [Prod.mk.sizeOf_spec, Value.obj.sizeOf_spec] at h1 h2
-    omega
-  · exact Value.field?_lt _hc
+decreasing_by exact children_lt _h
 
 /-- The JSON Schemas of a definition, each with the keyword path that holds it. -/
 def schemasOf (d : Definition) : List (List String × Value) :=

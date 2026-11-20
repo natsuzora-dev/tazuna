@@ -48,7 +48,7 @@ structure Checked (s : Structure) : Prop where
   /-- Every sortedBy array of a schema sorts by a key whose encoded value SortKey orders. -/
   sortKeysOrdered : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path key,
     (path, .unorderedSortKey key) ∉ Schemas.issues x.1 x.2
-  /-- No union of a schema that holds a collection has two options that one value fits, so sortCollections picks one. -/
+  /-- Every two options of a union that holds a collection are `apart`, so no value fits both (`apart_disjoint`). -/
   unionsApart : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ Schemas.issues x.1 x.2
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/

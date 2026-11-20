@@ -38,6 +38,7 @@ const responses = {
   decodeLines: "decodedLines",
   simulate: "simulated",
   stepOrderChanges: "stepOrderChanges",
+  sort: "sorted",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
@@ -200,5 +201,9 @@ export class Lean {
 
   check(structure: Structure): Responded<"check">["findings"] {
     return this.exchange({ type: "check", structure }).findings;
+  }
+
+  sort(schema: Json, value: Json): Json {
+    return this.exchange({ type: "sort", schema, value }).value as Json;
   }
 }

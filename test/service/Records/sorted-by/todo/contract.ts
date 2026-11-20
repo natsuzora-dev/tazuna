@@ -2,6 +2,8 @@ import {
   checkPlan,
   contract,
   Entry,
+  groupsListed,
+  listGroups,
   listPrices,
   listTasks,
   listVisits,
@@ -27,4 +29,6 @@ export const todo = contract({
   planChecked,
   listPrices,
   pricesListed,
+  listGroups,
+  groupsListed,
 });

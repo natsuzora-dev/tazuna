@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { collectionOf } from "./collections.ts";
+import { date, datetime } from "./datetime.ts";
+import { collectionOf } from "./marks.ts";
 import { holdsCodec, schemaNode } from "./schemaNode.ts";
 import type { Json, Shape } from "./values.ts";
 
@@ -32,6 +33,12 @@ export function unrepresentableType(schema: z.ZodType): UnrepresentableType | un
   return node.type === "opaque" ? unrepresentableTypes.find((type) => type === node.kind) : undefined;
 }
 
+const transformOf = (schema: z.core.$ZodType): unknown =>
+  (schema._zod.def as { readonly transform?: unknown }).transform;
+
+/** The decode transforms of tazuna's datetime and date, whose encoded order is their decoded order; a clone keeps it. */
+const timeTransforms = new Set([datetime, date].map(transformOf));
+
 export const jsonSchema = (schema: z.ZodType): JsonSchema =>
   z.toJSONSchema(schema, {
     io: "input",
@@ -39,9 +46,12 @@ export const jsonSchema = (schema: z.ZodType): JsonSchema =>
     // `format` already states the date, date-time and duration forms; Zod's regex `pattern` would repeat it.
     override: (ctx) => {
       if (["date-time", "date", "duration"].includes(String(ctx.jsonSchema.format))) delete ctx.jsonSchema.pattern;
-      // Parsing rejects a field that an object without a catchall does not name, at any depth.
+      // Parsing rejects a field that an object without a catchall does not name, at any depth. A codec other than
+      // tazuna's time codecs may decode to another order, which a sortedBy key cannot have.
       const node = schemaNode(ctx.zodSchema as unknown as z.ZodType);
       if (node.type === "object" && node.catchall === undefined) ctx.jsonSchema.additionalProperties = false;
+      if (node.type === "codec" && !timeTransforms.has(transformOf(ctx.zodSchema)))
+        ctx.jsonSchema["x-tazuna-codec"] = true;
       const collection = collectionOf(ctx.zodSchema);
       if (collection?.kind === "bag") ctx.jsonSchema["x-tazuna-bag"] = true;
       if (collection?.kind === "set") Object.assign(ctx.jsonSchema, { uniqueItems: true, "x-tazuna-set": true });

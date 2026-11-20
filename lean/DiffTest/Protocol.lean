@@ -50,6 +50,8 @@ inductive Request where
   | simulate («structure» : Spec.Structure) (scenario : Scenario) (execute : Option Bool)
       (stepOrders : Option (List StepOrder))
   | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
+  /-- sortCollections of an encoded value by its JSON Schema. -/
+  | sort (schema value : Value)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -216,6 +218,7 @@ inductive Response where
   | simulated (services : List SimulatedService) (violations : List Sim.InvalidScenario)
       (halted : Option Sim.InvalidScenario)
   | stepOrderChanges (searched : List SearchedProcessing)
+  | sorted (value : Value)
   | error (message : String)
 
 derive_wire Response tag "type" serialize_only

@@ -1,6 +1,7 @@
 import type { z } from "zod";
-import { type Collection, collectionOf, sortsInside } from "../data/collections.ts";
+import { sortsInside } from "../data/collections.ts";
 import type { Malformed } from "../data/malformed.ts";
+import { type Collection, collectionOf } from "../data/marks.ts";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
 import type { Definition, Named } from "../dsl/definition.ts";
 import type { Found } from "./found.ts";

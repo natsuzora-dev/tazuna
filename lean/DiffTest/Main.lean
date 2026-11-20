@@ -330,6 +330,7 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .simulate s sc execute stepOrders =>
     simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD [])
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
+  | .sort schema value => pure (.sorted (sortCollections schema value))
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { collectionOf } from "../data/collections.ts";
 import { date, datetime } from "../data/datetime.ts";
+import { collectionOf } from "../data/marks.ts";
 import { canonicalJson, objectOf, type Shape } from "../data/values.ts";
 
 export const stringsIn = (value: unknown): string[] =>

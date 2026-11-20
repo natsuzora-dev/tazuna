@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
-import { fieldSchema, namedOption, type SchemaNode, schemaNode, tolerant } from "./schemaNode.ts";
+import type { date as dateSchema, datetime as datetimeSchema } from "./datetime.ts";
+import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
+import { type Collection, collectionOf, mark } from "./marks.ts";
+import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
+import { fits } from "./unionOptions.ts";
 import {
   byCodePoint,
   canonicalJson,
@@ -12,17 +16,6 @@ import {
   strictObjectOf,
 } from "./values.ts";
 
-export type Collection =
-  | { readonly kind: "bag" }
-  | { readonly kind: "set" }
-  | { readonly kind: "sortedBy"; readonly key: string };
-
-/**
- * The collection of each marked array, keyed by a check rather than by the schema, because Zod copies checks into the
- * schemas that `.min()` and similar methods return.
- */
-const collections = new WeakMap<object, Collection>();
-
 /** An array schema whose output type carries mark `M`, so that spec functions may produce it from a Bag. */
 type CollectionSchema<E extends z.ZodType, M extends "bag" | "sortedBy"> = z.ZodArray<E> & {
   readonly _zod: { readonly output: Marked<z.output<E>[], M> };
@@ -33,7 +26,7 @@ function marked<E extends z.ZodType, M extends "bag" | "sortedBy">(
   check: z.core.$ZodCheck<never>,
   collection: Collection,
 ): CollectionSchema<E, M> {
-  collections.set(check, collection);
+  mark(check, collection);
   return z.array(element).check(check as z.core.$ZodCheck<z.output<E>[]>) as CollectionSchema<E, M>;
 }
 
@@ -59,13 +52,39 @@ export const bag = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag">
 export const set = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag"> =>
   marked(element, setCheck as never, { kind: "set" });
 
+/**
+ * The fields of `E` whose encoded value orders as their decoded one, which Lean's SortKey orders: a number with no
+ * codec, or tazuna's datetime or date.
+ */
 type SortKeyOf<E extends z.ZodObject> = {
-  [K in keyof z.output<E>]-?: z.output<E>[K] extends SortKey ? K : never;
-}[keyof z.output<E>] &
+  [K in keyof E["shape"]]-?: E["shape"][K] extends typeof datetimeSchema | typeof dateSchema
+    ? K
+    : E["shape"][K] extends { readonly _zod: { readonly def: { readonly type: "pipe" } } }
+      ? never
+      : z.output<E["shape"][K]> extends number
+        ? K
+        : never;
+}[keyof E["shape"]] &
   string;
 
-const byKey = (key: string) => (a: unknown, b: unknown) =>
-  compareKeys((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]);
+/** Lean's SortKey.of: the key that orders an encoded value, as a TS SortKey, whose compareKeys orders it as Lean. */
+function encodedKey(json: unknown): SortKey | undefined {
+  if (typeof json === "number") return json;
+  if (typeof json !== "string") return undefined;
+  try {
+    return Temporal.Instant.fromEpochMilliseconds(Temporal.Instant.from(json).epochMilliseconds);
+  } catch {
+    try {
+      return Temporal.PlainDate.from(json);
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/** The key `key` of each element of a sortedBy array of `element`, read from its encoded value as Lean reads it. */
+const keyOf = (element: z.ZodType, key: string) => (row: unknown) =>
+  encodedKey((toJson(element, row) as Record<string, unknown> | null)?.[key]) as SortKey;
 
 /**
  * Returns an array schema sorted ascending by `key`, like Kotlin's `sortedBy`. tazuna sorts the values that the spec
@@ -76,7 +95,8 @@ export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(
   key: K,
 ): CollectionSchema<E, "sortedBy"> {
   const check = z.check<readonly Record<string, unknown>[]>((ctx) => {
-    const i = ctx.value.findIndex((row, i) => i > 0 && byKey(key)(ctx.value[i - 1], row) > 0);
+    const keys = ctx.value.map(keyOf(element, key));
+    const i = keys.findIndex((k, i) => i > 0 && compareKeys(keys[i - 1], k) > 0);
     if (i > 0)
       ctx.issues.push({
         code: "custom",
@@ -87,9 +107,6 @@ export function sortedBy<E extends z.ZodObject, K extends SortKeyOf<E>>(
   });
   return marked(element, check as never, { kind: "sortedBy", key });
 }
-
-export const collectionOf = (schema: z.core.$ZodType): Collection | undefined =>
-  (schema._zod.def.checks ?? []).map((c) => collections.get(c)).find((c) => c !== undefined);
 
 /** Returns the elements of a marked array that spec code made from Bags, or the value itself if it is no such array. */
 function unbagged(collection: Collection | undefined, value: unknown): unknown {
@@ -116,7 +133,9 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
       if (collection === undefined) return items;
       const text = new Map(items.map((v) => [v, canonicalJson(toJson(node.element, v))]));
       const canonical = items.toSorted((a, b) => byCodePoint(text.get(a) as string, text.get(b) as string));
-      return collection.kind === "sortedBy" ? canonical.toSorted(byKey(collection.key)) : canonical;
+      if (collection.kind !== "sortedBy") return canonical;
+      const key = keyOf(node.element, collection.key);
+      return canonical.toSorted((a, b) => compareKeys(key(a), key(b)));
     }
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -143,15 +162,19 @@ export function sorted(schema: z.ZodType, value: unknown): unknown {
 export const sortsInside = (node: SchemaNode): boolean =>
   ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
+const optionSchemas = new WeakMap<readonly z.ZodType[], readonly JsonSchema[]>();
+
 /**
- * Returns the option of a union that `value` takes: the option that its discriminator names, or in a plain union the
- * first option that the receiver parses `value` with, its collections as `sorted` writes them, else the first option.
- * Walks that only change what they recognise use it, so a value that no option accepts still has its collections
- * written.
+ * Returns the option of a union that `value` takes by Lean's `fits`, read from the JSON Schema of each option: the
+ * first that fits, if any. A plain union holds no codec, so the encoded value that `fits` reads differs from `value`
+ * only by its Bags, which `fits` reads as arrays.
  */
 export function unionOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
-  if (node.discriminator !== undefined) return namedOption(node, value);
-  return node.options.find((o) => tolerant(o).safeParse(sorted(o, value)).success) ?? node.options[0];
+  const known = optionSchemas.get(node.options);
+  const schemas = known ?? node.options.map(jsonSchema);
+  if (known === undefined) optionSchemas.set(node.options, schemas);
+  const i = schemas.findIndex((schema) => fits(schema, value));
+  return i < 0 ? undefined : node.options[i];
 }
 
 /**
@@ -162,8 +185,7 @@ export const written = (schema: z.ZodType, value: unknown): Json => plain(toJson
 
 /**
  * Returns a value of `schema` as JSON holds it: each codec at any depth encodes its part, and no check or other
- * transform runs. A part that its codec cannot encode stays as it is. Check reports a plain union that holds a codec,
- * so a union picks the option that the discriminator names and needs no other choice.
+ * transform runs. A part that its codec cannot encode stays as it is.
  */
 export function toJson(schema: z.ZodType, value: unknown): unknown {
   const node = schemaNode(schema);
@@ -194,7 +216,7 @@ export function toJson(schema: z.ZodType, value: unknown): unknown {
       if (!isRecord(value)) return value;
       return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toJson(node.value, v)]));
     case "union": {
-      const option = namedOption(node, value);
+      const option = unionOption(node, value);
       return option === undefined ? value : toJson(option, value);
     }
     case "intersection":
@@ -241,7 +263,7 @@ export function fromJson(schema: z.ZodType, json: unknown): unknown {
       if (!isRecord(json)) return json;
       return Object.fromEntries(Object.entries(json).map(([k, v]) => [k, fromJson(node.value, v)]));
     case "union": {
-      const option = namedOption(node, json);
+      const option = unionOption(node, json);
       return option === undefined ? json : fromJson(option, json);
     }
     case "intersection":
@@ -271,8 +293,7 @@ export function bagged(schema: z.ZodType, value: unknown): unknown {
       const collection = collectionOf(schema);
       if (collection === undefined) return items;
       if (collection.kind !== "sortedBy") return new BagValue(() => items);
-      const key = (v: unknown) => (v as Record<string, SortKey>)[collection.key] as SortKey;
-      return runsOf(items, key).map((run) => new BagValue(() => run));
+      return runsOf(items, keyOf(node.element, collection.key)).map((run) => new BagValue(() => run));
     }
     case "object":
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;

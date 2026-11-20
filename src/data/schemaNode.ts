@@ -139,14 +139,6 @@ export function childrenOf(node: SchemaNode): readonly z.ZodType[] {
 export const fieldSchema = (node: Extract<SchemaNode, { type: "object" }>, key: string): z.ZodType | undefined =>
   Object.hasOwn(node.shape, key) ? node.shape[key] : node.catchall;
 
-/** The option of a discriminated union that `value` names by its discriminator, if any. */
-export function namedOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
-  const { discriminator } = node;
-  if (discriminator === undefined || value === null || typeof value !== "object") return undefined;
-  const tag = (value as Readonly<Record<string, unknown>>)[discriminator];
-  return node.options.find((o) => o._zod.propValues?.[discriminator]?.has(tag as never));
-}
-
 /** Whether a codec is at any depth of `schema`, `schema` included. */
 export function holdsCodec(schema: z.ZodType, seen = new Set<z.ZodType>()): boolean {
   if (seen.has(schema)) return false;

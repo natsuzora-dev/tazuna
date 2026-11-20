@@ -65,6 +65,27 @@ const contexts = [
     type: "object",
     properties: { u: { oneOf: [rows({ const: "a" }), { ...rows({ const: "b" }), items: bagOf({}) }] } },
   },
+  {
+    type: "object",
+    properties: {
+      s: { type: "array", items: rows({ type: "integer", "x-tazuna-codec": true }), "x-tazuna-sorted-by": "k" },
+    },
+  },
+  {
+    type: "object",
+    properties: { u: { oneOf: [rows({ enum: ["a", "b"] }), { ...rows({ const: "c" }), items: bagOf({}) }] } },
+  },
+  {
+    type: "object",
+    properties: {
+      u: {
+        anyOf: [
+          { ...rows({}), required: [] },
+          { ...rows({}), properties: { n: bagOf({}) }, required: ["n"] },
+        ],
+      },
+    },
+  },
 ];
 
 const pick = <T>(items: readonly T[], k: number): T | undefined => items[k % Math.max(items.length, 1)];

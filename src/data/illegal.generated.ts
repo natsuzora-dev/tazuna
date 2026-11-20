@@ -135,8 +135,9 @@ export type Illegal =
     }
   /**
    * The sortedBy array at `path` of the definition's schemas sorts by `key`, whose encoded value is no number, instant, or
-   * date, so its order would not be the order of the values. `check` reports none exactly when every sort key is encoded
-   * as one of these (`Checked.sortKeysOrdered`).
+   * date, or which has a codec other than tazuna's datetime and date, so the order of the encoded values, which tazuna
+   * sorts by, may not be the order of the values. `check` reports none exactly when every sort key is encoded as one of
+   * these with no other codec (`Checked.sortKeysOrdered`).
    */
   | {
       readonly kind: "Illegal.unorderedSortKey";
@@ -148,8 +149,8 @@ export type Illegal =
     }
   /**
    * The union at `path` of the definition's schemas holds a collection, and one value can fit two of its options by type,
-   * const, and required fields, so the option whose order sorts the value would be a guess. `check` reports none exactly
-   * when every such union tells its options apart (`Checked.unionsApart`).
+   * const or enum, closed fields, and required fields, so the option whose order sorts the value would be a guess. `check`
+   * reports none exactly when every such union tells its options apart (`Checked.unionsApart`).
    */
   | {
       readonly kind: "Illegal.ambiguousUnion";
