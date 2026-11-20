@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { Answer, TraceLine } from "../data/trace.generated.ts";
 import { type FileLine, subjectOf } from "../data/trace.ts";
@@ -233,8 +232,9 @@ export function checkExternal(
 
 /**
  * Runs checkExternal, and on the lines that it finds nothing on, the checks that need spec functions or Zod schemas:
- * each event's payload, and each answer that answers a send of its request, a command's ensures with all its result
- * events, which may come before or after the answer.
+ * each event's payload, and each answer that answers a send of its request: the request's input, which only a rejection
+ * may answer when it fails the schema, and a command's ensures with all its result events, which may come before or
+ * after the answer.
  */
 export function verifyExternal(spec: Spec, service: string, trace: readonly FileLine[]): Found[] {
   const { found, exchanges, events } = checkExternal(spec, service, trace);
@@ -257,13 +257,21 @@ export function verifyExternal(spec: Spec, service: string, trace: readonly File
   for (const x of exchanges) {
     const { definition } = x;
     const ref = { requestId: x.id, target: refOfDefinition(spec, definition) };
-    const input = z.object(definition.input as Record<string, z.ZodType>).safeParse(x.input);
+    const input = strictObjectOf(definition.input).safeParse(x.input);
     for (const { at: line, answer, answersSend } of answeringSends(x)) {
       if (!answersSend || flagged.has(line)) continue;
       const out =
         answer.result === "rejected" || definition.output === undefined
           ? undefined
           : strictObjectOf(definition.output).safeParse(answer.output);
+      if (!input.success && answer.result !== "rejected")
+        violations.push({
+          kind: "Mismatch.requestInputSchema",
+          definition: null,
+          line,
+          data: ref,
+          error: zodError(input.error.issues),
+        } satisfies Found & Mismatch);
       if (input.success) {
         const decoded = { input: input.data, ...(out?.success === true ? { output: out.data } : {}) };
         const failedRequires = assumedRequires(definition, input.data);

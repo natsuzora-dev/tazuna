@@ -10,8 +10,8 @@ open Tazuna.Data
 /--
 A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
 `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
-failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
-or Zod schemas.
+failedAssumedRequires, failedAssumedEnsures, answerOutputSchema, eventPayloadSchema and requestInputSchema, which need
+the spec's functions or Zod schemas.
 -/
 inductive Mismatch where
   /-- The request line has another input than the snapshot's. -/
@@ -60,6 +60,11 @@ inductive Mismatch where
   | repeatedAnswer (line : Nat) (requestId : String) (target : Spec.Ref)
   /-- The external service emits `event` with a payload that does not match the event's payload schema. -/
   | eventPayloadSchema (line : Nat) (event : Spec.Ref)
+  /--
+  The external service answers, without rejecting, the request `requestId` whose input does not match the target's input
+  schema. Its assumed requires and ensures cannot read such an input.
+  -/
+  | requestInputSchema (line : Nat) (requestId : String) (target : Spec.Ref)
 
 derive_group Mismatch flatten mismatch
 

@@ -1,3 +1,4 @@
+import { expectFound } from "../../data/internalError.ts";
 import { byCodePoint, plain } from "../../data/values.ts";
 import { ref } from "../basic.ts";
 import { Failed, type Functions, issueViolation } from "../functions.ts";
@@ -14,8 +15,11 @@ import type { Processing } from "./queue.ts";
  */
 function startCopy(r: Processing, owner: Instance, map: string, key: unknown, encodedKey: string, step: number): void {
   const chart = ref(r.st, owner.chart.name);
-  const context = r.functions.defaults({ kind: "mapContext", chart, map });
-  if (context instanceof Failed) halt(issueViolation(chart, context));
+  const defaults = r.functions.defaults({ kind: "mapContext", chart, map });
+  const context = expectFound(
+    `defaults of the copy context of ${map}`,
+    defaults instanceof Failed ? undefined : defaults,
+  );
   const id = copyId(owner.id, map, encodedKey);
   const copy: Instance = {
     chart: owner.chart,

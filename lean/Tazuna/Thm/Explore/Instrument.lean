@@ -287,7 +287,7 @@ theorem select_agrees (s : State) (top : Instance) (trigger : Spec.Trigger) (ext
 
 theorem startCopy_agrees (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) (r : Processing) :
     Agrees (startCopy fsI st step owner map key encodedKey r) (startCopy fs st step owner map key encodedKey r) := by
-  unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.defaults, enter_agrees h]
+  unfold startCopy; refine withMachine_agrees (fun i r => ?_) r; agree [h.defaults, expectFound_agrees, enter_agrees h]
 
 theorem exitLeftCopy_agrees (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     Agrees (exitLeftCopy fsI st owner map itemKeys r k) (exitLeftCopy fs st owner map itemKeys r k) := by

@@ -1,8 +1,10 @@
+import { defaultRow, normalizedRow } from "../data/collections.ts";
 import type { Delay } from "../data/datetime.ts";
-import type { DefinitionRef } from "../data/definitionRef.ts";
+import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import type { Expected, Malformed } from "../data/malformed.ts";
-import type { Shape } from "../data/values.ts";
+import { type Shape, sameJson } from "../data/values.ts";
+import { thrown, type ViolationError, zodError } from "../data/violation.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
 import {
   any,
@@ -30,13 +32,6 @@ type Path = readonly (string | number)[];
 /** Returns the ref of the definition `value` at `path`, which must be `expected`. */
 type RefOf = (value: unknown, path: Path, expected: Expected) => DefinitionRef;
 
-/** A schema whose conversion threw: one of `definition`, or the copy context of its map state `map`. */
-export interface ThrownDefault {
-  readonly definition: Definition;
-  readonly map?: string;
-  readonly error: unknown;
-}
-
 /** Stands where a definition names nothing it can resolve, in a structure that structureOf then drops. */
 const unresolved: DefinitionRef = { service: "", name: "" };
 
@@ -50,19 +45,28 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
 }
 
 /**
- * The structure, or the unresolved references and the throwing defaults found on the way, where the structure would
- * hold a placeholder. A reference that is missing or names a definition of another kind is
- * Malformed.unresolvedReference. A value that no export names is left to unexportedDefinitions and owners, which report
- * it; `unnamed` lists where, so that load can tell when neither did.
+ * The structure, or what was found on the way where the structure would hold a placeholder. A reference that is missing
+ * or names a definition of another kind is Malformed.unresolvedReference. A default that throws while its schema
+ * converts, or that the defaults of a single entity or a map state's copy context fail, is Malformed.defaultSchema, one
+ * per definition and one per map state. A value that no export names is left to unexportedDefinitions and owners, which
+ * report it; `unnamed` lists where, so that load can tell when neither did.
  */
 export type StructureOf =
   | { readonly kind: "built"; readonly structure: Structure }
-  | {
-      readonly kind: "found";
-      readonly thrownDefaults: readonly ThrownDefault[];
-      readonly malformed: readonly Found<Malformed>[];
-      readonly unnamed: readonly string[];
-    };
+  | { readonly kind: "found"; readonly malformed: readonly Found<Malformed>[]; readonly unnamed: readonly string[] };
+
+/**
+ * Returns the error of the defaults of a shape whose every field gets its value from its default: Zod's issues, or what
+ * a default function or a refinement threw. Zod does not validate default values itself.
+ */
+function defaultsError(shape: Shape): ViolationError | undefined {
+  try {
+    const checked = normalizedRow(shape, defaultRow(shape));
+    return "error" in checked ? zodError(checked.error.issues) : undefined;
+  } catch (error) {
+    return thrown(error);
+  }
+}
 
 /** Computes state trees and definition refs, which every other part reads from this JSON. */
 export function structureOf(
@@ -75,9 +79,22 @@ export function structureOf(
     const named = names.get(value);
     return named === undefined ? undefined : { service: named.service, name: named.name };
   };
-  const thrownDefaults: ThrownDefault[] = [];
   const malformed: Found<Malformed>[] = [];
   const unnamed: string[] = [];
+  const defaultSchema = (owner: Definition, map: string | undefined, error: ViolationError): void => {
+    const named = names.get(owner);
+    if (named === undefined) return;
+    const definition = { service: named.service, name: named.name };
+    const violation: Malformed =
+      map === undefined
+        ? { kind: "Malformed.defaultSchema", definition, data: {} }
+        : { kind: "Malformed.defaultSchema", definition, data: { map } };
+    const found = malformed.some(
+      ({ violation: v }) =>
+        v.kind === violation.kind && sameRef(v.definition, definition) && sameJson(v.data, violation.data),
+    );
+    if (!found) malformed.push({ violation, place: named.place, error });
+  };
   const structure: Structure = {
     services: [...services].map(([name, s]) => ({
       name,
@@ -114,20 +131,24 @@ export function structureOf(
         try {
           return objectSchema(shape);
         } catch (error) {
-          thrownDefaults.push({ definition: owner, ...(map === undefined ? {} : { map }), error });
+          defaultSchema(owner, map, thrown(error));
           return {};
         }
+      };
+      const defaultsOf = (owner: Definition, shape: Shape, map?: string): void => {
+        const error = defaultsError(shape);
+        if (error !== undefined) defaultSchema(owner, map, error);
       };
       const unreadableDeadline = (path: Path) =>
         malformed.push({
           violation: { kind: "Malformed.unreadableDeadline", definition: { service, name }, data: { path: [...path] } },
           place,
         });
-      return definitionStructure(named, ref, schemaOf, unreadableDeadline);
+      return definitionStructure(named, ref, schemaOf, defaultsOf, unreadableDeadline);
     }),
   };
-  return thrownDefaults.length > 0 || malformed.length > 0 || unnamed.length > 0
-    ? { kind: "found", thrownDefaults, malformed, unnamed }
+  return malformed.length > 0 || unnamed.length > 0
+    ? { kind: "found", malformed, unnamed }
     : { kind: "built", structure };
 }
 
@@ -135,6 +156,7 @@ function definitionStructure(
   { service, name, definition: d }: Named<Definition>,
   ref: RefOf,
   schemaOf: (owner: Definition, shape: Shape, map?: string) => JsonSchema,
+  defaultsOf: (owner: Definition, shape: Shape, map?: string) => void,
   unreadableDeadline: (path: Path) => void,
 ): DefinitionStructure {
   const references = (shape: Shape, key: string) =>
@@ -142,17 +164,20 @@ function definitionStructure(
       const target = refTarget(schema);
       return target === undefined ? [] : [{ field, entity: ref(target, [key, field], "keyedEntity") }];
     });
-  if (d.kind === "entity")
+  if (d.kind === "entity") {
+    const fields = schemaOf(d, d.fields as Shape);
+    if (d.single) defaultsOf(d, d.fields as Shape);
     return {
       kind: d.kind,
       service,
       name,
       key: d.single ? null : d.key,
-      fields: schemaOf(d, d.fields as Shape),
+      fields,
       unique: d.single ? [] : [...d.unique],
       references: references(d.fields as Shape, "fields"),
       keys: keysOf(d.fields as Shape, ref, ["fields"]),
     };
+  }
   if (d.kind === "event")
     return {
       kind: d.kind,
@@ -206,7 +231,13 @@ function definitionStructure(
     kind: chart.kind,
     service,
     name,
-    ...structureOfChart(chart, ref, (shape, map) => schemaOf(d, shape, map), unreadableDeadline),
+    ...structureOfChart(
+      chart,
+      ref,
+      (shape, map) => schemaOf(d, shape, map),
+      (shape, map) => defaultsOf(d, shape, map),
+      unreadableDeadline,
+    ),
   };
 }
 
@@ -243,6 +274,7 @@ function structureOfChart(
   chart: ChartSpec,
   ref: RefOf,
   schemaOf: (shape: Shape, map?: string) => JsonSchema,
+  defaultsOf: (shape: Shape, map: string) => void,
   unreadableDeadline: (path: Path) => void,
 ): Omit<ChartStructure, "kind" | "service" | "name"> {
   const byKey = (keyword: string, record: Readonly<Record<string, unknown>> | undefined, expected: Expected) =>
@@ -308,6 +340,8 @@ function structureOfChart(
           }),
         ),
       ];
+      const context = node.type === "map" ? schemaOf(node.context ?? {}, name) : {};
+      if (node.type === "map") defaultsOf(node.context ?? {}, name);
       const state: StateStructure = {
         name,
         path: [...(parent?.path ?? []), name],
@@ -326,7 +360,7 @@ function structureOfChart(
           node.type === "map"
             ? {
                 key: schemaOf(node.key),
-                context: schemaOf(node.context ?? {}, name),
+                context,
                 itemKeys: keysOf(node.key, ref, [...at, "key"]),
                 contextKeys: keysOf(node.context ?? {}, ref, [...at, "context"]),
               }

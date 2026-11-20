@@ -16,10 +16,8 @@ theorem keeps_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : 
   intro o r
   simp only [id_bind, note_id, id_pure]
   split
-  · exact report_fixed _
-  · split
-    · exact keeps_enter _ _ _ _
-    · rfl
+  · exact keeps_enter _ _ _ _
+  · rfl
 
 theorem exitLeftCopy_fixed (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     (exitLeftCopy fs st owner map itemKeys r k).1.fixed = r.state.fixed := by
@@ -102,10 +100,8 @@ theorem growsBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key 
   intro o r
   simp only [id_bind, note_id, id_pure]
   split
-  · exact Grows.of_lines (report_lines _)
-  · split
-    · exact (growsBy_enter _ _ _ _).bridge (by rfl) (by rfl)
-    · exact Grows.of_lines rfl
+  · exact (growsBy_enter _ _ _ _).bridge (by rfl) (by rfl)
+  · exact Grows.of_lines rfl
 
 theorem exitLeftCopy_grows (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
     Grows r.state (exitLeftCopy fs st owner map itemKeys r k).1 := by

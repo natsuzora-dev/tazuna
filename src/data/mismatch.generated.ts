@@ -21,8 +21,8 @@ export type Subject =
 /**
  * A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
  * `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
- * failedAssumedRequires, failedAssumedEnsures, answerOutputSchema and eventPayloadSchema, which need the spec's functions
- * or Zod schemas.
+ * failedAssumedRequires, failedAssumedEnsures, answerOutputSchema, eventPayloadSchema and requestInputSchema, which need
+ * the spec's functions or Zod schemas.
  */
 export type Mismatch =
   /** The request line has another input than the snapshot's. */
@@ -300,6 +300,19 @@ export type Mismatch =
       readonly data: {
         readonly event: DefinitionRef;
       };
+    }
+  /**
+   * The external service answers, without rejecting, the request `requestId` whose input does not match the target's input
+   * schema. Its assumed requires and ensures cannot read such an input.
+   */
+  | {
+      readonly kind: "Mismatch.requestInputSchema";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly requestId: string;
+        readonly target: DefinitionRef;
+      };
     };
 
 export const mismatchKinds = [
@@ -329,4 +342,5 @@ export const mismatchKinds = [
   "Mismatch.answerResult",
   "Mismatch.repeatedAnswer",
   "Mismatch.eventPayloadSchema",
+  "Mismatch.requestInputSchema",
 ] as const;

@@ -14,12 +14,14 @@ def setCopyKeys (copyKeys : List (String × List Value)) (map : String) (cs : Li
   if copyKeys.any (·.1 == map) then copyKeys.map fun (k, v) => if k == map then (k, cs) else (k, v)
   else copyKeys ++ [(map, cs)]
 
-/-- Starts the copy of the map state `map` for `key`; a copy's context starts as the defaults of its fields. -/
+/--
+Starts the copy of the map state `map` for `key`; a copy's context starts as the defaults of its fields, which load
+checks (Malformed.defaultSchema).
+-/
 def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (key encodedKey : Value) : Processing → m Processing :=
   withMachine owner fun o r => do
-    match ← fs.defaults (.mapContext (st.ref o.chart.name) map) with
-    | .error e => pure ⟨r.state.report (.fault (issueViolation (st.ref o.chart.name) e)), r.queue⟩
-    | .ok context =>
+    let context ← expectFound s!"defaults of the copy context of {map}"
+      (← fs.defaults (.mapContext (st.ref o.chart.name) map)).toOption
     let id := .copy o.id map encodedKey
     let copy : Instance := { chart := o.chart, id, context, input := o.input, itemKey := some key }
     let started : State := { r.state with copies := r.state.copies.filter (·.id != id) ++ [copy] }

@@ -305,11 +305,9 @@ theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key e
   intro o r
   simp only [id_bind, note_id, id_pure]
   split
+  · refine KeepsKeys.trans ?_ (keysBy_enter _ _ _ _)
+    keys_leaf
   · keys_leaf
-  · split
-    · refine KeepsKeys.trans ?_ (keysBy_enter _ _ _ _)
-      keys_leaf
-    · keys_leaf
 
 theorem keysBy_exitLeftCopy (owner : InstanceId) (map : String) (itemKeys : List Value) (k : Value) :
     KeysBy (fun r => exitLeftCopy fs st owner map itemKeys r k) := by

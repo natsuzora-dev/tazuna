@@ -20,7 +20,6 @@ import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "
 import type { Structure } from "../spec/structure.generated.ts";
 import type { DefinitionStructure } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
-import { defaultSchemas } from "./defaults.ts";
 import type { Found } from "./found.ts";
 import { caseCollisions, duplicateNames, type NamedExport, reservedNames } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
@@ -302,7 +301,6 @@ export async function loadSpec(root: string): Promise<Loaded> {
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),
-    ...defaultSchemas(definitions, opaque, built.kind === "found" ? built.thrownDefaults : []),
     ...(built.kind === "found" ? built.malformed : []),
     ...loaded.malformed,
   ];
