@@ -308,7 +308,7 @@ function structureOfChart(
         name,
         path: [...(parent?.path ?? []), name],
         parent: parent?.name ?? null,
-        kind: node.type ?? (node.states === undefined ? "atomic" : "compound"),
+        kind: node.type ?? "plain",
         initial: node.initial ?? null,
         children: Object.keys(node.states ?? {}),
         offers: offerKinds(node.offers),

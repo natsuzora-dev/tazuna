@@ -188,7 +188,7 @@ structure State where
   /-- The names from a child of the root down to the state itself. -/
   path : List String
   parent : Option String
-  /-- The kind. A compound state has children and is neither parallel nor map. -/
+  /-- The kind that the state's `type` names. -/
   kind : StateKind
   initial : Option String
   children : List String

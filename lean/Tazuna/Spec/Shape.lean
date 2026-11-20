@@ -5,8 +5,8 @@ namespace Tazuna.Spec
 open Tazuna.Data
 
 inductive StateKind where
-  | atomic
-  | compound
+  /-- A state without `type`: atomic without children and compound with them, as SCXML and XState decide by children. -/
+  | plain
   | parallel
   | final
   | history
@@ -72,10 +72,10 @@ def shapeInTree (shapes : List Shape) (s : Shape) : Bool :=
 
 /--
 Whether the shapes form a state tree. The states are in preorder. Each state's parent is the second-to-last name of
-its path, children are listed in document order with extended paths, and `initial` is one of them. A compound
-non-parallel state has `initial`; a parallel state has none; final and history states have no children. Inside a map
-there is no map state (copies do not nest) and no final state (a copy ends only when its key leaves `items`). A
-transition target is in the same copy scope as its source: copy transitions stay inside their map.
+its path, children are listed in document order with extended paths, and `initial` is one of them. A state with
+children has `initial` unless it is parallel; a parallel state has none; final and history states have no children.
+Inside a map there is no map state (copies do not nest) and no final state (a copy ends only when its key leaves
+`items`). A transition target is in the same copy scope as its source: copy transitions stay inside their map.
 -/
 def stateTree (shapes : List Shape) : Bool :=
   preorder [] [] shapes && shapes.all (shapeInTree shapes)

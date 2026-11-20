@@ -28,12 +28,12 @@ test("States come in source order, each with its path of names from the children
     closer.states.map((s) => `${s.name} ${s.kind} ${s.path.join("/")} parent ${s.parent ?? "-"}`),
     [
       "p parallel p parent -",
-      "left compound p/left parent p",
+      "left plain p/left parent p",
       "m map p/left/m parent left",
-      "c1 atomic p/left/m/c1 parent m",
-      "right compound p/right parent p",
-      "x atomic p/right/x parent right",
-      "q atomic q parent -",
+      "c1 plain p/left/m/c1 parent m",
+      "right plain p/right parent p",
+      "x plain p/right/x parent right",
+      "q plain q parent -",
       "done final done parent -",
     ],
   );

@@ -104,7 +104,7 @@ test("An entity in viewModel has its key, its unique, its invariant names, the t
 function chartLines(state: StateView, depth = 0): string[] {
   const head = [
     state.name,
-    state.kind === "atomic" || state.kind === "compound" ? "" : state.kind,
+    state.kind === "plain" ? "" : state.kind,
     state.initial === null ? "" : `initial ${state.initial}`,
     ...state.activities.map((r) => `${r.keyword} ${r.kind} ${r.name}`),
   ];

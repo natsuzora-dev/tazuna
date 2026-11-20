@@ -103,7 +103,7 @@ deriving Repr
 
 instance : Inhabited Chart :=
   ⟨{ name := "", order := 0, initial := "s", on := [], receives := [],
-     states := [{ spec := { name := "s", path := ["s"], parent := none, kind := .atomic, initial := none,
+     states := [{ spec := { name := "s", path := ["s"], parent := none, kind := .plain, initial := none,
                             children := [], offers := [], activities := [], transitions := [], deadlines := [],
                             map := none, held := none },
                   activities := [], transitions := [] }] }⟩

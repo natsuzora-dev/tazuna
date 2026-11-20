@@ -90,7 +90,7 @@ function chartView(name: string, chart: ChartStructure): StateView {
     name,
     path: [],
     parent: null,
-    kind: "compound",
+    kind: "plain",
     initial: chart.initial,
     children: chart.states.filter((s) => s.parent === null).map((s) => s.name),
     offers: chart.offers,

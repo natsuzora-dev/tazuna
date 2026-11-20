@@ -117,9 +117,9 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
     // The DSL puts no final state under a map state.
     const kinds =
       chart && state && mapAbove(chart, state.name) !== undefined
-        ? ["atomic", "history"]
-        : ["atomic", "final", "history"];
-    if (state) (state as { kind: string }).kind = pick(kinds, b) ?? "atomic";
+        ? ["plain", "history"]
+        : ["plain", "final", "history"];
+    if (state) (state as { kind: string }).kind = pick(kinds, b) ?? "plain";
   },
   screens(s, [a, b, c]) {
     const chart = pick(charts(s), a);

@@ -96,8 +96,8 @@ export type State = {
   /** The names from a child of the root down to the state itself. */
   readonly path: readonly string[];
   readonly parent: string | null;
-  /** The kind. A compound state has children and is neither parallel nor map. */
-  readonly kind: "atomic" | "compound" | "parallel" | "final" | "history" | "map";
+  /** The kind that the state's `type` names. */
+  readonly kind: "plain" | "parallel" | "final" | "history" | "map";
   readonly initial: string | null;
   readonly children: readonly string[];
   readonly offers: Readonly<Record<string, "any" | "listed">>;
