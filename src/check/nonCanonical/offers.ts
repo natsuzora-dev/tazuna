@@ -2,7 +2,7 @@ import type { Expression } from "oxc-parser";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { AnyControl } from "../../dsl/definition.ts";
 import type { Found } from "../../load/found.ts";
-import { type LoadedSpec, placeIn } from "../../load/load.ts";
+import { placeIn, type Spec } from "../../load/load.ts";
 import { propertiesOf, property, unwrap, writtenOf } from "./ast.ts";
 
 /** The elements of the array literal that the function `node` returns whatever it reads, if it returns only one. */
@@ -35,7 +35,7 @@ function markerOf(offer: Expression, payload: object): "none" | "any" | undefine
     : undefined;
 }
 
-export const check = (spec: LoadedSpec): Found<NonCanonical>[] =>
+export const check = (spec: Spec): Found<NonCanonical>[] =>
   writtenOf(spec).flatMap(({ source, definition, calls }) => {
     if (definition?.definition.kind !== "screen") return [];
     const controls = definition.definition.controls as Readonly<Record<string, AnyControl>>;

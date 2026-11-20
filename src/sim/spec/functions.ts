@@ -4,7 +4,7 @@ import { comparableAnswer, comparable as comparableOf, orderFree } from "../../d
 import { bag, bagged, defaultRow, sorted, toJson, written } from "../../data/collections.ts";
 import type { DefinitionRef } from "../../data/definitionRef.ts";
 import type { Ensured } from "../../data/ensured.generated.ts";
-import { InternalError } from "../../data/internalError.ts";
+import { expectFound, InternalError } from "../../data/internalError.ts";
 import type { Activity } from "../../data/step.generated.ts";
 import type { Answer } from "../../data/trace.generated.ts";
 import type { TransitionRef } from "../../data/transitionRef.generated.ts";
@@ -359,8 +359,11 @@ export class SpecFunctions implements Functions {
   } {
     const created: string[] = [];
     const createKey = (key: Ref<AnyKeyedEntity>) => {
-      created.push(this.spec.names.get(refTarget(key))?.name ?? "id");
-      return givenKeys(keys, created).at(-1)?.[1] as string;
+      const entity = this.spec.names.get(refTarget(key));
+      // Only a value of type `any` gets anything but ref() of an entity of the spec past the types.
+      if (entity === undefined) throw new TypeError("createKey takes ref() of an entity of the spec");
+      created.push(entity.name);
+      return expectFound(`created key of ${entity.name}`, givenKeys(keys, created).at(-1))[1];
     };
     return { createKey, created };
   }
@@ -418,7 +421,7 @@ export class SpecFunctions implements Functions {
 
   /** Returns the input that `f` gives a request or screen of the input shape `shape`, as the sender writes it. */
   private writtenInput(shape: Shape, f: ((args: never) => unknown) | undefined, args: () => Fields): Json | Failed {
-    return attempt(() => written(objectOf(shape), f?.(args() as never) ?? {}));
+    return attempt(() => written(objectOf(shape), f === undefined ? {} : f(args() as never)));
   }
 
   /** Returns the binds values, which Lean asks for only once every binding is non-null. */
@@ -649,7 +652,10 @@ export class SpecFunctions implements Functions {
     const [command, ...more] = Object.values(a.commands);
     if (command === undefined || more.length > 0) throw new InternalError(`the automation ${name} has no one command`);
     const shape = objectOf(command.input);
-    const given = attempt(() => written(shape, a.input?.({ ...args, bound: values, createKey } as never) ?? {}));
+    const input = a.input;
+    const given = attempt(() =>
+      written(shape, input === undefined ? {} : input({ ...args, bound: values, createKey } as never)),
+    );
     return given instanceof Failed ? given : { input: given, created };
   }
 
@@ -664,7 +670,7 @@ export class SpecFunctions implements Functions {
     const { named, ref } = this.chartOf(machine);
     const chart = named.definition;
     const row = attempt(() => {
-      const initial = (chart.initialContext?.({ input }) ?? {}) as Fields;
+      const initial = (chart.initialContext === undefined ? {} : chart.initialContext({ input })) as Fields;
       const filled: Fields = { ...initial };
       for (const [field, schema] of Object.entries(chart.context)) {
         if (field in initial) continue;
@@ -891,7 +897,8 @@ export class SpecFunctions implements Functions {
   ): { readonly output: Fields; readonly failed: string | undefined } | Failed {
     const { named, ref } = this.chartOf(chartOf(scope.id));
     const chart = named.definition;
-    const given = attempt(() => chart.resolve?.(this.args(scope, records, access) as never) ?? {});
+    const resolve = chart.resolve;
+    const given = attempt(() => (resolve === undefined ? {} : resolve(this.args(scope, records, access) as never)));
     if (given instanceof Failed) return given;
     const output = matching({ kind: "output", definition: ref }, strictObjectOf(chart.output ?? {}), given as Fields);
     if (output instanceof Failed) return output;

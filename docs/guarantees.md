@@ -258,7 +258,7 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | Property | Theorems |
 |---|---|
 | An accepted command emits exactly the events that its `decide` returned, each once, with its payload normalized by the declared schema, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run. | `accepted_emits_decided`, `unlisted_emitted_event_halts` |
-| The service normalizes the output of each query answer with the declared schema. | `resolve_output_sorted_before_normalize` |
+| The service normalizes the output of each query answer with the declared schema. | `resolve_output_sorted_before_normalize`, `requirements_lookup` |
 | When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`. | `command_invalid_input_rejected`, `query_invalid_input_rejected` |
 
 ### Statecharts
@@ -295,7 +295,7 @@ The other rows are tazuna's own.
 |---|---|
 | When the service publishes, it sends a new answer to a subscription only when the answer changes. | `changed_answer_sent`, `unchanged_answer_not_sent` |
 | Publishing sends no answer to a subscription id that no open subscription has. | `ended_subscription_not_answered` |
-| Opening a screen creates one child instance of the opened screen. | `entering_opens_one_child` |
+| Opening a screen creates one child instance of the opened screen. | `entering_opens_one_child`, `requirements_lookup` |
 | Among the screens open above an operated screen, a modal one covers it, as in the WAI-ARIA modal dialog. | `modal_child_covers` |
 | Non-modal screens above an operated screen leave it operable. | `nonmodal_child_lets_parent` |
 

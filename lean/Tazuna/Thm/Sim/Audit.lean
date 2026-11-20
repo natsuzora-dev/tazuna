@@ -245,14 +245,14 @@ theorem found_agrees (w : World) (expectations : List Scenario.Expectation) (i :
     Agrees (w.found fsOfI expectations i l) (w.found fsOf expectations i l) := by
   unfold World.found; agreeE [AgreesE.mapGetD (fill_agrees h w i), offeredAt_agrees h]
 
-theorem compared_agrees (w : World) (own : String) (lines : List Scenario.Line)
+theorem compared_agrees [MonadNote (StateT C Id)] (w : World) (own : String) (lines : List Scenario.Line)
     (found : List (Nat × Except InvalidScenario Bool)) (k : Nat) (e : Scenario.Expectation) :
     Agrees (w.compared fsOfI own lines found k e).run (w.compared fsOf own lines found k e).run := by
   unfold World.compared
   agreeE [fill_agrees h, messagesOf_agrees h, comparedOr_agrees h, comparedAnswer_agrees h,
-    comparedAnswerValue_agrees h]
+    comparedAnswerValue_agrees h, expectFound_agrees]
 
-theorem expect_agrees (w : World) (own : String) (lines : List Scenario.Line) (es : List Scenario.Expectation)
+theorem expect_agrees [MonadNote (StateT C Id)] (w : World) (own : String) (lines : List Scenario.Line) (es : List Scenario.Expectation)
     (found : List (Nat × Except InvalidScenario Bool)) :
     Agrees (w.expect fsOfI own lines es found) (w.expect fsOf own lines es found) := by
   unfold World.expect; agreeE [compared_agrees h]

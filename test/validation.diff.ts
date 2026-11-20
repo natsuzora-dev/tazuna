@@ -27,15 +27,12 @@ const examples = [
   ...runExamples(),
 ];
 
-// A spec whose structure names no definition has no structure, which check reports or calls unloadable.
-const bases = (
-  await Promise.all(
-    examples.map(async (root) => ({
-      name: relative(import.meta.dirname, root),
-      structure: (await loadSpec(root)).spec.structure,
-    })),
-  )
-).flatMap(({ name, structure }) => (structure === undefined ? [] : [{ name, structure }]));
+const bases = await Promise.all(
+  examples.map(async (root) => ({
+    name: relative(import.meta.dirname, root),
+    structure: (await loadSpec(root)).spec.structure,
+  })),
+);
 
 for (const { name, structure } of bases)
   test(`${name}: TS and Lean find the same Illegal violations in the structure`, () => {

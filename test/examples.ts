@@ -37,10 +37,10 @@ export async function checkedRoot(root: string): Promise<CheckedSpec> {
   throw new Error(`${name} is not checked:\n${failureText(result, name)}`);
 }
 
-/** Loads the spec of the example `root`, and throws unless its structure names only definitions of the spec. */
+/** Loads the spec of the example `root`, and throws when loading finds a Malformed violation. */
 export async function loadedSpec(root: string): Promise<Spec> {
-  const { spec } = await loadSpec(root);
-  if ("unresolved" in spec) throw new Error(`${root}: ${spec.unresolved} names no definition`);
+  const { spec, malformed } = await loadSpec(root);
+  if (malformed.length > 0) throw new Error(`${root}: ${malformed.map((f) => f.violation.kind).join(", ")}`);
   return spec;
 }
 

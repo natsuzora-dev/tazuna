@@ -1,4 +1,5 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import { expectFound } from "../data/internalError.ts";
 import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Expectation, Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import type { Answer, LineId } from "../data/trace.generated.ts";
@@ -871,10 +872,7 @@ function compared(
       );
       const filled = e.requests.map((q) => [q, fill(w, e.line, q.input)] as const);
       const expectedEnds = e.ends.flatMap((f) =>
-        messagesOf(w, e.line, f).map((k) => {
-          const m = w.messages[k];
-          return m === undefined ? "" : lineIdText(m.id);
-        }),
+        messagesOf(w, e.line, f).map((k) => lineIdText(expectFound(`message ${k}`, w.messages[k]).id)),
       );
       const expected = filled.map(([q, v]) => ({
         kind: q.kind,

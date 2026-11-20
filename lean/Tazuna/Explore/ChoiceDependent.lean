@@ -77,14 +77,6 @@ def Outcome.halted? : Outcome → Option Violation
 def refsAt (keys : List Spec.KeyPosition) : List (List String × Spec.Ref) :=
   keys.map fun k => (k.path, k.entity)
 
-/-- The key positions of entity `e`'s records (Structure.KeyPosition). -/
-def keyPaths (st : Service) (e : String) : List (List String × Spec.Ref) :=
-  let found := st.structure.definitions.findSome? fun d =>
-    match d.body with
-    | .entity body => if d.service == st.service && d.name == e then some body.keys else none
-    | _ => none
-  refsAt (found.getD [])
-
 /-- The value `v` at field path `path` with the strings at the key positions `keys` as key references. -/
 def keyed (keys : List (List String × Spec.Ref)) (path : List String) : Value → CValue
   | .str s => match keys.lookup path with
@@ -99,12 +91,11 @@ decreasing_by all_goals nested_decreasing
 /--
 The records as the relation compares them: each keyed entity as a bag of its encoded rows, in key order, since renamed
 keys no longer order them, and each single entity as its encoded row once it has one. Only the key positions
-(keyPaths) rename.
+(Service.recordKeys) rename.
 -/
 def recordsValue (st : Service) (records : Records) : CValue :=
-  .obj (st.entities.filterMap fun e =>
-    let keys := keyPaths st e
-    let row (r : Row) := keyed keys [] r.value
+  .obj (st.recordKeys.filterMap fun (e, keys) =>
+    let row (r : Row) := keyed (refsAt keys) [] r.value
     if e ∈ st.singles then (records.find? (·.entity == e)).map fun r => (e, row r)
     else
       let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.key.getD "" ≤ b.key.getD "")

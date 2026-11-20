@@ -1419,6 +1419,19 @@
         "violation": "{\"kind\":\"Malformed.unrepresentableSchema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"count\"],\"type\":\"bigint\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8}}"
       }
     },
+    "Malformed.unresolvedReference": {
+      "meaning": "The definition names at `path` no definition of the kind `expected`, or no keyed entity: the entry is missing, there is more than one in an automation's `receives` or `commands`, or it names a definition of another kind. Only a value of type `any` gets any of them past the types.",
+      "example": {
+        "excerpt": {
+          "file": "worklist/worklist.ts",
+          "from": 18,
+          "to": 18,
+          "line": 18,
+          "text": "export const retryTask = command({ input: { id: z.string() }, emits: [JSON.parse(\"0\") || addTask] }).decide(() => []);"
+        },
+        "violation": "{\"kind\":\"Malformed.unresolvedReference\",\"definition\":{\"service\":\"worklist\",\"name\":\"retryTask\"},\"data\":{\"path\":[\"emits\",0],\"expected\":\"event\"},\"location\":{\"file\":\"worklist/worklist.ts\",\"line\":18}}"
+      }
+    },
     "Malformed.writtenCreatedKey": {
       "meaning": "The scenario writes, in Given, on a line, or in an expectation of Then, `key`, a value in the form of a key that a spec service creates of `entity` (`<service>/<Entity>-<n>`). A scenario reads a created key through a handle, and a running peer's answer writes `created()`. The report is at the line or the expectation, or at the scenario for Given.",
       "example": {

@@ -1,7 +1,7 @@
 import type { Expression, Node } from "oxc-parser";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { Found } from "../../load/found.ts";
-import { type LoadedSpec, placeIn } from "../../load/load.ts";
+import { placeIn, type Spec } from "../../load/load.ts";
 import { property, unwrap, visit } from "./ast.ts";
 
 const results = ["accepted", "fulfilled", "rejected"] as const;
@@ -25,7 +25,7 @@ function answersOf(node: Node): Expression[] {
     : [answers];
 }
 
-export const check = (spec: LoadedSpec): Found<NonCanonical>[] =>
+export const check = (spec: Spec): Found<NonCanonical>[] =>
   spec.sources.flatMap((source) => {
     const found: Found<NonCanonical>[] = [];
     visit(source.program.body, (node) => {

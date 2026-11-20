@@ -1,8 +1,8 @@
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { Found } from "../../load/found.ts";
-import type { LoadedSpec } from "../../load/load.ts";
+import type { Spec } from "../../load/load.ts";
 
-export const check = (spec: LoadedSpec): Found<NonCanonical>[] => [
+export const check = (spec: Spec): Found<NonCanonical>[] => [
   ...[...spec.services]
     .filter(([, s]) => s.definition.description === "")
     .map(

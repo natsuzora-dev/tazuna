@@ -2,6 +2,7 @@ import type { Delay } from "../data/datetime.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { InternalError } from "../data/internalError.ts";
 import { type JsonSchema, objectSchema } from "../data/jsonSchema.ts";
+import type { Expected, Malformed } from "../data/malformed.ts";
 import type { Shape } from "../data/values.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
 import {
@@ -22,17 +23,13 @@ import type {
   StateStructure,
   TransitionStructure,
 } from "../spec/structure.ts";
+import type { Found } from "./found.ts";
 import { keyPositions } from "./schemas.ts";
 
-/** Returns the ref of the definition `value`, or throws Unresolved, naming the place `at`, when it is none. */
-type RefOf = (value: unknown, at: string) => DefinitionRef;
+type Path = readonly (string | number)[];
 
-class Unresolved {
-  readonly at: string;
-  constructor(at: string) {
-    this.at = at;
-  }
-}
+/** Returns the ref of the definition `value` at `path`, which must be `expected`. */
+type RefOf = (value: unknown, path: Path, expected: Expected) => DefinitionRef;
 
 /** The value that a default function threw while a schema that `definition` declares was converted to JSON Schema. */
 export interface ThrownDefault {
@@ -41,27 +38,36 @@ export interface ThrownDefault {
 }
 
 /**
- * Returns the one value of an automation's `receives` or `commands`, or undefined for any other count, which only `any`
- * gets past OneKey.
+ * The ref that the structure holds where a definition names nothing it can resolve. check stops at the violation that
+ * reports it, before anything reads the structure.
  */
+const unresolved: DefinitionRef = { service: "", name: "" };
+
+const isExpected = (definition: Definition, expected: Expected): boolean =>
+  expected === "keyedEntity" ? definition.kind === "entity" && !definition.single : definition.kind === expected;
+
+/** Returns the one value of an automation's `receives` or `commands`; OneKey lets only `any` give another count. */
 function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
   const values = Object.values(record);
   return values.length === 1 ? values[0] : undefined;
 }
 
 /**
- * The structure, or, when a definition names a value that is no definition of the spec, where it does. Such a value
- * passes the types only through a value of type `any` or an export that the spec lacks, which check reports as
- * Restricted.any or Malformed.unexportedDefinition.
+ * The structure, with the unresolved references and the throwing defaults found on the way. A reference that is
+ * missing or names a definition of another kind is Malformed.unresolvedReference. A value that no export names is left
+ * to unexportedDefinitions and owners, which report it; `unnamed` lists where, so that load can tell when neither did.
  */
-export type StructureOf =
-  | { readonly structure: Structure; readonly thrownDefaults: readonly ThrownDefault[] }
-  | { readonly structure: undefined; readonly unresolved: string };
+export interface StructureOf {
+  readonly structure: Structure;
+  readonly thrownDefaults: readonly ThrownDefault[];
+  readonly unresolvedReferences: readonly Found<Malformed>[];
+  readonly unnamed: readonly string[];
+}
 
 /**
- * Computes state trees and definition refs, which every other part reads from this JSON. A
- * schema whose conversion throws is {} in the structure; check stops at the Malformed.defaultSchema that the throw
- * becomes, before anything reads it.
+ * Computes state trees and definition refs, which every other part reads from this JSON. A schema whose conversion
+ * throws is {} in the structure, and an unresolved reference is a placeholder; check stops at the Malformed violation
+ * that each becomes, before anything reads it.
  */
 export function structureOf(
   definitions: readonly Named<Definition>[],
@@ -73,122 +79,131 @@ export function structureOf(
     const named = names.get(value);
     return named === undefined ? undefined : { service: named.service, name: named.name };
   };
-  const ref: RefOf = (value, at) => {
-    const found = nameOf(value);
-    if (found === undefined) throw new Unresolved(at);
-    return found;
-  };
-  try {
-    return structureWith(definitions, services, contracts, ref, nameOf);
-  } catch (error) {
-    if (error instanceof Unresolved) return { structure: undefined, unresolved: error.at };
-    throw error;
-  }
-}
-
-function structureWith(
-  definitions: readonly Named<Definition>[],
-  services: Services,
-  contracts: readonly Contract[],
-  ref: RefOf,
-  nameOf: (value: unknown) => DefinitionRef | undefined,
-): { readonly structure: Structure; readonly thrownDefaults: readonly ThrownDefault[] } {
   const thrownDefaults: ThrownDefault[] = [];
-  const schemaOf = (definition: Definition, shape: Shape): JsonSchema => {
-    try {
-      return objectSchema(shape);
-    } catch (error) {
-      thrownDefaults.push({ definition, error });
-      return {};
-    }
-  };
-  const references = (shape: Shape, at: string) =>
-    Object.entries(shape).flatMap(([field, schema]) => {
-      const target = refTarget(schema);
-      return target === undefined ? [] : [{ field, entity: ref(target, `${at} ref field ${field}`) }];
-    });
+  const unresolvedReferences: Found<Malformed>[] = [];
+  const unnamed: string[] = [];
   const structure: Structure = {
     services: [...services].map(([name, s]) => ({
       name,
       external: s.definition.external,
-      entities: Object.values(s.definition.entities).flatMap((e) => nameOf(e)?.name ?? []),
+      entities: Object.entries(s.definition.entities).flatMap(([key, e]) => {
+        const found = nameOf(e);
+        if (found === undefined) unnamed.push(`the service ${name} entities ${key}`);
+        return found === undefined ? [] : [found.name];
+      }),
     })),
     contracts: contracts.map((c) => ({
       service: c.service,
       members: Object.fromEntries(Object.entries(c.members).map(([key, member]) => [key, nameOf(member) ?? null])),
     })),
-    definitions: definitions.map(({ service, name, definition: d }): DefinitionStructure => {
-      const at = `the ${d.kind} ${service}.${name}`;
-      if (d.kind === "entity")
-        return {
-          kind: d.kind,
-          service,
-          name,
-          key: d.single ? null : d.key,
-          fields: Object.keys(d.fields),
-          unique: d.single ? [] : [...d.unique],
-          references: references(d.fields as Shape, at),
-          keys: keysOf(d.fields as Shape, ref, at),
-        };
-      if (d.kind === "event")
-        return {
-          kind: d.kind,
-          service,
-          name,
-          change: d.change === "none" ? null : { kind: d.change, entity: ref(d.entity, `${at} entity`) },
-          // An entity event's payload is made of its entity's fields.
-          payload: schemaOf(d.change === "none" ? d : d.entity, d.payload),
-        };
-      if (d.kind === "command")
-        return {
-          kind: d.kind,
-          service,
-          name,
-          rejects: d.rejects === undefined ? null : [...d.rejects],
-          input: schemaOf(d, d.input),
-          output: d.output === undefined ? null : schemaOf(d, d.output),
-          emits: d.emits.map((e, i) => ref(e, `${at} emits ${i}`)),
-          references: references(d.input as Shape, at),
-          binds: Object.keys(d.binds),
-          requires: Object.keys(d.requires),
-          ensures: Object.keys(d.ensures),
-        };
-      if (d.kind === "query")
-        return {
-          kind: d.kind,
-          service,
-          name,
-          rejects: d.rejects === undefined ? null : [...d.rejects],
-          input: schemaOf(d, d.input),
-          output: d.output === undefined ? null : schemaOf(d, d.output),
-          requires: Object.keys(d.requires),
-          ensures: Object.keys(d.ensures),
-        };
-      if (d.kind === "automation")
-        return {
-          kind: d.kind,
-          service,
-          name,
-          receives: ref(oneEntry(d.receives), `${at} receives`),
-          command: ref(oneEntry(d.commands), `${at} commands`),
-          binds: Object.keys(d.binds),
-          guard: Object.keys(d.guard),
-          onRejected: d.onRejected !== undefined,
-        };
-      const chart = chartOf(d) as ChartSpec;
-      return {
-        kind: chart.kind,
-        service,
-        name,
-        ...structureOfChart(
-          chart,
-          (value, place) => ref(value, `${at} ${place}`),
-          (shape) => schemaOf(d, shape),
-        ),
+    definitions: definitions.map((named) => {
+      const { service, name, place, definition } = named;
+      const ref: RefOf = (value, path, expected) => {
+        const found = names.get(value);
+        if (found !== undefined && isExpected(found.definition, expected))
+          return { service: found.service, name: found.name };
+        if (value === undefined || found !== undefined)
+          unresolvedReferences.push({
+            violation: {
+              kind: "Malformed.unresolvedReference",
+              definition: { service, name },
+              data: { path: [...path], expected },
+            },
+            place,
+          });
+        else unnamed.push(`the ${definition.kind} ${service}.${name} at ${path.join(".")}`);
+        return unresolved;
       };
+      const schemaOf = (owner: Definition, shape: Shape): JsonSchema => {
+        try {
+          return objectSchema(shape);
+        } catch (error) {
+          thrownDefaults.push({ definition: owner, error });
+          return {};
+        }
+      };
+      return definitionStructure(named, ref, schemaOf);
     }),
   };
-  return { structure, thrownDefaults };
+  return { structure, thrownDefaults, unresolvedReferences, unnamed };
+}
+
+function definitionStructure(
+  { service, name, definition: d }: Named<Definition>,
+  ref: RefOf,
+  schemaOf: (owner: Definition, shape: Shape) => JsonSchema,
+): DefinitionStructure {
+  const references = (shape: Shape, key: string) =>
+    Object.entries(shape).flatMap(([field, schema]) => {
+      const target = refTarget(schema);
+      return target === undefined ? [] : [{ field, entity: ref(target, [key, field], "keyedEntity") }];
+    });
+  if (d.kind === "entity")
+    return {
+      kind: d.kind,
+      service,
+      name,
+      key: d.single ? null : d.key,
+      fields: Object.keys(d.fields),
+      unique: d.single ? [] : [...d.unique],
+      references: references(d.fields as Shape, "fields"),
+      keys: keysOf(d.fields as Shape, ref, ["fields"]),
+    };
+  if (d.kind === "event")
+    return {
+      kind: d.kind,
+      service,
+      name,
+      change:
+        d.change === "none"
+          ? null
+          : { kind: d.change, entity: ref(d.entity, ["entity"], d.change === "update" ? "entity" : "keyedEntity") },
+      // An entity event's payload is made of its entity's fields.
+      payload: schemaOf(d.change === "none" ? d : d.entity, d.payload),
+    };
+  if (d.kind === "command")
+    return {
+      kind: d.kind,
+      service,
+      name,
+      rejects: d.rejects === undefined ? null : [...d.rejects],
+      input: schemaOf(d, d.input),
+      output: d.output === undefined ? null : schemaOf(d, d.output),
+      emits: d.emits.map((e, i) => ref(e, ["emits", i], "event")),
+      references: references(d.input as Shape, "input"),
+      binds: Object.keys(d.binds),
+      requires: Object.keys(d.requires),
+      ensures: Object.keys(d.ensures),
+    };
+  if (d.kind === "query")
+    return {
+      kind: d.kind,
+      service,
+      name,
+      rejects: d.rejects === undefined ? null : [...d.rejects],
+      input: schemaOf(d, d.input),
+      output: d.output === undefined ? null : schemaOf(d, d.output),
+      requires: Object.keys(d.requires),
+      ensures: Object.keys(d.ensures),
+    };
+  if (d.kind === "automation")
+    return {
+      kind: d.kind,
+      service,
+      name,
+      receives: ref(oneEntry(d.receives), ["receives"], "event"),
+      command: ref(oneEntry(d.commands), ["commands"], "command"),
+      binds: Object.keys(d.binds),
+      guard: Object.keys(d.guard),
+      onRejected: d.onRejected !== undefined,
+    };
+  const chart = chartOf(d) as ChartSpec;
+  return {
+    kind: chart.kind,
+    service,
+    name,
+    ...structureOfChart(chart, ref, (shape) => schemaOf(d, shape)),
+  };
 }
 
 /**
@@ -208,10 +223,10 @@ function deadlineTimeOf(d: { readonly delay?: Delay; readonly at?: unknown }, de
   }
 }
 
-const keysOf = (shape: Shape, ref: RefOf, at: string) =>
+const keysOf = (shape: Shape, ref: RefOf, at: Path) =>
   keyPositions(shape).map(({ path, entity }) => ({
     path: [...path],
-    entity: ref(entity, `${at} key ${path.join(".")}`),
+    entity: ref(entity, [...at, ...path], "keyedEntity"),
   }));
 
 const offerKinds = (offers: StateSpec["offers"]): Record<string, StateStructure["offers"][string]> =>
@@ -222,6 +237,15 @@ function structureOfChart(
   ref: RefOf,
   schemaOf: (shape: Shape) => JsonSchema,
 ): Omit<ChartStructure, "kind" | "service" | "name"> {
+  const byKey = (keyword: string, record: Readonly<Record<string, unknown>> | undefined, expected: Expected) =>
+    Object.fromEntries(Object.entries(record ?? {}).map(([key, value]) => [key, ref(value, [keyword, key], expected)]));
+  const receives = byKey("receives", chart.receives, "event");
+  const commands = byKey("commands", chart.commands, "command");
+  const queries = byKey("queries", chart.queries, "query");
+  const screens = byKey("screens", chart.screens, "screen");
+  /** The ref under `key` of the chart's `refs`, which the activity at `path` names; a missing key is reported there. */
+  const named = (refs: Readonly<Record<string, DefinitionRef>>, key: string, path: Path, expected: Expected) =>
+    refs[key] ?? ref(undefined, path, expected);
   const states: StateStructure[] = [];
   const transitions = (node: StateSpec, source: string | null) =>
     transitionArrays(node).flatMap(({ trigger, transitions }) =>
@@ -236,14 +260,19 @@ function structureOfChart(
         }),
       ),
     );
-  const visit = (nodes: Readonly<Record<string, StateSpec>>, parent: StateStructure | undefined): void => {
+  const visit = (
+    nodes: Readonly<Record<string, StateSpec>>,
+    parent: StateStructure | undefined,
+    within: Path,
+  ): void => {
     for (const [name, node] of Object.entries(nodes)) {
+      const at = [...within, "states", name];
       const activities = [
         ...Object.entries(node.calls ?? {}).map(
           ([key, call]): ActivityStructure => ({
             keyword: "calls",
             name: key,
-            definition: ref(chart.queries?.[key], `state ${name} calls ${key}`),
+            definition: named(queries, key, [...at, "calls", key], "query"),
             onRejected: call.onRejected !== undefined,
           }),
         ),
@@ -251,7 +280,7 @@ function structureOfChart(
           ([key, send]): ActivityStructure => ({
             keyword: "sends",
             name: key,
-            definition: ref(chart.commands[key], `state ${name} sends ${key}`),
+            definition: named(commands, key, [...at, "sends", key], "command"),
             onRejected: send.onRejected !== undefined,
           }),
         ),
@@ -259,14 +288,14 @@ function structureOfChart(
           (key): ActivityStructure => ({
             keyword: "shows",
             name: key,
-            definition: ref(chart.queries?.[key], `state ${name} shows ${key}`),
+            definition: named(queries, key, [...at, "shows", key], "query"),
           }),
         ),
         ...Object.entries(node.opens ?? {}).map(
           ([key, opens]): ActivityStructure => ({
             keyword: "opens",
             name: key,
-            definition: ref(chart.screens?.[key], `state ${name} opens ${key}`),
+            definition: named(screens, key, [...at, "opens", key], "screen"),
             modal: opens.modal,
           }),
         ),
@@ -288,23 +317,21 @@ function structureOfChart(
         map:
           node.type === "map"
             ? {
-                itemKeys: keysOf(node.key, ref, `state ${name}`),
-                contextKeys: keysOf(node.context ?? {}, ref, `state ${name} context`),
+                itemKeys: keysOf(node.key, ref, [...at, "key"]),
+                contextKeys: keysOf(node.context ?? {}, ref, [...at, "context"]),
               }
             : null,
-        held: node.held === undefined ? null : { keys: keysOf(node.held, ref, `state ${name} held`) },
+        held: node.held === undefined ? null : { keys: keysOf(node.held, ref, [...at, "held"]) },
       };
       states.push(state);
-      visit(node.states ?? {}, state);
+      visit(node.states ?? {}, state, at);
     }
   };
-  visit(chart.states, undefined);
-  const byKey = (keyword: string, record: Readonly<Record<string, unknown>> | undefined) =>
-    Object.fromEntries(Object.entries(record ?? {}).map(([key, value]) => [key, ref(value, `${keyword} ${key}`)]));
+  visit(chart.states, undefined, []);
   return {
     initial: chart.initial,
     context: Object.keys(chart.context),
-    contextKeys: keysOf(chart.context, ref, "context"),
+    contextKeys: keysOf(chart.context, ref, ["context"]),
     input: Object.keys(chart.input ?? {}),
     output: Object.keys(chart.output ?? {}),
     requires: Object.keys(chart.requires ?? {}),
@@ -318,9 +345,9 @@ function structureOfChart(
         control.payload === undefined ? null : schemaOf(control.payload),
       ]),
     ),
-    receives: byKey("receives", chart.receives),
-    commands: byKey("commands", chart.commands),
-    queries: byKey("queries", chart.queries),
-    screens: byKey("screens", chart.screens),
+    receives,
+    commands,
+    queries,
+    screens,
   };
 }

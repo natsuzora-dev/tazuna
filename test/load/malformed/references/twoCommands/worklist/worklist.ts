@@ -5,7 +5,7 @@ export const Task = entity({ description: "A task", fields: { id: z.string(), ti
 
 export const { automation, command, createEvent } = service({
   name: "worklist",
-  description: "Send no command from an automation, past the types without a written any",
+  description: "Send two commands from one automation, past the types without a written any",
   entities: { Task },
 });
 
@@ -15,6 +15,12 @@ export const addTask = command({ input: { id: z.string(), title: z.string() }, e
   ({ input }) => [emit(taskAdded, input)],
 );
 
-export const copyTask = automation({ receives: { taskAdded }, commands: JSON.parse("{}") }).send({
-  input: ({ payload }) => payload,
-});
+export const addCopy = command({ input: { id: z.string(), title: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, input)],
+);
+
+export const copyTask = automation({ receives: { taskAdded }, commands: JSON.parse("0") || { addTask, addCopy } }).send(
+  {
+    input: ({ payload }) => payload,
+  },
+);

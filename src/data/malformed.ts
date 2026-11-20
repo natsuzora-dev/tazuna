@@ -2,6 +2,9 @@ import type { Collection } from "./collections.ts";
 import type { DefinitionRef } from "./definitionRef.ts";
 import type { UnrepresentableType } from "./jsonSchema.ts";
 
+/** What a reference must name: a definition of that kind, or a keyed entity. */
+export type Expected = "keyedEntity" | "entity" | "event" | "command" | "query" | "screen";
+
 type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
   readonly kind: `Malformed.${Name}`;
   readonly definition: Definition;
@@ -91,6 +94,16 @@ export type Malformed =
       readonly scenario?: DefinitionRef;
     })
   | Of<"unexportedDefinition", null, { readonly contract: string; readonly key: string }>
+  /**
+   * The definition names at `path` no definition of the kind `expected`, or no keyed entity: the entry is missing, there
+   * is more than one in an automation's `receives` or `commands`, or it names a definition of another kind. Only a value
+   * of type `any` gets any of them past the types.
+   */
+  | Of<
+      "unresolvedReference",
+      DefinitionRef,
+      { readonly path: readonly (string | number)[]; readonly expected: Expected }
+    >
   /**
    * A time of the scenario, Given's start or a clock line's time, is not an ISO datetime with seconds and an offset, or
    * has a part below a millisecond, so the run cannot read it as an instant in milliseconds. The report is at the clock

@@ -1,6 +1,6 @@
 import type { Argument, Expression, Node, ObjectProperty, PropertyKey, VariableDeclarator } from "oxc-parser";
 import type { Definition, Named, Place } from "../../dsl/definition.ts";
-import { type LoadedSpec, placeIn, type SourceFile } from "../../load/load.ts";
+import { placeIn, type SourceFile, type Spec } from "../../load/load.ts";
 
 /** `node` without the parentheses, `as`, and `satisfies` around it, which change no value. */
 export function unwrap(node: Expression): Expression {
@@ -89,7 +89,7 @@ function placesOf(source: SourceFile, declarator: VariableDeclarator): Place[] {
  * How each definition and service of `spec` was written in its exported declaration. Scenarios and constants are left
  * out: they write data, not keywords.
  */
-export const writtenOf = (spec: LoadedSpec): Written[] =>
+export const writtenOf = (spec: Spec): Written[] =>
   spec.sources.flatMap((source) =>
     source.program.body.flatMap((statement) => {
       if (statement.type !== "ExportNamedDeclaration" || statement.declaration?.type !== "VariableDeclaration")

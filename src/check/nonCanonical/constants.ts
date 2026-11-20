@@ -1,7 +1,7 @@
 import type { Expression } from "oxc-parser";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { Found } from "../../load/found.ts";
-import { type LoadedSpec, placeIn } from "../../load/load.ts";
+import { placeIn, type Spec } from "../../load/load.ts";
 import { keyName, unwrap } from "./ast.ts";
 
 const DURATION_UNITS = new Set(["years", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds"]);
@@ -33,7 +33,7 @@ function isConstantLiteral(node: Expression | null): boolean {
   }
 }
 
-export const check = (spec: LoadedSpec): Found<NonCanonical>[] =>
+export const check = (spec: Spec): Found<NonCanonical>[] =>
   spec.sources.flatMap((source) =>
     source.program.body.flatMap((statement) => {
       if (statement.type !== "ExportNamedDeclaration" || statement.declaration?.type !== "VariableDeclaration")

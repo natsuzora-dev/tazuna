@@ -1,0 +1,1 @@
+{"kind":"Fault.exception","definition":{"service":"todo","name":"copyAdded"},"data":{},"location":{"file":"todo/todo.ts","line":23},"scenario":{"service":"todo","name":"addOne"},"error":{"type":"thrownError","name":"TypeError","message":"createKey takes ref() of an entity of the spec","stack":"<stack>"}}

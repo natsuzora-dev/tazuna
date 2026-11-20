@@ -46,12 +46,6 @@ const haltedOf = (o: Outcome): ViolationValue | null => ("halted" in o ? o.halte
 const refsAt = (keys: readonly KeyPosition[] | undefined): ReadonlyMap<string, string> =>
   new Map((keys ?? []).map((k) => [JSON.stringify(k.path), `${k.entity.service}/${k.entity.name}`] as const));
 
-/** Lean's keyPaths. */
-function keyPaths(st: Service, e: string): ReadonlyMap<string, string> {
-  const found = st.structure.definitions.find((d) => d.kind === "entity" && d.service === st.service && d.name === e);
-  return refsAt(found?.kind === "entity" ? found.keys : undefined);
-}
-
 /** Lean's keyed. */
 function keyed(keys: ReadonlyMap<string, string>, path: readonly string[], v: unknown): unknown {
   if (typeof v === "string") {
@@ -67,8 +61,8 @@ function keyed(keys: ReadonlyMap<string, string>, path: readonly string[], v: un
 /** Lean's recordsValue. */
 function recordsValue(st: Service, records: Records): unknown {
   return Object.fromEntries(
-    st.entities.flatMap((e) => {
-      const keys = keyPaths(st, e);
+    st.recordKeys.flatMap(([e, positions]) => {
+      const keys = refsAt(positions);
       const row = (r: Fields) => keyed(keys, [], r);
       const single = records.singles.get(e);
       if (st.singles.includes(e)) return single === undefined ? [] : [[e, row(single.encoded)]];

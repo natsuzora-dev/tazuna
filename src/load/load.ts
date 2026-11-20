@@ -3,6 +3,7 @@ import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseSync } from "oxc-parser";
 import type { z } from "zod";
+import { InternalError } from "../data/internalError.ts";
 import type { Malformed } from "../data/malformed.ts";
 import { chartOf } from "../dsl/chart.ts";
 import { constantsSchema, constantsService } from "../dsl/constants.ts";
@@ -58,14 +59,6 @@ export interface Spec {
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
   readonly structure: Structure;
 }
-
-/**
- * A spec as loaded. Its structure is undefined when a definition names a value that is no definition of the spec, and
- * `unresolved` says where.
- */
-export type LoadedSpec =
-  | Spec
-  | (Omit<Spec, "structure"> & { readonly structure: undefined; readonly unresolved: string });
 
 const skippedFolders = new Set(["__snapshots__", "node_modules"]);
 
@@ -197,9 +190,7 @@ function serviceImports(
 }
 
 /** The spec in `root`, and what keeps the loader from reading it faithfully. */
-export async function loadSpec(
-  root: string,
-): Promise<{ readonly spec: LoadedSpec; readonly malformed: Found<Malformed>[] }> {
+export async function loadSpec(root: string): Promise<{ readonly spec: Spec; readonly malformed: Found<Malformed>[] }> {
   const found: Omit<Named<Definition>, "service">[] = [];
   const foundContracts: { readonly place: Place; readonly value: Readonly<Record<string, unknown>> }[] = [];
   const foundConstants: { readonly name: string; readonly place: Place; readonly value: unknown }[] = [];
@@ -274,7 +265,7 @@ export async function loadSpec(
     return n === undefined ? undefined : { service: n.service, name: n.name };
   });
   const serviceNamed = [...services].map(([name, { place }]) => ({ name, place }));
-  const common = {
+  const spec: Spec = {
     root,
     definitions,
     contracts,
@@ -285,11 +276,8 @@ export async function loadSpec(
     imports: serviceImports(sources, fileExports, serviceOf),
     names,
     services,
+    structure: built.structure,
   };
-  const spec: LoadedSpec =
-    built.structure === undefined
-      ? { ...common, structure: undefined, unresolved: built.unresolved }
-      : { ...common, structure: built.structure };
   const malformed = [
     ...duplicateNames(namedExports),
     ...owned.malformed,
@@ -301,11 +289,12 @@ export async function loadSpec(
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
     ...misplacedSelfRefs(definitions, constants),
-    ...(built.structure === undefined
-      ? []
-      : defaultSchemas(definitions, built.structure, opaque, built.thrownDefaults)),
+    ...defaultSchemas(definitions, built.structure, opaque, built.thrownDefaults),
+    ...built.unresolvedReferences,
     ...loaded.malformed,
   ];
+  if (malformed.length === 0 && built.unnamed.length > 0)
+    throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
   return { spec, malformed };
 }
 

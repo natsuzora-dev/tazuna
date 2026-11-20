@@ -39,6 +39,7 @@ const malformedKinds = every<Malformed["kind"]>()([
   "Malformed.misplacedSelfRef",
   "Malformed.defaultSchema",
   "Malformed.unexportedDefinition",
+  "Malformed.unresolvedReference",
   "Malformed.unparsableTime",
   "Malformed.unknownPeer",
   "Malformed.lineAfterWhen",

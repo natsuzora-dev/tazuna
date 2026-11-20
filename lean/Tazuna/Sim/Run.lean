@@ -481,7 +481,9 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
       | _, _ => none
     let endIds := (← ends.mapM fun f => do
       let ks ← w.messagesOf fsOf line f
-      pure (ks.map fun k => Value.str ((w.messages[k]?.map (·.id.text)).getD ""))).flatten
+      ks.mapM fun k => do
+        let msg ← ExceptT.lift (expectFound s!"message {k}" w.messages[k]?)
+        pure (Value.str msg.id.text)).flatten
     let actual ← (span.filterMap fun l =>
       match l.dir, l.body with
       | .out, .command r input => some (RequestType.command, r, input)

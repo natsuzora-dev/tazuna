@@ -1,7 +1,7 @@
 import type { Expression } from "oxc-parser";
 import type { NonCanonical } from "../../data/nonCanonical.ts";
 import type { Found } from "../../load/found.ts";
-import { type LoadedSpec, placeIn } from "../../load/load.ts";
+import { placeIn, type Spec } from "../../load/load.ts";
 import { propertiesOf, unwrap, writtenOf } from "./ast.ts";
 
 type Path = readonly (string | number)[];
@@ -26,7 +26,7 @@ function empties(node: Expression, path: Path, definer: boolean): { path: Path; 
   return propertiesOf(e).flatMap(([key, p]) => empties(p.value, [...path, key], definer));
 }
 
-export const check = (spec: LoadedSpec): Found<NonCanonical>[] =>
+export const check = (spec: Spec): Found<NonCanonical>[] =>
   writtenOf(spec).flatMap(({ source, definition, service, calls }) =>
     calls.flatMap(({ method, arguments: args }) =>
       args.flatMap((arg) =>

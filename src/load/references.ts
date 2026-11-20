@@ -11,7 +11,7 @@ import {
   type Place,
   type ServiceDefinition,
 } from "../dsl/definition.ts";
-import { refTarget } from "../dsl/entity.ts";
+import { keyTarget } from "../dsl/entity.ts";
 import type { Found } from "./found.ts";
 import { definitionSchemas, type SchemaAt, schemasIn } from "./schemas.ts";
 
@@ -34,13 +34,13 @@ const chartReferences = (chart: ChartSpec): Reference[] => [
 ];
 
 /**
- * Returns the references in `schemas`, each counted once: a ref() and the nullable or default around it are found on
- * the same path.
+ * Returns the references in `schemas`, a ref() or an entity's key field, each counted once: a reference and the nullable
+ * or default around it are found on the same path.
  */
 const schemaReferences = (schemas: readonly SchemaAt[]): Reference[] =>
   schemas.flatMap(({ path, schema }, i) => {
-    const target = refTarget(schema);
-    const counted = schemas.slice(0, i).some((s) => refTarget(s.schema) === target && sameJson(s.path, path));
+    const target = keyTarget(schema);
+    const counted = schemas.slice(0, i).some((s) => keyTarget(s.schema) === target && sameJson(s.path, path));
     return target === undefined || counted ? [] : [{ path, target }];
   });
 

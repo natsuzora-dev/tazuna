@@ -1,4 +1,5 @@
 import Tazuna.Service.Chart.Basic
+import Tazuna.Service.Note
 
 namespace Tazuna.Service
 
@@ -84,6 +85,8 @@ structure Service where
   /-- The `ref()` fields as entity, field, and referenced entity, in entity then field order. -/
   references : List (String × String × String) := []
   uniques : List (String × List String) := []
+  /-- The key positions of each own entity's records, in the order of `entities`. -/
+  recordKeys : List (String × List Spec.KeyPosition) := []
   requirements : List (String × Requirements) := []
 deriving Repr, Inhabited
 
@@ -114,20 +117,32 @@ def changeOf (st : Service) (r : Spec.Ref) : Option Change :=
 def uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
 
 open Tazuna.Spec in
-/-- The service named `service`, or the reason why it has a definition that the Lean model does not cover. -/
-def ofStructure (j : Spec.Structure) (service : String) : Except String Service := do
+/-- The requirements of each own command, query, and screen of `service`, in definition order. -/
+def requirementsOf (j : Spec.Structure) (service : String) : List (String × Requirements) :=
+  j.definitions.filterMap fun d =>
+    if d.service != service then none else
+    match d.body with
+    | .command c =>
+      some (d.name, { refs := c.references.map fun r => (r.field, r.entity), binds := c.binds, requires := c.requires })
+    | .query q => some (d.name, { requires := q.requires })
+    | .screen c => some (d.name, { requires := c.requires })
+    | _ => none
+
+open Tazuna.Spec in
+/--
+The service named `service`. An entity that an event changes or the service lists is guaranteed by the loader, which
+reports a reference to anything else (Malformed.unresolvedReference); a lookup that finds none notes a bug.
+-/
+def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure) (service : String) : m Service := do
   let own := j.definitions.zipIdx.filter (·.1.service == service)
-  let entity (r : Ref) : Except String (String × List String) :=
-    match j.definitions.findSome? fun d =>
+  let entityBody (r : Ref) : m EntityBody :=
+    expectFound s!"entity {r.service}.{r.name}" (j.definitions.findSome? fun d =>
       match d.body with
-      | .entity { key := some key, fields, .. } => if d.ref == r then some (key, fields) else none
-      | _ => none with
-    | some found => pure found
-    | none => throw s!"the entity {r.name} has no key"
-  let single (r : Ref) : Bool := j.definitions.any fun d =>
-    d.ref == r && match d.body with
-      | .entity { key := none, .. } => true
-      | _ => false
+      | .entity body => if d.ref == r then some body else none
+      | _ => none)
+  let keyed (r : Ref) : m (String × List String) := do
+    let body ← entityBody r
+    pure ((← expectFound s!"key of the entity {r.name}" body.key), body.fields)
   let charts := own.filterMap fun (d, order) =>
     d.chart?.map (Chart.ofSpec · d.name order d.isScreen (d.isScreen && j.isOpenedByScreen d.ref))
   let mut commands := []
@@ -135,7 +150,6 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
   let mut events : List (String × Change) := []
   let mut automations := []
   let mut schemas : List (Schema × Value) := []
-  let mut requirements : List (String × Requirements) := []
   for (d, order) in own do
     let name := d.name
     match d.body with
@@ -145,25 +159,21 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
       match change with
       | none => events := events ++ [(name, .none)]
       | some { kind := .create, entity := e } =>
-        let (key, fields) ← entity e
+        let (key, fields) ← keyed e
         events := events ++ [(name, .create e.name key fields)]
       | some { kind := .update, entity := e } =>
-        if single e then events := events ++ [(name, .set e.name (schemaProperties payload))]
-        else
-          let (key, _) ← entity e
-          events := events ++ [(name, .update e.name key ((schemaProperties payload).filter (· != key)))]
+        match (← entityBody e).key with
+        | none => events := events ++ [(name, .set e.name (schemaProperties payload))]
+        | some key => events := events ++ [(name, .update e.name key ((schemaProperties payload).filter (· != key)))]
       | some { kind := .delete, entity := e } =>
-        let (key, fields) ← entity e
+        let (key, fields) ← keyed e
         events := events ++ [(name, .delete e.name key fields)]
     | .command c =>
       commands := commands ++ [name]
       schemas := schemas ++ [(.input d.ref, c.input)]
-      requirements := requirements ++
-        [(name, { refs := c.references.map fun r => (r.field, r.entity), binds := c.binds, requires := c.requires })]
     | .query q =>
       queries := queries ++ [name]
       schemas := schemas ++ [(.input d.ref, q.input)] ++ (q.output.map fun o => [(.output d.ref, o)]).getD []
-      requirements := requirements ++ [(name, { requires := q.requires })]
     | .automation a =>
       let sends := Activity.sends name a.command
       automations := automations ++
@@ -177,7 +187,6 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
     | .machine _ => pure ()
     | .screen c =>
       schemas := schemas ++ c.controls.filterMap fun (control, payload) => payload.map ((.control d.ref control, ·))
-      requirements := requirements ++ [(name, { requires := c.requires })]
   let listed := j.contracts.filter (·.service != service) |>.flatMap fun c =>
     c.members.filterMap fun (_, r) => r.bind fun r =>
       if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some r else none
@@ -196,19 +205,13 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
     | .command c => if sent.contains d.ref then c.emits else []
     | _ => []
   let receives := listed.filter (heard ++ results).contains
-  let entities := ((j.services.find? (·.name == service)).map (·.entities)).getD []
-  let references := entities.flatMap fun e =>
-    ((j.definitions.findSome? fun d =>
-      match d.body with
-      | .entity body => if d.service == service && d.name == e then some body.references else none
-      | _ => none).getD []).map fun r => (e, r.field, r.entity.name)
-  let uniques := entities.filterMap fun e =>
-    j.definitions.findSome? fun d =>
-      match d.body with
-      | .entity body => if d.service == service && d.name == e then some (e, body.unique) else none
-      | _ => none
-  let singles := entities.filter fun e => single { service, name := e }
-  pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities, singles,
-         references, uniques, requirements }
+  let entities ← expectFound s!"service {service}" ((j.services.find? (·.name == service)).map (·.entities))
+  let bodies ← entities.mapM fun e => do pure (e, ← entityBody { service, name := e })
+  pure { service, «structure» := j, commands, queries, events, receives, automations, charts, schemas, entities,
+         singles := bodies.filterMap fun (e, b) => if b.key.isNone then some e else none
+         references := bodies.flatMap fun (e, b) => b.references.map fun r => (e, r.field, r.entity.name)
+         uniques := bodies.map fun (e, b) => (e, b.unique)
+         recordKeys := bodies.map fun (e, b) => (e, b.keys)
+         requirements := requirementsOf j service }
 
 end Tazuna.Service

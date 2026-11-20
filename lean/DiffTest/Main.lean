@@ -255,7 +255,7 @@ instance : MonadNote IO where
 
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do
-  let start ← IO.ofExcept (Sim.World.start spec sc)
+  let start ← Sim.World.start spec sc
   pure { start with stepOrders := stepOrders.map fun o => (o.origin, o.service, o.order) }
 
 /--
@@ -303,7 +303,7 @@ scenario executed, from its startup: every search, with each step order it ran a
 -/
 def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Response := do
   let executeWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Execution := do
-    let start ← IO.ofExcept (Sim.World.start spec sc)
+    let start ← Sim.World.start spec sc
     let start := { start with stepOrders }
     let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
     let (w, acting) ← ran.run {}

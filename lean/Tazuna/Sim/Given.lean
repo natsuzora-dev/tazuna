@@ -37,9 +37,9 @@ def peersOf (sc : Scenario) : List (String × Peer) :=
 
 /--
 The world before the startup: the roles that Given lists, and each running service at the start, whose name qualifies its
-createKey values, or why the Lean model does not cover a service.
+createKey values.
 -/
-def World.start (j : Spec.Structure) (sc : Scenario) : Except String World := do
+def World.start {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure) (sc : Scenario) : m World := do
   let peers := peersOf sc
   let roles := (sc.service, Role.own) :: peers.map fun (s, p) => (s, match p with
     | .run _ => Role.run

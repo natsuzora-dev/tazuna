@@ -7,7 +7,7 @@ import type { Restricted } from "../data/restricted.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
-import { type LoadedSpec, loadSpec, type Spec } from "../load/load.ts";
+import { loadSpec, type Spec } from "../load/load.ts";
 import { check as validate } from "../validation/check.ts";
 import * as answers from "./nonCanonical/answers.ts";
 import * as binds from "./nonCanonical/binds.ts";
@@ -36,7 +36,7 @@ export type SpecFailure =
 
 export type SpecCheck = SpecFailure | { readonly kind: "checked"; readonly spec: CheckedSpec };
 
-const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Found<NonCanonical | Restricted>[] }[] = [
+const syntaxChecks: readonly { readonly check: (spec: Spec) => readonly Found<NonCanonical | Restricted>[] }[] = [
   answers,
   binds,
   constants,
@@ -46,13 +46,13 @@ const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Fo
   sources,
 ];
 
-/** The syntax checks that read the structure, which they skip on a spec without one. */
+/** The syntax checks that read the structure, which run only when loading found no Malformed violation, as Validation. */
 const structureChecks: readonly { readonly check: (spec: Spec) => readonly Found<NonCanonical>[] }[] = [
   charts,
   rejections,
 ];
 
-function placeOfIllegal(spec: LoadedSpec, illegal: Illegal): Place {
+function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
   switch (illegal.kind) {
     case "Illegal.foreignMember": {
       const contract = spec.contracts.find((c) => c.service === illegal.data.contract);
@@ -100,10 +100,7 @@ export function failureText(failure: SpecFailure, folder: string): string {
   }
 }
 
-function unlistedFiles(
-  spec: LoadedSpec,
-  typeChecked: Extract<TypeCheck, { readonly kind: "passed" }>,
-): Found<Malformed>[] {
+function unlistedFiles(spec: Spec, typeChecked: Extract<TypeCheck, { readonly kind: "passed" }>): Found<Malformed>[] {
   const tsconfig = relative(spec.root, typeChecked.tsconfig).split(sep).join("/");
   return spec.sources
     .filter((s) => !typeChecked.includes(join(spec.root, s.file)))
@@ -113,44 +110,35 @@ function unlistedFiles(
     }));
 }
 
-/**
- * checkSpec after `typeChecked`, the type check of `root`. A spec without a structure is unloadable unless a violation
- * says why, since the types let a definition name no definition of the spec only through `any` or an unexported value.
- */
+/** checkSpec after `typeChecked`, the type check of `root`. */
 export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promise<SpecCheck> {
   if (typeChecked.kind !== "passed") return typeChecked;
   let loaded: Awaited<ReturnType<typeof loadSpec>>;
   try {
     loaded = await loadSpec(root);
   } catch (error) {
+    if (error instanceof InternalError) throw error;
     return { kind: "unloadable", reason: reason(error) };
   }
   const { spec } = loaded;
-  const structured = "unresolved" in spec ? undefined : spec;
   const malformed = [...unlistedFiles(spec, typeChecked), ...loaded.malformed];
-  const loading = [
-    ...malformed,
-    ...syntaxChecks.flatMap((c) => c.check(spec)),
-    ...(structured === undefined ? [] : structureChecks.flatMap((c) => c.check(structured))),
-  ];
+  const loading = [...malformed, ...syntaxChecks.flatMap((c) => c.check(spec))];
   const found: Found<Malformed | NonCanonical | Restricted | Illegal>[] =
-    malformed.length > 0 || structured === undefined
+    malformed.length > 0
       ? loading
       : [
           ...loading,
-          ...validate(structured.structure).map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
+          ...structureChecks.flatMap((c) => c.check(spec)),
+          ...validate(spec.structure).map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
         ];
-  if (found.length === 0) {
-    if ("unresolved" in spec) return { kind: "unloadable", reason: `${spec.unresolved} names no definition` };
-    return { kind: "checked", spec: spec as CheckedSpec };
-  }
+  if (found.length === 0) return { kind: "checked", spec: spec as CheckedSpec };
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
   return { kind: "violations", files: spec.sources.length, violations };
 }
 
 /**
  * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
- * it, as a compiler compiles before it runs. When loading finds a Malformed violation, the structure (Illegal) goes
- * unchecked.
+ * it, as a compiler compiles before it runs. When loading finds a Malformed violation, the structure goes unchecked:
+ * Illegal, and the NonCanonical checks that read it.
  */
 export const checkSpec = (root: string): Promise<SpecCheck> => checkSpecWith(root, typeCheck(root, process.cwd()));

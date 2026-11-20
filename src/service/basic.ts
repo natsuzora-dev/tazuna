@@ -1,8 +1,8 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
-import { InternalError } from "../data/internalError.ts";
+import { expectFound } from "../data/internalError.ts";
 import type { Activity } from "../data/step.generated.ts";
-import type { Structure } from "../spec/structure.generated.ts";
-import { isOpenedByScreen, schemaProperties } from "../spec/structure.ts";
+import type { KeyPosition, Structure } from "../spec/structure.generated.ts";
+import { type DefinitionStructure, isOpenedByScreen, schemaProperties } from "../spec/structure.ts";
 import { type Chart, executableChart } from "./chart/basic.ts";
 
 type Change =
@@ -74,6 +74,8 @@ export interface Service {
   /** The `ref()` fields and the entity that each references, in entity and then field order. */
   readonly references: readonly { readonly entity: string; readonly field: string; readonly target: string }[];
   readonly uniques: ReadonlyMap<string, readonly string[]>;
+  /** The key positions of each own entity's records, in the order of `entities`. */
+  readonly recordKeys: readonly (readonly [string, readonly KeyPosition[]])[];
   readonly requirements: ReadonlyMap<string, Requirements>;
 }
 
@@ -104,22 +106,28 @@ export function schemaOwner(schema: Schema): DefinitionRef {
 
 export const uniqueOf = (st: Service, entity: string): readonly string[] => st.uniques.get(entity) ?? [];
 
+type EntityStructure = Extract<DefinitionStructure, { kind: "entity" }>;
+
 /**
- * Returns the service `service` of the structure, or throws, as Lean's ofStructure, on a definition that the types
- * forbid.
+ * Lean's ofStructure: the service `service` of the structure. An entity that an event changes or the service lists is
+ * guaranteed by the loader (Malformed.unresolvedReference), so a lookup that finds none is an InternalError.
  */
 export function serviceOf(structure: Structure, service: string): Service {
   const own = structure.definitions.map((d, order) => ({ d, order })).filter(({ d }) => d.service === service);
-  const entity = (r: DefinitionRef) => {
-    const found = structure.definitions.find((d) => d.kind === "entity" && sameRef(d, r));
-    return found?.kind === "entity" ? found : undefined;
+  const entityBody = (r: DefinitionRef): EntityStructure =>
+    expectFound(
+      `entity ${r.service}.${r.name}`,
+      structure.definitions.find((d): d is EntityStructure => d.kind === "entity" && sameRef(d, r)),
+    );
+  const keyed = (r: DefinitionRef) => {
+    const body = entityBody(r);
+    return { key: expectFound(`key of the entity ${r.name}`, body.key ?? undefined), fields: body.fields };
   };
   const charts = new Map<string, Chart>();
   const commands: string[] = [];
   const queries: string[] = [];
   const events = new Map<string, Change>();
   const automations: Automation[] = [];
-  const requirements = new Map<string, Requirements>();
   for (const { d, order } of own) {
     const { name } = d;
     switch (d.kind) {
@@ -127,7 +135,6 @@ export function serviceOf(structure: Structure, service: string): Service {
       case "screen": {
         const opened = d.kind === "screen" && isOpenedByScreen(structure, d);
         charts.set(name, executableChart(d, order, opened));
-        if (d.kind === "screen") requirements.set(name, { refs: [], binds: [], requires: d.requires });
         break;
       }
       case "event": {
@@ -136,32 +143,25 @@ export function serviceOf(structure: Structure, service: string): Service {
           events.set(name, { kind: "none" });
           break;
         }
-        const e = entity(change.entity);
-        if (change.kind === "update" && e?.key === null) {
-          events.set(name, { kind: "set", entity: e.name, writes: schemaProperties(d.payload) });
+        const entity = change.entity.name;
+        if (change.kind === "update") {
+          const { key } = entityBody(change.entity);
+          events.set(
+            name,
+            key === null
+              ? { kind: "set", entity, writes: schemaProperties(d.payload) }
+              : { kind: "update", entity, key, writes: schemaProperties(d.payload).filter((f) => f !== key) },
+          );
           break;
         }
-        if (e?.key == null) throw new InternalError(`the entity ${change.entity.name} has no key`);
-        const key = e.key;
-        events.set(
-          name,
-          change.kind === "update"
-            ? { kind: "update", entity: e.name, key, writes: schemaProperties(d.payload).filter((f) => f !== key) }
-            : { kind: change.kind, entity: e.name, key, fields: e.fields },
-        );
+        events.set(name, { kind: change.kind, entity, ...keyed(change.entity) });
         break;
       }
       case "command":
         commands.push(name);
-        requirements.set(name, {
-          refs: d.references.map(({ field, entity }) => [field, entity] as const),
-          binds: d.binds,
-          requires: d.requires,
-        });
         break;
       case "query":
         queries.push(name);
-        requirements.set(name, { refs: [], binds: [], requires: d.requires });
         break;
       case "automation": {
         const sends: Activity = { keyword: "sends", key: name, target: d.command };
@@ -197,18 +197,11 @@ export function serviceOf(structure: Structure, service: string): Service {
     d.kind === "command" && sent.some((c) => sameRef(c, d)) ? d.emits : [],
   );
   const receives = listed.filter((n) => [...heard, ...results].some((r) => sameRef(r, n)));
-  const entities = structure.services.find((s) => s.name === service)?.entities ?? [];
-  const ownEntity = (e: string) => entity({ service, name: e });
-  const references = entities.flatMap((e) =>
-    (ownEntity(e)?.references ?? []).map((r) => ({ entity: e, field: r.field, target: r.entity.name })),
-  );
-  const uniques = new Map(
-    entities.flatMap((e) => {
-      const found = ownEntity(e);
-      return found === undefined ? [] : [[e, found.unique] as const];
-    }),
-  );
-  const singles = entities.filter((e) => ownEntity(e)?.key === null);
+  const entities = expectFound(
+    `service ${service}`,
+    structure.services.find((s) => s.name === service),
+  ).entities;
+  const bodies = entities.map((e) => [e, entityBody({ service, name: e })] as const);
   return {
     service,
     structure,
@@ -219,9 +212,34 @@ export function serviceOf(structure: Structure, service: string): Service {
     automations,
     charts,
     entities,
-    singles,
-    references,
-    uniques,
-    requirements,
+    singles: bodies.flatMap(([e, b]) => (b.key === null ? [e] : [])),
+    references: bodies.flatMap(([e, b]) =>
+      b.references.map((r) => ({ entity: e, field: r.field, target: r.entity.name })),
+    ),
+    uniques: new Map(bodies.map(([e, b]) => [e, b.unique])),
+    recordKeys: bodies.map(([e, b]) => [e, b.keys] as const),
+    requirements: requirementsOf(structure, service),
   };
+}
+
+/** Lean's requirementsOf: the requirements of each own command, query, and screen of `service`. */
+function requirementsOf(structure: Structure, service: string): ReadonlyMap<string, Requirements> {
+  return new Map(
+    structure.definitions.flatMap((d): [string, Requirements][] => {
+      if (d.service !== service) return [];
+      if (d.kind === "command")
+        return [
+          [
+            d.name,
+            {
+              refs: d.references.map(({ field, entity }) => [field, entity] as const),
+              binds: d.binds,
+              requires: d.requires,
+            },
+          ],
+        ];
+      if (d.kind === "query" || d.kind === "screen") return [[d.name, { refs: [], binds: [], requires: d.requires }]];
+      return [];
+    }),
+  );
 }
