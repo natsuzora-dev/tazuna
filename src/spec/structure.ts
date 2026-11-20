@@ -1,4 +1,5 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { Answer, RejectionKind } from "../data/trace.generated.ts";
@@ -23,6 +24,7 @@ export type {
 };
 export type ChartStructure = Extract<DefinitionStructure, { kind: "machine" | "screen" }>;
 type CommandStructure = Extract<DefinitionStructure, { kind: "command" }>;
+type QueryStructure = Extract<DefinitionStructure, { kind: "query" }>;
 
 const kinds: { readonly [K in DefinitionStructure["kind"]]: K } = {
   entity: "entity",
@@ -127,17 +129,20 @@ export function emitsOf(structure: Structure, command: DefinitionRef | null): re
   );
 }
 
-/** Returns the requires conditions of the command or query `target`. */
-export function requiresOf(structure: Structure, target: DefinitionRef): string[] {
+/** Returns the command or query `target`, which callers name from the structure. */
+function requestOf(structure: Structure, target: DefinitionRef): CommandStructure | QueryStructure {
   const definition = structure.definitions.find((d) => sameRef(d, target));
-  return definition?.kind === "command" || definition?.kind === "query" ? [...definition.requires] : [];
+  if (definition?.kind === "command" || definition?.kind === "query") return definition;
+  throw new InternalError(`the structure has no command or query ${target.service}.${target.name}`);
 }
 
+/** Returns the requires conditions of the command or query `target`. */
+export const requiresOf = (structure: Structure, target: DefinitionRef): readonly string[] =>
+  requestOf(structure, target).requires;
+
 /** Returns the ensures conditions of the command or query `target`. */
-export function ensuresOf(structure: Structure, target: DefinitionRef): string[] {
-  const definition = structure.definitions.find((d) => sameRef(d, target));
-  return definition?.kind === "command" || definition?.kind === "query" ? [...definition.ensures] : [];
-}
+export const ensuresOf = (structure: Structure, target: DefinitionRef): readonly string[] =>
+  requestOf(structure, target).ensures;
 
 /**
  * Returns the reasons that a requires rejection of the command or query `target` may name: its binds, then its

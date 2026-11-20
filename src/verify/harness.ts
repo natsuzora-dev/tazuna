@@ -1,5 +1,6 @@
 import type { CheckedSpec } from "../check/spec.ts";
 import { Bag, Ref, Runs } from "../data/canonical.ts";
+import { InternalError } from "../data/internalError.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
 import type { Run } from "../data/traceFile.ts";
@@ -74,7 +75,7 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
   const { runner } = run;
   const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition
     .scenario;
-  if (scenario === undefined) throw new Error(`no scenario ${run.service}.${run.scenario}`);
+  if (scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
   const snapshot = readSnapshot(spec, run);
   const read = readLine(spec, runner);
   const readSnapshotLines = snapshot.map((l) => read(l));

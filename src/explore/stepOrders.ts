@@ -1,4 +1,5 @@
 import type { ChoiceDependent } from "../data/choiceDependent.generated.ts";
+import { InternalError } from "../data/internalError.ts";
 import { stepOrderLimit } from "../data/limits.generated.ts";
 import type { Origin, Scenario } from "../data/scenario.generated.ts";
 import type { StepName } from "../data/step.generated.ts";
@@ -60,7 +61,7 @@ const compareOf =
 /** Lean's Execution.outcomeWith: the outcome of `service` in `m`, with its lines `lines` when given. */
 function outcomeFor(spec: Spec, m: Made, service: string, lines?: readonly Line[]): Outcome {
   const p = m.world.services.get(service);
-  if (p === undefined) throw new Error(`${service} does not run`);
+  if (p === undefined) throw new InternalError(`${service} does not run`);
   const s = p.processing.state;
   const traceLines =
     lines === undefined

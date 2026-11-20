@@ -232,11 +232,24 @@ export const none: NoneOffer = Object.freeze({}) as NoneOffer;
 
 type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer>;
 
-export interface StateSpec {
-  readonly type?: "parallel" | "map" | "final" | "history";
-  readonly key?: Shape;
-  readonly context?: Shape;
-  readonly items?: (args: unknown) => readonly unknown[];
+/** A state: a map state has its copies' key shape and items, and the others have neither. */
+export type StateSpec = StateBehavior &
+  (
+    | {
+        readonly type?: "parallel" | "final" | "history";
+        readonly key?: never;
+        readonly context?: never;
+        readonly items?: never;
+      }
+    | {
+        readonly type: "map";
+        readonly key: Shape;
+        readonly context?: Shape;
+        readonly items: (args: unknown) => readonly unknown[];
+      }
+  );
+
+interface StateBehavior {
   /** The shapes of the state's parameters. */
   readonly held?: Shape;
   readonly initial?: string;

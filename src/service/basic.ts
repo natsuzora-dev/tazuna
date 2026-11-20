@@ -1,4 +1,5 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import { isOpenedByScreen, schemaProperties } from "../spec/structure.ts";
@@ -103,8 +104,12 @@ export function schemaOwner(schema: Schema): DefinitionRef {
 
 export const uniqueOf = (st: Service, entity: string): readonly string[] => st.uniques.get(entity) ?? [];
 
-export const requirementsOf = (st: Service, name: string): Requirements =>
-  st.requirements.get(name) ?? { refs: [], binds: [], requires: [] };
+/** Returns the requirements of the own command, query or screen `name`, which callers name from the structure. */
+export function requirementsOf(st: Service, name: string): Requirements {
+  const requirements = st.requirements.get(name);
+  if (requirements === undefined) throw new InternalError(`the service ${st.service} has no requirements of ${name}`);
+  return requirements;
+}
 
 /**
  * Returns the service `service` of the structure, or throws, as Lean's ofStructure, on a definition that the types
@@ -138,7 +143,7 @@ export function serviceOf(structure: Structure, service: string): Service {
           break;
         }
         const e = d.entity === null ? undefined : entity(d.entity);
-        if (e === undefined) throw new Error(`the event ${name} changes records without an entity`);
+        if (e === undefined) throw new InternalError(`the event ${name} changes records without an entity`);
         if (d.change === "update")
           events.set(
             name,
@@ -151,7 +156,7 @@ export function serviceOf(structure: Structure, service: string): Service {
                   writes: schemaProperties(d.payload).filter((f) => f !== e.key),
                 },
           );
-        else if (e.key === null) throw new Error(`the entity ${e.name} has no key`);
+        else if (e.key === null) throw new InternalError(`the entity ${e.name} has no key`);
         else events.set(name, { kind: d.change, entity: e.name, key: e.key, fields: e.fields });
         break;
       }
@@ -159,7 +164,7 @@ export function serviceOf(structure: Structure, service: string): Service {
         commands.push(name);
         requirements.set(name, {
           refs: d.references.map(({ field, entity }) => {
-            if (entity === null) throw new Error(`the ref field ${field} of ${name} points to no entity`);
+            if (entity === null) throw new InternalError(`the ref field ${field} of ${name} points to no entity`);
             return [field, entity] as const;
           }),
           binds: d.binds,
@@ -172,7 +177,8 @@ export function serviceOf(structure: Structure, service: string): Service {
         break;
       case "automation": {
         const { receives, command } = d;
-        if (receives === null || command === null) throw new Error(`the automation ${name} has no event or command`);
+        if (receives === null || command === null)
+          throw new InternalError(`the automation ${name} has no event or command`);
         const sends: Activity = { keyword: "sends", key: name, target: command };
         automations.push({ name, order, receives, sends, binds: d.binds, guard: d.guard });
         break;

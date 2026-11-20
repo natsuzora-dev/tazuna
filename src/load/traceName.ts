@@ -1,11 +1,12 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { Definition } from "../dsl/definition.ts";
 import { traceNameOfRef } from "../spec/structure.ts";
 import type { Spec } from "./load.ts";
 
 export function refOfDefinition(spec: Spec, definition: unknown): DefinitionRef {
   const named = spec.names.get(definition);
-  if (named === undefined) throw new Error("the value is no named definition of the spec");
+  if (named === undefined) throw new InternalError("the value is no named definition of the spec");
   return { service: named.service, name: named.name };
 }
 

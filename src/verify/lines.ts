@@ -1,4 +1,5 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { MalformedLine } from "../data/trace.ts";
 import { parseLines, steps } from "../data/trace.ts";
@@ -47,7 +48,7 @@ export const violationsAt = (file: string, found: readonly Found[], scenario?: D
   found.map((v) => toReported(v, { file }, scenario === undefined ? {} : { scenario }));
 
 const lineOf = (v: Found): number => {
-  if (v.line === undefined) throw new Error(`the ${v.kind} violation has no trace line`);
+  if (v.line === undefined) throw new InternalError(`the ${v.kind} violation has no trace line`);
   return v.line;
 };
 

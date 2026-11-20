@@ -1,4 +1,5 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { Placed, ViolationError, ViolationValue } from "../data/violation.ts";
 import { type ReportedViolation, toReported } from "../data/violation.ts";
 import type { Definition, Named, Place } from "../dsl/definition.ts";
@@ -20,6 +21,6 @@ export function placeOf(
   definition: DefinitionRef | null,
 ): Place {
   const found = spec.definitions.find((d) => sameRef(d, definition));
-  if (found === undefined) throw new Error(`no definition ${definition?.service}.${definition?.name}`);
+  if (found === undefined) throw new InternalError(`no definition ${definition?.service}.${definition?.name}`);
   return found.place;
 }

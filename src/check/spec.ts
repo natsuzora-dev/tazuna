@@ -1,5 +1,6 @@
 import { join, relative, sep } from "node:path";
 import type { Illegal } from "../data/illegal.generated.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { Malformed } from "../data/malformed.ts";
 import type { NonCanonical } from "../data/nonCanonical.ts";
 import type { Restricted } from "../data/restricted.ts";
@@ -51,7 +52,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
   switch (illegal.kind) {
     case "Illegal.foreignMember": {
       const contract = spec.contracts.find((c) => c.service === illegal.data.contract);
-      if (contract === undefined) throw new Error(`no contract of ${illegal.data.contract}`);
+      if (contract === undefined) throw new InternalError(`no contract of ${illegal.data.contract}`);
       return contract.place;
     }
     case "Illegal.automationCycle":

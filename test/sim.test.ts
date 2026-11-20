@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { test } from "node:test";
+import { InternalError } from "../src/data/internalError.ts";
 import { invalidScenarioKinds } from "../src/data/invalidScenario.generated.ts";
 import { scenario } from "../src/data/scenario.generated.ts";
 import { loadSpec } from "../src/load/load.ts";
+import type { RecordSource } from "../src/service/records.ts";
+import { SpecFunctions } from "../src/sim/spec/functions.ts";
 import { outcomeOf, simulateSpec } from "../src/sim/spec/simulate.ts";
 import {
   folders,
@@ -78,4 +81,21 @@ test("Each InvalidScenario kind is in the expected outcome of some scenario unde
     invalidScenarioKinds.filter((kind) => !reported.has(kind)),
     [],
   );
+});
+
+test("An InternalError raised inside author code stops the question instead of becoming the author's thrown Issue", async () => {
+  const { spec } = await loadSpec(join(tests, "../samples/todo/spec"));
+  const functions = new SpecFunctions(spec, "todo");
+  const broken = new InternalError("the records lost a row");
+  const records: RecordSource = {
+    keys: () => [],
+    exists: () => {
+      throw broken;
+    },
+    field: () => {
+      throw broken;
+    },
+  };
+  const now = Temporal.Instant.from("2026-10-25T00:00:00Z");
+  assert.throws(() => functions.binding("completeTask", "task", { taskId: "task-1" }, records, now), broken);
 });

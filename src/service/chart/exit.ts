@@ -1,3 +1,4 @@
+import { InternalError } from "../../data/internalError.ts";
 import type { Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { exitOrder, recordedChildren } from "../../spec/tree.ts";
@@ -115,7 +116,7 @@ export const exitFuel = (st: Service): number => [...st.charts.values()].reduce(
 
 /** Exits state `n` of `instance`, after its copies; `fuel` is the remaining nesting depth of exits. */
 export function exitOne(r: Processing, fuel: number, instance: Instance, n: string): void {
-  if (fuel === 0) throw new Error("exits nest deeper than exitFuel");
+  if (fuel === 0) throw new InternalError("exits nest deeper than exitFuel");
   for (const k of copyKeysOf(instance, n).toReversed()) endWith(r, copyId(instance.id, n, k), fuel - 1);
   instance.copyKeys.delete(n);
   leaveWith(r, fuel - 1, instance, n);

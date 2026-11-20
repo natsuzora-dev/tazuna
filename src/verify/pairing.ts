@@ -1,5 +1,6 @@
 import { join, relative } from "node:path";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { InternalError } from "../data/internalError.ts";
 import { type Entry, entriesOf, pair } from "../data/pairing.ts";
 import { type Run, runStem, snapshotEntryPath } from "../data/traceFile.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
@@ -177,6 +178,6 @@ export function snapshotPairingViolation(
 ): ReportedViolation {
   if (at.kind === "snapshotEntry") return toReported(violation, snapshotEntryAt(spec, at));
   const scenario = spec.scenarios.find((s) => s.service === at.scenario.service && s.name === at.scenario.name);
-  if (scenario === undefined) throw new Error(`no scenario ${at.scenario.service}.${at.scenario.name}`);
+  if (scenario === undefined) throw new InternalError(`no scenario ${at.scenario.service}.${at.scenario.name}`);
   return toReported(violation, scenario.place);
 }
