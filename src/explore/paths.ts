@@ -327,9 +327,13 @@ export interface ExploredLines {
   readonly visited: number;
 }
 
-const coverageOf = (executed: Executed, reached: Coverage) => {
+/**
+ * Adds what `executed` reached and `parent`, the execution it continues, had not: what its path reports (Space.out),
+ * not what the path before it already reported, as merged_search_reports takes a report.
+ */
+const coverageOf = (executed: Executed, reached: Coverage, parent?: Executed) => {
   if (halted(executed.world)) return;
-  for (const l of executed.listeners.values()) reached.addAll(l.coverage);
+  for (const [service, l] of executed.listeners) reached.addAll(l.coverage, parent?.listeners.get(service)?.coverage);
 };
 
 /**
@@ -377,7 +381,7 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   })) {
     if (parent === undefined) continue;
     const appended = path.flat();
-    coverageOf(result, reached);
+    coverageOf(result, reached, parent);
     for (const violation of violationsSince(parent, result)) found.push({ violation, appended });
     const from = sc.lines.length + path.slice(0, -1).flat().length;
     for (const violation of stepOrderChanges(spec, { ...sc, lines: [...sc.lines, ...appended] }, result, from))

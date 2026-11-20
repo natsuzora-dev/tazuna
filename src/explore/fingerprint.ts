@@ -1,5 +1,5 @@
+import { expectFound } from "../data/internalError.ts";
 import type { Requester } from "../data/step.generated.ts";
-import type { LineId } from "../data/trace.generated.ts";
 import { canonicalJson, type Json } from "../data/values.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { exchanges } from "../service/input.ts";
@@ -29,28 +29,25 @@ function requestsFingerprint(r: Processing): unknown {
   const s = r.state;
   const { lines } = s;
   const rank = (all: readonly number[], n: number) => new Set(all.filter((x) => x < n)).size;
-  const inputsBefore = (id: LineId) => {
-    const at = lines.findIndex((l) => l.dir === "out" && sameLineId(l.id, id));
-    if (at === -1) return { time: null, inputs: 0 };
-    return { time: lines[at]?.time ?? null, inputs: lines.slice(0, at).filter((l) => l.dir === "in").length };
-  };
-  const traced = s.pending.map((p) => inputsBefore(p.id));
+  const traced = s.pending.map((p) => {
+    const at = lines.findIndex((l) => l.dir === "out" && sameLineId(l.id, p.id));
+    const line = expectFound(`request line of ${JSON.stringify(p.id)}`, lines[at]);
+    return { p, time: line.time, before: lines.slice(0, at).filter((l) => l.dir === "in").length };
+  });
   const turns = s.pending.map((p) => p.turn);
+  const inputs = traced.map((t) => t.before);
   const requester = (q: Requester) =>
     q.kind === "automation" ? [q.automation] : [q.machine, q.kind === "state" ? q.state : q.slot];
   return {
-    pending: s.pending.map((p, i) => [
+    pending: traced.map(({ p, time, before }) => [
       p.id,
       p.activity.target,
       requester(p.requester),
       p.input,
       p.stale,
-      rank(turns, turns[i] ?? 0),
-      traced[i]?.time ?? null,
-      rank(
-        traced.map((t) => t.inputs),
-        traced[i]?.inputs ?? 0,
-      ),
+      rank(turns, p.turn),
+      time,
+      rank(inputs, before),
       lines.some((l) => "to" in l && sameLineId(l.to, p.id)),
     ]),
     queued: s.queued.map((q) => [q.machine, q.state, q.stale]),

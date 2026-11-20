@@ -3,7 +3,7 @@ import Tazuna.Thm.Guarantee
 
 /-!
 Merging the paths whose states have equal fingerprints loses no report, when equal fingerprints mean the same reports
-on every continuation. Breadth-first order extends each fingerprint first at its shallowest depth, so the state kept has
+on every continuation, up to what the path to a state already reported. Breadth-first order extends each fingerprint first at its shallowest depth, so the state kept has
 at least as many inputs left as any state merged into it.
 -/
 
@@ -87,17 +87,32 @@ theorem merged_sound (T : List R) : ∀ (k : Nat) (F : List S) (V : List K),
       exact Or.inr ⟨i, hi, Or.inr hr⟩
 
 /--
-Every path from a frontier reports into `T` when the merged search from it does and every visited fingerprint's paths
-do. The paths of a kept state reach the next layer, whose own visited fingerprints need the kept states' shallower paths,
-so the induction is strong.
+What `past` gives a state comes from what the path to it reported: a child's past is in its parent's past or in what
+extending the parent and taking the child's input reported.
 -/
-theorem merged_complete (congruent : ∀ a b k, fp a = fp b → ∀ r, r ∈ sp.tree k a → r ∈ sp.tree k b) (T : List R) :
-    ∀ (k : Nat) (F : List S) (V : List K), (∀ r ∈ sp.merged fp k F V, r ∈ T) →
-      (∀ s, fp s ∈ V → ∀ r ∈ sp.tree k s, r ∈ T) → ∀ s ∈ F, ∀ r ∈ sp.tree k s, r ∈ T := by
+def PastReported (past : S → List R) : Prop :=
+  ∀ s i, i ∈ sp.next s → ∀ r ∈ past (sp.step s i), r ∈ past s ∨ r ∈ sp.here s ∨ r ∈ sp.out s i
+
+/--
+States with equal fingerprints report alike from here on: whatever `a` reports on its paths of up to `k` inputs, `b`
+reports on its own or its path reported already (`past b`).
+-/
+def Congruent (past : S → List R) : Prop :=
+  ∀ a b k, fp a = fp b → ∀ r, r ∈ sp.tree k a → r ∈ sp.tree k b ∨ r ∈ past b
+
+/--
+Every path from a frontier reports into `T` when the merged search from it does, every visited fingerprint's paths do,
+and the frontier's pasts are in `T`. The paths of a kept state reach the next layer, whose own visited fingerprints
+need the kept states' shallower paths, so the induction is strong.
+-/
+theorem merged_complete (past : S → List R) (hpast : PastReported sp past) (congruent : Congruent sp fp past)
+    (T : List R) : ∀ (k : Nat) (F : List S) (V : List K), (∀ r ∈ sp.merged fp k F V, r ∈ T) →
+      (∀ s, fp s ∈ V → ∀ r ∈ sp.tree k s, r ∈ T) → (∀ f ∈ F, ∀ r ∈ past f, r ∈ T) →
+      ∀ s ∈ F, ∀ r ∈ sp.tree k s, r ∈ T := by
   intro k
   induction k using Nat.strongRecOn with
   | _ k ih =>
-  intro F V hM hV s hs r hr
+  intro F V hM hV hF s hs r hr
   rcases k with _ | k
   · simp [Space.tree] at hr
   have hM' : ∀ r ∈ sp.merged fp k (((fresh fp V F)).flatMap fun s => (sp.next s).map (sp.step s))
@@ -107,6 +122,14 @@ theorem merged_complete (congruent : ∀ a b k, fp a = fp b → ∀ r, r ∈ sp.
     simp only [Space.merged, List.mem_append, List.mem_flatMap]; exact Or.inl ⟨f, hf, Or.inl h⟩)
   have hOut : ∀ f ∈ fresh fp V F, ∀ i ∈ sp.next f, ∀ r ∈ sp.out f i, r ∈ T := fun f hf i hi r h => hM r (by
     simp only [Space.merged, List.mem_append, List.mem_flatMap]; exact Or.inl ⟨f, hf, Or.inr ⟨i, hi, h⟩⟩)
+  have hKept : ∀ f ∈ fresh fp V F, ∀ r ∈ past f, r ∈ T := fun f hf => hF f (mem_of_mem_fresh fp hf)
+  have hNext : ∀ c ∈ (fresh fp V F).flatMap (fun s => (sp.next s).map (sp.step s)), ∀ r ∈ past c, r ∈ T := by
+    intro c hc r hr
+    obtain ⟨g, hg, i, hi, rfl⟩ := by simpa only [List.mem_flatMap, List.mem_map] using hc
+    rcases hpast g i hi r hr with h | h | h
+    · exact hKept g hg r h
+    · exact hHere g hg r h
+    · exact hOut g hg i hi r h
   have hC : ∀ j, j ≤ k + 1 → ∀ f ∈ fresh fp V F, ∀ r ∈ sp.tree j f, r ∈ T := by
     intro j
     induction j with
@@ -117,28 +140,35 @@ theorem merged_complete (congruent : ∀ a b k, fp a = fp b → ∀ r, r ∈ sp.
       rcases hr with hr | ⟨i, hi, hr | hr⟩
       · exact hHere f hf r hr
       · exact hOut f hf i hi r hr
-      · refine ih j (by omega) _ _ (fun r h => hM' r (merged_mono sp fp (by omega) _ _ r h)) ?_ (sp.step f i) ?_ r hr
+      · refine ih j (by omega) _ _ (fun r h => hM' r (merged_mono sp fp (by omega) _ _ r h)) ?_ hNext
+          (sp.step f i) ?_ r hr
         · intro s hs r hr
           rcases List.mem_append.mp hs with hs | hs
           · exact hV s hs r (tree_mono sp (by omega) s r hr)
           · obtain ⟨g, hg, e⟩ := List.mem_map.mp hs
-            exact ihj (by omega) g hg r (congruent s g j e.symm r hr)
+            rcases congruent s g j e.symm r hr with h | h
+            · exact ihj (by omega) g hg r h
+            · exact hKept g hg r h
         · exact List.mem_flatMap.mpr ⟨f, hf, List.mem_map.mpr ⟨i, hi, rfl⟩⟩
   rcases fresh_covers fp (V := V) hs with h | ⟨f, hf, e⟩
   · exact hV s h r hr
-  · exact hC (k + 1) (Nat.le_refl _) f hf r (congruent s f (k + 1) e.symm r hr)
+  · rcases congruent s f (k + 1) e.symm r hr with h | h
+    · exact hC (k + 1) (Nat.le_refl _) f hf r h
+    · exact hKept f hf r h
 
 /--
 Explore's search, which extends only the first state of each fingerprint, reports exactly what extending every path of
-up to `bound` inputs reports, when states with equal fingerprints report the same on every continuation.
+up to `bound` inputs reports, when states with equal fingerprints report alike from here on (Congruent), up to what
+the path to the state kept already reported (`past`, empty at the start).
 -/
-@[guarantee] theorem merged_search_reports
-    (congruent : ∀ a b k, fp a = fp b → ∀ r, r ∈ sp.tree k a → r ∈ sp.tree k b) (bound : Nat) (start : S) (r : R) :
+@[guarantee] theorem merged_search_reports (past : S → List R) (hpast : PastReported sp past)
+    (congruent : Congruent sp fp past) (bound : Nat) (start : S) (hstart : past start = []) (r : R) :
     r ∈ sp.merged fp bound [start] [] ↔ r ∈ sp.tree bound start := by
   constructor
   · exact merged_sound sp fp (sp.tree bound start) bound [start] []
       (fun s hs r hr => by simp only [List.mem_singleton] at hs; subst hs; exact hr) r
-  · exact merged_complete sp fp congruent _ bound [start] [] (fun _ h => h) (fun _ hs => by simp at hs) start
+  · exact merged_complete sp fp past hpast congruent _ bound [start] [] (fun _ h => h) (fun _ hs => by simp at hs)
+      (fun f hf r hr => by simp only [List.mem_singleton] at hf; subst hf; simp [hstart] at hr) start
       (List.mem_singleton_self start) r
 
 end Tazuna.Thm.Explore.Search

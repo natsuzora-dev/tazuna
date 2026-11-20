@@ -2,9 +2,9 @@ import Tazuna.Service.Input
 import Tazuna.Sim.Network
 
 /-!
-The state of a world that explore merges paths by. Two worlds with equal fingerprints are taken to report the same
-violations and reach the same parts on every later path of the same length, which guarantees.md assumes; Search states
-what merging keeps under that assumption.
+The state of a world that explore merges paths by. Two worlds with equal fingerprints are taken to report alike on
+every later path of the same length, up to what the second world's own path reported already (Search's Congruent),
+which guarantees.md assumes; Search states what merging keeps under that assumption.
 
 The fingerprint leaves out the records of what happened: the trace (apart from what later lines and the end of the run
 read of it), violations, steps, the message count, and the violations already reported, which only stop a run from
@@ -52,23 +52,25 @@ def answersOrEnds (id : LineId) (l : Line) : Bool :=
   | .answer to _ | .unsubscribe to => to == id
   | _ => false
 
+variable {m : Type → Type} [Monad m] [MonadNote m]
+
 /--
 The pending requests and, for each, what the end of the run reads of the trace: the time of its request line, the order
 of the number of input lines before it, and whether a line answers or ends it; then the queued work.
 -/
-def requestsValue (s : State) : Value :=
+def requestsValue (s : State) : m Value := do
   let lines := s.lines.toList
-  let traced (id : LineId) : Option Time × Nat :=
-    match lines.findIdx? (fun l => l.dir == .out && l.id == id) with
-    | some i => (lines[i]?.map (·.time), (lines.take i).countP (·.dir == .in))
-    | none => (none, 0)
+  let traced ← s.pending.mapM fun p => do
+    let (l, i) ← expectFound s!"request line of {p.id.text}"
+      (lines.zipIdx.find? fun (l, _) => l.dir == .out && l.id == p.id)
+    pure (p, l.time, (lines.take i).countP (·.dir == .in))
   let turns := s.pending.map (·.turn)
-  let inputs := s.pending.map fun p => (traced p.id).2
-  .obj [("pending", .arr (s.pending.map fun p =>
+  let inputs := traced.map (·.2.2)
+  pure (.obj [("pending", .arr (traced.map fun (p, time, before) =>
       .arr [ToValue.toValue p.id, ToValue.toValue p.activity.ref, requesterValue p.requester, p.input, .bool p.stale,
-        ToValue.toValue (rank turns p.turn), ((traced p.id).1.map Time.toValue).getD .null,
-        ToValue.toValue (rank inputs (traced p.id).2), .bool (lines.any (answersOrEnds p.id))])),
-    ("queued", .arr (s.queued.map fun q => .arr [ToValue.toValue q.machine, .str q.state, .bool q.stale]))]
+        ToValue.toValue (rank turns p.turn), Time.toValue time, ToValue.toValue (rank inputs before),
+        .bool (lines.any (answersOrEnds p.id))])),
+    ("queued", .arr (s.queued.map fun q => .arr [ToValue.toValue q.machine, .str q.state, .bool q.stale]))])
 
 def instanceValue (i : Instance) : Value :=
   .obj [("id", ToValue.toValue i.id), ("entered", .arr (i.entered.map fun (n, t) => .arr [.str n, Time.toValue t])),
@@ -93,11 +95,13 @@ def exchangeValue (e : Exchange) : Value :=
 
 end Fingerprint
 
+variable {m : Type → Type} [Monad m] [MonadNote m]
+
 open Fingerprint in
 /-- The state of one running service that explore merges paths by. -/
-def serviceFingerprint (s : State) : Value :=
-  .obj [("now", Time.toValue s.now), ("lineCounts", countsOf (s.lines.toList.map (·.body.idName s.service))),
-    ("keyCounts", countsOf s.createdEntities), ("records", recordsValue s.records), ("requests", requestsValue s),
+def serviceFingerprint (s : State) : m Value := do
+  pure (.obj [("now", Time.toValue s.now), ("lineCounts", countsOf (s.lines.toList.map (·.body.idName s.service))),
+    ("keyCounts", countsOf s.createdEntities), ("records", recordsValue s.records), ("requests", ← requestsValue s),
     ("deadlines", .arr (s.deadlines.map fun d =>
       .arr [ToValue.toValue d.machine, .str d.state, .str d.name, Time.toValue d.time])),
     ("subscriptions", .arr (s.subscriptions.map fun u =>
@@ -106,16 +110,17 @@ def serviceFingerprint (s : State) : Value :=
     ("commandAnswers", .arr (byText (s.commandAnswers.map fun (id, request, answer) =>
       .arr [ToValue.toValue id, .str request.name, request.input, ToValue.toValue answer]))),
     ("deliveries", .arr (byText (s.deliveries.map ToValue.toValue))),
-    ("exchanges", .arr (byText (s.exchanges.map exchangeValue))), ("started", .bool s.started)]
+    ("exchanges", .arr (byText (s.exchanges.map exchangeValue))), ("started", .bool s.started)])
 
 open Fingerprint in
 /--
 The state of a world that explore merges paths by: the time, each running service's state, and the messages in flight.
 All halted worlds are one, since explore extends none of them.
 -/
-def worldFingerprint (w : World) : String :=
-  if w.halted.isSome || w.states.any (·.2.halted.isSome) then "halted" else
-  (Value.arr [Time.toValue w.now, .arr (w.states.map fun (n, s) => .arr [.str n, serviceFingerprint s]),
+def worldFingerprint (w : World) : m String := do
+  if w.halted.isSome || w.states.any (·.2.halted.isSome) then return "halted"
+  let states ← w.states.mapM fun (n, s) => do pure (Value.arr [.str n, ← serviceFingerprint s])
+  pure (Value.arr [Time.toValue w.now, .arr states,
     .arr (w.messages.toList.filterMap fun m =>
       if m.status == .inFlight then some (.arr [.str m.sender, .str m.receiver, bodyValue m.body]) else none)]).canonical
 

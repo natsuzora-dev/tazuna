@@ -200,9 +200,11 @@ tazuna detects a break of each assumption only in part or not at all.
   The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists (`checkExchanges` in `lean/Tazuna/Service/Input.lean`).
   No theorem ties each item of that list to the definition.
   The cause chain is what `causedBy` in `lean/Tazuna/Sim/Order.lean` computes, and the theorems under [Ordering](#ordering) state only the `after` that it gives.
-- **Fingerprints.** Two explored worlds with the same fingerprint report the same violations and reach the same parts on every later path of the same number of moves (`worldFingerprint` in `lean/Tazuna/Explore/Fingerprint.lean`).
+- **Fingerprints.** Two explored worlds with the same fingerprint report alike on every later path of the same number of moves: what the first reports, the second reports too, or its own path reported already (`Congruent` in `lean/Tazuna/Thm/Explore/Search.lean`, for `worldFingerprint` in `lean/Tazuna/Explore/Fingerprint.lean`).
+  A path reports the violations that it adds and the parts that it reaches first.
   `test` extends only the first explored world of each fingerprint, so its explored paths rest on this assumption.
-  No theorem proves it of the fingerprint, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
+  No theorem proves the assumption of the fingerprint, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
+  The assumption fails in one known case: a path that reported a `BagOrderDependent` violation of a definition reports no other one of that definition, so a world merged into its world can lose a second such violation.
   `test` keeps a 64-bit hash of each fingerprint instead of its text, so two worlds whose fingerprints share a hash also count as one.
   It writes the probability of that, as TLC does, when the probability is at least 1e-12.
   The diff tests compare full fingerprints.
@@ -375,6 +377,6 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 
 | Property | Theorems |
 |---|---|
-| Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each enabled slot is enumerated. Values fill each slot only up to two per payload, so the values are not complete. | `moves_enabled`, `slots_complete` |
+| Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each slot that `Slot.Enabled` in `lean/Tazuna/Explore/Moves.lean` states is enumerated, which ties the enumeration to that statement and not to the lines that a run accepts. Values fill each slot only up to two per payload, so the values are not complete. | `moves_enabled`, `slots_complete` |
 | Extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to `--depth` moves, under the fingerprints assumption. | `merged_search_reports` |
-| `test --coverage` reports only parts that no scenario's run and no explored path reached. Lean and the TypeScript runtime report the same reached parts on every explored path, which the diff test of explored paths compares. | `uncovered_unreached` |
+| `test --coverage` reports only parts outside the reached parts that the runs collect. No theorem states that the collected parts are what the runs reached. Lean and the TypeScript runtime collect the same parts on every explored path, which the diff test of explored paths compares. | `uncovered_unreached` |

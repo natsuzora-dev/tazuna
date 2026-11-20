@@ -306,8 +306,8 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
             uncovered := if executing && explore.isSome && service == sc.service then
                 some (Explore.uncovered spec reachedAll)
               else none } : SimulatedService)).run acting
-  pure (.simulated services w.violations w.halted
-    (if executing && explore.isSome then some (Explore.worldFingerprint w) else none))
+  let fingerprint ← if executing && explore.isSome then some <$> Explore.worldFingerprint w else pure none
+  pure (.simulated services w.violations w.halted fingerprint)
 
 /-- A search, as TS writes it. -/
 def searchedOf (r : Searched) : SearchedProcessing :=

@@ -10,8 +10,9 @@ export class Coverage {
     return copy;
   }
 
-  addAll(other: Coverage): void {
-    for (const key of other.reached) this.reached.add(key);
+  /** Adds what `other` reached and `before`, when given, had not. */
+  addAll(other: Coverage, before?: Coverage): void {
+    for (const key of other.reached) if (before?.reached.has(key) !== true) this.reached.add(key);
   }
 
   reach(obligation: Obligation): void {
